@@ -2407,3 +2407,9 @@ their four vCPUs give about two cores' worth of parallel throughput (SMT). That 
 `937aea8`'s and `5bb39bc`'s Windows reds — that hardware, not a busy moment, and not a regression.
 D-V2-47 §6 records it; the verdict now says "busy, or its hardware threads share fewer cores (SMT)".
 The criterion is asserted on every push on arm64.
+
+**RW 7.3 closed — container run `36400717604`: both jobs green**, read in the log, not only the
+conclusion: the image built with the fixed Dockerfile answered `delulu 1.0.0`, ran a program granted
+the console ("hello from the image") and refused the same program without the grant — `error[DL0703]:
+console was not granted to this program`; the devcontainer built again (`devcontainer up`, then the
+toolchain answered inside).

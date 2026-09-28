@@ -4,8 +4,9 @@
 # 2026-08-07 and never built until 2026-09-28, when the first build (run 36399908461) FAILED: this file
 # copied only `crates/`, and `delulu` embeds `skills/` and `examples/` at compile time (10 errors,
 # `couldn't read …`). It also built the default, Python-embedding binary while saying below that it
-# does not. Both are fixed here; the workflow's next run is the first expected to pass, and
-# docs/DELULULANG_V2/V2_LOG.md records what it said. Dockerfiles fail for reasons invisible by reading.
+# does not. Both are fixed here, and the next run (36400717604) PASSED: the image answered `delulu
+# 1.0.0`, ran a program granted the console, and refused it (DL0703) without the grant. Dockerfiles fail
+# for reasons invisible by reading; build this one again after any change to what the build embeds.
 #
 # Two stages, because the build needs a Rust toolchain and the result does not. The binary is the
 # portable one the release ships (`--no-default-features --features net`, `scripts/package-toolchain.sh`):

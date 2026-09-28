@@ -714,7 +714,9 @@ postCreateCommand's release build in 3 min 34 s, and `cargo 1.96.1` and `delulu 
 libpython a default build imports) — wrong about the first failure, right that the file also built the
 Python-embedding binary its own comment said it did not. Fixed: both folders copied, the portable
 build (`--no-default-features --features net`, as the release ships), and `ca-certificates` in the
-runtime image for the network client. The next run's result is in `docs/DELULULANG_V2/V2_LOG.md`.
+runtime image for the network client. **Run `36400717604`: both PASSED** — the image answered
+`delulu 1.0.0`, ran a program granted the console ("hello from the image") and refused it without the
+grant (`DL0703`); the devcontainer built again. Containers: **BUILT** (by hand, `container.yml`).
 
 ### The sweep is a script now, so this row means something
 

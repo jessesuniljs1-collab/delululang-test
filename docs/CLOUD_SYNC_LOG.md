@@ -111,7 +111,7 @@ it on `origin` was made in the cloud and is listed below.
   green, **check green — its first complete run ever** (59 min), broker still running. Then
   **PS-D-02**, then `docs/CLOUD_ROUTINE.md` step 4's order.
 
-### 2026-09-28 — routine run 1: CI read; the ping-pong criterion judged against a control (D-V2-47)
+### 2026-09-28 — routine run 1: PS-D and P7 complete; ADAPTER-SPELL-1, ATTEST-FIFO-1; RW 7.3, 7.4; P8 designed
 - Session: `https://claude.ai/code/session_013AZJ6RqYq59CeMgkvLV1BM`   Model: Claude Opus 5.5 (the scheduled routine)
 - Branch: `master` (the routine pushes there, `docs/CLOUD_ROUTINE.md`)   Pull request: none   Merged: n/a
 - Base: `5bb39bc`
@@ -125,7 +125,8 @@ it on `origin` was made in the cloud and is listed below.
   (8) `17d4623` RW 7.3: a manual container workflow — build the Dockerfile and the devcontainer on GitHub;
   (9) `f5b5985` RW 7.4: the editor's end-to-end test runs on Linux (a POSIX branch), and passed;
   (10) `8686479` RW 7.3: the Dockerfile's first build failed (embedded files not copied) — fixed; the devcontainer built;
-  (11) `What CI's runners are: SMT on x86, measured on arm64 (D-V2-47 §6); loop lessons`
+  (11) `3fd53cd` What CI's runners are: SMT on x86, measured on arm64 (D-V2-47 §6); loop lessons;
+  (12) `RW 7.3 closed: the fixed Dockerfile's image built, ran a granted program, refused an ungranted one`
 - Files and folders:
   M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar; (3) its verdict file
   A `crates/delulu/src/attest.rs` — (2) the statement, its canonical bytes, the verifier, the reference attester
@@ -159,21 +160,31 @@ it on `origin` was made in the cloud and is listed below.
   M `Dockerfile`, `.devcontainer/devcontainer.json`, `docs/design/CROSS_PLATFORM_VERIFICATION.md` — (10) the first builds' results; the Dockerfile fixed
   M `crates/delulu-runtime/tests/actors_pingpong.rs` (the verdict names SMT), `V2_DECISION_LOG.md` (D-V2-47 §6), `AGENTS.md`
     (brief for the evidence of an absence), `HANDOFF.md` §11.3, `docs/CLOUD_ROUTINE.md`, `docs/assistant-memory/cloud-period-2026-09-28.md` — (11)
+  M `Dockerfile` (header), `docs/design/CROSS_PLATFORM_VERIFICATION.md`, `docs/REMAINING_WORK.md` 7.3 — (12) RW 7.3 closed
+  Deleted: nothing.
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
-- Survey and doctor (after the last edit): see the commit message of each slice.
-- Verified: in the VM — (1) the ping-pong test idle (measured, 2.03–2.16x), with three CPUs starved (NOT
-  MEASURED, where the old test was red at 1.20x), and against a one-worker runtime mutant (red, 1.00x);
-  (2) six unit and five end-to-end tests, six mutants each red on its own assertion; clippy (workspace,
-  `-D warnings`) clean; the full suite alone, 1,995 passed and 1 failed — `egress_features`, which needs
-  `cargo fetch` in a fresh VM and then passes (1,996 of 1,996). CI: `miri-slow` `36381950975` syntax and
-  check green, broker running; `5bb39bc`'s push run `36390274072` red on Windows only, `actors_pingpong`
-  1.31x/1.28x — the defect (1) fixes; `9ac5477`'s push run `36393016213` green on every job.
-- Redo on the laptop: nothing (CI runs Windows and macOS).
-- For the laptop's memory: a fresh VM needs `cargo fetch --locked` before the suite (`egress_features`
-  runs `cargo metadata --offline`); a routine run has no `gh` — CI is read with the GitHub MCP tools.
-- Open / next: read the push runs of `fef8ccd` (PS-D-02 — PS-D closes when it is green on every job, then
-  `V2_PHASE_STATUS.md` row 13 says complete), `ed74683` (its new step prints `actors_pingpong`'s verdict
-  on every OS — record whether each runner MEASURED or was busy) and this run's last commit; and
-  `36381950975`'s broker job (green closes RW 5.6, and with it P7). Then P8 as far as software reaches
-  (`docs/CLOUD_ROUTINE.md` step 4.3). The owner should review D-V2-49 (an entrenched edit).
+- Survey and doctor (after the last edit of each slice, and of this entry): `survey check` ok (1,461
+  nodes at the end), `survey findings` 0 errors, 14 warnings (unchanged from the baseline), `doctor
+  --check` ok — all checks pass; each commit message carries its own figures.
+- Verified: in the VM — the full suite alone three times (1,995 + `egress_features` after `cargo fetch`;
+  1,997; 1,998 passed, 0 failed), clippy `--workspace -D warnings` clean each time, `cli-sweep.sh` 45/45,
+  every new test red on the old code (the ping-pong starve, ADAPTER-SPELL-1's impostor, ATTEST-FIFO-1's
+  hang) and every mutant red (six on PS-D-02, the one-worker runtime), the editor's real end-to-end test
+  on Linux (and falsified). CI read, each by its log where it mattered: `5bb39bc` red (Windows ping-pong,
+  1.31x/1.28x); `9ac5477`, `fef8ccd`, `ed74683`, `b7abcfb`, `81c644f`, `0a7b881` green on every job;
+  `miri-slow` `36381950975` green on all three crates; `container` `36399908461` (Dockerfile failed,
+  devcontainer passed) and `36400717604` (both passed). **Completed: PS-D, P7.**
+- Redo on the laptop: run `node editors/vscode/e2e.js` once on Windows (its Windows branch was
+  restructured, not changed); nothing else — CI runs Windows and macOS on every push.
+- For the laptop's memory: `docs/assistant-memory/cloud-period-2026-09-28.md` and `HANDOFF.md` §11.3
+  carry this run's facts (no `gh` in the VM; the MCP log tool's 5,000-line cap; `cargo fetch` first;
+  Docker Hub refused, `container.yml` instead; VS Code from Microsoft's apt repository; x86 CI runners
+  are SMT, arm64 measures the ping-pong criterion).
+- Open / next: (1) read the push runs of `e430c2a`, `17d4623`, `f5b5985`, `8686479`, `3fd53cd` and this
+  entry's commit (each test job ends with the ping-pong verdict — record them); (2) **P8-01**, the
+  control program in a guest (`V2_P8_DESIGN.md` — read its "Where the work is" first); (3) the
+  adversarial pass on PS-D-02, the `--` rule and ADAPTER-SPELL-1 that a Sonnet 5 sous-chef was running
+  at this entry's writing — if its findings are not in `V2_LOG.md`, re-run the pass; (4) RW 7.4's
+  "next": make the editor end-to-end a CI gate on the Linux editor job. **For the owner:** D-V2-49 is an
+  entrenched edit (`DELULU_CORE.md` v0.3) taken under the delegation — flagged for his review.
