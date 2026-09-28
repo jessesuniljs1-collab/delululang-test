@@ -714,6 +714,8 @@ material, this is the execution:
 - `V2_AGENT_LOG.md` — which agent did what through P1, and what was verified (frozen at P1).
 - `V2_SECURITY_MODEL.md` — the security model V2 works to.
 - `V2_AI_NATIVE_DESIGN.md` — the machine-facing design for V2.
+- `V2_P8_DESIGN.md` — P8, safe autonomy as far as software reaches: the slices (a control program in a
+  guest; the Verified-class adapter as a `.dpx`; a reference transport), their witnesses, what stays out.
 
 ### 5.12 Generated documents — do not hand-edit
 

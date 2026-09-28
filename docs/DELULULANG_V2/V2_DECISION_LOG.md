@@ -1086,6 +1086,20 @@ Built from the design in `HANDOFF.md` §0, with these choices:
    Verified-class adapter (a `.dpx` whose bytes are loaded once, verified, and executed from memory):
    P8.
 
+## D-V2-51 — P8's shape: the control program in a guest first, then the adapter's logic as a Verified `.dpx` — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **P8 is built in three slices** (`V2_P8_DESIGN.md`): P8-01 carries `Actuator` and `Sensor` over the
+   existing sandbox channel, performed by the host's `DeviceBroker`; P8-02 makes the driver's logic a
+   Verified-class `.dpx`, pure (no capability), whose frames the host writes; P8-03 a reference transport
+   to the simulator in its own process. Each is witnessed against the simulator; a real device stays
+   environment-blocked.
+2. **The logic and the transport are split.** The part of a driver that touches the machine stays the
+   host's; the part a vendor writes becomes code the host can prove, sign-check and run from the bytes it
+   verified — which is what ends D-V2-50's check-then-start residual, rather than a tighter race.
+3. **No new diagnostic codes are planned:** DL1510, DL1511 and DL1905 already say what can go wrong.
+4. **Out of P8:** certification, federation model-checking, and any lease-level constraint on what kind
+   of adapter a node may use (RFC territory).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

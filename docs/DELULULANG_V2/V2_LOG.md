@@ -2352,3 +2352,16 @@ promptly, for both a pipe and a link; the program never runs in either. D-V2-48 
   three jobs the CLI sweep and the fuzz campaign after the verdict step print more than that. The arm64
   job has nothing after it, which is why its line was found. `docs/CLOUD_ROUTINE.md` step 3 records the
   cap.
+
+### P8 — designed (D-V2-51), not built
+
+`V2_P8_DESIGN.md`: what exists (the device broker, the dead-man and the e-stop are already host-side;
+the driver is a signature-checked subprocess; a device program is refused under `--sandbox` — witnessed
+on the current binary, "`--sandbox` cannot carry this program yet: it uses Actuator", exit 2) and three
+slices, each one routine run: **P8-01** the control program in a guest — `Actuator`/`Sensor` over the
+existing channel, performed by the host's `DeviceBroker`, with five witnesses against the simulator
+(same values sandboxed or not; a wedged guest loses its actuator on the host's wall clock; a revoke
+mid-motion; DL1905 still binding; two falsifications); **P8-02** the driver's logic as a Verified-class
+`.dpx` — pure, proved at load, signature-checked against a pinned key and run from the verified bytes,
+the host keeping the transport — which ends D-V2-50's residual; **P8-03** a reference transport to the
+simulator in its own process. A real device stays environment-blocked.

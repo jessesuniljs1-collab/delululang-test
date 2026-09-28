@@ -252,6 +252,10 @@ integrated with hardware.
 
 ## P8 — safe autonomy (owner-gated)
 
+**Status (2026-09-28):** designed under the owner's mandate of the same day — `V2_P8_DESIGN.md`
+(D-V2-51): P8-01 the control program in a guest (next), P8-02 the Verified-class adapter as a `.dpx`,
+P8-03 a reference transport; each witnessed against the simulator.
+
 RW 4.7 the signed Verified-class adapter delivered as a `.dpx` (signature policy, a pinned key,
 verify-before-dispatch); the control program runs in a guest, the adapter and the dead-man watchdog
 stay host-side. A real device, federation model-checking and everything else here wait for hardware
