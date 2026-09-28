@@ -9,6 +9,26 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-D-01: an external launcher carries the sandbox (L3), 2026-09-28
+
+- **`delulu run --sandbox --sandbox-backend external:CMD`**: a boundary DeluluLang does not build — Docker
+  with gVisor, Kata, a cloud sandbox, `ssh` — runs the guest and carries its channel on standard input and
+  output. The host still decides and performs every effect under your grants, lease and Guard. The run
+  report says level 3, backend `external`, and **no host guarantee**: DeluluLang measured none of that
+  boundary. It names the launcher's program and never its arguments. A Docker + gVisor recipe is in
+  `DEPLOYMENT.md`, documented and not shipped (D-V2-46).
+- **Fixed: under `--json`, a failed run could be reported as a usage error.** A command that failed without
+  printing an envelope of its own got a fallback saying `"exit": 2, "kind": "usage"`, whatever it exited
+  with; a sandboxed run stopped by a ceiling exits 1. The `error` object now carries the real exit code, and
+  `kind` is `usage` only for 2 (JSON-EXIT-1, found by the Sonnet 5 Windows verifier).
+- **Fixed: on Windows a sandboxed run's processor-time ceiling fired late** — a 3 s budget stopped at up to
+  8.1 s, because Windows checks a job's time limit only now and then. The host now reads the job's own
+  accounting every 100 ms and stops the guest at the budget (SANDBOX-CPU-LATE-1, same verifier).
+- **Fixed: the audit chain's append lock could be taken from a writer that was only slow**, after five
+  seconds, and both then wrote — leaving an untampered chain that `delulu audit verify` reports as
+  truncated (AUDIT-LOCK-TAKEOVER-1, found by the `miri-slow` run). The lock is now the operating system's,
+  released when its holder exits or dies; a writer that cannot get it in time records nothing and says so.
+
 ## Unreleased — V2 P7 (first half): NIST known-answer tests, parser fuzzing, Miri in budget, 2026-09-27
 
 - **The NIST ACVP vectors are checked byte-exact** (`nist_kat.rs`): ML-DSA-65 keyGen, sigGen and sigVer and

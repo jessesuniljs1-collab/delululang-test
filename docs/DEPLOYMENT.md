@@ -149,8 +149,47 @@ running as you can still delete the policy file — Tier 2 is what stops that.
 **What this is not.** It is not a substitute for Tier 2. On Linux and macOS the guest runs as the same
 OS user, so it is a second wall under the account boundary, not instead of it. On Windows the guest is
 a separate identity, but the broker, the CLI and every run without `--sandbox` are still you. And it does not carry every program yet:
-actors, foreign C, Python, plugins, devices and secrets are **refused** rather than run unconfined,
-which `delulu sandbox policy <file> --json` reports in advance.
+actors, foreign C, Python, plugins and devices are **refused** before anything runs, rather than run
+unconfined — which `delulu sandbox policy <file> --json` reports in advance — and a secret is refused
+at its first use, because a secret's bytes never cross the channel.
+
+**The microVM (L2).** On Linux x86_64 with KVM, `--isolation microvm` runs the same guest as PID 1 of
+its own kernel under Firecracker (as root only under Firecracker's jailer; root without it is refused), with vsock and nothing else: no
+network device, no filesystem device, the image checked against its manifest on the copy that boots.
+You build the image from source (`scripts/microvm/build-image.sh`); it is not distributed (D-NE-27).
+Elsewhere, and without KVM or an image, the run refuses with `DL1408` — never a weaker boundary in
+silence.
+
+**An external launcher (L3, PS-D-01).** `--sandbox-backend external:CMD` lets a boundary DeluluLang does
+not build carry the guest: Docker with gVisor, Kata, a cloud sandbox, a Kubernetes pod, `ssh` to another
+machine. Your command runs the guest in YOUR environment and carries the channel on its standard input
+and output; DeluluLang tells it the guest's words (`DELULU_GUEST_ARGS`, `__guest --stdio-pipes`) and the
+limits the run asked for (`DELULU_LIMIT_MEMORY_BYTES`, `…_CPU_SECONDS`, `…_WALL_SECONDS`). The command's
+words are split on whitespace and run with no shell — anything that needs quoting belongs in a script.
+The guest still holds no authority: every effect it asks for is decided and performed on the host, under
+your grants, lease and Guard, exactly as at L1. What changes is who vouches for the wall around it: the
+run report says **level 3, backend `external`, and no host guarantee** — DeluluLang measured none of that
+boundary, and says so; it names the launcher's program (never its arguments, which can carry a token).
+A reference recipe — **documented, not shipped, and not tested by this project** — for Docker with gVisor
+and no network:
+
+```sh
+#!/bin/sh
+# /usr/local/bin/delulu-gvisor — run with:
+#   delulu run app.delulu --grant … --sandbox --sandbox-backend external:/usr/local/bin/delulu-gvisor
+# The image must carry the SAME delulu version as the host (the channel is versioned), and needs no
+# files of yours: the guest performs no effects, so mount nothing.
+exec docker run -i --rm --init --network none --runtime=runsc \
+  --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 \
+  --memory "${DELULU_LIMIT_MEMORY_BYTES}" --pids-limit 64 \
+  delulu-guest:1.0.0 delulu $DELULU_GUEST_ARGS
+```
+
+Two things this recipe does not do for you. The host's wall-clock ceiling (`--limits wall=`) ends the
+LAUNCHER's process, and ending a `docker` client does not end its container — give the container its
+own time limit, or run the launcher under something that reaps it. And `--memory` bounds the container,
+not the program's budget as DeluluLang accounts it: the run report records what was asked, and the
+launcher is what enforces it.
 
 ---
 
@@ -234,14 +273,15 @@ These are known, documented, and not fixable by configuration:
   language bounds *reachability*, not behaviour.
 - **The hardware adapter.** `--adapter-cmd` runs an operator-supplied subprocess. The envelope is
   enforced host-side before dispatch, but the driver itself is not sandboxed and is not signature-checked.
-- **The microVM isolation profile — because it does not exist yet.** `delulu run --isolation microvm`
-  is a *probe*: it looks for `/dev/kvm` and a VMM binary, names whichever is missing, and then
-  refuses with `DL1408` **even when both are present**, because the guest launch (read-only rootfs,
-  virtio-fs mounts matching the granted `fs.*` scopes, default-deny egress proxy, vsock broker
-  proxy) is unwritten. **This is the correct failure mode** — you never silently get weaker
-  isolation than you asked for — but do not plan a deployment around it. The profiles that work are
-  `none` and `process` (the foreign worker). For genuinely untrusted code the boundary is Tier 2
-  above, not a VM. Detail: [`REMAINING_WORK.md`](REMAINING_WORK.md) §4.1.
+- **The microVM, beyond Linux x86_64 + KVM.** `--isolation microvm` exists since V2 PS-C (see the
+  sandbox section above) on Linux x86_64 with KVM and an image you built; there is no Windows or macOS
+  microVM, no snapshot or warm pool, and no distributed image (D-NE-27 is the owner's). Everywhere else
+  it refuses with `DL1408` — the correct failure: you never silently get a weaker boundary than you
+  asked for. For genuinely untrusted code on one host, Tier 2 above is still the outer boundary.
+- **An external launcher's wall.** At L3 (`--sandbox-backend external:CMD`) the boundary around the
+  guest is whatever your launcher builds; DeluluLang measures none of it, and the report says level 3
+  with no host guarantee. Authority is unaffected — the host still decides every effect — but
+  containment is only as good as the launcher.
 
 ---
 

@@ -166,6 +166,13 @@ mod tests {
     use super::*;
     use crate::check_source;
 
+    /// The rows a sweep that TYPE-CHECKS a program per row visits: every row natively; every eighth
+    /// under Miri, which looks for undefined behaviour in the checker rather than for a drifted row —
+    /// each of those sweeps took eight minutes there (D-V2-45). The native run still sweeps them all.
+    fn swept() -> impl Iterator<Item = &'static PrimEntry> {
+        PRIM_TABLE.iter().step_by(if cfg!(miri) { 8 } else { 1 })
+    }
+
     /// The table is non-empty and anchors are unique and well-formed (`ref.prim.*.*`).
     #[test]
     fn table_is_well_formed() {
@@ -270,7 +277,7 @@ mod tests {
     #[test]
     fn every_table_receiver_is_labelled_for_the_arity_gate() {
         let mut missing: Vec<&str> = Vec::new();
-        for e in PRIM_TABLE {
+        for e in swept() {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
             // Call the method with one argument MORE than the table declares. If the gate can label
             // this receiver, that is DL0403; if it cannot, the surplus argument is ignored.
@@ -306,7 +313,7 @@ mod tests {
     /// has no stale/renamed entry for those receivers.
     #[test]
     fn every_listed_primitive_resolves() {
-        for e in PRIM_TABLE {
+        for e in swept() {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
             assert!(
                 resolves(binding, e.method),
@@ -361,7 +368,7 @@ mod tests {
     /// This is the per-entry rejecting conformance witness for `ref.prim.*` anchors.
     #[test]
     fn every_listed_primitive_rejects_a_five_argument_call() {
-        for e in PRIM_TABLE {
+        for e in swept() {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
             let recv = if binding.is_empty() { "root" } else { "recv" };
             let body = format!("{binding}\nlet _z = {recv}.{}(1, 2, 3, 4, 5);", e.method);
@@ -388,7 +395,7 @@ mod tests {
     /// column fails one of the two sides.
     #[test]
     fn arity_column_matches_the_checker_gate() {
-        for e in PRIM_TABLE {
+        for e in swept() {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
             let recv = if binding.is_empty() { "root" } else { "recv" };
             let exact_args = (0..e.arity).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");

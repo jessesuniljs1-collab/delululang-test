@@ -255,6 +255,9 @@ pub(crate) struct Opts {
     pub(crate) sandbox_said: Vec<String>,
     /// `--sandbox-profile <dev|contained|hostile-agent>` (D-V2-25, the owner's names).
     pub(crate) sandbox_profile: Option<String>,
+    /// `--sandbox-backend external:CMD` (PS-D-01, L3): the operator's launcher runs the guest in THEIR
+    /// environment and carries the channel on its standard input and output.
+    pub(crate) sandbox_backend: Option<String>,
     /// `--limits mem=<bytes>,cpu=<seconds>`: narrow the profile's limits. Never widens past a
     /// profile that is already tighter — a flag may only ask for less.
     pub(crate) limits: Option<String>,
@@ -380,6 +383,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         sandbox: None,
         sandbox_said: Vec::new(),
         sandbox_profile: None,
+        sandbox_backend: None,
         limits: None,
         sandbox_mode: None,
         assert_trace: false,
@@ -472,6 +476,17 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 } else {
                     opts.missing_values.push("--sandbox-profile".to_string());
                 }
+            }
+            "--sandbox-backend" => {
+                if i + 1 < rest.len() {
+                    opts.sandbox_backend = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--sandbox-backend".to_string());
+                }
+            }
+            s if s.starts_with("--sandbox-backend=") => {
+                opts.sandbox_backend = Some(s["--sandbox-backend=".len()..].to_string())
             }
             s if s.starts_with("--sandbox-profile=") => {
                 opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string())
@@ -987,18 +1002,23 @@ pub fn run(args: &[String]) -> i32 {
         // language diagnostic, so `diagnostics` stays empty and the failure is reported in an
         // additive `error` object. `summary.errors = 1` keeps the documented pass test
         // (`summary.errors == 0`) correct for a caller that reads nothing else.
+        //
+        // `exit` is the process's own code and `kind` follows it: `2` and `1` are never collapsed
+        // ([agents.exit-codes]). A run stopped by a ceiling ran, exits 1 and prints no envelope of its
+        // own; this said `usage`/`2` for it until the Windows verifier caught it (JSON-EXIT-1).
         let command = args.iter().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
+        let (kind, message) = if code == 2 {
+            ("usage", "the command could not run; the human-readable reason is on stderr")
+        } else {
+            ("failed", "the command ran and failed; the human-readable reason is on stderr")
+        };
         let envelope = json!({
             "command": command,
             "schema": 1,
             "delulu_version": env!("CARGO_PKG_VERSION"),
             "diagnostics": [],
             "summary": { "errors": 1, "warnings": 0 },
-            "error": {
-                "kind": "usage",
-                "exit": 2,
-                "message": "the command could not run; the human-readable reason is on stderr"
-            }
+            "error": { "kind": kind, "exit": code, "message": message }
         });
         note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&envelope).expect("the fallback envelope serializes"));
@@ -1282,6 +1302,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (process isolates FOREIGN code only — the program stays in-process;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 microvm runs the program as a guest in its own kernel: Linux+KVM+a guest image; elsewhere DL1408)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox-backend external:CMD]  (L3, with --sandbox: the operator's launcher — Docker + gVisor, Kata,\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a cloud sandbox, ssh — runs `delulu __guest --stdio-pipes` in THEIR environment on its stdin/stdout;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the level is labelled external and its guarantees unknown — DeluluLang measures none of them)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\

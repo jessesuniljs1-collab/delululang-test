@@ -2002,3 +2002,67 @@ usage limit mid-way; its file holds what it did, and it is resumed after the res
   measurement is a `miri-slow` run, started after this push.
 - RW 5.2 (restating Progress as progress-or-fault in `DELULU_CORE.md`) is the owner's: the file is
   entrenched.
+
+## 2026-09-28 — PS-D-01: an external launcher carries the guest (L3); the Windows verifier's two findings fixed
+
+**The Sonnet 5 Windows verifier finished** after the weekly reset (pass-2 folder,
+`work-sonnet-win-verify-FINDINGS.md`), on a clean build of `5065be1`: **all five fixes hold on Windows** —
+GUARD-ALIAS-1 through a junction, a case-different spelling, an 8.3 short name and `..` traversal at L0 and
+`--sandbox`, plus 40 reads racing a junction flipped between a public and a sealed directory (22 public,
+17 refused, 0 sealed bytes); SANDBOX-STOP-1 for memory, processor time and wall clock; VERIFY-FABRICATED-1
+(a permit on one secret of the pair does not suffice); GUARD-STALE-1; `--secret NAME=VALUE` refused. The
+head chef read its logs, not its summary. It also recorded two observations; both were real, and both are
+fixed with a test that failed first:
+
+- **JSON-EXIT-1.** Under `--json`, a failure that printed no envelope of its own collected the fallback
+  envelope, which said `"exit": 2, "kind": "usage"` whatever the exit was. A sandboxed run stopped by a
+  ceiling ran and exits 1, so a caller reading the envelope saw a usage error — the two codes
+  `[agents.exit-codes]` says never to collapse. `exit` is now the process's own code and `kind` is `usage`
+  only for 2, `failed` otherwise. Gates: the contract sweep asserts `error.exit` equals the exit for every
+  failing shape, and the ceiling test asserts it for a stopped run (on the old code: 2 against 1).
+- **SANDBOX-CPU-LATE-1.** On Windows the guest's processor-time ceiling was the Job Object's
+  `PerJobUserTimeLimit` alone, and Windows checks it late: `cpu=3` stopped at 5.1, 5.9 and 8.1 s, `cpu=6`
+  at 12.9 s. Not an accounting artefact — sampled mid-run, the guest was 5.94 s user and 0.13 s kernel on
+  one thread. The host's watchdog thread now also reads the job's accounting every 100 ms and ends the
+  guest at the budget (2.03, 3.09 and 6.0 s measured); the job's limit stays as the backstop, and the stop
+  is named as the host's watchdog. The ceiling test bounds a 2 s budget below 3 s; the mutant with the
+  watchdog disabled ran to 8.7 s and failed it. Linux's `RLIMIT_CPU` was never late.
+
+**PS-D-01 — `--sandbox --sandbox-backend external:CMD` (L3, D-V2-46).** The operator's launcher runs the
+guest in THEIR environment — Docker with gVisor, Kata, a cloud sandbox, `ssh` — and carries the channel on
+its standard input and output. The guest still holds no authority: every effect is decided and performed
+by the host under the grants, the lease and the Guard, exactly as at L1 (the test's ungranted effect is
+refused `DL0703`; its granted write is made by the host). What changes is who vouches for the wall, and the
+report says so: level 3, backend `external`, `fully_enforced: false`, no host guarantee, the launcher's
+program named and its arguments never recorded. A launcher that does not exist or exits without a guest
+ends the run promptly and in words. `DEPLOYMENT.md` carries a Docker + gVisor + `--network none` recipe,
+documented and not shipped, with the two things it does not do (ending the `docker` client does not end
+the container; `--memory` is the launcher's enforcement, not DeluluLang's). Its stale "the microVM does not
+exist yet" note is corrected. Tests: `sandbox_external_cli.rs`, the binary itself as the launcher —
+Windows 2/2, Linux 3/3 (the third, Unix-only, checks the words and limits the launcher is told).
+
+**CI.** `4b583e4` (P7's first half): push run `36336871608` GREEN on every job, the six fuzz targets
+included. **The `miri-slow` measurement RW 5.6 asked for** (run `36336888036`, 240 minutes each): 0 UB
+anywhere. `delulu-syntax` **finished** — 130 passed, 1 ignored, in 690 s, where it had stalled for over
+three hours; the shrinks did what they were for. `delulu-check` ran 91 of 248 and then spent the rest of
+its budget in ONE test, `rcaps::tests::criterion8_generated_sequences_never_reach_incompatible_aliases`
+(10,000 generated sequences) — now 20 under Miri, 10,000 natively; the four `prim_table` sweeps that
+type-check a program per row (eight minutes each there) visit every eighth row under Miri and every row
+natively (D-V2-45). And `delulu-broker` ran 166 of 167 and **failed one**, which is a finding:
+
+- **AUDIT-LOCK-TAKEOVER-1 (the audit chain's append lock).** `parallel_writers_leave_one_verifiable_chain`
+  failed under Miri with the chain disagreeing with its own anchor, and a writer that could not take the
+  lock at all. AUDIT-WRITERS-1's lock was a `create_new` file that a waiter TOOK OVER after five seconds,
+  so that a writer killed mid-append could not block the chain. But a holder that is only slow is not
+  dead: Miri is a hundred times slower, a waiter took the lock from a live writer mid-append, and both
+  wrote. Natively the same happens to a paused process, a slow disk or a swapping host — and `verify` then
+  reports an untampered chain as truncated. Two waiters timing out together could also each delete the
+  other's fresh lock and both hold it. Witnessed natively by a new test, `a_slow_holder_is_never_taken_over`
+  (red on the old code: the second writer took a held lock). **Fixed:** the lock is now the operating
+  system's (`flock` / `LockFileEx`, through `File::try_lock`) on a file that is never deleted. The OS
+  releases it with its holder's handle, including when the process dies, so nothing is ever taken over;
+  a wait that runs out fails the append in words, and the daemon refuses a synchronous operation it could
+  not record (invariant 26), rather than writing beside another writer. A new test kills a child process
+  holding the lock and takes it straight after. Its Miri measurement is CI's: the `miri-slow` run started after this push (a local Miri run had written 54 of the parallel test's 100 records, with no error, when it was moved there to spare this machine's memory).
+
+PS-D-02, the attestation seam with a fake attester, is next.

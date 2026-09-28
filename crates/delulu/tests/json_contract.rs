@@ -118,7 +118,15 @@ fn every_failing_json_invocation_emits_exactly_one_object() {
             }
             let stdout = String::from_utf8_lossy(&out.stdout);
             match count_json_values(&stdout) {
-                1 => {}
+                1 => {
+                    // The `error` object states the exit, and `1` and `2` are never collapsed
+                    // ([agents.exit-codes]): it must be the process's own code, `usage` only for 2.
+                    let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap_or_default();
+                    let e = &v["error"];
+                    if !e.is_null() && (e["exit"] != code || (e["kind"] == "usage") != (code == 2)) {
+                        broken.push(format!("{args:?} exited {code} but its `error` says {e}"));
+                    }
+                }
                 0 => broken.push(format!("{args:?} exited {code} with NO json on stdout")),
                 usize::MAX => broken.push(format!("{args:?} exited {code} with unparseable stdout")),
                 n => broken.push(format!("{args:?} exited {code} with {n} json values, want 1")),

@@ -282,6 +282,15 @@ fn big() -> Str {
     assert_eq!(v["outcome"]["stopped_by"]["budget_seconds"], 2, "{v}");
     assert_eq!(v["sandbox"]["limits"]["wall_seconds"], 2, "{v}");
     assert!(out(&o).contains("wall-clock time"), "{}", out(&o));
+    // The same stop under `--json`: the envelope's `error` states the exit the process gave, and a
+    // program that ran and was stopped is no usage error. It said `exit: 2, kind: "usage"` for every
+    // failure that printed no envelope of its own (JSON-EXIT-1, found by the Windows verifier).
+    let o = delulu(&["run", spin.to_str().unwrap(), "--sandbox", "--limits", "cpu=60,wall=2", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let e: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap_or_default();
+    assert_eq!(e["error"]["exit"], 1, "the envelope and the exit agree: {}", out(&o));
+    assert_ne!(e["error"]["kind"], "usage", "{}", out(&o));
+    assert_eq!(e["summary"]["errors"], 1, "{}", out(&o));
     let guarantees = v["sandbox"]["host_guarantees"].to_string();
     // Processor time, where the host applies that ceiling.
     if guarantees.contains("processor-time ceiling") {
@@ -290,6 +299,12 @@ fn big() -> Str {
         assert_eq!(v["outcome"]["exit"], 1, "{v}");
         assert_eq!(v["outcome"]["stopped_by"]["dimension"], "cpu", "{v} / {}", out(&o));
         assert!(out(&o).contains("processor time"), "{}", out(&o));
+        // Stopped AT the budget, not somewhere past it. Windows' job limit alone let this 2 s budget run
+        // to 8.7 s (SANDBOX-CPU-LATE-1, found by the Windows verifier at 8.1 s for 3); processor time
+        // does not accrue while a busy runner starves the guest, so this bound is not a timing race.
+        if let Some(used) = v["outcome"]["stopped_by"]["observed_seconds"].as_f64() {
+            assert!(used < 3.0, "a 2 s processor-time budget was spent to {used} s before the stop: {v}");
+        }
     }
     // Memory, where the host applies that ceiling (macOS's guest has none, and says so).
     if guarantees.contains("memory ceiling") {

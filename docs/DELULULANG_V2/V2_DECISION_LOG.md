@@ -955,6 +955,28 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    generator counts and exhaustive sweeps shrink under `cfg!(miri)`, and every size that IS a witness (the
    100,000-level nesting input) keeps running at full size natively on every push.
 
+## D-V2-46 — PS-D-01: what an external launcher is told, and what the report may say about it — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **The launcher is a command, not a shell line.** `external:CMD` is split on whitespace and run
+   directly; there is no shell, so no quoting, expansion or injection surface in DeluluLang. Anything that
+   needs one belongs in the operator's script.
+2. **The channel is the launcher's standard input and output**, and the guest is `delulu __guest
+   --stdio-pipes`, which moves the program's own standard output to standard error before anything runs,
+   so nothing the program prints can be read as a frame. The launcher is told the guest's words
+   (`DELULU_GUEST_ARGS`) and the limits the run asked for (`DELULU_LIMIT_MEMORY_BYTES`, `…_CPU_SECONDS`,
+   `…_WALL_SECONDS`); enforcing them is the launcher's.
+3. **The report claims only what was measured.** Level 3, backend `external`, `fully_enforced: false`, no
+   host guarantee. The layers the guest applied to itself count (RW 4.23 — the host checks the words), so
+   on Linux `granted` can be `contained` while every host guarantee stays empty. The host's wall-clock
+   watchdog still ends the launcher, but it is not claimed: ending a container's client does not end the
+   container.
+4. **The launcher's program is recorded — in the report and the `sandbox-launch` audit record — and its
+   arguments never are**, because a launcher line is where a registry token or an `ssh` identity goes.
+5. **The Docker + gVisor recipe is documented, not shipped**, and says it is not tested by this project.
+   Shipping one would make its wall a DeluluLang claim; attesting one is PS-D-02's seam.
+6. `--sandbox-backend` without `--sandbox`, with `--isolation microvm`, or in a mode that refuses
+   sandbox options (PS-A-10) is refused with exit 2 before anything runs.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

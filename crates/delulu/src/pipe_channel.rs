@@ -33,6 +33,90 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 pub use win::{duplex_pair, HostPipe};
 
+/// PS-D-01: the host's end of an EXTERNAL launcher's channel (L3) — the launcher's standard output,
+/// read, and its standard input, written. Two ordinary pipes on every platform, and a pipe has no read
+/// deadline, so a thread drains the output into a queue that a read waits on for at most the deadline:
+/// the PS-B-03 design this module left behind for speed on Windows. For an external launcher — whose
+/// guest may be in a container, or on another machine behind `ssh` — the extra hop is not where the time
+/// goes, and a deadline on every read is not optional.
+pub struct HostPipes<W: Write> {
+    rx: std::sync::mpsc::Receiver<io::Result<Vec<u8>>>,
+    buf: Vec<u8>,
+    pos: usize,
+    closed: bool,
+    writer: W,
+    deadline: Duration,
+}
+
+impl<W: Write> HostPipes<W> {
+    pub fn new<R: Read + Send + 'static>(mut reader: R, writer: W, deadline: Duration) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut chunk = vec![0u8; 64 * 1024];
+            loop {
+                match reader.read(&mut chunk) {
+                    Ok(0) => {
+                        let _ = tx.send(Ok(Vec::new()));
+                        return;
+                    }
+                    Ok(n) => {
+                        if tx.send(Ok(chunk[..n].to_vec())).is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        return;
+                    }
+                }
+            }
+        });
+        HostPipes { rx, buf: Vec::new(), pos: 0, closed: false, writer, deadline }
+    }
+}
+
+impl<W: Write> Read for HostPipes<W> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.buf.len() {
+            if self.closed {
+                return Ok(0);
+            }
+            match self.rx.recv_timeout(self.deadline) {
+                Ok(Ok(chunk)) if chunk.is_empty() => {
+                    self.closed = true;
+                    return Ok(0);
+                }
+                Ok(Ok(chunk)) => {
+                    self.buf = chunk;
+                    self.pos = 0;
+                }
+                Ok(Err(e)) => return Err(e),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "the external guest said nothing within the deadline"))
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    self.closed = true;
+                    return Ok(0);
+                }
+            }
+        }
+        let n = out.len().min(self.buf.len() - self.pos);
+        out[..n].copy_from_slice(&self.buf[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+impl<W: Write> Write for HostPipes<W> {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        self.writer.write(b)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
+}
+
 /// Milliseconds since this process first asked, plus one, so that 0 can mean "no read waiting".
 fn now_ms() -> u64 {
     static START: OnceLock<Instant> = OnceLock::new();

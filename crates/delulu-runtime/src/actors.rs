@@ -1022,7 +1022,7 @@ mod boundary_authority_tests {
         ("egress.rs", "the resolver thread: one getaddrinfo call, abandoned at the request's deadline"),
         ("budget.rs", "the budget watchdog: samples the process's memory and processor time"),
         ("run_cmd.rs", "flushes stdout, bounded, while a budget-stopped run exits"),
-        ("pipe_channel.rs", "the sandbox guest's channel watchdog: sleeps, and ends a guest whose host fell silent"),
+        ("pipe_channel.rs", "the sandbox guest's channel watchdog (sleeps, and ends a guest whose host fell silent) and the host's reader of an external launcher's output (PS-D-01)"),
         ("guest.rs", "the sandbox host's wall-clock watchdog (SANDBOX-STOP-1): sleeps until `--limits wall=`, then ends the guest"),
         ("mcp.rs", "drains a tool subprocess's stdout and stderr, so a large answer cannot stall it"),
         ("microvm.rs", "relays a microVM's console, bounded, and the VM's wall-clock watchdog: neither evaluates a program — the program runs in the guest"),

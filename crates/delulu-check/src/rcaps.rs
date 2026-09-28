@@ -615,7 +615,11 @@ mod tests {
         // If the tables ever let two actors reach read/write-incompatible aliases of ANY
         // one object, this catches it — and a counterexample BLOCKS the stage.
         let mut failures = Vec::new();
-        for seed in 1..=10_000u64 {
+        // 10,000 sequences natively. Under Miri, which looks for undefined behaviour and not for a
+        // counterexample, 20: the 10,000 ran there for over an hour and a half and the job hit its
+        // limit on this one test (the `miri-slow` run of `4b583e4`, D-V2-45).
+        let seeds = if cfg!(miri) { 20 } else { 10_000u64 };
+        for seed in 1..=seeds {
             let mut rng = XorShift(seed);
             let mut world: Vec<SimObject> = vec![SimObject {
                 aliases: vec![SimAlias { actor: 0, k: ALL[rng.pick(6)] }],

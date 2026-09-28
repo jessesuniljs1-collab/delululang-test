@@ -174,7 +174,10 @@ Every `--json` command emits one object:
 - `summary.errors == 0` is the machine-readable definition of "this passed".
 - **Exactly one object, including on failure.** A usage or I/O error — a missing argument, an
   unreadable path, a malformed flag — still emits one envelope, with `summary.errors = 1` and an
-  additive `error` object (`kind`, `exit`, `message`); the human-readable reason is on stderr. No DL
+  additive `error` object (`kind`, `exit`, `message`); the human-readable reason is on stderr. `exit`
+  is the process's own exit code, and `kind` is `usage` for `2` and `failed` for anything else — a
+  run stopped by a ceiling ran, so it is `failed` with `exit: 1` (until 2026-09-28 every such failure
+  said `usage` and `2`, collapsing the two codes the table above keeps apart). No DL
   code is invented for these, because the code registry is a stable contract and a usage error is not
   a language diagnostic, so `diagnostics` is `[]`.
 

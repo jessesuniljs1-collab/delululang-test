@@ -64,10 +64,91 @@ pub const STDIO_FLAG: &str = "--stdio";
 #[cfg(target_os = "linux")]
 pub const STDIO_READY: u8 = 0x06;
 
+/// PS-D-01: the guest argument that means "your channel is your standard input and output, as two
+/// ordinary PIPES" — what an operator's external launcher (L3) gives a guest it runs in its own
+/// environment: `docker run -i`, `ssh`, a cloud sandbox's exec. Unlike [`STDIO_FLAG`] it needs no
+/// inherited socket or duplex pipe, on any platform. The host tells a launcher the words to run in
+/// `DELULU_GUEST_ARGS`.
+pub const STDIO_PIPES_FLAG: &str = "--stdio-pipes";
+
+/// The channel of a guest started with [`STDIO_PIPES_FLAG`]: standard input for reading, and a copy of
+/// standard output for writing, with standard output itself pointed at standard error, so a stray
+/// print can never reach the channel. The read watchdog ends a guest whose host fell silent.
+fn stdio_pipes_channel() -> Result<crate::pipe_channel::GuestChannel<std::fs::File, std::fs::File>, String> {
+    #[cfg(windows)]
+    {
+        stdio_channel()
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use std::os::fd::FromRawFd as _;
+        // SAFETY: descriptors 0, 1 and 2 are this process's own; each is taken over exactly once here.
+        unsafe {
+            let out = libc::dup(1);
+            if out < 0 {
+                return Err(format!("its standard output cannot be duplicated: {}", io::Error::last_os_error()));
+            }
+            if libc::dup2(2, 1) < 0 {
+                return Err(format!("its standard output cannot be redirected: {}", io::Error::last_os_error()));
+            }
+            let reader = std::fs::File::from_raw_fd(0);
+            let writer = std::fs::File::from_raw_fd(out);
+            crate::pipe_channel::GuestChannel::new(reader, writer, || {
+                eprintln!("error: the sandbox guest heard nothing from its host within {CHANNEL_DEADLINE:?} — ending");
+                std::process::exit(2);
+            })
+            .map_err(|e| e.to_string())
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    {
+        Err("a pipes guest is not built for this platform".to_string())
+    }
+}
+
+/// PS-D-01: start the operator's launcher. Its words are the program and its arguments (no shell). It
+/// is told, in its environment, the guest's own words and the limits the run asked for, so a recipe can
+/// map them (`docker --memory`, `--cpus`); enforcing them is the launcher's — DeluluLang measures none of
+/// it, and the report says so.
+fn launch_external(cmd: &str, limits: crate::jail::Limits) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
+    let mut words = cmd.split_whitespace();
+    let program = words.next().ok_or_else(|| io::Error::other("the external launcher's command is empty"))?;
+    let mut c = std::process::Command::new(program);
+    c.args(words)
+        .env("DELULU_GUEST_ARGS", format!("{GUEST_SUBCOMMAND} {STDIO_PIPES_FLAG}"))
+        .env("DELULU_LIMIT_MEMORY_BYTES", limits.memory_bytes.to_string())
+        .env("DELULU_LIMIT_CPU_SECONDS", limits.cpu_seconds.to_string())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit());
+    if let Some(w) = limits.wall_seconds {
+        c.env("DELULU_LIMIT_WALL_SECONDS", w.to_string());
+    }
+    let child = c.spawn().map_err(|e| {
+        let why = match e.kind() {
+            io::ErrorKind::NotFound => "there is no such program (a bare name is looked up on PATH)".to_string(),
+            io::ErrorKind::PermissionDenied => "it is not executable by this user".to_string(),
+            _ => crate::cli::broker_unreachable_detail(&e),
+        };
+        io::Error::other(format!("the external launcher `{program}` could not be started: {why}"))
+    })?;
+    Ok((Guest::External(child), crate::jail::Jail::none(), Vec::new()))
+}
+
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
     // SANDBOX-STOP-1: from here a refused allocation ends this process with a status the host names.
     crate::ceiling::enter_guest_mode();
+    // PS-D-01: a guest an external launcher started, its channel two ordinary pipes.
+    if args.first().map(String::as_str) == Some(STDIO_PIPES_FLAG) {
+        return match stdio_pipes_channel() {
+            Ok(conn) => serve_as_guest(conn, None, &[]),
+            Err(e) => {
+                eprintln!("error: the sandbox guest cannot open its channel: {e}");
+                2
+            }
+        };
+    }
     // PS-C-03: the microVM guest, run by its own kernel as PID 1, whose channel is a vsock stream to
     // the host it dials itself.
     #[cfg(target_os = "linux")]
@@ -353,6 +434,8 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--broker",
     "--lease",
     "--epoch-ms",
+    // PS-D-01: `external:CMD` chooses an L3 launcher for the guest.
+    "--sandbox-backend",
 ];
 
 /// Which boundary a sandboxed run asked for: the jailed guest process (L1, `--sandbox`) or the
@@ -362,6 +445,8 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
 pub enum Isolation {
     Process,
     MicroVm,
+    /// PS-D-01 (L3): an operator-supplied launcher, the command (its words, no shell) as given.
+    External(&'static str),
 }
 
 impl Isolation {
@@ -369,6 +454,7 @@ impl Isolation {
         match self {
             Isolation::Process => 1,
             Isolation::MicroVm => 2,
+            Isolation::External(_) => 3,
         }
     }
 
@@ -376,6 +462,7 @@ impl Isolation {
         match self {
             Isolation::Process => "process",
             Isolation::MicroVm => "microvm",
+            Isolation::External(_) => "external",
         }
     }
 }
@@ -384,6 +471,30 @@ impl Isolation {
 /// a weaker boundary than the one `--sandbox` gives, and which of the two was meant is not something
 /// to guess, so it is refused.
 fn isolation_of(opts: &crate::cli::Opts) -> Result<Isolation, String> {
+    // PS-D-01: `--sandbox-backend external:CMD`. The command is the operator's, run WITHOUT a shell: its
+    // words are the program and its arguments (a launcher that needs quoting belongs in a script).
+    if let Some(b) = opts.sandbox_backend.as_deref() {
+        let cmd = match b.strip_prefix("external:") {
+            Some(cmd) if !cmd.trim().is_empty() => cmd.trim(),
+            Some(_) => {
+                return Err("`--sandbox-backend external:` needs the launcher's command after the colon — e.g. \
+                            `external:docker run -i --rm --network none IMAGE delulu __guest --stdio-pipes`. Nothing ran."
+                    .to_string())
+            }
+            None => {
+                return Err(format!(
+                    "`--sandbox-backend {b}` is not a backend this command knows: `external:CMD` (L3) is the one. The \
+                     jailed process is `--sandbox` alone, the microVM `--isolation microvm`. Nothing ran."
+                ))
+            }
+        };
+        if let Some(i) = opts.isolation.as_deref() {
+            return Err(format!(
+                "`--isolation {i}` and `--sandbox-backend external:…` name two different boundaries. Nothing ran: say which one you mean."
+            ));
+        }
+        return Ok(Isolation::External(Box::leak(cmd.to_string().into_boxed_str())));
+    }
     match opts.isolation.as_deref() {
         None => Ok(Isolation::Process),
         Some("microvm") => Ok(Isolation::MicroVm),
@@ -778,6 +889,13 @@ fn serve_under(
     let launched = match isolation {
         Isolation::Process => launch(&exe, &dir, limits, false),
         Isolation::MicroVm => launch_vm(limits, false),
+        Isolation::External(cmd) => launch_external(cmd, limits),
+    };
+    let external = matches!(isolation, Isolation::External(_));
+    let launcher = match isolation {
+        // The program only: an argument can carry an operator's token, and a report is shared.
+        Isolation::External(cmd) => cmd.split_whitespace().next().map(str::to_string),
+        _ => None,
     };
     let (mut child, jail, mut applied) = match launched {
         Ok(l) => l,
@@ -786,11 +904,19 @@ fn serve_under(
             return Err(e);
         }
     };
-    // SANDBOX-STOP-1: a process guest's wall-clock ceiling is the host's watchdog, started below.
-    if limits.wall_seconds.is_some() && child.killer().is_some() && !applied.contains(&"wall-clock ceiling") {
+    // SANDBOX-STOP-1: a process guest's wall-clock ceiling is the host's watchdog, started below. Not
+    // claimed for an external launcher: ending the launcher's process need not end what it started (a
+    // container can outlive its client), so it is attempted there and never counted.
+    if limits.wall_seconds.is_some() && child.killer().is_some() && !external && !applied.contains(&"wall-clock ceiling") {
         applied.push("wall-clock ceiling");
     }
-    if applied.is_empty() {
+    if let Some(program) = &launcher {
+        eprintln!(
+            "sandbox: an external launcher (`{program}`) runs the guest — the boundary is the operator's, and \
+             DeluluLang measured none of it (level 3, guarantees unknown). The guest still holds no authority of \
+             its own: every effect it asks for is performed here, under the same checks."
+        );
+    } else if applied.is_empty() {
         // Never claim a boundary that was not applied: PS-0-04's rule, in the place it matters most.
         eprintln!("sandbox: no OS jail on this host yet — the guest still holds no authority of its own");
     } else {
@@ -800,19 +926,34 @@ fn serve_under(
     // PS-A-08: the launch is recorded before the guest is told what to run, so the evidence exists
     // even if everything after it fails.
     let policy = crate::policy::SandboxPolicy::derive(
-        if applied.is_empty() { 0 } else { isolation.level() },
+        if external {
+            isolation.level()
+        } else if applied.is_empty() {
+            0
+        } else {
+            isolation.level()
+        },
         profile,
         Some(limits),
         crate::policy::Mode::Strict,
     )
     .requesting(isolation.level());
-    let backend = if applied.is_empty() { "inproc" } else { isolation.backend() };
+    let backend = if external {
+        isolation.backend()
+    } else if applied.is_empty() {
+        "inproc"
+    } else {
+        isolation.backend()
+    };
     // PS-C-06: a microVM's launch record names the image it booted, by the hashes of the copies that
     // were checked and booted.
     let image = child.image();
     let with_image = |mut v: serde_json::Value| {
         if let (Some(img), Some(obj)) = (&image, v.as_object_mut()) {
             obj.insert("image".to_string(), img.clone());
+        }
+        if let (Some(program), Some(obj)) = (&launcher, v.as_object_mut()) {
+            obj.insert("launcher".to_string(), serde_json::json!(program));
         }
         v
     };
@@ -825,15 +966,23 @@ fn serve_under(
 
     let mut evidence = Evidence::default();
     // SANDBOX-STOP-1: the operator's wall-clock ceiling for a process guest (a microVM's VMM carries
-    // its own watchdog, which honours the same number).
-    let watch = match (limits.wall_seconds, child.killer()) {
-        (Some(w), Some(k)) => Some(WallWatch::start(k, std::time::Duration::from_secs(w))),
-        _ => None,
+    // its own watchdog, which honours the same number) and, on Windows, the processor-time ceiling
+    // read from the job's accounting: the job's own limit fires late (SANDBOX-CPU-LATE-1).
+    #[cfg(windows)]
+    let cpu_watch: Option<(CpuReader, std::time::Duration)> = jail
+        .cpu_probe()
+        .map(|p| (Box::new(move || p.used()) as CpuReader, std::time::Duration::from_secs(limits.cpu_seconds)));
+    #[cfg(not(windows))]
+    let cpu_watch: Option<(CpuReader, std::time::Duration)> = None;
+    let watch = match (limits.wall_seconds, cpu_watch, child.killer()) {
+        (None, None, _) | (_, _, None) => None,
+        (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
     };
     let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, custody, &mut evidence);
     // Stopped, and joined, BEFORE the guest is reaped below: until then its process id cannot have
     // been reused, so the watchdog can only ever have ended this guest.
-    let wall_fired = match (watch.map(WallWatch::stop).unwrap_or(false), child.vm_wall_fired()) {
+    let fired = watch.and_then(Watchdog::stop);
+    let wall_fired = match (fired == Some(Fired::Wall), child.vm_wall_fired()) {
         (true, _) => Some("the host's wall-clock watchdog"),
         (_, true) => Some("the microVM's wall-clock watchdog"),
         _ => None,
@@ -854,6 +1003,7 @@ fn serve_under(
     // job's accounting), as the ordinary run names its stops.
     let evidence_of_stop = StopEvidence {
         wall_fired,
+        cpu_fired: fired == Some(Fired::Cpu),
         guest_cpu: children_cpu().zip(children_before).map(|(after, before)| after.saturating_sub(before)),
         vm_memory: child.vm_memory_ceiling(),
     };
@@ -976,6 +1126,8 @@ fn serve_under(
 /// birth.
 enum Guest {
     Plain(std::process::Child),
+    /// PS-D-01 (L3): the operator's launcher; the channel is its standard input and output.
+    External(std::process::Child),
     #[cfg(any(windows, target_os = "linux"))]
     Contained(crate::identity::ContainedGuest),
     /// PS-C: the guest is PID 1 of its own kernel, and this is its VMM.
@@ -986,7 +1138,7 @@ enum Guest {
 impl Guest {
     fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
         match self {
-            Guest::Plain(c) => c.try_wait(),
+            Guest::Plain(c) | Guest::External(c) => c.try_wait(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.try_wait(),
             #[cfg(target_os = "linux")]
@@ -996,7 +1148,7 @@ impl Guest {
 
     fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
         match self {
-            Guest::Plain(c) => c.wait(),
+            Guest::Plain(c) | Guest::External(c) => c.wait(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.wait(),
             #[cfg(target_os = "linux")]
@@ -1006,7 +1158,7 @@ impl Guest {
 
     fn kill(&mut self) -> io::Result<()> {
         match self {
-            Guest::Plain(c) => c.kill(),
+            Guest::Plain(c) | Guest::External(c) => c.kill(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.kill(),
             #[cfg(target_os = "linux")]
@@ -1020,9 +1172,9 @@ impl Guest {
     fn killer(&self) -> Option<Killer> {
         match self {
             #[cfg(unix)]
-            Guest::Plain(c) => Some(Killer(c.id() as usize)),
+            Guest::Plain(c) | Guest::External(c) => Some(Killer(c.id() as usize)),
             #[cfg(windows)]
-            Guest::Plain(c) => Some(Killer(std::os::windows::io::AsRawHandle::as_raw_handle(c) as usize)),
+            Guest::Plain(c) | Guest::External(c) => Some(Killer(std::os::windows::io::AsRawHandle::as_raw_handle(c) as usize)),
             #[cfg(target_os = "linux")]
             Guest::Contained(c) => Some(Killer(c.id() as usize)),
             #[cfg(windows)]
@@ -1062,7 +1214,7 @@ impl Guest {
     /// Standard error, when the launch captured it (the probe does; a run shares the host's).
     fn take_stderr(&mut self) -> Option<Box<dyn io::Read>> {
         match self {
-            Guest::Plain(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+            Guest::Plain(c) | Guest::External(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
             #[cfg(target_os = "linux")]
@@ -1340,6 +1492,13 @@ impl<T: io::Read + io::Write> Channel for T {}
 /// The host's end of the guest's channel, with `deadline` on every read. A contained guest already
 /// holds its pipes; a plain one is connected to by name within the connect deadline.
 fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::Duration) -> io::Result<Box<dyn Channel>> {
+    // PS-D-01: an external launcher's channel is its standard output and input, read with a deadline.
+    if let Guest::External(c) = child {
+        let (Some(input), Some(output)) = (c.stdin.take(), c.stdout.take()) else {
+            return Err(io::Error::other("the external launcher's standard input and output were already taken"));
+        };
+        return Ok(Box::new(crate::pipe_channel::HostPipes::new(output, input, deadline)));
+    }
     #[cfg(windows)]
     if let Guest::Contained(g) = child {
         let mut conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
@@ -1522,29 +1681,60 @@ impl Killer {
     }
 }
 
-/// The host's wall-clock watchdog for a process guest (SANDBOX-STOP-1): ends the guest when the
-/// operator's `--limits wall=` passes, unless stopped first. `stop` says whether it fired.
-struct WallWatch {
-    cancel: std::sync::mpsc::Sender<()>,
-    handle: std::thread::JoinHandle<bool>,
+/// Which of the host's watchdogs ended a process guest.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Fired {
+    Wall,
+    Cpu,
 }
 
-impl WallWatch {
-    fn start(k: Killer, wall: std::time::Duration) -> WallWatch {
+/// Reads a running guest's processor time, where the host can (Windows: the job's accounting).
+type CpuReader = Box<dyn Fn() -> Option<std::time::Duration> + Send>;
+
+/// The host's watchdog for a process guest (SANDBOX-STOP-1): ends the guest when the operator's
+/// `--limits wall=` passes or, where the host can read the guest's processor time while it runs, when
+/// `cpu=` is spent — unless stopped first. `stop` says which fired, if one did.
+struct Watchdog {
+    cancel: std::sync::mpsc::Sender<()>,
+    handle: std::thread::JoinHandle<Option<Fired>>,
+}
+
+impl Watchdog {
+    /// How often processor time is read: about the most a guest can spend past its budget.
+    const TICK: std::time::Duration = std::time::Duration::from_millis(100);
+
+    fn start(k: Killer, wall: Option<std::time::Duration>, cpu: Option<(CpuReader, std::time::Duration)>) -> Watchdog {
         let (cancel, rx) = std::sync::mpsc::channel::<()>();
-        let handle = std::thread::spawn(move || match rx.recv_timeout(wall) {
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                k.kill();
-                true
+        let started = std::time::Instant::now();
+        let handle = std::thread::spawn(move || loop {
+            let left = wall.map(|w| w.saturating_sub(started.elapsed()));
+            let wait = match (left, &cpu) {
+                (Some(l), None) => l,
+                (Some(l), Some(_)) => l.min(Self::TICK),
+                (None, _) => Self::TICK,
+            };
+            match rx.recv_timeout(wait) {
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if wall.is_some_and(|w| started.elapsed() >= w) {
+                        k.kill();
+                        return Some(Fired::Wall);
+                    }
+                    if let Some((read, budget)) = &cpu {
+                        if read().is_some_and(|used| used >= *budget) {
+                            k.kill();
+                            return Some(Fired::Cpu);
+                        }
+                    }
+                }
+                _ => return None,
             }
-            _ => false,
         });
-        WallWatch { cancel, handle }
+        Watchdog { cancel, handle }
     }
 
-    fn stop(self) -> bool {
+    fn stop(self) -> Option<Fired> {
         drop(self.cancel);
-        self.handle.join().unwrap_or(false)
+        self.handle.join().unwrap_or(None)
     }
 }
 
@@ -1573,6 +1763,9 @@ fn children_cpu() -> Option<std::time::Duration> {
 struct StopEvidence {
     /// Which watchdog ended it, if one did.
     wall_fired: Option<&'static str>,
+    /// The host's processor-time watchdog ended it (Windows).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    cpu_fired: bool,
     /// Its processor time, measured by the OS once it was reaped (Unix).
     #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
     guest_cpu: Option<std::time::Duration>,
@@ -1656,6 +1849,9 @@ fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: S
     }
     #[cfg(windows)]
     if let Some((used, peak)) = jail.usage() {
+        if ev.cpu_fired {
+            return Some(cpu(Some(used), "the host's processor-time watchdog, reading the job's accounting"));
+        }
         // The job ends a process at its limit, so a measurement at (or within 5% of) the budget IS
         // the limit firing; one well below it is some other death, and stays unnamed.
         if used.as_secs_f64() >= limits.cpu_seconds as f64 * 0.95 {

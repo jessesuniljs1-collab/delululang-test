@@ -235,66 +235,67 @@ pub const APPEND_LOCK_FILE: &str = "append.lock";
 /// put both writers on one chain.
 ///
 /// Now every write goes through this lock, and under it [`AuditLog::append`] first catches up with
-/// what any other writer did. `create_new` is the whole mechanism: it succeeds for exactly one
-/// process. A lock nobody released (a writer killed mid-append) is taken over after a short wait
-/// rather than blocking for ever, because an audit record must not be able to hang a run; the file
-/// carries its holder's nonce, so a writer whose lock was taken over does not delete its
-/// successor's on the way out.
+/// what any other writer did.
+///
+/// # Campaign finding AUDIT-LOCK-TAKEOVER-1 (2026-09-28)
+///
+/// The first lock was a `create_new` file, taken over after five seconds so that a writer killed
+/// mid-append could not block the chain for ever. But a holder that is only SLOW is not dead. Under
+/// Miri, a hundred times slower, a waiter took the lock from a live writer mid-append, both wrote, and
+/// the chain disagreed with its own anchor — which `verify` reports as truncation (the `miri-slow`
+/// run of `4b583e4`); a paused process, a slow disk or a swapping host does the same natively. And two
+/// waiters timing out together could each delete the other's fresh lock and both hold it.
+///
+/// Now the lock is the operating system's — `flock` on Unix, `LockFileEx` on Windows, through
+/// `File::try_lock` — on a file that is never deleted. The OS releases it when its holder's handle
+/// closes, including when the process dies, so a dead writer needs no takeover and a live one is never
+/// taken over. A wait that runs out FAILS the append, in words, rather than writing beside another
+/// writer; the daemon then refuses a synchronous operation it could not record (invariant 26).
 pub struct AppendLock {
-    path: PathBuf,
-    nonce: String,
+    /// Held open for as long as the lock is: the OS lock belongs to this handle and ends with it.
+    _file: fs::File,
 }
 
+/// How long a writer waits for another: far longer than any real append, short enough that an audit
+/// record cannot hang a run. Under Miri every append is a hundred times slower and the wall clock is
+/// not what it examines, so the bound there is an hour.
+const LOCK_WAIT: std::time::Duration =
+    if cfg!(miri) { std::time::Duration::from_secs(3600) } else { std::time::Duration::from_secs(5) };
+
 impl AppendLock {
-    /// Take the lock on `dir`, waiting up to five seconds for another writer. `None` only when even
-    /// the takeover of a stale lock fails (the directory is not writable).
-    pub fn take(dir: &Path) -> Option<AppendLock> {
-        AppendLock::take_within(dir, std::time::Duration::from_secs(5))
+    /// Take the lock on `dir`, waiting for another writer as long as [`LOCK_WAIT`].
+    pub fn take(dir: &Path) -> Result<AppendLock, AuditError> {
+        AppendLock::take_within(dir, LOCK_WAIT)
     }
 
-    fn take_within(dir: &Path, wait: std::time::Duration) -> Option<AppendLock> {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let t = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default();
-        let nonce = format!("{}-{t}-{n}", std::process::id());
+    fn take_within(dir: &Path, wait: std::time::Duration) -> Result<AppendLock, AuditError> {
         let path = dir.join(APPEND_LOCK_FILE);
-        let create = |path: &Path| -> std::io::Result<()> {
-            let mut f = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
-            f.write_all(nonce.as_bytes())
-        };
+        let file = fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&path).map_err(|e| {
+            AuditError::Io(format!("the audit chain's append lock `{}` could not be opened: {e}", path.display()))
+        })?;
         let deadline = std::time::Instant::now() + wait;
         loop {
-            match create(&path) {
-                Ok(()) => return Some(AppendLock { path, nonce }),
-                Err(_) if std::time::Instant::now() < deadline => {
+            match file.try_lock() {
+                Ok(()) => return Ok(AppendLock { _file: file }),
+                Err(fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                 }
-                Err(_) => {
-                    let _ = fs::remove_file(&path);
-                    return create(&path).ok().map(|()| AppendLock { path, nonce });
+                Err(fs::TryLockError::WouldBlock) => {
+                    return Err(AuditError::Io(format!(
+                        "another writer held the audit chain's append lock `{}` for {:.1} s — nothing was written",
+                        path.display(),
+                        wait.as_secs_f64()
+                    )))
+                }
+                Err(fs::TryLockError::Error(e)) => {
+                    return Err(AuditError::Io(format!(
+                        "the audit chain's append lock `{}` could not be taken: {e}",
+                        path.display()
+                    )))
                 }
             }
         }
     }
-}
-
-impl Drop for AppendLock {
-    fn drop(&mut self) {
-        // Only our own lock: after a takeover the file is the successor's.
-        if fs::read_to_string(&self.path).map(|s| s == self.nonce).unwrap_or(false) {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
-}
-
-fn lock_unavailable(dir: &Path) -> AuditError {
-    AuditError::Io(format!(
-        "the audit chain's append lock `{}` could not be taken",
-        dir.join(APPEND_LOCK_FILE).display()
-    ))
 }
 
 /// The anchor file's name. Deliberately NOT a `.jsonl` day file, so `list_day_files` never sees it.
@@ -390,7 +391,7 @@ impl AuditLog {
         fs::create_dir_all(&dir).map_err(AuditError::io)?;
         // Under the lock: a recovery that raced another writer's append would see its record
         // without its anchor, and refuse a chain that is fine.
-        let _lock = AppendLock::take(&dir).ok_or_else(|| lock_unavailable(&dir))?;
+        let _lock = AppendLock::take(&dir)?;
         let (head, current_day, records) = recover(&dir)?;
         let tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&dir, d)));
         Ok(AuditLog { dir, head, current_day, records, tail_len })
@@ -443,7 +444,7 @@ impl AuditLog {
 impl AuditSink for AuditLog {
     fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError> {
         // AUDIT-WRITERS-1: one writer at a time, and never onto a head another writer has moved.
-        let _lock = AppendLock::take(&self.dir).ok_or_else(|| lock_unavailable(&self.dir))?;
+        let _lock = AppendLock::take(&self.dir)?;
         self.catch_up()?;
         let day = day_string(entry.ts);
         self.ensure_day_file(&day)?;
@@ -557,8 +558,8 @@ pub fn verify(dir: impl AsRef<Path>) -> Result<VerifiedStats, AuditError> {
     let dir = dir.as_ref();
     match verify_unlocked(dir) {
         Err(AuditError::Corrupt(first)) => match AppendLock::take_within(dir, std::time::Duration::from_secs(2)) {
-            Some(_lock) => verify_unlocked(dir),
-            None => Err(AuditError::Corrupt(first)),
+            Ok(_lock) => verify_unlocked(dir),
+            Err(_) => Err(AuditError::Corrupt(first)),
         },
         other => other,
     }
@@ -1246,7 +1247,7 @@ mod tests {
         run.append(entry(5, 1000 + 86_400_000, "sandbox-launch", "g_a", "allow")).unwrap();
         daemon.append(entry(6, 1001 + 86_400_000, "use", "g_a", "allow")).unwrap();
         assert_eq!(verify(&dir).expect("across days too").records, 6);
-        assert!(!dir.join(APPEND_LOCK_FILE).exists(), "no lock is left behind");
+        assert!(AppendLock::take_within(&dir, std::time::Duration::ZERO).is_ok(), "no lock is left held");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1274,22 +1275,59 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// A stale lock (a writer killed mid-append) is taken over, and the one whose lock was taken
-    /// does not delete its successor's.
+    /// AUDIT-LOCK-TAKEOVER-1: a holder that is only SLOW is waited for, never taken over.
     #[test]
-    fn a_stale_lock_is_taken_over_and_never_deleted_by_the_one_it_was_taken_from() {
+    fn a_slow_holder_is_never_taken_over() {
+        let dir = tmp_dir("slow-holder");
+        fs::create_dir_all(&dir).unwrap();
+        let first = AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).expect("a free lock");
+        let second = AppendLock::take_within(&dir, std::time::Duration::from_millis(50));
+        assert!(second.is_err(), "a second writer took the lock while its holder still held it");
+        assert!(format!("{:?}", second.err().unwrap()).contains("nothing was written"), "refused in words");
+        drop(first);
+        assert!(AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).is_ok(), "free again");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// What the first lock's takeover was for, without one: a lock FILE a writer left behind (the old
+    /// format's, or anything else) blocks nobody — only a held OS lock does.
+    #[test]
+    fn a_lock_file_left_behind_blocks_nobody() {
         let dir = tmp_dir("stale-lock");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(APPEND_LOCK_FILE), "a writer that died").unwrap();
-        let first = AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).expect("taken over");
-        let lock_text = fs::read_to_string(dir.join(APPEND_LOCK_FILE)).unwrap();
-        assert_ne!(lock_text, "a writer that died");
-        // Someone else takes it over from `first` (as if `first` had stalled past the wait).
-        let second = AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).expect("taken over again");
-        drop(first);
-        assert!(dir.join(APPEND_LOCK_FILE).exists(), "the stalled holder left its successor's lock alone");
-        drop(second);
-        assert!(!dir.join(APPEND_LOCK_FILE).exists());
+        AppendLock::take_within(&dir, std::time::Duration::ZERO).expect("an unheld file is no lock");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A writer KILLED while holding the lock does not block the next one: the operating system
+    /// releases it with the process. The holder is this test binary, re-entered as a child.
+    #[cfg(not(miri))]
+    #[test]
+    fn a_writer_killed_holding_the_lock_does_not_block_the_next() {
+        const CHILD: &str = "DELULU_AUDIT_LOCK_HOLDER";
+        if let Ok(dir) = std::env::var(CHILD) {
+            let _held = AppendLock::take(Path::new(&dir)).expect("the child takes the lock");
+            std::thread::sleep(std::time::Duration::from_secs(120));
+            return;
+        }
+        let dir = tmp_dir("killed-holder");
+        fs::create_dir_all(&dir).unwrap();
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "audit::tests::a_writer_killed_holding_the_lock_does_not_block_the_next", "--nocapture"])
+            .env(CHILD, &dir)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        // Wait until the child holds it — a test that never saw it held would prove nothing.
+        let seen_held = (0..2000).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            AppendLock::take_within(&dir, std::time::Duration::ZERO).is_err()
+        });
+        assert!(seen_held, "the child never held the lock");
+        child.kill().unwrap();
+        child.wait().unwrap();
+        AppendLock::take_within(&dir, std::time::Duration::from_secs(5)).expect("released with the process that held it");
         let _ = fs::remove_dir_all(&dir);
     }
 }

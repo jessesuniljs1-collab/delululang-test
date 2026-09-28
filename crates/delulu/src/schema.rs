@@ -451,7 +451,9 @@ fn defs() -> Value {
                 ("denied_total", t("integer")),
                 ("policy_hash", t("string")),
             ],
-            &[("image", r("microvm_image"))],
+            // PS-D-01: an external (L3) run names the launcher's PROGRAM (never its arguments, which
+            // can carry an operator's token).
+            &[("image", r("microvm_image")), ("launcher", t("string"))],
         ), "a sandboxed run: what the host applied, what it answers, and what it refused"),
         "microvm_image": described(obj(
             &[("kernel_sha256", t("string")), ("initramfs_sha256", t("string")), ("kernel_version", t("string"))],

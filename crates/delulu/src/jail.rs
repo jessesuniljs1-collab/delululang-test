@@ -38,7 +38,7 @@ pub struct Enforced {
 // the value and let it drop, which is what fires kill-on-close.
 #[cfg(windows)]
 #[allow(unused_imports)]
-pub use windows_jail::{confine, Jail};
+pub use windows_jail::{confine, CpuProbe, Jail};
 
 #[cfg(not(windows))]
 #[allow(unused_imports)]
@@ -523,6 +523,11 @@ mod windows_jail {
     }
 
     impl Jail {
+        /// No jail: the guest is confined by something DeluluLang did not apply (PS-D-01, L3).
+        pub fn none() -> Jail {
+            Jail(std::ptr::null_mut())
+        }
+
         /// What the job measured: processor time (user + kernel) and the peak memory any process in
         /// it committed. The job's own accounting, read after the guest ended — so a stop is named
         /// from the OS's measurement, never guessed from an exit code that does not say
@@ -554,6 +559,42 @@ mod windows_jail {
                 }
                 let ticks = (acct.TotalUserTime.max(0) + acct.TotalKernelTime.max(0)) as u64;
                 Some((std::time::Duration::from_nanos(ticks.saturating_mul(100)), ext.PeakProcessMemoryUsed as u64))
+            }
+        }
+
+        /// The job's processor-time accounting, for the host's watchdog thread while the guest runs.
+        /// The job's own `PerJobUserTimeLimit` is checked late — a 3 s budget measured at 5–8 s, a 6 s
+        /// one at 12.9 s (SANDBOX-CPU-LATE-1) — so the host reads the same accounting and ends the guest
+        /// at the budget; the job's limit stays as the backstop.
+        pub fn cpu_probe(&self) -> Option<CpuProbe> {
+            (!self.0.is_null()).then_some(CpuProbe(self.0 as usize))
+        }
+    }
+
+    /// A read-only view of a job's processor time from another thread. Valid while the [`Jail`] it
+    /// came from is alive: the watchdog holding it is joined before the guest is reaped, and the jail
+    /// outlives both.
+    #[derive(Clone, Copy)]
+    pub struct CpuProbe(usize);
+
+    impl CpuProbe {
+        /// User plus kernel time of every process the job has held, as the job accounts it.
+        pub fn used(self) -> Option<std::time::Duration> {
+            // SAFETY: the structure is zeroed and sized with `size_of`; the handle is the live jail's.
+            unsafe {
+                let mut acct: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = std::mem::zeroed();
+                if QueryInformationJobObject(
+                    self.0 as HANDLE,
+                    JobObjectBasicAccountingInformation,
+                    &mut acct as *mut _ as *mut core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                    std::ptr::null_mut(),
+                ) == 0
+                {
+                    return None;
+                }
+                let ticks = (acct.TotalUserTime.max(0) + acct.TotalKernelTime.max(0)) as u64;
+                Some(std::time::Duration::from_nanos(ticks.saturating_mul(100)))
             }
         }
     }
@@ -704,6 +745,13 @@ mod windows_tests {
 #[cfg(not(windows))]
 mod other {
     pub struct Jail;
+
+    impl Jail {
+        /// No jail: the guest is confined by something DeluluLang did not apply (PS-D-01, L3).
+        pub fn none() -> Jail {
+            Jail
+        }
+    }
 
     pub fn confine<T>(_child: &T, _limits: super::Limits) -> (Jail, super::Enforced) {
         (Jail, super::Enforced::default())
