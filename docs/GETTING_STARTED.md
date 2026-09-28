@@ -546,8 +546,15 @@ Zed, Helix, Neovim, Kate, Emacs and JetBrains all work from the three-line confi
   the right posture for learning. A program running as *your* OS user is not contained by anything
   here; the three deployment tiers, and how to check with `delulu doctor` which one you are actually
   in, are there.
+- **Running code you did not write:** `delulu run app.delulu --sandbox --grant … --report-out r.json`
+  runs it as a guest that holds no authority of its own — every effect is decided and performed by
+  your `delulu` — in a jailed process on all three systems; `--isolation microvm` gives it its own
+  kernel on Linux with KVM, and `--sandbox-backend external:CMD` hands the wall to your own launcher.
+  Read the report, not the program's output: it says which level you actually got.
+  [`for-agents.md`](for-agents.md) `[agents.sandbox]` and `DEPLOYMENT.md` have the details.
 - [`for-agents.md`](for-agents.md) — pin this if you are an agent harness.
 - [`reference/`](reference/) — grammar, tokens, primitives, diagnostics, CLI contracts.
 - `delulu explain <CODE>` — long-form docs for any diagnostic you hit.
-- [`design/HARDENING_CAMPAIGN.md`](design/HARDENING_CAMPAIGN.md) — what is currently known to be
-  wrong with all of this.
+- [`REMAINING_WORK.md`](REMAINING_WORK.md) — everything currently known to be missing or wrong, each
+  row checked against the binary; [`design/HARDENING_CAMPAIGN.md`](design/HARDENING_CAMPAIGN.md) is
+  the campaign that found much of it.

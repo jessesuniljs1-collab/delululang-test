@@ -118,7 +118,7 @@ enforces what it actually has:
 
 | Platform | What the guest is held to |
 |---|---|
-| Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction; and since PS-B-03 **a separate identity**: a per-run AppContainer with no capabilities, so no network of any kind and none of the operator's files, the state directory included (T14, measured with a control) |
+| Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling (the job's own limit, which Windows checks late, and since 2026-09-28 the host reading the job's accounting every 100 ms and stopping the guest at the budget — SANDBOX-CPU-LATE-1), killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction; and since PS-B-03 **a separate identity**: a per-run AppContainer with no capabilities, so no network of any kind and none of the operator's files, the state directory included (T14, measured with a control) |
 | Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls Where the host allows user namespaces, **a separate identity** as well (PS-B-03b): a per-run subordinate uid in its own user namespace, with no supplementary groups or capabilities, so none of the files only your account may read (T14, measured with a control); the report says `same OS user` where the host forbids it. |
 | macOS | a processor-time ceiling and no core dump (`setrlimit` before `exec`, both measured: a spinning program with a one-second limit was killed by SIGXCPU after one second against a control that ran sixteen, run `35480762820`; **no** memory ceiling is claimed or even requested, because `setrlimit(RLIMIT_DATA)` returns EINVAL on macOS — measured in the same run — and the time ceiling matters most here, since macOS has no `PDEATHSIG` and a guest that is computing rather than asking would not notice its host had died), plus a **deny-default** Seatbelt profile: nothing is permitted but reads, `sysctl-read`, the guest's own `exec`, and its channel socket — so no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. Each of those four allowances was measured load-bearing by removing it (run `35479148216`); reads are NOT narrowed, because every attempt to confine them by subpath aborts the guest, so on macOS a guest can still read the filesystem and only the other layers stop it acting on what it read — except the state directory, which the profile refuses since PS-B-03 (T14). Measured on macOS 26.6.2 arm64: a future release needing another allowance makes the run REFUSE rather than fall back to a weaker profile |
 
@@ -129,10 +129,16 @@ when the sole entry is `identity_separation` — and `denied`, every attempt the
 code. A run report that listed only guarantees would read as though the rest were covered. The program
 can write to its own output but not to that file.
 
-Two of those rows are the guest restricting ITSELF, which is why the run report does not carry them:
-the report states what the **host** applied, and a host cannot verify a claim its guest makes about
-itself. The guest says what it applied on standard error, and on a kernel with no Landlock it says
-that instead — an absent boundary never reads like an applied one. `delulu sandbox probe` asks the
+On every platform a process guest may also be given `--limits wall=SECONDS`, a wall-clock ceiling the host's own watchdog enforces,
+and a guest stopped by any ceiling is named as such — in words, in the report's `outcome.stopped_by`,
+and in an exit code that agrees with the report (SANDBOX-STOP-1).
+
+The Linux Landlock ruleset and seccomp filter are the guest restricting ITSELF. Since 2026-09-25
+(`REMAINING_WORK.md` 4.23) the run report counts them: the guest reports them to the host as its first
+request, after its lock-down and before the program's first line, and the host accepts that only
+first, only once, and only in its own words for those layers — anything else refuses the whole run.
+The guest also says what it applied on standard error, and on a kernel with no Landlock it says that
+instead — an absent boundary never reads like an applied one. `delulu sandbox probe` asks the
 running kernel for its Landlock ABI directly; a kernel below ABI 3 does not mediate `truncate` and a
 kernel below ABI 4 does not mediate TCP, and the guest's report says which of the two it got.
 

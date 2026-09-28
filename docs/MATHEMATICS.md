@@ -588,7 +588,10 @@ question that cost this project its worst soundness hole, and it settles nothing
     Closing it means checking the opened **handle** (`O_NOFOLLOW`/`openat2`, `FILE_FLAG_OPEN_REPARSE_POINT`),
     which would make containment platform-dependent — the one property this project refuses — so it is
     named here rather than fixed. **Deployment rule: grant scopes that point at directories only the
-    program's own user can write.**
+    program's own user can write.** *Closed on 2026-09-27 (V2 P5c, FS-RACE-1):* every file effect
+    now opens the approved path one component at a time and follows no link, so a link swapped in
+    after the check is refused at the open (`openat`/`O_NOFOLLOW`, `NtCreateFile`/`FILE_OPEN_REPARSE_POINT`); the deployment rule
+    stays as defence in depth.
 15. **What `⊑` proves, and what it does not.** Worth stating in this list because two campaign findings
     landed on the seam. The order bounds what a grant may **say**; the filesystem decides what a path
     **does**. `SYMLINK-DANGLE-1` (a dangling link the resolver could not settle) and `GUARD-SPELL-1` (a

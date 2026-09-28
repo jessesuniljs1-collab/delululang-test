@@ -1474,9 +1474,10 @@ true (every `--json` answer validated against a closed schema); **the sandbox** 
 holding no authority, in a jailed process on all three systems and in its own kernel under Firecracker
 on Linux (this chapter's list above called the microVM launch "not built"; V2 built it); budgets on
 every run, as an authority dimension a delegation can only narrow; a real network client; plugins
-loaded at run time; the standard library; and the agent surfaces of Chapter 13. What it has not built
-yet: a distribution (you build from source), the verification-depth work, external launchers, and the
-owner-gated autonomy work. `V2_PHASE_STATUS.md` is the one-page answer to "where is it now".
+loaded at run time; the standard library; the agent surfaces of Chapter 13; a release workflow (its
+dry run builds and installs four targets and publishes nothing — you still build from source); and an
+external launcher (`--sandbox-backend external:CMD`, level 3, whose wall is reported as unmeasured).
+In progress: the verification-depth work and the attestation seam; owner-gated: the autonomy work. `V2_PHASE_STATUS.md` is the one-page answer to "where is it now".
 
 ### What actually remains
 

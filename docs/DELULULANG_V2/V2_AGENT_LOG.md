@@ -1,6 +1,9 @@
 # V2 agent log
 
-> **Frozen at P1 (owner, 2026-09-18, D-V2-22).** The running log is [`V2_LOG.md`](V2_LOG.md).
+> **Frozen at P1 (owner, 2026-09-18, D-V2-22).** The running log is [`V2_LOG.md`](V2_LOG.md). The later
+> agent passes — P5b's and P5c's multi-OS adversarial passes (Haiku 4.5 and Sonnet 5, 2026-09-27/28),
+> the usability pilot — are recorded there, with the head chef's verdicts; what running them taught is
+> `HANDOFF.md` §11.7.
 
 What each sous-chef agent was asked, did, found and failed — conclusions, evidence and outputs only.
 No private reasoning or chain-of-thought is stored here or anywhere (owner's rule, 2026-09-17).

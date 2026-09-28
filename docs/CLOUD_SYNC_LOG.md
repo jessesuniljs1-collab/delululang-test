@@ -66,7 +66,8 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (the laptop pushes to `master` directly; cloud sessions cannot)
 - Base: `047da1d`
 - Commits: `d41e558` Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot; and the
-  follow-up `Cloud handoff (2): run and check everything with the Survey and doctor` — the baseline.
+  follow-up `bc9192c` Cloud handoff (2): run and check everything with the Survey and doctor; and
+  `Cloud handoff (3): the documents brought up to date for the cloud period` — the baseline.
 - Files and folders:
   A `AGENTS.md` — the rules every agent reads
   A `CLAUDE.md` — imports `AGENTS.md`; Claude-specific notes for cloud sessions
@@ -78,6 +79,12 @@ it on `origin` was made in the cloud and is listed below.
   M `docs/REMAINING_WORK.md`, `docs/DEPLOYMENT.md` — CONTAIN-TOCTOU-1 is closed (FS-RACE-1, P5c)
   M `docs/DELULULANG_V2/V2_LOG.md` — the handoff entry
   M `docs/survey/*` — regenerated
+  (3) M `docs/DELULULANG_V2/V2_README.md`, `V2_PHASE_STATUS.md`, `V2_SECURITY_MODEL.md`,
+      `V2_IMPLEMENTATION_ROADMAP.md`, `V2_AGENT_LOG.md` — current state, the cloud period, PS-D status
+  (3) M `docs/REMAINING_WORK.md` — 6.5 closed (P4-07 had built it), 2.6/4.10/7.5/7.10a updated, 4.24 new
+  (3) M `docs/DEPLOYMENT.md`, `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `docs/QUESTIONS.md`,
+      `docs/MATHEMATICS.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REPOSITORY_STRUCTURE.md` —
+      stale sandbox, microVM and residual statements corrected; the sandbox levels; AGENTS.md pointers
 - Survey and doctor: `survey check` ok (1,456 nodes, 12,427 edges); `survey findings` 0 errors,
   14 warnings (12 new ones are the memory snapshot's dated citations, kept verbatim by design);
   `doctor --check` ok, 29 checks passed on the laptop.

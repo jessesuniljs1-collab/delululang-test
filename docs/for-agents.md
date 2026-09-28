@@ -82,7 +82,9 @@ escaped every sweep because the contract gate checked that each named command ap
 never the reverse, and `doctor` was named in no list at all. Both are fixed and both are now guarded:
 the gate reads the dispatcher itself, so the next command cannot be born unswept.
 
-This page is about *driving* DeluluLang. If you are modifying the implementation, start instead at
+This page is about *driving* DeluluLang. If you are an agent **changing this repository**, read
+[`AGENTS.md`](../AGENTS.md) at its root first — the rules, the Survey-and-`doctor` routine for every
+session and every change, and the record every cloud session keeps. Then start at
 [`docs/survey/SURVEY.md`](survey/SURVEY.md) — a map of the repository generated from the repository,
 where every edge cites the file and line it was read from. Ask it the question you actually have:
 
@@ -433,9 +435,17 @@ on macOS,
 and on Linux resource limits, no-new-privs, a Landlock ruleset (nothing writable anywhere, reads only
 from the system paths, no TCP) and a seccomp filter.
 
-The guest prints what it applied to itself, and on a host that cannot apply it prints that instead —
-so read those lines rather than assuming the list above. They are not in the report, deliberately:
-the report says what the HOST applied, and a host cannot verify its guest's claim about itself.
+The guest also reports what it applied to itself — as its first request to the host, before its
+program runs, accepted only in the host's own words for those layers — so the report counts them
+(since 2026-09-25); on a host that cannot apply them it says so instead. Read the report rather than
+assuming the list above.
+
+**Three isolation levels**, and the report's `level` says which one you got: **L1** `--sandbox` (a
+jailed process, all three systems); **L2** `--isolation microvm` (its own kernel under Firecracker —
+Linux x86_64 with KVM and an image built from source; elsewhere `DL1408`, never something weaker);
+**L3** `--sandbox --sandbox-backend external:CMD` (your launcher — Docker with gVisor, Kata, a cloud
+sandbox — carries the guest; the report says level 3 and **no host guarantee**, because DeluluLang
+measured none of that wall). At every level the host decides and performs every effect.
 
 Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
 performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may
@@ -449,8 +459,9 @@ than the rest —
 - `posture`: the questions you actually have, answered from what was applied — filesystem writes,
   filesystem reads, network, new programs, memory, processor time, privilege escalation, identity;
 - `limitations`: every one of those questions that **nothing is enforcing** on this host.
-  `identity_separation` is always there, because the guest runs as the same OS user (RW 4.4), and
-  `fully_enforced` is true only when it is the only one;
+  `identity_separation` is there wherever the guest runs as the same OS user — macOS, and Linux hosts
+  that forbid user namespaces (RW 4.4); a Windows guest (a per-run AppContainer) and a Linux guest with
+  a subordinate uid are separate identities. `fully_enforced` is true only when that is the only one;
 - `denied`: what the program TRIED and was refused, each entry naming its code, with `denied_total`
   in case there were more than the report keeps. On an unfamiliar program this is the first field to
   read.
@@ -461,15 +472,17 @@ output, because the program writes there too and could forge it (D-V2-21).
 
 **What it refuses, rather than quietly not applying:** an unknown profile, an unreadable limit, and
 any program whose surface the channel cannot carry yet — today that means actors, foreign C, Python,
-plugins, devices and secrets. A refusal names the surface and exits 2, having run nothing.
+plugins and devices. A refusal names the surface and exits 2, having run nothing. A secret is refused at
+its first use instead, because a secret's bytes never cross the channel.
 `sandbox policy --json` reports the same thing in advance, in `unsupported_surface`.
 
 `--sandbox=off` is the explicit opposite. Say it deliberately: an unconfined run should be a sentence
 someone wrote, not a default nobody noticed.
 
 The sandbox is **opt-in**, and that is a ruling rather than an oversight (D-V2-26): it becomes the
-default once the channel can carry the surfaces it currently refuses, in PS-B/PS-C. Until then, asking
-for it is the only way to get it — so ask for it.
+default once the channel can carry the surfaces it currently refuses. PS-B and PS-C have passed and
+those surfaces are still refused, so asking for it is still the only way to get it — so ask for it.
+(An operator can make it mandatory on a host: `delulu sandbox require`, `DEPLOYMENT.md`.)
 
 ## [agents.mcp] The MCP server
 

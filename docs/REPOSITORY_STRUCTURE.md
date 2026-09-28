@@ -48,6 +48,9 @@ DeluluLang/
 ├── NOTICE                          # attribution carried by every redistribution (Apache §4d)
 ├── TRADEMARK.md                    # the DeluluLang NAME policy — derivatives rename (D27)
 ├── GOVERNANCE.md                   # project governance; Jesse Sunil = lead
+├── HANDOFF.md                      # the briefing for whoever works here next — rules, state, memory
+├── AGENTS.md                       # the rules every AI agent reads (2026-09-28)
+├── CLAUDE.md                       # loaded by Claude Code; imports AGENTS.md (2026-09-28)
 ├── .gitignore
 │
 ├── crates/                         # the compiler & runtime, one crate per pipeline concern
@@ -336,6 +339,8 @@ DeluluLang/
     │                               #   ahead of them. Not a schedule and not a promise.
     ├── editors.md                  # editor/LSP setup
     ├── DELULULANG_V2/              # the ACTIVE V2 source of truth — see V2_README.md
+    ├── CLOUD_SYNC_LOG.md           # the cloud period's change ledger (2026-09-28 → 2026-10-16)
+    ├── assistant-memory/           # the laptop's auto-memory, snapshotted for cloud sessions
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
     │   ├── SOUNDNESS_AUDIT.md          # rules R-1…R-8 + R-2b; carries the R-4 and R-2/R-5

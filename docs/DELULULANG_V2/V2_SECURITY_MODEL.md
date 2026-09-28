@@ -19,9 +19,9 @@ principal                   who is asking — human, agent, robot, service: one 
   ↓ static authority        `delulu authority`: what the whole program can request     [implemented]
   ↓ operator grant / lease  `--grant`, `--lease`, the manifest ceiling; ⊑ bounds it     [implemented]
   ↓ Guard                   is this operation or delegation allowed? tiers, permits     [implemented]
-  ↓ sandbox policy          derive(authority, grant, profile) → SandboxPolicy           [designed]
+  ↓ sandbox policy          derive(authority, grant, profile) → SandboxPolicy           [implemented (PS-A): `delulu sandbox policy`, the report's `policy_hash`]
   ↓ sandbox backend         a launcher and a channel: process, microvm, external        [process and microvm implemented (PS-A, PS-C); external implemented, its wall measured by nobody (PS-D-01)]
-  ↓ host effect channel     the guest asks; the host performs                           [designed; the WASM host and the foreign worker are the precedents, implemented]
+  ↓ host effect channel     the guest asks; the host performs                           [implemented (PS-A): `delulu-sandbox-channel/2`, the same host code for L1, L2 and L3]
   ↓ broker / custody        is this request backed by valid custody?                    [implemented]
   ↓ real effect             the host performs it, under containment                     [implemented]
   ↓ audit                   what happened, hash-chained, anchored                       [implemented]
@@ -201,8 +201,17 @@ and measured against the simulator; the signed adapter is designed]
 Claimed today, with witnesses: zero ambient authority; attenuation-only delegation; transitive
 revocation with a stated latency bound; the hash-chained, anchored audit log (modification,
 reordering and truncation detected; an attacker who rewrites log and anchor is not); Guard permits
-rather than bearer codes; filesystem containment through resolved paths (with the TOCTOU residual
-named); the WASM in-process floor; the separate-OS-account boundary on POSIX.
+rather than bearer codes; filesystem containment through resolved paths, opened without following any
+link since P5c (FS-RACE-1 closed the check-then-open race, CONTAIN-TOCTOU-1); the WASM in-process
+floor; the separate-OS-account boundary on POSIX.
+
+The sandbox is claimed level by level, each with its witnesses in `V2_LOG.md`, and every run's report
+says what THAT host applied: **L1** (`--sandbox`) since PS-A and PS-B on Windows, Linux and macOS, as
+the per-platform table in `docs/DEPLOYMENT.md` states it; **identity separation** since PS-B-03 (a
+per-run AppContainer on Windows) and PS-B-03b (a subordinate uid on Linux, where the host allows user
+namespaces); **L2** (`--isolation microvm`) since PS-C on Linux x86_64 with KVM, with the hostile-guest
+red-team gates; the ceilings that stop a guest named from evidence (SANDBOX-STOP-1,
+SANDBOX-CPU-LATE-1).
 
 Egress control is claimed since PS-B-02, with witnesses and falsified mutants
 (`crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu/tests/egress_cli.rs`): one host-side
@@ -215,8 +224,9 @@ A resource bound on the main program is claimed since PS-B-01, with its witnesse
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
 host watchdog on every engine at a stated 25 ms resolution.
 
-Not claimed until its witness is green and its mutant is red: any L1 or L2 containment; content
-inspection of permitted traffic (a program may send
+Not claimed until its witness is green and its mutant is red: containment a host did not measure (a
+level or guarantee a run's report does not list); content inspection of permitted traffic (a program may send
 anything to a host it was granted — category 7, and the grant is the control);
-identity separation provided by the toolchain; anything about an L3 environment; multi-tenancy on
-one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.
+identity separation where the host forbids it (macOS; Linux without user namespaces); anything about
+an L3 environment — PS-D-01 reports it as unmeasured, and PS-D-02's attestation seam is not built;
+multi-tenancy on one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.

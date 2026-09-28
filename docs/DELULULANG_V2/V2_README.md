@@ -15,19 +15,29 @@ it is here. When a V2 decision changes, these files change; the archive does not
 | [`V2_IMPLEMENTATION_ROADMAP.md`](V2_IMPLEMENTATION_ROADMAP.md) | every phase with its tasks, verification, dependencies, and the end-of-phase protocol | you are about to do the work |
 | [`V2_LOG.md`](V2_LOG.md) | the running log: one short block per phase | you want what happened, briefly |
 | [`V2_PHASE_STATUS.md`](V2_PHASE_STATUS.md) | one row per phase: state, commit, CI run, date | you want to know where V2 is right now |
-| [`V2_EXECUTION_LOG.md`](V2_EXECUTION_LOG.md) | per phase: what was implemented, files, commands and results, Survey, doctor, CI, git, agents, problems, decisions | you want to know what actually happened |
+| [`V2_EXECUTION_LOG.md`](V2_EXECUTION_LOG.md) | **frozen at P1** (D-V2-22): the per-phase record of V2-0 and P1 — files, commands, Survey, doctor, CI | you want the first two phases in full; everything later is in `V2_LOG.md` |
 | [`V2_DECISION_LOG.md`](V2_DECISION_LOG.md) | records `D-V2-nn`: evidence, alternatives, why, status (RULED by the owner / TAKEN by the head chef / PROPOSED) | you want to argue with a choice |
 | [`V2_SECURITY_MODEL.md`](V2_SECURITY_MODEL.md) | the authority + sandbox model: the enforcement stack, the roles, execution modes, resource authority, isolation levels, the microVM principle, what is and is not claimed | you touch Authority, the Guard, the broker or a sandbox |
 | [`V2_AI_NATIVE_DESIGN.md`](V2_AI_NATIVE_DESIGN.md) | the AI-native goal as engineering: one principal model, the zero-shot learning loop, the surfaces, the usability benchmark, AI-audits-AI | you build an agent surface or measure usability |
 | [`V2_DOC_MOVE_MANIFEST.md`](V2_DOC_MOVE_MANIFEST.md) | every file moved into `docs/archive/v1/` in phase V2-0: original path, new path, why, class, links changed, whether it stays authoritative anywhere | you are looking for a document that used to be somewhere else |
-| [`V2_AGENT_LOG.md`](V2_AGENT_LOG.md) | what each sous-chef agent was asked, did, found and failed | you want to know what an agent did |
+| [`V2_AGENT_LOG.md`](V2_AGENT_LOG.md) | **frozen at P1** (D-V2-22): what each sous-chef agent was asked, did, found and failed, up to P1; later agent passes are recorded in `V2_LOG.md` | you want to know what an early agent did |
+| [`V2_PS_C_PREREQUISITES.md`](V2_PS_C_PREREQUISITES.md) | what the microVM phase needed before it could start — KVM, the VMM, the kernel and image, the host — and how each was met | you touch the microVM |
+| [`V2_PS_C_RED_TEAM.md`](V2_PS_C_RED_TEAM.md) | the microVM's red-team record (PS-C-06): the hostile guests, what each tried, what held | you want to know what attacks the microVM was tested against |
 
 ## How V2 proceeds
 
+**Where V2 is now:** `V2_PHASE_STATUS.md` — as of 2026-09-28, P7 (verification depth) and PS-D
+(external launchers; PS-D-02 waits for the owner's word) are in progress and P8 is owner-gated. **From
+2026-09-28 to 2026-10-16 the work runs in Claude Code cloud sessions**, through pull requests, with every
+change recorded in `docs/CLOUD_SYNC_LOG.md` (`HANDOFF.md` §0).
+
 One phase at a time, in the approved order (`V2_MASTER_PLAN.md` §4). At the start of a phase: read
-its objectives, inspect the affected code, run the Survey and `doctor`, establish the baseline. Most
-implementation is delegated to one Opus 5 sous-chef with an exact brief; the head chef (Claude
-Fable 5.1) verifies everything an agent produces against the real binary. At the end of a phase:
+its objectives, inspect the affected code, run the Survey and `doctor`, establish the baseline. The
+head chef — the main Claude Code session: Fable 5.1 for V2-0, Opus 5 from P1 to 2026-09-20, Opus 5.5
+from PS-B-02 (2026-09-25) on, as each commit's `Co-Authored-By` line records — does
+or delegates the implementation, each agent with an exact brief, and verifies everything an agent
+produces against the real binary; testing passes use Haiku 4.5 and Sonnet 5 agents on several
+operating systems (owner, 2026-09-27). At the end of a phase:
 tests, the Survey regenerated as the last edit, `doctor`, the relevant gates, the V2 logs, commit,
 push to the testing remote only, the CI result read and recorded — then **STOP**, wait about sixty
 seconds for the owner, and continue to the next approved phase if nothing arrives. A newer owner

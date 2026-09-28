@@ -236,6 +236,9 @@ parser (shared with PS-A's channel target); RW 5.6 shrink the three Miri-slow te
 
 ## PS-D — external launchers and the attestation seam (3–4 S)
 
+**Status (2026-09-28):** PS-D-01 **done** (`30a6b8d`, D-V2-46, CI green). PS-D-02 **designed, not
+started** — the owner's stop; the design is in `HANDOFF.md` §0.
+
 PS-D-01 `--sandbox-backend external:<cmd>`: the operator's launcher runs `delulu __guest` in their
 environment and exposes the channel over stdio; the level is labelled `external`, the guarantees
 `unknown`; a Docker + `runsc` + `--network none` recipe documented, not shipped. PS-D-02 the

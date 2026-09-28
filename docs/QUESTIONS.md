@@ -322,14 +322,18 @@ Yes, and they are enumerated rather than implied:
   the project refuses. Pinned as an executed characterization test; full threat model in
   `HARDENING_CAMPAIGN.md` P20-R1.
 - **Filesystem containment is a check-then-open, so a concurrent writer into a granted directory can
-  swap a checked file for a symlink in between** (`CONTAIN-TOCTOU-1`, 2026-08-10). **This one is
-  open.** It is not reachable by the confined program through this API — the primitive table exposes
+  swap a checked file for a symlink in between** (`CONTAIN-TOCTOU-1`, 2026-08-10). **This one was
+  open until 2026-09-27** — the end of this item says how it closed. It is not reachable by the confined program through this API — the primitive table exposes
   no symlink-creating operation, so winning the race needs a *second* writer — and that writer is
   either a same-uid process (already outside the proof boundary) or anyone who can write into the
   granted directory. Closing it properly needs `O_NOFOLLOW`/`openat2`/`FILE_FLAG_OPEN_REPARSE_POINT`,
   which is the platform-dependent containment this project refuses, so it is stated rather than
   fixed. **Deployment consequence: grant scopes that point at directories only the program's own user
-  can write — never a shared or world-writable one.**
+  can write — never a shared or world-writable one.** *Closed on 2026-09-27 (V2 P5c, FS-RACE-1):* the
+  V2 testers won the race (75 of 150 runs wrote outside a grant), and the project built what the
+  paragraph above said it refused — every file effect now opens the approved path one component at a
+  time and follows no link (`openat` with `O_NOFOLLOW` on Unix, `NtCreateFile` with
+  `FILE_OPEN_REPARSE_POINT` on Windows). The deployment advice stays, as defence in depth.
 - **A *dangling* symlink used to escape filesystem containment entirely — fixed 2026-08-10**
   (`SYMLINK-DANGLE-1`). `canonicalize` fails identically for "a name that is absent" and "a link whose
   target is absent", so the containment walk re-appended the link's own name as an ordinary component,
@@ -436,12 +440,13 @@ exactly the case where the type-level answer was wrong and a lower layer was the
 Which is why the design is explicitly defense in depth — type proof → WASM/WASI floor → microVM
 isolation → human-held broker keys — rather than a claim that any one layer suffices.
 
-**Three of those four layers are built; the microVM one is not.** `--isolation microvm` is a probe
-that names the missing prerequisite and refuses with `DL1408` on every host, including a
-fully-provisioned Linux+KVM one — so the layer that would contain *genuinely untrusted* execution
-is, today, the layer that is absent. That is stated here rather than left to be discovered, because
-this section is an argument *for* defense in depth and it would be a poor one if it counted a layer
-nobody can turn on. What holds instead is the WASM/WASI floor plus the broker, and — for untrusted
+**All four layers are built now — the microVM one only since 2026-09-27, and only on Linux x86_64
+with KVM** (V2 phase PS-C: `--isolation microvm` runs the interpreter as PID 1 of its own kernel under
+Firecracker's jailer, with no network or filesystem device and an image built from source). Everywhere
+else it refuses with `DL1408` rather than launch anything weaker. Until 2026-09-27 this paragraph said
+the microVM was a probe that refused on every host — the layer that would contain *genuinely
+untrusted* execution was the absent one — and it said so because an argument *for* defense in depth
+would be a poor one if it counted a layer nobody could turn on. Count it only where it runs. What holds instead is the WASM/WASI floor plus the broker, and — for untrusted
 code — a separate OS account (`DEPLOYMENT.md` Tier 2), which is the boundary this project actually
 verified with a second UID.
 
