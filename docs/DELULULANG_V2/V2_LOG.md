@@ -2467,3 +2467,29 @@ protocols beyond REST for now. **Terms:** nothing of OpenShell copied, none of i
 updated with it: `V2_SECURITY_MODEL.md` (§6's L3 note, a new §9b, §10's stale "PS-D-02 is not built"
 corrected), `V2_P8_DESIGN.md`, `V2_README.md`, `REMAINING_WORK.md`, `HANDOFF.md`, `AGENTS.md`, `README.md`,
 `DEPLOYMENT.md`, `REPOSITORY_STRUCTURE.md`. Nothing was built; no test changed.
+
+## 2026-09-28 (evening, later) — the routine's brief checked against the cloud docs; Sonnet 5.5
+
+The owner asked whether the routine's instructions need updating for Claude Code's cloud, and said
+Sonnet 5.5 and Haiku 5.5 had just launched. Read, as Markdown: the official models overview, Claude Code's
+model configuration, routines and cloud-environments pages. What held, and what changed:
+
+- **Models.** Sonnet 5.5 (`claude-sonnet-5-5`) is released — the models page lists it, retirement "not
+  sooner than September 28, 2027"; it needs Claude Code ≥ 2.1.284 (the laptop has 2.1.284). **Haiku 5.5
+  is not released**: the page's newest Haiku is 4.5, and the announcements say "in the coming weeks".
+  Testing passes now use Sonnet 5.5 and Haiku 4.5, Haiku 5.5 once it is listed (`AGENTS.md`,
+  `docs/CLOUD_ROUTINE.md`). The routine's head chef stays Opus 5.5 at xhigh — the owner's choice.
+- **Effort.** Claude Code runs Opus 5.5 and Sonnet 5.5 at `medium` by default; the repository's
+  `effortLevel: xhigh` is what gives the routine xhigh. Unchanged, now said.
+- **Classifier fallback.** A cybersecurity-flagged request on Opus 5.5 re-runs on Opus 4.8 and the
+  session stays there. PS-E-03's escaped-guest work is defensive but could be flagged; the commit trailer
+  must then name Opus 4.8 (`CLAUDE.md`, the brief).
+- **`gh`.** The docs list it as pre-installed and proxy-authenticated; run 1 found none. The brief now
+  says: check (`command -v gh`), record, use it when there; read CI with the GitHub MCP tools either way.
+- **The VM's reach.** Release assets and API calls reach only the attached repository — OpenShell's
+  releases cannot be fetched in the VM, so PS-E-05 exercises OpenShell only on GitHub's runners.
+  Commands wait at most 10 minutes, then move to the background. A cached environment setup script is
+  the owner's to add (the environment dialog), if he wants the toolchain pre-installed.
+- **Usage.** Recorded in the brief: routine runs draw on the owner's subscription, and three fires on
+  2026-09-28 ended in seconds on the five-hour limit.
+

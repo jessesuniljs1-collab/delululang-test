@@ -202,7 +202,11 @@ it on `origin` was made in the cloud and is listed below.
   (2) `Cloud handoff (8): the OpenShell export allows GET, not a preset` — a soundness correction to the
   study's §4.5 found on re-reading it (the `read-only` preset also allows `HEAD` and `OPTIONS`, wider
   than a program's authority; grant roots are exported as absolute resolved paths), and the memory
-  index's stale V2 line
+  index's stale V2 line; (3) `Cloud handoff (9): the routine's brief checked against the cloud docs;
+  Sonnet 5.5` — the owner's question the same evening: M `docs/CLOUD_ROUTINE.md` (models, effort, classifier
+  fallback, `gh`, the VM's reach and limits, usage), `AGENTS.md` (Sonnet 5.5 and Haiku 4.5 for testing
+  passes), `CLAUDE.md` (`gh`, release assets, the fallback's trailer), `HANDOFF.md` §11.1/§11.3,
+  `docs/DELULULANG_V2/V2_README.md`, `V2_LOG.md`, `docs/assistant-memory/` (two files)
 - Files and folders:
   A `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` — the study: what was read, the two designs side by side,
     what DeluluLang takes (each slice's design, witness, falsifier) and does not, the phase changes

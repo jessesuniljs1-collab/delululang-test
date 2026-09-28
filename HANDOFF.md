@@ -521,6 +521,12 @@ wins, and you should update the memory to match.
   then resume the routine. Done that evening: `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`, D-V2-52 to
   D-V2-55, phases PS-E and P9 and slice P8-04. The terms: nothing of OpenShell is copied into the
   repository, none of its crates is a dependency (Apache-2.0; `NOTICE` is the owner's).
+- **New models (owner, 2026-09-28, evening):** *"does routine instructions need updation for claude code
+  cloud. also models sonnet 5.5 and haiku 5.5 just now launched"* — checked against the official models
+  page: Sonnet 5.5 is released, Haiku 5.5 is not yet. Testing passes now use Sonnet 5.5 and Haiku 4.5,
+  and Haiku 5.5 once it is listed; the routine's head chef stays Opus 5.5 at xhigh (the owner's choice).
+  `docs/CLOUD_ROUTINE.md`, `AGENTS.md`, `CLAUDE.md` and §11.3 were brought up to the cloud docs the same
+  evening.
 
 ### 11.2 Working rules the project has paid for
 
@@ -553,6 +559,21 @@ wins, and you should update the memory to match.
   `.github/workflows/container.yml`. VS Code installs from Microsoft's apt repository
   (`packages.microsoft.com` is reachable; the direct download host is not), which is how RW 7.4's
   end-to-end test ran.
+- **The cloud VM, as the official docs describe it (read 2026-09-28, evening):** `gh` is *listed* as
+  pre-installed and authenticated through the GitHub proxy — run 1 found none, so a run checks
+  (`command -v gh`, `check-tools`) rather than assumes; GitHub release assets and API calls reach **only
+  the repositories attached to the session** (a download from NVIDIA/OpenShell's releases gets 403 —
+  OpenShell runs belong to a GitHub Actions workflow); a command waits 2 minutes by default, at most 10,
+  then moves to the background; an **environment setup script** (configured by the owner in the
+  environment dialog, not in the repository) is cached as a filesystem snapshot for about seven days if it
+  finishes within about five minutes — a candidate for the Rust toolchain and `cargo fetch`.
+- **Models (official models page, 2026-09-28):** Fable 5.1 (`claude-fable-5-1`), Opus 5.5
+  (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
+  the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
+  2026-10-15). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
+  `medium` effort — the repository's `effortLevel: xhigh` is what raises them; a cybersecurity-flagged
+  request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
+  `Co-Authored-By` must name the model actually running.
 
 - **WSL2 has KVM (since 2026-09-26):** `nestedVirtualization` plus a boot-time `modprobe` in
   `wsl.conf`. The PS-C toolchain lives there: Firecracker at `~/bin/firecracker`, guest images at

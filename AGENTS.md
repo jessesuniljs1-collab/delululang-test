@@ -107,7 +107,9 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
 ## Running sub-agents — lessons already paid for
 
 - Use an agent only where it adds real, independent value; the owner watches usage. Testing passes
-  may use Haiku 4.5 and Sonnet 5 (owner, 2026-09-27); implementation agents are Opus or Sonnet.
+  may use Haiku and Sonnet (owner, 2026-09-27) — since 2026-09-28 **Sonnet 5.5** and **Haiku 4.5**
+  (Haiku 5.5 is announced, not released: use it once the official models page lists it); implementation
+  agents are Opus or Sonnet. Name the model an agent ACTUALLY ran in every record of it.
 - **Judge an agent by its logs, never its summary.** Haiku overclaimed; one "microVM TTL defect" was
   the agent's own test mistake; one "dead delegate" was really a stale secret store. Re-run every claim
   against the CURRENT binary before it is used or recorded.

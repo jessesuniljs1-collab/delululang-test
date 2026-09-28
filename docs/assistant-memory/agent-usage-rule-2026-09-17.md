@@ -73,3 +73,5 @@ reproducing chain-of-thought or hidden reasoning**. No raw transcripts are kept.
 private reasoning is not part of the record and must not be stored.
 Recorded in `HANDOFF.md` §11.1 and `docs/NEXT_EVOLUTION_2026/EXECUTION_LOG.md` Entry 3.
 Related: [[head-chef-handoff]] rule 7, [[delulu-next-evolution-2026]].
+
+**Update 2026-09-28 (evening):** Sonnet 5.5 is released and is the Sonnet for testing passes; Haiku 5.5 is announced but not released — Haiku 4.5 until the official models page lists 5.5. Always name the model an agent ACTUALLY ran.

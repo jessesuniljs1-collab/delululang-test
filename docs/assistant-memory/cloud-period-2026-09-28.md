@@ -45,6 +45,7 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   findings 0 errors, doctor 29/29 on Windows; full suite NOT run locally — CI covered every OS); then
   **NVIDIA OpenShell studied** on Jesse's commission → [[openshell-study-2026-09-28]]; PS-E is next,
   then P8 (+P8-04), then P9; the routine resumed with its connectors cleared again.
+- **Models, 2026-09-28 evening (official models page):** Sonnet 5.5 (`claude-sonnet-5-5`) RELEASED; Haiku 5.5 announced, NOT released (Haiku 4.5 still newest; retirement not sooner than 2026-10-15). Testing passes: Sonnet 5.5 + Haiku 4.5 (Haiku 5.5 once listed). Opus 5.5 defaults to `medium` in Claude Code — repo `effortLevel: xhigh` raises it. A cyber-flagged request re-runs Opus 5.5 → Opus 4.8 and the session STAYS there: the trailer must name it. Cloud VM: `gh` listed as pre-installed in docs but run 1 found none — check; release assets only from the attached repo.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

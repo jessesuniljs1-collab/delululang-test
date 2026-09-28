@@ -29,8 +29,10 @@ everything using survey and doctor"*).
 
 - Ubuntu 24.04, x86-64, 4 vCPU, 16 GB RAM. `rust-toolchain.toml` pins Rust **1.96.1**; the first
   `cargo` call installs it with clippy and rustfmt (crates.io and `static.rust-lang.org` are on the
-  Trusted network list). Python 3, GCC/Clang, Docker, Node 22 and `xvfb-run` are pre-installed; **`gh` is
-  not** (measured by the first routine run) — use the GitHub MCP tools (`docs/CLOUD_ROUTINE.md` step 3).
+  Trusted network list). Python 3, GCC/Clang, Docker, Node 22 and `xvfb-run` are pre-installed. **`gh`:**
+  the official docs list it as pre-installed and authenticated through the GitHub proxy, but the first
+  routine run found none — check with `command -v gh`, and read CI with the GitHub MCP tools either way
+  (`docs/CLOUD_ROUTINE.md` step 3). The VM can fetch GitHub release assets only from this repository.
   Run `cargo fetch --locked` once before the suite: `egress_features` needs every platform's crates.
 - **A scheduled routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master`. **An interactive
   cloud session** can push only its own branch → push, open a pull request into `master`, and record the
@@ -44,7 +46,8 @@ everything using survey and doctor"*).
 
 ## Commits
 
-End every commit message with the model that is ACTUALLY running (check before writing it) and the
+End every commit message with the model that is ACTUALLY running (check before writing it — after a
+safety-classifier fallback notice, Opus 5.5 has become Opus 4.8 for the rest of the session) and the
 session link:
 
 ```
