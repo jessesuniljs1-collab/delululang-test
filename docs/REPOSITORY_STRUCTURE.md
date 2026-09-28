@@ -340,6 +340,7 @@ DeluluLang/
     ├── editors.md                  # editor/LSP setup
     ├── DELULULANG_V2/              # the ACTIVE V2 source of truth — see V2_README.md
     ├── CLOUD_SYNC_LOG.md           # the cloud period's change ledger (2026-09-28 → 2026-10-16)
+    ├── CLOUD_ROUTINE.md            # the loop every scheduled cloud run follows
     ├── assistant-memory/           # the laptop's auto-memory, snapshotted for cloud sessions
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
@@ -506,6 +507,7 @@ account for everything and check nothing.
 
 | File | Purpose |
 | --- | --- |
+| `CLOUD_ROUTINE.md` | **The loop every scheduled cloud run follows until 2026-10-16** — the authority a run has (everything but the owner's five reserved decisions), where it works (`master`), and the run step by step: orient, health, verify the previous run, choose, build, close, watch CI, record. |
 | `CLOUD_SYNC_LOG.md` | **The cloud period's change ledger (2026-09-28 → 2026-10-16).** Every cloud session appends the commits and the files and folders it touched, what it verified, and what the laptop must redo; with the procedure for syncing the laptop afterwards. |
 | `docs/assistant-memory/` | The head chef's auto-memory directory from the owner's laptop — `MEMORY.md` and one file per topic — snapshotted on 2026-09-28 for cloud sessions, which have no auto memory; sanitized for a public repository (its `README.md` says how). `HANDOFF.md` §11 and the V2 documents outrank it where they disagree. |
 | `GETTING_STARTED.md` | Install to first program to real programs to your editor. The path a new developer walks. |

@@ -35,7 +35,8 @@ the assistant's memory — which now also travels file by file in
     `DELULU_CORE.md`) is the owner's: the file is entrenched.
   - **PS-D, external launchers and the attestation seam.** PS-D-01 is done:
     `--sandbox --sandbox-backend external:CMD`, level 3, measured by nobody and reported so (D-V2-46).
-    **PS-D-02 waits for the owner's word** ("stop before PS-D-02", 2026-09-28); its design is in §0.
+    **PS-D-02 is next** — the owner's morning stop was superseded the same day by his delegation (§0);
+    its design is in §0.
 - **Not started:** P8, safe autonomy (the signed adapter) — owner-gated.
 - **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
   every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
@@ -97,15 +98,22 @@ repository, which is already connected to Claude; the laptop's checkout is synce
    request: commits, and every file and folder added, modified, deleted or renamed — the owner's
    instruction, *"keep a record of files and folders changed, to be synced with the local repo later."*
    The file has the template and the sync procedure.
-2. **Push only the session's branch** of `origin`, open a pull request into `master`, never force-push,
-   delete no branch. Say in the pull request what was verified and which CI runs were read.
+2. **Pushing.** The scheduled routine works on `master` and pushes there (`docs/CLOUD_ROUTINE.md`); an
+   interactive cloud session pushes only its own branch and opens a pull request into `master`. Never
+   force-push, delete no branch, and say what was verified and which CI runs were read.
 3. **Heavy runs go to GitHub** (owner, 2026-09-28: *"run everything on github"*): the three-OS matrix,
    Miri and `miri-slow`, `heavy-gates`, the release dry run, `channel-measure`,
    `host-capability-probe` — `gh workflow run ci.yml --ref <branch> -f jobs=…`. In the VM, run the
    suite alone with `-j 4`.
 4. **Durable facts go into §11** and, in the same format, into `docs/assistant-memory/` — there is no
    memory directory to write to.
-5. **Stop points hold:** PS-D-02 waits for the owner's word.
+5. **The owner's delegation (2026-09-28, later that day):** *"I want the development of delululang to be continued in my absentia. No need to wait for any of my input, Claude u can take better decisions than me on delululang. Run verification loops and loop engineering."*
+   Every DeluluLang decision is the head chef's until he is back — **except the five he reserved by
+   name**: the final public repository, the licence, entrenched files, D-NE-27, D-NE-7 (no tag, no
+   release). His morning stop before PS-D-02 is superseded. The engine is a **Claude Code routine** — a
+   saved prompt that runs as a cloud session every few hours with the laptop off — and every run follows
+   **[`docs/CLOUD_ROUTINE.md`](docs/CLOUD_ROUTINE.md)**: orient, check health, verify the previous run,
+   choose one piece of work, build it through the inner loop, close it, watch CI, record.
 6. **Run and check everything with the Survey and `doctor`** (owner, 2026-09-28): `survey check` and
    `doctor --check` at the start of every session; `survey impact`/`affected-by`/`query` before every
    change; `survey build`, `check`, `findings` (0 errors) and `doctor --check` after the last edit and
@@ -122,8 +130,7 @@ directory itself.
 laptop tree, a fast-forward pull, the CRLF check, the Survey and `doctor`, the suite on Windows and in
 WSL, each entry's "redo on the laptop" items, and the memory carried back by hand.
 
-**PS-D-02 — designed, not started** (the owner's stop, 2026-09-28). The draft the next session starts
-from, once he says so:
+**PS-D-02 — designed, not started; next.** The draft the next run starts from:
 
 1. The seam verifies a **statement**, not a platform. An attestation document is
    `{"format":"delulu-attestation-v1","statement":{"nonce","attester","guarantees":[…]},"signature"}` —
@@ -466,7 +473,10 @@ wins, and you should update the memory to match.
   stopped, and resume the stopped agents (by message, never respawned).
 - **Run everything on GitHub (owner, 2026-09-28):** heavy runs — the matrix, Miri, `heavy-gates`, the
   release dry run, the measurement and probe workflows — go to CI, not the owner's machine.
-- **Stop before PS-D-02 (owner, 2026-09-28)** — until he says otherwise.
+- **Stop before PS-D-02 (owner, 2026-09-28, morning)** — superseded the same day by the next line.
+- **Continue without him (owner, 2026-09-28):** *"I want the development of delululang to be continued in my absentia. No need to wait for any of my input, Claude u can take better decisions than me on delululang. Run verification loops and loop engineering."* Every decision is the head chef's until
+  2026-10-16 except the five reserved by name (§0 rule 5); a scheduled routine runs the loop in
+  `docs/CLOUD_ROUTINE.md`.
 - **The cloud period (owner, 2026-09-28):** work continues from Claude Code cloud sessions until
   2026-10-16 (§0), and every change is recorded for the later sync — *"keep a record of files and
   folders changed, to be synced with the local repo later"* (`docs/CLOUD_SYNC_LOG.md`).

@@ -67,7 +67,8 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `047da1d`
 - Commits: `d41e558` Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot; and the
   follow-up `bc9192c` Cloud handoff (2): run and check everything with the Survey and doctor; and
-  `Cloud handoff (3): the documents brought up to date for the cloud period` — the baseline.
+  `937aea8` Cloud handoff (3): the documents brought up to date for the cloud period; and
+  `Cloud handoff (4): the routine's loop, and the owner's delegation` — the baseline.
 - Files and folders:
   A `AGENTS.md` — the rules every agent reads
   A `CLAUDE.md` — imports `AGENTS.md`; Claude-specific notes for cloud sessions
@@ -85,6 +86,9 @@ it on `origin` was made in the cloud and is listed below.
   (3) M `docs/DEPLOYMENT.md`, `docs/for-agents.md`, `docs/GETTING_STARTED.md`, `docs/QUESTIONS.md`,
       `docs/MATHEMATICS.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REPOSITORY_STRUCTURE.md` —
       stale sandbox, microVM and residual statements corrected; the sandbox levels; AGENTS.md pointers
+  (4) A `docs/CLOUD_ROUTINE.md` — the loop every scheduled run follows; M `AGENTS.md`, `CLAUDE.md`,
+      `HANDOFF.md`, `README.md`, the V2 status files, `REMAINING_WORK.md` 4.24, the structure guide —
+      the owner's delegation (PS-D-02's stop superseded; five decisions stay his), the routine on `master`
 - Survey and doctor: `survey check` ok (1,456 nodes, 12,427 edges); `survey findings` 0 errors,
   14 warnings (12 new ones are the memory snapshot's dated citations, kept verbatim by design);
   `doctor --check` ok, 29 checks passed on the laptop.
@@ -93,5 +97,6 @@ it on `origin` was made in the cloud and is listed below.
   the first cloud session reads.
 - Redo on the laptop: nothing.
 - For the laptop's memory: the cloud period and this file (already in the laptop's memory).
-- Open / next: read the `miri-slow` run `36381950975` on `047da1d` — green closes REMAINING_WORK 5.6;
-  PS-D-02 waits for the owner's word; the rest is `V2_PHASE_STATUS.md` and `HANDOFF.md` *Where things stand*.
+- Open / next: read the `miri-slow` run `36381950975` on `047da1d` — green closes REMAINING_WORK 5.6 —
+  and the push runs of the four handoff commits; then **PS-D-02** (the owner's delegation superseded
+  his stop); then `docs/CLOUD_ROUTINE.md` step 4's order.

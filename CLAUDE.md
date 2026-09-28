@@ -30,8 +30,9 @@ everything using survey and doctor"*).
 - Ubuntu 24.04, x86-64, 4 vCPU, 16 GB RAM. `rust-toolchain.toml` pins Rust **1.96.1**; the first
   `cargo` call installs it with clippy and rustfmt (crates.io and `static.rust-lang.org` are on the
   Trusted network list). Python 3, GCC/Clang, Docker and `gh` are pre-installed.
-- `git push` reaches only this session's branch → push, open a pull request into `master`, record the
-  change in `docs/CLOUD_SYNC_LOG.md` in the same pull request. `master` moves only by the owner's merge.
+- **A scheduled routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master`. **An interactive
+  cloud session** can push only its own branch → push, open a pull request into `master`, and record the
+  change in `docs/CLOUD_SYNC_LOG.md` in the same pull request.
 - CI: `gh run list -R jessesuniljs1-collab/delululang-test`, `gh run view <id> --log`, a job's log via
   `gh api repos/jessesuniljs1-collab/delululang-test/actions/jobs/<job-id>/logs`. Manual runs:
   `gh workflow run ci.yml --ref <branch> -f jobs=everything|heavy|heavy-gates|miri-slow`; also

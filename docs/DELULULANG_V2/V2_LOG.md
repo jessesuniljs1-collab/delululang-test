@@ -2125,3 +2125,26 @@ auto memory is machine-local, so a cloud session has none. What was written for 
 run `36381950975` still running (syntax green, broker and check in flight) — the first cloud session reads
 it, and a green one closes REMAINING_WORK 5.6.
 
+## 2026-09-28 — the owner's delegation, and the routine that carries the work to 2026-10-16
+
+Later the same day the owner wrote: *"I want the development of delululang to be continued in my absentia. No need to wait for any of my input, Claude u can take better decisions than me on delululang. Run verification loops and loop engineering."* He asked whether a `/loop`, a Desktop scheduled task
+or a routine should keep prompting cloud sessions until 2026-10-16. From Claude Code's documentation
+(read 2026-09-28): `/loop` lives in an open session on his machine and expires after seven days; a
+Desktop scheduled task runs only while his computer is on and awake; **a routine** runs in the cloud with
+the laptop off, as a full autonomous cloud session, on a schedule of at least an hour, against a daily
+run cap and his plan's usage. Only a routine fits. Its runs clone `master` and may push to it, because
+`master` is not protected and every one of its commits is the owner's — which matters: a run that
+could only open pull requests would start each time from a `master` nobody merges into.
+
+- **`docs/CLOUD_ROUTINE.md`** (new) is the loop each run follows: the date and a three-hour budget;
+  orient; health (Survey, `doctor`); **verify the previous run** (read every CI run since the last
+  record; a red `master` is the only task, and two red runs in a row put the next into SAFE MODE —
+  revert, record, no new work; re-run the previous run's tests and check its entry's claims); choose one
+  piece of work in a fixed order (findings, "Open / next", PS-D-02, P7, REMAINING_WORK rows a Linux VM can
+  verify, a weekly verification sweep); the inner loop (witness, falsify, clippy, the suite alone); close
+  (Survey, `doctor`, the records, the sync-log entry with "Open / next"); watch the push run.
+- **The delegation's limits:** every decision is the head chef's until 2026-10-16 except the five the
+  owner reserved by name — the final public repository, the licence, entrenched files, D-NE-27, D-NE-7.
+  **PS-D-02's stop is superseded**; `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md` §0/§11.1, the status files and
+  REMAINING_WORK 4.24 say so.
+

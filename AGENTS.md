@@ -12,7 +12,8 @@ you remember from elsewhere.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
-3. `docs/CLOUD_SYNC_LOG.md` — what earlier cloud sessions changed.
+3. `docs/CLOUD_SYNC_LOG.md` — what earlier cloud sessions changed; and **`docs/CLOUD_ROUTINE.md`** —
+   the loop every scheduled cloud run follows until 2026-10-16.
 4. `docs/REMAINING_WORK.md` — everything open, each row checked against the binary.
 
 DeluluLang is a statically typed, authority-and-effect-typed language (a Rust workspace of 13 crates):
@@ -44,7 +45,10 @@ authority; the host performs every effect under grants, a lease and the Guard.
   counts only once its result is READ and recorded. Never fabricate evidence; record failed runs.
 - **Decisions you take under the owner's delegation** are written as
   `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`, never as his rulings.
-- **Stop points the owner set are binding:** as of 2026-09-28, *do not start PS-D-02* until he says so.
+- **The owner's delegation (2026-09-28):** every DeluluLang decision is the head chef's until he is back
+  — except the five he reserved by name: the final public repository, the licence, entrenched files,
+  D-NE-27 and D-NE-7 (never a tag, never a release). His morning "stop before PS-D-02" was superseded
+  the same day by that delegation (`docs/CLOUD_ROUTINE.md`).
 
 ## Run and check everything with the Survey and `doctor` (owner, 2026-09-28)
 
@@ -67,9 +71,10 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
 
 ## The cloud period (2026-09-28 → 2026-10-16) — `HANDOFF.md` §0
 
-- A cloud session can `git push` **only to its own working branch**. Commit and push there, open a
-  pull request into `master` (CI runs on pull requests), and say in it what was verified. The owner
-  merges. Never force-push.
+- **The scheduled routine works on `master` directly** and pushes there (`docs/CLOUD_ROUTINE.md`:
+  `master` is unprotected and every commit on it is the owner's, so a routine may). An **interactive**
+  cloud session can `git push` only to its own working branch: push there and open a pull request into
+  `master`, saying what was verified. Never force-push.
 - **Record every change in `docs/CLOUD_SYNC_LOG.md`** — commits, and every file and folder added,
   modified, deleted or renamed (`git diff --name-status <base>..HEAD`) — in the same pull request, so
   the local repository on the owner's laptop can be synced later. Use the template in that file.

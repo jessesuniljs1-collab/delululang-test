@@ -27,9 +27,10 @@ it is here. When a V2 decision changes, these files change; the archive does not
 ## How V2 proceeds
 
 **Where V2 is now:** `V2_PHASE_STATUS.md` — as of 2026-09-28, P7 (verification depth) and PS-D
-(external launchers; PS-D-02 waits for the owner's word) are in progress and P8 is owner-gated. **From
+(external launchers; PS-D-02 next) are in progress and P8 is owner-gated. **From
 2026-09-28 to 2026-10-16 the work runs in Claude Code cloud sessions**, through pull requests, with every
-change recorded in `docs/CLOUD_SYNC_LOG.md` (`HANDOFF.md` §0).
+change recorded in `docs/CLOUD_SYNC_LOG.md`, and a scheduled routine runs the loop in
+`docs/CLOUD_ROUTINE.md` under the owner's delegation (`HANDOFF.md` §0).
 
 One phase at a time, in the approved order (`V2_MASTER_PLAN.md` §4). At the start of a phase: read
 its objectives, inspect the affected code, run the Survey and `doctor`, establish the baseline. The
