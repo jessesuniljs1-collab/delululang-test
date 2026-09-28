@@ -2365,3 +2365,26 @@ mid-motion; DL1905 still binding; two falsifications); **P8-02** the driver's lo
 `.dpx` — pure, proved at load, signature-checked against a pinned key and run from the verified bytes,
 the host keeping the transport — which ends D-V2-50's residual; **P8-03** a reference transport to the
 simulator in its own process. A real device stays environment-blocked.
+
+**CI read (continued).** `81c644f` (ADAPTER-SPELL-1) push run `36397905009`: **success on every job** —
+`resolve_driver`'s `PATH` lookup (`.exe` appended) found the Windows rig's `python` and the Unix rigs'
+`sh`; the new Unix witness passed on Linux and macOS.
+
+### RW 7.4 — the editor's real end-to-end test, on Linux for the first time
+
+`editors/vscode/e2e.js` launches a real VS Code against the real server; it had only ever run on
+Windows, and reading it showed why: its "is the server alive?" check and its cleanup were PowerShell's
+`Win32_Process`, so on Linux it could not pass. Given a POSIX branch (`pgrep -af` for the `delulu …
+lsp` process, `pkill -f` for cleanup; `--no-sandbox` when running as root, which Electron requires),
+it ran in the cloud VM — VS Code 1.139.1 from Microsoft's apt repository (`packages.microsoft.com` is
+reachable; the direct download host is not), Node 22, `npm ci && npm run package`, `xvfb-run -a node
+e2e.js target/debug/delulu`: **"OK — extension activated and the language server started with no errors
+reported"**, with `initialize` sent and answered and `publishDiagnostics` received in the traced log.
+**Falsified:** against a "server" that exits at once, exit 1 and "server crashed 5 times". RW 7.4 closed;
+making it a CI gate on the Linux editor job is its "next".
+
+### RW 7.3 — why this VM cannot build the Dockerfile
+
+Its Docker daemon starts (`dockerd`, overlayfs, cgroup v1), but every pull from Docker Hub is refused:
+"You have reached your unauthenticated pull rate limit" — the VM's outbound address is shared. So the
+build moved to GitHub: `.github/workflows/container.yml`, by hand only, dispatched as run `36399908461`.

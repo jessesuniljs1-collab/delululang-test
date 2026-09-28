@@ -48,6 +48,16 @@ Witnesses, all against the simulator (`--broker-profile sim`) and on every OS CI
 `CARRIED` gains the two kinds; `unsupported_surface`'s refusal loses "devices"; the report's `granted`
 and `host_guarantees` gain nothing a device run did not measure.
 
+**Where the work is (read before starting):** the host channel performs a guest's `CapMethod` through
+`prim::call_cap_method`, and device operations do not live there — they live in the interpreter
+(`Interp::call_actuator` / `call_sensor` in `crates/delulu-runtime/src/interp.rs`, with the envelope
+check, the refused-attempt sweep of C39, and the DL1904 trace records). So P8-01 first moves that logic
+behind one function both the interpreter and `HostChannel` call, with the `DeviceBroker` handed to the
+host channel the way custody is (`HostChannel::with_custody`); and the sandboxed path in
+`crates/delulu/src/guest.rs` must build the broker exactly as `run_cmd.rs` does for an ordinary run —
+the DL1905 sign-off gate, the adapter's provenance check and `resolve_driver`, the clock mode — by
+sharing that code, not copying it.
+
 ### P8-02 — the Verified-class adapter as a `.dpx`
 
 The driver's LOGIC becomes a DeluluLang plugin of the Verified class: re-proved at load like every

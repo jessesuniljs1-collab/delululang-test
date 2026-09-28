@@ -67,8 +67,13 @@ fs.writeFileSync(
   )
 );
 
+// RW 7.4: this ran on Windows only — the liveness check and the cleanup below were PowerShell's. On
+// Linux and macOS they are `pgrep`/`pkill`, and Electron refuses to start as root without
+// `--no-sandbox` (a CI container or a cloud VM runs as root; a desktop session does not).
+const isWin = process.platform === "win32";
+const asRoot = typeof process.getuid === "function" && process.getuid() === 0;
 const code = (args, timeout) =>
-  spawnSync("code", args, { encoding: "utf8", shell: true, timeout });
+  spawnSync("code", asRoot ? ["--no-sandbox", ...args] : args, { encoding: "utf8", shell: true, timeout });
 
 console.log("installing the packaged extension into an isolated profile…");
 const install = code(
@@ -130,27 +135,35 @@ const activated = hostLogs.some((h) => /_doActivateExtension delulu-lang\.delulu
 
 // Is the server actually alive right now? Checked BEFORE the cleanup below, because a server that
 // starts and dies is exactly the failure this test exists to catch.
-const ps = spawnSync(
-  "powershell",
-  [
-    "-NoProfile",
-    "-Command",
-    "Get-CimInstance Win32_Process -Filter \"Name='delulu.exe'\" | Select-Object -ExpandProperty CommandLine",
-  ],
-  { encoding: "utf8", timeout: 30000 }
-);
-const serverAlive = /\blsp\b/.test(ps.stdout || "");
+const ps = isWin
+  ? spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_Process -Filter \"Name='delulu.exe'\" | Select-Object -ExpandProperty CommandLine",
+      ],
+      { encoding: "utf8", timeout: 30000 }
+    )
+  : spawnSync("pgrep", ["-af", "delulu"], { encoding: "utf8", timeout: 30000 });
+const serverAlive = isWin
+  ? /\blsp\b/.test(ps.stdout || "")
+  : (ps.stdout || "").split("\n").some((l) => /delulu\S*\s+lsp\b/.test(l));
 
 // Leave the machine as we found it.
-spawnSync(
-  "powershell",
-  [
-    "-NoProfile",
-    "-Command",
-    `Get-CimInstance Win32_Process -Filter "Name='Code.exe'" | Where-Object { $_.CommandLine -like '*${path.basename(root)}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
-  ],
-  { encoding: "utf8", timeout: 30000 }
-);
+if (isWin) {
+  spawnSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-Command",
+      `Get-CimInstance Win32_Process -Filter "Name='Code.exe'" | Where-Object { $_.CommandLine -like '*${path.basename(root)}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+    ],
+    { encoding: "utf8", timeout: 30000 }
+  );
+} else {
+  spawnSync("pkill", ["-f", path.basename(root)], { encoding: "utf8", timeout: 30000 });
+}
 
 console.log(body || "(no DeluluLang output channel was created)");
 
