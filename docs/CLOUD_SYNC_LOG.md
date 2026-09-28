@@ -68,7 +68,8 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: `d41e558` Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot; and the
   follow-up `bc9192c` Cloud handoff (2): run and check everything with the Survey and doctor; and
   `937aea8` Cloud handoff (3): the documents brought up to date for the cloud period; and
-  `Cloud handoff (4): the routine's loop, and the owner's delegation` — the baseline.
+  `7e67f97` Cloud handoff (4): the routine's loop, and the owner's delegation; and `Cloud handoff (5):
+  a run can end at any moment — push each verified slice` — the baseline.
 - Files and folders:
   A `AGENTS.md` — the rules every agent reads
   A `CLAUDE.md` — imports `AGENTS.md`; Claude-specific notes for cloud sessions

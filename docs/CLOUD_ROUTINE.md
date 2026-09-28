@@ -99,7 +99,9 @@ is spent, the entry's "Open / next" says the run is unread — the next run read
 ## Rules a run never bends
 
 - Everything in `AGENTS.md` *Hard rules*, and the five reserved decisions above.
-- **Never leave work uncommitted or unpushed at the end of a run.** Half-done work goes on
+- **Never leave work uncommitted or unpushed at the end of a run** — and a run can END AT ANY MOMENT: a
+  usage limit stops it mid-step, and the VM is discarded. So commit and push each verified slice as soon
+  as it is green, with its sync-log line, rather than one commit at the end; half-done work goes on
   `claude/cloud-dev` with an "Open / next" line, never lost.
 - **One writer at a time.** If `git fetch` shows another run pushed since this one started, rebase before
   pushing; if the other run is still working on the same files, choose different work.
