@@ -68,8 +68,9 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: `d41e558` Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot; and the
   follow-up `bc9192c` Cloud handoff (2): run and check everything with the Survey and doctor; and
   `937aea8` Cloud handoff (3): the documents brought up to date for the cloud period; and
-  `7e67f97` Cloud handoff (4): the routine's loop, and the owner's delegation; and `Cloud handoff (5):
-  a run can end at any moment — push each verified slice` — the baseline.
+  `7e67f97` Cloud handoff (4): the routine's loop, and the owner's delegation; `7bd018c` Cloud handoff
+  (5): a run can end at any moment — push each verified slice; and `Cloud handoff (6): the routine's
+  mandate — every phase, any file, xhigh effort` — the baseline.
 - Files and folders:
   A `AGENTS.md` — the rules every agent reads
   A `CLAUDE.md` — imports `AGENTS.md`; Claude-specific notes for cloud sessions
@@ -90,6 +91,9 @@ it on `origin` was made in the cloud and is listed below.
   (4) A `docs/CLOUD_ROUTINE.md` — the loop every scheduled run follows; M `AGENTS.md`, `CLAUDE.md`,
       `HANDOFF.md`, `README.md`, the V2 status files, `REMAINING_WORK.md` 4.24, the structure guide —
       the owner's delegation (PS-D-02's stop superseded; five decisions stay his), the routine on `master`
+  (6) A `.claude/settings.json` (`effortLevel: xhigh`); M `docs/CLOUD_ROUTINE.md` (finish every phase incl.
+      P8's software; any file may change; four decisions stay his; step 8, improve the loop), `AGENTS.md`,
+      `HANDOFF.md` — the owner's noon mandate
 - Survey and doctor: `survey check` ok (1,456 nodes, 12,427 edges); `survey findings` 0 errors,
   14 warnings (12 new ones are the memory snapshot's dated citations, kept verbatim by design);
   `doctor --check` ok, 29 checks passed on the laptop.
@@ -99,5 +103,10 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing.
 - For the laptop's memory: the cloud period and this file (already in the laptop's memory).
 - Open / next: read the `miri-slow` run `36381950975` on `047da1d` — green closes REMAINING_WORK 5.6 —
-  and the push runs of the four handoff commits; then **PS-D-02** (the owner's delegation superseded
-  his stop); then `docs/CLOUD_ROUTINE.md` step 4's order.
+  and the push runs of the handoff commits — read at 07:10 UTC: `d41e558`, `bc9192c`, `7e67f97`, `7bd018c`
+  green; **`937aea8` red on Windows only**: `actors_pingpong`'s criterion-1 speed-up measured 1.31x
+  against its 1.5x bar on a docs-only commit, and the next two commits passed it — a timing criterion
+  measuring a busy 4-CPU runner. Investigate it the project's way (`HANDOFF.md` §11.5: starve the
+  runner, never lengthen or loosen blindly) and record the verdict. `miri-slow` `36381950975`: syntax
+  green, **check green — its first complete run ever** (59 min), broker still running. Then
+  **PS-D-02**, then `docs/CLOUD_ROUTINE.md` step 4's order.

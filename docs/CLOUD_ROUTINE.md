@@ -13,16 +13,28 @@ the loop.
 
 ## The authority a run has — and does not have
 
-The owner delegated every DeluluLang decision to the head chef for this period, **except the five that
-stay his**, because they are legal, irreversible or outward-facing and his earlier rulings reserve them
-by name: **the final public repository** (never create, add or push to it — `HANDOFF.md` §1.1); **the
-licence**; **entrenched files** (CODEOWNERS — the list in `AGENTS.md`); **D-NE-27** (never commit or ship
-a built GPL kernel image); **D-NE-7** (publication: never push a tag, never create a release). Everything
-else — phases, designs, fixes, refactors, which item comes next — is the run's to decide, recorded as
-`D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`.
+The owner set the routine up on 2026-09-28 with these words: *"create it. I want opus 5.5 at xhigh effort. run verification loops. routine should be set for every 5hr till oct 16 … Can start PS-D-02. Tell to finish all the phases and verify. Set up loop engineering. any file or folder is allowed to modified or created or even deleted. If every phase is built continue improving and verifying delululang the lang of the future."*
 
-**PS-D-02 is no longer stopped.** The owner's "stop before PS-D-02" (2026-09-28, morning) was superseded
-the same day by the delegation above; its design is in `HANDOFF.md` §0.
+**So a run may do anything that develops DeluluLang** — every phase, design, fix, refactor and choice of
+what comes next is its own, recorded as `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's
+delegation)`. **Any file or folder may be created, modified or deleted**, including the entrenched ones
+(`CONSTITUTION.md`, `DELULU_CORE.md`, `STABILITY.md`, `SOUNDNESS_AUDIT.md`, `SECURITY.md`, `rfcs/`,
+`docs/security/`, the conformance witnesses): record every entrenched edit in
+`docs/design/ENTRENCHED_CHANGE_RECORD.md`, citing this delegation. New `DL` codes are allowed with a
+`D-V2-nn`. Prefer moving a superseded document to `docs/archive/` over deleting it, and name every
+deletion and its reason in the sync-log entry — a deleted record cannot be read by the owner when he is
+back.
+
+**Four things stay the owner's**, because they are legal or outward-facing rather than development, and
+his standing rulings reserve them by name: **the final public repository** (never create, add or push to
+any repository but `origin` — `HANDOFF.md` §1.1); **the licence** (never change `LICENSE`, `NOTICE` or the
+licence terms); **D-NE-7, publication** (never push a tag, never create a release — the release workflow's
+dry run is fine); **D-NE-27** (never commit or ship a built GPL kernel image).
+
+**PS-D-02 is no longer stopped** — the owner's words above; its design is in `HANDOFF.md` §0.
+
+**Effort.** The owner asked for Opus 5.5 at **xhigh** effort: the routine is set to Opus 5.5, and the
+repository's `.claude/settings.json` sets `effortLevel` to `xhigh` for every session that opens it.
 
 ## Where a run works: `master`
 
@@ -39,8 +51,10 @@ force-push. If a push to `master` is rejected:
 
 ## One run, step by step
 
-**0. Date and budget.** `date -u`. If it is **2026-10-16 or later**: do no new work — write a closing
-entry in `docs/CLOUD_SYNC_LOG.md` (what the period built, what is open, how to sync), push it, and stop.
+**0. Date and budget.** `date -u`. If it is **2026-10-16 or later**: do no new work — if the closing
+entry is not yet in `docs/CLOUD_SYNC_LOG.md`, write it (what the period built, what is open, how to sync)
+and push it; then stop at once, spending nothing more (the routine keeps firing until the owner pauses
+it).
 Otherwise note the start time: **stop starting new work about three hours after it**, and always leave
 the tree committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
 
@@ -65,16 +79,26 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 **4. Choose one piece of work** — the first of these that is not done:
 1. Anything steps 2–3 found.
 2. `Open / next` items from the newest sync-log entries.
-3. The phase order in `V2_PHASE_STATUS.md`: **PS-D-02** (the attestation seam, `HANDOFF.md` §0 design,
-   with a fake attester); then the rest of **P7** that is the head chef's (RW 5.2 is entrenched — leave
-   it); P8 stays owner-gated (it needs hardware).
+3. **Finish every phase, and verify each** — the owner's order: **PS-D-02** (the attestation seam, the
+   `HANDOFF.md` §0 design, with a fake attester); the rest of **P7** — RW 5.2 (restate Progress as
+   progress-or-fault in `DELULU_CORE.md`, now allowed, recorded in `ENTRENCHED_CHANGE_RECORD.md`) and RW
+   5.6's closing run; **P8** as far as software reaches — RW 4.7's signed Verified-class adapter as a
+   `.dpx` (signature policy, a pinned key, verify-before-dispatch, the control program in a guest, the
+   dead-man watchdog host-side), witnessed against the simulator; a real device stays
+   environment-blocked and says so. A phase is done when its CI run is read green and
+   `V2_PHASE_STATUS.md` says so with the commit and the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
    (build the Dockerfile and devcontainer: the VM has Docker), **7.4** (`editors/vscode/e2e.js` on Linux
    under `xvfb-run`, installed by `apt`), **2.2**, **2.4**, **2.10**, **4.17**, **7.16** — each as a small,
    witnessed change.
-5. **A verification sweep** when nothing above is ready, and at least once a week (Sundays, UTC): dispatch
-   `gh workflow run ci.yml -f jobs=everything`, read every job, and scan the live documents for claims the
-   code has overtaken (as the handoff did — `HANDOFF.md` §11.8's last lesson).
+5. **A verification sweep** at least once a week (Sundays, UTC) and whenever nothing above is ready:
+   dispatch `gh workflow run ci.yml -f jobs=everything`, read every job, run an adversarial testing pass
+   on the newest feature (a sous-chef agent may do it — `AGENTS.md`), and scan the live documents for
+   claims the code has overtaken (`HANDOFF.md` §11.8's last lesson).
+6. **When every phase is built: keep improving and verifying DeluluLang, the language of the future** —
+   the owner's words. Pick from `REMAINING_WORK.md` (the language: 2.x, the backends: 3.x, containment:
+   4.x, proof: 5.x, tooling: 6.x), from what the sweeps find, and from what would make the language
+   better for its users — developers, AI agents, robots — each change small, witnessed and recorded.
 
 Size the work to finish, verified and pushed, inside the run's budget. A phase is several runs: finish a
 self-contained slice, record where the next run picks up.
@@ -95,6 +119,12 @@ Commit with the trailers in `CLAUDE.md`, push.
 **7. Watch the push run.** Wait for it (`gh run watch <id>` or poll `gh run view`) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
+
+**8. Improve the loop — loop engineering.** Before ending, ask what this run lost time to: an ambiguous
+step here, a check that could not fail, a trap not yet written down, a slow command, a flaky test. Fix
+it where it lives — this file, `AGENTS.md`, a script, a test — in the same run, and name the change in
+the sync-log entry. The loop is a program too: each run should leave the next one faster and harder to
+fool. Keep this file short enough to read at the start of every run.
 
 ## Rules a run never bends
 

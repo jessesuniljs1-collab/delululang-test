@@ -2148,3 +2148,23 @@ could only open pull requests would start each time from a `master` nobody merge
   **PS-D-02's stop is superseded**; `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md` §0/§11.1, the status files and
   REMAINING_WORK 4.24 say so.
 
+## 2026-09-28 (noon) — the routine's mandate
+
+Creating the routine, the owner widened the delegation: *"create it. I want opus 5.5 at xhigh effort. run verification loops. routine should be set for every 5hr till oct 16 … Can start PS-D-02. Tell to finish all the phases and verify. Set up loop engineering. any file or folder is allowed to modified or created or even deleted. If every phase is built continue improving and verifying delululang the lang of the future."* `docs/CLOUD_ROUTINE.md` now says
+so: every phase finished and verified (PS-D-02, P7 with RW 5.2 now allowed, P8 as far as software
+reaches), then continuous improvement; any file or folder may change — entrenched edits recorded in
+`ENTRENCHED_CHANGE_RECORD.md`, deletions named in the sync log; four things stay the owner's (the final
+public repository, the licence, D-NE-7, D-NE-27); a step 8 that improves the loop itself each run. xhigh
+effort comes from `.claude/settings.json` (`effortLevel`), which cloud sessions read. The routine itself:
+Opus 5.5, every five hours, until the step-0 date check ends the work on 2026-10-16.
+
+**CI read at 07:10 UTC, before the routine was created.** The handoff commits' push runs: `d41e558`
+`36384606872`, `bc9192c` `36384932715`, `7e67f97` `36387621134` and `7bd018c` `36387678371` green on every
+job; **`937aea8` `36385550908` red on Windows only** — `actors_pingpong`'s criterion 1 measured a 1.31x
+speed-up at 4 threads against its 1.5x bar (20.6 s against 15.8 s, after its built-in retry) on a commit
+that changed only documents, and the two commits after it passed. That is the timing criterion measuring
+a busy 4-CPU runner, which `HANDOFF.md` §1.1 predicted and which had held until now; it is the first run's
+first task, investigated by starving a runner, never by loosening the bar blindly. **`miri-slow`
+`36381950975` (on `047da1d`): `delulu-syntax` green, and `delulu-check` green — every one of its tests run
+under Miri to the end for the first time (59 minutes); `delulu-broker` still running.**
+

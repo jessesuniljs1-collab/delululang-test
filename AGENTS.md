@@ -45,10 +45,12 @@ authority; the host performs every effect under grants, a lease and the Guard.
   counts only once its result is READ and recorded. Never fabricate evidence; record failed runs.
 - **Decisions you take under the owner's delegation** are written as
   `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`, never as his rulings.
-- **The owner's delegation (2026-09-28):** every DeluluLang decision is the head chef's until he is back
-  — except the five he reserved by name: the final public repository, the licence, entrenched files,
-  D-NE-27 and D-NE-7 (never a tag, never a release). His morning "stop before PS-D-02" was superseded
-  the same day by that delegation (`docs/CLOUD_ROUTINE.md`).
+- **The owner's delegation (2026-09-28, until he is back):** every DeluluLang decision is the head
+  chef's, and **any file or folder may be created, modified or deleted** — entrenched files included
+  (each edit recorded in `ENTRENCHED_CHANGE_RECORD.md`), new `DL` codes included (with a `D-V2-nn`) —
+  which supersedes, for this period, the owner-reserved-file, never-delete-a-`.md` and no-new-codes
+  rules above. **Four things stay his:** the final public repository, the licence, D-NE-7 (never a tag,
+  never a release) and D-NE-27. PS-D-02 is next. The full terms: `docs/CLOUD_ROUTINE.md`.
 
 ## Run and check everything with the Survey and `doctor` (owner, 2026-09-28)
 

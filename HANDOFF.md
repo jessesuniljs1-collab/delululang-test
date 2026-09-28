@@ -108,9 +108,11 @@ repository, which is already connected to Claude; the laptop's checkout is synce
 4. **Durable facts go into §11** and, in the same format, into `docs/assistant-memory/` — there is no
    memory directory to write to.
 5. **The owner's delegation (2026-09-28, later that day):** *"I want the development of delululang to be continued in my absentia. No need to wait for any of my input, Claude u can take better decisions than me on delululang. Run verification loops and loop engineering."*
-   Every DeluluLang decision is the head chef's until he is back — **except the five he reserved by
-   name**: the final public repository, the licence, entrenched files, D-NE-27, D-NE-7 (no tag, no
-   release). His morning stop before PS-D-02 is superseded. The engine is a **Claude Code routine** — a
+   Every DeluluLang decision is the head chef's until he is back. At noon he widened it while creating
+   the routine: *"create it. I want opus 5.5 at xhigh effort. run verification loops. routine should be set for every 5hr till oct 16 … Can start PS-D-02. Tell to finish all the phases and verify. Set up loop engineering. any file or folder is allowed to modified or created or even deleted. If every phase is built continue improving and verifying delululang the lang of the future."* So **any file or folder may be created, modified or deleted** —
+   entrenched files included, each edit recorded in `ENTRENCHED_CHANGE_RECORD.md` — **except four
+   things that stay his**: the final public repository, the licence, D-NE-7 (no tag, no release) and
+   D-NE-27. His morning stop before PS-D-02 is superseded. The engine is a **Claude Code routine** — a
    saved prompt that runs as a cloud session every few hours with the laptop off — and every run follows
    **[`docs/CLOUD_ROUTINE.md`](docs/CLOUD_ROUTINE.md)**: orient, check health, verify the previous run,
    choose one piece of work, build it through the inner loop, close it, watch CI, record.
@@ -474,6 +476,10 @@ wins, and you should update the memory to match.
 - **Run everything on GitHub (owner, 2026-09-28):** heavy runs — the matrix, Miri, `heavy-gates`, the
   release dry run, the measurement and probe workflows — go to CI, not the owner's machine.
 - **Stop before PS-D-02 (owner, 2026-09-28, morning)** — superseded the same day by the next line.
+- **Everything is allowed but four things (owner, 2026-09-28, noon):** *"create it. I want opus 5.5 at xhigh effort. run verification loops. routine should be set for every 5hr till oct 16 … Can start PS-D-02. Tell to finish all the phases and verify. Set up loop engineering. any file or folder is allowed to modified or created or even deleted. If every phase is built continue improving and verifying delululang the lang of the future."* Opus 5.5 at xhigh
+  effort (`.claude/settings.json`), a routine every five hours until 2026-10-16, every phase finished and
+  verified, then continuous improvement. Reserved: the final public repository, the licence, D-NE-7,
+  D-NE-27.
 - **Continue without him (owner, 2026-09-28):** *"I want the development of delululang to be continued in my absentia. No need to wait for any of my input, Claude u can take better decisions than me on delululang. Run verification loops and loop engineering."* Every decision is the head chef's until
   2026-10-16 except the five reserved by name (§0 rule 5); a scheduled routine runs the loop in
   `docs/CLOUD_ROUTINE.md`.
