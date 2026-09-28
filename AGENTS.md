@@ -7,6 +7,8 @@ you remember from elsewhere.
 
 ## Read first, in this order
 
+0. **Run the Survey and `doctor`** (`cargo run -p delulu-survey -- check`,
+   `cargo run -p delulu -- doctor --check`) — the section below says when and why.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
@@ -44,6 +46,25 @@ authority; the host performs every effect under grants, a lease and the Guard.
   `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`, never as his rulings.
 - **Stop points the owner set are binding:** as of 2026-09-28, *do not start PS-D-02* until he says so.
 
+## Run and check everything with the Survey and `doctor` (owner, 2026-09-28)
+
+The Survey (`delulu-survey`) is the repository's map of itself — every edge cites a `file:line`; `doctor`
+is the one command that answers "is this healthy?" (environment, security posture, and the map's
+freshness and integrity). **Use both at every one of these points, and write their results down:**
+
+| When | Run | It must say |
+|---|---|---|
+| **Start of every session** | `cargo run -p delulu-survey -- check` and `cargo run -p delulu -- doctor --check` | `ok: the Survey matches the tree`; `ok: N check(s) passed`. Anything else is the first thing to fix or record. |
+| **Before any change** | `cargo run -p delulu-survey -- impact <id>` (what breaks), `affected-by <id>` (what it rests on), `query <id>` (both directions, and ENTRENCHED) | read what it reaches before editing. IDs: `crate:delulu-check`, `mod:crates/delulu/src/guest.rs`, `doc:README.md`, `code:DL0501`, `ruling:S10-D64` |
+| **Reviewing a branch** | `cargo run -p delulu-survey -- diff <base>` | every changed path and the nodes it reaches — also the file list for `docs/CLOUD_SYNC_LOG.md` |
+| **After the LAST edit** | `cargo run -p delulu-survey -- build`, then `-- check`, then `-- findings`, then `cargo run -p delulu -- doctor --check` | the map fresh; **0 errors** in `findings` (a warning is for a human to judge); all doctor checks pass |
+| **Before every commit and pull request** | `survey check` and `doctor --check` again | their results go into the pull request and the sync-log entry |
+| **After syncing the laptop** | the same, on Windows and in WSL | |
+
+`doctor` exits 0 when healthy, 1 when a problem remains, 2 on a bad invocation; `--check` never writes;
+`--json` gives one envelope. Never quote its check count as a fact — it varies by machine. A stale map
+fails `doctor_cli` and the Survey's freshness test: regenerate it after the last edit, never before.
+
 ## The cloud period (2026-09-28 → 2026-10-16) — `HANDOFF.md` §0
 
 - A cloud session can `git push` **only to its own working branch**. Commit and push there, open a
@@ -59,15 +80,16 @@ authority; the host performs every effect under grants, a lease and the Guard.
 
 ## How every change is made
 
-1. **Ask the Survey first:** `cargo run -p delulu-survey -- impact <id>` (blast radius).
+1. **Survey and `doctor` first** (the table above): `survey check` and `doctor --check` at the start,
+   then `survey impact <id>` for the blast radius of what you are about to change.
 2. **Witness a defect failing before you fix it**, and **falsify every new test** (reintroduce the
    defect, watch it go red). A gate that cannot fail is not a gate.
 3. `cargo clippy --workspace --all-targets -- -D warnings` (zero warnings) and the tests —
    `cargo test --workspace --no-fail-fast -j 4`. **Freeze the tree while a suite runs.** Read cargo's
    own exit code, never a pipeline's.
-4. **Regenerate the Survey LAST** — `cargo run -p delulu-survey -- build` — then
-   `cargo run -p delulu -- doctor --check` (all checks must pass). A stale map fails `doctor_cli` and
-   the freshness test.
+4. **Regenerate the Survey LAST** — `cargo run -p delulu-survey -- build`, `-- check`, `-- findings`
+   (0 errors) — then `cargo run -p delulu -- doctor --check` (all checks must pass). A stale map fails
+   `doctor_cli` and the freshness test.
 5. **Record:** a `V2_LOG.md` entry (what, why, evidence), `CHANGELOG.md` for anything a user sees, a
    `D-V2-nn` for a decision, `V2_PHASE_STATUS.md`, `REMAINING_WORK.md`, `docs/CLOUD_SYNC_LOG.md`, and
    `HANDOFF.md` §11 for any durable lesson. Every new markdown file needs a row in

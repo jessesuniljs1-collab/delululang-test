@@ -17,6 +17,14 @@ learn something durable (an owner instruction, a trap, a finding that must never
 it into `HANDOFF.md` §11 and note it in `docs/CLOUD_SYNC_LOG.md`, so it reaches the laptop's memory when
 the repositories are synced.
 
+## Survey and doctor, always
+
+Start every session with `cargo run -p delulu-survey -- check` and `cargo run -p delulu -- doctor --check`;
+ask the Survey (`impact`, `affected-by`, `query`) before any change; after the last edit run
+`survey build`, `check`, `findings` and `doctor --check`; record the results in the pull request and in
+`docs/CLOUD_SYNC_LOG.md`. The table in AGENTS.md says exactly when (owner, 2026-09-28: *"run and check
+everything using survey and doctor"*).
+
 ## In a cloud session (`CLAUDE_CODE_REMOTE=true`)
 
 - Ubuntu 24.04, x86-64, 4 vCPU, 16 GB RAM. `rust-toolchain.toml` pins Rust **1.96.1**; the first

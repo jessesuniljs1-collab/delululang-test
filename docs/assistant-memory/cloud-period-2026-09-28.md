@@ -12,7 +12,8 @@ From **2026-09-28 to 2026-10-16** Jesse uses the laptop for other work; DeluluLa
 **Claude Code cloud sessions** (claude.ai/code / app / `claude --cloud`) on the GitHub testing repo,
 which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced afterwards.
 
-- **Baseline:** the commit that added `docs/CLOUD_SYNC_LOG.md` (laptop clean, nothing unpushed).
+- **Run and check everything using the Survey and doctor** (Jesse, 2026-09-28): `survey check` + `doctor --check` at every session start; `survey impact/affected-by/query` before a change; `survey build/check/findings` + `doctor --check` after the last edit and before every commit/PR, results in the PR and the sync-log entry (table in AGENTS.md; HANDOFF §0 rule 6).
+- **Baseline = the newest `Cloud handoff` commit** (`git log -1 --grep='^Cloud handoff'`): `d41e558` then its follow-up. Earlier wording: **`d41e558`** ("Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot", pushed 2026-09-28, laptop clean, nothing unpushed) = the commit that added `docs/CLOUD_SYNC_LOG.md`. At handoff every run was read except miri-slow `36381950975` on `047da1d` (broker + check still running) and `d41e558`'s own push run.
 - **Every cloud session appends an entry to `docs/CLOUD_SYNC_LOG.md`** (Jesse: "keep a record of files
   and folders changed, to be sync with local repo later") — commits + `git diff --name-status`,
   what was verified, what to redo on the laptop, what the laptop memory must learn.

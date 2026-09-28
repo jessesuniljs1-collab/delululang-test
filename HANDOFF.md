@@ -106,6 +106,12 @@ repository, which is already connected to Claude; the laptop's checkout is synce
 4. **Durable facts go into §11** and, in the same format, into `docs/assistant-memory/` — there is no
    memory directory to write to.
 5. **Stop points hold:** PS-D-02 waits for the owner's word.
+6. **Run and check everything with the Survey and `doctor`** (owner, 2026-09-28): `survey check` and
+   `doctor --check` at the start of every session; `survey impact`/`affected-by`/`query` before every
+   change; `survey build`, `check`, `findings` (0 errors) and `doctor --check` after the last edit and
+   before every commit and pull request — and their results in the pull request and the sync-log entry.
+   `survey diff <base>` lists a branch's changed paths for that entry. The full table is in `AGENTS.md`;
+   §4 of this file explains the Survey.
 
 **What the laptop holds that the cloud does not** — check or redo after the sync: the WSL2 KVM lab and
 its guest images (§11.3); the agent-pass folders (§11.3; their verified results are in `V2_LOG.md`);
@@ -464,6 +470,9 @@ wins, and you should update the memory to match.
 - **The cloud period (owner, 2026-09-28):** work continues from Claude Code cloud sessions until
   2026-10-16 (§0), and every change is recorded for the later sync — *"keep a record of files and
   folders changed, to be synced with the local repo later"* (`docs/CLOUD_SYNC_LOG.md`).
+- **Run and check everything using the Survey and `doctor` (owner, 2026-09-28)** — at the start of
+  every session, before and after every change, before every commit and pull request (§0 rule 6;
+  the table in `AGENTS.md`).
 
 ### 11.2 Working rules the project has paid for
 

@@ -13,10 +13,10 @@ anything (a CI run, for example).
 
 ## The baseline
 
-The laptop's checkout is at **the commit that added this file** — find it with
-`git log --diff-filter=A --format='%h %s' -- docs/CLOUD_SYNC_LOG.md` — on `master`, clean, with nothing
-unpushed (checked on 2026-09-28 with `git status` and `git ls-remote origin refs/heads/master`).
-Everything after it on `origin` was made in the cloud and is listed below.
+The laptop's checkout is at **the newest commit whose subject begins `Cloud handoff`** — find it with
+`git log -1 --format='%h %s' --grep='^Cloud handoff'` — on `master`, clean, with nothing unpushed
+(checked on 2026-09-28 with `git status` and `git ls-remote origin refs/heads/master`). Everything after
+it on `origin` was made in the cloud and is listed below.
 
 ## Syncing the laptop afterwards (when the owner is back)
 
@@ -27,8 +27,10 @@ Everything after it on `origin` was made in the cloud and is listed below.
    look — the laptop was not supposed to move.
 4. `git ls-files --eol | grep w/crlf` must print nothing (a CRLF working tree broke the Survey once —
    `HANDOFF.md` §11.5).
-5. `cargo run -p delulu-survey -- build`, `cargo run -p delulu -- doctor --check`, then the full
-   suite on Windows, and on Linux in WSL (`HANDOFF.md` §11.3).
+5. **The Survey and `doctor`:** `cargo run -p delulu-survey -- check` (the map the cloud committed
+   must match the laptop's tree — CRLF or a stray file shows here first), `-- findings` (0 errors),
+   `cargo run -p delulu -- doctor --check` (all checks pass); then the full suite on Windows, and on
+   Linux in WSL (`HANDOFF.md` §11.3), and `doctor --check` in WSL too.
 6. Do each entry's **"Redo on the laptop"** items (for example: rebuild the microVM guest image in WSL
    if `scripts/microvm/` changed; re-run a Windows-only check).
 7. Carry each entry's **"For the laptop's memory"** items into
@@ -44,11 +46,13 @@ Everything after it on `origin` was made in the cloud and is listed below.
 - Branch: <claude/…>   Pull request: <#n or URL>   Merged: <yes, by the owner, <date> / not yet>
 - Base: <hash the branch started from>
 - Commits: <hash subject> (one per line; `git log --oneline <base>..HEAD`)
-- Files and folders (`git diff --name-status <base>..HEAD`):
+- Files and folders (`git diff --name-status <base>..HEAD`, or `cargo run -p delulu-survey -- diff <base>`):
   A <added path>
   M <modified path>
   D <deleted path — never a .md>
   R <old path> -> <new path>
+- Survey and doctor (after the last edit): `survey check` <ok / stale>, `survey findings` <N errors,
+  N warnings>, `doctor --check` <ok: all checks passed / the failing check>
 - Verified: <what ran, where: local VM tests, CI run ids READ with their results>
 - Redo on the laptop: <Windows-only or WSL/KVM checks, rebuilt artifacts — or "nothing">
 - For the laptop's memory: <durable facts added to HANDOFF §11 — or "nothing">
@@ -61,20 +65,25 @@ Everything after it on `origin` was made in the cloud and is listed below.
 - Session: the laptop's head-chef session (Claude Opus 5.5), `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`
 - Branch: `master` (the laptop pushes to `master` directly; cloud sessions cannot)
 - Base: `047da1d`
-- Commits: the commit that added this file (the baseline).
+- Commits: `d41e558` Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot; and the
+  follow-up `Cloud handoff (2): run and check everything with the Survey and doctor` — the baseline.
 - Files and folders:
   A `AGENTS.md` — the rules every agent reads
   A `CLAUDE.md` — imports `AGENTS.md`; Claude-specific notes for cloud sessions
   A `docs/CLOUD_SYNC_LOG.md` — this file
+  A `docs/assistant-memory/` — the laptop's memory directory (40 files + its README), sanitized
   M `HANDOFF.md` — §0 the cloud period; state as of 2026-09-28; §11 memory brought up to date
   M `README.md` — status: the latest CI run, V2 progress, the microVM layer now built
   M `docs/REPOSITORY_STRUCTURE.md` — rows for the three new files
   M `docs/REMAINING_WORK.md`, `docs/DEPLOYMENT.md` — CONTAIN-TOCTOU-1 is closed (FS-RACE-1, P5c)
   M `docs/DELULULANG_V2/V2_LOG.md` — the handoff entry
   M `docs/survey/*` — regenerated
-- Verified: `doctor --check` all checks pass; the Survey fresh; CI for `30a6b8d` and `047da1d` read
-  (`V2_LOG.md` 2026-09-28); the handoff commit's own push run is the first thing the first cloud session
-  reads.
+- Survey and doctor: `survey check` ok (1,456 nodes, 12,427 edges); `survey findings` 0 errors,
+  14 warnings (12 new ones are the memory snapshot's dated citations, kept verbatim by design);
+  `doctor --check` ok, 29 checks passed on the laptop.
+- Verified: `repository_structure`, `doctor_cli` and the Survey's freshness test pass; CI for `30a6b8d`
+  and `047da1d` read (`V2_LOG.md` 2026-09-28); the handoff commits' own push runs are the first thing
+  the first cloud session reads.
 - Redo on the laptop: nothing.
 - For the laptop's memory: the cloud period and this file (already in the laptop's memory).
 - Open / next: read the `miri-slow` run `36381950975` on `047da1d` — green closes REMAINING_WORK 5.6;
