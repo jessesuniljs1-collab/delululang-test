@@ -384,3 +384,40 @@ fn hostile_agent_refuses_a_boundary_that_lacks_a_property_before_the_program_is_
     assert!(String::from_utf8_lossy(&r.stdout).contains(&canary), "{}", text(&r));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// RW 4.31 (the red-team pass's F7): at L3 the guest is a binary the operator's launcher chose, so what it
+/// says it applied to itself is ITS word — reported as `guest_reported`, never as a host guarantee and
+/// never in the posture. Red on `42f5ea0` on Linux: the guest's Landlock and seccomp words were in
+/// `host_guarantees` and the posture said "writes denied", while `properties` said `unknown`.
+#[test]
+fn an_external_guests_own_words_are_its_own_not_the_hosts() {
+    let d = lab("l3-words");
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
+    let exe = env!("CARGO_BIN_EXE_delulu").replace('\\', "/");
+    assert!(!exe.contains(' '), "the launcher is split on whitespace: {exe}");
+    let report = d.join("r.json");
+    let r = delulu(
+        &d,
+        &[
+            "run", "h.delulu", "--sandbox", "--sandbox-backend", &format!("external:{exe} __guest --stdio-pipes"),
+            "--grant", "console", "--report-out", report.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let s = &v["sandbox"];
+    assert_eq!(s["host_guarantees"].as_array().unwrap().len(), 0, "an L3 guest's words are not the host's: {s}");
+    assert_eq!(s["granted"], "none", "{s}");
+    for (row, answer) in s["posture"].as_object().unwrap() {
+        if row != "identity" {
+            assert_eq!(answer, "not confined", "the posture claims `{row}` on a guest's word: {s}");
+        }
+    }
+    // On Linux the guest does confine itself, and says so — as its own report.
+    if cfg!(target_os = "linux") {
+        let own = s["guest_reported"].as_array().unwrap_or_else(|| panic!("the guest's words are kept: {s}"));
+        assert!(own.iter().any(|w| w == "no new programs"), "{s}");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}

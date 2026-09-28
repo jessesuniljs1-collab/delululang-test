@@ -222,8 +222,9 @@ allows before the required sets exist: a launcher that never confirms receives n
 code, the `contained` set above would refuse every macOS run (reads open, no memory ceiling), so the
 sets wait for each OS's reported answers. **Third step (D-V2-59):** CI's answers read — Linux x86-64,
 arm64 and Windows all five, macOS two — `hostile-agent` requires all five and is refused in
-`Opened::confirm`; `contained` requires none until macOS's gaps and RW 4.31 close. Open: `contained`'s
-set, attesters' claims as properties.
+`Opened::confirm`; `contained` requires none until macOS's gaps close. RW 4.31 closed the same run: an
+L3 guest's own words are `guest_reported`, never host guarantees. Open: `contained`'s set, attesters'
+claims as properties.
 
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 

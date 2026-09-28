@@ -1155,8 +1155,15 @@ fn serve_under(
     let sent = evidence.sent;
     // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
     // chain — they were in force before the program's first line, and the host checked the words.
+    // RW 4.31 (the red-team pass's F7): but only where the HOST started the guest. At L3 the guest is a
+    // binary the operator's launcher chose, and its words are its own: reported as `guest_reported`,
+    // never as a host guarantee or in the posture (a lying guest made its report say "writes denied"
+    // beside properties that said `unknown`).
+    let mut guest_reported: Vec<&'static str> = Vec::new();
     for w in evidence.own {
-        if !applied.contains(&w) {
+        if external {
+            guest_reported.push(w);
+        } else if !applied.contains(&w) {
             applied.push(w);
         }
     }
@@ -1274,6 +1281,9 @@ fn serve_under(
         // as `host_guarantees` and the posture, so the three cannot disagree. An external launcher's are
         // `unknown`: DeluluLang measured none of its wall.
         report["sandbox"]["properties"] = crate::boundary::properties(&applied, !external);
+        if external && !guest_reported.is_empty() {
+            report["sandbox"]["guest_reported"] = serde_json::json!(guest_reported);
+        }
         if let Some(a) = &attested {
             report["sandbox"]["attestation"] = a.to_json();
         }

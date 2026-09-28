@@ -2739,3 +2739,24 @@ runs. Mutant M10 (`hostile-agent` requiring nothing) red.
 
 **Verified:** clippy `--workspace --all-targets -D warnings` clean; every sandbox test binary green; the
 full suite alone: 2014 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+## 2026-09-28 (night) — RW 4.31 closed: an external guest's words about itself are its own (D-V2-58 §5)
+
+**CI read first.** `8b2994a` (the red-team fixes) push run `36486821458` — success on every job;
+`42f5ea0` (`hostile-agent`'s required set) push run `36487993092` — success on every job: macOS's two
+`hostile-agent` tests, written for a refusal nobody here could run, passed there (the refusal is real), and
+the `microvm` job's `hostile-agent` runs at L2 still ran (all five established by its construction).
+
+**The defect, witnessed by the head chef** (the sous-chef's F7): at L3 the guest is a binary the operator's
+launcher chose, yet the words it reported applying to itself (RW 4.23) were merged into `host_guarantees`
+and the posture — so a run through `external:<delulu> __guest --stdio-pipes` on Linux reported the guest's
+Landlock and seccomp as the host's guarantees and "writes denied" in its posture, beside `properties` that
+said `unknown`. Witness `an_external_guests_own_words_are_its_own_not_the_hosts` — red on `42f5ea0`.
+
+**Fixed.** Where the host did not start the guest, the guest's words go to `sandbox.guest_reported` (the
+closed schema gained it), never to `host_guarantees` or the posture: an L3 report now says `granted: none`,
+no host guarantee, every posture row "not confined", and what the guest says it did, as the guest's word.
+`sandbox_external_cli.rs`'s assertion ("only what the guest measured of itself, if anything") became the
+strict one. Mutant M11 (the words merged again at L3) red.
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2015 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.

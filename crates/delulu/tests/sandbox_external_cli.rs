@@ -74,13 +74,11 @@ fn an_external_guest_runs_under_the_hosts_grants_and_the_report_claims_nothing_u
     assert_eq!(s["level"], 3, "{s}");
     assert_eq!(s["requested_level"], 3, "{s}");
     assert_eq!(s["fully_enforced"], false, "an external boundary is never reported as enforced: {s}");
-    // `granted` is the profile only when something was MEASURED: on Linux the guest confines itself
-    // (Landlock, seccomp) and reports it in the host's known words (RW 4.23); on Windows it applies
-    // nothing to itself, and the answer is "none".
-    let measured = !s["host_guarantees"].as_array().unwrap().is_empty();
-    assert_eq!(s["granted"] == "none", !measured, "{s}");
-    assert_eq!(s["host_guarantees"].as_array().unwrap().iter().filter(|g| g.as_str().is_some_and(|g| !g.starts_with("no ") && !g.starts_with("reads only"))).count(), 0,
-        "no HOST guarantee is claimed (only what the guest measured of itself, if anything): {s}");
+    // Nothing here was measured by the HOST, so nothing is claimed as its guarantee: `granted` is "none"
+    // and `host_guarantees` empty. What the guest says it applied to itself (Landlock and seccomp, on
+    // Linux) is reported as the guest's word, `guest_reported` — RW 4.31, the red-team pass's F7.
+    assert_eq!(s["granted"], "none", "{s}");
+    assert_eq!(s["host_guarantees"].as_array().unwrap().len(), 0, "no HOST guarantee is claimed: {s}");
     let launcher_named = s["launcher"].as_str().unwrap();
     assert!(launcher_named.ends_with("delulu") || launcher_named.ends_with("delulu.exe"), "{s}");
     assert!(!launcher_named.contains("__guest"), "the launcher's ARGUMENTS are never recorded: {s}");

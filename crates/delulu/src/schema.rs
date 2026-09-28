@@ -472,7 +472,13 @@ fn defs() -> Value {
             ],
             // PS-D-01: an external (L3) run names the launcher's PROGRAM (never its arguments, which
             // can carry an operator's token). PS-D-02: and what its attester said, when the run required it.
-            &[("image", r("microvm_image")), ("launcher", t("string")), ("attestation", r("attestation"))],
+            // RW 4.31: an external guest's own words about itself, as ITS word — never host guarantees.
+            &[
+                ("image", r("microvm_image")),
+                ("launcher", t("string")),
+                ("attestation", r("attestation")),
+                ("guest_reported", str_list.clone()),
+            ],
         ), "a sandboxed run: what the host applied, what it answers, and what it refused"),
         "attestation": described(obj(
             &[

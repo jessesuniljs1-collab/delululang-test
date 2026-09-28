@@ -259,7 +259,8 @@ it on `origin` was made in the cloud and is listed below.
   (2) `062a78c` PS-E-01, first step: the guest confirms its boundary before it is sent the program (D-V2-56);
   (3) `6ceaf2d` PS-E-01, second step: every sandboxed run reports its boundary's five properties (D-V2-57);
   (4) `8b2994a` The red-team pass on channel /3: seven defects around a guarantee that held, fixed (D-V2-58);
-  (5) `PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59)`
+  (5) `42f5ea0` PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59);
+  (6) `RW 4.31 closed: an external guest's words about itself are its own`
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -310,6 +311,10 @@ it on `origin` was made in the cloud and is listed below.
     macOS), `skills/delulu/SKILL.md`, `docs/for-agents.md`, `CHANGELOG.md`, `HANDOFF.md`,
     `docs/REMAINING_WORK.md` 4.25, `V2_DECISION_LOG.md` (D-V2-59, flagged), `V2_PHASE_STATUS.md`,
     `V2_OPENSHELL_STUDY.md` §4.1 — (5)
+  M `crates/delulu/src/guest.rs` (`guest_reported` at L3), `schema.rs` (`guest_reported`),
+    `crates/delulu/tests/sandbox_confirm_cli.rs` (the witness), `crates/delulu/tests/sandbox_external_cli.rs`
+    (the strict assertion), `CHANGELOG.md`, `HANDOFF.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md`
+    (4.31 closed), `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.1 — (6)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entries
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
@@ -336,15 +341,18 @@ it on `origin` was made in the cloud and is listed below.
   whose fake guest raced two writes — fixed); clippy clean; the full suite alone 2,013 passed, 0 failed,
   15 ignored (152 binaries). (5): the witness red on `8b2994a` (an unattested launcher ran the program
   under `hostile-agent`), green after; M10 killed; clippy clean; the full suite alone 2,014 passed,
+  0 failed, 15 ignored. CI read: `8b2994a` `36486821458` and `42f5ea0` `36487993092` — success on every
+  job (macOS's `hostile-agent` refusal real; the microVM's `hostile-agent` runs still run). (6): the
+  witness red on `42f5ea0`, green after; M11 killed; clippy clean; the full suite alone 2,015 passed,
   0 failed, 15 ignored.
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read (4)'s and (5)'s push runs — every OS; **macOS must now REFUSE `hostile-agent`**
-  (`sandbox_run_cli`'s two tests expect exit 2 there: written blind, the VM has no macOS) and the
-  `microvm` job's `hostile-agent` tests must still run (L2 establishes all five by its words); (2) PS-E-01's
-  remainder: RW 4.31 (F7 — an L3 guest's self-report is not a host guarantee), attesters' claims as
-  properties, `contained`'s set once its gaps close; (3) E-02 (macOS host loss — the red one), E-03 … E-06,
-  P8, P9; RW 4.32's channel hygiene. **For the owner:** D-V2-59 narrows D-V2-53 §2 (flagged).
+- Open / next: (1) read (6)'s push run (the last commit of this run, and its sync-log commit's); (2)
+  PS-E-01's remainder — an attester's claims mapped to properties (so an attested L3 can satisfy
+  `hostile-agent`), then `contained`'s set once its gaps close; (3) **E-02** — the macOS guest outlives its
+  host (the red one; CI only: a watcher thread, `kqueue NOTE_EXIT`, `getppid` fallback), the external
+  launcher's death signal / Job Object; then E-03 … E-06, P8, P9; RW 4.32's channel hygiene. **For the
+  owner:** D-V2-59 narrows D-V2-53 §2 (flagged); D-V2-49 and D-V2-53's consequence stay flagged.

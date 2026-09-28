@@ -25,6 +25,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   confinement, egress confinement, privilege floor, host loss ends the guest, resource ceiling — each
   `established` (by what), `absent` (why) or `unknown` (an external launcher's), answered from the same
   posture the report carries. Reported only: no profile refuses on them yet (D-V2-57).
+- **An external launcher's guest no longer vouches for itself in the report.** At L3 the words the guest
+  says it applied to itself are reported as `sandbox.guest_reported` — its own word — and no longer
+  appear among `host_guarantees` or in the posture (RW 4.31).
 - **`--sandbox-profile hostile-agent` refuses a boundary that lacks any of the five properties** — before
   the program is sent, with DL1408 (exit 2), naming what is missing and the ways out. On macOS's jailed
   guest (no read confinement, memory ceiling or death signal) and with an unattested external launcher it
