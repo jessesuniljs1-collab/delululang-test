@@ -192,8 +192,9 @@ A future actuator path is `program → Cap[Actuator] → Authority → Guard →
 safety envelope → device`. No raw device access because the caller is a robot; no "robot authority"
 or "AGI authority" as a special category; the adapter and the dead-man watchdog stay host-side
 (invariant 52) and the control program runs in a guest. Today the adapter is an operator-supplied
-subprocess with no signature check and no real driver ships (RW 4.7); the signed Verified-class
-adapter is P8. [partially implemented: envelopes, dead-man, e-stop and revocation are implemented
+subprocess whose detached signature is checked before it is spawned (D52/D53, optionally pinned; the
+file checked is the file started since ADAPTER-SPELL-1, 2026-09-28), and no real driver ships (RW
+4.7); the signed Verified-class adapter is P8. [partially implemented: envelopes, dead-man, e-stop and revocation are implemented
 and measured against the simulator; the signed adapter is designed]
 
 ## 10. What is and is not claimed

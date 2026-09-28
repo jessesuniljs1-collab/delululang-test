@@ -36,7 +36,8 @@ the assistant's memory — which now also travels file by file in
   - **PS-D, external launchers and the attestation seam.** PS-D-01 is done:
     `--sandbox --sandbox-backend external:CMD`, level 3, measured by nobody and reported so (D-V2-46).
     **PS-D-02 is built** (2026-09-28, the first cloud routine run, D-V2-48): `--require-attestation HEX`
-    at L3, `delulu sandbox attest` as the software attester; PS-D closes when its CI run is read green.
+    at L3, `delulu sandbox attest` as the software attester. **PS-D is complete** — `fef8ccd`'s push
+    run `36395256154` green on every job.
 - **Not started:** P8, safe autonomy (the signed adapter) — owner-gated.
 - **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
   every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
@@ -585,8 +586,11 @@ wins, and you should update the memory to match.
 - **RFC 0001 shipped partly during its own comment period.** Open governance debt. Never restate as
   compliance.
 - **The hardware adapter (D23) is an operator-supplied subprocess, not specification §5.4's signed
-  plugin.** There is **no signature check** on the adapter itself, and **no driver for any real device
-  ships in-tree**. Named as a gap, never blurred.
+  plugin.** Its provenance is checked before it is spawned — a detached signature, verified, refused
+  when bad, optionally required and pinned to a key (D52/D53), recorded in the audit chain on request
+  (D66) — but it is not a Verified-class plugin, and **no driver for any real device ships in-tree**.
+  Named as a gap, never blurred. *(This line said "no signature check" until 2026-09-28, a year of
+  stages after D52 added one — found while fixing ADAPTER-SPELL-1, §11.8's lesson again.)*
 - **P19 — the editor was a way in, twice**, and the second needed no click. See §8.
 - **2026-08-09 — four restart-resurrection defects.** `broker rotate-key` never persisted the new key,
   so a restart resurrected every "invalidated" token (**ROTATE-1**); a revoked federation certificate
@@ -636,7 +640,10 @@ wins, and you should update the memory to match.
   **GUARD-STALE-1**: an old denial answered for a new request. **VERIFY-FABRICATED-1**: `Secret.verify`
   under a lease returned a made-up `false` — now computed by the broker, Guard-gated per secret.
   **SECRETS-STALE-1**: the broker never re-read a secret stored while it ran. **JSON-EXIT-1**: `--json`'s
-  fallback envelope said exit 2 and "usage" for every failure.
+  fallback envelope said exit 2 and "usage" for every failure. **ADAPTER-SPELL-1** (2026-09-28, the
+  first cloud routine run): a hardware driver's signature was checked on `./NAME` and the driver started
+  as `NAME` from `PATH` — a pinned key vouched for a file that never ran; now resolved once, and that
+  file is both verified and started.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

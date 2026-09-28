@@ -9408,6 +9408,59 @@ pub(crate) fn record_adapter_provenance(prov: &AdapterProvenance, explicit_dir: 
     }
 }
 
+/// The ONE file a hardware driver's name means: the file both verified and started (ADAPTER-SPELL-1).
+///
+/// The provenance check used to read `--adapter-cmd`'s first word as a path from the working
+/// directory, and the spawn gave the same word to the operating system, which looks a bare name up
+/// on `PATH` (and, on Windows, in its own directories first). Two spellings of one driver named two
+/// files: `--adapter-cmd drive --adapter-signer KEY` verified `./drive` under the pinned key and then
+/// started whatever `drive` came first on `PATH`. So the name is resolved here, once — a path (it
+/// holds a separator) is made absolute from the working directory; a bare name is looked up on `PATH`
+/// by DeluluLang, in its ABSOLUTE directories only (an empty or relative entry means the working
+/// directory to a shell, which is another spelling), first executable file wins, with `.exe`
+/// appended on Windows where it has no extension — and the caller verifies and starts that absolute
+/// file. Links are NOT resolved: a multi-call binary (`sh` → `busybox`) dispatches on the name it is
+/// started as, and the read that verifies follows the same link the start does. `None` means nothing
+/// resolves, and the caller must not hand the bare name to the OS's own search either.
+///
+/// What this does not close, named: the file can still be REPLACED between the check and the start
+/// by anyone who can write to its directory. The deployment rule for a driver is the one for a
+/// grant (`DEPLOYMENT.md` §5): only the operator can write where it lives.
+pub(crate) fn resolve_driver(name: &str) -> Option<std::path::PathBuf> {
+    let is_path = name.contains('/') || (cfg!(windows) && name.contains('\\'));
+    let found = if is_path {
+        std::path::absolute(name).ok()
+    } else {
+        let paths = std::env::var_os("PATH")?;
+        std::env::split_paths(&paths).find_map(|dir| {
+            if !dir.is_absolute() {
+                // An empty or relative PATH entry is the working directory, or a path from it, to a
+                // shell; to this lookup it is nothing, so a bare name never quietly means `./name`.
+                return None;
+            }
+            let mut candidates = vec![dir.join(name)];
+            if cfg!(windows) && std::path::Path::new(name).extension().is_none() {
+                candidates.insert(0, dir.join(format!("{name}.exe")));
+            }
+            candidates.into_iter().find(|c| is_executable_file(c))
+        })
+    };
+    found.filter(|p| p.is_file())
+}
+
+fn is_executable_file(p: &std::path::Path) -> bool {
+    let Ok(meta) = std::fs::metadata(p) else { return false };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        meta.is_file() && meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        meta.is_file()
+    }
+}
+
 /// Verify a hardware adapter's provenance before it is spawned (ruling D52, extended by D53).
 ///
 /// D52 closed the gap D23 named — "an operator-supplied SUBPROCESS with NO signature check" — by
@@ -9492,6 +9545,15 @@ pub(crate) fn check_adapter_signature(
         return (rec("unverifiable", None), None);
     }
     let sig_path = format!("{prog}.sig");
+    // ADAPTER-SPELL-1: the first word now resolves to the file that is started, which for an
+    // interpreter-hosted driver (`sh driver.sh`, `python drive.py`) is the INTERPRETER. It is almost
+    // never signed, and the operator needs the way to name the driver's own bytes.
+    let interpreter_hint = if artifact.is_none() {
+        " (if it is an interpreter hosting the driver, name the driver's own signed bytes with \
+         `--adapter-artifact <path>`)"
+    } else {
+        ""
+    };
     let sig = match std::fs::read(&sig_path) {
         Ok(s) => s,
         Err(_) => {
@@ -9501,7 +9563,7 @@ pub(crate) fn check_adapter_signature(
                     format!(
                         "hardware adapter `{prog}` has no signature at `{sig_path}`, and this run \
                          requires one — a driver commands physical machinery, so its provenance is \
-                         not something this run will assume"
+                         not something this run will assume{interpreter_hint}"
                     ),
                 );
                 eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
@@ -9509,7 +9571,7 @@ pub(crate) fn check_adapter_signature(
             }
             eprintln!(
                 "warning: hardware adapter `{prog}` is UNSIGNED (no `{sig_path}`) — its provenance is \
-                 unknown. Pass `--require-signed-adapter` to refuse this."
+                 unknown{interpreter_hint}. Pass `--require-signed-adapter` to refuse this."
             );
             return (rec("unsigned", None), None);
         }

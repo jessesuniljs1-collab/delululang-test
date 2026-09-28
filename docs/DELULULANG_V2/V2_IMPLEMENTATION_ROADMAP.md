@@ -240,8 +240,8 @@ under the owner's delegation, with RW 5.3: `DELULU_CORE.md` v0.3 (D-V2-49).
 **Status (2026-09-28):** PS-D-01 **done** (`30a6b8d`, D-V2-46, CI green). PS-D-02 **built** by the
 first cloud routine run (D-V2-48): `--require-attestation HEX` with `external:`, a nonce-bound statement
 checked against a pinned key before the program is sent, `sandbox.attestation` in the report, and
-`delulu sandbox attest` as the software reference attester; PS-D closes when that commit's CI run is
-read green (`V2_PHASE_STATUS.md`).
+`delulu sandbox attest` as the software reference attester. **PS-D complete:** `fef8ccd`'s push run
+`36395256154` green on every job.
 
 PS-D-01 `--sandbox-backend external:<cmd>`: the operator's launcher runs `delulu __guest` in their
 environment and exposes the channel over stdio; the level is labelled `external`, the guarantees

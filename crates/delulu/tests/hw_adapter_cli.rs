@@ -329,17 +329,19 @@ fn an_adapter_with_a_bad_signature_is_refused_whatever_the_policy_says() {
     assert!(!o.status.success(), "--require-signed-adapter must refuse an unsigned driver");
     assert!(stderr(&o).contains("DL1511"), "{}", stderr(&o));
 
-    // 4. An interpreter-hosted driver is NOT silently treated as verified.
+    // 4. An interpreter-hosted driver is NOT silently treated as verified. Since ADAPTER-SPELL-1 the
+    //    first token resolves to the file that is started — the interpreter — and that is what is
+    //    checked: unsigned, so refused under the flag, with the way to name the driver's own bytes.
     let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter", "--adapter-cmd", &r.adapter_cmd]);
     assert!(
         !o.status.success(),
-        "a command whose first token is not a file cannot be verified, and under the flag that must \
-         refuse rather than pass: {}",
+        "the interpreter a command starts is not the driver's signed bytes, and under the flag that \
+         must refuse rather than pass: {}",
         stdout(&o)
     );
     assert!(
-        stderr(&o).contains("nothing to verify"),
-        "and it must say WHY it could not check, not merely that it refused: {}",
+        stderr(&o).contains("DL1511") && stderr(&o).contains("--adapter-artifact"),
+        "and it must say WHY it could not vouch for the driver, and how to name it: {}",
         stderr(&o)
     );
 }
@@ -567,4 +569,64 @@ fn the_signed_bytes_can_be_named_apart_from_the_command_that_runs() {
                    "--adapter-artifact", script, "--adapter-signer", &key]);
     assert!(!o.status.success(), "a tampered driver must not run");
     assert!(stderr(&o).contains("DL1510"), "{}", stderr(&o));
+}
+
+// ===== ADAPTER-SPELL-1 · the file verified is the file started ==================================
+//
+// The provenance check read `--adapter-cmd`'s first word as a path from the working directory; the
+// spawn gave the same word to the operating system, which looks a bare name up on `PATH`. Two
+// spellings of one driver, two files: `--adapter-cmd drive --adapter-signer KEY` verified `./drive`
+// under the pinned key and then started whatever `drive` came first on `PATH`.
+
+/// A signed driver in the working directory and a different `drive` earlier on `PATH`: the pinned
+/// check must be about the file that is started, so the impostor never runs.
+#[cfg(unix)]
+#[test]
+fn a_bare_driver_name_is_verified_and_started_as_one_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let r = rig("spell", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+    let exec = |p: &std::path::Path| std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    // The operator's driver, signed with the operator's key, in the working directory.
+    let seed = [7u8; 32];
+    let key = delulu_runtime::plugin::public_key_hex(&seed);
+    let real = r.dir.join("drive");
+    std::fs::copy(r.dir.join("driver.sh"), &real).unwrap();
+    exec(&real);
+    std::fs::write(r.dir.join("drive.sig"), delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&real).unwrap())).unwrap();
+
+    // A different `drive`, first on PATH: it leaves a mark and then behaves, so a run that starts it
+    // would otherwise look healthy.
+    let elsewhere = r.dir.join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let impostor = elsewhere.join("drive");
+    std::fs::write(&impostor, format!("#!/bin/sh\ntouch {}/IMPOSTOR-RAN\nexec sh driver.sh\n", r.dir.display())).unwrap();
+    exec(&impostor);
+    let path = format!("{}:{}", elsewhere.display(), std::env::var("PATH").unwrap_or_default());
+
+    let run = |cmd: &str| {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&r.dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("PATH", &path)
+            .args(["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--broker-profile", "hw:demo-adapter",
+                   "--approved", "signoff.json", "--adapter-cmd", cmd, "--adapter-signer", &key, "--no-prompt"])
+            .output()
+            .unwrap()
+    };
+    let o = run("drive");
+    assert!(
+        !r.dir.join("IMPOSTOR-RAN").exists(),
+        "a driver nobody signed was started after the pinned check passed on another file: {}",
+        stderr(&o)
+    );
+    assert!(!o.status.success(), "the file `drive` names on PATH is unsigned, and the key is pinned: {}", stderr(&o));
+
+    // Spelled as the path it is, the operator's driver is verified and is the one that runs.
+    let o = run("./drive");
+    assert!(stderr(&o).contains("verifies under the pinned key"), "{}", stderr(&o));
+    assert!(o.status.success(), "{} {}", stdout(&o), stderr(&o));
+    assert!(!r.dir.join("IMPOSTOR-RAN").exists(), "{}", stderr(&o));
+    assert!(r.saw().contains("CMD"), "the verified driver received the command: {}", r.saw());
 }

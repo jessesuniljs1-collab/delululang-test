@@ -1061,6 +1061,28 @@ Built from the design in `HANDOFF.md` §0, with these choices:
    (`ENTRENCHED_CHANGE_RECORD.md` says why, and how to revert). Nothing new is machine-checked; RW 5.1
    stays open, now aimed at the right calculus.
 
+## D-V2-50 — ADAPTER-SPELL-1: a driver's name is resolved once, by DeluluLang — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **One resolution, used twice.** `--adapter-cmd`'s first word is resolved once
+   (`cli::resolve_driver`): a word with a path separator is made absolute from the working directory; a
+   bare word is looked up on `PATH` by DeluluLang, in its absolute directories only (an empty or
+   relative entry is the working directory again, another spelling) — the first executable regular
+   file, `.exe` appended on Windows where the word has no extension. The absolute path found is the
+   file verified AND the file started. Links are not resolved: a multi-call binary (`sh` → `busybox`)
+   dispatches on the name it is started as, and the read that verifies follows the same link the start
+   does.
+2. **Nothing resolves → refused, never guessed.** The bare word is not handed to the operating
+   system's own search, which on Windows looks in its own directories before `PATH` and could find a
+   file the check never saw. The refusal keeps the words the old spawn failure had ("adapter could not
+   be started").
+3. **An interpreter-hosted driver** now resolves to the interpreter it starts, which is what is checked
+   unless `--adapter-artifact` names the driver's own bytes; the unsigned refusal and warning say so.
+   `--adapter-artifact` remains the operator's statement that the command executes those bytes.
+4. **The residual, named:** the file can be replaced between the check and the start by anyone who can
+   write its directory — the deployment rule for grants applies to drivers. Closing it needs the
+   Verified-class adapter (a `.dpx` whose bytes are loaded once, verified, and executed from memory):
+   P8.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

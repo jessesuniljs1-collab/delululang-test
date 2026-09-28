@@ -2286,3 +2286,35 @@ is unchanged). RW 5.2 and 5.3 closed; RW 5.1 — the mechanization — is open a
 that states the construct that failed and the outcome the runtime has. `PROOF_CAMPAIGN.md` and
 `MATHEMATICS.md` note the repair where they state the findings. P7 now waits only on RW 5.6's green
 `miri-slow` run.
+
+### ADAPTER-SPELL-1 — a hardware driver was verified as one file and started as another (D-V2-50)
+
+Found while sizing P8 (RW 4.7, the signed adapter), by the question §11.4 says to ask of every string
+a security decision is made on — *what else spells this?* `run_cmd.rs` checked the driver's provenance
+with `check_adapter_signature(prog, …)`, which reads `--adapter-cmd`'s first word as a path from the
+working directory, and then started it with `ProcessAdapter::spawn(…, prog, …)`, i.e.
+`Command::new(prog)`, which looks a bare word up on `PATH`. **Witnessed** (Unix, a new end-to-end test):
+the operator's driver signed by the operator's key in the working directory, a different unsigned
+`drive` first on `PATH` that leaves a marker; `--adapter-cmd drive --adapter-signer KEY` printed
+"`drive` signature verifies under the pinned key …" — and the marker appeared: **a pinned key vouched
+for a file that never ran, and a driver nobody signed commanded the machine.** Fixed (D-V2-50): the
+word is resolved once and that absolute file is verified and started; a word that resolves to nothing
+is refused rather than handed to the OS's own search. The test now passes and the old code fails it
+(the witness). Two assertions of an older test encoded the old reading of `sh driver.sh` ("first word
+is not a file — nothing to verify", true only because `sh` was looked for in the working directory):
+`sh` now resolves to the interpreter started, which is unsigned — still refused under the flag, and the
+refusal now names `--adapter-artifact`; the assertion checks that instead. All 12 adapter tests pass.
+**Stale claims found beside it:** `REMAINING_WORK.md` 4.7, `HANDOFF.md` §11.4 and
+`V2_SECURITY_MODEL.md` said the adapter had "no signature check" — untrue since D52/D53; corrected, with
+what is still missing (the Verified-class `.dpx`, P8). The residual — replacement between check and
+start by someone who can write the driver's directory — is named in D-V2-50, `QUESTIONS.md` §3.2 and
+RW 4.7.
+
+**CI read, and PS-D closed.** `fef8ccd` (PS-D-02) push run `36395256154`: **success on every job** —
+the attestation tests on Windows, Linux and macOS included. **PS-D is complete** (`V2_PHASE_STATUS.md`
+row 13); RW 4.24 closed.
+
+The full suite after ADAPTER-SPELL-1, alone in the VM (`-j 4`, cargo's exit 0): 151 binaries, **1,997
+passed, 0 failed, 15 ignored**; clippy `--workspace --all-targets -D warnings` clean. Inside the suite
+`actors_pingpong` wrote "MEASURED: 2.12x where the machine gave perfectly parallel work 3.54x, against
+a bar of 1.33x — passed".

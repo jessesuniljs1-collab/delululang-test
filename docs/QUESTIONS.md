@@ -516,8 +516,11 @@ load and keeps per-export rows; a **Contained** plugin is opaque, so every expor
 plugin's *entire* granted authority (rule R-1). That is the honest price of containment-only trust.
 
 **Limits, stated:** the hardware adapter is an operator-supplied **subprocess**, not a signed
-in-process plugin; unless you pin a key with `--adapter-signer`, there is **no trust policy**; and
-**no driver for any real device ships in this repository.**
+in-process plugin; unless you pin a key with `--adapter-signer`, there is **no trust policy**; the
+file whose signature is checked is the file started (a bare name is looked up on `PATH` once, by
+DeluluLang), but anyone who can write where the driver lives can replace it between the check and the
+start, so keep it where only you can write; and **no driver for any real device ships in this
+repository.**
 
 ### 3.3 Can the characters of the language be changed?
 

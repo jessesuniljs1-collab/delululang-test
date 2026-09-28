@@ -1386,6 +1386,22 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                     return 2;
                 };
                 let args: Vec<String> = parts.map(str::to_string).collect();
+                // ADAPTER-SPELL-1: the file the name means, resolved ONCE, is the file verified and
+                // the file started. Unresolved, the bare name is never handed to the OS's own search,
+                // which could find a file the check never saw.
+                let resolved = crate::cli::resolve_driver(prog);
+                let prog: String = match &resolved {
+                    Some(p) => p.display().to_string(),
+                    None => {
+                        eprintln!(
+                            "error: adapter could not be started: `{prog}` is neither a file on PATH nor a path \
+                             to one — the driver started must be the file whose provenance is checked, so it is \
+                             not looked up anywhere else"
+                        );
+                        return 1;
+                    }
+                };
+                let prog = prog.as_str();
                 // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
                 let (prov, gate) = check_adapter_signature(
                     prog,

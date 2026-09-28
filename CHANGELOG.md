@@ -23,6 +23,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **`delulu` reads nothing after a bare `--`.** Those words belong to the command a verb runs, so
   `sandbox attest -- docker run -h HOST …` passes `-h` to `docker`, where `delulu` used to answer it with
   its own help.
+- **Fixed: a hardware driver's signature could be checked on one file and another file started**
+  (ADAPTER-SPELL-1). `--adapter-cmd drive` verified `./drive` — under the pinned key, if one was given —
+  and then let the operating system start whatever `drive` came first on `PATH`. The name is now
+  resolved once, by DeluluLang (a path from the working directory, a bare name on `PATH`), and that file
+  is both verified and started; a name that resolves to nothing is refused rather than handed to the
+  OS's own search. An interpreter-hosted driver's refusal now says to name its bytes with
+  `--adapter-artifact` (D-V2-50).
 - **Tests:** `actors_pingpong`'s parallel speed-up is now judged against a control measured on the same
   machine, so a CI runner that is busy is reported as busy rather than as a runtime that stopped running in
   parallel (D-V2-47).
