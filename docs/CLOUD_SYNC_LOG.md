@@ -121,7 +121,8 @@ it on `origin` was made in the cloud and is listed below.
   (4) `b7abcfb` P7: Delulu Core v0.3 — progress-or-fault and the higher-order primitive (D-V2-49);
   (5) `81c644f` ADAPTER-SPELL-1: a hardware driver is verified and started as one file (D-V2-50); PS-D complete;
   (6) `0a7b881` ATTEST-FIFO-1: the attestation is read only from a regular file; P7 complete;
-  (7) `P8 designed (D-V2-51): the control program in a guest, then a Verified-class adapter`
+  (7) `e430c2a` P8 designed (D-V2-51): the control program in a guest, then a Verified-class adapter;
+  (8) `RW 7.3: a manual container workflow — build the Dockerfile and the devcontainer on GitHub`
 - Files and folders:
   M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar; (3) its verdict file
   A `crates/delulu/src/attest.rs` — (2) the statement, its canonical bytes, the verifier, the reference attester
@@ -150,6 +151,7 @@ it on `origin` was made in the cloud and is listed below.
   M `.github/workflows/ci.yml`, `docs/CLOUD_ROUTINE.md` — (6) the verdict step last in each test job, a notice annotation; the log tool's 5,000-line cap
   A `docs/DELULULANG_V2/V2_P8_DESIGN.md` — (7) P8's design; M `docs/REPOSITORY_STRUCTURE.md` §5.11 (its row),
     `V2_DECISION_LOG.md` (D-V2-51), `V2_PHASE_STATUS.md` row 14, `V2_IMPLEMENTATION_ROADMAP.md` P8
+  A `.github/workflows/container.yml` — (8) by hand only: `docker build` of the Dockerfile and `devcontainer up`, as committed
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
 - Survey and doctor (after the last edit): see the commit message of each slice.

@@ -1,0 +1,42 @@
+# RW 7.3: the Dockerfile and the devcontainer, BUILT — they were written on 2026-08-07 and never built,
+# because the authoring machine's Docker daemon was not running, and a cloud VM's pulls from Docker Hub
+# are refused (its shared address is over the unauthenticated rate limit — measured by the first cloud
+# routine run, 2026-09-28). A GitHub runner builds them.
+#
+# Runs ONLY by hand (workflow_dispatch): a container build is an experiment until it has passed once
+# ("Dockerfiles fail for reasons invisible by reading", RW 7.3), and an experiment must not turn the push
+# run red. Read the result and record it (docs/DELULULANG_V2/V2_LOG.md); "activated" is not "executed".
+name: container
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dockerfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build — the Dockerfile as committed
+        run: docker build --progress=plain -t delulu:ci .
+      - name: the image answers, and runs a program with a grant and without one
+        shell: bash
+        run: |
+          set -x
+          docker run --rm delulu:ci --version
+          mkdir -p work
+          printf 'module hello\n\nfn main(root: Root) ! {Write} {\n    root.console().println("hello from the image")\n}\n' > work/hello.delulu
+          chmod -R a+rwX work
+          docker run --rm -v "$PWD/work:/home/delulu/work" delulu:ci run hello.delulu --grant console | tee out.txt
+          grep -q "hello from the image" out.txt
+          # Without the grant it is refused — the language's claim, inside the container too.
+          if docker run --rm -v "$PWD/work:/home/delulu/work" delulu:ci run hello.delulu; then echo "ran without a grant"; exit 1; fi
+  devcontainer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: devcontainer up — the definition as committed (its postCreateCommand builds delulu)
+        run: npx --yes @devcontainers/cli@0.72.0 up --workspace-folder . --log-level info
+      - name: the toolchain inside answers
+        run: npx --yes @devcontainers/cli@0.72.0 exec --workspace-folder . bash -lc 'cargo --version && ./target/release/delulu --version'
