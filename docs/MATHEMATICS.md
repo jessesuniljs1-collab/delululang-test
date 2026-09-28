@@ -456,7 +456,9 @@ So Theorem 3 is provable **and true of the calculus** while the implementation w
 argument makes `E-Op` inapplicable and no other rule applies — so a well-typed closed term is
 **stuck**, which Progress forbids. Observed: a program granted `fs.read=./data` reading
 `../outside.txt` **checks clean** and then faults `DL0904`. The document has **no fault
-configuration at all**. The correct statement is **progress-or-fault**.
+configuration at all**. The correct statement is **progress-or-fault**. *(Both P17-T1 and P17-T2 were
+repaired on paper on 2026-09-28: `DELULU_CORE.md` v0.3 has the higher-order primitive and the fault
+configuration, and states progress-or-fault — still unmechanized, D-V2-49.)*
 
 **P17-T3 — §6's faithfulness claim is weaker than stated.** §6 justifies its exclusions as making the
 calculus faithful to the implemented language, and one exclusion is "no ambient mutable cell through

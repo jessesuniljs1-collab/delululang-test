@@ -974,6 +974,10 @@ mechanization buys confidence in a model that excludes the only soundness hole t
 
 ### 🔶 P17-T2 — Theorem 1 (Progress) is FALSE as stated (OBSERVED)
 
+*Repaired 2026-09-28 in `DELULU_CORE.md` v0.3 (D-V2-49): the fault configuration, `E-Refuse` and
+`E-Fault`, and Theorem 1 restated as progress-or-fault. P17-T1 was repaired in the same revision
+(`hop`, `T-HOp`, `E-HOp`). The finding as recorded:*
+
 `E-Op` (§4) carries `(scope of κ permits the arguments)` as a **premise**. When a capability is
 present and well-typed but its *scope* does not cover the argument, `E-Op` does not apply and no
 other rule does — so a well-typed closed term is **stuck**, which Progress forbids.

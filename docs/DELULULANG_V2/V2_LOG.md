@@ -2266,3 +2266,23 @@ its control's figures, or NOT MEASURED and why — to `target/tmp/actors_pingpon
 CI's test and arm64 jobs print it after the suite, pass or fail (idle VM: "MEASURED: 2.18x where the
 machine gave perfectly parallel work 3.24x, against a bar of 1.21x — passed"). `9ac5477`'s push run
 `36393016213` — the first with the control — was green on every job.
+
+### P7 — RW 5.2 and 5.3: Delulu Core v0.3 (D-V2-49)
+
+The routine names RW 5.2 as P7's; the owner's delegation allows the entrenched edit, recorded in
+`ENTRENCHED_CHANGE_RECORD.md` and flagged for his review. **Witnessed first, on the current binary**,
+what the calculus must describe: a program granted `fs.read=./data` reading `../outside.txt` checks
+clean, runs, and faults `DL0904` (exit 1; its own `Err` arm never runs), and `--trace-effects` records
+the attempted `Read` before the refusal; and a pure-declared function passing a `! {Write}` callback to
+`List.map` is refused `DL0501`, while declaring `{Write}` checks clean. **`DELULU_CORE.md` v0.3:** a
+configuration may be `fault(c)`; `E-Refuse` takes a present capability whose scope does not cover its
+arguments there, emitting the attempted label as the trace does; `E-Fault` propagates it — the calculus
+has no handlers; Theorem 1 is **progress-or-fault**; Preservation and Theorem 3 hold over faults, and
+Theorem 3 for every finite prefix of a run. And RW 5.3 with it: `hop(e, ē)`, `T-HOp` joining the
+callback's latent row (R-4 — the Lean fragment's `TypedGood.ho`, generalized from a literal closure),
+`E-HOp` unfolding to applications. §8 gains three traceability rows; §9's two finding boxes each say
+"repaired in v0.3" and keep their text. Lean was not re-run (no toolchain in the VM; the `.lean` file
+is unchanged). RW 5.2 and 5.3 closed; RW 5.1 — the mechanization — is open and now aimed at a calculus
+that states the construct that failed and the outcome the runtime has. `PROOF_CAMPAIGN.md` and
+`MATHEMATICS.md` note the repair where they state the findings. P7 now waits only on RW 5.6's green
+`miri-slow` run.

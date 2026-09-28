@@ -232,7 +232,8 @@ entrenched paths untouched; regenerate the Survey.
 RW 4.10a wire the NIST KAT vectors; RW 5.4 `cargo-fuzz` targets for the four parsers and the grant
 parser (shared with PS-A's channel target); RW 5.6 shrink the three Miri-slow tests under
 `cfg!(miri)` and measure; RW 5.2 restate Progress as progress-or-fault in `DELULU_CORE.md`
-(entrenched → owner approval, recorded in `ENTRENCHED_CHANGE_RECORD.md`).
+(entrenched → owner approval, recorded in `ENTRENCHED_CHANGE_RECORD.md`). **RW 5.2 done 2026-09-28**
+under the owner's delegation, with RW 5.3: `DELULU_CORE.md` v0.3 (D-V2-49).
 
 ## PS-D — external launchers and the attestation seam (3–4 S)
 

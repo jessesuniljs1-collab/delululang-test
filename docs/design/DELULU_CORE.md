@@ -1,4 +1,4 @@
-# Delulu Core — the formal core calculus (v0.2)
+# Delulu Core — the formal core calculus (v0.3)
 
 **Status:** Normative companion to `STAGE2_SPECIFICATION.md` §7.1. This document states the core
 calculus and the theorems that justify the phrase "authority cannot escape the type." **Honesty
@@ -8,7 +8,7 @@ capabilities, no store, no secrets, no attenuation, no Progress and no Preservat
 committed future work. **One fragment is no longer a sketch:** `models/lean/DeluluCore.lean`
 machine-checks the higher-order extension in **Lean 4.32.2**, with `#print axioms` reporting *"does
 not depend on any axioms"* for every theorem — see the box in §9, and read it before starting the
-rest, because it also proves this document's own `T-Op` unsound for that construct. The
+rest, because it also proves v0.2's `T-Op` unsound for that construct. The
 implementation's soundness is additionally guarded by the laundering suite
 (`crates/delulu-check/tests/laundering.rs`), the conformance corpus, and the executable
 `trace ⊆ row` witness (`--assert-trace`), which are evidence, not proof.
@@ -17,6 +17,13 @@ Delulu Core is intentionally **smaller** than the surface language: it models ex
 machinery on which the authority guarantee rests, and nothing else. What it omits, it omits on
 purpose (§6), and each omission corresponds to a Stage-1 restriction that already exists in the
 implementation (no exceptions, no continuations, no mutable module state, no reflection).
+
+**v0.3 (2026-09-28, D-V2-49, recorded in `ENTRENCHED_CHANGE_RECORD.md`)** repairs the two defects the
+proof campaign found in v0.2 (§9): it adds the **higher-order primitive** the calculus lacked
+(`hop`, `T-HOp`, `E-HOp` — the rule the Lean fragment already proves sound, P17-T1) and the **fault
+configuration** Progress needs (`fault(c)`, `E-Refuse`, `E-Fault`), and restates Theorem 1 as
+**progress-or-fault** (P17-T2). It proves nothing new by machine: §1–§7 remain paper sketches, now of
+a calculus that states the construct that failed and the outcome the runtime actually has.
 
 ---
 
@@ -39,6 +46,8 @@ effect labels (`Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`).
 e  ::=  x | c | λx:τ. e | e e | let x = e in e
      |  (e, e) | π₁ e | π₂ e | inl e | inr e | case e of inl x ⇒ e | inr y ⇒ e
      |  op_ℓ[R](e, ē)              a primitive operation on a capability (the ONLY effect source)
+     |  hop(e, ē)                  a higher-order primitive that INVOKES its function argument
+                                   (`map`, `filter`, `fold`, …) — no label of its own (v0.3)
      |  wrapₛ e | verify(e, e) | expose(e, e)     secret intro/compare/eliminate
      |  κ                          a runtime capability token value (no surface syntax; store-only)
 ```
@@ -87,6 +96,10 @@ calculus-level image of the runtime primitive table (`prim.rs`) and the compile-
           -----------------------------------------------------------------------------------
           Γ ⊢ op_ℓ[R](e₀, ē) : τ ! ({ℓ} ⊔ ρ₀ ⊔ ⊔ᵢ ρᵢ)      -- the ONLY rule that introduces a label
 
+(T-HOp)   Σ(hop) = ((τ̄' →ρ_f τ'), τ̄) → τ     Γ ⊢ e₀ : (τ̄' →ρ_f τ') ! ρ₀     Γ ⊢ ēᵢ : τᵢ ! ρᵢ
+          -----------------------------------------------------------------------------------
+          Γ ⊢ hop(e₀, ē) : τ ! (ρ_f ⊔ ρ₀ ⊔ ⊔ᵢ ρᵢ)   -- the callback's LATENT row joins here (R-4, v0.3)
+
 (T-Sec)   Γ ⊢ e : τ ! ρ                        (T-Verify) Γ ⊢ e₁,e₂ : Secret Str ! ρ₁,ρ₂
           -------------------------                        -----------------------------------
           Γ ⊢ wrapₛ e : Secret τ ! ρ                       Γ ⊢ verify(e₁,e₂) : Bool ! (ρ₁ ⊔ ρ₂)
@@ -99,8 +112,10 @@ calculus-level image of the runtime primitive table (`prim.rs`) and the compile-
 Two structural facts follow immediately from the rule shapes and are used throughout:
 
 - **(Fact A — labels come only from T-Op/T-Expose.)** No rule other than `T-Op` and `T-Expose`
-  adds a concrete label to a row; every other rule only unions the rows of subterms. Hence a label
-  `ℓ` in a derivation's conclusion is traceable to a `T-Op` (or `T-Expose`) node in the tree.
+  adds a concrete label to a row; every other rule only unions the rows of subterms and the latent
+  rows of arrow types (`T-App`, and `T-HOp` since v0.3), and a latent row is itself fixed at a `T-Abs`.
+  Hence a label `ℓ` in a derivation's conclusion is traceable to a `T-Op` (or `T-Expose`) node in the
+  tree, or to a declared row that over-approximates one.
 - **(Fact B — a label demands a capability.)** The `T-Op`/`T-Expose` premises require a subterm of
   type `Cap R` (with `R` the resource kind for `ℓ`; `Declassify` for expose). By the shapes of the
   typing rules, a closed term of type `Cap R` reduces (Theorem 1) to a token `κ` for `R`.
@@ -115,15 +130,43 @@ stringified" is not a theorem to prove but an absence to observe.
 
 ## 4. Operational semantics
 
-A configuration is `⟨σ ; e⟩` where `σ` is a **capability store** mapping tokens `κ` to their
-resource kind and scope. Reduction `⟨σ ; e⟩ ⟶ ⟨σ' ; e'⟩ | tr` optionally emits a trace label.
-The only label-emitting rule:
+A configuration is `⟨σ ; e⟩`, where `σ` is a **capability store** mapping tokens `κ` to their
+resource kind and scope, or a **fault** `fault(c)` — a run that ended refused, with the code `c` the
+runtime reports (v0.3). Reduction `⟨σ ; e⟩ ⟶ C | tr` optionally emits a trace label; `fault(c)`
+does not reduce. The label-emitting rules:
 
 ```
-(E-Op)   κ ∈ dom(σ)     σ(κ) = R     (scope of κ permits the arguments)
-         --------------------------------------------------------------
-         ⟨σ ; op_ℓ[R](κ, v̄)⟩  ⟶  ⟨σ' ; v⟩   emitting  ℓ
+(E-Op)     κ ∈ dom(σ)     σ(κ) = R     permits(σ, κ, v̄)
+           ------------------------------------------------
+           ⟨σ ; op_ℓ[R](κ, v̄)⟩  ⟶  ⟨σ' ; v⟩         emitting  ℓ
+
+(E-Refuse) κ ∈ dom(σ)     σ(κ) = R     ¬ permits(σ, κ, v̄)
+           ------------------------------------------------
+           ⟨σ ; op_ℓ[R](κ, v̄)⟩  ⟶  fault(scope)      emitting  ℓ       (v0.3)
 ```
+
+and the two that emit nothing:
+
+```
+(E-HOp)    ⟨σ ; hop(v_f, v̄)⟩  ⟶  ⟨σ ; δ_hop(v_f, v̄)⟩                   (v0.3)
+
+(E-Fault)  ⟨σ ; e⟩ ⟶ fault(c)   implies   ⟨σ ; E[e]⟩ ⟶ fault(c)       (v0.3)
+```
+
+`permits(σ, κ, v̄)` — *the scope of `κ` covers the arguments* — is a decidable predicate on values:
+it is the runtime's containment check, made on the resolved arguments. Types do not track scopes, so a
+well-typed program can reach an operation whose present, correctly-typed capability does not cover
+its argument; `E-Refuse` is what happens then, and it is what the runtime does: the operation is
+**not performed**, the run ends with `DL0904`, and no handler in the program sees it (§6: there are
+none). The label is still emitted, because the runtime's trace records the ATTEMPT — witnessed
+2026-09-28: a program granted `fs.read=./data` reading `../outside.txt` has a `Read` record for it in
+`--trace-effects`, then faults `DL0904` without reading. Either choice satisfies Theorem 3, since
+`T-Op` already put `ℓ` in the row; this one is the implementation's. `δ_hop(v_f, v̄)` is the
+primitive's unfolding — a term in which `v_f` occurs only in application position and which is
+otherwise pure (for `map` over `[v₁, v₂]`: `[v_f v₁, v_f v₂]`): a higher-order primitive's effects are
+exactly its callback's, emitted by the applications as they reduce. `E[·]` ranges over the
+call-by-value evaluation contexts the congruence rules already use: a fault propagates to the whole
+configuration, because nothing in the calculus can catch it.
 
 `E-Op` **requires `κ ∈ dom(σ)`**: an operation can only fire on a token actually present in the
 store. Tokens are never created by reduction except by attenuation (`narrow`, which produces a
@@ -171,27 +214,35 @@ models the implemented language rather than an idealized superset:
 Let `labels(tr)` be the multiset of labels emitted along a reduction sequence, and `row(e)` the
 row in `e`'s typing.
 
-> **Theorem 1 (Progress).** If `⟨σ ; e⟩` is well-typed (`∅ ⊢ e : τ ! ρ`, `σ` supplies every free
-> token in `e` at the required kind) then either `e` is a value or `⟨σ ; e⟩ ⟶ ⟨σ' ; e'⟩`.
+> **Theorem 1 (Progress-or-fault; restated in v0.3).** If `⟨σ ; e⟩` is well-typed (`∅ ⊢ e : τ ! ρ`,
+> `σ` supplies every free token in `e` at the required kind) then `e` is a value, or
+> `⟨σ ; e⟩ ⟶ ⟨σ' ; e'⟩`, or `⟨σ ; e⟩ ⟶ fault(c)`. No well-typed configuration is stuck.
 >
-> *Sketch.* Standard structural induction on the typing derivation. The only non-standard case is
-> `T-Op`: by Fact B the capability subterm reduces to a token `κ` of kind `R`, and well-formedness
-> of `σ` (it supplies `e`'s free tokens) gives `κ ∈ dom(σ)`, so `E-Op` applies. No stuck state
-> arises from a missing capability, because a missing capability makes the term ill-typed, not
-> stuck.
+> *Sketch.* Structural induction on the typing derivation. In a congruence case a subterm that steps
+> makes the whole term step, and one that faults makes it fault (`E-Fault`). The non-standard cases:
+> **`T-Op`** — by Fact B the capability subterm reduces to a token `κ` of kind `R`, and
+> well-formedness of `σ` (it supplies `e`'s free tokens) gives `κ ∈ dom(σ)`; `permits` is decidable,
+> so exactly one of `E-Op` and `E-Refuse` applies. A *missing* capability makes the term ill-typed, not
+> stuck; a *present* one whose scope does not cover the arguments makes it fault, not stuck — the case
+> v0.2's statement missed (P17-T2). **`T-HOp`** — once its arguments are values, `E-HOp` applies.
 
 > **Theorem 2 (Preservation, types and rows).** If `∅ ⊢ e : τ ! ρ` and `⟨σ ; e⟩ ⟶ ⟨σ' ; e'⟩ | tr`
-> then `∅ ⊢ e' : τ ! ρ'` with `ρ' ⊔ labels(tr) ⊆ ρ`.
+> then `∅ ⊢ e' : τ ! ρ'` with `ρ' ⊔ labels(tr) ⊆ ρ`. If instead `⟨σ ; e⟩ ⟶ fault(c) | tr`, then
+> `labels(tr) ⊆ ρ` (v0.3).
 >
 > *Sketch.* Induction on the reduction. The row component is the point of interest: every
-> congruence step preserves or shrinks the row (subterm rows only union upward under T-App/T-Op,
-> so a reduced subterm's row is `⊆` the original), and `E-Op` emits exactly the `ℓ` that `T-Op`
-> already accounted for in `ρ`. Substitution (from β-reduction / `let`) preserves rows because
+> congruence step preserves or shrinks the row (subterm rows only union upward under
+> T-App/T-Op/T-HOp, so a reduced subterm's row is `⊆` the original), and `E-Op` — and `E-Refuse`,
+> which emits the same label and leaves no term — emit exactly the `ℓ` that `T-Op` already accounted
+> for in `ρ`. `E-HOp` emits nothing, and its unfolding is typed by `T-App` at the callback's latent row
+> `ρ_f`, which `T-HOp` put in `ρ`: this is the step v0.2 could not take, because its only rule for the
+> construct gave the callback `{}` (P17-T1, C88). Substitution (from β-reduction / `let`) preserves rows because
 > lambda bodies carry their row in the arrow type (rows never erase). The single subsumption site
 > (T-Abs) is where `ρ_body ⊆ ρ` is discharged; no other step introduces a `⊆`.
 
 > **Theorem 3 (Effect soundness — "authority cannot escape the type").** If `∅ ⊢ e : τ ! ρ` and
-> `⟨σ_root ; e⟩ ⟶* ⟨σ' ; v⟩` emitting trace `tr`, then `labels(tr) ⊆ ρ`. In particular, every
+> `⟨σ_root ; e⟩ ⟶* C` emitting trace `tr` — whether `C` is a value, a fault, or any configuration
+> part-way (every finite prefix of a run, including one that never ends) — then `labels(tr) ⊆ ρ`. In particular, every
 > emitted label is witnessed by a capability token that descends, by explicit passing or
 > attenuation, from `σ_root`.
 >
@@ -220,6 +271,9 @@ row in `e`'s typing.
 | Opacity as absent eliminators | `check.rs::is_opaque` → DL0604/DL0605 (R-5) |
 | Store discipline / no forgery | `value.rs` `CapVal` has no constructor from data; broker-only minting |
 | Theorem 3, dynamically | `trace.rs::assert_trace` + `--assert-trace` (DL1101) |
+| `T-HOp` — the callback's latent row joins (v0.3) | `check.rs` R-4, the builtin-callback law (audit F-4), generalized to a callback POSITION in V2 P3 |
+| `fault(scope)` via `E-Refuse` (v0.3) | `prim.rs::resolve_in_scope` → `DL0904`, raised before the operation is performed; the trace already holds the attempt |
+| `E-Fault` — no handler catches a fault (v0.3) | a runtime fault ends the run as a diagnostic (`ref.rule.runtime.faults-are-diagnostics`); the program's own `Err` arms never see it |
 
 Every audit exploit (`SOUNDNESS_AUDIT.md` F-2…F-5) corresponds to a would-be violation of Fact A,
 Fact B, or the opacity side condition, and appears as a rejection test in the laundering suite.
@@ -231,6 +285,10 @@ runtime enforcement lands in Stage 6.
 ## 9. Mechanization — stated as future work, not as a present claim
 
 > ### 🔴 BEFORE MECHANIZING, READ THIS — campaign finding P17-T1 (2026-08-04)
+>
+> **Repaired in v0.3 (2026-09-28):** §1 has `hop`, §3 `T-HOp`, §4 `E-HOp` — the rule `good_sound`
+> proves sound below, generalized from a literal closure to any term of arrow type. What follows is
+> kept as the record of what v0.2 said and why it mattered.
 >
 > **Mechanizing §1–§7 as written would NOT have caught C88**, the worst soundness hole this project
 > has had. Search this document for `higher-order`, `callback`, `invoke` or `map`: there are **zero
@@ -250,6 +308,9 @@ runtime enforcement lands in Stage 6.
 > excludes the only soundness hole this project has ever had.
 >
 > ### 🔶 Theorem 1 (Progress) is FALSE as stated — campaign finding P17-T2
+>
+> **Repaired in v0.3 (2026-09-28):** §4 has the fault configuration and `E-Refuse`/`E-Fault`, and §7
+> states progress-or-fault. What follows is the finding as it read against v0.2.
 >
 > `E-Op` carries `(scope of κ permits the arguments)` as a **premise**. A capability that is present
 > and well-typed but whose *scope* does not cover the argument makes `E-Op` inapplicable, and no
@@ -276,7 +337,8 @@ runtime enforcement lands in Stage 6.
 >   row: `ho (lam [write] (op write))` types at row `[]` and emits `write`. **C88, mechanized.**
 >
 > So the gap is no longer only argued — it is proved, in both directions. What remains unmechanized
-> is everything else: capabilities, the store, secrets, attenuation, Progress and Preservation.
+> is everything else: capabilities, the store, secrets, attenuation, faults, Progress and
+> Preservation — of the v0.3 calculus, which is now the right target.
 
 A machine-checked development (the natural target is a ~500-line Lean or Coq formalization of §1–§7)
 is **open, invited work** recorded in `CONTRIBUTING.md`. Until it exists, this document and the

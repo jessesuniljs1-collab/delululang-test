@@ -26,6 +26,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Tests:** `actors_pingpong`'s parallel speed-up is now judged against a control measured on the same
   machine, so a CI runner that is busy is reported as busy rather than as a runtime that stopped running in
   parallel (D-V2-47).
+- **The core calculus, `DELULU_CORE.md` v0.3** (D-V2-49, an entrenched document, under the owner's
+  delegation): Progress is restated as **progress-or-fault** — a well-typed program is a value, takes a
+  step, or faults, as `DL0904` does for a capability whose scope does not cover its argument — and the
+  calculus gains the **higher-order primitive** (`map`, `fold` …) whose missing rule was C88. Paper only:
+  nothing new is machine-checked, and the language itself does not change.
 
 ## Unreleased — V2 PS-D-01: an external launcher carries the sandbox (L3), 2026-09-28
 

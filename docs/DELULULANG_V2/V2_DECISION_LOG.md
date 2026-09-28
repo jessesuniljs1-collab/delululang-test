@@ -1041,6 +1041,26 @@ Built from the design in `HANDOFF.md` §0, with these choices:
    RFC territory); level 4 `attested` (it waits for a hardware attester whose quote the host itself
    checks); key rotation or a list of pinned keys (one key per run; an operator's script picks it).
 
+## D-V2-49 — Delulu Core v0.3: faults and the higher-order primitive enter the calculus — TAKEN (head chef, 2026-09-28, under the owner's delegation; FLAGGED for the owner's review — an entrenched file)
+
+1. **Progress becomes progress-or-fault (RW 5.2, P17-T2).** A configuration may be `fault(c)`;
+   `E-Refuse` takes a present capability whose scope does not cover its arguments there, and
+   `E-Fault` propagates it through every evaluation context — the calculus has no handlers.
+   Theorem 1: a well-typed configuration is a value, steps, or faults.
+2. **`E-Refuse` emits the attempted label**, because the implementation's trace records the attempt
+   (witnessed: a `Read` record for the refused `../outside.txt`, then `DL0904`). Emitting nothing
+   would also satisfy Theorem 3; the calculus follows the implementation, so `--assert-trace` and
+   §8's traceability agree.
+3. **The higher-order primitive enters §1–§7 (RW 5.3, P17-T1):** `hop(e, ē)`, typed by `T-HOp` with the
+   callback's latent row joined (R-4), reduced by `E-HOp` to an unfolding in which the callback occurs
+   only applied. It is the Lean fragment's `TypedGood.ho`, generalized from a literal closure to any
+   term of arrow type.
+4. **Theorem 3 is stated for every finite prefix** of a run — ending in a value, in a fault, or not
+   ending — rather than only for runs that reach a value.
+5. **No RFC:** the language does not move; its formal model is corrected toward the implementation
+   (`ENTRENCHED_CHANGE_RECORD.md` says why, and how to revert). Nothing new is machine-checked; RW 5.1
+   stays open, now aimed at the right calculus.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

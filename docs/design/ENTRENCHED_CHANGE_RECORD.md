@@ -154,3 +154,67 @@ cargo run -p delulu-survey -- build
 
 and, if the channel itself should close, switch off private vulnerability reporting in the
 repository's settings — and §1 must then say again that there is no inbox.
+
+---
+
+## 2026-09-28 — `docs/design/DELULU_CORE.md` v0.3: the fault configuration, progress-or-fault, and the higher-order primitive
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/DELULU_CORE.md` — the title (v0.2 → v0.3), one clause of the Status block, a v0.3 note, §1 (`hop`), §3 (`T-HOp`; Fact A), §4 (`fault(c)`, `E-Refuse`, `E-HOp`, `E-Fault`, `permits`), §7 (Theorems 1–3), §8 (three traceability rows), §9 (a "repaired in v0.3" line on each of the two finding boxes) |
+| Entrenched by | `.github/CODEOWNERS:17` → `@PENDING-PUBLIC-project-lead` |
+| Campaign | V2 P7, `REMAINING_WORK.md` 5.2 and 5.3; decision D-V2-49 |
+| Approved by | **The owner's delegation of 2026-09-28** (`docs/CLOUD_ROUTINE.md`, *The authority a run has*): *"any file or folder is allowed to modified or created or even deleted"*, with RW 5.2 named in the routine as allowed and to be recorded here. Taken by the head chef in the first cloud routine run, **flagged for the owner's review** on his return. |
+
+**Why**
+
+The proof campaign found two defects in v0.2, both recorded in the document's own §9 since
+2026-08-04 and neither repaired: **P17-T2**, Theorem 1 (Progress) is false as stated — a present,
+well-typed capability whose scope does not cover its argument makes `E-Op` inapplicable and no rule
+applies, while the runtime faults `DL0904` — and **P17-T1**, the calculus has no construct for a
+primitive that invokes a function argument, so mechanizing §1–§7 as written would prove the wrong
+theorem (C88). Both are prerequisites for RW 5.1, the mechanization. v0.3 adds the fault
+configuration and the rules that reach it, restates Progress as progress-or-fault, and adds the
+higher-order primitive with the typing rule the Lean fragment already proves sound (`good_sound`),
+generalized from a literal closure to any term of arrow type.
+
+**Why this is not an RFC**
+
+`CONTRIBUTING.md` §5 sends changes to *the language core* through `rfcs/`. **The language does not
+move:** no surface rule, diagnostic, exit code, artifact format or `STABILITY.md` line changes, and the
+checker and runtime are untouched. The calculus is corrected to describe the language as it is
+implemented, which is what §6 says it is for ("the calculus faithfully models the implemented
+language"). Both behaviours it now models were witnessed on the current binary before the edit
+(below). A reader who holds that the calculus IS the language core would want an RFC; that reading is
+the owner's to take on his return, and the revert below is one command.
+
+**Verified before the change**
+
+1. **E-Refuse is what the runtime does**, run on the binary built from `fef8ccd`: a program granted
+   `fs.read=./data` that reads `data/in.txt` and then `../outside.txt` checks clean; the run prints
+   the first, then ends `error[DL0904]: path ../outside.txt escapes the granted scope`, exit 1, and the
+   program's own `Err` arm never runs (a fault, not a result). `--trace-effects` holds a `Read` record
+   for the refused operation (seq 2) — the trace records the ATTEMPT — so `E-Refuse` emits the label.
+2. **T-HOp is what the checker does:** a function declared pure whose body passes a callback
+   declared `! {Write}` to `List.map` is refused `DL0501` ("performs effect `Write` not declared in its
+   row"); declared `! {Write}`, it checks clean and `delulu authority` reports `Write`.
+3. **The blast radius is zero:** `delulu-survey impact doc:docs/design/DELULU_CORE.md` → **0 nodes
+   reached**; eight lines link to the file, none to a section this edit renumbers (no section moves).
+4. **Lean was not re-run:** the cloud VM has no Lean toolchain, and `DeluluCore.lean` is unchanged, so
+   its 2026-08-08 result (above) stands for it; v0.3's new rules are paper, like the rest of §1–§7.
+
+**What did NOT change, and is the honest residue**
+
+Nothing new is machine-checked. §1–§7 — now including faults — remain paper sketches; RW 5.1 (a Lean
+or Coq development of the whole calculus) is still open, and is now aimed at a calculus that states
+the construct that failed (C88) and the outcome the runtime actually has. §9's two finding boxes are
+kept, each with a line saying it was repaired in v0.3. P17-T3 (§6's faithfulness claim) is untouched.
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
+cargo run -p delulu-survey -- build
+```

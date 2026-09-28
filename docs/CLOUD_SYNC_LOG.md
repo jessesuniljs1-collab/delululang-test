@@ -117,7 +117,8 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `5bb39bc`
 - Commits: (1) `9ac5477` actors_pingpong: judge criterion 1 against a control on a free machine (D-V2-47);
   (2) `fef8ccd` PS-D-02: the attestation seam — --require-attestation, sandbox attest (D-V2-48);
-  (3) `Loop engineering: CI read through MCP, cargo fetch, the ping-pong verdict printed by CI`
+  (3) `ed74683` Loop engineering: CI read through MCP, cargo fetch, the ping-pong verdict printed by CI;
+  (4) `P7: Delulu Core v0.3 — progress-or-fault and the higher-order primitive (D-V2-49)`
 - Files and folders:
   M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar; (3) its verdict file
   A `crates/delulu/src/attest.rs` — (2) the statement, its canonical bytes, the verifier, the reference attester
@@ -133,6 +134,10 @@ it on `origin` was made in the cloud and is listed below.
   M `docs/CLOUD_ROUTINE.md`, `CLAUDE.md`, `AGENTS.md` — (3) CI through the GitHub MCP tools (no `gh` in the VM),
     `cargo fetch --locked` before the suite, `test:` Survey ids, a red already fixed by a newer commit
   M `docs/assistant-memory/cloud-period-2026-09-28.md` — (3) what routine run 1 learned
+  M `docs/design/DELULU_CORE.md` — (4) ENTRENCHED: v0.3 — `fault(c)`, `E-Refuse`, `E-Fault`, progress-or-fault; `hop`, `T-HOp`, `E-HOp`
+  M `docs/design/ENTRENCHED_CHANGE_RECORD.md` — (4) the record for that edit, under the owner's delegation
+  M `docs/design/PROOF_CAMPAIGN.md`, `docs/MATHEMATICS.md` — (4) P17-T1/T2 noted as repaired on paper
+  M `docs/REMAINING_WORK.md` — (4) 5.2 and 5.3 closed; `CHANGELOG.md`, `V2_PHASE_STATUS.md`, `V2_IMPLEMENTATION_ROADMAP.md` — (4)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
 - Survey and doctor (after the last edit): see the commit message of each slice.
@@ -146,6 +151,8 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing (CI runs Windows and macOS).
 - For the laptop's memory: a fresh VM needs `cargo fetch --locked` before the suite (`egress_features`
   runs `cargo metadata --offline`); a routine run has no `gh` — CI is read with the GitHub MCP tools.
-- Open / next: read `9ac5477`'s and this commit's push runs (PS-D closes when the latter is green on
-  every job — then `V2_PHASE_STATUS.md` row 13 says complete), and `36381950975`'s broker job (green
-  closes RW 5.6); then P7's RW 5.2 (Progress restated as progress-or-fault in `DELULU_CORE.md`).
+- Open / next: read the push runs of `fef8ccd` (PS-D-02 — PS-D closes when it is green on every job, then
+  `V2_PHASE_STATUS.md` row 13 says complete), `ed74683` (its new step prints `actors_pingpong`'s verdict
+  on every OS — record whether each runner MEASURED or was busy) and this run's last commit; and
+  `36381950975`'s broker job (green closes RW 5.6, and with it P7). Then P8 as far as software reaches
+  (`docs/CLOUD_ROUTINE.md` step 4.3). The owner should review D-V2-49 (an entrenched edit).
