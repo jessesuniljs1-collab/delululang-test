@@ -99,3 +99,18 @@ recorded as observed. macOS's N = 2,000 point again carries the fixed cost the s
 
 **PS-B-04 is closed on this evidence (D-V2-36).** The script and the manual workflow stay: if a runner
 measures above the line again, the question is one button away.
+
+## Re-measured after P5–P7 and PS-D-01 (run `36368024526`, `30a6b8d`, read 2026-09-28)
+
+| runner | N = 2,000 | N = 10,000 | slope | at `2fb0895` (slope) |
+|---|---|---|---|---|
+| Linux (Azure), x86-64 | 27.8 µs | 20.76 µs | **19.0 µs** | 13.2 µs |
+| macOS 26, arm64 | 21.2 µs | 26.67 µs | **28.0 µs** | 18.7 µs |
+| Windows Server 2025, x86-64 | 43.0 µs | 41.47 µs | **41.1 µs** | 43.0 µs |
+
+**Every runner is still under the rule; PS-B-04's verdict stands.** Two slopes rose — Linux by about a
+half, macOS by about a half — and Windows did not move. Since `2fb0895` the guest has gained, among other
+things, a global allocator that checks every allocation against the memory ceiling (SANDBOX-STOP-1) and
+the host's pinned-path custody on every file effect (not on a clock read). This is one run on shared
+runners and the cause is not measured, so it is recorded as observed and not diagnosed; if either slope
+keeps climbing toward the line, the next run of this workflow is where to look first.

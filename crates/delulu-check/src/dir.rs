@@ -687,7 +687,12 @@ mod tests {
         }
     }
 
+    // Not under Miri: this test's witness IS the wall clock, which Miri (a hundred times slower, and
+    // looking for undefined behaviour) cannot judge — it measured 14.8 s a verify there and spent 49
+    // minutes of `miri-slow`'s budget failing (run `36368020490`). The same `verify` runs under Miri in
+    // every other test in this module; this bound runs natively on every push (D-V2-45).
     #[test]
+    #[cfg_attr(miri, ignore = "a wall-clock bound; Miri examines undefined behaviour, not speed")]
     fn verify_is_comfortably_fast_for_per_load_use() {
         // Build-order deviation 1 condition (b): a rough timing witness that re-verification is fast
         // enough to run at EVERY load. Re-verification is a FULL same-code-path re-check (single-

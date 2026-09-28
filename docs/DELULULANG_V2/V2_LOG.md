@@ -2066,3 +2066,30 @@ natively (D-V2-45). And `delulu-broker` ran 166 of 167 and **failed one**, which
   holding the lock and takes it straight after. Its Miri measurement is CI's: the `miri-slow` run started after this push (a local Miri run had written 54 of the parallel test's 100 records, with no error, when it was moved there to spare this machine's memory).
 
 PS-D-02, the attestation seam with a fake attester, is next.
+
+## 2026-09-28 — everything on GitHub for `30a6b8d` (the owner: "run everything on github")
+
+Five runs on `30a6b8d`, each read:
+
+- **CI push `36367985299` — GREEN on every job.** Tests: Windows 1,967 passed / 0 failed (14 ignored),
+  Linux 1,985 / 0 (15), macOS 1,975 / 0 (15), 150 binaries each; clippy, the six fuzz targets under
+  AddressSanitizer, Miri (diag, atlas, FFI), formal, supply chain, the editor, arm64, the microVM and its
+  reproducible image all green. `sandbox_external_cli.rs` (PS-D-01) and the new ceiling assertions
+  (JSON-EXIT-1, SANDBOX-CPU-LATE-1) ran on all three.
+- **CI heavy `36368020490`** — `heavy-gates` green. `miri-slow`, the measurement: **0 UB in all three crates, and for the first time every test in them ran to the end.** `delulu-syntax` 130 passed (1 ignored) again; **`delulu-broker` 168 passed, 0 failed, in 176 minutes — the AUDIT-LOCK-TAKEOVER-1 fix holds under Miri**, the parallel writers included; `delulu-check` ran all 248 and failed one, `dir::tests::verify_is_comfortably_fast_for_per_load_use`: a wall-clock bound (5 ms a verify) that measured 14.8 s under Miri and spent 49 minutes of the budget failing. Its witness IS the clock, which Miri cannot judge, so it is ignored under Miri only and still runs natively on every push (D-V2-45); the same `verify` runs under Miri in every other test of its module. The `miri-slow` run after this push is the one expected to be green on all three.
+- **Release dry run `36368022181` — green, nothing published:** all four targets packaged, checked and
+  installed; the `release` job skipped (no tag); 0 artifacts, no release (D-NE-7 held again).
+- **`channel-measure` `36368024526`** — every runner still under PS-B-04's 50 µs rule (slopes: Linux
+  19.0, macOS 28.0, Windows 41.1 µs); Linux and macOS rose since `2fb0895` (13.2, 18.7), recorded as
+  observed and not diagnosed in `measurements/sandbox-channel/RECORD.md`.
+- **`host-capability-probe` `36368026333`** — every job green, and no result contradicts a claim the
+  product makes: macOS `RLIMIT_CPU` kills a spinner (the processor-time ceiling claim holds) and
+  `RLIMIT_DATA` does not bite (withholding the memory-ceiling claim stays correct); Seatbelt denies
+  network, reads and writes; the Windows one-process job and the restricted child pass; KVM boots a
+  guest to `/init`; the subordinate-uid separation passes in its relaxed form.
+
+This machine ran out of memory once today (Claude Code reaped a full suite and a local Miri run while
+the session was idle); from here the heavy runs are GitHub's.
+
+PS-D-02 waits for the owner's word ("stop before PS-D-02").
+
