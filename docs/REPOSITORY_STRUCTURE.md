@@ -494,11 +494,15 @@ account for everything and check nothing.
 | `CONTRIBUTING.md` | How to propose a change, and the rules a change must satisfy. It binds this project too, which `governance.rs` tests. |
 | `SECURITY.md` | The disclosure policy and the threat model's edges. |
 | `TRADEMARK.md` | Name and mark usage. Owner-reserved territory. |
+| `AGENTS.md` | The rules every AI agent reads — hard rules, the cloud period, how a change is made, running sub-agents, traps. The short form of `HANDOFF.md`. |
+| `CLAUDE.md` | Loaded into every Claude Code session; imports `AGENTS.md` and adds what is Claude-specific (no auto memory in cloud sessions, commit trailers, `gh` use). |
 
 ### 5.2 `docs/` — what a user or an agent reads
 
 | File | Purpose |
 | --- | --- |
+| `CLOUD_SYNC_LOG.md` | **The cloud period's change ledger (2026-09-28 → 2026-10-16).** Every cloud session appends the commits and the files and folders it touched, what it verified, and what the laptop must redo; with the procedure for syncing the laptop afterwards. |
+| `docs/assistant-memory/` | The head chef's auto-memory directory from the owner's laptop — `MEMORY.md` and one file per topic — snapshotted on 2026-09-28 for cloud sessions, which have no auto memory; sanitized for a public repository (its `README.md` says how). `HANDOFF.md` §11 and the V2 documents outrank it where they disagree. |
 | `GETTING_STARTED.md` | Install to first program to real programs to your editor. The path a new developer walks. |
 | `for-agents.md` | **Driving the toolchain as an AI agent**: exit codes, JSON envelopes, why to batch `check` and nothing else, and what to ask the language server instead of shelling out. |
 | `QUESTIONS.md` | The hard questions answered with evidence — can an agent bypass Authority, is any of this real mathematics — and an enumerated list of known leaks. |

@@ -260,10 +260,13 @@ delulu audit tail | grep root-policy-mode
 These are known, documented, and not fixable by configuration:
 
 - **A same-OS-user process.** Tiers 0 and 1 do not contain it. Tier 2 does.
-- **A concurrent writer into a granted directory.** Filesystem containment is a check-then-open, so a
-  second writer can swap a checked file for a symlink in between (`CONTAIN-TOCTOU-1`). **Grant scopes
-  that point at directories only the program's own user can write** — never a shared or
-  world-writable one.
+- **A concurrent writer into a granted directory — closed as a race, kept as advice.** Filesystem
+  containment used to be a check-then-open, so a second writer could swap a checked file for a symlink
+  in between (`CONTAIN-TOCTOU-1`). Since V2 P5c (2026-09-27, FS-RACE-1) every file effect opens the
+  approved path one component at a time and follows no link, so a swapped-in link is refused at the
+  open. Still **grant scopes that point at directories only the program's own user can write** —
+  never a shared or world-writable one: a writer you do not control can still change what a file
+  holds, and a hardlink (below) is a real second name.
 - **A hardlink inside a granted directory.** A hardlink is a genuine second name for one file, so
   containment reports it as inside the grant, because it *is*. Creating one requires access to the
   target already, and git cannot carry one.

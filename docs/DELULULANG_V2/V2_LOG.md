@@ -2093,3 +2093,35 @@ the session was idle); from here the heavy runs are GitHub's.
 
 PS-D-02 waits for the owner's word ("stop before PS-D-02").
 
+## 2026-09-28 — the handoff to the cloud (the laptop is away until 2026-10-16)
+
+The owner needs the laptop for other work until 2026-10-16; the work continues from Claude Code cloud
+sessions on the GitHub repository and is synced back afterwards. Before handing over, the head chef read
+Claude Code's current documentation on cloud sessions, environments and memory (2026-09-28): a cloud
+session runs in a fresh Ubuntu 24.04 VM (4 vCPUs, 16 GB) with Rust, Python, Docker and `gh`; it can push
+**only to its own branch**, so its work reaches `master` through a pull request the owner merges; and
+auto memory is machine-local, so a cloud session has none. What was written for that:
+
+- **`AGENTS.md`** (new, root) — the rules every agent reads; **`CLAUDE.md`** (new, root) imports it
+  (`@AGENTS.md` — with both present, Claude Code reads only `CLAUDE.md` unless it imports the other) and
+  adds what is Claude-specific.
+- **`docs/CLOUD_SYNC_LOG.md`** (new) — the owner's instruction to *"keep a record of files and folders
+  changed, to be synced with the local repo later"*: every cloud session appends its commits, files and
+  folders, checks, and what the laptop must redo; with the sync procedure.
+- **`docs/assistant-memory/`** (new) — the laptop's auto-memory directory itself, 39 topics and the
+  index, on the owner's instruction to include it; sanitized for a public repository (the banned word
+  replaced in nine files, one file renamed), by a script that re-scans the result.
+- **`HANDOFF.md`** — §0 (the cloud period, the laptop/cloud differences, PS-D-02's design draft), the
+  state as of today, and §11 brought up to date: the owner's instructions of 2026-09-27/28, the laptop's
+  environment, V2's findings, the operational traps, and two new sections — what running agents taught
+  (§11.7) and what building V2 taught (§11.8).
+- **`README.md`** — the latest CI run; V2's progress; and the defence-in-depth paragraph, which still said
+  the microVM layer was not built.
+- **A stale residual, found while writing §11:** `REMAINING_WORK.md` 4.6, `DEPLOYMENT.md` §5 and HANDOFF
+  §11.4 still called CONTAIN-TOCTOU-1 an accepted residual a day after FS-RACE-1 (P5c) closed it. All
+  three now say closed, keeping the deployment advice as defence in depth.
+
+**Runs at the handoff:** every run on `30a6b8d` read (above); `047da1d`'s push run green; its `miri-slow`
+run `36381950975` still running (syntax green, broker and check in flight) — the first cloud session reads
+it, and a green one closes REMAINING_WORK 5.6.
+

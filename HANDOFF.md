@@ -7,23 +7,45 @@ document that had grown a ledger, a feature tour, dated numbers, a problems list
 record alongside the briefing. Those sections are kept **verbatim, with their original numbers**, in
 [`docs/archive/v1/HANDOFF_HISTORY.md`](docs/archive/v1/HANDOFF_HISTORY.md); the last section here says
 where each one went, so a citation of "`HANDOFF.md` §8" still finds its text. Nothing was deleted.
-**Repository:** `D:\nelan\DeluluLang` — a Rust workspace of 13 crates — and on GitHub, **publicly since
+**Brought up to date on 2026-09-28** for the cloud period (§0): the state below, §0 itself, and §11 —
+the assistant's memory — which now also travels file by file in
+[`docs/assistant-memory/`](docs/assistant-memory/).
+**Repository:** on the owner's laptop at `D:\nelan\DeluluLang` — a Rust workspace of 13 crates — and on GitHub, **publicly since
 2026-09-17**: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 
-## Where things stand (2026-09-27)
+## Where things stand (2026-09-28)
 
 - **DeluluLang V2 is executing** — the active source of truth is `docs/DELULULANG_V2/` (start at
-  `V2_README.md`). Complete, each with its CI run read green: V2-0, P1, PS-0, PS-A, P2, P4a, P3, PS-B,
-  P4b–e and **PS-C** — the microVM runs (`--isolation microvm`, Linux + KVM), under Firecracker's jailer
-  when run as root — except **PS-C-05**, a distributed guest image, which is the owner's (D-NE-27, a
-  built GPL kernel). **Now: P6** (this rewrite, the README and the Book). Then P5 (distribution), P7
-  (verification depth), PS-D (external launchers), P8 (owner-gated).
+  `V2_README.md`).
+- **Done**, each phase's CI run read green: V2-0 (workspace and documents), P1 (machine-contract truth),
+  PS-0 (sandbox truth), PS-A (the process sandbox and its effect channel), P2 (run-time plugin loading),
+  P4a (the Agent Skill), P3 (a standard library), PS-B (budgets as authority, the egress proxy, identity,
+  break-glass), P4b–e (agent surfaces: `delulu mcp`, schemas, checked edits, Atlas and Survey tooling,
+  the usability benchmark), **PS-C** (the microVM: `--isolation microvm` on Linux + KVM under
+  Firecracker's jailer — except PS-C-05, a distributed guest image, which is the owner's under
+  D-NE-27), **P6** (this file, the README and the Book) and **P5** (distribution: the release workflow,
+  whose dry run packages, checks and installs four targets and publishes nothing — only the owner's
+  first `v*` tag releases anything, D-NE-7).
+- **In progress:**
+  - **P7, verification depth.** Done: the NIST vectors checked byte-exact (`nist_kat.rs`), six
+    `cargo-fuzz` targets under AddressSanitizer, the Miri-slow tests shrunk under `cfg!(miri)`. The
+    `miri-slow` run `36368020490` ran every test in all three crates to the end with 0 UB, and found
+    AUDIT-LOCK-TAKEOVER-1 (fixed); run `36381950975` on `047da1d` should be the first fully green one,
+    which closes REMAINING_WORK 5.6 — **read it first**. RW 5.2 (restating Progress in
+    `DELULU_CORE.md`) is the owner's: the file is entrenched.
+  - **PS-D, external launchers and the attestation seam.** PS-D-01 is done:
+    `--sandbox --sandbox-backend external:CMD`, level 3, measured by nobody and reported so (D-V2-46).
+    **PS-D-02 waits for the owner's word** ("stop before PS-D-02", 2026-09-28); its design is in §0.
+- **Not started:** P8, safe autonomy (the signed adapter) — owner-gated.
+- **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
+  every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
+  run green with nothing published — and `047da1d`'s push run was green.
 - **Resume from `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the newest entry in
-  `docs/DELULULANG_V2/V2_LOG.md`.** Decisions taken under the owner's delegation are
-  `V2_DECISION_LOG.md` (`D-V2-nn`).
+  `docs/DELULULANG_V2/V2_LOG.md`, then `docs/CLOUD_SYNC_LOG.md`.** Decisions taken under the owner's
+  delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
 - **What is open**, everywhere: `docs/REMAINING_WORK.md`. **What only the owner can decide:**
-  `V2_DECISION_LOG.md`, *Owner decisions carried from V1, still open*, and §1.1's gate for the final
-  public repository.
+  `V2_DECISION_LOG.md`, *Owner decisions carried from V1, still open*; the owner-reserved list in
+  `AGENTS.md`; and §1.1's gate for the final public repository.
 
 > **Status: PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS** — Windows and Linux, in the
 > Tier-2 deployment of `docs/DEPLOYMENT.md` (the 2026-08-10 campaign's verdict). macOS is verified by CI
@@ -34,21 +56,92 @@ Read §1 and §2 before touching anything. The rest is reference.
 
 > ### If you are Claude Code, read this first
 >
-> Assistant memory for this project lives at:
+> **On the owner's laptop**, assistant memory for this project lives at
+> `C:\Users\jesse\.claude\projects\D--nelan-DeluluLang\memory\`, keyed by project path, and a session
+> opened at `D:\nelan\DeluluLang` loads its `MEMORY.md` automatically. It lives **outside the
+> repository**: it does not travel with a clone and is not shared with another account or machine.
 >
-> ```
-> C:\Users\jesse\.claude\projects\D--nelan-DeluluLang\memory\
-> ```
->
-> It is **keyed by project path**, so a new session opened at `D:\nelan\DeluluLang` **on this account,
-> on this machine** loads the same `MEMORY.md` automatically — you already have it.
->
-> But that directory lives **outside the repository**. It does **not** travel with a clone, does not
-> exist on another machine, and is not shared with a different account. So everything durable in it is
-> transcribed into **§11 of this file**, and this file is the authority if the two ever disagree.
->
-> If you *do* have the memory loaded, §11 will be familiar and you can skip it. If §11 tells you
-> something `MEMORY.md` does not, trust §11 and update the memory.
+> **In a cloud session there is no memory directory at all** — Claude Code's auto memory is
+> machine-local. Two copies travel with the repository instead: **§11 of this file** (the durable
+> content, organised by purpose, and the authority if anything disagrees) and
+> **[`docs/assistant-memory/`](docs/assistant-memory/)** (the memory directory itself, file by file,
+> snapshotted on 2026-09-28 and sanitized for a public repository — read its `MEMORY.md` index at the
+> start of a session). `CLAUDE.md`, which imports `AGENTS.md`, is loaded into every session; this file
+> is not — read §0, §1 and §11.
+
+---
+
+## 0. The cloud period — 2026-09-28 to 2026-10-16
+
+**What.** The owner needs the laptop for other work until **2026-10-16**. DeluluLang is developed from
+**Claude Code cloud sessions** (claude.ai/code, the Claude app, or `claude --cloud`) on the GitHub
+repository, which is already connected to Claude; the laptop's checkout is synced afterwards (owner,
+2026-09-28).
+
+**How a cloud session differs from the laptop** (Claude Code's documentation, read 2026-09-28 —
+*Use Claude Code in the cloud*, *Configure cloud environments*, *How Claude remembers your project*):
+
+| | The laptop | A cloud session |
+|---|---|---|
+| Machine | Windows 11, and WSL2 Ubuntu 20.04 with KVM | a fresh Ubuntu 24.04 x86-64 VM: 4 vCPUs, 16 GB, 30 GB of disk |
+| Tools | Rust 1.96.1, Python, WSL, the microVM lab (§11.3) | Rust, Python 3, GCC/Clang, Docker and `gh` pre-installed; `rust-toolchain.toml` installs 1.96.1 on the first `cargo` call (crates.io and `static.rust-lang.org` are on the default Trusted network list) |
+| Pushing | to `master` directly | **only to the session's own branch** → a pull request into `master`, which the owner merges; CI runs on pull requests |
+| Memory | auto memory, loaded every session | none — §11 and `docs/assistant-memory/` |
+| Other operating systems | native Windows; macOS through CI | all through CI |
+| KVM and the microVM | the WSL2 lab | none documented — CI's `microvm` job |
+| Agent-pass folders | `D:\nelan\DeluluLang-agent-transcripts\` | nothing persists outside the repository — record verified results in `V2_LOG.md` |
+
+**Rules for the cloud period** — §1 still holds in full; these are added to it:
+
+1. **Record every change in [`docs/CLOUD_SYNC_LOG.md`](docs/CLOUD_SYNC_LOG.md)**, in the same pull
+   request: commits, and every file and folder added, modified, deleted or renamed — the owner's
+   instruction, *"keep a record of files and folders changed, to be synced with the local repo later."*
+   The file has the template and the sync procedure.
+2. **Push only the session's branch** of `origin`, open a pull request into `master`, never force-push,
+   delete no branch. Say in the pull request what was verified and which CI runs were read.
+3. **Heavy runs go to GitHub** (owner, 2026-09-28: *"run everything on github"*): the three-OS matrix,
+   Miri and `miri-slow`, `heavy-gates`, the release dry run, `channel-measure`,
+   `host-capability-probe` — `gh workflow run ci.yml --ref <branch> -f jobs=…`. In the VM, run the
+   suite alone with `-j 4`.
+4. **Durable facts go into §11** and, in the same format, into `docs/assistant-memory/` — there is no
+   memory directory to write to.
+5. **Stop points hold:** PS-D-02 waits for the owner's word.
+
+**What the laptop holds that the cloud does not** — check or redo after the sync: the WSL2 KVM lab and
+its guest images (§11.3); the agent-pass folders (§11.3; their verified results are in `V2_LOG.md`);
+`.claude/worktrees/` (a stale 2026-07-18 copy — never delete it without asking); the auto-memory
+directory itself.
+
+**Syncing back** is written out in `docs/CLOUD_SYNC_LOG.md`, *Syncing the laptop afterwards*: a clean
+laptop tree, a fast-forward pull, the CRLF check, the Survey and `doctor`, the suite on Windows and in
+WSL, each entry's "redo on the laptop" items, and the memory carried back by hand.
+
+**PS-D-02 — designed, not started** (the owner's stop, 2026-09-28). The draft the next session starts
+from, once he says so:
+
+1. The seam verifies a **statement**, not a platform. An attestation document is
+   `{"format":"delulu-attestation-v1","statement":{"nonce","attester","guarantees":[…]},"signature"}` —
+   ed25519 over `"delulu-attestation-v1\n"` followed by the statement's canonical JSON. Whoever signs
+   it — a verifier service that checked a hardware quote, a CI system that built the launcher's image,
+   an operator — is the attester, and its word is exactly as good as its key's custody. DeluluLang
+   checks the signature against a key the **operator pinned** and the nonce it chose for this run,
+   nothing else. (`ed25519-dalek` is already in `delulu-runtime`; `delulu keygen` already mints seeds.)
+2. The nonce is fresh per run (32 bytes of OS randomness), given to the launcher as
+   `DELULU_ATTEST_NONCE`; the launcher writes the document, atomically (temporary file, then rename),
+   to the path in `DELULU_ATTEST_OUT`, inside the host's per-run directory. A replayed document fails on
+   the nonce.
+3. `delulu run … --sandbox-backend external:CMD --require-attestation HEX` reads and checks it after the
+   launcher starts and **before the host sends the program** — so on refusal the program never ran and
+   no effect was performed under the grants or a lease. At L3 only: L1 and L2 are measured, and the flag
+   there is exit 2.
+4. The report gains `sandbox.attestation = {attester, guarantees, verified}` — the attester's claims,
+   labelled as the attester's, beside `host_guarantees` (still empty) and never merged into them. The
+   level stays 3; L4 `attested` waits for a hardware attester.
+5. A reference attester, `delulu attest launch --key NAME --guarantee TEXT … -- COMMAND…`, signs the
+   statement with a `keygen` seed and runs the command with the channel on its standard input and
+   output. It is a **software** attester — it says what its key's holder says — and the tests' fake one.
+6. A lease-level constraint ("this node may only be used attested") is **not** part of it: it changes
+   the authority model, which is RFC territory and the owner's governance.
 
 ---
 
@@ -56,7 +149,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 
 | Rule | Why |
 | --- | --- |
-| **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
+| **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). **In a cloud session (§0), `git push` reaches only the session's own branch: push there, open a pull request into `master`, and the owner merges.** | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **The final public repository is gated on the owner's decisions — remind him first, then wait.** Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
 | **Never auto-decide the licence.** | Owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
@@ -227,7 +320,7 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 
 ```
 cargo build --release                              # first build fetches everything
-cargo test --workspace --no-fail-fast              # ~145 test binaries (--no-fail-fast MATTERS:
+cargo test --workspace --no-fail-fast              # 150 test binaries (--no-fail-fast MATTERS:
                                                    #  without it cargo stops at the first failing target)
 cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # every case an exact exit code; it counts its own
@@ -236,6 +329,9 @@ cargo run -p delulu-survey -- build                # ALWAYS, after any change
                                                    #  SECURITY POSTURE, and the repo map.
                                                    #  Exit 1 means a real problem remains.
 ```
+
+In a cloud session (§0) the VM has 4 vCPUs: add `-j 4`, run the suite alone, and leave Miri,
+`heavy-gates` and the other operating systems to CI (`gh workflow run ci.yml --ref <branch> -f jobs=heavy`).
 
 Editor extension:
 
@@ -262,10 +358,12 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 
 ## 10. If you are starting fresh, do this
 
+0. **In a cloud session:** `CLAUDE.md` and `AGENTS.md` are already loaded. Read §0 of this file,
+   `docs/CLOUD_SYNC_LOG.md`, and `docs/assistant-memory/MEMORY.md` first.
 1. Read `README.md`, then this file's §1, then `docs/REMAINING_WORK.md` (what is open, and why).
-2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 0 failures (about
-   1,930 tests on Windows as of 2026-09-27; the per-date figures are in the V2 log, and before V2 in
-   the archived §9). **Read cargo's own exit code, not a pipeline's** — `cargo test … | tail` reports the
+2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 0 failures (1,967 tests
+   on Windows, 1,985 on Linux and 1,975 on macOS in CI run `36367985299`, 2026-09-28; the per-date
+   figures are in the V2 log, and before V2 in the archived §9). **Read cargo's own exit code, not a pipeline's** — `cargo test … | tail` reports the
    *pipe's* status, which is how a red gate once survived a whole campaign described as green.
    If `doctor_cli` fails, run `cargo run -p delulu-survey -- build` and try again.
 3. Ask the Survey about anything you are about to change.
@@ -290,8 +388,11 @@ session opened at `D:\nelan\DeluluLang` **on this account, on this machine** loa
 clone, does not exist on another machine, and is not shared with a different account. So everything
 durable is transcribed here, and this file is the authority if the two ever disagree.
 
-There are **26** memory topics as of 2026-08-10. Their content is below, organised by what it is for
-rather than one-per-topic, because several topics say the same thing from different angles.
+There were **26** memory topics on 2026-08-10 and **40** on 2026-09-28. Their content is below,
+organised by what it is for rather than one-per-topic, because several topics say the same thing from
+different angles. **Since 2026-09-28 the topics themselves are also in the repository**, file by file,
+in [`docs/assistant-memory/`](docs/assistant-memory/) — sanitized for a public repository and otherwise
+verbatim. In a cloud session this section and that folder are the only memory there is (§0).
 
 **If you are a fresh session with no memory loaded, §11 is your briefing** — it is written to stand on
 its own. If you *do* have memory, this section will be familiar; where the two disagree, this file
@@ -346,8 +447,23 @@ wins, and you should update the memory to match.
   continue. Three things stay the owner's regardless: **entrenched files** (CODEOWNERS), **the final
   public repository**, and **the licence**. Decisions taken under this delegation are recorded as
   `D-V2-nn … TAKEN (head chef, under the owner's delegation)`, never as rulings he made.
-- **Agents, currently (owner, 2026-09-20):** Sonnet 5 for small, easily finished jobs only.
+- **Agents (owner, 2026-09-20, then 2026-09-27):** Sonnet 5 for small, easily finished jobs; and for
+  the testing passes, *"use haiku 4.5 and sonnet 5 as agents"* (2026-09-27) — agents run programs
+  inside the DeluluLang sandbox on several operating systems and deliberately attempt what they must
+  not be able to do, with authority configured through `delulu authority` and validated with the
+  Guard. §11.7 has what running them taught.
 - **V2 execution rules (owner, 2026-09-17, evening; `docs/design/DeluluLang_V2_Execution_Master_Prompt.md`):** Opus 5 is the main execution sous-chef and does most of the work — implementation, investigation, tests, refactors, security and adversarial testing, documentation migration, verification, cleanup; one strong agent at a time; the head chef writes the brief (objective, files, constraints, security and verification requirements, expected outputs), supervises, verifies every result against the binary, and commits; an agent asks rather than invents an architectural or security decision. Phases run one at a time in the approved order; after each phase's push and recorded result the work **stops, waits about sixty seconds for the owner, and continues to the next approved phase only if nothing arrives** — one controlled continuation, never a loop. The active source of truth is `docs/DELULULANG_V2/`; historical documents live in `docs/archive/v1/` and are neither maintained nor deleted.
+
+- **Back up before a limit (owner, 2026-09-27):** *"backup everything including agents running and
+  their findings"* — progress, findings, pending work and state go to files before a session limit.
+- **Continue after a limit (owner, 2026-09-28):** use the Survey and `doctor`, find where the work
+  stopped, and resume the stopped agents (by message, never respawned).
+- **Run everything on GitHub (owner, 2026-09-28):** heavy runs — the matrix, Miri, `heavy-gates`, the
+  release dry run, the measurement and probe workflows — go to CI, not the owner's machine.
+- **Stop before PS-D-02 (owner, 2026-09-28)** — until he says otherwise.
+- **The cloud period (owner, 2026-09-28):** work continues from Claude Code cloud sessions until
+  2026-10-16 (§0), and every change is recorded for the later sync — *"keep a record of files and
+  folders changed, to be synced with the local repo later"* (`docs/CLOUD_SYNC_LOG.md`).
 
 ### 11.2 Working rules the project has paid for
 
@@ -369,6 +485,27 @@ wins, and you should update the memory to match.
   `Co-Authored-By` line. Stage 9 was mis-signed and the correction is recorded rather than rewritten.
 
 ### 11.3 Environment facts a new session will otherwise rediscover the hard way
+
+*Most of these are the laptop's; a cloud session has none of them (§0).*
+
+- **WSL2 has KVM (since 2026-09-26):** `nestedVirtualization` plus a boot-time `modprobe` in
+  `wsl.conf`. The PS-C toolchain lives there: Firecracker at `~/bin/firecracker`, guest images at
+  `~/microvm-image-a` and `~/microvm-image-b`, the gated microVM tests built into `~/delulu-kvm-target`
+  with `RUSTFLAGS=--cfg delulu_kvm`; ordinary Linux runs use `~/delulu-gnu-target`. **Build a guest
+  image from a clone on the Linux filesystem**, not from `/mnt/d` — libffi's configure fails on `drvfs`.
+  From Git-Bash run WSL as `MSYS_NO_PATHCONV=1 wsl -e bash /mnt/d/…/script.sh`, and `wsl --shutdown`
+  afterwards to give its memory back.
+- **The GitHub CLI** is at `C:\Program Files\GitHub CLI\gh.exe`, not on Git-Bash's `PATH`; one job's
+  log: `gh api --allow-escape-sequences repos/…/actions/jobs/<id>/logs` (only once the job finishes).
+- **Agent-pass folders live outside the repository**, at `D:\nelan\DeluluLang-agent-transcripts\` —
+  `2026-09-18-ps0`, `2026-09-18-psa`, `2026-09-26-ai-usability-pilot`, `2026-09-27-p5-multios`,
+  `2026-09-27-p5b-haiku-guard` — each with its brief, the agents' logs and a `FINDINGS.md` carrying the
+  head chef's verdicts. The verified results are in `V2_LOG.md`.
+- **The laptop has about 15 GB of RAM.** On 2026-09-28 Claude Code stopped a full suite and a WSL Miri
+  run because memory ran critically low while the session was idle. One heavy job at a time, `-j 4`,
+  and CI for the rest.
+- **Python on Windows** needs `C:/…` paths and prints in cp1252 — an arrow or emoji in `print` kills
+  the script *after* it may already have written; write files, don't print them.
 
 - **`.claude/worktrees/` holds a full second copy of the repository** at a 2026-07-18 commit. **Exclude
   it from every tree walk** — findings from it are about code that is not this checkout — and **never
@@ -437,17 +574,36 @@ wins, and you should update the memory to match.
   and nothing bounded *data* depth, so a recursive value a few million deep aborted the host during
   teardown, **after the program had finished** (**INTERP-DROP-1**). That violates this project's own
   `ref.rule.runtime.faults-are-diagnostics`. Fixed by an iterative teardown on the variant payload.
-- **CONTAIN-TOCTOU-1 is an accepted, documented residual.** Filesystem containment is a
-  check-then-open, so a *concurrent* writer into a granted directory can swap a checked file for a
-  symlink in between. The confined program cannot win this race through the primitive table (no
-  symlink-creating operation exists), and closing it properly needs `O_NOFOLLOW`/`openat2` — the
-  platform-dependent containment this project refuses. **Deployment rule: grant scopes that point at
-  directories only the program's own user can write.**
+- **CONTAIN-TOCTOU-1 — closed on 2026-09-27 by FS-RACE-1 (V2 P5c).** Containment was check-then-open:
+  a *concurrent* writer into a granted directory could swap a checked path for a link in between, and
+  the V2 testers' race did it (75 of 150 runs wrote outside the grant, plain and `--sandbox`). This
+  section once called it an accepted residual whose fix, `O_NOFOLLOW`, the project refused as
+  platform-dependent. It was built instead: `delulu-runtime/src/beneath.rs` opens the approved
+  canonical path one component at a time from the filesystem root and follows no link (`openat` with
+  `O_NOFOLLOW`, `O_PATH` on Linux; `NtCreateFile` relative to the parent's handle with
+  `FILE_OPEN_REPARSE_POINT` on Windows), and every file effect goes through it. Keep the deployment
+  rule anyway, as defence in depth — grant directories only the program's own user can write — and
+  hardlinks remain their own documented case (`docs/DEPLOYMENT.md` §5).
 - **The same-uid boundary is category 7 and cannot be closed by code.** To the kernel, a process
   running as your user *is* you. Strict anchored-root mode raises the bar (and, since 2026-08-10, is
   usable, audit-recorded and `doctor`-checkable) but its own residual is a same-user-writable policy
   file. The real boundary is a **separate OS account** — verified with a real second UID, and written
   up with the exact commands in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+- **V2's findings (2026-09-17 onward), each witnessed failing on the old code and fixed;
+  `V2_LOG.md` has each in full.** **GUARD-SCOPE-1**: Guard path rules matched by exact equality, so a
+  seal on a directory sealed the entry and nothing inside it. **GUARD-ALIAS-1**: the broker and the
+  Guard judged the *lexical* path while the filesystem followed a junction or link — both now decide on
+  the pinned, resolved path. **FS-RACE-1**: above. **AUDIT-WRITERS-1**: several writers each cached the
+  chain head and broke an untampered chain — one append lock, and catch-up under it.
+  **AUDIT-LOCK-TAKEOVER-1**: that lock was taken over after five seconds, so a writer that was only
+  slow lost it mid-append — now the operating system's lock, never taken over. **SANDBOX-STOP-1**: a
+  ceiling that stopped a guest went unnamed, and exits disagreed with reports. **SANDBOX-CPU-LATE-1**:
+  Windows' job time limit fired at about twice the budget — the host now polls the job's accounting.
+  **GUARD-STALE-1**: an old denial answered for a new request. **VERIFY-FABRICATED-1**: `Secret.verify`
+  under a lease returned a made-up `false` — now computed by the broker, Guard-gated per secret.
+  **SECRETS-STALE-1**: the broker never re-read a secret stored while it ran. **JSON-EXIT-1**: `--json`'s
+  fallback envelope said exit 2 and "usage" for every failure.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -489,11 +645,74 @@ Added 2026-08-09/10, each paid for the same way:
 - **A Python heredoc that prints an emoji dies on Windows cp1252 *before* it writes.** One doc patch
   reported two successful replacements and saved nothing. Prefer the editor for Unicode content.
 
+Added in V2 (2026-09-17 → 2026-09-28):
+
+- **Freeze the tree during verification — again.** On 2026-09-28 the head chef rebuilt one crate while
+  the full suite ran; that run was void and had to be repeated. Edit nothing and build nothing until the
+  suite reports.
+- **Regenerate the Survey after the LAST edit.** A regeneration before a final edit leaves four
+  stale-map failures (`doctor_cli` three times, and the freshness test).
+- **Activated is not executed.** A run counts once its result is read and recorded: `gh run view --log`
+  for a run, `gh api …/actions/jobs/<id>/logs` for one job.
+- **CI's literal skip token anywhere in a commit message skips the push run** — it happened once, and a
+  manual run recovered it.
+- **Heredocs mangle backslashes and non-ASCII.** Write patch scripts and commit messages to files
+  (`git commit -F`), and look for U+FFFD after any scripted edit.
+- **macOS differs where it matters:** unix-socket paths are limited to 104 bytes (keep test sockets under
+  `/tmp`); a socket in a directory answers `EOPNOTSUPP` (102) where Linux says `ENXIO`; the clock resolves
+  microseconds, and two tests' scratch directories collided until a counter joined the timestamp.
+- **Windows 8.3 short names** spell a path differently from its long form, and a CI runner's working
+  directory can be an 8.3 spelling: resolve before comparing.
+- **Miri is about a hundred times slower** — which is how it found AUDIT-LOCK-TAKEOVER-1. Shrink a test
+  under `cfg!(miri)` only where its size is not the witness (D-V2-45); a test whose witness is the wall
+  clock is ignored under Miri and runs natively on every push. `miri-slow` jobs get 240 minutes.
+- **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
+  `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
 a one-line pointer in `MEMORY.md`. Do not record what the repository already says — code structure,
 git history, past fixes. Record what was *non-obvious*: the reasoning, the trap, the owner's ruling.
+
+### 11.7 What running agents taught (V2's testing passes, 2026-09-18 → 2026-09-28)
+
+- **Judge an agent by its logs, never its summary.** A Haiku 4.5 tester overclaimed; one reported
+  "microVM TTL defect" was its own test mistake, refuted by the head chef's run (DL1402 at L0, L1 and
+  L2); a Sonnet 5 tester's "`expose` under a lease can never succeed" was really SECRETS-STALE-1. Re-run
+  every claim against the CURRENT binary before it is used or recorded.
+- **Read the "non-blocking notes".** The Windows verifier's two side remarks were both real defects
+  (JSON-EXIT-1, SANDBOX-CPU-LATE-1), each fixed with a test that failed first.
+- **Different operating systems find different defects.** Windows found the 8.3-name and junction
+  aliases, Linux the alias race and the FIFO; each missed the other's. Independent testers on two OSes
+  found VERIFY-FABRICATED-1 separately — the strongest evidence a pass produced.
+- **The brief forbids writing into the repository**, and still one agent wrote into its root: check
+  `git status` after every agent. Agents work in a scratch folder outside the checkout.
+- **Limits are real.** A Sonnet tester was stopped by the model's weekly limit mid-pass and resumed after
+  the reset by message, with its work intact on disk; respawning would have lost it. Before a session
+  limit, back up progress and findings (owner, 2026-09-27).
+- **An agent's value is independence, not volume.** The head chef's own end-to-end test found
+  GUARD-STALE-1 and SECRETS-STALE-1 while writing the fix for an agent's finding — agents and the head
+  chef each find what the other misses.
+- **No chain-of-thought is kept** — findings, evidence and decisions only (owner, 2026-09-17).
+
+### 11.8 What building and running DeluluLang V2 taught
+
+- **The guest performs no effects.** Every effect is decided and performed on the host, so a new
+  isolation backend — process, microVM, an external launcher — never needs a new authority path, and
+  the same tests hold at every level.
+- **Honesty lives in the report, not the prose.** Each run reports the level it actually got, what the
+  host measured (`host_guarantees`, `fully_enforced`), and nothing else; an external launcher is level 3
+  with no host guarantee; a guest's self-applied layers count only in words the host checks (RW 4.23).
+- **Resolve at the edges; the broker stays lexical (Ruling 2).** The runtime pins file paths and opens
+  exactly the pin; the CLI stores grants, rules and requests resolved; the broker compares what it is
+  given.
+- **Slow and different machines find real bugs.** Miri's slowness, macOS's sockets, Windows' 8.3 names,
+  a 4-CPU runner — each found what the development machine never would.
+- **A long-lived process holding a copy is a defect waiting** — SECRETS-STALE-1's store read once at
+  start; AUDIT-WRITERS-1's cached chain head.
+- **A document that names a residual must be re-read when the code moves.** CONTAIN-TOCTOU-1 stayed
+  "accepted" in three documents for a day after FS-RACE-1 closed it — found while writing this handoff.
 
 ---
 
