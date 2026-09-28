@@ -704,6 +704,18 @@ What can be said: every command inside it has been run on this machine outside a
 (`cargo build --release --locked -p delulu` is the ordinary build, `delulu --version` is in the CLI
 sweep), so the *contents* are not speculative. The **assembly** is.
 
+**2026-09-28 — built, on GitHub (the first cloud routine run).** A cloud VM's Docker cannot pull from
+Docker Hub (its shared address is over the unauthenticated rate limit), so `.github/workflows/container.yml`
+builds both by hand. Run `36399908461`: **the devcontainer PASSED** — `devcontainer up`, its
+postCreateCommand's release build in 3 min 34 s, and `cargo 1.96.1` and `delulu 1.0.0` answering inside.
+**The Dockerfile FAILED**, exactly as this section warned — a `COPY` the build needed and did not have:
+`delulu` embeds `skills/` and `examples/` at compile time, and only `crates/` was copied (10 errors,
+`couldn't read …`). The head chef had predicted a different failure (the runtime image lacking the
+libpython a default build imports) — wrong about the first failure, right that the file also built the
+Python-embedding binary its own comment said it did not. Fixed: both folders copied, the portable
+build (`--no-default-features --features net`, as the release ships), and `ca-certificates` in the
+runtime image for the network client. The next run's result is in `docs/DELULULANG_V2/V2_LOG.md`.
+
 ### The sweep is a script now, so this row means something
 
 Previous passes recorded "CLI + compiler sweep 21/21" from a sequence of commands run **by hand**.

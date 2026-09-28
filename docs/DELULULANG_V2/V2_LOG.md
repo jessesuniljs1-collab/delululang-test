@@ -2388,3 +2388,12 @@ making it a CI gate on the Linux editor job is its "next".
 Its Docker daemon starts (`dockerd`, overlayfs, cgroup v1), but every pull from Docker Hub is refused:
 "You have reached your unauthenticated pull rate limit" — the VM's outbound address is shared. So the
 build moved to GitHub: `.github/workflows/container.yml`, by hand only, dispatched as run `36399908461`.
+
+**RW 7.3, the first container build — run `36399908461`.** The **devcontainer passed** (`devcontainer
+up` with its release build in 3 min 34 s; `cargo 1.96.1` and `delulu 1.0.0` answered inside). The
+**Dockerfile failed** at `cargo build`: 10 errors, `couldn't read …/skills/delulu/SKILL.md` and nine
+`…/examples/…` — `delulu` embeds them at compile time and the Dockerfile copied only `crates/`. The
+prediction recorded in `17d4623`'s message (a loader failure for the missing libpython) was **wrong**
+about the first failure — kept as written. Fixed: `skills/` and `examples/` copied; the portable build
+the release ships (`--no-default-features --features net`, which the Dockerfile's own comment already
+claimed); `ca-certificates` in the runtime image. Re-dispatched after the push.
