@@ -13,7 +13,7 @@ From **2026-09-28 to 2026-10-16** Jesse uses the laptop for other work; DeluluLa
 which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced afterwards.
 
 - **Run and check everything using the Survey and doctor** (Jesse, 2026-09-28): `survey check` + `doctor --check` at every session start; `survey impact/affected-by/query` before a change; `survey build/check/findings` + `doctor --check` after the last edit and before every commit/PR, results in the PR and the sync-log entry (table in AGENTS.md; HANDOFF §0 rule 6).
-- **Baseline = the newest `Cloud handoff` commit** (`git log -1 --grep='^Cloud handoff'`): `d41e558`, then `bc9192c`, then `937aea8`, `7e67f97` (routine + delegation), then **`7bd018c` = THE BASELINE** (Cloud handoff (5)); earlier: `937aea8` ("Cloud handoff (3)": the live docs brought up to date — V2 folder, REMAINING_WORK 6.5 closed + 4.24 new, DEPLOYMENT, for-agents, GETTING_STARTED, QUESTIONS, MATHEMATICS, the Book) ("Cloud handoff (2)", pushed 2026-09-28; laptop clean, local == origin). Earlier wording: **`d41e558`** ("Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot", pushed 2026-09-28, laptop clean, nothing unpushed) = the commit that added `docs/CLOUD_SYNC_LOG.md`. At handoff every run was read except miri-slow `36381950975` on `047da1d` (broker + check still running) and `d41e558`'s own push run.
+- **Baseline = the newest `Cloud handoff` commit** (`git log -1 --grep='^Cloud handoff'`): `d41e558`, then `bc9192c`, then `937aea8`, `7e67f97` (routine + delegation), then `7bd018c`, then `5bb39bc` (Cloud handoff (6), the mandate), then **`Cloud handoff (7)` = THE BASELINE** (2026-09-28 evening, pushed from the laptop after it fast-forwarded to the cloud's `dd543e5`: the OpenShell study). **ROUTINE `trig_01GG41tCGxZXyt7bZUid8Vuu`** (https://claude.ai/code/routines/trig_01GG41tCGxZXyt7bZUid8Vuu): Opus 5.5, cron `7 */5 * * *` UTC (IST 05:37/10:37/15:37/20:37/01:37), env `env_012Mxeiw6zvfyxPy9ZEEFf3p`, tools Bash/Read/Write/Edit/Glob/Grep/Agent/WebFetch/WebSearch, NO connectors (cleared — the API attached all by default), prompt = follow docs/CLOUD_ROUTINE.md + 4 never-rules + stop on 2026-10-16. First run started by hand 07:11Z: session `cse_013AZJ6RqYq59CeMgkvLV1BM`. Debug with RemoteTrigger list_runs / get_run_log. Earlier: `937aea8` ("Cloud handoff (3)": the live docs brought up to date — V2 folder, REMAINING_WORK 6.5 closed + 4.24 new, DEPLOYMENT, for-agents, GETTING_STARTED, QUESTIONS, MATHEMATICS, the Book) ("Cloud handoff (2)", pushed 2026-09-28; laptop clean, local == origin). Earlier wording: **`d41e558`** ("Cloud handoff: AGENTS.md, CLAUDE.md, the sync log, the memory snapshot", pushed 2026-09-28, laptop clean, nothing unpushed) = the commit that added `docs/CLOUD_SYNC_LOG.md`. At handoff every run was read except miri-slow `36381950975` on `047da1d` (broker + check still running) and `d41e558`'s own push run.
 - **Every cloud session appends an entry to `docs/CLOUD_SYNC_LOG.md`** (Jesse: "keep a record of files
   and folders changed, to be sync with local repo later") — commits + `git diff --name-status`,
   what was verified, what to redo on the laptop, what the laptop memory must learn.
@@ -38,6 +38,13 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   review); P8 designed (D-V2-51); RW 7.4 closed (VS Code via apt from packages.microsoft.com); Docker
   Hub refuses the VM's pulls → `container.yml` builds on GitHub; the MCP log tool returns only a job's
   last 5,000 lines.
+- **Runs 2-4 (10:11, 10:12, 10:44 UTC) did nothing:** each ended in seconds on the account's five-hour
+  usage limit (`rate_limit: rejected (five_hour)`) — run 1 had spent it. Jesse paused the routine at
+  14:30 UTC. Routine runs share his usage; a run that starts on an exhausted window is wasted.
+- **2026-09-28 evening, on the laptop:** synced (ff `5bb39bc..dd543e5`, no CRLF, Survey ok 1,462 nodes,
+  findings 0 errors, doctor 29/29 on Windows; full suite NOT run locally — CI covered every OS); then
+  **NVIDIA OpenShell studied** on Jesse's commission → [[openshell-study-2026-09-28]]; PS-E is next,
+  then P8 (+P8-04), then P9; the routine resumed with its connectors cleared again.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

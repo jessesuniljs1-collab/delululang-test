@@ -715,7 +715,10 @@ material, this is the execution:
 - `V2_SECURITY_MODEL.md` — the security model V2 works to.
 - `V2_AI_NATIVE_DESIGN.md` — the machine-facing design for V2.
 - `V2_P8_DESIGN.md` — P8, safe autonomy as far as software reaches: the slices (a control program in a
-  guest; the Verified-class adapter as a `.dpx`; a reference transport), their witnesses, what stays out.
+  guest; the Verified-class adapter as a `.dpx`; a reference transport; an out-of-band monitor), their
+  witnesses, what stays out.
+- `V2_OPENSHELL_STUDY.md` — the study of NVIDIA OpenShell (2026-09-28): what was read, the two designs
+  side by side, what DeluluLang takes (phases PS-E and P9, P8-04) and what it does not, and why.
 
 ### 5.12 Generated documents — do not hand-edit
 

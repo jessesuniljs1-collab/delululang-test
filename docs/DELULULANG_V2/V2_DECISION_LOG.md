@@ -1110,6 +1110,92 @@ Built from the design in `HANDOFF.md` §0, with these choices:
 4. **Out of P8:** certification, federation model-checking, and any lease-level constraint on what kind
    of adapter a node may use (RFC territory).
 
+## D-V2-52 — NVIDIA OpenShell studied: what is taken, on what terms, and in what order — TAKEN (head chef, 2026-09-28, under the owner's delegation; the owner commissioned the study)
+
+The owner, 2026-09-28 evening, having paused the routine: NVIDIA and its partners launched OpenShell
+(the open runtime of NVIDIA's Open Agent Safety Platform) the same day, *"and I want this to be studied
+and incorporated not just as copy but as real engineering for the sandbox currently we are working
+on"*. Studied on the laptop (Opus 5.5): the 57 pages of its documentation (v0.1.2 and dev) as
+Markdown, its seven architecture diagrams read from their SVG sources, its repository at `36b0386`
+(`architecture/`, RFCs 0001/0002/0005/0012, the isolation-interface, binary-identity, prover and
+supervisor-network crates), the announcement and the solutions page. The record, the side-by-side and
+every slice's design: `V2_OPENSHELL_STUDY.md`.
+
+1. **The difference that decides every choice:** OpenShell governs programs it cannot read, so it
+   mediates an opaque binary's syscalls and keeps a separate policy in step with it; DeluluLang governs
+   programs it compiles — authority computed from the text, a guest that performs no effects, `⊑`
+   proved once. So DeluluLang can *deny* where OpenShell must *intercept*, derive its policy rather
+   than write it, and ask a boundary question of a program rather than of a policy.
+2. **Taken, each re-engineered as a slice with a witness and a mutant:** confirmation of the boundary
+   by construction, bound to a per-run generation (PS-E-01); host loss ends the guest on every backend
+   (PS-E-02); the guest's kernel surface narrowed (PS-E-03, six hypotheses, none a finding until
+   witnessed); the external launcher resolved, hashed and pinnable (PS-E-04); OpenShell as a tested L3
+   backend and DeluluLang as the author of its policies (PS-E-05); the audit exported as OCSF and still
+   verifiable (PS-E-06); an out-of-band monitor with revoke authority only (P8-04); a program checked
+   against a boundary with four results and a source-located counterexample (P9-01); categorical risk
+   findings on a change of authority (P9-02); proposals to the operator with approval bounded by `⊑`
+   (P9-03); secrets bound to endpoints, checked statically and enforced at send (P9-04); network
+   authority scoped to methods and paths as a `⊑` dimension (P9-05).
+3. **Not taken, with reasons** (`V2_OPENSHELL_STUDY.md` §5): deny rules inside allow rules;
+   hot-widening a running sandbox; binary identity for the guest; `audit` as a default enforcement; an
+   HTTP proposal endpoint inside the guest; content-inspecting middleware (still category 7); a fleet
+   control plane; L7 protocols beyond REST for now.
+4. **Terms.** OpenShell is Apache-2.0. Nothing of it — code, schema files, text, diagrams — is copied
+   into the repository and none of its crates becomes a dependency: the licence and `NOTICE` are the
+   owner's, and importing Apache-2.0 material would change what `NOTICE` must say. Interop emits
+   documents in OpenShell's published policy format — DeluluLang's own output — and uses the name only
+   to identify that format. A CI workflow that exercises OpenShell downloads a pinned,
+   checksum-verified release at run time and ships nothing.
+5. **Order:** PS-E next (P8-01 puts control programs in guests, and the boundary they stand on is
+   confirmed first), then P8 with P8-04, then P9. `V2_MASTER_PLAN.md` §4, `V2_PHASE_STATUS.md`,
+   `V2_IMPLEMENTATION_ROADMAP.md` and `docs/CLOUD_ROUTINE.md` step 4 say so.
+
+## D-V2-53 — PS-E: the boundary, confirmed — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **Six slices** (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): E-01 `Launched → Confirmed → Running`, the
+   program sendable only from `Confirmed`; five properties (filesystem confinement, egress
+   confinement, privilege floor, host loss ends the guest, resource ceiling), each established,
+   absent or unknown, with its mechanism and evidence; a generation for every run. E-02 host loss:
+   a macOS watcher (`kqueue NOTE_EXIT`, `getppid` fallback), a death signal or Job Object for the
+   external launcher. E-03 the kernel surface (H1–H6). E-04 the launcher pinned. E-05 OpenShell interop.
+   E-06 OCSF export.
+2. **Profiles gain a required set.** `hostile-agent` requires all five properties; `contained`
+   requires filesystem, egress and resource; `dev` none. A missing required property refuses before the
+   program is sent, under DL1408's rule. Consequence accepted: `hostile-agent` on a Linux host that
+   forbids user namespaces refuses instead of running the guest as the operator's own user, and names
+   the ways out (the microVM, an external launcher, the host setting).
+3. **Hypotheses stay hypotheses** until an escaped-guest witness is red on the current binary; a
+   refuted one is recorded with its evidence and changes nothing.
+4. **New diagnostic codes** are allowed under the owner's delegation, each with its own record here.
+5. **PS-E-05's soundness rule:** an exported policy never allows more than the program's authority and
+   grants; a grant with no equivalent refuses the export by name; a dimension OpenShell does not model
+   is listed as unrepresented. Its workflow is manual until it has run green, as `container.yml` was.
+
+## D-V2-54 — P8 gains P8-04, an out-of-band monitor — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+NVIDIA's Sentry (announced 2026-09-28) watches agents from a DPU the agent's host cannot touch and
+quarantines in milliseconds. The hardware is out of reach; the shape is not. P8-04: a monitor is a
+separate principal (its own process, a separate OS identity where the host allows one) holding exactly
+**revoke** over one run's grant node, reading only what the host recorded (the audit, or PS-E-06's
+stream), applying declarative rules, and quarantining by revoking — the device fail-state and e-stop
+engage (implemented), the guest ends. It can grant nothing and perform nothing. Designed in
+`V2_P8_DESIGN.md` and `V2_OPENSHELL_STUDY.md` §4.7; built after P8-03.
+
+## D-V2-55 — P9: authority at the boundary — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **Five slices** (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `delulu authority --within BOUNDARY`,
+   four results as a closed set (within 0, exceeds 1 with a source-located counterexample,
+   unsupported/inconclusive 3; 2 a bad invocation), coverage named; P9-02 `grants diff` findings;
+   P9-03 proposals, operator review, auto-approval only as the operator's standing `⊑`-bounded
+   delegation with no findings, and a re-run rather than a live widening; P9-04 secrets bound to
+   endpoints (a request with headers, a secret's audience in its grant, the host resolving bytes at
+   send only inside the audience, every redirect re-checked, and the checker proving a secret reaches
+   only a header position); P9-05 methods and restricted path globs as a `⊑` dimension in the Z3 model.
+2. **The invariant is untouched:** a program cannot relax its own authority. A proposal is a request
+   to an external principal; auto-approval is that principal's own delegation.
+3. P9-04 and P9-05 change the language and `⊑`: each carries its primitive-table version, conformance
+   anchors, Z3 obligations with mutants, and `MATHEMATICS.md` entry, as PS-B-05 did.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

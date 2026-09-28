@@ -23,11 +23,14 @@ it is here. When a V2 decision changes, these files change; the archive does not
 | [`V2_AGENT_LOG.md`](V2_AGENT_LOG.md) | **frozen at P1** (D-V2-22): what each sous-chef agent was asked, did, found and failed, up to P1; later agent passes are recorded in `V2_LOG.md` | you want to know what an early agent did |
 | [`V2_PS_C_PREREQUISITES.md`](V2_PS_C_PREREQUISITES.md) | what the microVM phase needed before it could start — KVM, the VMM, the kernel and image, the host — and how each was met | you touch the microVM |
 | [`V2_PS_C_RED_TEAM.md`](V2_PS_C_RED_TEAM.md) | the microVM's red-team record (PS-C-06): the hostile guests, what each tried, what held | you want to know what attacks the microVM was tested against |
+| [`V2_P8_DESIGN.md`](V2_P8_DESIGN.md) | P8's design: the control program in a guest, the Verified-class adapter, a reference transport, the out-of-band monitor | you start a P8 slice |
+| [`V2_OPENSHELL_STUDY.md`](V2_OPENSHELL_STUDY.md) | the study of NVIDIA OpenShell (2026-09-28): the two designs side by side, what DeluluLang takes and why, what it does not, and the design of phases PS-E and P9 | you start a PS-E or P9 slice, or compare DeluluLang's sandbox with another |
 
 ## How V2 proceeds
 
-**Where V2 is now:** `V2_PHASE_STATUS.md` — as of 2026-09-28, P7 (verification depth) and PS-D
-(external launchers; PS-D-02 next) are in progress and P8 is owner-gated. **From
+**Where V2 is now:** `V2_PHASE_STATUS.md` — as of 2026-09-28 evening, every phase through P7 and
+PS-D is complete; **PS-E** (the boundary, confirmed — from the study of NVIDIA OpenShell) is next, then
+P8 (designed) and P9 (designed). **From
 2026-09-28 to 2026-10-16 the work runs in Claude Code cloud sessions**, through pull requests, with every
 change recorded in `docs/CLOUD_SYNC_LOG.md`, and a scheduled routine runs the loop in
 `docs/CLOUD_ROUTINE.md` under the owner's delegation (`HANDOFF.md` §0).

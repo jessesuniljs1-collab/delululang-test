@@ -153,6 +153,11 @@ semantics and the Guard are never what it changes.]
 | **L3 `external`** | an operator-supplied launcher (Docker + gVisor, Kata, a cloud sandbox, Kubernetes, ssh) carrying the channel over stdio; the level is labelled `external` and the guarantees `unknown` unless attested | wherever the operator runs | implemented as `--sandbox --sandbox-backend external:CMD` (PS-D-01, 2026-09-28, D-V2-46): the command, split on whitespace and run with no shell, carries the channel on its standard input and output (`__guest --stdio-pipes`) and is told the run's limits in its environment; the report says level 3, backend `external`, `fully_enforced: false` and **no host guarantee** (only what the guest measured of itself, RW 4.23), and names the launcher's program, never its arguments; authority is unchanged — the host decides and performs every effect; a Docker + gVisor recipe is documented in `DEPLOYMENT.md`, not shipped and not tested here; **attestable since PS-D-02** (2026-09-28, D-V2-48): `--require-attestation HEX` refuses to send the program until the launcher's attester has signed a statement over this run's nonce with the pinned key, and the report carries its claims as `sandbox.attestation` — the attester's, never merged into `host_guarantees`; the level stays 3 |
 | **L4 `attested`** | L2/L3 whose guest attests the pinned image before any lease is delegated | specific hardware | deferred; the seam is designed with a fake attester (PS-D-02) |
 
+**NVIDIA OpenShell as an L3 backend** is designed (PS-E-05, `V2_OPENSHELL_STUDY.md` §4.5): the guest
+inside an OpenShell sandbox whose policy has no network rule, reached through `external:`; the level
+stays 3 and its guarantees unknown unless attested. In the other direction, `delulu sandbox policy
+--format openshell` will emit the OpenShell policy a program's authority implies — never wider.
+
 **Machine-readable output** (the run report that `run --json --report-out <path>` writes, never the program's own standard
 output, which the program could forge (D-V2-21); `delulu sandbox probe --json`
 before running; `doctor` for the host) reports: requested level, actual level, backend, host
@@ -197,6 +202,22 @@ file checked is the file started since ADAPTER-SPELL-1, 2026-09-28), and no real
 4.7); the signed Verified-class adapter is P8. [partially implemented: envelopes, dead-man, e-stop and revocation are implemented
 and measured against the simulator; the signed adapter is designed]
 
+## 9b. What the study of NVIDIA OpenShell changes (2026-09-28)
+
+`V2_OPENSHELL_STUDY.md` compares the two designs line by line. The rules this model states are
+unchanged; four of their enforcements get stronger, as phase PS-E (D-V2-53) and P9 (D-V2-55):
+
+- **"Never a guarantee that was not measured" becomes a type** (PS-E-01): the program is sendable
+  only from a `Confirmed` state built from five measured properties, bound to a per-run generation; a
+  profile's required property that is absent refuses the run before the program is sent.
+- **"The guest reaches nothing but the channel" is enforced beyond TCP** (PS-E-03, if its witness is
+  red): Landlock mediates TCP only, so a guest that escaped the interpreter could still open UDP,
+  netlink or Unix sockets on Linux; the guest needs none after lock-down, so `socket` is denied.
+- **"The guest ends with its host" holds on every backend** (PS-E-02): macOS and the external launcher
+  are the gaps today.
+- **Authority checked at a boundary** (P9-01): the `⊑` the lease tree enforces, asked of a whole
+  program before it runs, with the source line of anything that exceeds.
+
 ## 10. What is and is not claimed
 
 Claimed today, with witnesses: zero ambient authority; attenuation-only delegation; transitive
@@ -229,5 +250,8 @@ Not claimed until its witness is green and its mutant is red: containment a host
 level or guarantee a run's report does not list); content inspection of permitted traffic (a program may send
 anything to a host it was granted — category 7, and the grant is the control);
 identity separation where the host forbids it (macOS; Linux without user namespaces); anything about
-an L3 environment — PS-D-01 reports it as unmeasured, and PS-D-02's attestation seam is not built;
+an L3 environment — PS-D-01 reports it as unmeasured, and PS-D-02's attestation seam carries only
+what the attester signs; the Linux guest's confinement of sockets other than TCP (Landlock's
+network rules cover TCP only — PS-E-03 H2) and of other processes' `/proc` entries (H3);
+anything about OpenShell's enforcement (designed as an L3 backend, PS-E-05, not yet run);
 multi-tenancy on one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.

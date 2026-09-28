@@ -38,12 +38,22 @@ the assistant's memory — which now also travels file by file in
     **PS-D-02 is built** (2026-09-28, the first cloud routine run, D-V2-48): `--require-attestation HEX`
     at L3, `delulu sandbox attest` as the software attester. **PS-D is complete** — `fef8ccd`'s push
     run `36395256154` green on every job.
-- **Next:** P8, safe autonomy (the signed Verified-class adapter), as far as software reaches — the
-  owner's mandate of 2026-09-28 names it; a real device stays environment-blocked. ADAPTER-SPELL-1 (the
-  subprocess driver verified as one file and started as another) was found and fixed while sizing it.
-- **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
-  every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
-  run green with nothing published — and `047da1d`'s push run was green.
+- **Studied on the laptop the same evening — NVIDIA OpenShell** (the open runtime of NVIDIA's Open Agent
+  Safety Platform, launched 2026-09-28), on the owner's commission *"studied and incorporated not just as
+  copy but as real engineering"*: `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` — the two designs side by
+  side, what DeluluLang takes and why, what it does not. It added **PS-E** (the boundary, confirmed),
+  **P8-04** (an out-of-band monitor, the shape of NVIDIA's Sentry) and **P9** (authority at the
+  boundary); D-V2-52 to D-V2-55. Nothing of OpenShell is copied into the repository.
+- **Next:** **PS-E** — E-01 the boundary confirmed by construction, E-02 host loss ends the guest, E-03
+  the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
+  pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
+  control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
+  then **P9**. A real device stays environment-blocked. ADAPTER-SPELL-1 (the subprocess driver verified
+  as one file and started as another) was found and fixed while sizing P8.
+- **Last pushed from the laptop:** `Cloud handoff (7)` — the laptop synced with the first routine run's
+  13 commits (`5bb39bc..dd543e5`, a fast-forward; the Survey matched the tree, 0 errors, `doctor` 29/29
+  on Windows), and the OpenShell study. Earlier, CI on `30a6b8d` was green on every job — 1,967 tests
+  passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed.
 - **Resume from `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the newest entry in
   `docs/DELULULANG_V2/V2_LOG.md`, then `docs/CLOUD_SYNC_LOG.md`.** Decisions taken under the owner's
   delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
@@ -163,6 +173,15 @@ top-level command; and `delulu` now reads nothing after a bare `--`):
    output. It is a **software** attester — it says what its key's holder says — and the tests' fake one.
 6. A lease-level constraint ("this node may only be used attested") is **not** part of it: it changes
    the authority model, which is RFC territory and the owner's governance.
+
+**PS-E, P8-04 and P9 — designed on 2026-09-28 (evening) from the study of NVIDIA OpenShell.** The owner
+paused the routine, had the laptop synced with the first run's commits, commissioned the study, and had
+the routine resumed afterwards. `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` is the record: what was read
+(57 documentation pages, the seven architecture diagrams from their sources, the repository at
+`36b0386`), the two designs side by side, and each slice's design, witness and falsifier. The routine's
+order (`docs/CLOUD_ROUTINE.md` step 4) is now **PS-E → P8 (with P8-04) → P9**. Its §4.3 items are
+hypotheses until an escaped-guest witness is red; its terms (D-V2-52) — nothing of OpenShell copied,
+none of its crates a dependency — bind every run.
 
 ---
 
@@ -495,6 +514,13 @@ wins, and you should update the memory to match.
 - **Run and check everything using the Survey and `doctor` (owner, 2026-09-28)** — at the start of
   every session, before and after every change, before every commit and pull request (§0 rule 6;
   the table in `AGENTS.md`).
+- **Study NVIDIA OpenShell and incorporate it as real engineering, not a copy (owner, 2026-09-28,
+  evening):** *"I want this to be studied and incorporated not just as copy but as real engineering for
+  the sandbox currently we are working on"* — sync the laptop with the cloud's commits first, read every
+  OpenShell document and diagram (the Markdown form of each page), update every document it changes,
+  then resume the routine. Done that evening: `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`, D-V2-52 to
+  D-V2-55, phases PS-E and P9 and slice P8-04. The terms: nothing of OpenShell is copied into the
+  repository, none of its crates is a dependency (Apache-2.0; `NOTICE` is the owner's).
 
 ### 11.2 Working rules the project has paid for
 
@@ -759,6 +785,13 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
   start; AUDIT-WRITERS-1's cached chain head.
 - **A document that names a residual must be re-read when the code moves.** CONTAIN-TOCTOU-1 stayed
   "accepted" in three documents for a day after FS-RACE-1 closed it — found while writing this handoff.
+- **Study another system by its contracts and its code, then ask what YOUR design lets you do that
+  it cannot** (the OpenShell study, 2026-09-28). OpenShell governs binaries it cannot read, so it must
+  intercept sockets and decide per request; a DeluluLang guest performs no effects, so it can simply be
+  denied a socket. Copying the other system's controls would have added interception DeluluLang does
+  not need and missed the denial it can afford. Read the diagrams from their sources (an SVG is text),
+  and compare the other system's list of controls line by line against your own code — that is how
+  the six PS-E-03 hypotheses were found, and each is still only a hypothesis until its witness is red.
 
 ---
 

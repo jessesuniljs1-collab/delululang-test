@@ -235,6 +235,14 @@ exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu
   --guarantee "gVisor runsc" --guarantee "no network" -- /usr/local/bin/delulu-gvisor
 ```
 
+**NVIDIA OpenShell — designed, not yet built or tested (PS-E-05).** OpenShell (NVIDIA's open agent
+runtime, 2026-09) is planned as a second L3 recipe and as a target DeluluLang writes policy for:
+`delulu sandbox policy <file> --format openshell` will emit the OpenShell policy a program's authority
+and grants imply — never wider — for running `delulu run` inside an OpenShell sandbox, and the guest
+will run inside an OpenShell sandbox with no network rule through `external:`, still at level 3 and
+still reported as unmeasured unless attested. Until PS-E-05's workflow has run green, nothing here is
+a recipe to follow. The design: `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.5.
+
 ---
 
 ## 3. Verify it — do not assume it

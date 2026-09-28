@@ -190,3 +190,47 @@ it on `origin` was made in the cloud and is listed below.
   at this entry's writing — if its findings are not in `V2_LOG.md`, re-run the pass; (4) RW 7.4's
   "next": make the editor end-to-end a CI gate on the Linux editor job. **For the owner:** D-V2-49 is an
   entrenched edit (`DELULU_CORE.md` v0.3) taken under the delegation — flagged for his review.
+
+### 2026-09-28 (evening) — the laptop synced; NVIDIA OpenShell studied; PS-E, P8-04 and P9 designed (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q` (the laptop's head chef)   Model: Claude Opus 5.5
+- Branch: `master`, from the laptop   Pull request: none   Merged: n/a
+- Base: `dd543e5` (the laptop fast-forwarded to it from `5bb39bc` first — every commit in routine run 1's
+  entry above; `git ls-files --eol` clean; on Windows `survey check` ok, 1,462 nodes; `findings` 0
+  errors, 14 warnings; `doctor --check` 29 passed). **This commit is `Cloud handoff (7)` — the new
+  baseline** for the sync procedure above; everything after it on `origin` is the cloud's again.
+- Commits: `Cloud handoff (7): NVIDIA OpenShell studied — PS-E, P8-04 and P9 designed`
+- Files and folders:
+  A `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` — the study: what was read, the two designs side by side,
+    what DeluluLang takes (each slice's design, witness, falsifier) and does not, the phase changes
+  A `docs/assistant-memory/openshell-study-2026-09-28.md` — the study, as a memory file
+  M `docs/DELULULANG_V2/V2_DECISION_LOG.md` — D-V2-52 (terms, order), D-V2-53 (PS-E), D-V2-54 (P8-04), D-V2-55 (P9)
+  M `docs/DELULULANG_V2/V2_MASTER_PLAN.md` (§4 rows 14–16, §5 gaps, §8), `V2_IMPLEMENTATION_ROADMAP.md`
+    (PS-E, P8-04, P9, the dependency line), `V2_PHASE_STATUS.md` (rows 14–16), `V2_P8_DESIGN.md` (P8-01 on
+    PS-E; P8-04), `V2_SECURITY_MODEL.md` (§6 L3 note, §9b new, §10 — its stale "PS-D-02 is not built"
+    corrected), `V2_README.md` (two file rows; where V2 is), `V2_LOG.md` (this evening's entry)
+  M `docs/REMAINING_WORK.md` — rows 2.11, 2.12, 4.25–4.30, 6.14 (4.27 is hypotheses, not findings)
+  M `docs/CLOUD_ROUTINE.md` — the owner's commission and its terms; step 4's order PS-E → P8 → P9
+  M `HANDOFF.md` (where things stand; §0's PS-E paragraph; §11.1 the commission; §11.8 the lesson),
+    `AGENTS.md` (PS-E is next), `README.md` (V2's next), `docs/DEPLOYMENT.md` (OpenShell: designed, not a
+    recipe yet), `docs/REPOSITORY_STRUCTURE.md` (§5.11 rows)
+  M `docs/assistant-memory/MEMORY.md`, `cloud-period-2026-09-28.md` (merged with the laptop's copy: the
+    baseline, the routine, runs 2–4 and the evening), `README.md` (the added file)
+  M `docs/survey/*` — regenerated
+  Deleted: nothing.
+- Survey and doctor (after the last edit): `survey check` ok; `survey findings` 0 errors, 14 warnings;
+  `doctor --check` 29 checks passed (Windows).
+- Verified: documents only — no code or test changed. The routine's runs read by their logs: run 1
+  (`cse_013AZJ6RqYq59CeMgkvLV1BM`) as its entry says; runs at 10:11, 10:12 and 10:44 UTC each ended in
+  seconds on the five-hour usage limit, having done nothing. This commit's push run: read by the next
+  routine run (step 3).
+- Redo on the laptop: from routine run 1's entry, `node editors/vscode/e2e.js` on Windows, and the sync
+  procedure's full suite on Windows and in WSL — not run this evening (CI ran every OS on each of run
+  1's commits, each read green by run 1).
+- For the laptop's memory: done on the laptop itself — `openshell-study-2026-09-28.md` added and
+  `cloud-period-2026-09-28.md` merged in both the memory directory and `docs/assistant-memory/`;
+  `HANDOFF.md` §11.1 and §11.8.
+- Open / next: (1) read this commit's push run; (2) **PS-E-01** — the boundary confirmed by construction
+  (`V2_OPENSHELL_STUDY.md` §4.1), then E-02 … E-06 in order; (3) routine run 1's open items (2) and (4)
+  stand, re-ordered: P8-01 now follows PS-E; the adversarial pass on PS-D-02 (its item 3) still stands.
+  **For the owner:** D-V2-49 (an entrenched edit, `DELULU_CORE.md` v0.3) and D-V2-53's consequence for
+  `hostile-agent` on hosts without user namespaces are flagged for his review.

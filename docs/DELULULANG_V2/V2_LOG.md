@@ -2413,3 +2413,57 @@ conclusion: the image built with the fixed Dockerfile answered `delulu 1.0.0`, r
 the console ("hello from the image") and refused the same program without the grant — `error[DL0703]:
 console was not granted to this program`; the devcontainer built again (`devcontainer up`, then the
 toolchain answered inside).
+
+## 2026-09-28 (evening) — the laptop synced; NVIDIA OpenShell studied; PS-E, P8-04 and P9 designed
+
+**The routine, read before anything was touched.** Run 1 (`cse_013AZJ6RqYq59CeMgkvLV1BM`, 07:11–09:16
+UTC) pushed the 13 commits recorded above. The next three fires (10:11, 10:12, 10:44 UTC) each ended
+within seconds on the account's five-hour usage limit (`rate_limit: rejected (five_hour)`, read in each
+run's log), having done nothing. The owner paused the routine at 14:30 UTC and asked, in order: sync the
+laptop with what the cloud pushed; study NVIDIA OpenShell, launched that day with the Open Agent Safety
+Platform, *"not just as copy but as real engineering for the sandbox"*; update every document it
+changes; resume the routine.
+
+**The sync.** The laptop was clean at the baseline `5bb39bc`; `git pull --ff-only` fast-forwarded it to
+`dd543e5` (13 commits, all run 1's). `git ls-files --eol`: no CRLF working-tree file. On Windows:
+`survey check` — ok, 1,462 nodes, 12,602 edges; `survey findings` — 0 errors, 14 warnings, 38 notes (the
+same as the cloud's); `doctor --check` — 29 checks passed. The full suite was not run on the laptop:
+CI ran every OS on each of those commits and run 1 read each green; the sync procedure's full-suite
+and editor steps stay for the owner's return (`docs/CLOUD_SYNC_LOG.md`).
+
+**The study.** Read in full: OpenShell's 57 documentation pages as Markdown (v0.1.2 and dev — the same
+set), its seven architecture diagrams from their SVG sources, label by label, and its repository at
+`36b0386` — `architecture/`, RFCs 0001/0002/0005/0012, and the source of the typestate isolation
+contract, the binary-identity resolver and the Z3 prover. Then each of its controls was compared line
+by line with DeluluLang's code. The record is `V2_OPENSHELL_STUDY.md`; the decisions D-V2-52 (the terms
+and the order), D-V2-53 (PS-E), D-V2-54 (P8-04) and D-V2-55 (P9).
+
+**The finding that shaped it:** OpenShell governs binaries it cannot read, so it must intercept their
+sockets and decide each request; a DeluluLang guest performs no effects, so it can be *denied* what
+OpenShell must *allow*. The comparison produced, from the code and not from the other system's claims:
+
+- the boundary is confirmed by convention in `guest.rs`, not by construction, and an absent layer
+  never refuses a run, even under `hostile-agent` (RW 4.25 → PS-E-01);
+- a macOS guest computing without asking outlives its host until its CPU limit, and an external
+  launcher is started with no death signal (RW 4.26 → PS-E-02);
+- **six hypotheses about the Linux guest after lock-down** — syscalls the filter does not name, sockets
+  other than TCP (Landlock mediates TCP only), all of `/proc` readable, a dumpable host, the Landlock
+  ABI requirement, and the other two systems' equivalents (RW 4.27 → PS-E-03). **None is a finding
+  yet**: each needs an escaped-guest witness red on the current binary;
+- the external launcher found on `PATH` at spawn and never hashed — ADAPTER-SPELL-1's shape (RW 4.28 →
+  PS-E-04);
+- no program-against-boundary check, no risk report on a change of grants, no way for a refusal to
+  become a request to the operator (RW 4.29 → P9-01…03); no way to send a secret to an endpoint (RW
+  2.11 → P9-04); host-only network scopes (RW 2.12 → P9-05); no OCSF export (RW 6.14 → PS-E-06);
+  OpenShell neither a tested backend nor a policy target (RW 4.30 → PS-E-05).
+
+**Not taken, and why** (study §5): deny rules, hot-widening, binary identity for the guest, `audit` as a
+default, an HTTP endpoint inside the guest, content-inspecting middleware, a fleet control plane, L7
+protocols beyond REST for now. **Terms:** nothing of OpenShell copied, none of its crates a dependency
+(Apache-2.0; `NOTICE` is the owner's).
+
+**Order:** PS-E → P8 (P8-01 on PS-E-01's confirmation; P8-04 added) → P9 — in `V2_MASTER_PLAN.md`,
+`V2_IMPLEMENTATION_ROADMAP.md`, `V2_PHASE_STATUS.md` and `docs/CLOUD_ROUTINE.md` step 4. Documents
+updated with it: `V2_SECURITY_MODEL.md` (§6's L3 note, a new §9b, §10's stale "PS-D-02 is not built"
+corrected), `V2_P8_DESIGN.md`, `V2_README.md`, `REMAINING_WORK.md`, `HANDOFF.md`, `AGENTS.md`, `README.md`,
+`DEPLOYMENT.md`, `REPOSITORY_STRUCTURE.md`. Nothing was built; no test changed.

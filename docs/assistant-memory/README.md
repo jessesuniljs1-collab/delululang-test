@@ -6,7 +6,8 @@ on. For this project that is the owner's laptop, at
 per fact, written by the head chef across every campaign since July 2026. Auto memory is
 **machine-local**: a Claude Code cloud session does not have it. From 2026-09-28 to 2026-10-16 the work
 runs in cloud sessions (`HANDOFF.md` §0), so on the owner's instruction the whole directory is copied
-here — **a snapshot taken 2026-09-28**, 39 topic files and the index.
+here — **a snapshot taken 2026-09-28**, 39 topic files and the index; one added since, on the laptop
+that evening: `openshell-study-2026-09-28.md` (the study of NVIDIA OpenShell).
 
 **What was changed on the way in — only this.** The repository is public, and a word the owner banned
 (`HANDOFF.md` §1) appeared in nine of the files. Every occurrence, in every casing, reads

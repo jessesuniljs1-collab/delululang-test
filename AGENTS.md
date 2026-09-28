@@ -50,7 +50,8 @@ authority; the host performs every effect under grants, a lease and the Guard.
   (each edit recorded in `ENTRENCHED_CHANGE_RECORD.md`), new `DL` codes included (with a `D-V2-nn`) —
   which supersedes, for this period, the owner-reserved-file, never-delete-a-`.md` and no-new-codes
   rules above. **Four things stay his:** the final public repository, the licence, D-NE-7 (never a tag,
-  never a release) and D-NE-27. PS-D-02 is next. The full terms: `docs/CLOUD_ROUTINE.md`.
+  never a release) and D-NE-27. **PS-E is next** (from the study of NVIDIA OpenShell,
+  `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`), then P8 and P9. The full terms: `docs/CLOUD_ROUTINE.md`.
 
 ## Run and check everything with the Survey and `doctor` (owner, 2026-09-28)
 

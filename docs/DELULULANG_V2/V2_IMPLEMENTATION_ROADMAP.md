@@ -250,16 +250,63 @@ attestation seam: a `guarantees` field a launcher may populate from an attestati
 "refuse to delegate unless attested" policy hook — designed and tested with a fake attester, not
 integrated with hardware.
 
+## PS-E — the boundary, confirmed (6 S; added 2026-09-28 from the study of NVIDIA OpenShell)
+
+**Status (2026-09-28):** designed — `V2_OPENSHELL_STUDY.md` §4.1–§4.6 (D-V2-52, D-V2-53). **Next**,
+before P8, because P8-01 puts control programs in guests and the boundary they stand on is confirmed
+first. Each slice is one routine run and ends with its CI run read green.
+
+- **PS-E-01** the boundary confirmed by construction: `Launched → Confirmed → Running`, the program
+  sendable only from `Confirmed`; five properties (filesystem, egress, privilege floor, host loss,
+  resource ceiling) each established/absent/unknown with mechanism and evidence; a generation for
+  every run; profiles' required sets (`hostile-agent` all five) refusing before the program is sent.
+  Witness: a canary program that never ran; `hostile-agent` refused on the arm64 job, run on x86-64.
+- **PS-E-02** host loss ends the guest on every backend: a macOS watcher (`kqueue NOTE_EXIT`, `getppid`
+  fallback), a death signal / Job Object for the external launcher. Witness: a spinning guest, the host
+  killed, the guest gone within 1 s, per OS; the watcher removed → macOS red.
+- **PS-E-03** the guest's kernel surface: hypotheses H1 (syscalls unnamed by the filter), H2 (`socket`
+  denied after lock-down), H3 (`/proc` narrowed to `/proc/self`), H4 (the host non-dumpable during a
+  sandboxed run), H5 (Landlock ABI reported, ≥ 3 for `hostile-agent`), H6 (Seatbelt `mach-lookup`,
+  AppContainer named objects) — each witnessed by an escaped-guest mode before it is fixed or refuted.
+- **PS-E-04** the external launcher resolved once, hashed, started from the file hashed, the digest in
+  the report, the audit and the attestation statement, `--launcher-digest` to pin.
+- **PS-E-05** OpenShell interop: `delulu sandbox policy --format openshell` (never wider than the
+  authority; unrepresentable grants refuse by name), the guest-inside-OpenShell recipe at L3, and a
+  manual `openshell.yml` workflow: the pinned release, a granted/ungranted pair, a denied `curl`, and
+  `openshell-prover check` within one boundary and exceeding a narrower one.
+- **PS-E-06** `delulu audit export --format ocsf`: OCSF 1.8.0 JSON Lines, each record's chain fields
+  carried so the export stays verifiable; no secret, no query string.
+
 ## P8 — safe autonomy (owner-gated)
 
 **Status (2026-09-28):** designed under the owner's mandate of the same day — `V2_P8_DESIGN.md`
-(D-V2-51): P8-01 the control program in a guest (next), P8-02 the Verified-class adapter as a `.dpx`,
-P8-03 a reference transport; each witnessed against the simulator.
+(D-V2-51): P8-01 the control program in a guest (after PS-E, on PS-E-01's confirmation), P8-02 the
+Verified-class adapter as a `.dpx`, P8-03 a reference transport; each witnessed against the simulator.
+**P8-04** (D-V2-54) an out-of-band monitor: a separate principal holding only revoke over one run's
+grant node, reading what the host recorded, quarantining by revocation.
 
 RW 4.7 the signed Verified-class adapter delivered as a `.dpx` (signature policy, a pinned key,
 verify-before-dispatch); the control program runs in a guest, the adapter and the dead-man watchdog
 stay host-side. A real device, federation model-checking and everything else here wait for hardware
 or the owner.
+
+## P9 — authority at the boundary (5 S; added 2026-09-28 from the study of NVIDIA OpenShell)
+
+**Status (2026-09-28):** designed — `V2_OPENSHELL_STUDY.md` §4.8–§4.12 (D-V2-55). After P8.
+
+- **P9-01** `delulu authority <file> --within BOUNDARY`: within / exceeds (with a source-located
+  counterexample) / unsupported / inconclusive, the `⊑` dimensions covered; the guide corpus as
+  witness, one-dimension narrowings as the falsifiers.
+- **P9-02** `delulu grants diff OLD NEW`: categorical findings (`special_use_reach`, `effect_expansion`,
+  `scope_expansion`, `device_reach_expansion`, `budget_expansion`, later `secret_reach_expansion`).
+- **P9-03** proposals: `grants propose --from <report>` files the narrowest grant for a refused call
+  with the broker; `grants approve|reject`; auto-approval only within the operator's standing `⊑`
+  boundary with no P9-02 finding; approval takes effect on the next run.
+- **P9-04** secrets bound to endpoints: a request with headers; `--grant secret=K@host[:port][/path]`;
+  bytes resolved by the host at send only inside the audience, every redirect re-checked; the checker
+  proves a secret reaches only a header; `authority` lists each secret's destinations.
+- **P9-05** methods and restricted path globs in `net` grants, a `⊑` dimension with Z3 obligations and
+  mutants, enforced in the egress client.
 
 ---
 
@@ -273,7 +320,8 @@ V2-0 ─► P1 ─► PS-0 ─► PS-A ─► P2 (claims; P2's code needs only P
                         └─► PS-B ─► P4b–e (MCP exposes sandbox_probe; the benchmark needs P4a–d)
                                  │
                                  └─► PS-C ─► P6 ─► P5 (the image artifact; the skill and morphs in the archive)
-P7: independent of all (its fuzz scaffolding is shared with PS-A).   PS-D after PS-A.   P8 owner-gated.
+P7: independent of all (its fuzz scaffolding is shared with PS-A).   PS-D after PS-A.
+PS-D ─► PS-E (confirms the boundary; E-04/E-05 extend PS-D's launcher) ─► P8 (P8-01 on E-01) ─► P9
 ```
 
 **What must remain deferred, with the trigger that re-opens each** (archive:

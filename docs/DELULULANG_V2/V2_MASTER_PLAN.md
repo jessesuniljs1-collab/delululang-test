@@ -78,7 +78,9 @@ specified in `V2_SECURITY_MODEL.md`.
 | 11 | **P5** | distribution: a tag-triggered release workflow, four targets, checksums, attestations, the skill and morphs in the archive, installers if accepted | D-NE-7 (channel), D-NE-8 (installer posture) |
 | 12 | **P7** | verification depth: KAT vectors, `cargo-fuzz` targets, Miri shrinking, Progress restated | the entrenched restatement (owner) |
 | 13 | **PS-D** | external launchers (L3) and the attestation seam (L4) | hardware beyond the seam |
-| 14 | **P8** | safe autonomy: the signed Verified-class adapter; the rest waits for hardware | owner-gated |
+| 14 | **PS-E** | the boundary, confirmed — from the study of NVIDIA OpenShell (`V2_OPENSHELL_STUDY.md`): confirmation by construction with a generation per run, host loss ends the guest, the guest's kernel surface narrowed, the launcher pinned, OpenShell as a tested L3 and a policy target, OCSF export | none (D-V2-52, D-V2-53, under the delegation) |
+| 15 | **P8** | safe autonomy: the control program in a guest, the signed Verified-class adapter, a reference transport, an out-of-band monitor (P8-04); a real device waits for hardware | a real device and certification |
+| 16 | **P9** | authority at the boundary: a program checked against a boundary, risk findings on a change, proposals with `⊑`-bounded approval, secrets bound to endpoints, method-and-path network scopes | none (D-V2-55, under the delegation) |
 
 This is an execution dependency graph, not a checklist: if the code reveals a dependency that forces
 a different order, the phase stops, records the evidence, explains the dependency, updates this table
@@ -101,6 +103,8 @@ never changed for convenience. Task-level detail: `V2_IMPLEMENTATION_ROADMAP.md`
 | AI-friendliness is asserted, not measured | commission §19 | P4e |
 | Resource limits are launcher configuration, not authority | commission §13 | PS-B |
 | Physical AI: the adapter is an unsigned subprocess | RW 4.7 | P8 |
+| The boundary is confirmed by convention, not construction; a macOS orphan guest outlives its host; Landlock covers TCP only; the external launcher is looked up on `PATH` and never hashed | `V2_OPENSHELL_STUDY.md` §3 (2026-09-28) | PS-E |
+| No program can be checked against a boundary; no secret can be sent to an endpoint; network grants cannot scope a method or a path | `V2_OPENSHELL_STUDY.md` §3 | P9 |
 
 ## 6. How success is measured
 
@@ -141,5 +145,6 @@ product surface), `SANDBOX_ARCHITECTURE.md`, `SANDBOX_THREAT_MODEL.md` (claims T
 evidence category each owes), `SANDBOX_TEST_PLAN.md`, `SANDBOX_IMPLEMENTATION_PLAN.md`,
 `DECISION_LOG.md` (D-NE-01…33), `DOCUMENTATION_AUDIT.md` (the classification behind V2-0's moves),
 `EXECUTION_LOG.md` (the two planning passes, every CI run read), and `agent-notes/` (the two
-sous-chefs' records). The current gap list of the V1 era stays `docs/REMAINING_WORK.md`; V2 closes
+sous-chefs' records). The study of NVIDIA OpenShell (2026-09-28) that added PS-E, P8-04 and P9 is in
+this folder: `V2_OPENSHELL_STUDY.md`. The current gap list of the V1 era stays `docs/REMAINING_WORK.md`; V2 closes
 its rows and says what closed each.

@@ -31,7 +31,18 @@ any repository but `origin` — `HANDOFF.md` §1.1); **the licence** (never chan
 licence terms); **D-NE-7, publication** (never push a tag, never create a release — the release workflow's
 dry run is fine); **D-NE-27** (never commit or ship a built GPL kernel image).
 
-**PS-D-02 is no longer stopped** — the owner's words above; its design is in `HANDOFF.md` §0.
+**PS-D-02 is no longer stopped** — the owner's words above; routine run 1 built it (D-V2-48).
+
+**The owner's commission of 2026-09-28, evening** (he paused the routine for it, then resumed it): NVIDIA
+launched OpenShell, the open runtime of its Open Agent Safety Platform, *"and I want this to be studied
+and incorporated not just as copy but as real engineering for the sandbox currently we are working on"*.
+The laptop session did the study and the design: **`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`** — read
+its §2 and the section of the slice you build. It added phase **PS-E** (next), **P8-04**, and phase
+**P9** (D-V2-52 to D-V2-55). Its terms bind every run: nothing of OpenShell — code, schema files,
+text, diagrams — is copied into this repository and none of its crates becomes a dependency (the
+licence and `NOTICE` are the owner's); a workflow that exercises it downloads a pinned release at
+run time and ships nothing. Its §4.3 items are **hypotheses**: witness each red before fixing it,
+or record it refuted.
 
 **Effort.** The owner asked for Opus 5.5 at **xhigh** effort: the routine is set to Opus 5.5, and the
 repository's `.claude/settings.json` sets `effortLevel` to `xhigh` for every session that opens it.
@@ -93,14 +104,22 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 **4. Choose one piece of work** — the first of these that is not done:
 1. Anything steps 2–3 found.
 2. `Open / next` items from the newest sync-log entries.
-3. **Finish every phase, and verify each** — the owner's order: **PS-D-02** (the attestation seam, the
-   `HANDOFF.md` §0 design, with a fake attester); the rest of **P7** — RW 5.2 (restate Progress as
-   progress-or-fault in `DELULU_CORE.md`, now allowed, recorded in `ENTRENCHED_CHANGE_RECORD.md`) and RW
-   5.6's closing run; **P8** as far as software reaches — RW 4.7's signed Verified-class adapter as a
-   `.dpx` (signature policy, a pinned key, verify-before-dispatch, the control program in a guest, the
-   dead-man watchdog host-side), witnessed against the simulator; a real device stays
-   environment-blocked and says so. A phase is done when its CI run is read green and
-   `V2_PHASE_STATUS.md` says so with the commit and the run.
+3. **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
+   Next, one slice per run, in this order:
+   **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): E-01 confirmation by
+   construction and a generation per run; E-02 host loss ends the guest (macOS and the external launcher);
+   E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
+   is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
+   tested L3 and `sandbox policy --format openshell` (a manual `openshell.yml`, by hand first, as
+   `container.yml` was); E-06 OCSF export.
+   **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
+   E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
+   P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
+   environment-blocked and says so.
+   **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
+   P9-02 `grants diff`, P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
+   the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
    (build the Dockerfile and devcontainer: the VM has Docker), **7.4** (`editors/vscode/e2e.js` on Linux
    under `xvfb-run`, installed by `apt`), **2.2**, **2.4**, **2.10**, **4.17**, **7.16** — each as a small,

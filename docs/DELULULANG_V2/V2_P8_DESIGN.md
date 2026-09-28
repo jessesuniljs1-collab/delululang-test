@@ -25,7 +25,12 @@ run read green. A real device stays environment-blocked, and every surface that 
 
 ## The slices
 
-### P8-01 — the control program in a guest (next)
+### P8-01 — the control program in a guest (after PS-E)
+
+**Stands on PS-E** (D-V2-53, `V2_OPENSHELL_STUDY.md`): the guest that holds an actuator handle is sent
+its program only from PS-E-01's `Confirmed` state, and PS-E-02's "host loss ends the guest" is one of
+the properties a device run's profile requires — a control program must never outlive the host that
+holds its watchdog.
 
 A program holding `Actuator`/`Sensor` capabilities runs under `--sandbox` (L1) and `--isolation microvm`
 (L2). `root.actuator("arm0/elbow")` and `root.sensor(…)` become `RootMethod`s the host answers with a
@@ -79,6 +84,23 @@ still refuses before the plugin is called; a plugin that tries to name a capabil
 A transport the tests and a lab can both use: a line or byte stream to the in-tree simulator run as a
 separate process, so P8-02 is witnessed across a real process boundary. A serial port or a CAN socket is
 a transport of the same shape, and is the operator's to wire — a real device stays out of reach here.
+
+### P8-04 — an out-of-band monitor (D-V2-54)
+
+The shape of NVIDIA's Sentry (announced 2026-09-28: out-of-band watching from a DPU, quarantine in
+milliseconds), in software. A **monitor** is a separate principal — its own process, a separate OS
+identity where the host allows one — holding exactly one authority: **revoke** over one run's grant
+node. It reads only what the host recorded (the audit as it is appended, or PS-E-06's OCSF stream),
+applies declarative rules (N refusals within T; any envelope refusal on an actuator; any break-glass
+use; any special-use reach), and quarantines by revoking: the e-stop and the declared fail-state engage
+(implemented), the guest is ended. It cannot grant and cannot perform an effect, and it trusts nothing
+the guest says.
+
+Witnesses against the simulator: a guest that keeps probing refused operations loses its actuator
+within a measured bound after the Nth refusal; a monitor that tries to grant (a mutant) is refused by the
+broker; the monitor's own death is recorded and then handled as the operator's rule says —
+`quarantine` (the default for a run that holds a device: a watchdog that has gone quiet is treated as
+one that fired, as OpenShell treats the loss of its fence's controller) or `continue`.
 
 ## What stays out, and why
 
