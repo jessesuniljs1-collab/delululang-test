@@ -1241,6 +1241,18 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 5. **F7 is the next step's decision**: an external guest's self-report must stop counting as a host
    guarantee (RW 4.31), taken with the profiles' required sets.
 
+## D-V2-59 — `hostile-agent` requires all five boundary properties; `contained` waits for its gaps — TAKEN (head chef, 2026-09-28, under the owner's delegation; FLAGGED for the owner's review — it narrows D-V2-53 §2)
+
+1. **`hostile-agent` requires all five properties**, checked in `Opened::confirm` after the guest's report
+   and before the program is sent; a missing one refuses with DL1408, exit 2, naming it and the ways out.
+2. **`contained` and `dev` require none for now.** D-V2-53 §2's `contained` set, measured against CI, would
+   refuse every macOS run (reads open, no memory ceiling, no death signal) and every unattested external
+   launcher by default. It is taken when those gaps can be closed (PS-E-02; a read-deny Seatbelt profile; a
+   macOS memory ceiling; RW 4.31 for L3), each measured.
+3. **The privilege floor is `no_new_privs`, a restricted token, a separate identity or a VM** — as §4.1
+   lists — so `hostile-agent` runs on a Linux host without user namespaces (arm64 CI). §4.1's consequence
+   ("refuses instead") would need identity separation as its own requirement; not taken, and flagged.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

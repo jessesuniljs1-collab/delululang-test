@@ -815,6 +815,11 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     }
     match served {
         Ok(exit) => exit,
+        // D-V2-59: the profile's refusal, before the program was sent.
+        Err(e) if crate::boundary::is_refusal(&e) => {
+            eprintln!("error[DL1408]: {e}");
+            2
+        }
         Err(e) => {
             eprintln!("error: the sandboxed run failed: {e}");
             1
@@ -1113,11 +1118,22 @@ fn serve_under(
         (None, None, _) | (_, _, None) => None,
         (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
     };
-    let served = converse(&mut child, &dir, program, &generation, root, seed, fixed_clock_ms, custody, &mut evidence)
+    let launch_words = applied.clone();
+    let need = crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external };
+    let served = converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, &mut evidence)
         // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
         // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
-        // chain. Escaped and bounded here, once, before any of them.
-        .map_err(|e| io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024)));
+        // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
+        // own words, and keeps its type.)
+        .map_err(|e| {
+            if crate::boundary::is_refusal(&e) {
+                e
+            } else {
+                io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024))
+            }
+        });
+    // D-V2-59: refused before the program was sent, because the boundary lacks what the profile requires.
+    let refused = served.as_ref().err().is_some_and(crate::boundary::is_refusal);
     // The red-team pass on `/3` (F4): a conversation that failed ENDS the guest, and one that said
     // goodbye gets a short grace to exit. `wait()` alone let a guest — an external launcher above all —
     // hold the host for as long as it liked after its channel had failed: "the channel's deadline ended
@@ -1211,6 +1227,7 @@ fn serve_under(
         if matches!(&served, Ok(0)) { "allow" } else { "deny" },
         Some(match &served {
             Ok(code) => format!("exit {code}"),
+            Err(e) if refused => format!("refused (DL1408): {e}"),
             Err(e) => format!("channel failed: {e}"),
         }),
         // How many times the host said no, in the chain as well as the report: a run report can be
@@ -1234,7 +1251,7 @@ fn serve_under(
         eprintln!("error: {}", s.message);
     }
     if let Some(path) = report_out {
-        let exit = served.as_ref().copied().unwrap_or(1);
+        let exit = if refused { 2 } else { served.as_ref().copied().unwrap_or(1) };
         let mut outcome = serde_json::json!({ "ran": sent, "exit": exit });
         if let Some(s) = &stop {
             outcome["stopped_by"] = s.json.clone();
@@ -1272,6 +1289,8 @@ fn serve_under(
         // REASON is reported in both branches. This arm used to drop it whenever the child's exit
         // status was non-zero, which is exactly when the reason matters most: the channel diagnosis
         // was written, thrown away in a branch, and three CI runs read as an unexplained timeout.
+        // D-V2-59: a profile's refusal is returned as it is, for the caller to print as DL1408.
+        Err(e) if refused => Err(e),
         Err(e) => {
             if stop.is_none() {
                 eprintln!("sandbox: {e}");
@@ -1625,6 +1644,7 @@ fn converse(
     dir: &std::path::Path,
     program: &str,
     generation: &str,
+    need: &crate::boundary::Requirement<'_>,
     root: Rc<RootVal>,
     seed: u64,
     fixed_clock_ms: Option<i64>,
@@ -1640,7 +1660,7 @@ fn converse(
     }
     // PS-E-01: the boundary first. `boundary::open` sends the generation and no program; only the
     // `Confirmed` that `confirm` builds from the guest's accepted report can send the program.
-    let confirmed = match crate::boundary::open(conn, generation).and_then(|o| o.confirm(&mut host)) {
+    let confirmed = match crate::boundary::open(conn, generation).and_then(|o| o.confirm(&mut host, need)) {
         Ok(c) => c,
         Err(e) => {
             let (list, total) = host.denied();
@@ -1819,7 +1839,12 @@ pub fn attempt_launch() -> Result<String, String> {
             // the probe's empty program.
             let generation = crate::attest::fresh_nonce().map_err(io::Error::other)?;
             let mut host = HostChannel::new(LocalSink).with_root(Rc::new(RootVal::default())).with_generation(&generation);
-            let mut conn = crate::boundary::open(conn, &generation)?.confirm(&mut host)?.send_program(&Program {
+            let need = crate::boundary::Requirement {
+                profile: crate::policy::Profile::Dev,
+                launch: &[],
+                measured_by_host: true,
+            };
+            let mut conn = crate::boundary::open(conn, &generation)?.confirm(&mut host, &need)?.send_program(&Program {
                 program: PROBE_PROGRAM.to_string(),
                 hash: blake3::hash(PROBE_PROGRAM.as_bytes()).to_hex().to_string(),
                 seed: 0,

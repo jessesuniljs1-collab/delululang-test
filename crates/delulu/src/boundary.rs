@@ -45,6 +45,32 @@ pub(crate) fn open<C: Read + Write>(mut conn: C, generation: &str) -> io::Result
     Ok(Opened { conn })
 }
 
+/// What this boundary must establish before the program is sent (PS-E-01, D-V2-59): the profile's
+/// required properties, and the words the host applied at launch (the guest's own come with its report).
+pub(crate) struct Requirement<'a> {
+    pub profile: crate::policy::Profile,
+    pub launch: &'a [&'static str],
+    pub measured_by_host: bool,
+}
+
+/// A run refused because its boundary lacks a property its profile requires — DL1408's refusal, carried
+/// through `io::Error` so the caller can tell it from a channel that failed.
+#[derive(Debug)]
+pub(crate) struct Refused(pub String);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refused {}
+
+/// Is this error a [`Refused`]?
+pub(crate) fn is_refusal(e: &io::Error) -> bool {
+    e.get_ref().is_some_and(|inner| inner.is::<Refused>())
+}
+
 /// Why a guest's boundary was not confirmed, in words an operator can act on.
 fn unconfirmed(why: impl std::fmt::Display) -> io::Error {
     // What the guest sent may be quoted in `why` (a decoder's message, a refused word): shown bounded.
@@ -57,7 +83,11 @@ impl<C: Read + Write> Opened<C> {
     /// once, first, for this generation (`HostChannel::answer`) — confirms the guest; anything else ends
     /// the conversation with the program unsent. A first request of any other kind is NOT answered: an
     /// answer to a `RootMethod` would be an effect performed for a guest nobody confirmed.
-    pub(crate) fn confirm<S: delulu_runtime::sink::EffectSink>(mut self, host: &mut HostChannel<S>) -> io::Result<Confirmed<C>> {
+    pub(crate) fn confirm<S: delulu_runtime::sink::EffectSink>(
+        mut self,
+        host: &mut HostChannel<S>,
+        need: &Requirement<'_>,
+    ) -> io::Result<Confirmed<C>> {
         let req: Request = read_frame(&mut self.conn).map_err(|e| {
             unconfirmed(match e.kind() {
                 io::ErrorKind::UnexpectedEof => "it closed the channel first".to_string(),
@@ -72,6 +102,30 @@ impl<C: Read + Write> Opened<C> {
         let resp = host.answer(&req);
         match resp {
             Response::Ok(_) => {
+                // D-V2-59: the report is accepted; does the boundary it completes have what the profile
+                // requires? Answered from the launch's words and the guest's, as the run report answers it.
+                let mut words: Vec<&str> = need.launch.to_vec();
+                words.extend(host.self_applied().iter().copied());
+                let props = properties(&words, need.measured_by_host);
+                let missing: Vec<String> = need
+                    .profile
+                    .required()
+                    .iter()
+                    .filter(|p| props[**p]["state"] != "established")
+                    .map(|p| format!("{p} ({})", props[*p]["why"].as_str().unwrap_or("not established")))
+                    .collect();
+                if !missing.is_empty() {
+                    let why = format!(
+                        "the `{}` profile requires a boundary that establishes all five properties, and this one does \
+                         not: {}. Nothing was sent to the guest. Ways out: `--isolation microvm` (Linux with KVM), an \
+                         external launcher whose attester vouches for it, or — a person's choice, never made for \
+                         you — a weaker profile (`--sandbox-profile contained`) [see `delulu explain DL1408`]",
+                        need.profile.name(),
+                        missing.join("; ")
+                    );
+                    let _ = write_frame(&mut self.conn, &Response::Error { code: "DL1408".into(), message: why.clone() });
+                    return Err(io::Error::other(Refused(why)));
+                }
                 write_frame(&mut self.conn, &resp)?;
                 Ok(Confirmed { conn: self.conn, applied: host.self_applied().to_vec() })
             }
@@ -174,6 +228,8 @@ mod tests {
     use std::os::unix::net::UnixStream;
 
     const GEN: &str = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
+    const NEED: Requirement<'static> =
+        Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host: true };
 
     fn program() -> Program {
         let text = "module p\n\nfn main(root: Root) {\n}\n".to_string();
@@ -212,7 +268,7 @@ mod tests {
             tx.send((open.generation, p)).unwrap();
         });
         let mut host = HostChannel::new(LocalSink).with_generation(GEN);
-        let confirmed = open(conn, GEN).unwrap().confirm(&mut host).expect("confirmed");
+        let confirmed = open(conn, GEN).unwrap().confirm(&mut host, &NEED).expect("confirmed");
         assert_eq!(confirmed.applied(), ["no new programs"]);
         let _conn = confirmed.send_program(&program()).unwrap();
         t.join().unwrap();
@@ -277,7 +333,7 @@ mod tests {
             let mut grants = delulu_runtime::broker::Grants::default();
             grants.add("console").unwrap();
             let mut host = HostChannel::new(LocalSink).with_generation(GEN).with_root(std::rc::Rc::new(crate::cli::build_root(&grants)));
-            let err = match open(conn, GEN).unwrap().confirm(&mut host) {
+            let err = match open(conn, GEN).unwrap().confirm(&mut host, &NEED) {
                 Ok(_) => panic!("{name}: confirmed"),
                 Err(e) => e.to_string(),
             };

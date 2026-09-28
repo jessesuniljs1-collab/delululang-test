@@ -25,6 +25,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   confinement, egress confinement, privilege floor, host loss ends the guest, resource ceiling — each
   `established` (by what), `absent` (why) or `unknown` (an external launcher's), answered from the same
   posture the report carries. Reported only: no profile refuses on them yet (D-V2-57).
+- **`--sandbox-profile hostile-agent` refuses a boundary that lacks any of the five properties** — before
+  the program is sent, with DL1408 (exit 2), naming what is missing and the ways out. On macOS's jailed
+  guest (no read confinement, memory ceiling or death signal) and with an unattested external launcher it
+  now refuses; on Linux, Windows and the microVM it runs as before. `contained` and `dev` are unchanged
+  (D-V2-59).
 - **Fixed (found by a red-team pass on the new channel, each re-run by the head chef first):** a guest
   whose channel failed was waited for rather than ended, so a lingering launcher could hold the host
   indefinitely; `outcome.ran` said "confirmed" where it must say "sent"; a guest's refused words reached

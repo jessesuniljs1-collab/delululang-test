@@ -220,7 +220,10 @@ allows before the required sets exist: a launcher that never confirms receives n
 (`tests/sandbox_confirm_cli.rs`). **Second step (D-V2-57):** every run reports the five properties
 (`sandbox.properties`), answered from its own posture; an L3 run's are `unknown`. Read against the jail
 code, the `contained` set above would refuse every macOS run (reads open, no memory ceiling), so the
-sets wait for each OS's reported answers. Open: the required sets and the refusal.
+sets wait for each OS's reported answers. **Third step (D-V2-59):** CI's answers read — Linux x86-64,
+arm64 and Windows all five, macOS two — `hostile-agent` requires all five and is refused in
+`Opened::confirm`; `contained` requires none until macOS's gaps and RW 4.31 close. Open: `contained`'s
+set, attesters' claims as properties.
 
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 

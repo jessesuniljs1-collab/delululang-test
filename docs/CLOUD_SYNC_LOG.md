@@ -258,7 +258,8 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: (1) `ff701ae` CI hygiene: every action on its Node-24 major, every Ubuntu runner pinned to 24.04;
   (2) `062a78c` PS-E-01, first step: the guest confirms its boundary before it is sent the program (D-V2-56);
   (3) `6ceaf2d` PS-E-01, second step: every sandboxed run reports its boundary's five properties (D-V2-57);
-  (4) `The red-team pass on channel /3: seven defects around a guarantee that held, fixed (D-V2-58)`
+  (4) `8b2994a` The red-team pass on channel /3: seven defects around a guarantee that held, fixed (D-V2-58);
+  (5) `PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59)`
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -302,6 +303,13 @@ it on `origin` was made in the cloud and is listed below.
     (4.31 F7, 4.32 channel hygiene), `V2_DECISION_LOG.md` (D-V2-58), `V2_PHASE_STATUS.md`,
     `docs/CLOUD_ROUTINE.md` (a red-team pass after a security slice; the cost of CI reads),
     `docs/assistant-memory/cloud-period-2026-09-28.md` — (4)
+  M `crates/delulu/src/policy.rs` (`Profile::required`), `crates/delulu/src/boundary.rs` (`Requirement`,
+    `Refused`, the check in `Opened::confirm`), `crates/delulu/src/guest.rs` (the requirement passed in; the
+    refusal printed as DL1408, exit 2, reported `ran: false`), `crates/delulu/tests/sandbox_confirm_cli.rs`
+    (the witness), `crates/delulu/tests/sandbox_run_cli.rs` (the two `hostile-agent` tests expect exit 2 on
+    macOS), `skills/delulu/SKILL.md`, `docs/for-agents.md`, `CHANGELOG.md`, `HANDOFF.md`,
+    `docs/REMAINING_WORK.md` 4.25, `V2_DECISION_LOG.md` (D-V2-59, flagged), `V2_PHASE_STATUS.md`,
+    `V2_OPENSHELL_STUDY.md` §4.1 — (5)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entries
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
@@ -326,15 +334,17 @@ it on `origin` was made in the cloud and is listed below.
   (~85 attempts, 700 fuzzed frames; the guarantee held); every finding re-run by the head chef — six
   witnesses red on `6ceaf2d`, green after; mutants M7–M9 landed and killed (M8 survived the first witness,
   whose fake guest raced two writes — fixed); clippy clean; the full suite alone 2,013 passed, 0 failed,
-  15 ignored (152 binaries).
+  15 ignored (152 binaries). (5): the witness red on `8b2994a` (an unattested launcher ran the program
+  under `hostile-agent`), green after; M10 killed; clippy clean; the full suite alone 2,014 passed,
+  0 failed, 15 ignored.
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read (4)'s push run (every OS; `pipe_channel.rs` changed on all three); (2) **PS-E-01's
-  required sets and refusal, with RW 4.31 (F7)** — each OS's properties are read (above); decide the sets
-  on those answers
-  (D-V2-57 §2: a platform-honest set, or refusal with the microVM and L3 as the ways out) and build the
-  refusal in `Opened::confirm` (the host's launch words must reach it); (3) then E-02 (macOS host loss —
-  the red one), E-03 … E-06, P8, P9.
+- Open / next: (1) read (4)'s and (5)'s push runs — every OS; **macOS must now REFUSE `hostile-agent`**
+  (`sandbox_run_cli`'s two tests expect exit 2 there: written blind, the VM has no macOS) and the
+  `microvm` job's `hostile-agent` tests must still run (L2 establishes all five by its words); (2) PS-E-01's
+  remainder: RW 4.31 (F7 — an L3 guest's self-report is not a host guarantee), attesters' claims as
+  properties, `contained`'s set once its gaps close; (3) E-02 (macOS host loss — the red one), E-03 … E-06,
+  P8, P9; RW 4.32's channel hygiene. **For the owner:** D-V2-59 narrows D-V2-53 §2 (flagged).

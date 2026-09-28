@@ -456,7 +456,9 @@ the guest, a resource ceiling — each `established`, `absent` or `unknown`, and
 
 Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
 performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may
-**narrow** a profile and never widen it.
+**narrow** a profile and never widen it. `hostile-agent` also requires every one of the five properties
+to be `established`, and refuses (DL1408, exit 2) before the program is sent where one is not — on
+macOS's jailed guest and with an unattested external launcher, for example (D-V2-59).
 
 Read the report, not the program's output. Under `--report-out F` the runtime writes the run report
 to `F`: the `sandbox` object with `requested_level` and the actual `level`, the backend, the limits,

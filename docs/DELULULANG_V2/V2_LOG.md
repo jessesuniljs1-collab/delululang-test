@@ -2705,3 +2705,37 @@ each red on `6ceaf2d`.
   is not a secret).
 
 **Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2013 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+## 2026-09-28 (night) — PS-E-01, third step: `hostile-agent` refuses a boundary that lacks a property (D-V2-59)
+
+**Measured first.** `6ceaf2d`'s push run `36481810253` printed each runner's L1 properties: Linux x86-64
+(a subordinate uid), Linux arm64 (the operator's own uid, `no_new_privs`) and Windows (an AppContainer) —
+all five established; macOS — egress and the privilege floor only (reads open, no memory ceiling, no death
+signal). An unattested external launcher establishes nothing (`unknown`). The microVM establishes all five
+by its construction (the unit test over its words).
+
+**Decided on those answers (D-V2-59).** `hostile-agent` — the profile for code nobody trusts — requires all
+five; a boundary without one is refused **before the program is sent**, in `Opened::confirm`, with DL1408
+(exit 2): the missing properties named with why, and the ways out (the microVM, an attested launcher, or a
+weaker profile chosen by a person). `contained` (the default) and `dev` require nothing yet: D-V2-53's
+`contained` set (filesystem, egress, resource) would refuse every macOS run and every unattested L3 run by
+default, and that waits for the gaps to be closable (PS-E-02 for host loss; a read-deny Seatbelt profile
+and a macOS memory ceiling are open) and for RW 4.31 — decided when they are, not before. The design's
+second consequence (`hostile-agent` refusing on a Linux host without user namespaces, the privilege floor
+read as "a separate identity") is NOT taken here: CI measured `no_new_privs` as that floor on arm64, and
+reading it as identity would refuse a boundary the posture calls privilege-escalation-denied — recorded
+for the owner's review with the required sets.
+
+**Consequence, now true:** `run --sandbox --sandbox-profile hostile-agent` on macOS L1 refuses (DL1408);
+`sandbox_run_cli`'s two `hostile-agent` tests expect exit 2 there and 0 elsewhere, and still read the
+profile's limits from the report (which is written, with `ran: false`). An external launcher under
+`hostile-agent` refuses unless an attester's claims can establish the properties (not yet mapped — PS-E-01's
+remainder).
+
+**Witness and falsifier.** `sandbox_confirm_cli.rs::hostile_agent_refuses_a_boundary_that_lacks_a_property_before_the_program_is_sent`
+— red on `8b2994a` (the unattested launcher ran the program: the canary printed); now exit 2, DL1408 naming
+`filesystem_confinement`, the canary absent, `ran: false`, and the same launcher under `contained` still
+runs. Mutant M10 (`hostile-agent` requiring nothing) red.
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; every sandbox test binary green; the
+full suite alone: 2014 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.

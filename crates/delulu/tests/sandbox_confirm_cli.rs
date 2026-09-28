@@ -351,3 +351,36 @@ fn a_guests_words_reach_the_operator_escaped_and_bounded() {
     assert!(chain.len() < 64 * 1024, "{} bytes of chain text", chain.len());
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// PS-E-01, third step (D-V2-59): `hostile-agent` — the profile for code nobody trusts — requires all five
+/// properties, and a boundary that does not establish one is refused BEFORE the program is sent, under
+/// DL1408's rule (never silently weaker). An unattested external launcher establishes none (all `unknown`),
+/// so it is refused; the same launcher under `contained` still runs. Red on `8b2994a`: it ran.
+#[test]
+fn hostile_agent_refuses_a_boundary_that_lacks_a_property_before_the_program_is_sent() {
+    let d = lab("hostile");
+    let canary = format!("CANARY-HOSTILE-{}", std::process::id());
+    canary_program(&d, &canary);
+    let exe = env!("CARGO_BIN_EXE_delulu").replace('\\', "/");
+    assert!(!exe.contains(' '), "the launcher is split on whitespace: {exe}");
+    let launcher = format!("external:{exe} __guest --stdio-pipes");
+    let report = d.join("r.json");
+    let r = delulu(
+        &d,
+        &[
+            "run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--sandbox-profile", "hostile-agent",
+            "--grant", "console", "--report-out", report.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(r.status.code(), Some(2), "{}", text(&r));
+    assert!(text(&r).contains("DL1408"), "{}", text(&r));
+    assert!(text(&r).contains("filesystem_confinement") && text(&r).contains("hostile-agent"), "it names what is missing: {}", text(&r));
+    assert!(!String::from_utf8_lossy(&r.stdout).contains(&canary), "the program never ran: {}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(v["outcome"]["ran"], false, "{v}");
+    // The control: the same launcher and program under the default profile run.
+    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console"]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(String::from_utf8_lossy(&r.stdout).contains(&canary), "{}", text(&r));
+    let _ = std::fs::remove_dir_all(&d);
+}

@@ -172,12 +172,23 @@ fn a_profile_chooses_the_limits_and_the_report_names_it() {
         "--report-out",
         report.to_str().unwrap(),
     ]);
-    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(o.status.code(), Some(hostile_agent_exit()), "{}", String::from_utf8_lossy(&o.stderr));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
     assert_eq!(v["sandbox"]["requested"], "hostile-agent");
     assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 256 * 1024 * 1024_u64);
     assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 60);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// D-V2-59: `hostile-agent` requires all five boundary properties. CI measured macOS's jailed guest
+/// without read confinement, a memory ceiling or a death signal, so there it is REFUSED (DL1408, exit 2)
+/// before the program is sent — and the report still names the profile and its limits; elsewhere it runs.
+fn hostile_agent_exit() -> i32 {
+    if cfg!(target_os = "macos") {
+        2
+    } else {
+        0
+    }
 }
 
 /// `--limits` may narrow a profile and never widen it: choosing a tight profile cannot be undone by
@@ -201,7 +212,7 @@ fn limits_narrow_a_profile_and_never_widen_it() {
         "--report-out",
         report.to_str().unwrap(),
     ]);
-    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(o.status.code(), Some(hostile_agent_exit()), "{}", String::from_utf8_lossy(&o.stderr));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
     assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 256 * 1024 * 1024_u64, "a flag must not widen a profile");
     assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 60);
