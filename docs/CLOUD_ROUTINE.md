@@ -48,11 +48,11 @@ or record it refuted.
 repository's `.claude/settings.json` sets `effortLevel` to `xhigh` for every session that opens it —
 without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, read 2026-09-28).
 
-**Models (checked against the official models page, 2026-09-28).** The head chef is Opus 5.5 (the
-routine's setting — the owner's choice). **Sous-chefs:** testing passes use **Sonnet 5.5**
-(`claude-sonnet-5-5`, the `sonnet` alias — launched 2026-09-28) and **Haiku 4.5** (the `haiku` alias);
-**Haiku 5.5 is announced, not released** — use it once the models page lists it, never before. Haiku 4.5's
-retirement is "not sooner than 2026-10-15". **Classifier fallback:** Opus 5.5 re-runs a request its
+**Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
+routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
+`sonnet` alias — launched 2026-09-28). **Haiku 5.5 is announced, not released** (checked against the
+official models page, 2026-09-28): once that page lists it, Haiku 5.5 (the `haiku` alias, if it then
+resolves to 5.5 — say which model ran) may be used as an agent; until then no Haiku agent. **Classifier fallback:** Opus 5.5 re-runs a request its
 safety classifier flags as cybersecurity on Opus 4.8, **and the session stays on Opus 4.8 from then
 on** (Sonnet 5.5 falls back to Sonnet 5). Sandbox red-team work — PS-E-03's escaped guest above all —
 is defensive, but a flag can happen: if Claude Code shows a fallback notice, every later commit's

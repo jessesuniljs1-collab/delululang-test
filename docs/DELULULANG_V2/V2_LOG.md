@@ -2492,4 +2492,10 @@ model configuration, routines and cloud-environments pages. What held, and what 
   the owner's to add (the environment dialog), if he wants the toolchain pre-installed.
 - **Usage.** Recorded in the brief: routine runs draw on the owner's subscription, and three fires on
   2026-09-28 ended in seconds on the five-hour limit.
+- **The owner's ruling, minutes later:** *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"* Agents are Sonnet 5.5; Haiku 5.5 once it is
+  released; no Haiku 4.5 meanwhile. `AGENTS.md`, the brief, `HANDOFF.md` §11.1/§11.3 and the memory say so.
+- **CI read:** `fed54cb` (Cloud handoff 7) push run `36463058082` — success on every job; arm64's
+  ping-pong MEASURED 2.88x against a 4.12x control, bar 1.50x, passed. Two runner notices to act on
+  before they bite: `actions/checkout@v4` and `actions/cache@v4` target Node.js 20, which GitHub now forces
+  onto Node 24; and `ubuntu-latest` migrates to Ubuntu 26 from 2026-10-19.
 

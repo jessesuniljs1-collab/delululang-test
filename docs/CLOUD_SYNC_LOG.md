@@ -206,7 +206,11 @@ it on `origin` was made in the cloud and is listed below.
   Sonnet 5.5` — the owner's question the same evening: M `docs/CLOUD_ROUTINE.md` (models, effort, classifier
   fallback, `gh`, the VM's reach and limits, usage), `AGENTS.md` (Sonnet 5.5 and Haiku 4.5 for testing
   passes), `CLAUDE.md` (`gh`, release assets, the fallback's trailer), `HANDOFF.md` §11.1/§11.3,
-  `docs/DELULULANG_V2/V2_README.md`, `V2_LOG.md`, `docs/assistant-memory/` (two files)
+  `docs/DELULULANG_V2/V2_README.md`, `V2_LOG.md`, `docs/assistant-memory/` (two files); (4) `Cloud handoff (10): agents are Sonnet 5.5, and Haiku 5.5 once released` — the owner's
+  ruling minutes later ("run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and
+  haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"): M `AGENTS.md`,
+  `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`, `V2_README.md`, `V2_LOG.md` (and `fed54cb`'s run read green),
+  `docs/assistant-memory/` (two files)
 - Files and folders:
   A `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` — the study: what was read, the two designs side by side,
     what DeluluLang takes (each slice's design, witness, falsifier) and does not, the phase changes
@@ -237,7 +241,11 @@ it on `origin` was made in the cloud and is listed below.
 - For the laptop's memory: done on the laptop itself — `openshell-study-2026-09-28.md` added and
   `cloud-period-2026-09-28.md` merged in both the memory directory and `docs/assistant-memory/`;
   `HANDOFF.md` §11.1 and §11.8.
-- Open / next: (1) read this commit's push run; (2) **PS-E-01** — the boundary confirmed by construction
+- Open / next: (1) read the push runs of `045c21a`, `7e9d97d` and (10) — `fed54cb`'s, `36463058082`, was
+  read green on every job; (1b) CI hygiene before it bites: `actions/checkout@v4` and `actions/cache@v4`
+  run on Node 20, which GitHub now forces onto Node 24 (move to their Node-24 majors), and
+  `ubuntu-latest` becomes Ubuntu 26 from 2026-10-19 (pin `ubuntu-24.04` or verify on 26 first);
+  (2) **PS-E-01** — the boundary confirmed by construction
   (`V2_OPENSHELL_STUDY.md` §4.1), then E-02 … E-06 in order; (3) routine run 1's open items (2) and (4)
   stand, re-ordered: P8-01 now follows PS-E; the adversarial pass on PS-D-02 (its item 3) still stands.
   **For the owner:** D-V2-49 (an entrenched edit, `DELULU_CORE.md` v0.3) and D-V2-53's consequence for

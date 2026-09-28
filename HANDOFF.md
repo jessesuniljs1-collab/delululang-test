@@ -523,8 +523,9 @@ wins, and you should update the memory to match.
   repository, none of its crates is a dependency (Apache-2.0; `NOTICE` is the owner's).
 - **New models (owner, 2026-09-28, evening):** *"does routine instructions need updation for claude code
   cloud. also models sonnet 5.5 and haiku 5.5 just now launched"* — checked against the official models
-  page: Sonnet 5.5 is released, Haiku 5.5 is not yet. Testing passes now use Sonnet 5.5 and Haiku 4.5,
-  and Haiku 5.5 once it is listed; the routine's head chef stays Opus 5.5 at xhigh (the owner's choice).
+  page: Sonnet 5.5 is released, Haiku 5.5 is not yet. **Then, the same evening:** *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"* —
+  so the head chef is Opus 5.5 at xhigh, agents are Sonnet 5.5 where one is needed, and Haiku 5.5 only
+  after it is released (not Haiku 4.5 meanwhile).
   `docs/CLOUD_ROUTINE.md`, `AGENTS.md`, `CLAUDE.md` and §11.3 were brought up to the cloud docs the same
   evening.
 
@@ -570,7 +571,7 @@ wins, and you should update the memory to match.
 - **Models (official models page, 2026-09-28):** Fable 5.1 (`claude-fable-5-1`), Opus 5.5
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
-  2026-10-15). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
+  2026-10-15 — no longer used as an agent, §11.1). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
   `medium` effort — the repository's `effortLevel: xhigh` is what raises them; a cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.

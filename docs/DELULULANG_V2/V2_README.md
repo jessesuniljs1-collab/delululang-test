@@ -40,7 +40,7 @@ its objectives, inspect the affected code, run the Survey and `doctor`, establis
 head chef — the main Claude Code session: Fable 5.1 for V2-0, Opus 5 from P1 to 2026-09-20, Opus 5.5
 from PS-B-02 (2026-09-25) on, as each commit's `Co-Authored-By` line records — does
 or delegates the implementation, each agent with an exact brief, and verifies everything an agent
-produces against the real binary; testing passes use Haiku 4.5 and Sonnet 5 agents (Sonnet 5.5 from 2026-09-28) on several
+produces against the real binary; testing passes use Haiku 4.5 and Sonnet 5 agents (from 2026-09-28: Sonnet 5.5, and Haiku 5.5 once released) on several
 operating systems (owner, 2026-09-27). At the end of a phase:
 tests, the Survey regenerated as the last edit, `doctor`, the relevant gates, the V2 logs, commit,
 push to the testing remote only, the CI result read and recorded — then **STOP**, wait about sixty
