@@ -262,7 +262,8 @@ it on `origin` was made in the cloud and is listed below.
   (5) `42f5ea0` PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59);
   (6) `71221d3` RW 4.31 closed: an external guest's words about itself are its own;
   (7) `aeea324` PS-E-02, first part: an external launcher ends with its host (Linux);
-  (8) `A channel frame means one value; CI's downloads retry (the microvm job's red run 36490575764)`
+  (8) `5d63119` A channel frame means one value; CI's downloads retry (the microvm job's red run 36490575764);
+  (9) `Routine run 2 closed: every push run read green` — this entry's last lines
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -357,14 +358,17 @@ it on `origin` was made in the cloud and is listed below.
   `71221d3`'s run `36490575764` failed in one job — `microvm`, GitHub's release download answered HTTP 500
   to `fetch-firecracker.sh`, which had no retry; reproduced locally (a 500 once: exit 22; with `--retry`:
   exit 0), fixed in (8), the failed job re-run once. (8): the strict-frame witness red on `aeea324`, green
-  after; clippy clean; the full suite alone 2,017 passed, 0 failed, 15 ignored.
+  after; clippy clean; the full suite alone 2,017 passed, 0 failed, 15 ignored. **Every push run of this
+  run read:** `ff701ae` `36477748775`, `062a78c` `36480421762`, `6ceaf2d` `36481810253`, `8b2994a`
+  `36486821458`, `42f5ea0` `36487993092`, `71221d3` `36490575764` (attempt 1 red — the Firecracker
+  download's 500; attempt 2, the re-run, success), `aeea324` `36491419602`, `5d63119` `36492440031` — all
+  success. `master` is green at `5d63119`.
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read `36490575764`'s re-run of `microvm` (queued by this run), and the push runs of (7)
-  and (8) — unread at this entry's writing if this line still says so; (2) **E-02's rest** —
+- Open / next: (1) read (9)'s push run — the only one this run did not read (a records-only commit); (2) **E-02's rest** —
   the macOS guest outlives its host (the red one; CI only: a watcher thread before the program starts,
   `kqueue` `NOTE_EXIT` on the host's pid, `getppid() == 1` fallback, `_exit` at once; witnessed on the
   macOS runner by killing the host and timing the guest from outside), and the Windows launcher's Job

@@ -2802,3 +2802,10 @@ Reproduced in the VM against a local server that answers 500 once — plain `cur
 Firecracker release, the kernel source in `build-image.sh`, TLA+'s tools, Lean's installer); plain `--retry`
 covers HTTP 500 and runs on the laptop's older WSL curl, which `--retry-all-errors` would not; the sha256
 pins still decide what is accepted. The failed job was re-run once (allowed: it died in a download step).
+
+**Routine run 2, closed (22:45 UTC).** Every push run it made was read: `ff701ae` `36477748775`, `062a78c`
+`36480421762`, `6ceaf2d` `36481810253`, `8b2994a` `36486821458`, `42f5ea0` `36487993092`, `71221d3`
+`36490575764` (attempt 1 red — the upstream 500; attempt 2, the one re-run, success), `aeea324`
+`36491419602`, `5d63119` `36492440031` — all success; `master` green at `5d63119`. The run built PS-E-01's
+first three steps and RW 4.31, fixed seven red-team findings, began PS-E-02, and left the next run E-02's
+macOS watcher (the red one) first — `docs/CLOUD_SYNC_LOG.md`'s entry has the inbox.
