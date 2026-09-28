@@ -522,7 +522,11 @@ wins, and you should update the memory to match.
 - **The cloud VM (measured by the first routine run, 2026-09-28):** no `gh` — CI is read with the GitHub
   MCP tools, and the proxy refuses the signed log-download URLs (`docs/CLOUD_ROUTINE.md` step 3); Docker,
   Node 22 and `xvfb-run` are there; a fresh clone holds only Linux's crates, so `cargo fetch --locked`
-  goes before the suite or `egress_features` fails offline.
+  goes before the suite or `egress_features` fails offline. `dockerd` starts, but Docker Hub refuses the
+  VM's pulls (a shared address over the unauthenticated rate limit) — container builds go to
+  `.github/workflows/container.yml`. VS Code installs from Microsoft's apt repository
+  (`packages.microsoft.com` is reachable; the direct download host is not), which is how RW 7.4's
+  end-to-end test ran.
 
 - **WSL2 has KVM (since 2026-09-26):** `nestedVirtualization` plus a boot-time `modprobe` in
   `wsl.conf`. The PS-C toolchain lives there: Firecracker at `~/bin/firecracker`, guest images at

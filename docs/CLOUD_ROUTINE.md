@@ -80,7 +80,8 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
   since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
   passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
   verdict that matters for timing, `actors_pingpong`'s, as each test job's LAST step and as a `notice`
-  annotation (D-V2-47) — record each OS's verdict.
+  annotation (D-V2-47) — record each OS's verdict. Ask for a run by id (`get_workflow_run`) once it is
+  known: a run listing carries every commit message in full.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
   NEWER commit already fixed is not a new task: read the newer commit's push run, and record both. **If the previous run's

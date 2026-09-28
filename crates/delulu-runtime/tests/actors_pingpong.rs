@@ -221,8 +221,9 @@ fn criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel() {
     let Some(&(best, machine)) = counted.max_by(|a, b| (a.0 / bar(a.1)).total_cmp(&(b.0 / bar(b.1)))) else {
         verdict(&format!(
             "ping-pong speedup NOT MEASURED: in {} attempts this machine never gave perfectly parallel work \
-             {QUIET_MACHINE}x at 4 threads on both sides of a run — it is busy, and criterion 1 is stated for \
-             4 workers on 4 free threads ({attempts:?} as (speedup, control), asserted nothing)",
+             {QUIET_MACHINE}x at 4 threads on both sides of a run — it is busy, or its hardware threads share \
+             fewer cores (SMT), and criterion 1 is stated for 4 workers on 4 free threads \
+             ({attempts:?} as (speedup, control), asserted nothing)",
             attempts.len()
         ));
         return;

@@ -33,7 +33,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   the suite (`egress_features` runs `cargo metadata --offline`); Survey test nodes are `test:<path>`.
   `actors_pingpong` went red on Windows twice at 1.31x — starving the VM reproduced it; D-V2-47 gave it a
   control and CI now prints its verdict. PS-D-02 built (D-V2-48): `--require-attestation HEX`,
-  `delulu sandbox attest`; `delulu` reads nothing after a bare `--`.
+  `delulu sandbox attest`; `delulu` reads nothing after a bare `--`. Also: PS-D and P7 COMPLETE;
+  ADAPTER-SPELL-1 and ATTEST-FIFO-1 found and fixed; DELULU_CORE v0.3 (D-V2-49, entrenched — owner to
+  review); P8 designed (D-V2-51); RW 7.4 closed (VS Code via apt from packages.microsoft.com); Docker
+  Hub refuses the VM's pulls → `container.yml` builds on GitHub; the MCP log tool returns only a job's
+  last 5,000 lines.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

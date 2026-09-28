@@ -1002,7 +1002,17 @@ four CPUs were free.
 5. **The residual, named:** a passing log does not show whether a run measured or skipped (cargo shows a
    passing test's output only with `--nocapture`), so how often CI's runners are "busy" by this rule is
    not yet known; a red now always carries the control's figure, which says whether the runtime or the
-   runner was slow.
+   runner was slow. *(Answered the same day: CI now prints the verdict — §6.)*
+6. **What CI's runners are, measured (`0a7b881`, run `36399295189`, 2026-09-28):** the Linux x86-64 and
+   Windows runners' controls were **2.28–2.31x and 1.99–2.12x with nothing else running** — four
+   hardware threads with about two cores' worth of parallel throughput (SMT), not a busy machine; the
+   runtime reached 2.09–2.16x and 1.74–1.81x there, so both are NOT MEASURED. The macOS runner offers
+   three hardware threads (the `hw < 4` rule). **The arm64 runner's control was 4.11x and the criterion
+   was MEASURED there: 2.93x against the full 1.5x bar** (2.80x on `ed74683`). So the criterion is
+   asserted on every push, on arm64, and no longer turns red on an x86 runner that cannot show it —
+   which is what `937aea8`'s and `5bb39bc`'s Windows reds (1.31x) were: that hardware, not a regression.
+   A floor low enough to measure on the SMT runners would also pass a serial runtime (1.0x), so it
+   stays at 3.0; the verdict's words now name SMT beside "busy".
 
 ## D-V2-48 — PS-D-02: the attestation seam verifies a statement, not a platform — TAKEN (head chef, 2026-09-28, under the owner's delegation; the first cloud routine run)
 

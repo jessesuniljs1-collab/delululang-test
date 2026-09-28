@@ -2397,3 +2397,13 @@ prediction recorded in `17d4623`'s message (a loader failure for the missing lib
 about the first failure — kept as written. Fixed: `skills/` and `examples/` copied; the portable build
 the release ships (`--no-default-features --features net`, which the Dockerfile's own comment already
 claimed); `ca-certificates` in the runtime image. Re-dispatched after the push.
+
+**What CI's runners are — the verdicts of `0a7b881`'s push run `36399295189`** (green on every job;
+the lines extracted by a Haiku 4.5 sous-chef, in the test's own words and with their `##[notice]`
+annotations): **arm64 — MEASURED 2.93x on a 4.11x control, bar 1.50x, passed**; macOS — NOT MEASURED,
+three hardware threads; **Linux x86-64 — NOT MEASURED, controls 2.28–2.31x, runtime 2.09–2.16x;
+Windows — NOT MEASURED, controls 1.99–2.12x, runtime 1.74–1.81x.** Nothing else ran on those runners:
+their four vCPUs give about two cores' worth of parallel throughput (SMT). That is the real account of
+`937aea8`'s and `5bb39bc`'s Windows reds — that hardware, not a busy moment, and not a regression.
+D-V2-47 §6 records it; the verdict now says "busy, or its hardware threads share fewer cores (SMT)".
+The criterion is asserted on every push on arm64.

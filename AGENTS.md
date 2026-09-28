@@ -112,6 +112,9 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
   against the CURRENT binary before it is used or recorded.
 - **Read an agent's "non-blocking notes".** Two of them were real defects (JSON-EXIT-1,
   SANDBOX-CPU-LATE-1).
+- **Brief for the evidence of an absence.** "Not found" must come with what was searched — how many
+  lines, which range. A log extractor's "no matching lines" (2026-09-28) was a tool that returns only a
+  job's last 5,000 lines; asking for its evidence cost a second round that the brief could have saved.
 - **The brief forbids writing into the repository**; agents work in a scratch directory outside the
   checkout. One agent wrote into the repo root anyway — check `git status` after every agent.
 - **On a usage-limit kill, resume the SAME agent** (its ID, by message) — never respawn; its work is on
