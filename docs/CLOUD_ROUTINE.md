@@ -106,7 +106,8 @@ first `doctor` builds the whole `delulu` crate) and do step 1's reading while th
   since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
   passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
   verdict that matters for timing, `actors_pingpong`'s, as each test job's LAST step and as a `notice`
-  annotation (D-V2-47) — record each OS's verdict. Ask for a run by id (`get_workflow_run`) once it is
+  annotation (D-V2-47) — record each OS's verdict; the step before it prints that runner's sandbox
+  properties (PS-E-01, D-V2-57) — record those too (a `tail_lines` of about 45 reaches both). Ask for a run by id (`get_workflow_run`) once it is
   known: a run listing carries every commit message in full.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a

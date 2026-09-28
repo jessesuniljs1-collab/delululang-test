@@ -1211,6 +1211,10 @@ fn serve_under(
         });
         // PS-D-02: the attester's claims, as the attester's — beside `host_guarantees`, never in them.
         let mut report = report;
+        // PS-E-01: the five properties this boundary has, answered from what was applied — the same words
+        // as `host_guarantees` and the posture, so the three cannot disagree. An external launcher's are
+        // `unknown`: DeluluLang measured none of its wall.
+        report["sandbox"]["properties"] = crate::boundary::properties(&applied, !external);
         if let Some(a) = &attested {
             report["sandbox"]["attestation"] = a.to_json();
         }

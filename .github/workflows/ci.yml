@@ -140,6 +140,19 @@ jobs:
       # the job's LAST step, and an annotation too, because a reader of the log through the API gets
       # only its last 5,000 lines, and the sweep and the fuzz campaign above print more than that
       # (measured by the first cloud routine run).
+      # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
+      # report — read here before any profile requires them. Never fails the job: it is a measurement. It
+      # comes before the ping-pong verdict, which stays the job's last step.
+      - name: PS-E-01 — this runner's sandbox properties (D-V2-57)
+        if: always()
+        shell: bash
+        run: |
+          d=target/props; mkdir -p "$d"
+          printf 'module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println("hi")\n}\n' > "$d/h.delulu"
+          DELULU_NO_FIRST_RUN=1 target/debug/delulu run "$d/h.delulu" --sandbox --grant console --report-out "$d/r.json" > /dev/null 2>&1 || true
+          v="$(jq -r '.sandbox | "level \(.level): " + (.properties | to_entries | map("\(.key) \(.value.state) (\(.value.by // .value.why))") | join("; "))' "$d/r.json" 2>/dev/null || echo "no report — the run did not complete")"
+          echo "$v"
+          echo "::notice title=sandbox properties (${{ matrix.os }})::$v"
       - name: actors_pingpong criterion 1 — the verdict and its control (D-V2-47)
         if: always()
         shell: bash
@@ -165,6 +178,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Full workspace test suite (aarch64)
         run: cargo test --workspace --no-fail-fast
+      # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's
+      # report — read here before any profile requires them. Never fails the job: it is a measurement. It
+      # comes before the ping-pong verdict, which stays the job's last step.
+      - name: PS-E-01 — this runner's sandbox properties (D-V2-57)
+        if: always()
+        shell: bash
+        run: |
+          d=target/props; mkdir -p "$d"
+          printf 'module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println("hi")\n}\n' > "$d/h.delulu"
+          DELULU_NO_FIRST_RUN=1 target/debug/delulu run "$d/h.delulu" --sandbox --grant console --report-out "$d/r.json" > /dev/null 2>&1 || true
+          v="$(jq -r '.sandbox | "level \(.level): " + (.properties | to_entries | map("\(.key) \(.value.state) (\(.value.by // .value.why))") | join("; "))' "$d/r.json" 2>/dev/null || echo "no report — the run did not complete")"
+          echo "$v"
+          echo "::notice title=sandbox properties (arm64)::$v"
       - name: actors_pingpong criterion 1 — the verdict and its control (D-V2-47)
         if: always()
         shell: bash

@@ -1214,6 +1214,19 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 5. **Split, so each step is witnessed on its own:** this step (the order and the generation); next, the
    five properties, the profiles' required sets and the refusal (D-V2-53 §2), then E-02 … E-06.
 
+## D-V2-57 — PS-E-01's properties are reported on every OS before any profile requires them — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **Every sandboxed run reports five properties** (`sandbox.properties`), each established (by what),
+   absent (why) or unknown (why), answered from the posture the same report carries — one source, so the
+   properties, the posture and `host_guarantees` cannot disagree. An external launcher's are unknown.
+2. **No refusal yet.** D-V2-53 §2's required sets, read against the jail code, would refuse every macOS
+   run under the default profile (reads open; no memory ceiling). The sets are decided on the reported
+   answers of all three operating systems as CI measures them, and the decision is recorded then — the
+   choices being a platform-honest set (what each OS can establish, the gap named), or the refusal with
+   the microVM and an external launcher as the ways out.
+3. **The privilege floor counts a separate identity** — a per-run AppContainer, a subordinate uid, the
+   jailer's uid for the VMM — as well as `no_new_privs` and Seatbelt's deny-by-default, as §4.1 lists.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

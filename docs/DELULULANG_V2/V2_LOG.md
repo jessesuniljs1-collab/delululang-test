@@ -2601,3 +2601,41 @@ Node-20 warning is gone from the logs read (arm64: `checkout@v5`; formal: `check
 filesystem, egress, resource; `dev` none); refusal before the program is sent when a required property
 is missing, and `host_guarantees` derived from the confirmation. The typestate now has the one place
 where that check goes: `Opened::confirm`.
+
+## 2026-09-28 (night) — PS-E-01, second step: every run reports its boundary's five properties (D-V2-57)
+
+**Why report before requiring.** D-V2-53 §2 gave the profiles required sets — `contained` (the default)
+requires filesystem, egress and resource. Read against `jail.rs` before building the refusal, that set
+would refuse **every macOS run**: Seatbelt leaves reads open (so filesystem confinement is not
+established) and macOS refuses `RLIMIT_DATA` (so no memory ceiling is claimed). A required set that a
+supported platform can never meet is a decision to be taken on measurements, not on a reading. So this
+step REPORTS the properties, on every operating system CI runs, and refuses nothing; the required sets and
+the refusal come once each OS's answers are read (the next step).
+
+**Built.** `boundary::properties(guarantees, measured_by_host)` → `sandbox.properties` in every run
+report (the closed schema's `properties`/`property`): `filesystem_confinement`, `egress_confinement`,
+`privilege_floor`, `host_loss_ends_guest`, `resource_ceiling`, each `{state: established, by}`,
+`{state: absent, why}` or `{state: unknown, why}`. **One source:** each is answered from the posture the
+same report carries (`SandboxPolicy::posture` over the applied words) — filesystem = writes and reads
+held; egress = the network row; privilege floor = the privilege row, or a separate identity (an
+AppContainer, a subordinate uid, the jailed VMM); host loss = "killed with the host"; resource = memory
+and processor time held. An external launcher's (L3) are all `unknown`: its wall was measured by nobody,
+and what its guest says of itself is the word of a binary the launcher chose.
+
+**What each platform answers (unit test over each launch's real words):** Linux L1 with Landlock — all
+five established (this VM's run reports exactly that); Linux without Landlock — filesystem and egress
+absent; **macOS L1 — filesystem absent (reads open), host loss absent (PS-E-02), resource absent (no
+memory ceiling)**; Windows L1 — all five, the AppContainer as the privilege floor; the microVM — all
+five; L3 — unknown. CI's three OSes will say whether the runners agree: **each test job (three OSes and
+arm64) now prints one L1 run's properties** as a step and a `notice` annotation, just before the
+ping-pong verdict (which stays last) — the step run locally exactly as YAML parses it printed all five
+established for this VM.
+
+**Witnesses and falsifiers.** `sandbox_confirm_cli.rs` gained two tests, red on `062a78c` (no
+`properties` in the report): a run's five properties agree with its own posture on whatever OS runs it,
+and each says by what or why not; an external launcher's are all `unknown`. Mutants, each landed and
+killed: M4 an L3 run's properties established (the e2e test and the unit test red); M5 egress always
+established (the unit test's no-Landlock case red); M6 the identity not counted as a privilege floor (the
+unit test's Windows case red).
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2006 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.

@@ -154,3 +154,64 @@ fn every_sandboxed_run_has_a_fresh_generation_in_its_report_and_its_launch_recor
     assert_eq!(v.status.code(), Some(0), "{}", text(&v));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// PS-E-01, second step: a run reports the five properties its boundary has — each `established` (and
+/// by what), `absent` (and why) or `unknown` — and they agree with the posture the same report carries,
+/// on whatever operating system this runs. Reported, not yet required (D-V2-57).
+#[test]
+fn a_run_reports_the_five_properties_and_they_agree_with_its_posture() {
+    let d = lab("props");
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
+    let report = d.join("r.json");
+    let r = delulu(&d, &["run", "h.delulu", "--sandbox", "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let s = &v["sandbox"];
+    let p = s["properties"].as_object().unwrap_or_else(|| panic!("no properties in the report: {s}"));
+    let names = ["filesystem_confinement", "egress_confinement", "privilege_floor", "host_loss_ends_guest", "resource_ceiling"];
+    assert_eq!(p.len(), names.len(), "{s}");
+    let held = |row: &str| s["posture"][row].as_str().is_some_and(|a| a != "not confined");
+    let separate = s["posture"]["identity"] != "same OS user";
+    let killed = s["host_guarantees"].as_array().unwrap().iter().any(|g| g == "killed with the host");
+    for (name, expect) in [
+        ("filesystem_confinement", held("filesystem_writes") && held("filesystem_reads")),
+        ("egress_confinement", held("network")),
+        ("privilege_floor", held("privilege_escalation") || separate),
+        ("host_loss_ends_guest", killed),
+        ("resource_ceiling", held("memory") && held("processor_time")),
+    ] {
+        let state = p[name]["state"].as_str().unwrap_or_else(|| panic!("{name}: {s}"));
+        assert_eq!(state, if expect { "established" } else { "absent" }, "{name} disagrees with the posture: {s}");
+        let words = if expect { &p[name]["by"] } else { &p[name]["why"] };
+        assert!(words.as_str().is_some_and(|w| !w.is_empty()), "{name} says by what, or why not: {s}");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// An external launcher's wall was measured by nobody here, and what its guest says of itself is the word
+/// of a binary the launcher chose: every property is `unknown`.
+#[test]
+fn an_external_launchers_properties_are_unknown() {
+    let d = lab("props-ext");
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
+    let exe = env!("CARGO_BIN_EXE_delulu").replace('\\', "/");
+    assert!(!exe.contains(' '), "the launcher is split on whitespace: {exe}");
+    let report = d.join("r.json");
+    let r = delulu(
+        &d,
+        &[
+            "run", "h.delulu", "--sandbox", "--sandbox-backend", &format!("external:{exe} __guest --stdio-pipes"),
+            "--grant", "console", "--report-out", report.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let p = v["sandbox"]["properties"].as_object().unwrap_or_else(|| panic!("no properties: {v}"));
+    assert_eq!(p.len(), 5, "{v}");
+    for (name, prop) in p {
+        assert_eq!(prop["state"], "unknown", "{name}: {v}");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}

@@ -381,6 +381,20 @@ fn defs() -> Value {
             ],
             &[],
         ),
+        "properties": described(obj(
+            &[
+                ("filesystem_confinement", r("property")),
+                ("egress_confinement", r("property")),
+                ("privilege_floor", r("property")),
+                ("host_loss_ends_guest", r("property")),
+                ("resource_ceiling", r("property")),
+            ],
+            &[],
+        ), "PS-E-01: the five properties a sandboxed run's boundary has, answered from what was applied"),
+        "property": described(obj(
+            &[("state", en(&["established", "absent", "unknown"]))],
+            &[("by", t("string")), ("why", t("string"))],
+        ), "`established` says `by` what; `absent` and `unknown` say `why` not"),
         "posture": obj(
             &[
                 ("filesystem_writes", t("string")),
@@ -453,6 +467,8 @@ fn defs() -> Value {
                 ("policy_hash", t("string")),
                 // PS-E-01: every sandboxed run's own generation, the nonce its guest confirmed against.
                 ("generation", t("string")),
+                // PS-E-01: the five properties its boundary has, each established, absent or unknown.
+                ("properties", r("properties")),
             ],
             // PS-D-01: an external (L3) run names the launcher's PROGRAM (never its arguments, which
             // can carry an operator's token). PS-D-02: and what its attester said, when the run required it.

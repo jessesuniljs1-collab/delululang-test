@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 287 |
-| Rust lines | 146346 |
+| Rust lines | 146568 |
 | Rust files outside `src/` (test/bench targets) | 129 |
 | Markdown documents | 252 |
-| Markdown lines | 65249 |
+| Markdown lines | 65326 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1466 / 12686 |
+| Nodes / edges in this map | 1466 / 12692 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,14 +90,14 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 39 files, 34874 lines
+- **Modules:** 39 files, 35035 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/advisories.rs` | 219 | The advisory-feed detector (Stage 10 phase 10k, Track C, spec §4). |
 | `src/atlas_chain.rs` | 331 | P4-11: `delulu atlas chain` — the Atlas's V2 chain, one ordered view an auditor can read top to |
 | `src/attest.rs` | 570 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
-| `src/boundary.rs` | 225 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
+| `src/boundary.rs` | 366 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 472 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 391 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
@@ -115,7 +115,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 2131 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 2135 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
 | `src/jail.rs` | 890 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
@@ -130,7 +130,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1731 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 552 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
-| `src/schema.rs` | 919 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
+| `src/schema.rs` | 935 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 171 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
 

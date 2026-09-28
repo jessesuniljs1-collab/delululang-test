@@ -21,6 +21,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Every sandboxed run has a generation** — 32 random bytes, at every level — in the run report
   (`sandbox.generation`) and in the audit chain's launch and death records (the death record also says
   whether the guest `confirmed`). An attested run's nonce is its generation.
+- **Every sandboxed run reports its boundary's five properties** (`sandbox.properties`): filesystem
+  confinement, egress confinement, privilege floor, host loss ends the guest, resource ceiling — each
+  `established` (by what), `absent` (why) or `unknown` (an external launcher's), answered from the same
+  posture the report carries. Reported only: no profile refuses on them yet (D-V2-57).
 - **A host and a guest of different versions refuse each other in words** — an external launcher's image
   must carry the host's `delulu` version.
 - **CI:** every GitHub action on its Node-24 major; every Ubuntu runner pinned to `ubuntu-24.04`.

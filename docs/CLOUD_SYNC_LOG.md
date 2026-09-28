@@ -256,7 +256,8 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (the routine pushes there)   Pull request: none   Merged: n/a
 - Base: `cfbfbdc` (the newest `Cloud handoff` commit — the laptop's baseline)
 - Commits: (1) `ff701ae` CI hygiene: every action on its Node-24 major, every Ubuntu runner pinned to 24.04;
-  (2) `PS-E-01, first step: the guest confirms its boundary before it is sent the program (D-V2-56)`
+  (2) `062a78c` PS-E-01, first step: the guest confirms its boundary before it is sent the program (D-V2-56);
+  (3) `PS-E-01, second step: every sandboxed run reports its boundary's five properties (D-V2-57)`
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -281,6 +282,13 @@ it on `origin` was made in the cloud and is listed below.
     `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2) — (2)
   M `docs/CLOUD_ROUTINE.md` — (2) loop engineering: start the health build in the background at once; draft
     the records in the scratchpad while the suite runs
+  M `crates/delulu/src/boundary.rs` — (3) `PROPERTIES`, `properties()` from the posture; the per-platform
+    unit test; `crates/delulu/src/guest.rs` (`sandbox.properties` in the report), `schema.rs`
+    (`properties`, `property`), `crates/delulu/tests/sandbox_confirm_cli.rs` (two more tests) — (3)
+  M `.github/workflows/ci.yml` — (3) each test job and arm64 print one L1 run's `sandbox.properties`
+    (a step and a notice) before the ping-pong verdict; `docs/CLOUD_ROUTINE.md` step 3 says to read both
+  M `CHANGELOG.md`, `HANDOFF.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` 4.25,
+    `V2_DECISION_LOG.md` (D-V2-57), `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.1 — (3)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entries
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
@@ -295,11 +303,18 @@ it on `origin` was made in the cloud and is listed below.
   arm64 ping-pong MEASURED 2.88x/4.12x passed. (2) in the VM: both witnesses red on `ff701ae` and green
   after; three mutants landed and killed (M1 program before `confirm`, M2 any generation, M3 an unconfirmed
   guest's console request answered); clippy `-D warnings` clean; the full suite alone 2,002 passed and 1
-  failed — the thread-stack gate on `boundary.rs`'s test attribute, fixed, re-run green.
+  failed — the thread-stack gate on `boundary.rs`'s test attribute, fixed, re-run green. (3): both new
+  tests red on `062a78c`, green after; M4–M6 landed and killed; clippy clean; the full suite alone
+  2,006 passed, 0 failed, 15 ignored (152 binaries).
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read (2)'s push run — every OS, and the `microvm` job (its guest image is built from
-  this tree and speaks `/3`); (2) PS-E-01's next step, in this run if time allows.
+- Open / next: (1) read (2)'s and (3)'s push runs — every OS, and the `microvm` job (its guest image is
+  built from this tree and speaks `/3`); (2) **read each OS's `sandbox.properties` from CI** — (3) makes each
+  test job print one L1 run's properties (the step before the ping-pong verdict); then decide the
+  required sets on those answers
+  (D-V2-57 §2: a platform-honest set, or refusal with the microVM and L3 as the ways out) and builds the
+  refusal in `Opened::confirm` (the host's launch words must reach it); (3) then E-02 (macOS host loss —
+  the red one), E-03 … E-06, P8, P9.

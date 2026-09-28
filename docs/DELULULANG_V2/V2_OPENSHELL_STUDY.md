@@ -217,7 +217,10 @@ channel is now `/3` — `Open` (the generation, no program) → the guest's `Con
 constructor of `Confirmed`, `Confirmed::send_program` the only writer of the program). Every run has a
 generation, in the report and the launch and death records. Witness (1) is built in the form the channel
 allows before the required sets exist: a launcher that never confirms receives no program byte
-(`tests/sandbox_confirm_cli.rs`). Open: the five properties, the required sets and the refusal.
+(`tests/sandbox_confirm_cli.rs`). **Second step (D-V2-57):** every run reports the five properties
+(`sandbox.properties`), answered from its own posture; an L3 run's are `unknown`. Read against the jail
+code, the `contained` set above would refuse every macOS run (reads open, no memory ceiling), so the
+sets wait for each OS's reported answers. Open: the required sets and the refusal.
 
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 

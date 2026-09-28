@@ -16,9 +16,10 @@
 //! guest that never confined itself had already been handed it (witnessed by
 //! `tests/sandbox_confirm_cli.rs`, red on `ff701ae`).
 //!
-//! What a confirmation establishes today is the guest's own report, in the checked words of
-//! `channel::SELF_APPLIED`, for this run. What each profile REQUIRES of it — the five properties and the
-//! refusal when one is missing — is PS-E-01's next step (§4.1's "required set").
+//! What a confirmation establishes is the guest's own report, in the checked words of
+//! `channel::SELF_APPLIED`, for this run; with the host's launch words it answers [`PROPERTIES`] — the
+//! five properties a run reports (`sandbox.properties`). What each profile REQUIRES of them, and the
+//! refusal when one is missing, is PS-E-01's next step (§4.1's "required set").
 
 use std::io::{self, Read, Write};
 
@@ -92,6 +93,71 @@ impl<C: Read + Write> Confirmed<C> {
         write_frame(&mut self.conn, program)?;
         Ok(self.conn)
     }
+}
+
+/// PS-E-01 (§4.1): the five properties a sandboxed run's boundary has — or has not — each answered
+/// from the posture the host already derives from what was APPLIED (the host's launch words and the
+/// guest's accepted report), so the properties and the posture cannot disagree: there is one source.
+///
+/// Reported, not yet required: which of them each profile requires, and the refusal when one is
+/// absent, follow once every operating system's answers have been read from CI (a required set that no
+/// macOS host can meet would refuse every macOS run — `jail.rs` claims no memory ceiling there).
+pub(crate) const PROPERTIES: [&str; 5] =
+    ["filesystem_confinement", "egress_confinement", "privilege_floor", "host_loss_ends_guest", "resource_ceiling"];
+
+/// `measured_by_host` is false for an external launcher (L3): its wall is the operator's, and what its
+/// guest says of itself is the word of a binary the launcher chose — every property is `unknown`.
+pub(crate) fn properties(guarantees: &[&str], measured_by_host: bool) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    if !measured_by_host {
+        for p in PROPERTIES {
+            out.insert(
+                p.to_string(),
+                serde_json::json!({
+                    "state": "unknown",
+                    "why": "an external launcher's wall: DeluluLang measured none of it, and its guest's report is \
+                            the word of a binary the launcher chose",
+                }),
+            );
+        }
+        return serde_json::Value::Object(out);
+    }
+    let (posture, _) = crate::policy::SandboxPolicy::posture(guarantees);
+    let row = |q: &str| posture[q].as_str().unwrap_or("not confined").to_string();
+    let held = |q: &str| row(q) != "not confined";
+    let answer = |rows: &[&str]| rows.iter().map(|q| format!("{q}: {}", row(q))).collect::<Vec<_>>().join("; ");
+    let separate = row("identity") != "same OS user";
+    let killed = guarantees.contains(&"killed with the host");
+    let cases: [(&str, bool, String); 5] = [
+        ("filesystem_confinement", held("filesystem_writes") && held("filesystem_reads"), answer(&["filesystem_writes", "filesystem_reads"])),
+        ("egress_confinement", held("network"), answer(&["network"])),
+        (
+            "privilege_floor",
+            held("privilege_escalation") || separate,
+            format!("{}; identity: {}", answer(&["privilege_escalation"]), row("identity")),
+        ),
+        (
+            "host_loss_ends_guest",
+            killed,
+            if killed {
+                "killed with the host".to_string()
+            } else {
+                "nothing on this host ends the guest when its host dies (PS-E-02)".to_string()
+            },
+        ),
+        ("resource_ceiling", held("memory") && held("processor_time"), answer(&["memory", "processor_time"])),
+    ];
+    for (name, established, words) in cases {
+        out.insert(
+            name.to_string(),
+            if established {
+                serde_json::json!({ "state": "established", "by": words })
+            } else {
+                serde_json::json!({ "state": "absent", "why": words })
+            },
+        );
+    }
+    serde_json::Value::Object(out)
 }
 
 // `#[cfg(test)]` first and alone: the thread-stack gate (`actors.rs`) cuts each file at that exact
@@ -221,5 +287,80 @@ mod tests {
                 assert!(heard.is_empty(), "{name}: an unconfirmed guest's request was answered: {heard:?}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+
+    fn states(v: &serde_json::Value) -> Vec<(&'static str, String)> {
+        PROPERTIES.iter().map(|p| (*p, v[*p]["state"].as_str().unwrap().to_string())).collect()
+    }
+
+    fn state_of(v: &serde_json::Value, p: &str) -> String {
+        v[p]["state"].as_str().unwrap().to_string()
+    }
+
+    /// Each platform's words, as its launch applies them (`jail.rs`, `identity.rs`, `microvm.rs`) and its
+    /// guest reports them (`channel::SELF_APPLIED`) — so the answers below are the ones a real run of that
+    /// kind reports, and a platform's gap shows as `absent` with its reason, never as `established`.
+    #[test]
+    fn each_platforms_words_answer_the_five_properties() {
+        // Linux L1 with Landlock, as this VM's run reports it (no second identity here).
+        let linux = [
+            "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
+            "no file writes", "reads only from the system paths", "no TCP bind or connect", "no new programs",
+            "no debugger", "no namespace or module tricks",
+        ];
+        let v = properties(&linux, true);
+        assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
+        assert!(v["filesystem_confinement"]["by"].as_str().unwrap().contains("confined to the system paths"), "{v}");
+
+        // Linux on a kernel with no Landlock: the guest narrows nothing, so its files and its network are open.
+        let old_kernel = ["memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host", "no new programs"];
+        let v = properties(&old_kernel, true);
+        assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
+        assert_eq!(state_of(&v, "egress_confinement"), "absent", "{v}");
+        assert!(v["egress_confinement"]["why"].as_str().unwrap().contains("network: not confined"), "{v}");
+        assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
+
+        // macOS L1: Seatbelt denies writes and the network, but reads stay open, no memory ceiling is
+        // claimed (RLIMIT_DATA is refused there) and nothing ends the guest with its host (PS-E-02).
+        let macos = [
+            "deny by default", "no file writes", "no network but the channel", "no new programs", "no Mach services",
+            "no signals or process info beyond itself", "processor-time ceiling", "no core dump",
+        ];
+        let v = properties(&macos, true);
+        assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
+        assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
+        assert_eq!(state_of(&v, "privilege_floor"), "established", "{v}");
+        assert_eq!(state_of(&v, "host_loss_ends_guest"), "absent", "{v}");
+        assert!(v["host_loss_ends_guest"]["why"].as_str().unwrap().contains("PS-E-02"), "{v}");
+        assert_eq!(state_of(&v, "resource_ceiling"), "absent", "{v}");
+        assert!(v["resource_ceiling"]["why"].as_str().unwrap().contains("memory: not confined"), "{v}");
+
+        // Windows L1: the Job Object and a per-run AppContainer — the identity is the privilege floor.
+        let windows = ["one process only", "memory ceiling", "processor-time ceiling", "killed with the host", crate::identity::WINDOWS_GUARANTEE];
+        let v = properties(&windows, true);
+        assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
+        assert!(v["privilege_floor"]["by"].as_str().unwrap().contains("AppContainer"), "{v}");
+
+        // L2 (Linux only): the microVM's own words and its guest's.
+        #[cfg(target_os = "linux")]
+        {
+            let mut vm: Vec<&str> = crate::microvm::GUARANTEES.to_vec();
+            vm.extend(["no new programs", "no network stack in its kernel"]);
+            let v = properties(&vm, true);
+            assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
+        }
+
+        // Nothing applied at all: nothing established.
+        let v = properties(&[], true);
+        assert!(states(&v).iter().all(|(_, s)| s == "absent"), "{v}");
+
+        // L3: whatever words arrive, nothing is established by them.
+        let v = properties(&linux, false);
+        assert!(states(&v).iter().all(|(_, s)| s == "unknown"), "{v}");
     }
 }

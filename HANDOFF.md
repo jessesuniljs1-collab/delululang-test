@@ -48,9 +48,10 @@ the assistant's memory — which now also travels file by file in
   found the host's FIRST channel frame was the program itself, so a guest that never confined itself had
   already received it (witnessed red on `ff701ae`). Now `delulu-sandbox-channel/3`: the host opens with a
   per-run generation and no program, the guest confirms its boundary, and `boundary.rs`'s `Confirmed` is
-  the only way the program is sent. The CI workflows moved to their Node-24 action majors and
-  `ubuntu-24.04`.
-- **Next:** **PS-E** — E-01's five properties, required sets and refusal (its first step is built), E-02 host loss ends the guest, E-03
+  the only way the program is sent; and every run reports its boundary's five properties (D-V2-57 —
+  macOS's gaps visible: reads open, no memory ceiling, no death signal). The CI workflows moved to their
+  Node-24 action majors and `ubuntu-24.04`.
+- **Next:** **PS-E** — E-01's required sets and refusal, decided on each OS's reported properties (its first two steps are built), E-02 host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
