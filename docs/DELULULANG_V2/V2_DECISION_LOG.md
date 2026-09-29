@@ -1332,6 +1332,18 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    through the host instead of the terminal itself (RW 4.32 names the relay). The filter closes the escape;
    those would narrow what a guest's own output can do to a terminal — escape sequences — and are open.
 
+## D-V2-64 — PS-E-03 H9: an escaped guest signals only itself — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **H9, found and confirmed the same run:** after its lock-down an escaped guest could still signal another
+   process of the same user, its whole process group (its host and the terminal's foreground job among
+   them), and queue signals — `kill(-1, SIGKILL)` would have ended every process the operator has
+   (GUEST-SIGNAL-1; witnessed with signal 0, which delivers nothing).
+2. **The filter refuses `kill`, `tgkill`, `rt_sigqueueinfo` and `rt_tgsigqueueinfo` unless they name the
+   guest's own process** — its pid, fixed when the filter is made, compared on 32 bits as `pid_t` is — and
+   `tkill` outright. `abort` (a signal to itself, through `tgkill`) keeps working: the witness's control.
+3. **Landlock's signal scoping (ABI 6) is not what closes it:** CI's Ubuntu 24.04 kernels predate it, and the
+   filter holds on every kernel the guest runs on. Where ABI 6 exists it would be depth.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -681,6 +681,23 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
     rules.insert(libc::SYS_ioctl, ioctl_rules);
+    // H9 (GUEST-SIGNAL-1, found with the escaped guest): nothing stopped a signal to another process of the
+    // same user — one process, the guest's whole process group (its host and the terminal's foreground
+    // job among them), or a queued signal; `kill(-1, SIGKILL)` would end every process the operator has.
+    // A guest signals only itself (`abort` is a signal to itself), so every call that names a process is
+    // refused unless it names THIS one — its pid, fixed when the filter is made, compared on 32 bits as
+    // `pid_t` is. `tkill`, which names a thread by id alone, is refused outright: `raise` uses `tgkill`.
+    // SAFETY: `getpid` cannot fail.
+    let own = unsafe { libc::getpid() } as u64;
+    let not_self = || {
+        seccompiler::SeccompCondition::new(0, seccompiler::SeccompCmpArgLen::Dword, seccompiler::SeccompCmpOp::Ne, own)
+            .and_then(|c| seccompiler::SeccompRule::new(vec![c]))
+            .map_err(|e| format!("the syscall filter could not be built: {e}"))
+    };
+    for call in [libc::SYS_kill, libc::SYS_tgkill, libc::SYS_rt_sigqueueinfo, libc::SYS_rt_tgsigqueueinfo] {
+        rules.insert(call, vec![not_self()?]);
+    }
+    rules.insert(libc::SYS_tkill, Vec::new());
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
     // guest reports a refusal instead of vanishing and leaving the host to guess.
     let filter = SeccompFilter::new(
@@ -1291,6 +1308,21 @@ mod escaped_tests {
         let high = libc::TIOCSTI as u64 | (1u64 << 32);
         let injected = controlling >= 0 && unsafe { libc::syscall(libc::SYS_ioctl, controlling, high, c"x".as_ptr()) } == 0;
         println!("TIOCSTI_HIGH={injected}");
+        // H9 — a signal to another process of the same user. Signal 0 asks only whether it WOULD be
+        // delivered, so nothing is harmed; `kill(-1, SIGKILL)` would end every process the operator has.
+        // SAFETY: plain signal-0 probes; nothing is delivered.
+        unsafe {
+            println!("SIGNAL_OTHER={}", libc::kill(pid, 0) == 0);
+            println!("SIGNAL_GROUP={}", libc::kill(0, 0) == 0);
+            println!("SIGNAL_QUEUE={}", {
+                let mut info: libc::siginfo_t = std::mem::zeroed();
+                info.si_signo = 0;
+                info.si_code = -1; // SI_QUEUE
+                libc::syscall(libc::SYS_rt_sigqueueinfo, pid, 0, &mut info as *mut libc::siginfo_t) == 0
+            });
+            // The guest must still be able to signal ITSELF: `abort` is a signal to itself.
+            println!("SIGNAL_SELF={}", libc::kill(libc::getpid(), 0) == 0);
+        }
         // What the guest itself must keep, or it cannot run: the control of any narrowing.
         println!("PROC_SELF={}", std::fs::read("/proc/self/status").is_ok());
         println!("DEV_NULL={}", std::fs::File::open("/dev/null").is_ok());
@@ -1366,6 +1398,7 @@ mod escaped_tests {
         assert_eq!(escaped.get("SECCOMP").map(String::as_str), Some("true"), "the filter was not installed: {escaped:?}");
         assert_eq!(escaped.get("PROC_SELF").map(String::as_str), Some("true"), "the guest cannot read itself: {escaped:?}");
         assert_eq!(escaped.get("DEV_NULL").map(String::as_str), Some("true"), "the guest cannot open /dev/null: {escaped:?}");
+        assert_eq!(escaped.get("SIGNAL_SELF").map(String::as_str), Some("true"), "the guest cannot signal itself: {escaped:?}");
         let mut open = Vec::new();
         for n in names {
             match (free.get(*n).map(String::as_str), escaped.get(*n).map(String::as_str)) {
@@ -1408,6 +1441,14 @@ mod escaped_tests {
     #[test]
     fn h8_an_escaped_guest_types_nothing_into_the_operators_terminal() {
         let Some(open) = still_open("h8", &["TIOCSTI", "TIOCSTI_HIGH"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H9: an escaped guest cannot signal another process of the operator's — not one (`kill`), not its
+    /// process group, not by a queued signal. `kill(-1, SIGKILL)` would end every process the user has.
+    #[test]
+    fn h9_an_escaped_guest_signals_no_other_process() {
+        let Some(open) = still_open("h9", &["SIGNAL_OTHER", "SIGNAL_GROUP", "SIGNAL_QUEUE"]) else { return };
         assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
     }
 

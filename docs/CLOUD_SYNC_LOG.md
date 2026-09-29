@@ -395,7 +395,8 @@ it on `origin` was made in the cloud and is listed below.
   (10) `ff251bb` A guest gone before the host opens the channel is told in words (macOS CI red, 36527491801);
   (11) `30e3262` PS-E-03 and the macOS CI fix: read green on every runner; the records;
   (12) `6f88202` PS-E-03 H4: a serving host is closed to its own user (D-V2-62);
-  (13) `PS-E-03 H4's records; H8: an escaped guest cannot type into the operator's terminal (D-V2-62, D-V2-63)`
+  (13) `e584f8d` PS-E-03 H8: an escaped guest cannot type into the operator's terminal (D-V2-63); H4's records;
+  (14) `PS-E-03 H9: an escaped guest signals only itself (D-V2-64)`
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -439,6 +440,10 @@ it on `origin` was made in the cloud and is listed below.
     (the H4 witness) — (12)
   M `crates/delulu/src/jail.rs` (`escaped_tests`: H8, `TIOCSTI`, `TIOCSTI_HIGH`; `lock_down_self`: the `ioctl`
     rule), `scripts/check-other-os.sh` (musl), `docs/CLOUD_ROUTINE.md` — (13)
+  M `crates/delulu/src/jail.rs` (`escaped_tests`: H9's signal attempts and the self-signal control;
+    `lock_down_self`: the signal rules), `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27),
+    `V2_DECISION_LOG.md` (D-V2-64), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3,
+    `V2_SECURITY_MODEL.md` §10 — (14)
   M `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-62, D-V2-63),
     `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (13)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
@@ -492,6 +497,9 @@ it on `origin` was made in the cloud and is listed below.
   ignored (152 binaries), cargo exit 0.
   **`30e3262`'s push run `36531207166` — success on every job**: `master` green again, the macOS test job
   among them, and the `microvm` job whose guest runs PS-E-03's filter.
+  (14): H9's witness red on `e584f8d` (SIGNAL_OTHER, SIGNAL_GROUP, SIGNAL_QUEUE), green after, the
+  self-signal control true; mutants M9 (rules dropped) and M10 (comparison reversed) red; clippy clean on
+  Linux, arm64 Linux and musl. The full suite alone 2,027 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
 - Redo on the laptop: (9) changes the Linux guest's own lock-down — **rebuild the WSL microVM guest images**
   (the VM guest applies the same filter) and run the suite in WSL; Windows: nothing new beyond the suite.
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed

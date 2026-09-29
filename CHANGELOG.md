@@ -33,6 +33,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   outside the guest now ends it (and the launcher) when the host is gone, and the report claims "killed
   with the host" only once the watcher is armed (`host_loss_ends_guest` is now established on macOS)
   (D-V2-60).
+- **Fixed (security, PS-E-03 H9): a Linux guest that escaped its interpreter could signal the operator's
+  other processes** — one, its own process group (its host among them), or all of them with `kill(-1)`. It
+  may now signal only itself (D-V2-64).
 - **Fixed (security, PS-E-03 H8): a Linux guest that escaped its interpreter could type into the operator's
   terminal.** It shares the host's session, so the terminal was its controlling terminal, and `TIOCSTI`
   pushed keystrokes into it — for the operator's shell to run after the run. Refused now (D-V2-63).

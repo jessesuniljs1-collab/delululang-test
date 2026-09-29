@@ -2994,3 +2994,19 @@ job whose guest runs PS-E-03's filter).
 
 **Open:** the guest's own output still reaches the terminal raw (escape sequences) — RW 4.32's relay; and
 the guest could be given no controlling terminal at all.
+
+## 2026-09-29 — routine run 3: PS-E-03 H9 — an escaped guest could signal the operator's processes (D-V2-64)
+
+**The next "what else":** the filter named no signal call. **Witness**
+`h9_an_escaped_guest_signals_no_other_process` (`jail::escaped_tests`), with signal 0, which asks only whether
+a signal WOULD be delivered: **red** on `e584f8d` — `still reached: ["SIGNAL_OTHER", "SIGNAL_GROUP",
+"SIGNAL_QUEUE"]` — **GUEST-SIGNAL-1**: another process of the same user, the guest's process group (its host,
+the terminal's foreground job), a queued signal; `kill(-1, SIGKILL)` would end the operator's session.
+
+**Fixed** (`lock_down_self`): `kill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` refused unless their
+first argument is the guest's own pid (fixed when the filter is made, compared on 32 bits); `tkill` refused.
+The control `SIGNAL_SELF` — a guest must still signal itself, as `abort` does — stays true. **Mutants:** M9
+(the rules dropped) red on all three; M10 (the comparison reversed) red on the control.
+
+**Verified:** clippy `-D warnings` clean on Linux, arm64 Linux and musl; the full suite alone: 2,027 passed,
+0 failed, 15 ignored (152 binaries), cargo exit 0.

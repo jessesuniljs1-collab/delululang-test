@@ -62,7 +62,8 @@ the assistant's memory — which now also travels file by file in
   escaped Linux guest could open sockets (and connect to the operator's own), read other processes'
   `environ`, make io_uring/memfd/userfaultfd/pidfd calls and a user namespace — plus H7, the operator's
   terminal; all closed, each with a mutant. H4 too: a serving host is non-dumpable (D-V2-62). And H8, new:
-  an escaped guest typed into the operator's terminal with `TIOCSTI` — refused now (D-V2-63).
+  an escaped guest typed into the operator's terminal with `TIOCSTI` — refused now (D-V2-63); H9, new: it
+  could signal the operator's processes — now only itself (D-V2-64).
 - **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H5–H6, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
@@ -733,7 +734,8 @@ wins, and you should update the memory to match.
   namespace through `clone`); **HOST-DUMPABLE-1** (a serving host's `environ` read by a process of the
   same user — witnessed as a non-root user, since root reads everything); and **GUEST-TIOCSTI-1** (the
   operator's terminal is the guest's controlling terminal, and `TIOCSTI` typed into it — the escape class of
-  CVE-2017-5226; the rule compares 32 bits, because the kernel truncates the command).
+  CVE-2017-5226; the rule compares 32 bits, because the kernel truncates the command); and
+  **GUEST-SIGNAL-1** (signals to any process of the same user — its host's group, or `kill(-1)`).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
