@@ -619,3 +619,46 @@ it on `origin` was made in the cloud and is listed below.
   refuted first-element idea.
   **For the owner:** D-V2-67 (wasmtime 48, the LTS line) and D-V2-68 (the WebAssembly 3.0 proposals refused)
   are this run's decisions; D-V2-59, D-V2-49 and D-V2-53's consequence stay flagged from earlier runs.
+
+### 2026-09-29 — routine run 5: CI read green; PS-E-04 — the external launcher resolved once, hashed, pinnable (LAUNCHER-SPELL-1)
+- Session: `https://claude.ai/code/session_01PqeUqqZua7e9zJEiEs3kf4`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there; the slice was read on the other runners from
+  `claude/friendly-thompson-gsorc5` first, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `cfc5b01` (routine run 4's last commit)
+- Commits: (1) `370d641` PS-E-04: the external launcher resolved once, hashed, pinnable, and started as the file hashed;
+  (2) `PS-E-04's records: D-V2-69, LAUNCHER-SPELL-1, the runners read; routine run 5's entry` — records only
+- Files and folders:
+  A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
+  M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
+    before the launch; `launch_external` starts the resolved file; `launcher_path`/`launcher_blake3` in the
+    report and the launch record), `cli.rs` (`--launcher-digest`, the help), `main.rs` (`mod launcher`),
+    `run_cmd.rs` (the flag describes a sandboxed run), `schema.rs` (the two fields) — (1)
+  M `crates/delulu/tests/sandbox_external_cli.rs` (five witnesses) — (1)
+  M `docs/DEPLOYMENT.md` (*Which file runs*), `docs/for-agents.md` — (1)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 LAUNCHER-SPELL-1; §11.5 two lessons), `docs/CLOUD_ROUTINE.md` (step 2:
+    the cross-OS targets in the background), `docs/REMAINING_WORK.md` (4.28), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+    (D-V2-69), `V2_LOG.md`, `V2_OPENSHELL_STUDY.md` (§4.4 built), `V2_PHASE_STATUS.md` (PS-E), `V2_SECURITY_MODEL.md`
+    (§10), `docs/assistant-memory/cloud-period-2026-09-28.md` — (2)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,832 edges); `doctor --check` ok, all
+  checks pass. After the last edit: in (2)'s commit message.
+- Verified: **CI on arrival:** `cfc5b01` `36566189830` — success on every job; the nightly `36548984501` (`9fc4d86`)
+  — failure on `supply-chain` only (RUSTSEC-2026-0315/0316 against wasmtime 47.0.4, fixed in `63a375e`), every
+  other job green, `miri-slow` all three (syntax 20 min, check 67 min, broker 2 h 45 min). `gh`: absent.
+  `cargo deny --all-features check advisories`: ok. **(1):** the five witnesses red on `cfc5b01` (the planted
+  `./lnch` ran — LAUNCHER-SPELL-1); green after; M1–M6 red (M1, the path started by name: B ran 3 of 3), each
+  restored byte for byte; clippy clean; `check-other-os.sh` clean on five targets; the full suite alone
+  2,034 passed, 4 failed (the stale map only — `doctor_cli` three, the Survey's freshness; green once
+  regenerated), 15 ignored (152 binaries). `witness.yml` at `370d641`: macOS `36595372725`, Windows `36595377128`,
+  Linux arm64 `36595380398` — every test of the three external-launcher targets passed.
+- Redo on the laptop: the suite on Windows and in WSL (the launcher path changed on every OS; WSL runs the
+  `fexecve` path and the swap witness).
+- For the laptop's memory: `HANDOFF.md` §11.4 (LAUNCHER-SPELL-1) and §11.5 (`environ` in a `pre_exec` step;
+  holding a race's window open with work the code does anyway); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Push runs read: see (2)'s follow-up line below, or the next run's entry.
+- Open / next: (1) read (2)'s push run if this entry does not; (2) E-04's remainder — Windows deny-write (needs a
+  witness first), the attestation binding a digest the attester measured; (3) run 3's inbox: PS-E-03 H6 (macOS
+  and Windows under the escaped-guest harness), the red-team pass on the filter by hand, RW 4.32's stderr relay
+  and `setsid`, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
+  P9. **For the owner:** D-V2-69 is this run's decision.

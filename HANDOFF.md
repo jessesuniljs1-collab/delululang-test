@@ -741,6 +741,10 @@ wins, and you should update the memory to match.
   **GUEST-PROCESS-1** (the same processes' limits, priority, CPUs and scheduling, changed by pid); and
   **LANDLOCK-TRUNCATE-1** (below Landlock ABI 3 the report said writes denied: the posture matched "no file
   writes" INSIDE "no file writes but truncation" — a pin written to prove H5 held went red).
+  **Routine run 5 (2026-09-29, PS-E-04): LAUNCHER-SPELL-1** — `external:NAME` left the lookup to the
+  operating system, whose `PATH` search honours `.`, so a `NAME` planted in the working directory ran while
+  the report named `NAME`: ADAPTER-SPELL-1's shape again, one feature later. Now `resolve_driver` resolves
+  it once, the bytes are hashed and reported, and on Linux the descriptor hashed is the file started.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -852,6 +856,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
   claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs
   for another reason). A mutant per entry finds such a hole; a green suite does not.
+- **`environ` in a `pre_exec` step is not the command's environment** (routine run 5): a step that execs by
+  itself (`fexecve`) and passed `environ` started the launcher with none of the variables the host set on
+  the command — caught only because a test asserted the launcher's environment. Build the environment from
+  the command (`vars_os`, then `get_envs`) before the fork.
+- **Hold a race's window open with work the code must do anyway** (routine run 5): the launcher-swap
+  witness made the host's hash slow (a 64 MiB launcher) and swapped the path the moment `/proc/<pid>/fd`
+  showed the host holding the file — no hook in the product, no re-running; the mutant failed 3 of 3.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

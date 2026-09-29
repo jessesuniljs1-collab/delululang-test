@@ -1414,6 +1414,44 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 4. **A narrowing, never a widening:** it can only turn a module that would have loaded into one that is
    refused before it runs (the plugin store answers "module failed to compile", naming the proposal).
 
+## D-V2-69 — PS-E-04: the external launcher is resolved once, hashed with BLAKE3, pinnable, and on Linux started as the file hashed — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **Witnessed first (LAUNCHER-SPELL-1).** On `cfc5b01`, `external:lnch` with `.` ahead of the operator's
+   directory on `PATH` ran a `lnch` planted in the working directory, while the report named `lnch`: the
+   operating system's search honours a relative entry. ADAPTER-SPELL-1's shape (D-V2-50), for launchers.
+2. **One resolver.** The launcher's word is resolved by `cli::resolve_driver` — the code that closed
+   ADAPTER-SPELL-1, shared, not copied: a word with a separator is a path from the working directory; a
+   bare name is looked up in `PATH`'s absolute directories only, `.exe` appended on Windows, and nothing is
+   left to the operating system's own search (on Windows the standard library's also looked in the
+   application's own directory and the system directories before `PATH`; an operator who relied on that
+   names the path now).
+3. **BLAKE3, of the bytes opened.** The file is opened once — non-blocking, and judged by the descriptor's
+   own `fstat`, not the name `resolve_driver` looked at — and hashed with BLAKE3, the repository's file hash
+   (a `.dpx`'s content bindings, the lockfile, the audit chain, a program's hash in its launch record; the
+   microVM's image manifest follows kernel.org's SHA-256).
+4. **Two flat, additive report fields, not the design's `launcher: {path, digest}`.** `sandbox.launcher`
+   has been a string since PS-D-01, and schema 1 promises it; changing its type would break every reader of
+   it. So `launcher` stays the word as named, and `launcher_path` and `launcher_blake3` join it, named for
+   their algorithm as `microvm_image.kernel_sha256` is — in the report and in the `sandbox-launch` record.
+5. **`--launcher-digest HEX` refuses before anything starts, exit 1, in words** — naming the path and both
+   digests — **and records a `sandbox-launcher` deny** in the chain: a launcher that changed under a pin is
+   news to someone. Exit 1 and no DL code, as its sibling pin's refusal (`--require-attestation`, PS-D-02)
+   is: the command line was well formed; the world did not match it. A malformed digest, or the flag
+   without an external launcher or without `--sandbox`, is exit 2 like every bad invocation.
+6. **Linux starts the descriptor (`fexecve`)** as the last `pre_exec` step, with argv and envp built
+   before the fork (the environment is built from the command — `environ` in a `pre_exec` step is not yet
+   the command's, witnessed: the launcher started with none of the host's words). A `#!` script's
+   descriptor is kept open across the start, because its interpreter reads it back through `/dev/fd/N`;
+   the launcher then holds a read-only descriptor of its own script, and a script's `$0` is that name.
+7. **macOS and Windows start the resolved path by name.** macOS has no `fexecve`; Windows could hold the
+   file open deny-write, but no witness for that exists yet, so it is not built and not claimed. The window
+   between the hash and the start stays open there to someone who can write the launcher's directory, and
+   `DEPLOYMENT.md` says so. Nowhere does the digest stop an in-place change by someone who may write the
+   file itself; the pin refuses the next run.
+8. **Not in this slice: the attestation statement binding the launcher's digest.** Binding means an
+   attester vouching for a digest it measured itself; a statement that echoes the host's own digest back
+   says nothing. RW 4.28 keeps it, with that question.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

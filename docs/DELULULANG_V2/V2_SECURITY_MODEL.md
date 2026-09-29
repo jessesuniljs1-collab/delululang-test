@@ -258,6 +258,12 @@ limits, priority, CPUs or scheduling (GUEST-PROCESS-1, D-V2-65). A report claims
 Linux only where truncation is refused too (Landlock ABI ≥ 3, LANDLOCK-TRUNCATE-1, D-V2-66). Not yet: the Landlock ABI as a requirement (H5), macOS and Windows under the
 same harness (H6).
 
+An external (L3) launcher is claimed resolved once and named by its bytes since PS-E-04 (D-V2-69), with
+witnesses and six falsified mutants (`crates/delulu/tests/sandbox_external_cli.rs`): a bare name is never a
+file in the working directory (LAUNCHER-SPELL-1); the report's `launcher_blake3` is the file's; a pinned run
+starts no other file; and on Linux a path swapped between the hash and the start is not what runs. Not
+claimed: that window on macOS and Windows, or an in-place change by someone who may write the file.
+
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
 host watchdog on every engine at a stated 25 ms resolution.

@@ -335,6 +335,17 @@ a mismatch refuses before anything starts. The digest algorithm follows the repo
 swapped file refuses; a `PATH` entry planted ahead of the intended launcher is not what runs. **Mutant:**
 hash one file, start another.
 
+**Built (2026-09-29, routine run 5, D-V2-69).** Witnessed first: a relative `PATH` entry let a `lnch` planted
+in the working directory run instead of the operator's (LAUNCHER-SPELL-1). `crates/delulu/src/launcher.rs`
+resolves the word with `resolve_driver`, hashes the opened file with BLAKE3 and, on Linux, starts that
+descriptor (`fexecve`); the report and the launch record carry `launcher_path` and `launcher_blake3` —
+two flat fields beside the existing `launcher` string rather than the object above, because schema 1
+promises `launcher` is a string; `--launcher-digest HEX` refuses any other file (exit 1, recorded). The
+swap witness holds the window open with a 64 MiB launcher and swaps the path the moment the host is seen
+holding it; the mutant that hashes one file and starts another ran B three times in three. Open: Windows
+held deny-write, macOS (no `fexecve`), and the attestation binding — which needs a digest the attester
+measured itself, not the host's echoed back.
+
 ### 4.5 PS-E-05 — OpenShell as a tested L3 backend, and DeluluLang as its policy author
 
 Two directions, one soundness rule: **what DeluluLang emits never allows more than the program's

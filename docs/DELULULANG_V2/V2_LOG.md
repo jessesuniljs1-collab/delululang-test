@@ -3184,3 +3184,60 @@ classifier before the agent started).
 
 **The closing commit's run, read:** `eb3af0b` `36564217831` — success on every job. `master` green at `eb3af0b`.
 The nightly `36548984501` (`9fc4d86`) was still running at 12:08 UTC — the next run reads it.
+
+## 2026-09-29 — routine run 5: CI read; PS-E-04 — the external launcher resolved once, hashed, pinnable, started as the file hashed (D-V2-69)
+
+**CI, read first.** `master` was green on arrival: `cfc5b01` (routine run 4's last commit, records only)
+`36566189830` — success on every job. **The nightly `36548984501` on `9fc4d86` — failure, one job:**
+`supply-chain`, RUSTSEC-2026-0315 and -0316 against wasmtime 47.0.4 — the advisories `63a375e` fixed, so
+the old commit's record, as run 4 expected. Every other job green, the three `miri-slow` jobs included
+(`delulu-syntax` 20 min, `delulu-check` 67 min, `delulu-broker` 2 h 45 min); `test (macos-latest)` green
+this time. `gh`: absent in this VM too. `cargo deny --all-features check advisories`: ok on `cfc5b01`.
+
+**Witnessed first, on `cfc5b01` — LAUNCHER-SPELL-1.** `launch_external` gave the command's first word to
+`Command::new`, and the operating system's `PATH` search honours an empty or relative entry: with `.`
+ahead of the operator's directory, `external:lnch` ran a `lnch` planted in the working directory, and the
+report said `lnch` (`a_bare_launcher_name_never_means_a_file_in_the_working_directory`: "the file planted
+in the working directory ran"). The same shape ADAPTER-SPELL-1 had for hardware drivers. The other four
+new witnesses were red for want of the feature (no `launcher_path`; `--launcher-digest` unknown).
+
+**Built (`crates/delulu/src/launcher.rs`, new; `guest.rs`):** the word resolved by `cli::resolve_driver`
+(shared with ADAPTER-SPELL-1's fix — `PATH`'s absolute directories only); the file opened once,
+non-blocking, judged by its descriptor's `fstat`, and hashed with BLAKE3; `sandbox.launcher_path` and
+`sandbox.launcher_blake3` in the report and the `sandbox-launch` record; `--launcher-digest HEX` refuses
+any other file before anything starts — exit 1 in words naming the path and both digests, and a
+`sandbox-launcher` deny record. **On Linux the descriptor hashed is the file started** (`fexecve`, the last
+`pre_exec` step; argv and envp built before the fork; a `#!` script's descriptor kept open for its
+interpreter's `/dev/fd/N`). macOS and Windows start the resolved path by name — that window is named in
+`DEPLOYMENT.md`, not claimed closed (D-V2-69 §7).
+
+**The environment witness caught the first build.** It started the launcher with `environ` as the
+environment, on the reading that the standard library installs the command's environment there before a
+`pre_exec` step runs: it does not — `the_launcher_is_told_the_guest_words_and_the_limits` went red, the
+launcher started with no `DELULU_GUEST_ARGS` and printed `delulu`'s help. The environment is now built
+from the command (`vars_os` with `get_envs` applied), before the fork.
+
+**Witnesses** (`sandbox_external_cli`, five new): the digest in the report and the launch record equals an
+independent BLAKE3 of the file; a pinned run with another file exits 1 naming both digests, runs nothing,
+records a `sandbox-launcher` deny and no launch; a pinned script launcher that is not the pinned file is
+never STARTED (its marker absent), the pinned one is; the planted `PATH` entry is not what runs; and **the
+path swapped while the host is seen hashing is not what runs** — a 64 MiB launcher holds the window open,
+and the test renames B over A the moment `/proc/<host>/fd` shows the host holding A. **Mutants:** M1 (the
+path started by name, not the descriptor) — B ran, 3 of 3 (and A, 3 of 3, restored); M2 (the pin never
+compared), M3 (the digest of the name, not the bytes), M4 (the word opened as it is spelled), M5 (a
+script's descriptor closed at the start), M6 (the refusal unrecorded) — each red; each restored byte for
+byte (`cmp`).
+
+**Verified:** clippy `-D warnings` clean; `scripts/check-other-os.sh` clean for macOS (arm64 and x86-64),
+Windows, Linux arm64 and musl; the full suite alone (`-j 4`): 2,034 passed, 4 failed, 15 ignored (152
+binaries) — the four failures `doctor_cli` (three) and the Survey's freshness test, the map stale because the
+Survey is regenerated last; regenerated, both targets were re-run green. **Read on the other runners before
+`master` moved** (`witness.yml` on `claude/friendly-thompson-gsorc5` at `370d641`, targets
+`sandbox_external_cli sandbox_attest_cli sandbox_confirm_cli`): macOS `36595372725` — 7, 12, 7 passed;
+Windows `36595377128` — 4, 7, 4 passed (the report's digest and the pin witnesses included; the
+script-launcher witnesses are Unix-only); Linux arm64 `36595380398` — 7, 13, 8 passed, the swap witness
+among them (`fexecve` on aarch64). Then `master` fast-forwarded to the branch.
+
+**Open in E-04** (RW 4.28): Windows could hold the launcher open deny-write between the hash and the start
+— not built, because nothing yet witnesses it; macOS has no `fexecve`; and an attestation that binds a
+launcher digest the attester measured itself.

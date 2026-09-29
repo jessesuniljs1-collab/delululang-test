@@ -92,6 +92,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   turned five on by default, and RUSTSEC-2026-0315 could reach a plugin's granted fuel through two. A module
   using one is refused before it runs. The WebAssembly 2.0 set ordinary toolchains emit still loads
   (D-V2-68).
+- **Fixed (security, PS-E-04): an external launcher named by a bare word could be a file planted in the
+  working directory.** `--sandbox-backend external:NAME` left the lookup to the operating system, whose
+  `PATH` search honours `.` and empty entries (LAUNCHER-SPELL-1). The word is now resolved once, by
+  DeluluLang — a path from the working directory, or a bare name in `PATH`'s absolute directories only —
+  and on Windows no longer falls back to the application's or the system's directories: name the path.
+- **An external run names its launcher by file and digest** — `sandbox.launcher_path` and
+  `sandbox.launcher_blake3` (BLAKE3 of the bytes), in the report and the `sandbox-launch` audit record.
+  **`--launcher-digest HEX`** pins it: any other file is never started — the run exits 1 in words, and a
+  `sandbox-launcher` refusal is recorded. On Linux the file started is the very one hashed (a path swapped
+  in between is not what runs); a launcher script's `$0` is then `/dev/fd/N` (D-V2-69).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

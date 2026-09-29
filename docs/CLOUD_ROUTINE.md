@@ -91,7 +91,10 @@ first `doctor` builds the whole `delulu` crate) and do step 1's reading while th
 --offline`, which needs every platform's (run 1 lost a suite result to it). And, in the background,
 `cargo install cargo-deny --locked` (about four minutes; the VM has none): the supply-chain gate reds a
 push whenever RustSec publishes against the tree, whatever the commit changed (run 4), and the fix is
-witnessed with `cargo deny --all-features check advisories` before and after.
+witnessed with `cargo deny --all-features check advisories` before and after. And, in the background,
+`rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu
+x86_64-unknown-linux-musl` — `scripts/check-other-os.sh` needs them for any change to code that runs on
+another OS, and then takes about seven minutes itself (run 5).
 
 **3. Verify the previous run — the verification loop.** A run does not trust the one before it:
 - **Read CI with the GitHub MCP tools.** Run 1 found no `gh` in its VM, though the official docs list

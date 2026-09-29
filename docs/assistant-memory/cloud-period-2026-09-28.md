@@ -73,6 +73,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   an attestation read half-written is now refused as `incomplete`, in words. Then RW 4.33 (D-V2-68): the
   plugin store had RUN a `call_ref` module — both WASM engines now refuse the WebAssembly 3.0 proposals and
   keep the 2.0 set; `scripts/check-other-os.sh` lints `delulu-runtime` and `delulu-wasm` too.
+- **Routine run 5 (2026-09-29):** PS-E-04 — the external launcher resolved once (`resolve_driver`,
+  shared with ADAPTER-SPELL-1's fix), hashed with BLAKE3, reported (`launcher_path`, `launcher_blake3`),
+  pinnable (`--launcher-digest`), and on Linux started as the descriptor hashed (`fexecve`); LAUNCHER-SPELL-1
+  (a planted `./lnch` ran through `.` on `PATH`) witnessed and closed (D-V2-69). Trap: `environ` inside a
+  `pre_exec` step is not the command's environment.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
