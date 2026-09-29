@@ -187,14 +187,56 @@ fn a_document_replayed_from_another_run_is_refused_on_its_nonce() {
         .unwrap();
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
     assert!(std::fs::read_to_string(&old).unwrap().contains("delulu-attestation-v1"));
-    // A launcher that hands the host that old document and then runs the guest.
+    // A launcher that hands the host that old document — whole, as the protocol asks: a temporary file, then
+    // a rename (a plain `cp` creates the file before it fills it, and the host, which reads the document the
+    // moment it exists, once read it empty on a macOS runner — `36537537718`) — and then runs the guest.
     let script = d.join("replay.sh");
-    std::fs::write(&script, format!("#!/bin/sh\ncp {} \"$DELULU_ATTEST_OUT\"\nexec {exe} __guest --stdio-pipes\n", old.display())).unwrap();
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\ncp {} \"$DELULU_ATTEST_OUT.part\"\nmv \"$DELULU_ATTEST_OUT.part\" \"$DELULU_ATTEST_OUT\"\nexec {exe} __guest --stdio-pipes\n",
+            old.display()
+        ),
+    )
+    .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     let r = run_attested(&d, &format!("external:{}", script.display()), &public, &d.join("r.json"));
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
     assert!(text(&r).contains("not made for this run"), "{}", text(&r));
     assert!(!d.join("out").join("made.txt").exists(), "a replayed attestation let the program run");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The host reads the document the moment it exists, so an attester writes it WHOLE — a temporary file,
+/// then a rename. One that writes it in place (creates the file, then fills it) can be read half-written:
+/// routine run 4 found the replay test's own `cp` losing that race on a macOS runner (`36537537718`,
+/// "EOF while parsing a value at line 1 column 0"). Such a document is refused before the program is
+/// sent, and the words name the protocol it broke rather than a parser's position.
+#[cfg(unix)]
+#[test]
+fn a_document_written_in_place_is_refused_in_words_that_name_the_rename() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let d = lab("inplace");
+    program(&d);
+    let (_, public) = keygen(&d, "attester");
+    let exe = exe();
+    // What the host can see mid-write, held still: the file created and nothing in it yet, and the first
+    // half of a document. Neither launcher ever completes it, so the witness is not a race.
+    for (tag, write) in [
+        ("empty", ": > \"$DELULU_ATTEST_OUT\"".to_string()),
+        ("half", "printf '%s' '{\"format\":\"delulu-attestation-v1\",\"statement\":{' > \"$DELULU_ATTEST_OUT\"".to_string()),
+    ] {
+        let script = d.join(format!("{tag}.sh"));
+        std::fs::write(&script, format!("#!/bin/sh\n{write}\nexec {exe} __guest --stdio-pipes\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let r = run_attested(&d, &format!("external:{}", script.display()), &public, &d.join(format!("{tag}.json")));
+        assert_eq!(r.status.code(), Some(1), "{tag}: {}", text(&r));
+        assert!(text(&r).contains("the attestation is incomplete"), "{tag}: {}", text(&r));
+        assert!(text(&r).contains("a temporary file, then a rename"), "{tag}: the words name the protocol: {}", text(&r));
+        assert!(!text(&r).contains("EOF while parsing"), "{tag}: a parser's position is not the reason: {}", text(&r));
+        assert!(text(&r).contains("the program was never sent"), "{tag}: {}", text(&r));
+        assert!(!d.join("out").join("made.txt").exists(), "{tag}: the program ran on half a document");
+    }
     let _ = std::fs::remove_dir_all(&d);
 }
 

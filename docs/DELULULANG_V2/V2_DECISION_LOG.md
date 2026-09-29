@@ -1371,6 +1371,27 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 3. **Kernels ≥ 6.2 are unchanged** (CI's 6.8 among them); the effective ABI is still named by the word, not
    by a number.
 
+## D-V2-67 — Wasmtime 47 → 48.0.3, the 48 LTS line, for RUSTSEC-2026-0315 and -0316 — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **The supply-chain gate went red on a records-only commit** (`9fc4d86`, push run `36537537718`): two
+   advisories published after its last clean run, both against wasmtime 47.0.4 — RUSTSEC-2026-0315 (`call_ref`
+   and an exception `catch` can drop fuel accounting, so a module's fuel is amplified exponentially) and
+   RUSTSEC-2026-0316 (component-model record lifting can allocate past the host-call fuel limit). Witnessed in
+   the VM with cargo-deny 0.20.2: `cargo deny --all-features check advisories` exit 1 on 47.0.4 naming both,
+   exit 0 on 48.0.3; bans, licences and sources ok.
+2. **Reachability, read rather than assumed.** 0316 is not reachable here: `harden_wasm_features` turns the
+   component model off. 0315 is reachable in principle: a plugin's fuel is a GRANTED limit
+   (`delulu-wasm/src/limits.rs`, `consume_fuel(true)`), and neither function references nor exceptions are
+   refused, so a hand-made `.dpx` could spend more than its grant (the wall-clock watchdog still bounds it).
+   So the answer is the upgrade, never an `ignore`.
+3. **48, not 49.** Both 48.0.3 and 49.0.1 carry the fix. Wasmtime 48 is a long-term-support line — the
+   advisory's other patched range, 36.x, is the previous one — so it is patched for longest; it needs Rust
+   1.95 and this workspace pins 1.96.1; it is one major step, not two. No source line changed: the workspace
+   compiles as it was, clippy is clean and the full suite passes on it.
+4. **Next — RW 4.33:** narrow what a plugin may use to what DeluluLang emits (function references, GC,
+   exceptions refused at validation), so the next fuel-accounting defect in those proposals is unreachable
+   too — "upgrade AND narrowing", the rule `deny.toml`'s own history states.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -88,7 +88,10 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 `cargo run -p delulu -- doctor --check` — start them in the background as soon as the run begins (the
 first `doctor` builds the whole `delulu` crate) and do step 1's reading while they build. A failure here is the run's first task. Then `cargo fetch
 --locked` once: a fresh VM holds only Linux's crates, and `egress_features` runs `cargo metadata
---offline`, which needs every platform's (run 1 lost a suite result to it).
+--offline`, which needs every platform's (run 1 lost a suite result to it). And, in the background,
+`cargo install cargo-deny --locked` (about four minutes; the VM has none): the supply-chain gate reds a
+push whenever RustSec publishes against the tree, whatever the commit changed (run 4), and the fix is
+witnessed with `cargo deny --all-features check advisories` before and after.
 
 **3. Verify the previous run — the verification loop.** A run does not trust the one before it:
 - **Read CI with the GitHub MCP tools.** Run 1 found no `gh` in its VM, though the official docs list
@@ -100,9 +103,11 @@ first `doctor` builds the whole `delulu` crate) and do step 1's reading while th
   `mcp__github__actions_get` `get_workflow_run` for one run's conclusion; `mcp__github__get_job_logs`
   with `run_id` + `failed_only: true` + a small `tail_lines` for a red run's failing jobs — it returns at
   most a job's LAST 5,000 lines, so a step followed by a long one is out of its reach (a test job's
-  sweep and fuzz campaign print more than that). A failure's own lines sit mid-log: a Haiku sous-chef
-  can fetch the log in its own context and return only the matching lines (run 1 did, for ~35 k tokens
-  a time). `list_workflow_jobs` returns every step of every job — ask it only for a red run. **Read** every completed run
+  sweep and fuzz campaign print more than that). A failure's own lines sit mid-log: ask
+  `get_job_logs` for that job by `job_id` with `tail_lines` at least the log's length (a first, small call
+  reports `original_length`); the harness saves an over-long result to a file and names it — JSON whose
+  `logs_content` is the log — and `grep` finds the failure there without the log entering the context
+  (run 4: a 3,423-line macOS log, the failure at line 1,556; no sous-chef needed). `list_workflow_jobs` returns every step of every job — ask it only for a red run. **Read** every completed run
   since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
   passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
   verdict that matters for timing, `actors_pingpong`'s, as each test job's LAST step and as a `notice`
@@ -214,6 +219,9 @@ fool. Keep this file short enough to read at the start of every run.
   fires ended in seconds on `rate_limit: rejected (five_hour)`.
 - **The VM's limits (official docs):** 4 vCPUs, 16 GB, 30 GB; a command waits 2 minutes by default and
   at most 10, then moves to the background — run the suite in the background and poll its output file.
+  The harness refuses a bare `sleep N` as a wait (run 4): wait on a background job's file with
+  `until grep -q '^EXIT=' FILE; do sleep 5; done` (a timeout of up to ten minutes), or end the turn and
+  be woken when a background command finishes.
   **GitHub release assets are reachable only for this repository** (the GitHub proxy scopes them to the
   attached repository), so OpenShell's releases cannot be downloaded in the VM: PS-E-05 exercises
   OpenShell only in its `openshell.yml` workflow on GitHub's runners.

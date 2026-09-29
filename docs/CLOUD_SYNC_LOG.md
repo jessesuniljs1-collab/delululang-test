@@ -538,3 +538,42 @@ it on `origin` was made in the cloud and is listed below.
   to D-V2-65 close five findings the study predicted and three it did not (H7, H8, H9/H10 — the terminal,
   keystroke injection, signals and other processes); D-V2-59, D-V2-49 and D-V2-53's consequence stay
   flagged.
+
+### 2026-09-29 — routine run 4: `master` red on a records-only commit, read and fixed (Wasmtime 48; an attestation read half-written)
+- Session: `https://claude.ai/code/session_01R7P5oTaoPP7KizcvUSiJpp`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there)   Pull request: none   Merged: n/a
+- Base: `9fc4d86` (routine run 3's last commit)
+- Commits: (1) `CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written`
+- Files and folders:
+  M `crates/delulu-wasm/Cargo.toml` (`wasmtime = "48"`), `Cargo.lock` (wasmtime 48.0.3 and its tree) — (1)
+  M `crates/delulu/src/attest.rs` (`Refusal::Incomplete`, `incomplete`: end-of-input and a cut character;
+    the unit test's cuts), `crates/delulu/tests/sandbox_attest_cli.rs` (the replay launcher writes, then
+    renames; `a_document_written_in_place_is_refused_in_words_that_name_the_rename`) — (1)
+  M `.github/workflows/ci.yml` and `deny.toml` (the supply-chain history: 2026-09-29) — (1)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.5: two lessons), `docs/REMAINING_WORK.md` (4.33, new),
+    `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-67), `V2_LOG.md`,
+    `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_ROUTINE.md` (step 2: cargo-deny in the
+    background; step 3: a failing job's whole log saved to a file and grepped; the VM's limits: waiting
+    without a bare `sleep`) — (1)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,795 edges); `doctor --check` ok, all
+  checks pass (26 in this VM). After the last edit: in the commit message.
+- Verified: **routine run 3's closing push run `36537537718` (`9fc4d86`) — failure, read:** `supply-chain`
+  (RUSTSEC-2026-0315/0316 against wasmtime 47.0.4, published after the last clean run) and
+  `test (macos-latest)` (`sandbox_attest_cli`, `a_document_replayed_from_another_run_is_refused_on_its_nonce`:
+  "EOF while parsing a value at line 1 column 0" — the test's launcher wrote the document in place with `cp`);
+  every other job green, macOS's properties line as before, its ping-pong verdict "NOT MEASURED" (3 threads).
+  `gh`: absent. (1): `cargo deny --all-features check advisories` exit 1 on 47.0.4, exit 0 on 48.0.3 (cargo-deny
+  0.20.2, installed in the VM); bans, licences, sources ok. The race witnessed with the launcher's `cp` held
+  open (red, the runner's words); fixed launcher green, and green slowed the same way (M3); the new words'
+  witness red on `9fc4d86`, green after; M1 and M2 red. Clippy `-D warnings` clean; the full suite alone
+  2,029 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+- Redo on the laptop: the suite on Windows and in WSL (wasmtime 48 is a new build on every platform).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a records-only commit can go red; a fake peer keeps the
+  protocol it fakes); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 4).
+- Push runs read: (1)'s — in the next commit or entry.
+- Open / next: (1) read (1)'s push run and the nightly `36548984501` (`9fc4d86`, expected red on the same two);
+  (2) RW 4.33 — the plugin engine refuses the Wasm 3.0 proposals DeluluLang never emits; (3) run 3's inbox
+  still stands: PS-E-03 H6 (macOS and Windows under the escaped-guest harness), a red-team pass on the filter,
+  RW 4.32's stderr relay and `setsid`, PS-E-01's remainder, E-04, E-05, E-06, then P8, P9.

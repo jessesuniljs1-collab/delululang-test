@@ -79,6 +79,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **A host and a guest of different versions refuse each other in words** — an external launcher's image
   must carry the host's `delulu` version.
 - **CI:** every GitHub action on its Node-24 major; every Ubuntu runner pinned to `ubuntu-24.04`.
+- **Security: wasmtime 47.0.4 → 48.0.3** (the 48 long-term-support line) for RUSTSEC-2026-0315 — a plugin
+  using function references or exceptions could spend more fuel than it was granted — and RUSTSEC-2026-0316
+  (the component model, which DeluluLang turns off). No behaviour changes (D-V2-67).
+- **An attestation read before it was whole is refused as `incomplete`, in words that name the protocol.** The
+  host reads the document the moment it exists, so an attester writes it whole — a temporary file, then a
+  rename, as `delulu sandbox attest` does; one that writes in place was refused with a parser's "EOF while
+  parsing". Still refused, still before the program is sent.
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

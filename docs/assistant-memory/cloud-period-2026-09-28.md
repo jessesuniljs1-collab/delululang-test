@@ -67,6 +67,10 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   harness (`jail::escaped_tests`) confirmed H1–H5 and found H7–H10 (terminal read, TIOCSTI keystrokes,
   signals, other processes) — all closed with mutants (D-V2-61–D-V2-66); `master` red once on macOS (a raw
   `Broken pipe` a timing change exposed), fixed at its cause.
+- **Routine run 4 (2026-09-29):** `master` red on a records-only commit — new Wasmtime advisories
+  (RUSTSEC-2026-0315/0316; wasmtime 48.0.3, the LTS line, D-V2-67) and a macOS race in a TEST's fake
+  attester (a plain `cp` where the protocol asks for write-then-rename); both witnessed in the VM and fixed;
+  an attestation read half-written is now refused as `incomplete`, in words.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

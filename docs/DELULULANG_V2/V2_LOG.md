@@ -3057,3 +3057,42 @@ closed, each with mutants — and H4 (the host non-dumpable) as a non-root user.
 
 **Every push run read (07:34 UTC):** `407e423` `36533983121`, `be749d1` `36534873999`, `33c20e5` `36535808138`
 — success. `master` is green at `33c20e5`; the only run left unread is the closing commit's own.
+
+## 2026-09-29 — routine run 4: `master` red on a records-only commit, read and fixed — Wasmtime 48 (D-V2-67); an attestation read half-written
+
+**Read first (step 3).** Routine run 3's closing commit `9fc4d86` — records only — had a red push run,
+`36537537718`: two jobs, two unrelated causes, neither in its diff. Every other job green (Linux x86-64 and
+arm64, Windows, the microVM, fuzz, Miri, the formal models). The nightly on the same commit, `36548984501`,
+was running when this run started. `gh`: absent again (`command -v gh` empty) — CI read with the GitHub MCP
+tools.
+
+**1. `supply-chain` — new advisories.** RUSTSEC-2026-0315 and RUSTSEC-2026-0316, both published after the last
+clean run, both against wasmtime 47.0.4. **Witnessed** in the VM (cargo-deny 0.20.2, installed for it): exit 1
+on 47.0.4 naming both, exit 0 on 48.0.3; bans, licences and sources ok. **Fixed:** `wasmtime = "48"` (48.0.3,
+the LTS line); D-V2-67 has the reachability — 0315 in principle, since fuel is a granted limit and function
+references and exceptions are not refused; 0316 not, the component model is off — and why 48 rather than 49.
+No source line changed. RW 4.33 records the narrowing that would have made 0315 unreachable.
+
+**2. `test (macos-latest)` — `sandbox_attest_cli`, one test.**
+`a_document_replayed_from_another_run_is_refused_on_its_nonce` got "the attestation is not a
+`delulu-attestation-v1` document (EOF while parsing a value at line 1 column 0)" where it expected "not made for
+this run" (read from the job's whole log: 3,423 lines, the failure at line 1,556). The host reads the attestation
+the moment it exists — the protocol says an attester writes it whole, a temporary file then a rename, and
+`delulu sandbox attest` does — but the test's fake replaying launcher used a plain `cp`, which creates the file
+and then fills it, and on the macOS runner the host read it in between. **The fake broke the protocol it fakes.**
+**Witnessed** deterministically, not by rerunning: the same launcher with its `cp` held open (the file created,
+`sleep 1`, then filled) red with the runner's exact words. **Fixed:** the launcher copies to
+`$DELULU_ATTEST_OUT.part` and renames it; M3, that launcher slowed the same way, stays green — the rename is
+what holds.
+
+**And the words.** An operator whose attester writes in place was shown a parser's position. New refusal
+`incomplete` (`attest::Refusal::Incomplete`): a document that ends early — `serde_json`'s end-of-input error,
+or bytes that stop inside a UTF-8 character — is refused as "the attestation is incomplete … an attester writes
+it whole — a temporary file, then a rename", still before the program is sent. **Witness**
+`a_document_written_in_place_is_refused_in_words_that_name_the_rename` — an empty file and half a document, held
+still so it is not a race — red on `9fc4d86`, green after; the unit test cuts a good document at four places
+and inside a multi-byte character. **Mutants:** M1 (the end-of-input mapping removed) red on both tests; M2
+(the mid-character mapping removed) red on the unit test.
+
+**Verified:** clippy `-D warnings` clean; `sandbox_attest_cli` 7 passed, the attest unit tests 6 passed; the full
+suite alone: 2,029 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.

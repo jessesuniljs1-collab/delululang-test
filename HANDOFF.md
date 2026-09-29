@@ -837,6 +837,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   build wins, so the other tree's integration tests can run the wrong binary. Give a worktree its own
   target, or rebuild (`touch src/main.rs`) before testing. And `a && b && (suite) &` backgrounds the WHOLE
   chain — its first commands' output is lost.
+- **A records-only commit can go red** (routine run 4): the supply-chain gate reads RustSec as it is on the
+  day, not the diff, so an advisory published between pushes reds the next push, whatever it changes
+  (RUSTSEC-2026-0315/0316 on `9fc4d86`). Witness it in the VM: `cargo install cargo-deny --locked` (about
+  four minutes), `cargo deny --all-features check advisories` before and after the fix.
+- **A fake peer keeps the protocol it fakes** (routine run 4): the attestation replay test's launcher wrote
+  with `cp`, which the protocol forbids — the host reads the document the moment it exists — and macOS lost
+  that race once. Witness a race by holding its window open (a `sleep` between creating and filling), never
+  by re-running until it shows.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

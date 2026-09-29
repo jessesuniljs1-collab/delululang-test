@@ -169,6 +169,9 @@ pub enum Refusal {
     /// ATTEST-FIFO-1: the path held a link, a pipe or a device, not a document.
     NotAFile,
     TooLarge,
+    /// The document ends before it is whole: an attester that wrote it in place, read mid-write (the host
+    /// reads it the moment it exists), or one that stopped writing.
+    Incomplete,
     NotADocument(String),
     WrongFormat(String),
     BadStatement(String),
@@ -185,6 +188,7 @@ impl Refusal {
             Refusal::Unreadable(_) => "unreadable",
             Refusal::NotAFile => "not-a-file",
             Refusal::TooLarge => "too-large",
+            Refusal::Incomplete => "incomplete",
             Refusal::NotADocument(_) => "not-a-document",
             Refusal::WrongFormat(_) => "wrong-format",
             Refusal::BadStatement(_) => "bad-statement",
@@ -208,6 +212,11 @@ impl Refusal {
                     .to_string()
             }
             Refusal::TooLarge => format!("the attestation is larger than {MAX_DOCUMENT_BYTES} bytes"),
+            Refusal::Incomplete => format!(
+                "the attestation is incomplete: the document ends before it is whole. The host reads it the moment \
+                 it exists, so an attester writes it whole — a temporary file, then a rename to `${ENV_OUT}` (`delulu \
+                 sandbox attest` does)"
+            ),
             Refusal::NotADocument(e) => format!("the attestation is not a `{FORMAT}` document ({e})"),
             Refusal::WrongFormat(f) => format!("the attestation's format is `{f}`, and this build reads `{FORMAT}`"),
             Refusal::BadStatement(e) => format!("the attestation's statement is refused: {e}"),
@@ -229,8 +238,15 @@ pub fn verify(bytes: &[u8], pinned: &str, nonce: &str) -> Result<Attested, Refus
     if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
         return Err(Refusal::TooLarge);
     }
-    let text = std::str::from_utf8(bytes).map_err(|_| Refusal::NotADocument("it is not UTF-8".to_string()))?;
-    let doc: Document = serde_json::from_str(text).map_err(|e| Refusal::NotADocument(e.to_string()))?;
+    // A document that ends early was read mid-write, or never finished: said as that, not as a parser's
+    // position (routine run 4 — a launcher writing in place lost this race on a macOS runner). Its last
+    // character may be cut too: bytes that end INSIDE a character are the same case, not "not UTF-8".
+    let text = std::str::from_utf8(bytes).map_err(|e| match e.error_len() {
+        None => Refusal::Incomplete,
+        Some(_) => Refusal::NotADocument("it is not UTF-8".to_string()),
+    })?;
+    let doc: Document =
+        serde_json::from_str(text).map_err(|e| if e.is_eof() { Refusal::Incomplete } else { Refusal::NotADocument(e.to_string()) })?;
     if doc.format != FORMAT {
         return Err(Refusal::WrongFormat(doc.format.chars().take(64).collect()));
     }
@@ -513,6 +529,18 @@ mod tests {
         assert!(matches!(verify(&serde_json::to_vec(&v).unwrap(), &pinned, &nonce()), Err(Refusal::NotADocument(_))));
 
         assert!(matches!(verify(b"not json", &pinned, &nonce()), Err(Refusal::NotADocument(_))));
+        // Read mid-write: nothing yet, or a prefix of a good document. Never a document, and said so.
+        let whole = doc_bytes(&good);
+        for cut in [0, 1, whole.len() / 2, whole.len() - 2] {
+            assert_eq!(verify(&whole[..cut], &pinned, &nonce()), Err(Refusal::Incomplete), "cut at {cut}");
+        }
+        // ... cut inside a character: a claim in another script, stopped after the first of its bytes.
+        let mut accented = statement(&nonce());
+        accented.guarantees.push("géré par l'opérateur".to_string());
+        let whole = doc_bytes(&sign(&SEED, accented).unwrap());
+        let inside = whole.iter().position(|&b| b >= 0x80).expect("a multi-byte character") + 1;
+        assert!(std::str::from_utf8(&whole[..inside]).is_err(), "the cut is inside the character");
+        assert_eq!(verify(&whole[..inside], &pinned, &nonce()), Err(Refusal::Incomplete));
         assert!(matches!(verify(&[0xff, 0xfe], &pinned, &nonce()), Err(Refusal::NotADocument(_))));
         assert_eq!(verify(&vec![b' '; 70_000], &pinned, &nonce()), Err(Refusal::TooLarge));
 

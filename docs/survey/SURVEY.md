@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 287 |
-| Rust lines | 148234 |
+| Rust lines | 148304 |
 | Rust files outside `src/` (test/bench targets) | 129 |
 | Markdown documents | 252 |
-| Markdown lines | 66312 |
+| Markdown lines | 66439 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1468 / 12795 |
+| Nodes / edges in this map | 1468 / 12804 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,13 +90,13 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 39 files, 36137 lines
+- **Modules:** 39 files, 36165 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/advisories.rs` | 219 | The advisory-feed detector (Stage 10 phase 10k, Track C, spec §4). |
 | `src/atlas_chain.rs` | 331 | P4-11: `delulu atlas chain` — the Atlas's V2 chain, one ordered view an auditor can read top to |
-| `src/attest.rs` | 570 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
+| `src/attest.rs` | 598 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
 | `src/boundary.rs` | 480 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 472 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
