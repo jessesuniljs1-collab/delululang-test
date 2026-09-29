@@ -507,10 +507,11 @@ fn a_computing_guest_ends_when_its_host_is_killed() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), its Linux half for an external launcher: the launcher ends when
-/// its host is killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none,
-/// so a host killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host).
-#[cfg(target_os = "linux")]
+/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), for an external launcher: the launcher ends when its host is
+/// killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none, so a host
+/// killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host). Linux got the
+/// death signal then; macOS has none, and this is its witness too.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn an_external_launcher_ends_when_its_host_is_killed() {
     use std::os::unix::fs::PermissionsExt as _;
