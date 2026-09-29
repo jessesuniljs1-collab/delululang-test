@@ -2809,3 +2809,41 @@ pins still decide what is accepted. The failed job was re-run once (allowed: it 
 `36491419602`, `5d63119` `36492440031` — all success; `master` green at `5d63119`. The run built PS-E-01's
 first three steps and RW 4.31, fixed seven red-team findings, began PS-E-02, and left the next run E-02's
 macOS watcher (the red one) first — `docs/CLOUD_SYNC_LOG.md`'s entry has the inbox.
+
+## 2026-09-29 — routine run 3: PS-E-02 on macOS — a watcher outside the guest ends it with its host (D-V2-60)
+
+**Verified first (step 3).** Routine run 2's last push run, `7b9aac8` `36494315402` — success (read by id).
+No nightly since `36402530469`. The Survey matched the tree (1,466 nodes, 12,743 edges) and `doctor --check`
+passed (26 checks in this VM).
+
+**Loop engineering first (`a39b423`).** Every open PS-E-02 item was CI-only, and the only way to see a macOS
+test fail was the push run on `master` — which turns `master` red. `.github/workflows/witness.yml` runs one
+test target on one runner at any ref, by hand; `scripts/check-macos.sh` runs clippy `-D warnings` for both
+macOS targets from the Linux VM (a stand-in C compiler — check and clippy never link — and
+`PYO3_CROSS_PYTHON_VERSION`), falsified with a planted macOS-only type error (E0308). Windows cannot be
+checked that way (libffi-sys runs `configure` for an msvc target).
+
+**The witness, red on macOS, off `master`.** `a_computing_guest_ends_when_its_host_is_killed`
+(`sandbox_confirm_cli.rs`, Linux and macOS): a jailed guest past its boundary — the host has printed the
+program's first line — spins, asking for nothing; the host is killed with SIGKILL; the guest's pid must be
+gone within 3 s, read from outside both with `ps`. On Linux it is the control: green in 9 ms, from the jail's
+`PR_SET_PDEATHSIG`, which no test had witnessed — and red with that `prctl` removed (a mutant, restored). On
+macOS, `2d08622`, `witness.yml` run `36526271163`: **red** — "the guest outlived its host by more than
+3.15 s". The external launcher's witness, extended to macOS: `9c38027`, run `36526351005`: **red** — "the
+external launcher outlived its host".
+
+**The fix (`jail.rs`, D-V2-60).** A watcher process, `__host_watch <pid>`, started right after the guest,
+waits with `kqueue` on a pipe only the host holds and on the guest's exit; the host gone first ends the guest
+with SIGKILL, the guest gone first ends the watcher, and an exit racing the end of file is looked for once
+more before the kill. The `Jail` owns it, so a finished host ends its guest as the Windows job does.
+"killed with the host" is claimed only once the watcher says it is armed. The study's design put the watcher
+inside the guest as a thread; it runs outside instead, where an escaped guest cannot stop it (Seatbelt
+denies it every signal). The external launcher gets the same watcher on macOS, claimed for nothing (L3).
+
+**Green on macOS, on the same branch:** `36526707055` (`sandbox_confirm_cli`, 12 passed — the guest gone 3.6 ms after its host's SIGKILL, the launcher's witness green too), `36526709263` (`guest_cli`, 5 passed — the jail's report names "killed with the host"), `36526711462` (the boundary unit tests, 3 passed), all on `2d9d2a0`.
+
+**Verified in the VM:** clippy `--workspace --all-targets -D warnings` clean; `scripts/check-macos.sh` clean
+on both macOS targets; the full suite alone: 2,018 passed, 0 failed, 15 ignored (152 binaries) — cargo exit 0.
+
+**Open (PS-E-02's rest):** the Windows external launcher's Job Object with kill-on-close (a Windows witness
+through `witness.yml` first).

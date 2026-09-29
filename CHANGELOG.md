@@ -28,6 +28,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed: an external launcher outlived a host that was killed** (Linux). It now carries the same death
   signal as a jailed guest (PS-E-02). What the launcher started — a container — remains the launcher's
   to end.
+- **Fixed: on macOS a sandboxed guest that was computing outlived a host that was killed** — until its
+  processor-time ceiling, five minutes by default — and so did an external launcher. A watcher process
+  outside the guest now ends it (and the launcher) when the host is gone, and the report claims "killed
+  with the host" only once the watcher is armed (`host_loss_ends_guest` is now established on macOS)
+  (D-V2-60).
 - **An external launcher's guest no longer vouches for itself in the report.** At L3 the words the guest
   says it applied to itself are reported as `sandbox.guest_reported` — its own word — and no longer
   appear among `host_guarantees` or in the posture (RW 4.31).

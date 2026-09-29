@@ -248,8 +248,11 @@ attester claims more.
 first, because it is the red one. **Mutant:** remove the watcher → the macOS witness goes red.
 
 **Built so far (2026-09-28, routine run 2):** the Linux external launcher — `PR_SET_PDEATHSIG` in its
-`pre_exec`, witnessed red first (a host killed with SIGKILL left its launcher running). Open: the macOS
-watcher and the Windows launcher's Job Object, both CI-only.
+`pre_exec`, witnessed red first (a host killed with SIGKILL left its launcher running). **Then (2026-09-29,
+routine run 3, D-V2-60) macOS**, witnessed red on a runner first — the guest and the launcher both outlived a
+killed host — and closed by a watcher that runs OUTSIDE the guest rather than as a thread in it (a watcher in
+the guest is the guest's own word): `kqueue` on a pipe only the host holds and on the guest's exit, claimed
+only once armed. Open: the Windows launcher's Job Object.
 
 ### 4.3 PS-E-03 — the guest's kernel surface, narrowed to what a guest that performs no effects needs
 

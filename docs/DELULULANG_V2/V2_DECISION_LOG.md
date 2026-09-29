@@ -1253,6 +1253,29 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    lists — so `hostile-agent` runs on a Linux host without user namespaces (arm64 CI). §4.1's consequence
    ("refuses instead") would need identity separation as its own requirement; not taken, and flagged.
 
+## D-V2-60 — PS-E-02 on macOS: a watcher OUTSIDE the guest ends it with its host — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **The watcher is a process, not a thread in the guest** — a departure from `V2_OPENSHELL_STUDY.md`
+   §4.2's design. A watcher inside the guest is the guest's own word (RW 4.31's lesson): a guest that
+   escapes the interpreter could stop it. Outside, the guest cannot reach it — its Seatbelt profile denies
+   every signal. It is this binary (`__host_watch <pid>`, the environment cleared), started by the host
+   right after the guest, as the microVM's reaper is.
+2. **It waits on the host's pipe and the guest's exit** (`kqueue`: `EVFILT_READ` on a pipe only the host
+   holds; `EVFILT_PROC`/`NOTE_EXIT` on the guest, registered while the host still holds the guest
+   unreaped, so the pid is the guest's). The host gone first ends the guest with SIGKILL; the guest gone
+   first ends the watcher. Not `kqueue` on the host's pid, and not `getppid() == 1`: the pipe also
+   closes when the host FINISHES, so dropping the `Jail` ends a guest the host is done with — the Windows
+   job's kill-on-close semantics, on macOS.
+3. **Claimed only once armed.** "killed with the host" (and `host_loss_ends_guest: established`) is
+   reported only after the watcher writes that both waits are registered, within the connect deadline; a
+   watcher that did not arm is ended before its pipe closes, and the run says what is missing.
+4. **The external launcher gets the same watcher on macOS**, and nothing is claimed for it: the level stays
+   3, and what the launcher started is the launcher's. The Windows launcher's Job Object is next.
+5. **CI-only defects are witnessed off `master`** (`witness.yml`): red on a branch, green on the same
+   branch, then `master` fast-forwarded — the history keeps the red witness and `master` never goes red.
+   Red: `36526271163` (the guest, "outlived its host by more than 3.15 s"), `36526351005` (the launcher);
+   green: `36526707055` (`sandbox_confirm_cli`, 12 passed — the guest gone 3.6 ms after its host's SIGKILL, the launcher's witness green too), `36526709263` (`guest_cli`, 5 passed — the jail's report names "killed with the host"), `36526711462` (the boundary unit tests, 3 passed), all on `2d9d2a0`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

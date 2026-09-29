@@ -53,7 +53,12 @@ the assistant's memory — which now also travels file by file in
   Node-24 action majors and `ubuntu-24.04`. A red-team sous-chef found seven defects around the new
   guarantee (which held); all verified and fixed the same run (D-V2-58) but F7 (RW 4.31). And, on CI's
   measured properties, `hostile-agent` now requires all five (D-V2-59 — flagged for the owner).
-- **Next:** **PS-E** — E-02's rest (the macOS watcher — the red one; the Windows launcher's Job Object; its Linux launcher half is built), E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
+- **Routine run 3 (2026-09-29):** `witness.yml` (one test on one runner, by hand) and
+  `scripts/check-macos.sh` (clippy for macOS from Linux), so a CI-only defect is witnessed red on a branch
+  before its fix reaches `master`; with them **PS-E-02 on macOS** — a guest computing when its host was
+  killed lived on until its CPU ceiling (red on a runner); a watcher OUTSIDE the guest now ends it and the
+  external launcher (D-V2-60).
+- **Next:** **PS-E** — E-02's rest (the Windows launcher's Job Object; the Linux launcher and macOS are built), E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
@@ -790,6 +795,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   descriptor opened before it (`exec 3<&0; cat <&3 > file &`). A fake launcher that listens in the
   background otherwise hears nothing, and the absence it then "proves" is vacuous — so a capture
   witness also asserts that it captured SOMETHING (routine run 2, PS-E-01).
+- **A macOS- or Windows-only defect is witnessed on a runner, off `master`** (routine run 3):
+  `witness.yml` runs one test on one runner at a branch — read it red there, then the fix green there,
+  then fast-forward `master`. Lint the macOS code in the VM first (`scripts/check-macos.sh`). A witness
+  run's test lines sit 70–85 lines before its log's end (the cache save and git's cleanup follow), so
+  read it with `tail_lines` ≈ 90.
+- **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
+  host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
+  for both, was the first; it also proved the death signal with a mutant.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

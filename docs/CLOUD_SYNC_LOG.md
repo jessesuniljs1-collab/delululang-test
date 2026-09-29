@@ -377,23 +377,50 @@ it on `origin` was made in the cloud and is listed below.
   E-06, P8, P9; RW 4.32's channel hygiene. **For the
   owner:** D-V2-59 narrows D-V2-53 §2 (flagged); D-V2-49 and D-V2-53's consequence stay flagged.
 
-### 2026-09-29 — routine run 3: a one-runner witness workflow; macOS linted from Linux; PS-E-02's macOS half
+### 2026-09-29 — routine run 3: a one-runner witness workflow; macOS linted from Linux; PS-E-02 on macOS
 - Session: `https://claude.ai/code/session_011rtmJDeAZtHQ5iCE18Pofo`   Model: Claude Opus 5.5 (the scheduled routine)
-- Branch: `master` (the routine pushes there); red witnesses on `claude/wonderful-hamilton-mjutjd` first   Pull request: none   Merged: n/a
+- Branch: `master` (the routine pushes there); the macOS witnesses were read red, then green, on
+  `claude/wonderful-hamilton-mjutjd` first, and `master` fast-forwarded to it   Pull request: none   Merged: n/a
 - Base: `7b9aac8` (routine run 2's last commit)
-- Commits: (1) `witness.yml` and `scripts/check-macos.sh` — CI-only witnesses off `master` (this commit)
+- Commits: (1) `a39b423` Loop engineering: a one-runner witness workflow; macOS linted from Linux;
+  (2) `2d08622` PS-E-02 witness: a computing guest ends when its host is killed (red on macOS);
+  (3) `9c38027` PS-E-02 witness: the external launcher's, on macOS too;
+  (4) `2d9d2a0` PS-E-02, macOS: a watcher outside the guest ends it with its host (D-V2-60);
+  (5) `PS-E-02 on macOS: the records` — this entry's commit
 - Files and folders:
-  A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand
+  A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux
-  M `docs/CLOUD_ROUTINE.md` (step 5: a CI-only witness, red on a branch first), `CLAUDE.md` (the manual
-    runs), `docs/REPOSITORY_STRUCTURE.md` (both rows) — (1)
+  M `docs/CLOUD_ROUTINE.md` (step 5: a CI-only witness, red on a branch first; reading it), `CLAUDE.md` (the
+    manual runs), `docs/REPOSITORY_STRUCTURE.md` (both rows) — (1), (5)
+  M `crates/delulu/tests/sandbox_confirm_cli.rs` — (2) `a_computing_guest_ends_when_its_host_is_killed`,
+    `gone()` by `ps`, `guest_of()`; (3) the launcher's witness compiled for macOS; (4) their records
+  M `crates/delulu/src/jail.rs` — (4) `HOST_WATCH_SUBCOMMAND`, `HostWatch` (start, armed, drop),
+    `run_host_watch` (kqueue), the non-Windows `Jail` holds the watcher; `crates/delulu/src/guest.rs` — (4) the
+    watcher started in `launch` (claimed once armed) and `launch_external` (claimed for nothing);
+    `crates/delulu/src/cli.rs` — (4) the dispatch; `crates/delulu/src/boundary.rs` — (4) the macOS
+    property test; `crates/delulu/tests/guest_cli.rs` — (4) macOS's "killed with the host"
+  M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5 two lessons), `docs/DEPLOYMENT.md` (macOS row),
+    `docs/book/THE_DELULULANG_BOOK.md` (macOS row), `docs/REMAINING_WORK.md` (4.26),
+    `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-60), `V2_LOG.md`, `V2_PHASE_STATUS.md` (row 14),
+    `V2_OPENSHELL_STUDY.md` (§4.2), `V2_SECURITY_MODEL.md`, `V2_IMPLEMENTATION_ROADMAP.md`,
+    `docs/assistant-memory/cloud-period-2026-09-28.md` — (5)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
+  M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,466 nodes, 12,743 edges); `doctor --check` ok,
   all checks pass (26 in this VM). After each slice: in its commit message.
 - Verified: routine run 2's last push run, `7b9aac8` `36494315402` — success (read by id). No nightly
-  since `36402530469`. (1): `witness.yml` parses; `scripts/check-macos.sh` clean on both macOS targets
-  at `7b9aac8`, and red (E0308) with a macOS-only type error planted in `jail.rs`, restored.
-- Redo on the laptop: nothing yet.
-- For the laptop's memory: nothing yet.
-- Open / next: this run is in progress.
+  since `36402530469`. (1): `witness.yml` parses; `scripts/check-macos.sh` clean on both macOS targets,
+  red (E0308) with a macOS-only type error planted, restored. (2): the witness green on Linux (9 ms), red
+  with the jail's `PR_SET_PDEATHSIG` removed (a mutant, restored) — no test had witnessed it before; on
+  macOS **red**, `witness.yml` run `36526271163` ("the guest outlived its host by more than 3.15 s").
+  (3): on macOS **red**, run `36526351005` ("the external launcher outlived its host"). (4): on macOS
+  **green**, runs `36526707055` (`sandbox_confirm_cli`, 12 passed; the guest gone 3.6 ms after the
+  kill), `36526709263` (`guest_cli`, 5 passed), `36526711462` (the boundary unit tests, 3 passed); in
+  the VM clippy `-D warnings` clean on Linux and both macOS targets; the full suite alone 2,018 passed,
+  0 failed, 15 ignored (152 binaries), cargo exit 0.
+- Redo on the laptop: nothing for Windows or WSL (the change is macOS-only; the Linux witness is new and
+  runs everywhere Linux does).
+- For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed
+  guarantee needs its own witness); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
+- Open / next: this run is in progress — (5)'s push run to read; then E-02's Windows launcher Job Object.

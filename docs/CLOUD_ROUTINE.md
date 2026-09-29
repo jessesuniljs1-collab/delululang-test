@@ -159,7 +159,8 @@ defect, watch it go red, restore). **A macOS- or Windows-only defect is witnesse
 `master`:** push the witness alone to a branch (this session's `claude/…` branch), dispatch
 `witness.yml` there (`mcp__github__actions_run_trigger` `run_workflow`, `workflow_id` `witness.yml`,
 `ref` the branch, `inputs` `{"os": "macos-latest", "target": "<test file>", "filter": "<test>"}`),
-read it red; commit the fix on the branch, dispatch again, read it green; then fast-forward `master`
+read it red (`get_job_logs` with `tail_lines` ≈ 90 — the cache save and git's cleanup follow the
+test's lines); commit the fix on the branch, dispatch again, read it green; then fast-forward `master`
 to the branch — its history keeps the red witness, and `master` never goes red for it. Lint macOS code
 in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin`, then
 `scripts/check-macos.sh` (clippy `-D warnings` for both, compiled and never run) — so a runner is spent

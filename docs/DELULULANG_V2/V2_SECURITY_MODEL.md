@@ -215,8 +215,9 @@ unchanged; four of their enforcements get stronger, as phase PS-E (D-V2-53) and 
 - **"The guest reaches nothing but the channel" is enforced beyond TCP** (PS-E-03, if its witness is
   red): Landlock mediates TCP only, so a guest that escaped the interpreter could still open UDP,
   netlink or Unix sockets on Linux; the guest needs none after lock-down, so `socket` is denied.
-- **"The guest ends with its host" holds on every backend** (PS-E-02): macOS and the external launcher
-  are the gaps today.
+- **"The guest ends with its host" holds on every backend** (PS-E-02): Linux by the death signal (the
+  external launcher too, since 2026-09-28), Windows by the job, macOS by a watcher outside the guest (the
+  guest and the launcher, 2026-09-29, D-V2-60); the Windows external launcher is the gap left.
 - **Authority checked at a boundary** (P9-01): the `⊑` the lease tree enforces, asked of a whole
   program before it runs, with the source line of anything that exceeds.
 

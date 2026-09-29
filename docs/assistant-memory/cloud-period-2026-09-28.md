@@ -58,6 +58,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   copy):** guarantee held; seven defects around it, verified and fixed (D-V2-58): GUEST-WAIT-1,
   RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1, PIPE-FLOOD-1, F8, F10; F7 (L3 self-report as host
   guarantee) → RW 4.31. A racing witness let mutant M8 live — fake peers read before they hang up.
+- **Routine run 3 (2026-09-29):** `witness.yml` (one test, one runner, any ref — CI-only witnesses
+  red on a branch before `master`) and `scripts/check-macos.sh` (clippy for macOS from Linux, a
+  stand-in C compiler). PS-E-02 on macOS: a computing guest outlived a killed host (red on a runner);
+  a watcher OUTSIDE the guest (`__host_watch`, kqueue on the host's pipe and the guest's exit) ends it
+  and the external launcher (D-V2-60) — not a thread in the guest, which an escaped guest could stop.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
