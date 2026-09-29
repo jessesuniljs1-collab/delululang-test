@@ -417,6 +417,17 @@ mod property_tests {
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
         assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
+        // PS-E-03 H5: a kernel whose Landlock predates ABI 3 cannot stop truncation, so the guest says "no file
+        // writes but truncation" — and that is NOT writes denied: filesystem confinement is absent, and
+        // `hostile-agent`, which requires it, refuses. H5 asked for "ABI >= 3" as a requirement; it already is.
+        let before_abi3 = [
+            "no file writes but truncation", "reads only from the system paths", "no new programs", "no sockets but the channel",
+            "memory ceiling", "processor-time ceiling", "no privilege escalation", "killed with the host",
+        ];
+        let v = properties(&before_abi3, true);
+        assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
+        assert!(v["filesystem_confinement"]["why"].as_str().unwrap().contains("filesystem_writes: not confined"), "{v}");
+        assert!(crate::policy::Profile::HostileAgent.required().contains(&"filesystem_confinement"));
         // Landlock's TCP rule alone is NOT the channel alone: UDP, netlink and Unix sockets stayed open
         // under it (GUEST-SOCKET-1), so without the filter's word the network is not confined.
         let tcp_only = ["no file writes", "reads only from the system paths", "no TCP bind or connect"];

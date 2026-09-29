@@ -3027,3 +3027,30 @@ the control. The musl lint caught the witness's `sched_param` spelled glibc's wa
 
 **Verified:** clippy `-D warnings` clean on Linux, arm64 Linux and musl; the full suite alone: 2,028 passed,
 0 failed, 15 ignored (152 binaries), cargo exit 0.
+
+## 2026-09-29 — routine run 3: PS-E-03 H5 — "no file writes but truncation" read as "writes denied" (D-V2-66)
+
+**Meant as a pin, found a defect.** H5 asked for Landlock ABI ≥ 3 (truncation mediated) as a `hostile-agent`
+requirement; reading the posture it seemed to hold already — so a test was added to PIN it: the words of a
+kernel before ABI 3 ("no file writes but truncation" …) must leave `filesystem_confinement` absent. **Red** on
+`be749d1`: `established`, by "filesystem_writes: denied". The posture's `has` matches a word inside another,
+and "no file writes but truncation" contains "no file writes" — **LANDLOCK-TRUNCATE-1**: on kernels 5.13–6.1
+the report claimed writes denied while an escaped guest could `truncate` any file its user can write, and
+`hostile-agent` ran there.
+
+**Fixed** (`policy.rs`): writes are "denied" only on the exact word; `has`'s substring match stays where the
+microVM's longer words rely on it. Green; below ABI 3 the report says writes are not confined and
+`hostile-agent` refuses. Kernels ≥ 6.2 (CI's 6.8) are unchanged. The search key of §11.4 again: a security
+decision on a looser spelling — here a word containing a stronger one.
+
+**Verified:** clippy `-D warnings` clean on Linux and all five other targets; the full suite alone: 2,028
+passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+
+**Routine run 3, closed.** It built `witness.yml` and `scripts/check-other-os.sh` (macOS, Windows, arm64 Linux
+and musl linted from the VM — each falsified with a planted error), then used them: PS-E-02 completed on
+macOS (a watcher outside the guest) and Windows (the launcher's kill-on-close job), each witnessed red on a
+runner and green on the same branch before `master` moved; PS-E-03's escaped guest confirmed H1, H2 and H3
+and found H7, H8 (keystrokes into the operator's terminal), H9 (signals) and H10 (other processes) — all
+closed, each with mutants — and H4 (the host non-dumpable) as a non-root user. `master` went red once
+(`3ec690b`/`c9739db`, macOS, a raw `Broken pipe`), was read, fixed at its cause and read green
+(`36531207166`). Push runs: `a39b423` `36526041627` success; `3ec690b` `36527491801` **failure** (macOS `sandbox_external_cli`, a raw `Broken pipe` — fixed in `ff251bb`); `c9739db` `36529103180` **failure** (the same); `30e3262` `36531207166` success (every job — `master` green again); `e584f8d` `36533139190` success; `407e423`, `be749d1` and this entry's commit — running as it was written (Open / next (1))

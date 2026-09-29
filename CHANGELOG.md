@@ -33,6 +33,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   outside the guest now ends it (and the launcher) when the host is gone, and the report claims "killed
   with the host" only once the watcher is armed (`host_loss_ends_guest` is now established on macOS)
   (D-V2-60).
+- **Fixed (security, PS-E-03 H5): on Linux kernels before 6.2 a sandboxed run's report claimed file writes
+  denied** where Landlock could not stop truncation, and `hostile-agent` ran there. Such a report now says
+  writes are not confined, and `hostile-agent` refuses (D-V2-66).
 - **Fixed (security, PS-E-03 H10): a Linux guest that escaped its interpreter could change the operator's
   other processes** — their resource limits, priority, CPUs, scheduling class and I/O priority. Refused
   now; it may read only its own limits (D-V2-65).

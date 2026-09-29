@@ -64,8 +64,9 @@ the assistant's memory — which now also travels file by file in
   terminal; all closed, each with a mutant. H4 too: a serving host is non-dumpable (D-V2-62). And H8, new:
   an escaped guest typed into the operator's terminal with `TIOCSTI` — refused now (D-V2-63); H9, new: it
   could signal the operator's processes — now only itself (D-V2-64); H10, new: or change their limits,
-  priority, CPUs and scheduling — refused (D-V2-65).
-- **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H5–H6, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
+  priority, CPUs and scheduling — refused (D-V2-65). H5: below ABI 3 the report claimed writes denied —
+  exact now (D-V2-66).
+- **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H6 and a red-team pass on the filter, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
@@ -737,7 +738,9 @@ wins, and you should update the memory to match.
   operator's terminal is the guest's controlling terminal, and `TIOCSTI` typed into it — the escape class of
   CVE-2017-5226; the rule compares 32 bits, because the kernel truncates the command); and
   **GUEST-SIGNAL-1** (signals to any process of the same user — its host's group, or `kill(-1)`); and
-  **GUEST-PROCESS-1** (the same processes' limits, priority, CPUs and scheduling, changed by pid).
+  **GUEST-PROCESS-1** (the same processes' limits, priority, CPUs and scheduling, changed by pid); and
+  **LANDLOCK-TRUNCATE-1** (below Landlock ABI 3 the report said writes denied: the posture matched "no file
+  writes" INSIDE "no file writes but truncation" — a pin written to prove H5 held went red).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

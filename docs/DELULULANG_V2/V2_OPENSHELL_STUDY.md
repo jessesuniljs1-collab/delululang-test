@@ -313,7 +313,9 @@ and an escaped guest pushed keystrokes into it with `TIOCSTI` (GUEST-TIOCSTI-1) 
 compared on the command's low 32 bits. **H9, the same run (D-V2-64):** it could signal any process of the
 same user — its host's process group, or `kill(-1)` (GUEST-SIGNAL-1); now it signals only itself. **H10
 (D-V2-65):** and it could change their limits, priority, CPUs and scheduling (GUEST-PROCESS-1) — refused.
-Open: H5, H6.
+**H5 (D-V2-66):** a pin that went red — below ABI 3 the report said writes denied, because the posture
+matched "no file writes" inside "no file writes but truncation" (LANDLOCK-TRUNCATE-1); exact now, and
+`hostile-agent` refuses there. Open: H6.
 
 ### 4.4 PS-E-04 — the external launcher is resolved once, hashed, and optionally pinned
 

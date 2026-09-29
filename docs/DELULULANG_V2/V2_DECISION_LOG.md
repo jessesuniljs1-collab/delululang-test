@@ -1357,6 +1357,20 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 3. The class — "an escaped guest acts on another process of its user" — is now covered for signals (H9) and
    these; `ptrace`, `process_vm_*` and `pidfd_*` were already refused.
 
+## D-V2-66 — PS-E-03 H5: writes are "denied" only where truncation is refused too — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **H5 confirmed, as an over-claim in the report.** On a kernel whose Landlock predates ABI 3 (5.13–6.1)
+   the guest reports "no file writes but truncation" — an escaped guest may still `truncate` any file its
+   user can write — and the posture's `has` matched "no file writes" INSIDE that word: the report said
+   `filesystem_writes: denied`, `filesystem_confinement` established, and `hostile-agent` ran
+   (LANDLOCK-TRUNCATE-1; witnessed red in the property test before the fix).
+2. **Writes are "denied" only on the exact word.** Below ABI 3 the report now says writes are not confined,
+   names the limitation, and `hostile-agent` refuses — H5's "the ABI as a requirement", through the required
+   set. `has`'s substring match stays for the rows whose longer words rely on it (the microVM's), and only the
+   one word that another word extends is matched exactly.
+3. **Kernels ≥ 6.2 are unchanged** (CI's 6.8 among them); the effective ABI is still named by the word, not
+   by a number.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

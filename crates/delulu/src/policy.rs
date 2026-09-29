@@ -136,6 +136,11 @@ impl SandboxPolicy {
     /// A report that lists only guarantees reads as though the rest were covered.
     pub fn posture(guarantees: &[&str]) -> (serde_json::Value, Vec<&'static str>) {
         let has = |needle: &str| guarantees.iter().any(|g| g.contains(needle));
+        // PS-E-03 H5 (LANDLOCK-TRUNCATE-1): `has` matches a word INSIDE another, which the microVM's longer
+        // words rely on — and which let "no file writes but truncation" (Landlock before ABI 3, where an
+        // escaped guest may still `truncate` any file its user can write) answer "writes: denied". Writes
+        // are denied only on the exact word.
+        let exact = |word: &str| guarantees.contains(&word);
         // PS-B-03: a guest started as a separate identity (Windows, a per-run AppContainer with no
         // capabilities). Matched on the guarantee's exact words, which `identity.rs` owns, so the
         // report cannot say "separate" unless the launch that applied it said so.
@@ -165,12 +170,12 @@ impl SandboxPolicy {
                 // not "denied", and the report does not round it up to that.
                 if no_fs_device {
                     "none of the host's: the guest has no filesystem device"
-                } else if has("no file writes") {
+                } else if exact("no file writes") {
                     "denied"
                 } else {
                     "only its own per-run container folder"
                 },
-                no_fs_device || has("no file writes") || windows_identity,
+                no_fs_device || exact("no file writes") || windows_identity,
             ),
             (
                 "filesystem_reads",

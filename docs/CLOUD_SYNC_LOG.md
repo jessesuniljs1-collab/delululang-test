@@ -397,7 +397,8 @@ it on `origin` was made in the cloud and is listed below.
   (12) `6f88202` PS-E-03 H4: a serving host is closed to its own user (D-V2-62);
   (13) `e584f8d` PS-E-03 H8: an escaped guest cannot type into the operator's terminal (D-V2-63); H4's records;
   (14) `407e423` PS-E-03 H9: an escaped guest signals only itself (D-V2-64);
-  (15) `PS-E-03 H10: an escaped guest changes no other process (D-V2-65)`
+  (15) `be749d1` PS-E-03 H10: an escaped guest changes no other process (D-V2-65);
+  (16) `PS-E-03 H5: writes are denied only where truncation is too (D-V2-66); the run closed`
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -449,6 +450,10 @@ it on `origin` was made in the cloud and is listed below.
     `lock_down_self`: the setters and the `prlimit64` rule), `CHANGELOG.md`, `HANDOFF.md`,
     `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-65), `V2_LOG.md`, `V2_PHASE_STATUS.md`,
     `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (15)
+  M `crates/delulu/src/policy.rs` (`exact` for "no file writes"), `crates/delulu/src/boundary.rs` (the H5 pin),
+    `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-66), `V2_LOG.md`
+    (H5; the run closed), `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10,
+    `docs/CLOUD_ROUTINE.md` (cheaper CI polling) — (16)
   M `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-62, D-V2-63),
     `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (13)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
@@ -508,8 +513,22 @@ it on `origin` was made in the cloud and is listed below.
   (15): H10's witness red on `407e423` (five calls on the operator's process), green after with the control
   true; mutants M11–M13 red; clippy clean on Linux, arm64 Linux and musl (musl caught the witness's
   `sched_param`). The full suite alone 2,028 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+  (16): the H5 pin red on `be749d1` (`filesystem_confinement` established on a pre-ABI-3 kernel's words),
+  green after; the full suite alone 2,028 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
 - Redo on the laptop: (9) changes the Linux guest's own lock-down — **rebuild the WSL microVM guest images**
   (the VM guest applies the same filter) and run the suite in WSL; Windows: nothing new beyond the suite.
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed
   guarantee needs its own witness); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
-- Open / next: this run is in progress — the push runs of (5) and (8) to read; then PS-E-03 (the escaped guest).
+- Push runs read: `a39b423` `36526041627` success; `3ec690b` `36527491801` **failure** (macOS `sandbox_external_cli`, a raw `Broken pipe` — fixed in `ff251bb`); `c9739db` `36529103180` **failure** (the same); `30e3262` `36531207166` success (every job — `master` green again); `e584f8d` `36533139190` success; `407e423`, `be749d1` and this entry's commit — running as it was written (Open / next (1))
+- Open / next: (1) read the push runs this entry names as unread, first; (2) **PS-E-03's rest** — H5 (the
+  Landlock ABI as a `hostile-agent` requirement; the report states the effective ABI), H6 (the escaped-guest
+  harness on macOS and Windows through `witness.yml`: Seatbelt's and the AppContainer's reach), and a
+  **red-team pass on the new filter** (a Sonnet 5.5 sous-chef adding attempts to a copy of
+  `jail::escaped_tests` — keyrings, `personality`, `mknod`, the channel descriptor itself, `/sys`, `/etc`);
+  (3) the guest's standard error still reaches the operator's terminal raw (escape sequences) and the guest
+  keeps a controlling terminal — RW 4.32's relay and a `setsid`; (4) PS-E-01's remainder (attesters' claims as
+  properties, `contained`'s set), E-04 (the launcher resolved, hashed, pinnable), E-05, E-06, then P8, P9.
+  **For the owner:** D-V2-60 departs from the study's design (the macOS watcher outside the guest); D-V2-61
+  to D-V2-65 close five findings the study predicted and three it did not (H7, H8, H9/H10 — the terminal,
+  keystroke injection, signals and other processes); D-V2-59, D-V2-49 and D-V2-53's consequence stay
+  flagged.

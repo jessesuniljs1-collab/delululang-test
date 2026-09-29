@@ -185,7 +185,9 @@ Commit with the trailers in `CLAUDE.md`, push.
 
 **7. Watch the push run.** Wait for it (poll `mcp__github__actions_get` `get_workflow_run` — a push run
 takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and
-`list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply) within the budget,
+`list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply; `get_workflow_run_usage`
+names a run's job ids in a few bytes, and `get_job_logs` by job id answers 404 until that job is done — the
+cheapest way to wait on a `witness.yml` run) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
 

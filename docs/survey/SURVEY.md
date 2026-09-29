@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 287 |
-| Rust lines | 148218 |
+| Rust lines | 148234 |
 | Rust files outside `src/` (test/bench targets) | 129 |
 | Markdown documents | 252 |
-| Markdown lines | 66218 |
+| Markdown lines | 66289 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1468 / 12789 |
+| Nodes / edges in this map | 1468 / 12793 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,14 +90,14 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 39 files, 36121 lines
+- **Modules:** 39 files, 36137 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/advisories.rs` | 219 | The advisory-feed detector (Stage 10 phase 10k, Track C, spec §4). |
 | `src/atlas_chain.rs` | 331 | P4-11: `delulu atlas chain` — the Atlas's V2 chain, one ordered view an auditor can read top to |
 | `src/attest.rs` | 570 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
-| `src/boundary.rs` | 469 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
+| `src/boundary.rs` | 480 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 472 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 391 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
@@ -126,7 +126,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/morph_file.rs` | 257 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
 | `src/pipe_channel.rs` | 573 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
-| `src/policy.rs` | 506 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
+| `src/policy.rs` | 511 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1731 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 552 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
