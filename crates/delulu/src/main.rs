@@ -25,6 +25,7 @@ mod fix;
 mod guest;
 mod identity;
 mod jail;
+mod launcher;
 // Used by the Windows contained guest today; its tests run everywhere, so the module is not gated.
 #[cfg_attr(not(windows), allow(dead_code))]
 mod pipe_channel;

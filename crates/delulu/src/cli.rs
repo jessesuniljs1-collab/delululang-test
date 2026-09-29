@@ -261,6 +261,9 @@ pub(crate) struct Opts {
     /// `--require-attestation HEX` (PS-D-02, L3 only): the ed25519 key the external launcher's attester
     /// must sign this run's statement with, before the program is sent.
     pub(crate) require_attestation: Option<String>,
+    /// `--launcher-digest HEX` (PS-E-04, L3 only): the BLAKE3 digest the external launcher's file must
+    /// have, or nothing is started.
+    pub(crate) launcher_digest: Option<String>,
     /// `--limits mem=<bytes>,cpu=<seconds>`: narrow the profile's limits. Never widens past a
     /// profile that is already tighter — a flag may only ask for less.
     pub(crate) limits: Option<String>,
@@ -388,6 +391,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         sandbox_profile: None,
         sandbox_backend: None,
         require_attestation: None,
+        launcher_digest: None,
         limits: None,
         sandbox_mode: None,
         assert_trace: false,
@@ -502,6 +506,17 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             }
             s if s.starts_with("--require-attestation=") => {
                 opts.require_attestation = Some(s["--require-attestation=".len()..].to_string())
+            }
+            "--launcher-digest" => {
+                if i + 1 < rest.len() {
+                    opts.launcher_digest = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--launcher-digest".to_string());
+                }
+            }
+            s if s.starts_with("--launcher-digest=") => {
+                opts.launcher_digest = Some(s["--launcher-digest=".len()..].to_string())
             }
             s if s.starts_with("--sandbox-profile=") => {
                 opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string())
@@ -1335,6 +1350,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--require-attestation HEX]  (PS-D-02, with external: only: the launcher's attester must sign a statement\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 over this run's nonce with this pinned ed25519 key, or the program is never sent; its claims are\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 reported as the attester's, never as the host's — `delulu sandbox attest` is a software attester)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--launcher-digest HEX]  (PS-E-04, with external: only: the launcher's file must have this BLAKE3 digest —\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the `launcher_blake3` every external run reports — or nothing is started)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\

@@ -151,3 +151,217 @@ fn the_launcher_is_told_the_guest_words_and_the_limits() {
     assert_eq!(std::fs::read_to_string(d.join("env.txt")).unwrap().trim(), "__guest --stdio-pipes|268435456|7|30");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ===== PS-E-04 · the launcher resolved once, hashed, and pinnable ===============================
+//
+// `launch_external` handed the command's first word to the operating system, which looks a bare name
+// up on `PATH` at spawn — a relative entry included — and the report named the word, never the bytes.
+// ADAPTER-SPELL-1 was the same shape for hardware drivers (D-V2-50). `V2_OPENSHELL_STUDY.md` §4.4.
+
+/// BLAKE3 of a file, computed here, independently of the host that reports it.
+fn blake3_of(p: &Path) -> String {
+    let mut h = blake3::Hasher::new();
+    h.update_reader(std::fs::File::open(p).unwrap()).unwrap();
+    h.finalize().to_hex().to_string()
+}
+
+fn hello(d: &Path) {
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+}
+
+/// The report and the launch record name the file the launcher's word resolved to, and its digest —
+/// the digest of the bytes, not of the name.
+#[test]
+fn the_report_names_the_launchers_file_and_its_digest() {
+    let d = lab("digest");
+    hello(&d);
+    std::fs::create_dir_all(d.join("s").join("audit")).unwrap();
+    let report = d.join("r.json");
+    let r = delulu(
+        &d,
+        &d.join("s"),
+        &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &self_launcher(), "--report-out", report.to_str().unwrap()],
+    );
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let s = &v["sandbox"];
+    let exe = Path::new(env!("CARGO_BIN_EXE_delulu"));
+    let path = s["launcher_path"].as_str().unwrap_or_else(|| panic!("the report names the launcher's file: {s}"));
+    assert_eq!(Path::new(path), exe, "{s}");
+    assert_eq!(s["launcher_blake3"], blake3_of(exe), "the digest is the file's, computed independently: {s}");
+    let q = delulu(&d, &d.join("s"), &["audit", "query", "--json"]);
+    let chain: serde_json::Value = serde_json::from_slice(&q.stdout).unwrap_or_else(|_| panic!("{}", text(&q)));
+    let launch = chain["records"].as_array().unwrap().iter().find(|r| r["action"] == "sandbox-launch").cloned();
+    let launch = launch.unwrap_or_else(|| panic!("a launch record: {chain}"));
+    assert_eq!(launch["authority"]["launcher_blake3"], blake3_of(exe), "the launch record names it too: {launch}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `--launcher-digest HEX` pins the launcher: another file refuses before anything starts, the pinned
+/// one runs; a pin that is not a digest, or a pin with no external launcher, is refused in words.
+#[test]
+fn a_pinned_launcher_runs_only_as_the_file_it_pins() {
+    let d = lab("pin");
+    hello(&d);
+    let st = d.join("s");
+    std::fs::create_dir_all(st.join("audit")).unwrap();
+    let launcher = self_launcher();
+    let exe = Path::new(env!("CARGO_BIN_EXE_delulu"));
+    let wrong = blake3::hash(b"not the launcher").to_hex().to_string();
+    let r = delulu(&d, &st, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &launcher, "--launcher-digest", &wrong]);
+    assert_eq!(r.status.code(), Some(1), "refused in words, as an attester's refusal is: {}", text(&r));
+    assert!(text(&r).contains("not the pinned launcher"), "{}", text(&r));
+    assert!(text(&r).contains(&blake3_of(exe)) && text(&r).contains(&wrong), "both digests are named: {}", text(&r));
+    assert!(!String::from_utf8_lossy(&r.stdout).contains("hi"), "nothing ran: {}", text(&r));
+    // The refusal is evidence: a launcher that changed under a pin is in the chain, and nothing launched.
+    let q = delulu(&d, &st, &["audit", "query", "--json"]);
+    let chain: serde_json::Value = serde_json::from_slice(&q.stdout).unwrap_or_else(|_| panic!("{}", text(&q)));
+    let records = chain["records"].as_array().unwrap_or_else(|| panic!("{chain}"));
+    assert!(
+        records.iter().any(|r| r["action"] == "sandbox-launcher"
+            && r["decision"] == "deny"
+            && r["authority"]["pinned"] == wrong.as_str()
+            && r["authority"]["launcher_blake3"] == blake3_of(exe).as_str()),
+        "the refused launcher is recorded: {chain}"
+    );
+    assert!(!records.iter().any(|r| r["action"] == "sandbox-launch"), "and nothing was launched: {chain}");
+
+    let right = blake3_of(exe);
+    let r = delulu(&d, &st, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &launcher, &format!("--launcher-digest={}", right.to_uppercase())]);
+    assert_eq!(r.status.code(), Some(0), "the pinned file runs (a pin's case does not matter): {}", text(&r));
+    assert!(String::from_utf8_lossy(&r.stdout).contains("hi"), "{}", text(&r));
+
+    for (args, says) in [
+        (vec!["--sandbox", "--sandbox-backend", launcher.as_str(), "--launcher-digest", "abc"], "is not a BLAKE3 digest"),
+        (vec!["--sandbox", "--launcher-digest", right.as_str()], "is for an external launcher"),
+        (vec!["--launcher-digest", right.as_str()], "describes a sandboxed run"),
+    ] {
+        let mut a = vec!["run", "h.delulu", "--grant", "console"];
+        a.extend(args.iter().copied());
+        let r = delulu(&d, &st, &a);
+        assert_eq!(r.status.code(), Some(2), "{args:?}: {}", text(&r));
+        assert!(text(&r).contains(says), "{args:?}: {}", text(&r));
+        assert!(!String::from_utf8_lossy(&r.stdout).contains("hi"), "{args:?}: nothing ran");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(unix)]
+fn script(p: &Path, body: &str) {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::write(p, body).unwrap();
+    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// A launcher the pin refuses is never STARTED — not started and then ended.
+#[cfg(unix)]
+#[test]
+fn a_launcher_the_pin_refuses_is_never_started() {
+    let d = lab("never");
+    hello(&d);
+    let lnch = d.join("lnch");
+    script(&lnch, &format!("#!/bin/sh\ntouch {}/STARTED\nexec {} $DELULU_GUEST_ARGS\n", d.display(), env!("CARGO_BIN_EXE_delulu")));
+    let run = |pin: &str| {
+        delulu(&d, &d.join("s"), &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &format!("external:{}", lnch.display()), "--launcher-digest", pin])
+    };
+    let r = run(&blake3::hash(b"another launcher").to_hex());
+    assert_ne!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(!d.join("STARTED").exists(), "a launcher that is not the pinned file was started: {}", text(&r));
+    let r = run(&blake3_of(&lnch));
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(d.join("STARTED").exists(), "the pinned launcher runs: {}", text(&r));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// A bare launcher name is looked up in PATH's ABSOLUTE directories, by DeluluLang: an empty or relative
+/// entry — `.` ahead of the operator's directory — means the working directory to the operating system's
+/// own search, and a `lnch` planted there must not be what runs.
+#[cfg(unix)]
+#[test]
+fn a_bare_launcher_name_never_means_a_file_in_the_working_directory() {
+    let d = lab("plant");
+    hello(&d);
+    let exe = env!("CARGO_BIN_EXE_delulu");
+    let good = d.join("good");
+    std::fs::create_dir_all(&good).unwrap();
+    script(&good.join("lnch"), &format!("#!/bin/sh\ntouch {}/GOOD-RAN\nexec {exe} $DELULU_GUEST_ARGS\n", d.display()));
+    script(&d.join("lnch"), &format!("#!/bin/sh\ntouch {}/PLANTED-RAN\nexec {exe} $DELULU_GUEST_ARGS\n", d.display()));
+    let path = format!(".:{}:{}", good.display(), std::env::var("PATH").unwrap_or_default());
+    let report = d.join("r.json");
+    let r = Command::new(exe)
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .env("PATH", &path)
+        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", "external:lnch", "--report-out", report.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!d.join("PLANTED-RAN").exists(), "the file planted in the working directory ran: {}", text(&r));
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(d.join("GOOD-RAN").exists(), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(Path::new(v["sandbox"]["launcher_path"].as_str().unwrap_or_default()), good.join("lnch"), "{v}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// On Linux the file started is the file that was hashed (`fexecve` of the descriptor the digest was
+/// read from): a path swapped between the hash and the start is not what runs. The window is held open
+/// by a launcher long enough to take a while to hash, and the swap is made the moment the host is seen
+/// holding the launcher open — never by re-running until a race shows (HANDOFF §11.5).
+#[cfg(target_os = "linux")]
+#[test]
+fn the_launcher_started_is_the_file_that_was_hashed() {
+    use std::io::Write as _;
+    let d = lab("swap");
+    hello(&d);
+    let exe = env!("CARGO_BIN_EXE_delulu");
+    let lnch = d.join("lnch");
+    let body = |who: &str| format!("#!/bin/sh\necho {who} >> {}/ran\nexec {exe} $DELULU_GUEST_ARGS\n", d.display());
+    // A: the pinned file, its tail a comment the shell never reaches (it `exec`s first), 64 MiB long.
+    let mut a = body("A").into_bytes();
+    a.extend(std::iter::repeat_n(b'#', 64 << 20));
+    a.push(b'\n');
+    {
+        let mut f = std::fs::File::create(&lnch).unwrap();
+        f.write_all(&a).unwrap();
+    }
+    script(&d.join("b"), &body("B"));
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&lnch, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let pin = blake3::hash(&a).to_hex().to_string();
+    let seen_as = std::fs::canonicalize(&lnch).unwrap();
+    let mut host = Command::new(exe)
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &format!("external:{}", lnch.display()), "--launcher-digest", &pin])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // The moment the host holds the launcher open — it is reading it to hash it — the path is swapped.
+    let fds = format!("/proc/{}/fd", host.id());
+    let swapped = loop {
+        if host.try_wait().unwrap().is_some() {
+            break false;
+        }
+        let open = std::fs::read_dir(&fds)
+            .map(|rd| rd.flatten().any(|e| std::fs::read_link(e.path()).is_ok_and(|t| t == seen_as)))
+            .unwrap_or(false);
+        if open {
+            std::fs::rename(d.join("b"), &lnch).unwrap();
+            break true;
+        }
+        std::thread::yield_now();
+    };
+    let out = host.wait_with_output().unwrap();
+    assert!(swapped, "the host never held the launcher open before starting it, so nothing was hashed: {}", text(&out));
+    let ran = std::fs::read_to_string(d.join("ran")).unwrap_or_default();
+    assert_eq!(ran.trim(), "A", "A was hashed and pinned; B was swapped in under its name and must not be what ran: {}", text(&out));
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out));
+    let _ = std::fs::remove_dir_all(&d);
+}

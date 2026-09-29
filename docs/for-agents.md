@@ -445,7 +445,10 @@ jailed process, all three systems); **L2** `--isolation microvm` (its own kernel
 Linux x86_64 with KVM and an image built from source; elsewhere `DL1408`, never something weaker);
 **L3** `--sandbox --sandbox-backend external:CMD` (your launcher — Docker with gVisor, Kata, a cloud
 sandbox — carries the guest; the report says level 3 and **no host guarantee**, because DeluluLang
-measured none of that wall). Add `--require-attestation HEX` and the program is sent only after the
+measured none of that wall). The report names the file the launcher's word resolved to and its BLAKE3,
+`sandbox.launcher_path` and `sandbox.launcher_blake3` (a bare name is looked up in `PATH`'s absolute
+directories only); `--launcher-digest HEX` pins it, and any other file is never started (PS-E-04). Add
+`--require-attestation HEX` and the program is sent only after the
 launcher's attester has signed a statement over this run's nonce with that ed25519 key; its claims come
 back as `sandbox.attestation` — the attester's word, never counted as a host guarantee (PS-D-02;
 `delulu sandbox attest` is a software attester, `DEPLOYMENT.md` has the format). At every level the host

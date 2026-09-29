@@ -176,6 +176,23 @@ The guest still holds no authority: every effect it asks for is decided and perf
 your grants, lease and Guard, exactly as at L1. What changes is who vouches for the wall around it: the
 run report says **level 3, backend `external`, and no host guarantee** — DeluluLang measured none of that
 boundary, and says so; it names the launcher's program (never its arguments, which can carry a token).
+
+**Which file runs (PS-E-04).** The command's first word is resolved once, by DeluluLang: a word with a
+separator is a path from the working directory; a bare name is looked up in `PATH`'s **absolute**
+directories only (an empty or relative entry — `.` — means the working directory to a shell, and a
+launcher planted there must not be what runs; `.exe` is appended on Windows), with no fallback to the
+operating system's own search. That file is opened and its bytes hashed with BLAKE3, and every external
+run reports `sandbox.launcher_path` and `sandbox.launcher_blake3` (also in its `sandbox-launch` audit
+record). **`--launcher-digest HEX`** pins it: any other file refuses before anything is started — the
+run exits 1 in words naming both digests, and a `sandbox-launcher` refusal goes into the audit chain.
+Take the digest from a run's report, or `b3sum`. On **Linux** what starts is the very descriptor the
+digest was read from (`fexecve`), so a path swapped between the hash and the start is not what runs; a
+script's interpreter reads it back through `/dev/fd/N`, so `$0` in a launcher script is that name, not
+the script's path. On **macOS and Windows** the resolved path is started by name, and a swap in that
+moment by someone who can write the launcher's directory is not closed — keep launchers where only you
+can write (§5). Nowhere does the digest stop a change to the file's own bytes, in place, by someone who
+may write the file: the pin then refuses the NEXT run, which is what a pin is for.
+
 A reference recipe — **documented, not shipped, and not tested by this project** — for Docker with gVisor
 and no network:
 

@@ -476,6 +476,9 @@ fn defs() -> Value {
             &[
                 ("image", r("microvm_image")),
                 ("launcher", t("string")),
+                // PS-E-04: the file the launcher's word resolved to, and the BLAKE3 of the bytes started.
+                ("launcher_path", t("string")),
+                ("launcher_blake3", t("string")),
                 ("attestation", r("attestation")),
                 ("guest_reported", str_list.clone()),
             ],

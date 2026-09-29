@@ -115,14 +115,18 @@ fn stdio_pipes_channel() -> Result<crate::pipe_channel::GuestChannel<std::fs::Fi
 ///
 /// PS-D-02: where this run requires attestation, the launcher is also told the run's nonce and where to
 /// write its attester's document ([`crate::attest::ENV_NONCE`], [`crate::attest::ENV_OUT`]).
+///
+/// PS-E-04: `launcher` is the command's first word, already resolved and hashed
+/// ([`crate::launcher::Launcher`]); it is started by that path — on Linux, as the very file hashed.
 fn launch_external(
     cmd: &str,
+    launcher: &crate::launcher::Launcher,
     limits: crate::jail::Limits,
     attest: Option<(&str, &std::path::Path)>,
 ) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
     let mut words = cmd.split_whitespace();
     let program = words.next().ok_or_else(|| io::Error::other("the external launcher's command is empty"))?;
-    let mut c = std::process::Command::new(program);
+    let mut c = std::process::Command::new(&launcher.path);
     c.args(words)
         .env("DELULU_GUEST_ARGS", format!("{GUEST_SUBCOMMAND} {STDIO_PIPES_FLAG}"))
         .env("DELULU_LIMIT_MEMORY_BYTES", limits.memory_bytes.to_string())
@@ -165,9 +169,12 @@ fn launch_external(
         const CREATE_SUSPENDED: u32 = 0x0000_0004;
         c.creation_flags(CREATE_SUSPENDED);
     }
+    // PS-E-04: the file that was hashed is the file that starts. Registered last, so every step above runs
+    // first in the child.
+    launcher.start_as_hashed(&mut c)?;
     let child = c.spawn().map_err(|e| {
         let why = match e.kind() {
-            io::ErrorKind::NotFound => "there is no such program (a bare name is looked up on PATH)".to_string(),
+            io::ErrorKind::NotFound => "there is no such program".to_string(),
             io::ErrorKind::PermissionDenied => "it is not executable by this user".to_string(),
             _ => crate::cli::broker_unreachable_detail(&e),
         };
@@ -520,6 +527,8 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--sandbox-backend",
     // PS-D-02: an external launcher's attester must vouch for the guest before the program is sent.
     "--require-attestation",
+    // PS-E-04: the external launcher's file must have this BLAKE3 digest, or nothing starts.
+    "--launcher-digest",
 ];
 
 /// The largest program a sandboxed run sends: the channel's frame bound, less room for the frame's other
@@ -533,9 +542,10 @@ const MAX_PROGRAM_BYTES: usize = delulu_runtime::channel::MAX_FRAME as usize - 6
 pub enum Isolation {
     Process,
     MicroVm,
-    /// PS-D-01 (L3): an operator-supplied launcher, the command (its words, no shell) as given; and
-    /// (PS-D-02) the key its attester must sign with, when the run requires attestation.
-    External(&'static str, Option<&'static str>),
+    /// PS-D-01 (L3): an operator-supplied launcher, the command (its words, no shell) as given; (PS-D-02)
+    /// the key its attester must sign with, when the run requires attestation; and (PS-E-04) the BLAKE3
+    /// digest the launcher's file must have, when the run pins it.
+    External(&'static str, Option<&'static str>, Option<&'static str>),
 }
 
 impl Isolation {
@@ -589,7 +599,21 @@ fn isolation_of(opts: &crate::cli::Opts) -> Result<Isolation, String> {
                 Some(&*Box::leak(key.into_boxed_str()))
             }
         };
-        return Ok(Isolation::External(Box::leak(cmd.to_string().into_boxed_str()), pinned));
+        let launcher_pin = match opts.launcher_digest.as_deref() {
+            None => None,
+            Some(given) => {
+                let pin = crate::launcher::pinned_digest(given).map_err(|why| format!("{why}. Nothing ran."))?;
+                Some(&*Box::leak(pin.into_boxed_str()))
+            }
+        };
+        return Ok(Isolation::External(Box::leak(cmd.to_string().into_boxed_str()), pinned, launcher_pin));
+    }
+    // PS-E-04: the launcher's digest pins a file DeluluLang starts; the jailed process and the microVM
+    // start this binary, which a pin would not be checked against.
+    if opts.launcher_digest.is_some() {
+        return Err("`--launcher-digest` is for an external launcher (`--sandbox-backend external:CMD`, level 3): it \
+                    pins the file that launcher's word resolves to. Nothing ran."
+            .to_string());
     }
     // PS-D-02: an attester vouches for a boundary this host did NOT measure. L1 and L2 are measured here,
     // and nothing an attester says would be checked against them, so the flag is refused rather than
@@ -638,7 +662,7 @@ fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> 
 /// PS-D-02: a dry run launches nothing, so an attestation it requires is reported as required and not
 /// verified — never left out, which would read as a run that asked for none.
 fn with_attestation_required(mut sandbox: serde_json::Value, isolation: Isolation) -> serde_json::Value {
-    if let Isolation::External(_, Some(key)) = isolation {
+    if let Isolation::External(_, Some(key), _) = isolation {
         sandbox["attestation"] = crate::attest::required_json(key);
     }
     sandbox
@@ -1029,20 +1053,52 @@ fn serve_under(
     };
     // PS-D-02: the place in this run's own directory where the attester's document must appear.
     let attest_plan = match isolation {
-        Isolation::External(_, Some(key)) => Some((key, generation.clone(), dir.join(crate::attest::FILE_NAME))),
+        Isolation::External(_, Some(key), _) => Some((key, generation.clone(), dir.join(crate::attest::FILE_NAME))),
         _ => None,
     };
-    let launched = match isolation {
-        Isolation::Process => launch(&exe, &dir, limits, false),
-        Isolation::MicroVm => launch_vm(limits, false),
-        Isolation::External(cmd, _) => {
-            launch_external(cmd, limits, attest_plan.as_ref().map(|(_, nonce, path)| (nonce.as_str(), path.as_path())))
+    // PS-E-04: the launcher is resolved once and its bytes hashed, and a pinned run refuses any other file
+    // before anything starts — recorded, because a launcher that changed under a pin is news to someone.
+    let resolved = match isolation {
+        Isolation::External(cmd, _, pin) => {
+            let word = cmd.split_whitespace().next().unwrap_or_default();
+            let l = match crate::launcher::Launcher::resolve(word) {
+                Ok(l) => l,
+                Err(e) => {
+                    let _ = std::fs::remove_dir_all(&dir);
+                    return Err(e);
+                }
+            };
+            if let Err(why) = l.check_pin(pin) {
+                audit_sandbox(
+                    "sandbox-launcher",
+                    "deny",
+                    Some(l.blake3.clone()),
+                    Some(serde_json::json!({
+                        "launcher_path": l.path.display().to_string(),
+                        "launcher_blake3": l.blake3,
+                        "pinned": pin,
+                        "generation": generation,
+                    })),
+                );
+                let _ = std::fs::remove_dir_all(&dir);
+                return Err(io::Error::other(why));
+            }
+            Some(l)
         }
+        _ => None,
+    };
+    let launched = match (isolation, &resolved) {
+        (Isolation::Process, _) => launch(&exe, &dir, limits, false),
+        (Isolation::MicroVm, _) => launch_vm(limits, false),
+        (Isolation::External(cmd, ..), Some(l)) => {
+            launch_external(cmd, l, limits, attest_plan.as_ref().map(|(_, nonce, path)| (nonce.as_str(), path.as_path())))
+        }
+        (Isolation::External(..), None) => Err(io::Error::other("the external launcher was not resolved")),
     };
     let external = matches!(isolation, Isolation::External(..));
     let launcher = match isolation {
         // The program only: an argument can carry an operator's token, and a report is shared.
-        Isolation::External(cmd, _) => cmd.split_whitespace().next().map(str::to_string),
+        Isolation::External(cmd, ..) => cmd.split_whitespace().next().map(str::to_string),
         _ => None,
     };
     let (mut child, jail, mut applied) = match launched {
@@ -1117,6 +1173,11 @@ fn serve_under(
         }
         if let (Some(program), Some(obj)) = (&launcher, v.as_object_mut()) {
             obj.insert("launcher".to_string(), serde_json::json!(program));
+        }
+        // PS-E-04: the file that word resolved to, and the digest of the bytes that were started.
+        if let (Some(l), Some(obj)) = (&resolved, v.as_object_mut()) {
+            obj.insert("launcher_path".to_string(), serde_json::json!(l.path.display().to_string()));
+            obj.insert("launcher_blake3".to_string(), serde_json::json!(l.blake3));
         }
         v
     };
