@@ -432,6 +432,94 @@ fn gone(pid: u32) -> bool {
     }
 }
 
+/// The same question where there is no `/proc`: `ps` prints nothing for a process that is gone, and a
+/// state beginning `Z` for one that exited and was not reaped yet.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn gone(pid: u32) -> bool {
+    let out = Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]).output().expect("ps runs");
+    let state = String::from_utf8_lossy(&out.stdout);
+    let state = state.trim();
+    state.is_empty() || state.starts_with('Z')
+}
+
+/// Every process descended from `pid`, found while they are all still attached to it — once a parent
+/// dies its children are re-parented, and a search by parent would no longer find them.
+#[cfg(unix)]
+fn descendants(pid: u32) -> Vec<u32> {
+    let mut all = Vec::new();
+    let mut frontier = vec![pid];
+    while let Some(p) = frontier.pop() {
+        let out = Command::new("pgrep").args(["-P", &p.to_string()]).output().expect("pgrep runs");
+        for child in String::from_utf8_lossy(&out.stdout).split_whitespace().filter_map(|s| s.parse::<u32>().ok()) {
+            all.push(child);
+            frontier.push(child);
+        }
+    }
+    all
+}
+
+/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), the guest itself: a guest that is COMPUTING and asking for
+/// nothing ends when its host is killed, measured from outside both. It never notices a closed channel,
+/// because it never reads one. Linux carries `PR_SET_PDEATHSIG`; macOS has no death signal, so there the
+/// spinning guest lived on until its processor-time ceiling (five minutes by default) ended it.
+///
+/// Every process descended from the host is collected while the guest spins (so a launcher, an identity
+/// helper or the guest itself are all measured), the host is killed with SIGKILL, and each must be gone
+/// within 3 s. The witness also asserts it found a guest to measure: an empty set would pass vacuously.
+#[cfg(unix)]
+#[test]
+fn a_spinning_guest_ends_when_its_host_is_killed() {
+    let d = lab("spin");
+    std::fs::write(
+        d.join("s.delulu"),
+        "module s\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"spinning\")\n    var i = 0\n    \
+         while true {\n        i = i + 1\n    }\n}\n",
+    )
+    .unwrap();
+    let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_HOME", d.join("home"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["run", "s.delulu", "--sandbox", "--grant", "console"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the host starts");
+    // The guest has started spinning once the host has printed the line it asked for first.
+    let out = host.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        use std::io::BufRead as _;
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            if line.contains("spinning") {
+                let _ = tx.send(());
+            }
+        }
+    });
+    if rx.recv_timeout(std::time::Duration::from_secs(60)).is_err() {
+        let _ = host.kill();
+        panic!("the guest never started spinning");
+    }
+    let guests = descendants(host.id());
+    assert!(!guests.is_empty(), "the host has no guest process to measure");
+    assert!(guests.iter().all(|p| !gone(*p)), "every guest process is running before its host is killed");
+    host.kill().expect("the host is killed");
+    let _ = host.wait();
+    let t = std::time::Instant::now();
+    while guests.iter().any(|p| !gone(*p)) && t.elapsed() < std::time::Duration::from_secs(3) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let left: Vec<u32> = guests.iter().copied().filter(|p| !gone(*p)).collect();
+    for p in &left {
+        // SAFETY: a plain signal to a stray process this test started, so it does not spin on for minutes.
+        unsafe { libc::kill(*p as i32, libc::SIGKILL) };
+    }
+    assert!(left.is_empty(), "the guest outlived its killed host: {left:?} still running 3 s later (of {guests:?})");
+    eprintln!("every guest process ({guests:?}) was gone {:?} after its host was killed", t.elapsed());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), its Linux half for an external launcher: the launcher ends when
 /// its host is killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none,
 /// so a host killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host).

@@ -28,17 +28,26 @@ on:
   # 2026-09-14, when the repository was private and a manual run of the heavy gates also paid for the
   # whole matrix, so `heavy` was the default then. Since 2026-09-17 the repository is public and its
   # runners are free, so the default is `everything` again and the narrower choices are for speed.
+  #
+  # `tests` (routine run 3, 2026-09-29) runs the three-OS test matrix alone, and with `test_filter` just
+  # the cargo test named there: a witness that only one runner can turn red (macOS's PS-E-02, first) is
+  # dispatched on a branch holding the witness and not yet the fix, and read red there before the fix is
+  # pushed — minutes instead of a whole matrix, and `master` never red.
   workflow_dispatch:
     inputs:
       jobs:
-        description: "Which jobs: everything (default); heavy = heavy-gates + miri-slow; or one of those two alone"
+        description: "Which jobs: everything (default); tests = the three-OS test matrix alone; heavy = heavy-gates + miri-slow; or one of those two alone"
         type: choice
-        options: [everything, heavy, heavy-gates, miri-slow]
+        options: [everything, tests, heavy, heavy-gates, miri-slow]
         default: everything
+      test_filter:
+        description: "With `tests`: cargo test's arguments for one witness (e.g. `-p delulu --test sandbox_confirm_cli -- a_spinning_guest`); empty runs the whole suite and every step"
+        type: string
+        default: ""
 
 jobs:
   test:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything' || inputs.jobs == 'tests')
     strategy:
       fail-fast: false
       matrix:
@@ -77,7 +86,20 @@ jobs:
       # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
       # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.
       - name: Full workspace test suite
+        if: ${{ !inputs.test_filter }}
         run: cargo test --workspace --no-fail-fast
+
+      # A dispatched witness (`jobs: tests` with `test_filter`): exactly the named test, on each OS. The
+      # words reach the shell through the environment, never spliced into the script. Every step below
+      # but the two measurements is skipped for it: they are the whole suite's.
+      - name: One witness, as dispatched
+        if: ${{ inputs.test_filter }}
+        shell: bash
+        env:
+          TEST_FILTER: ${{ inputs.test_filter }}
+        run: |
+          # shellcheck disable=SC2086 # split on purpose: the filter is cargo's arguments
+          cargo test --no-fail-fast $TEST_FILTER
 
       # Stage 8 criterion 10: `delulu fmt --check` and locale invariance are permanent CI
       # gates. The suite already carries them (fmt identity/idempotence over the corpus +
@@ -85,15 +107,18 @@ jobs:
       # locale_cli.rs criterion7) — these steps make the fmt corpus check explicit and
       # fail the build on any unformatted committed source.
       - name: fmt --check the examples corpus
+        if: ${{ !inputs.test_filter }}
         run: cargo run -q -p delulu -- fmt --check examples
 
       # Stage 9h criterion 7: the Book's samples are conformance tests. A tutorial whose examples
       # do not compile teaches something false and wastes the reader's afternoon proving it.
       - name: fmt --check the Book's samples
+        if: ${{ !inputs.test_filter }}
         run: cargo run -q -p delulu -- fmt --check docs/book/samples
 
       # The Python-less build must stay a first-class citizen (DL1307 path).
       - name: Python-less build check
+        if: ${{ !inputs.test_filter }}
         run: cargo check -p delulu --no-default-features
 
       # Stage 9 invariant 42 (the coverage law): the conformance suite is the specification's
@@ -107,12 +132,14 @@ jobs:
       # a stronger gate than a per-push workflow step, so this step is a human-readable report of a
       # number the build has already refused to let regress.
       - name: Conformance coverage law (report; hard-gated per-commit by delulu-conform's own suite)
+        if: ${{ !inputs.test_filter }}
         run: cargo run -q -p delulu-conform -- --coverage || true
 
       # Stage 9b: the reference is generated in part, so it cannot drift from the compiler.
       # This IS a hard gate: if the grammar, primitive table, diagnostics registry or rule index
       # changed without regenerating, the docs are already wrong and the build says so.
       - name: The generated reference is in sync with the source
+        if: ${{ !inputs.test_filter }}
         run: cargo run -q -p delulu-conform -- --check-reference
 
       # ---- P17 proof campaign gates -------------------------------------------------------
@@ -125,6 +152,7 @@ jobs:
       # P17-F: the CLI + compiler sweep, 22 cases with exact exit codes. It replaced a procedure
       # that had been performed BY HAND every pass, which is the drift design rule 1 warns about.
       - name: CLI + compiler sweep
+        if: ${{ !inputs.test_filter }}
         shell: bash
         run: sh scripts/cli-sweep.sh
 
@@ -132,6 +160,7 @@ jobs:
       # historically broke the language (generics reaching higher-order builtins, closures
       # carrying rows, the Secret.map+verify oracle) — see crates/delulu-fuzz/src/danger.rs.
       - name: Effect-soundness fuzz campaign (trace ⊆ row, locally AND as a sandbox guest)
+        if: ${{ !inputs.test_filter }}
         run: cargo run -q -p delulu-fuzz -- 50000 20260804
 
       # D-V2-47: whether `actors_pingpong`'s criterion 1 was MEASURED on this runner or set aside as busy
