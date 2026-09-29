@@ -67,7 +67,7 @@ pub(crate) fn harden_wasm_features(config: &mut Config) {
     // RW 4.33 (routine run 4, D-V2-68): the WebAssembly 3.0 proposals. `codegen.rs` emits none of them and
     // neither does a default wasm32 toolchain, yet wasmtime turns function references, GC, exceptions,
     // tail calls and multi-memory on by default — and RUSTSEC-2026-0315 (fuel accounting dropped through
-    // `call_ref` and an exception `catch`) reached a Contained plugin's GRANTED fuel through exactly
+    // `call_ref` and an exception `catch`) could reach a Contained plugin's GRANTED fuel through exactly
     // those. The ones wasmtime leaves off today are named too, so a future default cannot switch them
     // on here. What ordinary toolchains do emit — the WebAssembly 2.0 set: bulk memory, reference types,
     // multi-value, sign extension, saturating conversions — stays (a test holds both sides).

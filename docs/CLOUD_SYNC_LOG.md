@@ -545,7 +545,8 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `9fc4d86` (routine run 3's last commit)
 - Commits: (1) `63a375e` CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written;
   (2) `f33183c` RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits (D-V2-68);
-  (3) `RW 2.2 closed: overtaken by P3; the pin its comment named never existed, and Secret.map's entry is pinned now`
+  (3) `2ea4208` RW 2.2 closed: overtaken by P3; the pin its comment named never existed, and Secret.map's entry is pinned now;
+  (4) `RW 2.4 measured and bounded; an ignored gate and the witness's package input in the routine`
 - Files and folders:
   M `crates/delulu-wasm/Cargo.toml` (`wasmtime = "48"`), `Cargo.lock` (wasmtime 48.0.3 and its tree) — (1)
   M `crates/delulu/src/attest.rs` (`Refusal::Incomplete`, `incomplete`: end-of-input and a cut character;
@@ -565,6 +566,11 @@ it on `origin` was made in the cloud and is listed below.
   M `crates/delulu-check/src/check.rs` (the comment on `higher_order_callback_arg` names its real pins),
     `crates/delulu-check/tests/secret_oracle.rs` (`an_impure_mappers_row_surfaces_in_its_caller`),
     `docs/REMAINING_WORK.md` (2.2 closed), `V2_LOG.md`, `HANDOFF.md` (§11.5, §11.7) — (3)
+  M `docs/REMAINING_WORK.md` (2.4: Partial, bounded; the refuted idea), `V2_LOG.md`, `HANDOFF.md` (§11.5: an ignored
+    gate is not in the suite's count), `docs/CLOUD_ROUTINE.md` (step 5: `witness.yml`'s `package`; the differential
+    by hand for a change to either WebAssembly engine), `docs/REMAINING_WORK.md` §1 (corrections 1.12, 1.13),
+    `CHANGELOG.md` and `crates/delulu-wasm/src/host.rs` (a comment: "reached" -> "could reach" — the run showed
+    the door open, not the advisory exercised) — (4)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,795 edges); `doctor --check` ok, all
@@ -591,13 +597,24 @@ it on `origin` was made in the cloud and is listed below.
   **Not run:** the red-team pass on the Linux guest's filter (run 3's inbox) — a safety classifier stopped the
   response briefing the Sonnet 5.5 sous-chef before the agent started; no agent ran, and no fallback notice was
   shown (the commits keep naming Opus 5.5, the configured model).
+  (4): RW 2.4 measured on the debug binary — 16 KB at depth 120 in 0.39 s; linear in size at a fixed depth; per
+  nest about depth^1.6; the first-element idea in `check_list` 10x slower (1.63 s -> 17.0 s), reverted byte for
+  byte (`cmp`) and the binary rebuilt and re-measured (1.66 s). Records only otherwise.
 - Redo on the laptop: the suite on Windows and in WSL (wasmtime 48 is a new build on every platform).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a records-only commit can go red; a fake peer keeps the
   protocol it fakes); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 4).
-- Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2)'s — in the next commit or entry.
-- Open / next: (1) read (1)'s push run and the nightly `36548984501` (`9fc4d86`, expected red on the same two);
+- Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2) `f33183c` `36560942558` — success on every job; (3) `2ea4208` `36562163647` — success on every job. Every push run of this run read but (4)'s own, the closing commit's. The nightly `36548984501` (`9fc4d86`) was still running at the close — its Miri jobs run for hours.
+- Open / next: (1) read (4)'s push run (records, and the RW 4.33 comment reworded) and the nightly `36548984501` on
+  `9fc4d86` — expected red on `supply-chain` (the advisories (1) fixed) and possibly macOS's `sandbox_attest_cli`;
+  both fixed in `63a375e`, so read it as the old commit's record, and read the NEXT nightly as the real check;
   (2) RW 4.33 — done in (2), D-V2-68; (3) run 3's inbox
   still stands: PS-E-03 H6 (macOS and Windows under the escaped-guest harness), the red-team pass on the filter
   (not run here — do it by hand, one witnessed hypothesis at a time, e.g. the terminal settings reachable through
   the inherited standard error),
-  RW 4.32's stderr relay and `setsid`, PS-E-01's remainder, E-04, E-05, E-06, then P8, P9.
+  RW 4.32's stderr relay and `setsid`, PS-E-01's remainder, E-04, E-05, E-06, then P8, P9. **E-04 was scoped and
+  not started** (the time left could not finish it verified): its honest form executes the file it hashed
+  (`fexecve` on Linux, which a shell-script launcher complicates — the tests' launchers are scripts), so plan it
+  as its own run. (4) RW 2.4 stays Partial: a real fix is a profile of `check_list`'s unification, not the
+  refuted first-element idea.
+  **For the owner:** D-V2-67 (wasmtime 48, the LTS line) and D-V2-68 (the WebAssembly 3.0 proposals refused)
+  are this run's decisions; D-V2-59, D-V2-49 and D-V2-53's consequence stay flagged from earlier runs.

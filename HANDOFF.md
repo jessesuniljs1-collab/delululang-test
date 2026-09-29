@@ -845,6 +845,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   with `cp`, which the protocol forbids — the host reads the document the moment it exists — and macOS lost
   that race once. Witness a race by holding its window open (a `sleep` between creating and filling), never
   by re-running until it shows.
+- **An ignored gate is not in the suite's count** (routine run 4): `delulu-wasm/tests/differential.rs`, the
+  two-engine differential, is `#[ignore]`d and runs only in `heavy-gates`, so a green suite says nothing
+  about it. A change to either WebAssembly engine runs it by hand (release, 50,000 programs, ~150 s).
 - **A comment that names a test is a claim — grep for it** (routine run 4): the doc comment on
   `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
   claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs

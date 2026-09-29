@@ -165,7 +165,9 @@ self-contained slice, record where the next run picks up.
 defect, watch it go red, restore). **A macOS- or Windows-only defect is witnessed on a runner, off
 `master`:** push the witness alone to a branch (this session's `claude/…` branch), dispatch
 `witness.yml` there (`mcp__github__actions_run_trigger` `run_workflow`, `workflow_id` `witness.yml`,
-`ref` the branch, `inputs` `{"os": "macos-latest", "target": "<test file>", "filter": "<test>"}`),
+`ref` the branch, `inputs` `{"os": "macos-latest", "target": "<test file>", "filter": "<test>"}`, and
+`"package"` for a crate other than `delulu` — run 4 read `delulu-wasm`'s `lib` on three runners before
+`master` moved, when a test's controls depended on what each platform's compiler supports),
 read it red (`get_job_logs` with `tail_lines` ≈ 90 — the cache save and git's cleanup follow the
 test's lines); commit the fix on the branch, dispatch again, read it green — **on every test target that
 runs the changed code on that OS** (`target` takes several, or `all`: run 3 read its macOS watcher green on
@@ -175,7 +177,9 @@ Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-
 x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
 (clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
 tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
-exit code. Freeze the tree while it runs: draft the records (step 6) as a patch script in the
+exit code. An `#[ignore]`d gate is not in that count: a change to either WebAssembly engine also runs the
+two-engine differential by hand, `cargo test -p delulu-wasm --release --test differential -- --ignored`
+(50,000 programs, about 150 s once built — CI runs it only in `heavy-gates`, run 4). Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported.
 
 After a security-relevant slice, a **red-team pass** is worth its cost: one Sonnet 5.5 sous-chef, briefed

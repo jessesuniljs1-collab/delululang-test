@@ -3163,3 +3163,21 @@ two real pins; RW 2.2 closed.
 
 **Verified:** clippy `-D warnings` clean; the full suite alone: 2,033 passed, 0 failed, 15 ignored (152
 binaries), cargo exit 0.
+
+**RW 2.4 measured, not fixed.** The row said 16 KB of nested list literals took 17.8 s to check. The parser has
+refused nesting past 128 levels since 2026-08 (DL0210), so that shape no longer parses; at the deepest legal
+depth, 16 KB (depth 120, 64 nests) checks in 0.39 s, and time is linear in size at a fixed depth (debug build,
+an upper bound). Per nest the cost still grows about as depth^1.6. One idea was tried and refuted: typing a
+list literal by its first element instead of a fresh type variable made the same file ten times slower
+(1.63 s → 17.0 s) — reverted, byte for byte, and recorded in the row so it is not tried again. RW 2.4: Partial,
+bounded.
+
+**Routine run 4, closed.** `master` was red on arrival — `9fc4d86`, a records-only commit, against new Wasmtime
+advisories and a test's fake attester that wrote in place — and green from `63a375e` (D-V2-67, the `incomplete`
+refusal). The run then shut the door the advisory used (D-V2-68: the plugin store had run a `call_ref` module;
+both engines now refuse the WebAssembly 3.0 proposals), read that slice on macOS, Windows and Linux arm64 before
+`master` moved, found a comment naming a test that never existed and an R-4 entry pinned by nothing (RW 2.2),
+and measured RW 2.4 bounded (one idea refuted). Push runs: `63a375e` `36556961783` success; `f33183c`
+`36560942558` success; `2ea4208` `36562163647` success on every job. Unread: the nightly `36548984501` (still running) and the
+closing commit's own run. The red-team pass on the guest's filter did not run (its brief was stopped by a safety
+classifier before the agent started).
