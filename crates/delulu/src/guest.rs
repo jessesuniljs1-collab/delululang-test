@@ -1244,6 +1244,7 @@ fn serve_under(
                             "sent": false,
                             "ended_by_host": true,
                             "generation": generation,
+                            "guest_words": [],
                         })),
                     );
                     return Err(io::Error::other(format!("the guest was not served: {why}")));
@@ -1308,6 +1309,9 @@ fn serve_under(
     // never as a host guarantee or in the posture (a lying guest made its report say "writes denied"
     // beside properties that said `unknown`).
     let mut guest_reported: Vec<&'static str> = Vec::new();
+    // RW 4.32: the words the host accepted when the guest confirmed, kept for the death record — the
+    // chain's own copy of what the guest claimed to have applied to itself.
+    let guest_words = evidence.own.clone();
     for w in evidence.own {
         if external {
             guest_reported.push(w);
@@ -1396,6 +1400,7 @@ fn serve_under(
             "sent": sent,
             "ended_by_host": host_ended,
             "generation": generation,
+            "guest_words": guest_words,
         })),
     );
 

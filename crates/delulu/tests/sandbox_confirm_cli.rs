@@ -683,3 +683,54 @@ fn an_external_launcher_ends_when_its_host_is_killed_on_windows() {
     eprintln!("PS-E-02: the launcher was gone {took:?} after its host was killed");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// RW 4.32: the death record names the words the guest confirmed its boundary with — the chain, not only
+/// a report that can be discarded, says what a guest claimed to have applied to itself. At L3 they are
+/// exactly the report's `guest_reported`; at L1 each is among what the report says was applied.
+#[test]
+fn the_death_record_names_the_words_the_guest_confirmed_with() {
+    let d = lab("words");
+    std::fs::create_dir_all(d.join("s").join("audit")).unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
+    let exe = env!("CARGO_BIN_EXE_delulu").replace('\\', "/");
+    let external = format!("external:{exe} __guest --stdio-pipes");
+    let runs: [(&str, Vec<&str>); 2] = [("l3", vec!["--sandbox-backend", external.as_str()]), ("l1", vec![])];
+    for (tag, extra) in runs {
+        let report = d.join(format!("{tag}.json"));
+        let mut args = vec!["run", "h.delulu", "--sandbox", "--grant", "console", "--report-out", report.to_str().unwrap()];
+        args.extend(extra.iter().copied());
+        let r = delulu(&d, &args);
+        assert_eq!(r.status.code(), Some(0), "{tag}: {}", text(&r));
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+        let g = v["sandbox"]["generation"].as_str().unwrap().to_string();
+        let q = delulu(&d, &["audit", "query", "--json"]);
+        let chain: serde_json::Value = serde_json::from_slice(&q.stdout).unwrap_or_else(|_| panic!("{}", text(&q)));
+        let death = chain["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["action"] == "sandbox-death" && r["authority"]["generation"] == g.as_str())
+            .cloned()
+            .unwrap_or_else(|| panic!("{tag}: a death record for {g}: {chain}"));
+        let words: Vec<String> = death["authority"]["guest_words"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{tag}: the death record names the guest's words: {death}"))
+            .iter()
+            .map(|w| w.as_str().unwrap().to_string())
+            .collect();
+        if tag == "l3" {
+            let reported: Vec<String> =
+                v["sandbox"]["guest_reported"].as_array().map(|a| a.iter().map(|w| w.as_str().unwrap().to_string()).collect()).unwrap_or_default();
+            assert_eq!(words, reported, "{tag}: the chain and the report agree: {death}\n{v}");
+        } else {
+            let applied = v["sandbox"].to_string();
+            for w in &words {
+                assert!(applied.contains(w.as_str()), "{tag}: `{w}` is among what the report says was applied: {v}");
+            }
+        }
+        #[cfg(target_os = "linux")]
+        assert!(!words.is_empty(), "{tag}: a Linux guest confirms with its Landlock and seccomp words: {death}");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
