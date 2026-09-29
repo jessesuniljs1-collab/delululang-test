@@ -556,3 +556,83 @@ fn an_external_launcher_ends_when_its_host_is_killed() {
     assert!(!outlived, "the external launcher outlived its host");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// Is this Windows process gone? Asked of the process itself: a handle that cannot be opened, or one
+/// whose process has signalled its exit.
+#[cfg(windows)]
+fn gone_windows(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    // SAFETY: a handle this function opens and closes; a zero-timeout wait on it.
+    unsafe {
+        let h = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+        if h.is_null() {
+            return true;
+        }
+        let exited = WaitForSingleObject(h, 0) == WAIT_OBJECT_0;
+        CloseHandle(h);
+        exited
+    }
+}
+
+/// PS-E-02 on Windows, for an external launcher: the launcher ends when its host is killed. A jailed guest
+/// always lived in a Job Object with kill-on-close; the launcher was started in none, so a host ended with
+/// `TerminateProcess` left it running. The launcher here is PowerShell, which writes its own pid and waits.
+#[cfg(windows)]
+#[test]
+fn an_external_launcher_ends_when_its_host_is_killed_on_windows() {
+    let d = lab("orphan-win");
+    canary_program(&d, "never");
+    let pidfile = d.join("launcher.pid");
+    let p = pidfile.display().to_string();
+    assert!(!p.contains(char::is_whitespace), "the launcher's words are split on whitespace: {p}");
+    let launcher = format!(
+        "external:powershell -NoProfile -NonInteractive -Command $PID | Out-File -Encoding ascii {p}; Start-Sleep 60"
+    );
+    let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_HOME", d.join("home"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the host starts");
+    let t = std::time::Instant::now();
+    let pid: u32 = loop {
+        if let Some(p) = std::fs::read_to_string(&pidfile).ok().and_then(|s| s.trim().parse().ok()) {
+            break p;
+        }
+        if t.elapsed() > std::time::Duration::from_secs(60) {
+            let _ = host.kill();
+            let _ = host.wait();
+            panic!("the launcher never started");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    assert!(!gone_windows(pid), "the launcher is running before its host is killed");
+    host.kill().expect("the host is killed");
+    let _ = host.wait();
+    let t = std::time::Instant::now();
+    while !gone_windows(pid) && t.elapsed() < std::time::Duration::from_secs(3) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let took = t.elapsed();
+    let outlived = !gone_windows(pid);
+    if outlived {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+        // SAFETY: ends the stray launcher this test started, so it does not linger.
+        unsafe {
+            let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if !h.is_null() {
+                TerminateProcess(h, 1);
+                CloseHandle(h);
+            }
+        }
+    }
+    assert!(!outlived, "the external launcher outlived its host by more than {took:?}");
+    eprintln!("PS-E-02: the launcher was gone {took:?} after its host was killed");
+    let _ = std::fs::remove_dir_all(&d);
+}
