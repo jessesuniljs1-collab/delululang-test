@@ -636,7 +636,10 @@ it on `origin` was made in the cloud and is listed below.
   (9) `30d1563` RW 4.32: the death record names the words the guest confirmed its boundary with;
   (10) `ec4d39d` RW 4.32's death-record words recorded; master green again at 41ac869 — records only;
   (11) `1721539` RW 4.32: the microVM's console reaches the operator escaped, a line at a time;
-  (12) `RW 4.32's microVM console recorded, read on the KVM job first; the run's close` — records only
+  (12) `fa69efb` RW 4.32's microVM console recorded, read on the KVM job first; an arm64 red on ec4d39d, recorded — records
+  and a test's failure message;
+  (13) `Routine run 5 closed: master green at fa69efb` — records only (HANDOFF §11.5: a failure message is all the
+  evidence a CI run keeps)
 - Files and folders:
   A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
   M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
@@ -717,7 +720,8 @@ it on `origin` was made in the cloud and is listed below.
   every job. (10) `ec4d39d` `36603987907` — **red on
   one job, `arm64`: `estop_cli`'s control test printed `REVOKED (operator-revoke)` for a run nobody revoked** — code this run
   did not touch, passed on arm64 at `41ac869` and `d566295`; not reproduced by starving the VM; not root-caused (RW 7.17;
-  the test now prints the journal's reason). (12): the next run reads it.
+  the test now prints the journal's reason). (12) `fa69efb` `36606231595` — **success on every job
+  (16); `master` green at `fa69efb`**, arm64's `estop_cli` included. (13), this entry's last line: the next run reads it.
 - Open / next: (1) read (12)'s push run first — and RW 7.17: if `estop_cli`'s control test fails again, its message now
   carries the journal's reason; root-cause it before anything else; (2) RW 4.32's rest — the microVM's console relay
   (still raw, capped; its witness needs the KVM job), the per-frame deadline, the accepted words in the death

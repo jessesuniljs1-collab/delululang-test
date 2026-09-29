@@ -3388,3 +3388,7 @@ a collapse `device.rs`'s own unit test holds on purpose, the journal keeping the
 that line. Eight busy loops on the VM's four CPUs did not reproduce it (two runs, 5 passed each, 29 s against the
 runner's 12 s). **Done:** the control test now prints the journal beside a failure, so the next occurrence names
 its reason; RW 7.17 holds the question, and whether an unanswered probe deserves its own recorded cause.
+
+**`fa69efb`'s push run, `36606231595` — success on every job (16): `master` green at `fa69efb`**, arm64's
+`estop_cli` among them (RW 7.17 stays open until a failure's journal names its reason, or it is shown not to
+recur). The run's close: `HANDOFF.md` §11.5 gains that a failure message is all the evidence a CI run keeps.

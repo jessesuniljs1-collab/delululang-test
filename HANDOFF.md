@@ -860,6 +860,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
   claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs
   for another reason). A mutant per entry finds such a hole; a green suite does not.
+- **A failure message is all the evidence a CI run keeps** (routine run 5, RW 7.17): `estop_cli`'s control test
+  went red once on arm64 printing only the program's `REVOKED (operator-revoke)` — a line that says the same for
+  every dead probe — while the journal holding the real reason went to a stream the assertion never printed.
+  Print the reason with the verdict; a red that cannot be read cannot be root-caused.
 - **A new test runs on every OS, and its own assumptions are platform rules** (routine run 5): TERMINAL-TEXT-1
   was OS-neutral code, so it went to `master` unread on the other runners — and its refusal witness asked for
   a path holding `:`, which Windows refuses first as an alternate data stream (DL0904), so the test's DL0703
