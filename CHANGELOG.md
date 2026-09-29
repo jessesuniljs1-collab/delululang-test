@@ -33,6 +33,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   outside the guest now ends it (and the launcher) when the host is gone, and the report claims "killed
   with the host" only once the watcher is armed (`host_loss_ends_guest` is now established on macOS)
   (D-V2-60).
+- **Fixed: on Windows an external launcher outlived a host that was ended.** It now joins a Job Object
+  whose only limit is kill-on-close, so it — and what it started inside the job — ends with the host.
+  Nothing else is imposed on it, and nothing is claimed: the level stays 3 (D-V2-60).
 - **An external launcher's guest no longer vouches for itself in the report.** At L3 the words the guest
   says it applied to itself are reported as `sandbox.guest_reported` — its own word — and no longer
   appear among `host_guarantees` or in the posture (RW 4.31).

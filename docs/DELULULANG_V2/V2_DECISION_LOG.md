@@ -1270,7 +1270,10 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    reported only after the watcher writes that both waits are registered, within the connect deadline; a
    watcher that did not arm is ended before its pipe closes, and the run says what is missing.
 4. **The external launcher gets the same watcher on macOS**, and nothing is claimed for it: the level stays
-   3, and what the launcher started is the launcher's. The Windows launcher's Job Object is next.
+   3, and what the launcher started is the launcher's. **On Windows (the same run) the launcher joins a job
+   whose only limit is kill-on-close** — created suspended, assigned, resumed — held beside the jailed
+   guest's measured job, so a level-3 run gains no processor-time watchdog and no stop named from the
+   launcher's accounting: nothing new is enforced on the launcher but its end. Red: `37828ab`, `witness.yml` run `36527876892` — "the external launcher outlived its host by more than 3.0 s"; green: `1a63829`: `36528140459` (`sandbox_confirm_cli`, 7 passed — the launcher gone 20 ms after its host was killed), `36528149629` (`sandbox_external_cli`), `36528152057` (the jail unit tests), `36528154367` (`sandbox_run_cli`) — all success.
 5. **CI-only defects are witnessed off `master`** (`witness.yml`): red on a branch, green on the same
    branch, then `master` fast-forwarded — the history keeps the red witness and `master` never goes red.
    Red: `36526271163` (the guest, "outlived its host by more than 3.15 s"), `36526351005` (the launcher);

@@ -377,7 +377,7 @@ it on `origin` was made in the cloud and is listed below.
   E-06, P8, P9; RW 4.32's channel hygiene. **For the
   owner:** D-V2-59 narrows D-V2-53 §2 (flagged); D-V2-49 and D-V2-53's consequence stay flagged.
 
-### 2026-09-29 — routine run 3: a one-runner witness workflow; macOS linted from Linux; PS-E-02 on macOS
+### 2026-09-29 — routine run 3: a one-runner witness workflow; other OSes linted from Linux; PS-E-02 complete
 - Session: `https://claude.ai/code/session_011rtmJDeAZtHQ5iCE18Pofo`   Model: Claude Opus 5.5 (the scheduled routine)
 - Branch: `master` (the routine pushes there); the macOS witnesses were read red, then green, on
   `claude/wonderful-hamilton-mjutjd` first, and `master` fast-forwarded to it   Pull request: none   Merged: n/a
@@ -386,10 +386,15 @@ it on `origin` was made in the cloud and is listed below.
   (2) `2d08622` PS-E-02 witness: a computing guest ends when its host is killed (red on macOS);
   (3) `9c38027` PS-E-02 witness: the external launcher's, on macOS too;
   (4) `2d9d2a0` PS-E-02, macOS: a watcher outside the guest ends it with its host (D-V2-60);
-  (5) `PS-E-02 on macOS: the records` — this entry's commit
+  (5) `3ec690b` PS-E-02 on macOS: the records (D-V2-60);
+  (6) `37828ab` PS-E-02 witness: an external launcher ends with its host on Windows (red expected) — it also
+  carried `scripts/check-other-os.sh`, already staged when it was committed (its message does not say so);
+  (7) `1a63829` PS-E-02, Windows: an external launcher joins a kill-on-close job;
+  (8) `PS-E-02 on Windows: the records` — its records
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
-  A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux
+  A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
+  R `scripts/check-macos.sh` -> `scripts/check-other-os.sh` — (6)/(7) Windows msvc linted from Linux too
   M `docs/CLOUD_ROUTINE.md` (step 5: a CI-only witness, red on a branch first; reading it), `CLAUDE.md` (the
     manual runs), `docs/REPOSITORY_STRUCTURE.md` (both rows) — (1), (5)
   M `crates/delulu/tests/sandbox_confirm_cli.rs` — (2) `a_computing_guest_ends_when_its_host_is_killed`,
@@ -404,6 +409,14 @@ it on `origin` was made in the cloud and is listed below.
     `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-60), `V2_LOG.md`, `V2_PHASE_STATUS.md` (row 14),
     `V2_OPENSHELL_STUDY.md` (§4.2), `V2_SECURITY_MODEL.md`, `V2_IMPLEMENTATION_ROADMAP.md`,
     `docs/assistant-memory/cloud-period-2026-09-28.md` — (5)
+  M `crates/delulu/tests/sandbox_confirm_cli.rs` — (6) `an_external_launcher_ends_when_its_host_is_killed_on_windows`
+  M `crates/delulu/src/jail.rs` — (7) `end_with_host`; the Windows `Jail` holds two handles; the test accessor;
+    `crates/delulu/src/guest.rs` — (7) the launcher created suspended, joined, resumed
+  M `CLAUDE.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md`, `docs/REPOSITORY_STRUCTURE.md`,
+    `docs/assistant-memory/cloud-period-2026-09-28.md` — (7) the script's new name
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.5: `git stash pop`), `docs/REMAINING_WORK.md` (4.26 closed),
+    `V2_DECISION_LOG.md` (D-V2-60 §4), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.2,
+    `V2_SECURITY_MODEL.md`, `V2_IMPLEMENTATION_ROADMAP.md` — (8)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
   Deleted: nothing.
@@ -418,9 +431,16 @@ it on `origin` was made in the cloud and is listed below.
   **green**, runs `36526707055` (`sandbox_confirm_cli`, 12 passed; the guest gone 3.6 ms after the
   kill), `36526709263` (`guest_cli`, 5 passed), `36526711462` (the boundary unit tests, 3 passed); in
   the VM clippy `-D warnings` clean on Linux and both macOS targets; the full suite alone 2,018 passed,
-  0 failed, 15 ignored (152 binaries), cargo exit 0.
+  0 failed, 15 ignored (152 binaries), cargo exit 0. Push runs: `a39b423` `36526041627` — success.
+  (6): on Windows **red**, run `36527876892` ("the external launcher outlived its host by more than 3.0 s").
+  (7): `scripts/check-other-os.sh` clean for all three targets, red with a planted Windows-only type error;
+  on Windows **green**, runs `36528140459` (`sandbox_confirm_cli`, 7 passed; the launcher gone 20 ms after
+  the kill), `36528149629` (`sandbox_external_cli`), `36528152057` (the jail unit tests), `36528154367`
+  (`sandbox_run_cli`). The Linux suite was not re-run for (7): every line it changed is compiled only for
+  Windows (on Linux the cfg selects the same code as before), Linux clippy is clean, and
+  `sandbox_confirm_cli`, `doctor_cli`, `repository_structure` and `evidence_claims` pass.
 - Redo on the laptop: nothing for Windows or WSL (the change is macOS-only; the Linux witness is new and
   runs everywhere Linux does).
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed
   guarantee needs its own witness); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
-- Open / next: this run is in progress — (5)'s push run to read; then E-02's Windows launcher Job Object.
+- Open / next: this run is in progress — the push runs of (5) and (8) to read; then PS-E-03 (the escaped guest).

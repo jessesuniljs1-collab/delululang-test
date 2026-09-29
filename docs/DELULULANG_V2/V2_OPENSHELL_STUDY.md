@@ -252,7 +252,8 @@ first, because it is the red one. **Mutant:** remove the watcher → the macOS w
 routine run 3, D-V2-60) macOS**, witnessed red on a runner first — the guest and the launcher both outlived a
 killed host — and closed by a watcher that runs OUTSIDE the guest rather than as a thread in it (a watcher in
 the guest is the guest's own word): `kqueue` on a pipe only the host holds and on the guest's exit, claimed
-only once armed. Open: the Windows launcher's Job Object.
+only once armed. **And Windows** (the same run): the launcher joins a job whose only limit is kill-on-close,
+red `37828ab`, `witness.yml` run `36527876892` — "the external launcher outlived its host by more than 3.0 s", green `1a63829`: `36528140459` (`sandbox_confirm_cli`, 7 passed — the launcher gone 20 ms after its host was killed), `36528149629` (`sandbox_external_cli`), `36528152057` (the jail unit tests), `36528154367` (`sandbox_run_cli`) — all success. **E-02 is complete.**
 
 ### 4.3 PS-E-03 — the guest's kernel surface, narrowed to what a guest that performs no effects needs
 

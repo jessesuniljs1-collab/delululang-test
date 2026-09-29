@@ -262,7 +262,8 @@ first. Each slice is one routine run and ends with its CI run read green.
   every run; profiles' required sets (`hostile-agent` all five) refusing before the program is sent.
   Witness: a canary program that never ran; `hostile-agent` refused on the arm64 job, run on x86-64.
 - **PS-E-02** host loss ends the guest on every backend: a macOS watcher (built 2026-09-29 as a process
-  outside the guest, D-V2-60), a death signal / Job Object for the external launcher (Linux built). Witness: a spinning guest, the host
+  outside the guest, D-V2-60), a death signal / Job Object for the external launcher (all three built,
+  2026-09-29 — PS-E-02 complete). Witness: a spinning guest, the host
   killed, the guest gone within 1 s, per OS; the watcher removed → macOS red.
 - **PS-E-03** the guest's kernel surface: hypotheses H1 (syscalls unnamed by the filter), H2 (`socket`
   denied after lock-down), H3 (`/proc` narrowed to `/proc/self`), H4 (the host non-dumpable during a

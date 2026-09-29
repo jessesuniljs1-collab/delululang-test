@@ -217,7 +217,8 @@ unchanged; four of their enforcements get stronger, as phase PS-E (D-V2-53) and 
   netlink or Unix sockets on Linux; the guest needs none after lock-down, so `socket` is denied.
 - **"The guest ends with its host" holds on every backend** (PS-E-02): Linux by the death signal (the
   external launcher too, since 2026-09-28), Windows by the job, macOS by a watcher outside the guest (the
-  guest and the launcher, 2026-09-29, D-V2-60); the Windows external launcher is the gap left.
+  guest and the launcher, 2026-09-29, D-V2-60), and the Windows external launcher by a kill-on-close job
+  (the same day). What a launcher starts outside itself stays the launcher's.
 - **Authority checked at a boundary** (P9-01): the `⊑` the lease tree enforces, asked of a whole
   program before it runs, with the source line of anything that exceeds.
 

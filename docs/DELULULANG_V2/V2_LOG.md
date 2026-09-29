@@ -2847,3 +2847,28 @@ on both macOS targets; the full suite alone: 2,018 passed, 0 failed, 15 ignored 
 
 **Open (PS-E-02's rest):** the Windows external launcher's Job Object with kill-on-close (a Windows witness
 through `witness.yml` first).
+
+## 2026-09-29 — routine run 3: PS-E-02 on Windows — the external launcher ends with its host; PS-E-02 complete
+
+**Loop engineering first.** `scripts/check-macos.sh` became `scripts/check-other-os.sh`: Windows (msvc) is
+now linted from the Linux VM too — libffi-sys's build script, which runs `configure` and knows no Rust
+triple, is replaced through its `links = "ffi"` key (Cargo's build-script override), and the stand-in
+archiver understands `lib.exe`'s `-out:`. Falsified with a planted Windows-only type error (E0308).
+
+**The witness, red on Windows, off `master`.** `an_external_launcher_ends_when_its_host_is_killed_on_windows`
+(`sandbox_confirm_cli.rs`): the launcher is PowerShell, which writes its own pid and waits; the host is ended
+with `TerminateProcess`; the launcher must signal its exit within 3 s (`OpenProcess(SYNCHRONIZE)`, a zero
+wait). A jailed guest always lived in a Job Object with kill-on-close; the launcher was started in none:
+`37828ab`, `witness.yml` run `36527876892` — "the external launcher outlived its host by more than 3.0 s".
+
+**The fix (`jail.rs::end_with_host`, `guest.rs::launch_external`).** The launcher is created suspended, joins a
+job whose ONLY limit is kill-on-close, and is resumed; the job's handle is the host's alone, so the host's end
+closes it and ends the launcher and what it started inside the job. The Windows `Jail` holds it as a second
+handle beside the jailed guest's measured job, so a level-3 run gains no processor-time watchdog and no stop
+named from the launcher's accounting (D-V2-60 §4). The jail test's pointer cast into `Jail` became an
+accessor. Green on Windows, the same branch: `1a63829`: `36528140459` (`sandbox_confirm_cli`, 7 passed — the launcher gone 20 ms after its host was killed), `36528149629` (`sandbox_external_cli`), `36528152057` (the jail unit tests), `36528154367` (`sandbox_run_cli`) — all success.
+
+**PS-E-02 is complete:** the guest ends with its host on every backend — Linux (the death signal: guest, VMM,
+external launcher), Windows (the job: guest and launcher), macOS (the watcher: guest and launcher) — each
+witnessed red where it was missing and green after, and Linux's own death signal witnessed for the first
+time. What an external launcher STARTS outside itself (a container a daemon runs) remains the launcher's.
