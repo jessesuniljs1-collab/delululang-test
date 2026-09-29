@@ -3334,3 +3334,21 @@ no model fallback notice was shown. As with run 4's stopped red-team brief (`HAN
 was dropped for this run rather than re-attempted in other words. The profile itself is deny-by-default with
 no `mach-lookup` (`jail.rs::seatbelt_launcher`); what H6 asks — each word the macOS report claims, witnessed
 against an escaped guest — stays open, and may be one to do with the owner at the laptop.
+
+## 2026-09-29 — routine run 5: RW 4.32 — the death record names the guest's words
+
+The audit chain recorded that a guest confirmed its boundary (`confirmed`, `sent`, the generation) but not
+with WHAT — the words it claimed to have applied to itself were in the run report only, and a report can be
+discarded. **Witnessed on `d566295`**: the `sandbox-death` record carried no words. Now it carries
+`guest_words` — the words the host accepted at confirmation, its own vocabulary, nothing a guest can spell —
+equal at L3 to the report's `guest_reported`, and at L1 each among what the report says was applied; the
+attestation refusal's death record carries an empty list, so every death record keeps the same fields (F10).
+Witness `the_death_record_names_the_words_the_guest_confirmed_with` (`sandbox_confirm_cli`), red on
+`d566295`, green after; M19 (the words dropped) red, restored byte for byte.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone: 2,050 passed, 0 failed, 15 ignored (153 binaries), cargo exit 0. Read on the other runners before
+`master` moved (`witness.yml` at `30d1563`, `sandbox_confirm_cli sandbox_attest_cli`): Windows `36602983681` and macOS `36602987750`, success.
+
+**`41ac869`'s push run, `36601247472` — success on every job (16): `master` green again** after `6cd68c8`'s
+Windows red; Windows' properties line on `6cd68c8`'s run read all five established, its ping-pong NOT
+MEASURED (the runner busy).
