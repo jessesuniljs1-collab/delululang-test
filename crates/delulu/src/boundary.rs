@@ -41,8 +41,22 @@ pub(crate) struct Confirmed<C> {
 
 /// Open the conversation: this run's generation, and nothing to run.
 pub(crate) fn open<C: Read + Write>(mut conn: C, generation: &str) -> io::Result<Opened<C>> {
-    write_frame(&mut conn, &Open { version: CHANNEL_VERSION.to_string(), generation: generation.to_string() })?;
+    // A guest already gone — a launcher that exits at once — fails this first write; said in words, as the
+    // reads below are, never as "Broken pipe (os error 32)" (macOS CI, `3ec690b`'s push run).
+    write_frame(&mut conn, &Open { version: CHANNEL_VERSION.to_string(), generation: generation.to_string() })
+        .map_err(|e| unconfirmed(gone_before(&e, "the host opened it")))?;
     Ok(Opened { conn })
+}
+
+/// A write to a guest that has closed its end, in words: `when` says at which step.
+fn gone_before(e: &io::Error, when: &str) -> String {
+    match e.kind() {
+        io::ErrorKind::BrokenPipe | io::ErrorKind::ConnectionReset | io::ErrorKind::UnexpectedEof => {
+            format!("it had closed the channel before {when}")
+        }
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => "it took nothing within the channel's deadline".to_string(),
+        _ => e.to_string(),
+    }
 }
 
 /// What this boundary must establish before the program is sent (PS-E-01, D-V2-59): the profile's
@@ -147,7 +161,10 @@ impl<C: Read + Write> Confirmed<C> {
 
     /// Send the program — the only way it is ever sent — and hand back the channel to serve.
     pub(crate) fn send_program(mut self, program: &Program) -> io::Result<C> {
-        write_frame(&mut self.conn, program)?;
+        write_frame(&mut self.conn, program).map_err(|e| {
+            let why = gone_before(&e, "it was sent the program");
+            io::Error::new(e.kind(), format!("the guest confirmed its boundary but was not sent the program: {why}"))
+        })?;
         Ok(self.conn)
     }
 }
@@ -275,6 +292,19 @@ mod tests {
         let (generation, p) = rx.recv().unwrap();
         assert_eq!(generation, GEN, "the guest was told this run's generation");
         assert_eq!(p, program());
+    }
+
+    /// A guest gone before the host opens the channel — a launcher that exits at once — fails the host's
+    /// FIRST write, and the operator is told so in words, never "Broken pipe (os error 32)". Red on
+    /// `dd2a542`; on macOS CI (`3ec690b`'s push run `36527491801`) the watcher's start let such a launcher
+    /// die before the host wrote, and the raw error reached the operator.
+    #[test]
+    fn a_guest_gone_before_the_host_opens_the_channel_is_told_in_words() {
+        let (host_end, guest_end) = UnixStream::pair().unwrap();
+        drop(guest_end);
+        let said = open(host_end, GEN).err().expect("there is no guest to open the channel to").to_string();
+        assert!(!said.contains("os error"), "in words: {said}");
+        assert!(said.contains("before the host opened it"), "{said}");
     }
 
     /// Each way of not confirming ends the conversation with the program unsent — and a first request

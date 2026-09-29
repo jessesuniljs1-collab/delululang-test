@@ -295,6 +295,10 @@ pub const HOST_WATCH_SUBCOMMAND: &str = "__host_watch";
 #[cfg(target_os = "macos")]
 const WATCH_ARMED: u8 = 0x06;
 
+/// The watcher's exit status when the process it was given had already ended (`ESRCH`): nothing to watch.
+#[cfg(target_os = "macos")]
+const WATCH_NOTHING: i32 = 3;
+
 /// A running watcher, owned by the host for as long as it owns the guest.
 #[cfg(target_os = "macos")]
 pub struct HostWatch {
@@ -334,10 +338,17 @@ impl HostWatch {
             ready && matches!(out.read(&mut byte), Ok(1)) && byte[0] == WATCH_ARMED
         });
         if !armed {
+            // Say which: a watcher that EXITED found nothing to watch or could not arm; one still running
+            // did not answer in time.
+            let why = match watcher.try_wait() {
+                Ok(Some(st)) if st.code() == Some(WATCH_NOTHING) => "the process it was to watch had already ended".to_string(),
+                Ok(Some(st)) => format!("the watcher could not arm ({st})"),
+                _ => format!("the watcher did not say it was armed within {deadline:?}"),
+            };
             let _ = watcher.kill();
             let _ = watcher.wait();
             drop(pipe);
-            return Err(format!("the watcher did not say it was armed within {deadline:?}"));
+            return Err(why);
         }
         Ok(HostWatch { pipe, watcher })
     }
@@ -365,7 +376,8 @@ impl Drop for HostWatch {
 }
 
 /// `__host_watch <guest pid>` — the watcher's side of [`HostWatch`]. Exit 0 when it has done its work
-/// (the guest gone, or ended because the host was), 1 when it could not arm, 2 on a bad invocation.
+/// (the guest gone, or ended because the host was), 1 when it could not arm, 2 on a bad invocation, and
+/// [`WATCH_NOTHING`] when the process it was given had already ended.
 #[cfg(target_os = "macos")]
 pub fn run_host_watch(args: &[String]) -> i32 {
     let [guest] = args else { return 2 };
@@ -394,8 +406,8 @@ pub fn run_host_watch(args: &[String]) -> i32 {
         }
         let exit = [event(guest as usize, libc::EVFILT_PROC, libc::NOTE_EXIT)];
         if libc::kevent(kq, exit.as_ptr(), 1, std::ptr::null_mut(), 0, std::ptr::null()) != 0 {
-            // ESRCH: the guest is already gone, and there is nothing to watch.
-            return 1;
+            // ESRCH: the guest is already gone — a launcher that exits at once — and there is nothing to watch.
+            return if std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) { WATCH_NOTHING } else { 1 };
         }
         if libc::write(1, [WATCH_ARMED].as_ptr().cast(), 1) != 1 {
             return 1;
