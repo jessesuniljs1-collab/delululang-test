@@ -79,6 +79,11 @@ fn a_sandboxed_guests_fault_reaches_the_terminal_escaped() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// The same bytes as a path, without the `:` — Windows refuses a `:` in a component (an alternate data
+/// stream, DL0904) before the grant is asked, and this witness is about the grant's refusal on every OS
+/// (read red on a Windows runner, `witness.yml` `36599638102`, before it was taken out).
+const HOSTILE_PATH: &str = r"\u{1b}]0;PWNED\u{7}\u{1b}[2K\rforged";
+
 /// A refusal quotes the path the program asked for, twice — in the message and in the `--grant` it
 /// suggests. Both escaped; and the JSON envelope still carries the exact bytes.
 #[test]
@@ -87,7 +92,7 @@ fn a_refusal_quotes_the_programs_path_escaped_and_json_keeps_it_exact() {
     std::fs::write(
         d.join("w.delulu"),
         format!(
-            "module w\n\nfn main(root: Root) ! {{Write}} {{\n    let fw = root.fs_write(\"./{HOSTILE}\")\n    \
+            "module w\n\nfn main(root: Root) ! {{Write}} {{\n    let fw = root.fs_write(\"./{HOSTILE_PATH}\")\n    \
              match fw.write_text(\"f.txt\", \"x\") {{\n        Ok(_) => root.console().println(\"wrote\"),\n        \
              Err(_) => root.console().println(\"refused\")\n    }}\n}}\n"
         ),
