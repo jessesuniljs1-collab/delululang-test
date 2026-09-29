@@ -17,6 +17,11 @@
 # seccomp list that compiles on x86-64 can fail to (the arm64 CI job once caught exactly that). And Linux
 # on musl, the microVM's static guest: its `libc` types differ from glibc's (`Ioctl` is `c_int` there).
 #
+# Every package whose code differs by platform is linted, tests included (`--all-targets`): `delulu` (the
+# jail, the watcher, the launcher's job), `delulu-runtime` (`beneath.rs`: `openat` or `NtCreateFile`) and
+# `delulu-wasm` (the plugin store refuses on Windows) — routine run 4 found `delulu-wasm`'s tests never
+# linted for Windows, where a helper used only off Windows is dead code and a `-D warnings` error.
+#
 # usage: scripts/check-other-os.sh [TARGET…]
 #   default: aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu
 #            x86_64-unknown-linux-musl
@@ -53,9 +58,9 @@ chmod +x "$STUB/cc" "$STUB/ar"
 TARGETS=${*:-"aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl"}
 for target in $TARGETS; do
   var=$(echo "$target" | tr '-' '_')
-  echo "== $target: cargo clippy -p delulu --all-targets -- -D warnings"
+  echo "== $target: cargo clippy -p delulu -p delulu-runtime -p delulu-wasm --all-targets -- -D warnings"
   env "CC_$var=$STUB/cc" "CXX_$var=$STUB/cc" "AR_$var=$STUB/ar" PYO3_CROSS_PYTHON_VERSION=3.13 \
-    cargo clippy -q -p delulu --all-targets --target "$target" \
+    cargo clippy -q -p delulu -p delulu-runtime -p delulu-wasm --all-targets --target "$target" \
       --config "target.$target.ffi.rustc-link-lib=[\"ffi\"]" -- -D warnings
 done
-echo "ok: delulu type-checks and lints clean for $TARGETS — compiled, not run"
+echo "ok: delulu, delulu-runtime and delulu-wasm type-check and lint clean for $TARGETS — compiled, not run"

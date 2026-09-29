@@ -535,7 +535,8 @@ jobs:
   # accounting dropped through `call_ref` and exception `catch` — reachable in principle, since a
   # plugin's fuel is a granted limit here) and RUSTSEC-2026-0316 (component-model record lifting —
   # not reachable: the component model is off). Closed by moving to wasmtime 48.0.3, the 48 LTS
-  # line (D-V2-67). Nothing is ignored for them.
+  # line (D-V2-67), and 0315's door shut too: both engines refuse the WebAssembly 3.0 proposals
+  # (D-V2-68). Nothing is ignored for them.
   #
   # Two pyo3 entries remain ignored on reachability grounds, and that argument is itself gated by
   # `governance.rs::the_ignored_pyo3_advisories_are_still_unreachable` — because an `ignore` whose

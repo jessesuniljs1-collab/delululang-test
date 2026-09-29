@@ -1390,7 +1390,29 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    compiles as it was, clippy is clean and the full suite passes on it.
 4. **Next — RW 4.33:** narrow what a plugin may use to what DeluluLang emits (function references, GC,
    exceptions refused at validation), so the next fuel-accounting defect in those proposals is unreachable
-   too — "upgrade AND narrowing", the rule `deny.toml`'s own history states.
+   too — "upgrade AND narrowing", the rule `deny.toml`'s own history states. **Done the same run: D-V2-68.**
+
+## D-V2-68 — RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **Witnessed, and wider than the advisory.** On `63a375e` (wasmtime 48.0.3) the program engine accepted
+   function references, exceptions, GC, tail calls and multi-memory — each on by wasmtime's default — and
+   the plugin store RAN a Contained module that calls through `call_ref` (`Ok(Some(7))`): the path
+   RUSTSEC-2026-0315 used to spend more than a plugin's granted fuel was open until the upgrade, and the
+   next defect in those proposals would have found it open again.
+2. **Refused at validation, on both engines** (`harden_wasm_features`, which both call): GC, function
+   references, exceptions, stack switching, tail calls, multi-memory, custom page sizes, wide arithmetic
+   and shared-everything threads — beside SIMD, relaxed SIMD, threads, memory64 and the component model,
+   refused since P17-F. The ones wasmtime leaves off today are named too, so a future default cannot switch
+   them on. The legacy exceptions form is not named: wasmtime keeps that switch deprecated, for its own
+   spec tests, and Cranelift cannot compile it (an engine asked for it is refused).
+3. **What stays: the WebAssembly 2.0 set, and extended constants.** A Contained `.dpx` carries a module an
+   ordinary compiler built, and a default wasm32 toolchain emits bulk memory, reference types, multi-value,
+   sign extension, saturating conversions and mutable globals — so those keep loading, and a test holds
+   that side as firmly as the refusals. `codegen.rs` emits none of the refused proposals (its whole
+   instruction list is MVP), so no DeluluLang program changes: the two-engine differential and the parity
+   suites pass unchanged.
+4. **A narrowing, never a widening:** it can only turn a module that would have loaded into one that is
+   refused before it runs (the plugin store answers "module failed to compile", naming the proposal).
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

@@ -543,7 +543,8 @@ it on `origin` was made in the cloud and is listed below.
 - Session: `https://claude.ai/code/session_01R7P5oTaoPP7KizcvUSiJpp`   Model: Claude Opus 5.5 (the scheduled routine)
 - Branch: `master` (the routine pushes there)   Pull request: none   Merged: n/a
 - Base: `9fc4d86` (routine run 3's last commit)
-- Commits: (1) `CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written`
+- Commits: (1) `63a375e` CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written;
+  (2) `RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits (D-V2-68)`
 - Files and folders:
   M `crates/delulu-wasm/Cargo.toml` (`wasmtime = "48"`), `Cargo.lock` (wasmtime 48.0.3 and its tree) — (1)
   M `crates/delulu/src/attest.rs` (`Refusal::Incomplete`, `incomplete`: end-of-input and a cut character;
@@ -555,6 +556,11 @@ it on `origin` was made in the cloud and is listed below.
     `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_ROUTINE.md` (step 2: cargo-deny in the
     background; step 3: a failing job's whole log saved to a file and grepped; the VM's limits: waiting
     without a bare `sleep`) — (1)
+  M `crates/delulu-wasm/src/host.rs` (`harden_wasm_features`: the WebAssembly 3.0 proposals; three tests) — (2)
+  M `scripts/check-other-os.sh` (`delulu-runtime` and `delulu-wasm` linted too) — (2)
+  M `docs/CLOUD_ROUTINE.md` (step 3: a green run's verdict lines sit behind the cache save) — (2)
+  M `CHANGELOG.md`, `deny.toml`, `.github/workflows/ci.yml` (the histories), `docs/REMAINING_WORK.md` (4.33
+    closed), `V2_DECISION_LOG.md` (D-V2-68), `V2_LOG.md`, `docs/assistant-memory/cloud-period-2026-09-28.md` — (2)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,795 edges); `doctor --check` ok, all
@@ -569,11 +575,15 @@ it on `origin` was made in the cloud and is listed below.
   open (red, the runner's words); fixed launcher green, and green slowed the same way (M3); the new words'
   witness red on `9fc4d86`, green after; M1 and M2 red. Clippy `-D warnings` clean; the full suite alone
   2,029 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+  (2): the witnesses red on `63a375e` (the program engine accepted five proposals; the plugin store ran a
+  `call_ref` module, `Some(7)`), green after; M5, M6, M7 red; `scripts/check-other-os.sh` clean for Windows,
+  macOS arm64 and Linux arm64, and red on Windows with the test helper's `cfg` removed; clippy clean; the full
+  suite alone 2,032 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
 - Redo on the laptop: the suite on Windows and in WSL (wasmtime 48 is a new build on every platform).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a records-only commit can go red; a fake peer keeps the
   protocol it fakes); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 4).
-- Push runs read: (1)'s — in the next commit or entry.
+- Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2)'s — in the next commit or entry.
 - Open / next: (1) read (1)'s push run and the nightly `36548984501` (`9fc4d86`, expected red on the same two);
-  (2) RW 4.33 — the plugin engine refuses the Wasm 3.0 proposals DeluluLang never emits; (3) run 3's inbox
+  (2) RW 4.33 — done in (2), D-V2-68; (3) run 3's inbox
   still stands: PS-E-03 H6 (macOS and Windows under the escaped-guest harness), a red-team pass on the filter,
   RW 4.32's stderr relay and `setsid`, PS-E-01's remainder, E-04, E-05, E-06, then P8, P9.

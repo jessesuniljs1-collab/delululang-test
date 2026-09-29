@@ -18,8 +18,10 @@
 # On 2026-09-29 **wasmtime 47 -> 48.0.3** (the 48 LTS line, D-V2-67) closed RUSTSEC-2026-0315 and
 # RUSTSEC-2026-0316, published after the last clean run. 0315 drops fuel accounting through `call_ref`
 # and exception `catch` — reachable in principle, because a plugin's fuel is a granted limit
-# (`delulu-wasm/src/limits.rs`) and `harden_wasm_features` does not refuse function references or
-# exceptions; 0316 is in the component model, which is off. No source line changed.
+# (`delulu-wasm/src/limits.rs`) and `harden_wasm_features` did not refuse function references or
+# exceptions; 0316 is in the component model, which is off. No source line changed. The same day
+# D-V2-68 refused the WebAssembly 3.0 proposals on both engines (witnessed: the plugin store had run a
+# `call_ref` module) — upgrade AND narrowing again.
 #
 # Every `ignore` below carries a FALSIFIABLE reason. If the reason stops being true, the entry is
 # wrong and must be removed — that is the only property that makes an ignore list honest.

@@ -3096,3 +3096,44 @@ and inside a multi-byte character. **Mutants:** M1 (the end-of-input mapping rem
 
 **Verified:** clippy `-D warnings` clean; `sandbox_attest_cli` 7 passed, the attest unit tests 6 passed; the full
 suite alone: 2,029 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+
+## 2026-09-29 — routine run 4: RW 4.33 — a Contained plugin could still reach the proposals RUSTSEC-2026-0315 lived in (D-V2-68)
+
+**The consequence D-V2-67 named, witnessed.** The upgrade closes the advisory; it does not close the door.
+**Witnesses** (`delulu-wasm/src/host.rs`, `feature_hardening_tests`), red on `63a375e`:
+`both_hardened_engines_refuse_every_wasm3_proposal_codegen_never_emits` — the program engine accepted
+function references, exceptions, GC, tail calls and multi-memory (each fixture first proven VALID on a
+control engine with only its proposal on); `a_contained_plugin_using_a_wasm3_proposal_never_runs` — the
+plugin store, the engine that meters GRANTED fuel, ran a module calling through `call_ref` and answered
+`Some(7)` (its control, the same module with a direct `call`, runs too).
+
+**Fixed** (`harden_wasm_features`, called by both engines): the WebAssembly 3.0 proposals refused at
+validation — GC, function references, exceptions, stack switching, tail calls, multi-memory, custom page
+sizes, wide arithmetic, shared-everything threads. **Kept:** the WebAssembly 2.0 set a default wasm32
+toolchain emits, and extended constants — `the_webassembly_2_baseline_still_loads_on_the_hardened_engine`
+holds that side. Legacy exceptions got no fixture and no line: no engine here can switch them on
+("not supported on this compiler configuration" — found when the fixture could not be proven valid), and
+their switch is deprecated, internal to wasmtime — found by the Windows lint, which failed on the
+deprecation.
+
+**Mutants:** M5 (function references allowed) red on both witnesses — on the plugin engine the fixture then
+reached "no export `run`" instead of failing to compile; M6 (exceptions allowed) red; M7 (over-narrowing:
+reference types and bulk memory refused too) red on the baseline test ("bulk memory support is not enabled").
+
+**Loop engineering, found here:** `scripts/check-other-os.sh` linted `delulu` alone, so `delulu-wasm`'s
+tests had never been linted for Windows, where a helper used only off Windows is dead code under
+`-D warnings`. It now lints `delulu`, `delulu-runtime` and `delulu-wasm` — falsified: with the helper's
+`cfg` removed, the Windows lint is red ("function `plugin_limits` is never used").
+
+**Verified:** clippy `-D warnings` clean on Linux; `scripts/check-other-os.sh` clean for Windows, macOS arm64
+and Linux arm64 (three packages each); the full suite alone: 2,032 passed, 0 failed, 15 ignored
+(152 binaries), cargo exit 0 — the parity suites among them (actors 7, conformance 6, fault 2, foreign 8,
+hostile guest 5). The two-engine differential is a heavy gate the suite ignores, so it was run by hand at its
+full size: `cargo test -p delulu-wasm --release --test differential -- --ignored` — 50,000 programs, passed in
+147 s (5,000 first, 15 s).
+
+**`63a375e`'s push run, `36556961783` — success on every job: `master` green again.** macOS: egress, host loss
+and privilege established, filesystem and memory absent, as before; ping-pong MEASURED 2.66x against a 1.41x
+bar (control 3.75x) — passed. Windows: all five properties established; ping-pong NOT MEASURED, the runner
+busy (controls 1.93x–2.50x, under 3x). Read on a green run the verdicts sit ~100 lines from the end — the cache
+save follows them — so the routine's step 3 now says how to reach them.

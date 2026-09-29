@@ -64,6 +64,24 @@ pub(crate) fn harden_wasm_features(config: &mut Config) {
     config.wasm_threads(false);
     config.wasm_memory64(false);
     config.wasm_component_model(false);
+    // RW 4.33 (routine run 4, D-V2-68): the WebAssembly 3.0 proposals. `codegen.rs` emits none of them and
+    // neither does a default wasm32 toolchain, yet wasmtime turns function references, GC, exceptions,
+    // tail calls and multi-memory on by default — and RUSTSEC-2026-0315 (fuel accounting dropped through
+    // `call_ref` and an exception `catch`) reached a Contained plugin's GRANTED fuel through exactly
+    // those. The ones wasmtime leaves off today are named too, so a future default cannot switch them
+    // on here. What ordinary toolchains do emit — the WebAssembly 2.0 set: bulk memory, reference types,
+    // multi-value, sign extension, saturating conversions — stays (a test holds both sides).
+    config.wasm_gc(false);
+    config.wasm_function_references(false);
+    // (The legacy exceptions form is not named: wasmtime keeps its switch for its own spec tests only, and
+    // Cranelift cannot compile it — an engine asked for it is refused.)
+    config.wasm_exceptions(false);
+    config.wasm_stack_switching(false);
+    config.wasm_tail_call(false);
+    config.wasm_multi_memory(false);
+    config.wasm_custom_page_sizes(false);
+    config.wasm_wide_arithmetic(false);
+    config.wasm_shared_everything_threads(false);
 }
 
 // Stage 7 phase 7h: the WASM engine's cooperative single-threaded actor scheduler (spec §6.5).
@@ -1368,6 +1386,119 @@ mod feature_hardening_tests {
             msg.contains("simd") || msg.contains("not enabled") || msg.contains("disabled"),
             "expected a feature-disabled validation error, got: {err:#}"
         );
+    }
+
+    /// RW 4.33 (routine run 4, D-V2-68): the WebAssembly 3.0 proposals that neither `codegen.rs` nor a
+    /// default wasm32 toolchain emits are refused — RUSTSEC-2026-0315 (a plugin's granted fuel dropped
+    /// through `call_ref` and an exception `catch`) was reachable through two of them while each was on
+    /// by wasmtime's default. Each fixture is enabled ALONE on a control engine first, so a refusal
+    /// below is the hardening's and never a malformed fixture's. (Legacy exceptions have no fixture: no
+    /// engine here can switch them on — "not supported on this compiler configuration" — so a fixture
+    /// could never be proven valid, and no engine this crate builds can run them.)
+    const WASM3_ONLY: &[(&str, &str)] = &[
+        ("function references", "(module (type $t (func)) (func $f (type $t)) (elem declare func $f) (func (call_ref $t (ref.func $f))))"),
+        ("exceptions", "(module (tag $e) (func (block $h (try_table (catch_all $h) (throw $e)))))"),
+        ("gc", "(module (type $s (struct (field i32))) (func (result (ref $s)) (struct.new $s (i32.const 1))))"),
+        ("tail calls", "(module (func $f) (func (return_call $f)))"),
+        ("wide arithmetic", "(module (func (param i64 i64 i64 i64) (result i64 i64) (i64.add128 (local.get 0) (local.get 1) (local.get 2) (local.get 3))))"),
+        ("custom page sizes", "(module (memory 1 (pagesize 1)))"),
+        ("multi-memory", "(module (memory 1) (memory 1))"),
+        ("stack switching", "(module (type $f (func)) (type $c (cont $f)) (func (param (ref null $c)) (drop (local.get 0))))"),
+    ];
+
+    /// The control for one fixture: an engine with that proposal (and what it rests on) switched on.
+    fn engine_with(proposal: &str) -> Option<Engine> {
+        let mut c = Config::new();
+        match proposal {
+            "function references" => c.wasm_function_references(true),
+            "exceptions" => c.wasm_exceptions(true),
+            "gc" => c.wasm_function_references(true).wasm_gc(true),
+            "tail calls" => c.wasm_tail_call(true),
+            "wide arithmetic" => c.wasm_wide_arithmetic(true),
+            "custom page sizes" => c.wasm_custom_page_sizes(true),
+            "multi-memory" => c.wasm_multi_memory(true),
+            "stack switching" => c.wasm_function_references(true).wasm_exceptions(true).wasm_stack_switching(true),
+            other => panic!("no control for {other}"),
+        };
+        // A proposal this platform's engine cannot run at all (stack switching is x86-64 only) is refused
+        // there by construction; the fixture is proven valid on the platforms that can.
+        Engine::new(&c).ok()
+    }
+
+    #[cfg(not(windows))]
+    fn plugin_limits() -> crate::limits::Effective {
+        crate::limits::Effective { fuel: 1_000_000, mem_bytes: 64 * 1024 * 1024, wall_ms: 5_000 }
+    }
+
+    #[test]
+    fn both_hardened_engines_refuse_every_wasm3_proposal_codegen_never_emits() {
+        let hardened = optimizing_engine();
+        let mut proven = 0;
+        let mut accepted = Vec::new();
+        for (proposal, wat) in WASM3_ONLY {
+            if let Some(control) = engine_with(proposal) {
+                if let Err(e) = wasmtime::Module::new(&control, wat) {
+                    panic!("{proposal}: the fixture must be VALID with its proposal on, or its refusal proves nothing: {e:#}");
+                }
+                proven += 1;
+            }
+            // The Stage-3 engine (`.dwx` programs).
+            if wasmtime::Module::new(&hardened, wat).is_ok() {
+                accepted.push(format!("{proposal} (the program engine)"));
+            }
+            // The plugin store (Contained `.dpx`), which meters granted fuel: refused at compilation, not
+            // at the missing export the fixture would have hit next.
+            #[cfg(not(windows))]
+            match crate::limits::run_contained_export(wat.as_bytes(), "run", plugin_limits()) {
+                Err(crate::limits::TrapCause::Unattributable(why)) if why.contains("failed to compile") => {}
+                other => accepted.push(format!("{proposal} (the plugin engine: {other:?})")),
+            }
+        }
+        // Stack switching runs only on x86-64 today; there, every fixture is proven valid.
+        let expected = if cfg!(all(target_arch = "x86_64", unix)) { WASM3_ONLY.len() } else { WASM3_ONLY.len() - 1 };
+        assert!(proven >= expected, "only {proven} of {} fixtures were proven valid", WASM3_ONLY.len());
+        assert!(accepted.is_empty(), "the hardened engine still accepts: {accepted:?}");
+    }
+
+    /// The plugin store is the engine that meters GRANTED fuel, so the refusal must hold there, end to
+    /// end: a Contained module that uses `call_ref` never runs.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_contained_plugin_using_a_wasm3_proposal_never_runs() {
+        let calls = "(module (type $t (func (result i64))) (func $f (type $t) (i64.const 7)) (elem declare func $f) \
+                     (func (export \"run\") (result i64) (call_ref $t (ref.func $f))))";
+        // Control: the same module with a direct call runs and answers 7 — the path works.
+        let direct = "(module (func $f (result i64) (i64.const 7)) (func (export \"run\") (result i64) (call $f)))";
+        // (wasmtime's `wat` feature reads the text form wherever it reads a module.)
+        let ran = crate::limits::run_contained_export(direct.as_bytes(), "run", plugin_limits());
+        assert!(matches!(ran, Ok(Some(7))), "the control must run: {ran:?}");
+        match crate::limits::run_contained_export(calls.as_bytes(), "run", plugin_limits()) {
+            Err(crate::limits::TrapCause::Unattributable(why)) => {
+                assert!(why.contains("failed to compile"), "{why}");
+            }
+            other => panic!("a plugin using call_ref must be refused before it runs, got {other:?}"),
+        }
+    }
+
+    /// What third-party toolchains emit by default — the WebAssembly 2.0 set: bulk memory, reference
+    /// types, multi-value, sign extension, saturating conversions, mutable globals — keeps loading. A
+    /// Contained plugin built by an ordinary wasm32 compiler is not refused by the narrowing.
+    #[test]
+    fn the_webassembly_2_baseline_still_loads_on_the_hardened_engine() {
+        let hardened = optimizing_engine();
+        for (what, wat) in [
+            ("bulk memory", "(module (memory 1) (func (memory.copy (i32.const 0) (i32.const 8) (i32.const 8))))"),
+            ("reference types", "(module (table 1 funcref) (table 1 externref) (func (result funcref) (table.get 0 (i32.const 0))))"),
+            ("multi-value", "(module (func (result i32 i64) (i32.const 1) (i64.const 2)))"),
+            ("sign extension", "(module (func (param i32) (result i32) (i32.extend8_s (local.get 0))))"),
+            ("saturating conversions", "(module (func (param f64) (result i32) (i32.trunc_sat_f64_s (local.get 0))))"),
+            ("mutable globals", "(module (global (export \"g\") (mut i32) (i32.const 0)))"),
+            ("extended constants", "(module (global i32 (i32.add (i32.const 1) (i32.const 2))))"),
+        ] {
+            if let Err(e) = wasmtime::Module::new(&hardened, wat) {
+                panic!("{what} is what ordinary toolchains emit and must keep loading: {e:#}");
+            }
+        }
     }
 
     /// Narrowing may not break what the compiler actually emits. `codegen.rs`'s float instructions

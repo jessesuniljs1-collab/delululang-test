@@ -70,7 +70,9 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
 - **Routine run 4 (2026-09-29):** `master` red on a records-only commit — new Wasmtime advisories
   (RUSTSEC-2026-0315/0316; wasmtime 48.0.3, the LTS line, D-V2-67) and a macOS race in a TEST's fake
   attester (a plain `cp` where the protocol asks for write-then-rename); both witnessed in the VM and fixed;
-  an attestation read half-written is now refused as `incomplete`, in words.
+  an attestation read half-written is now refused as `incomplete`, in words. Then RW 4.33 (D-V2-68): the
+  plugin store had RUN a `call_ref` module — both WASM engines now refuse the WebAssembly 3.0 proposals and
+  keep the 2.0 set; `scripts/check-other-os.sh` lints `delulu-runtime` and `delulu-wasm` too.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

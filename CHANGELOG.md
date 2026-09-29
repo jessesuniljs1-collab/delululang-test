@@ -86,6 +86,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   host reads the document the moment it exists, so an attester writes it whole — a temporary file, then a
   rename, as `delulu sandbox attest` does; one that writes in place was refused with a parser's "EOF while
   parsing". Still refused, still before the program is sent.
+- **Security (a narrowing): a compiled program or a Contained plugin may no longer use the WebAssembly 3.0
+  proposals** — GC, function references, exceptions, tail calls, multi-memory, stack switching, custom page
+  sizes, wide arithmetic, shared-everything threads. DeluluLang's compiler emits none of them; wasmtime
+  turned five on by default, and RUSTSEC-2026-0315 reached a plugin's granted fuel through two. A module
+  using one is refused before it runs. The WebAssembly 2.0 set ordinary toolchains emit still loads
+  (D-V2-68).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 
