@@ -755,7 +755,7 @@ impl Vm {
 
     /// The console, kept, for a probe that captured it. Waits for the relay, so call it after the VMM
     /// has exited.
-    pub fn take_console(&mut self) -> Option<Box<dyn io::Read>> {
+    pub fn take_console(&mut self) -> Option<Box<dyn io::Read + Send>> {
         let kept = self.console.take()?.join().ok()?;
         Some(Box::new(io::Cursor::new(kept)))
     }

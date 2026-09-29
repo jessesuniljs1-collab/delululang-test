@@ -133,7 +133,8 @@ fn launch_external(
         .env("DELULU_LIMIT_CPU_SECONDS", limits.cpu_seconds.to_string())
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::inherit());
+        // RW 4.32: relayed by the host, escaped and marked, never the operator's terminal itself.
+        .stderr(std::process::Stdio::piped());
     if let Some(w) = limits.wall_seconds {
         c.env("DELULU_LIMIT_WALL_SECONDS", w.to_string());
     }
@@ -1089,7 +1090,7 @@ fn serve_under(
         _ => None,
     };
     let launched = match (isolation, &resolved) {
-        (Isolation::Process, _) => launch(&exe, &dir, limits, false),
+        (Isolation::Process, _) => launch(&exe, &dir, limits, true, false),
         (Isolation::MicroVm, _) => launch_vm(limits, false),
         (Isolation::External(cmd, ..), Some(l)) => {
             launch_external(cmd, l, limits, attest_plan.as_ref().map(|(_, nonce, path)| (nonce.as_str(), path.as_path())))
@@ -1107,6 +1108,17 @@ fn serve_under(
         Err(e) => {
             let _ = std::fs::remove_dir_all(&dir);
             return Err(e);
+        }
+    };
+    // RW 4.32: the guest's standard error (at L3, the launcher's) reaches the operator through this host,
+    // escaped and marked. A microVM's console has its own relay (`microvm.rs`).
+    let stderr_relay = match isolation {
+        Isolation::MicroVm => None,
+        _ => child.take_stderr().map(|from| relay_stderr(from, if external { "launcher" } else { "guest" })),
+    };
+    let relayed = |relay: &Option<std::sync::mpsc::Receiver<()>>| {
+        if let Some(done) = relay {
+            let _ = done.recv_timeout(STDERR_RELAY_GRACE);
         }
     };
     // PS-E-03 H4 (HOST-DUMPABLE-1): from here this host holds the run's custody — lease tokens, a secret's
@@ -1219,6 +1231,7 @@ fn serve_under(
                     );
                     let _ = child.kill();
                     let _ = child.wait();
+                    relayed(&stderr_relay);
                     let _ = std::fs::remove_dir_all(&dir);
                     audit_sandbox(
                         "sandbox-death",
@@ -1304,6 +1317,7 @@ fn serve_under(
     }
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
+    relayed(&stderr_relay);
     let _ = std::fs::remove_dir_all(&dir);
     // SANDBOX-STOP-1: a guest that ended without saying goodbye may have been STOPPED by a ceiling —
     // named here only from evidence (the watchdog, the guest's allocator status, the OS's signal, the
@@ -1542,12 +1556,12 @@ impl Guest {
         }
     }
 
-    /// Standard error, when the launch captured it (the probe does; a run shares the host's).
-    fn take_stderr(&mut self) -> Option<Box<dyn io::Read>> {
+    /// Standard error, when the launch captured it: the probe keeps it, a run relays it (RW 4.32).
+    fn take_stderr(&mut self) -> Option<Box<dyn io::Read + Send>> {
         match self {
-            Guest::Plain(c) | Guest::External(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+            Guest::Plain(c) | Guest::External(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read + Send>),
             #[cfg(any(windows, target_os = "linux"))]
-            Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+            Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read + Send>),
             #[cfg(target_os = "linux")]
             Guest::Vm(v) => v.take_console(),
         }
@@ -1611,11 +1625,16 @@ fn await_ready(g: &mut crate::identity::ContainedGuest) -> Result<(), String> {
 /// own user namespace, its channel an inherited socket (PS-B-03b). A host that cannot give it one
 /// runs it as PS-A did, and says so on standard error — never silently: the identity is named among
 /// the applied guarantees only when it was applied, so the run report cannot claim it either.
+///
+/// `capture_stderr`: the guest's standard error is a pipe the caller takes — a run relays it (RW 4.32), the
+/// probe keeps it. `quiet`: the launch says nothing on the host's own standard error (the probe reports
+/// in its own words).
 fn launch(
     exe: &std::path::Path,
     dir: &std::path::Path,
     limits: crate::jail::Limits,
     capture_stderr: bool,
+    quiet: bool,
 ) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
     #[cfg(windows)]
     {
@@ -1635,7 +1654,7 @@ fn launch(
                 }
                 return Ok((Guest::Contained(g), jail, applied));
             }
-            Err(why) => identity_refused(why, capture_stderr),
+            Err(why) => identity_refused(why, quiet),
         }
     }
     #[cfg(target_os = "linux")]
@@ -1663,7 +1682,7 @@ fn launch(
                 applied.push(crate::identity::GUARANTEE);
                 return Ok((Guest::Contained(g), jail, applied));
             }
-            Err(why) => identity_refused(why, capture_stderr),
+            Err(why) => identity_refused(why, quiet),
         }
     }
     let (mut cmd, launched) = guest_command(exe, dir);
@@ -1695,7 +1714,7 @@ fn launch(
             jail.watched_by(watch)
         }
         Err(why) => {
-            if !capture_stderr {
+            if !quiet {
                 eprintln!("sandbox: nothing will end the guest if this host dies ({why})");
             }
             jail
@@ -1974,7 +1993,7 @@ pub fn attempt_launch() -> Result<String, String> {
     // The probe's guest is killed on purpose, and a killed guest says so on its standard error. That
     // belongs in this function's answer, not on the operator's terminal, where "error: the sandbox
     // guest was started without a hello frame" from a successful PROBE reads as a broken host.
-    let (mut child, jail, applied) = match launch(&exe, &dir, crate::jail::Limits::default(), true) {
+    let (mut child, jail, applied) = match launch(&exe, &dir, crate::jail::Limits::default(), true, true) {
         Ok(l) => l,
         Err(e) => return finish(Err(format!("the guest could not be started: {e}")), None),
     };
@@ -2287,6 +2306,77 @@ fn limit_kill_reason(status: &std::process::ExitStatus) -> Option<String> {
         let _ = status;
         None
     }
+}
+
+/// RW 4.32: how much of a guest's standard error reaches the operator, and the longest line relayed whole.
+const STDERR_RELAY_CAP: usize = 1024 * 1024;
+const STDERR_RELAY_LINE: usize = 8 * 1024;
+
+/// How long the host waits, once the guest is gone, for the relay to print its last line.
+const STDERR_RELAY_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// RW 4.32: the guest's standard error — at L3 the launcher's, which carries the guest's inside it — read
+/// by the host and printed on the host's a line at a time, each escaped (TERMINAL-TEXT-1) and marked with
+/// whose it is. It used to be the operator's terminal itself, so a guest that escaped its interpreter
+/// wrote control sequences, and lines that read like the host's, straight onto it. Bounded: past
+/// [`STDERR_RELAY_CAP`] bytes the rest is still read — a full pipe would stall the writer — and discarded,
+/// and that is said once. The receiver hears when the last line is out.
+fn relay_stderr(mut from: Box<dyn io::Read + Send>, who: &'static str) -> std::sync::mpsc::Receiver<()> {
+    struct Relay {
+        who: &'static str,
+        passed: usize,
+        told: bool,
+    }
+    impl Relay {
+        fn line(&mut self, bytes: &[u8]) {
+            if self.passed >= STDERR_RELAY_CAP {
+                if !self.told {
+                    self.told = true;
+                    eprintln!(
+                        "sandbox: the {}'s standard error passed {} KiB; the rest was discarded",
+                        self.who,
+                        STDERR_RELAY_CAP / 1024
+                    );
+                }
+                return;
+            }
+            self.passed += bytes.len() + 1;
+            let text = String::from_utf8_lossy(bytes);
+            let text = text.strip_suffix('\r').unwrap_or(&text);
+            eprintln!("{}: {}", self.who, delulu_diag::terminal_line(text));
+        }
+    }
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut relay = Relay { who, passed: 0, told: false };
+        let mut line: Vec<u8> = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            let n = match from.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            };
+            for &b in &buf[..n] {
+                if b == b'\n' {
+                    relay.line(&line);
+                    line.clear();
+                } else {
+                    line.push(b);
+                    if line.len() >= STDERR_RELAY_LINE {
+                        relay.line(&line);
+                        line.clear();
+                    }
+                }
+            }
+        }
+        if !line.is_empty() {
+            relay.line(&line);
+        }
+        let _ = done.send(());
+    });
+    finished
 }
 
 /// PS-A-08: record a sandbox lifecycle event in the audit chain, when this machine has one.

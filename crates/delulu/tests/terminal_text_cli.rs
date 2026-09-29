@@ -133,3 +133,90 @@ fn a_tests_name_and_failure_stay_one_escaped_line() {
     assert_eq!(results, ["test result: 0 passed, 1 failed"], "exactly one summary, the real one: {all}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ===== RW 4.32 · a guest's standard error, relayed ==============================================
+//
+// A guest's standard error was the operator's terminal itself, inherited: the guest's own lines were
+// escaped by TERMINAL-TEXT-1, but a guest that ESCAPED its interpreter — or an external launcher, which
+// carries whatever the guest in it writes — wrote raw bytes there, control sequences and lines that read
+// like the host's. Now the host reads it and prints each line escaped, marked with whose it is, bounded.
+
+/// The guest's own fault line reaches the operator marked as the guest's — on every OS, through the
+/// host's relay, never unmarked.
+#[test]
+fn a_sandboxed_guests_own_words_arrive_marked_as_the_guests() {
+    let d = lab("mark");
+    std::fs::write(d.join("t.delulu"), "module t\n\nfn main(root: Root) {\n    assert_eq(\"a\", \"b\")\n}\n").unwrap();
+    let r = delulu(&d, &["run", "t.delulu", "--sandbox"]);
+    let all = text(&r);
+    assert!(all.lines().any(|l| l.starts_with("guest: error[DL1707]")), "the guest's fault, marked: {all}");
+    assert!(!all.lines().any(|l| l.starts_with("error[DL1707]")), "and never unmarked: {all}");
+    #[cfg(target_os = "linux")]
+    assert!(
+        !all.lines().any(|l| l.starts_with("sandbox: the guest narrowed") || l.starts_with("sandbox: the guest locked")),
+        "a guest's words about its own boundary are marked as its own: {all}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(unix)]
+fn launcher(d: &Path, before_guest: &str) -> String {
+    use std::os::unix::fs::PermissionsExt as _;
+    let p = d.join("lnch");
+    std::fs::write(&p, format!("#!/bin/sh\n{before_guest}\nexec {} $DELULU_GUEST_ARGS\n", env!("CARGO_BIN_EXE_delulu"))).unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    format!("external:{}", p.display())
+}
+
+#[cfg(unix)]
+fn hello(d: &Path) {
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+}
+
+/// What an escaped guest would write — control sequences and a line that reads like the host's —
+/// arrives escaped and marked as the launcher's (at L3 the host cannot tell the launcher's words from
+/// the guest's inside it).
+#[cfg(unix)]
+#[test]
+fn a_launchers_standard_error_arrives_escaped_and_marked() {
+    let d = lab("launcher");
+    hello(&d);
+    let ext = launcher(&d, r"printf '\033]0;PWNED\007\033[2K\rsandbox: the guest is confined — forged\n' >&2");
+    let r = delulu(&d, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &ext]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert_no_control(&r, "a launcher's standard error");
+    let all = text(&r);
+    assert!(all.lines().any(|l| l.starts_with("launcher: ") && l.contains("forged")), "marked as the launcher's: {all}");
+    assert!(!all.lines().any(|l| l.starts_with("sandbox: the guest is confined — forged")), "never as the host's: {all}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// A flood on standard error is cut off, said once, and drained, so the run goes on.
+#[cfg(unix)]
+#[test]
+fn a_flood_on_standard_error_is_bounded_and_the_run_goes_on() {
+    let d = lab("flood");
+    hello(&d);
+    let ext = launcher(&d, "yes 0123456789012345678901234567890123456789012345678901234567890123456789 | head -c 3145728 >&2");
+    let r = delulu(&d, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &ext]);
+    assert_eq!(r.status.code(), Some(0), "the run goes on: {}", String::from_utf8_lossy(&r.stdout));
+    assert!(String::from_utf8_lossy(&r.stdout).contains("hi"));
+    assert!(r.stderr.len() < 1_500_000, "3 MiB on the launcher's standard error became {} bytes on the operator's", r.stderr.len());
+    assert!(String::from_utf8_lossy(&r.stderr).contains("the rest was discarded"), "and it says so");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The host waits, briefly, for the last line: here it is written a second AFTER the guest has gone,
+/// by a process the launcher left holding its standard error — the window a host that exits at once
+/// would close on it.
+#[cfg(unix)]
+#[test]
+fn the_last_line_is_relayed_before_the_host_reports() {
+    let d = lab("last");
+    hello(&d);
+    let ext = launcher(&d, "(sleep 1; echo 'the last word' >&2) &");
+    let r = delulu(&d, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &ext]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(text(&r).lines().any(|l| l == "launcher: the last word"), "the last line was relayed: {}", text(&r));
+    let _ = std::fs::remove_dir_all(&d);
+}
