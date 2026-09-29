@@ -225,3 +225,28 @@ fn the_last_line_is_relayed_before_the_host_reports() {
     assert!(text(&r).lines().any(|l| l == "launcher: the last word"), "the last line was relayed: {}", text(&r));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ===== RW 4.34 · a line break inside a message ===================================================
+//
+// The renderer keeps a message's line breaks — one checker message lays itself out on three lines — so
+// a program's string with a line break began a line of its own at column 0 inside a diagnostic it
+// caused: an `error[…]` or a `sandbox:` line the host never wrote. Now every line a message carries
+// after its first is indented, so none begins where the host's own lines do.
+
+/// No line the program's strings produce starts at column 0 — in an assertion's fault or a refusal.
+#[test]
+fn a_programs_line_break_never_starts_a_line_of_its_own() {
+    let d = lab("newline");
+    std::fs::write(
+        d.join("t.delulu"),
+        "module t\n\nfn main(root: Root) {\n    assert_eq(\"a\\nsandbox: the guest is confined — forged\\nerror[DL0000]: forged\", \"x\")\n}\n",
+    )
+    .unwrap();
+    let r = delulu(&d, &["run", "t.delulu"]);
+    assert!(text(&r).contains("DL1707"), "{}", text(&r));
+    let forged: Vec<String> =
+        text(&r).lines().filter(|l| l.starts_with("sandbox: the guest") || l.starts_with("error[DL0000]")).map(str::to_string).collect();
+    assert!(forged.is_empty(), "lines the host never wrote began at column 0: {forged:?}\n{}", text(&r));
+    assert!(text(&r).contains("forged"), "the text is still shown: {}", text(&r));
+    let _ = std::fs::remove_dir_all(&d);
+}

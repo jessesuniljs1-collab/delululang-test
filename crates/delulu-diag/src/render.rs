@@ -70,6 +70,18 @@ fn escape_for_terminal(text: &str, one_line: bool) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// RW 4.34: a message keeps its own line breaks — one checker message lays itself out on three lines —
+/// but every line after its first is indented, so none that a program's string carries begins at column
+/// 0, where the host's own lines (`error[…]`, `sandbox: …`) begin. Witnessed on `41ac869`: an assertion's
+/// value put a forged `sandbox:` line and a forged `error[…]` line there.
+fn indented_continuations(text: &str) -> Cow<'_, str> {
+    if text.contains('\n') {
+        Cow::Owned(text.replace('\n', "\n  "))
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
 /// A quoted source line keeps its columns — the caret below it counts characters — so a character
 /// [`terminal_line`] would escape is shown as one `?` instead.
 fn quotable(line: &str) -> Cow<'_, str> {
@@ -142,6 +154,7 @@ pub fn render_human_localized(
 ) -> String {
     let localized = catalog.and_then(|c| c.render(d.code, &d.args));
     let message = terminal_safe(localized.as_deref().unwrap_or(&d.message));
+    let message = indented_continuations(&message);
     let sev_role = match d.severity {
         Severity::Error => Role::Error,
         Severity::Warning => Role::Warning,
