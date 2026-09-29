@@ -602,7 +602,16 @@ fn relay_console(
         // partial line is held until its newline, but never beyond one read's worth.
         let marker = crate::ceiling::VM_MEMORY_MARKER.trim_ascii();
         let mut pending: Vec<u8> = Vec::new();
-        let mut emit = |bytes: &[u8], kept: &mut Vec<u8>| {
+        let mut emit = |line: &[u8], kept: &mut Vec<u8>| {
+            // RW 4.32: the console is the guest's own text — its kernel's and its standard error — so each
+            // line reaches the operator, and the probe's answer, escaped (TERMINAL-TEXT-1): it used to be
+            // written raw, and a guest's control sequences drove the operator's terminal.
+            let (body, end) = match line.strip_suffix(b"\n") {
+                Some(body) => (body, "\n"),
+                None => (line, ""),
+            };
+            let shown = format!("{}{end}", delulu_diag::terminal_line(&String::from_utf8_lossy(body)));
+            let bytes = shown.as_bytes();
             let take = bytes.len().min(CONSOLE_CAP.saturating_sub(passed));
             if take > 0 {
                 if keep {
@@ -1345,6 +1354,25 @@ fn serve_vm_guest(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 4.32: the guest's console is the guest's own text — its kernel's and its standard error — and
+    /// reaches the operator (and the probe's answer) escaped, a line at a time; an ordinary line unchanged.
+    #[test]
+    fn the_console_relay_shows_a_guests_control_sequences_escaped() {
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(r"printf '\033]0;PWNED\007booted\r\nplain line\r\n'")
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let out = child.stdout.take().unwrap();
+        let kept = relay_console(out, true, Arc::new(std::sync::atomic::AtomicBool::new(false))).join().unwrap();
+        let _ = child.wait();
+        let text = String::from_utf8(kept).unwrap();
+        assert!(!text.chars().any(|c| c.is_control() && c != '\n'), "a control character was relayed: {text:?}");
+        assert!(text.contains(r"\u{1b}]0;PWNED\u{7}booted"), "shown, escaped: {text:?}");
+        assert!(text.contains("plain line\n"), "an ordinary line is unchanged: {text:?}");
+    }
 
     fn response(bytes: &[u8]) -> Result<(u16, String), String> {
         read_http_response(&mut io::Cursor::new(bytes.to_vec()))
