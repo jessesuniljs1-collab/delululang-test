@@ -54,7 +54,7 @@ the assistant's memory — which now also travels file by file in
   guarantee (which held); all verified and fixed the same run (D-V2-58) but F7 (RW 4.31). And, on CI's
   measured properties, `hostile-agent` now requires all five (D-V2-59 — flagged for the owner).
 - **Routine run 3 (2026-09-29):** `witness.yml` (one test on one runner, by hand) and
-  `scripts/check-macos.sh` (clippy for macOS from Linux), so a CI-only defect is witnessed red on a branch
+  `scripts/check-other-os.sh` (clippy for macOS and Windows from Linux), so a CI-only defect is witnessed red on a branch
   before its fix reaches `master`; with them **PS-E-02 on macOS** — a guest computing when its host was
   killed lived on until its CPU ceiling (red on a runner); a watcher OUTSIDE the guest now ends it and the
   external launcher (D-V2-60).
@@ -797,7 +797,7 @@ Added in V2 (2026-09-17 → 2026-09-28):
   witness also asserts that it captured SOMETHING (routine run 2, PS-E-01).
 - **A macOS- or Windows-only defect is witnessed on a runner, off `master`** (routine run 3):
   `witness.yml` runs one test on one runner at a branch — read it red there, then the fix green there,
-  then fast-forward `master`. Lint the macOS code in the VM first (`scripts/check-macos.sh`). A witness
+  then fast-forward `master`. Lint the macOS and Windows code in the VM first (`scripts/check-other-os.sh`). A witness
   run's test lines sit 70–85 lines before its log's end (the cache save and git's cleanup follow), so
   read it with `tail_lines` ≈ 90.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the

@@ -157,6 +157,14 @@ fn launch_external(
             });
         }
     }
+    // PS-E-02 on Windows: created suspended, so the launcher joins its job before its first instruction
+    // and nothing it starts can race the assignment.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_SUSPENDED: u32 = 0x0000_0004;
+        c.creation_flags(CREATE_SUSPENDED);
+    }
     let child = c.spawn().map_err(|e| {
         let why = match e.kind() {
             io::ErrorKind::NotFound => "there is no such program (a bare name is looked up on PATH)".to_string(),
@@ -178,7 +186,24 @@ fn launch_external(
             crate::jail::Jail::none()
         }
     };
-    #[cfg(not(target_os = "macos"))]
+    // PS-E-02 on Windows: a job with kill-on-close and nothing else, which ends the launcher — and what
+    // it started inside the job — when the host is gone, as the jailed guest's job always has. Nothing is
+    // claimed for it: the level stays 3, and a container the launcher asked a service for is the service's.
+    #[cfg(windows)]
+    let jail = {
+        let jail = crate::jail::end_with_host(&child).unwrap_or_else(|why| {
+            eprintln!("sandbox: the external launcher will not be ended if this host dies ({why})");
+            crate::jail::Jail::none()
+        });
+        if !crate::jail::resume(&child) {
+            let mut child = child;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::other(format!("the external launcher `{program}` could not be started: it did not resume")));
+        }
+        jail
+    };
+    #[cfg(not(any(windows, target_os = "macos")))]
     let jail = crate::jail::Jail::none();
     Ok((Guest::External(child), jail, Vec::new()))
 }

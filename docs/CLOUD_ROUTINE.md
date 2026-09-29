@@ -161,10 +161,10 @@ defect, watch it go red, restore). **A macOS- or Windows-only defect is witnesse
 `ref` the branch, `inputs` `{"os": "macos-latest", "target": "<test file>", "filter": "<test>"}`),
 read it red (`get_job_logs` with `tail_lines` ≈ 90 — the cache save and git's cleanup follow the
 test's lines); commit the fix on the branch, dispatch again, read it green; then fast-forward `master`
-to the branch — its history keeps the red witness, and `master` never goes red for it. Lint macOS code
-in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin`, then
-`scripts/check-macos.sh` (clippy `-D warnings` for both, compiled and never run) — so a runner is spent
-on the witness, not on a typo. Windows cannot be checked that way (libffi-sys's build script). `cargo clippy --workspace --all-targets -- -D warnings`; the affected
+to the branch — its history keeps the red witness, and `master` never goes red for it. Lint macOS and
+Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
+x86_64-pc-windows-msvc`, then `scripts/check-other-os.sh` (clippy `-D warnings` for all three, compiled
+and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
 tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
 exit code. Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported.

@@ -283,8 +283,8 @@ DeluluLang/
 │   │                               #   workflow runs this same script; it names the build's commit)
 │   ├── check-install.sh            # [P5-05] the install gate: runs INSTALL.md's `install-gate` block,
 │   │                               #   read out of the page, against a real archive
-│   ├── check-macos.sh              # clippy -D warnings for macOS from Linux (a stand-in C compiler;
-│   │                               #   compiled, never run) — routine run 3's loop engineering
+│   ├── check-other-os.sh           # clippy -D warnings for macOS and Windows from Linux (a stand-in
+│   │                               #   C compiler; compiled, never run) — routine run 3's loop engineering
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact
 │                                   #   exit code. It was performed by hand every pass before

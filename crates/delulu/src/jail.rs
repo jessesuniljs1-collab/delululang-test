@@ -38,7 +38,7 @@ pub struct Enforced {
 // the value and let it drop, which is what fires kill-on-close.
 #[cfg(windows)]
 #[allow(unused_imports)]
-pub use windows_jail::{confine, CpuProbe, Jail};
+pub use windows_jail::{confine, end_with_host, CpuProbe, Jail};
 
 #[cfg(not(windows))]
 #[allow(unused_imports)]
@@ -676,13 +676,18 @@ mod windows_jail {
     };
 
     /// A held Job Object. Dropping it fires kill-on-close for every process still assigned, so a
-    /// guest never outlives the host that was serving it.
-    pub struct Jail(HANDLE);
+    /// guest never outlives the host that was serving it. The first handle is a jailed guest's job, with
+    /// its limits and its accounting; the second an external launcher's (PS-E-02, [`end_with_host`]),
+    /// whose only limit is kill-on-close and whose accounting nothing reads — a level-3 run claims none.
+    pub struct Jail(HANDLE, HANDLE);
 
     impl Drop for Jail {
         fn drop(&mut self) {
-            if !self.0.is_null() {
-                unsafe { CloseHandle(self.0) };
+            for h in [self.0, self.1] {
+                if !h.is_null() {
+                    // SAFETY: a job handle this value owns, closed once.
+                    unsafe { CloseHandle(h) };
+                }
             }
         }
     }
@@ -690,7 +695,13 @@ mod windows_jail {
     impl Jail {
         /// No jail: the guest is confined by something DeluluLang did not apply (PS-D-01, L3).
         pub fn none() -> Jail {
-            Jail(std::ptr::null_mut())
+            Jail(std::ptr::null_mut(), std::ptr::null_mut())
+        }
+
+        /// The jailed guest's job, for the tests that read its limits back.
+        #[cfg(test)]
+        pub(super) fn handle(&self) -> HANDLE {
+            self.0
         }
 
         /// What the job measured: processor time (user + kernel) and the peak memory any process in
@@ -773,7 +784,7 @@ mod windows_jail {
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
             if job.is_null() {
-                return (Jail(std::ptr::null_mut()), enforced);
+                return (Jail::none(), enforced);
             }
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
             info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -793,7 +804,7 @@ mod windows_jail {
             ) == 0
             {
                 CloseHandle(job);
-                return (Jail(std::ptr::null_mut()), enforced);
+                return (Jail::none(), enforced);
             }
             enforced.guarantees.push("one process only");
             enforced.guarantees.push("memory ceiling");
@@ -824,9 +835,44 @@ mod windows_jail {
                 // An outer job that forbids nesting, most likely. Nothing is enforced, and the
                 // caller must not be told otherwise.
                 CloseHandle(job);
-                return (Jail(std::ptr::null_mut()), super::Enforced::default());
+                return (Jail::none(), super::Enforced::default());
             }
-            (Jail(job), enforced)
+            (Jail(job, std::ptr::null_mut()), enforced)
+        }
+    }
+
+    /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2): an external launcher's job — kill-on-close and nothing else.
+    /// The launcher, and whatever it starts inside the job, ends when the host is gone, because the job's
+    /// only handle closes with the host. Its limits stay the launcher's own (told to it in its
+    /// environment), so none is imposed here and none is claimed. The launcher is assigned while it is
+    /// still suspended, so nothing it starts can race the assignment.
+    pub fn end_with_host(child: &impl std::os::windows::io::AsRawHandle) -> Result<Jail, String> {
+        // SAFETY: a job this function creates and either returns or closes; the child's own handle; the
+        // structure zeroed and sized with `size_of`.
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return Err(format!("no job object could be created: {}", std::io::Error::last_os_error()));
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            if SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const core::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ) == 0
+            {
+                let e = std::io::Error::last_os_error();
+                CloseHandle(job);
+                return Err(format!("the job refused kill-on-close: {e}"));
+            }
+            if AssignProcessToJobObject(job, child.as_raw_handle() as HANDLE) == 0 {
+                let e = std::io::Error::last_os_error();
+                CloseHandle(job);
+                return Err(format!("the launcher could not join its job: {e}"));
+            }
+            Ok(Jail(std::ptr::null_mut(), job))
         }
     }
 }
@@ -898,8 +944,7 @@ mod windows_tests {
 
     /// Reach the handle for the query above without widening the public surface.
     fn jail_handle(jail: &super::Jail) -> HANDLE {
-        // SAFETY: `Jail` is a newtype over the handle; this test lives in the same module tree.
-        unsafe { *(jail as *const super::Jail as *const HANDLE) }
+        jail.handle()
     }
 }
 
