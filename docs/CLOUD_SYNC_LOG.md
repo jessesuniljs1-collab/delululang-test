@@ -546,7 +546,8 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: (1) `63a375e` CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written;
   (2) `f33183c` RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits (D-V2-68);
   (3) `2ea4208` RW 2.2 closed: overtaken by P3; the pin its comment named never existed, and Secret.map's entry is pinned now;
-  (4) `RW 2.4 measured and bounded; an ignored gate and the witness's package input in the routine`
+  (4) `eb3af0b` Routine run 4 closed: every push run read and green; RW 2.4 measured and bounded; the loop's lessons;
+  (5) `Routine run 4: eb3af0b's push run read green; the entry's own subject corrected` — records only
 - Files and folders:
   M `crates/delulu-wasm/Cargo.toml` (`wasmtime = "48"`), `Cargo.lock` (wasmtime 48.0.3 and its tree) — (1)
   M `crates/delulu/src/attest.rs` (`Refusal::Incomplete`, `incomplete`: end-of-input and a cut character;
@@ -603,8 +604,8 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: the suite on Windows and in WSL (wasmtime 48 is a new build on every platform).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a records-only commit can go red; a fake peer keeps the
   protocol it fakes); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 4).
-- Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2) `f33183c` `36560942558` — success on every job; (3) `2ea4208` `36562163647` — success on every job. Every push run of this run read but (4)'s own, the closing commit's. The nightly `36548984501` (`9fc4d86`) was still running at the close — its Miri jobs run for hours.
-- Open / next: (1) read (4)'s push run (records, and the RW 4.33 comment reworded) and the nightly `36548984501` on
+- Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2) `f33183c` `36560942558` — success on every job; (3) `2ea4208` `36562163647` — success on every job. (4) `eb3af0b` `36564217831` — success on every job. Every push run of this run read but (5)'s own. The nightly `36548984501` (`9fc4d86`) was still running at the close — its Miri jobs run for hours.
+- Open / next: (1) read (5)'s push run (records only) and the nightly `36548984501` on
   `9fc4d86` — expected red on `supply-chain` (the advisories (1) fixed) and possibly macOS's `sandbox_attest_cli`;
   both fixed in `63a375e`, so read it as the old commit's record, and read the NEXT nightly as the real check;
   (2) RW 4.33 — done in (2), D-V2-68; (3) run 3's inbox

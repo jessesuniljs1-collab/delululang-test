@@ -198,7 +198,8 @@ Commit with the trailers in `CLAUDE.md`, push.
 takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and
 `list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply; `get_workflow_run_usage`
 names a run's job ids in a few bytes and gains a `run_duration_ms` only once the run is complete, and
-`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run) within the budget,
+`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run; `workflow_runs_filter.status` `in_progress` answered NO runs while two were
+running (run 4) — filter by `event` instead and read each run's `status`) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
 

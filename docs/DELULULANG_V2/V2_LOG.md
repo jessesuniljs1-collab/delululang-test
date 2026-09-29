@@ -3181,3 +3181,6 @@ and measured RW 2.4 bounded (one idea refuted). Push runs: `63a375e` `3655696178
 `36560942558` success; `2ea4208` `36562163647` success on every job. Unread: the nightly `36548984501` (still running) and the
 closing commit's own run. The red-team pass on the guest's filter did not run (its brief was stopped by a safety
 classifier before the agent started).
+
+**The closing commit's run, read:** `eb3af0b` `36564217831` — success on every job. `master` green at `eb3af0b`.
+The nightly `36548984501` (`9fc4d86`) was still running at 12:08 UTC — the next run reads it.
