@@ -845,6 +845,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   with `cp`, which the protocol forbids — the host reads the document the moment it exists — and macOS lost
   that race once. Witness a race by holding its window open (a `sleep` between creating and filling), never
   by re-running until it shows.
+- **A comment that names a test is a claim — grep for it** (routine run 4): the doc comment on
+  `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
+  claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs
+  for another reason). A mutant per entry finds such a hole; a green suite does not.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.
@@ -875,6 +879,9 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
   GUARD-STALE-1 and SECRETS-STALE-1 while writing the fix for an agent's finding — agents and the head
   chef each find what the other misses.
 - **No chain-of-thought is kept** — findings, evidence and decisions only (owner, 2026-09-17).
+- **A sous-chef's brief can be stopped before the agent starts** (routine run 4): a safety classifier stopped
+  the response that was briefing a red-team pass on the guest's filter; nothing ran. Do that kind of pass by
+  hand, one witnessed hypothesis at a time, as PS-E-03 did.
 - **The defects are rarely IN the guarantee under test** (routine run 2): a Sonnet 5.5 red-team pass on
   `/3` found the guarantee held in ~85 attempts and 700 fuzzed frames — and seven real defects AROUND it
   (waiting, reporting, text, pipes). Brief a tester to attack the guarantee and to list every oddity.

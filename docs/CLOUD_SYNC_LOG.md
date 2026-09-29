@@ -544,7 +544,8 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (the routine pushes there)   Pull request: none   Merged: n/a
 - Base: `9fc4d86` (routine run 3's last commit)
 - Commits: (1) `63a375e` CI red on 9fc4d86, read and fixed: wasmtime 48.0.3 (D-V2-67); an attestation read half-written;
-  (2) `RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits (D-V2-68)`
+  (2) `f33183c` RW 4.33: both WebAssembly engines refuse the 3.0 proposals DeluluLang never emits (D-V2-68);
+  (3) `RW 2.2 closed: overtaken by P3; the pin its comment named never existed, and Secret.map's entry is pinned now`
 - Files and folders:
   M `crates/delulu-wasm/Cargo.toml` (`wasmtime = "48"`), `Cargo.lock` (wasmtime 48.0.3 and its tree) — (1)
   M `crates/delulu/src/attest.rs` (`Refusal::Incomplete`, `incomplete`: end-of-input and a cut character;
@@ -561,6 +562,9 @@ it on `origin` was made in the cloud and is listed below.
   M `docs/CLOUD_ROUTINE.md` (step 3: a green run's verdict lines sit behind the cache save) — (2)
   M `CHANGELOG.md`, `deny.toml`, `.github/workflows/ci.yml` (the histories), `docs/REMAINING_WORK.md` (4.33
     closed), `V2_DECISION_LOG.md` (D-V2-68), `V2_LOG.md`, `docs/assistant-memory/cloud-period-2026-09-28.md` — (2)
+  M `crates/delulu-check/src/check.rs` (the comment on `higher_order_callback_arg` names its real pins),
+    `crates/delulu-check/tests/secret_oracle.rs` (`an_impure_mappers_row_surfaces_in_its_caller`),
+    `docs/REMAINING_WORK.md` (2.2 closed), `V2_LOG.md`, `HANDOFF.md` (§11.5, §11.7) — (3)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,795 edges); `doctor --check` ok, all
@@ -579,11 +583,21 @@ it on `origin` was made in the cloud and is listed below.
   `call_ref` module, `Some(7)`), green after; M5, M6, M7 red; `scripts/check-other-os.sh` clean for Windows,
   macOS arm64 and Linux arm64, and red on Windows with the test helper's `cfg` removed; clippy clean; the full
   suite alone 2,032 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+  (2) on the other runners before `master` moved (`witness.yml`, `claude/friendly-thompson-w49pvi` at `f33183c`):
+  macOS `36560326859` 5 passed, Windows `36560329484` 4 passed, Linux arm64 `36560332509` 5 passed.
+  (3): M8 (`fold` read at 0) and M9 (`filter` dropped) red on `stdlib_p3`; M10 (`Secret.map` dropped) passed every
+  test before the new pin and is red on it. Clippy clean; the full suite alone 2,033 passed, 0 failed, 15 ignored
+  (152 binaries), cargo exit 0.
+  **Not run:** the red-team pass on the Linux guest's filter (run 3's inbox) — a safety classifier stopped the
+  response briefing the Sonnet 5.5 sous-chef before the agent started; no agent ran, and no fallback notice was
+  shown (the commits keep naming Opus 5.5, the configured model).
 - Redo on the laptop: the suite on Windows and in WSL (wasmtime 48 is a new build on every platform).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a records-only commit can go red; a fake peer keeps the
   protocol it fakes); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 4).
 - Push runs read: (1) `63a375e` `36556961783` — **success on every job; `master` green again** (macOS: egress, host loss and privilege established, filesystem and memory absent as before; ping-pong MEASURED 2.66x against a 1.41x bar, control 3.75x — passed. Windows: all five established; ping-pong NOT MEASURED, the runner busy — controls 1.93x–2.50x); (2)'s — in the next commit or entry.
 - Open / next: (1) read (1)'s push run and the nightly `36548984501` (`9fc4d86`, expected red on the same two);
   (2) RW 4.33 — done in (2), D-V2-68; (3) run 3's inbox
-  still stands: PS-E-03 H6 (macOS and Windows under the escaped-guest harness), a red-team pass on the filter,
+  still stands: PS-E-03 H6 (macOS and Windows under the escaped-guest harness), the red-team pass on the filter
+  (not run here — do it by hand, one witnessed hypothesis at a time, e.g. the terminal settings reachable through
+  the inherited standard error),
   RW 4.32's stderr relay and `setsid`, PS-E-01's remainder, E-04, E-05, E-06, then P8, P9.

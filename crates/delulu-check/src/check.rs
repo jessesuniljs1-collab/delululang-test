@@ -3711,9 +3711,13 @@ impl RowAcc {
 /// and — before C88 — dropping the row; after C88 it would have reported a confusing DL0401 about
 /// the accumulator. Either way the law would have been decided about the wrong argument.
 ///
-/// `every_higher_order_callback_position_is_where_method_sig_expects_a_function` pins each entry
-/// against `method_sig`, so a method added here with the wrong index fails rather than silently
-/// checking the wrong slot.
+/// What pins each entry is end to end: `delulu/tests/stdlib_p3.rs`'s
+/// `every_higher_order_builtin_surfaces_its_callbacks_row` gives each `List` method an effectful
+/// callback and requires its row to surface (a wrong index — `fold` read at 0 — or a dropped entry
+/// fails it), and `delulu-check/tests/secret_oracle.rs`'s `an_impure_mappers_row_surfaces_in_its_caller`
+/// does the same for `Secret.map`. A method added here needs its line in one of them. (Until routine
+/// run 4 this comment named a unit test, `every_higher_order_callback_position_is_where_method_sig_…`,
+/// that never existed, and nothing pinned `Secret.map`'s entry: a mutant removing it passed.)
 fn higher_order_callback_arg(recv: &Type, method: &str) -> Option<usize> {
     match (recv, method) {
         (Type::List(_), "map") | (Type::List(_), "filter") | (Type::List(_), "find") => Some(0),

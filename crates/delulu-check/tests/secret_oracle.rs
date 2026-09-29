@@ -193,3 +193,16 @@ fn an_impure_mapper_is_still_refused() {
     );
     assert!(cs.iter().any(|c| c == "DL0603"), "expected DL0603, got {cs:?}");
 }
+
+/// R-4 holds for `Secret.map` on its own, not only through DL0603: the callback's row surfaces in its
+/// caller, so an effect the caller does not declare is DL0501 whatever DL0603 decides. Routine run 4 found
+/// this entry of `higher_order_callback_arg` pinned by nothing — a mutant that removed it passed every test,
+/// because DL0603 refused the same programs for another reason.
+#[test]
+fn an_impure_mappers_row_surfaces_in_its_caller() {
+    let cs = error_codes(
+        "module m\nfn bad(o: Cap[Console], s: Secret[Str]) -> Secret[Str] \
+         { s.map(fn(x: Str) -> Str ! {Write} { o.println(x)  x }) }\n",
+    );
+    assert!(cs.iter().any(|c| c == "DL0501"), "the callback's {{Write}} must surface in `bad`'s row, got {cs:?}");
+}

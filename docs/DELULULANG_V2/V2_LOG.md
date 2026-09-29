@@ -3137,3 +3137,29 @@ and privilege established, filesystem and memory absent, as before; ping-pong ME
 bar (control 3.75x) — passed. Windows: all five properties established; ping-pong NOT MEASURED, the runner
 busy (controls 1.93x–2.50x, under 3x). Read on a green run the verdicts sit ~100 lines from the end — the cache
 save follows them — so the routine's step 3 now says how to reach them.
+
+**Slice 2 read on the other runners before `master` moved** (`witness.yml` on `claude/friendly-thompson-w49pvi`
+at `f33183c`, `delulu-wasm` `lib`, filter `feature_hardening`): macOS `36560326859` — 5 passed; Windows
+`36560329484` — 4 passed (the plugin-store test is Unix-only: Windows refuses Contained plugins up front);
+Linux arm64 `36560332509` — 5 passed. Then `master` fast-forwarded to `f33183c`.
+
+**Not run: the red-team pass on the Linux guest's filter** that routine run 3's inbox named. A safety classifier
+stopped the response that was briefing the Sonnet 5.5 sous-chef, before the agent started; the pass was dropped
+for this run, and nothing of it ran. No fallback notice was shown.
+
+## 2026-09-29 — routine run 4: RW 2.2 — overtaken by P3, and the pin it relied on did not exist
+
+**Checked against the tree, the row was stale:** `List.filter` exists since P3 (`prim_table.rs:149`), and
+`is_higher_order_method` became `higher_order_callback_arg`, which carries the callback's position. **But its
+doc comment named a pinning unit test, `every_higher_order_callback_position_is_where_method_sig_expects_a_function`,
+that exists nowhere in the tree** — a gate claimed and absent. What does pin it: `stdlib_p3.rs`'s
+`every_higher_order_builtin_surfaces_its_callbacks_row`, end to end — M8 (`fold`'s callback read at index 0)
+red ("`fold` dropped its callback's row", DL0401 instead); M9 (`filter` dropped) red. **And nothing pinned the
+fifth entry:** M10 (`Secret.map` removed) passed every test — delulu-check's 270, `stdlib_p3`,
+`secret_verify_cli` — because DL0603 refuses an effectful mapper for another reason. **Pinned now:**
+`secret_oracle.rs::an_impure_mappers_row_surfaces_in_its_caller` — the callback's `{Write}` must surface in its
+caller's row (DL0501); green, and M10 red (`["DL0209", "DL0401", "DL0603"]`, no DL0501). The comment names the
+two real pins; RW 2.2 closed.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone: 2,033 passed, 0 failed, 15 ignored (152
+binaries), cargo exit 0.
