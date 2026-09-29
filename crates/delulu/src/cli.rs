@@ -2014,7 +2014,7 @@ fn run_module_tests(
                 entry["status"] = json!("pass");
                 st.passed += 1;
                 if !st.json {
-                    ok_line!("ok: test \"{}\" ({} ms)", t.name, ms);
+                    ok_line!("ok: test \"{}\" ({} ms)", delulu_diag::terminal_line(&t.name), ms);
                 }
             }
             Err(fault) => {
@@ -2035,7 +2035,13 @@ fn run_module_tests(
                 entry["failure"] = failure;
                 st.failed += 1;
                 if !st.json {
-                    eprintln!("FAIL: test \"{}\" — {} ({} ms)", t.name, fault.message, ms);
+                    // TERMINAL-TEXT-1: the name and the fault are the program's strings; one line each.
+                    eprintln!(
+                        "FAIL: test \"{}\" — {} ({} ms)",
+                        delulu_diag::terminal_line(&t.name),
+                        delulu_diag::terminal_line(&fault.message),
+                        ms
+                    );
                     if !output.is_empty() {
                         eprintln!("  captured output:\n{output}");
                     }

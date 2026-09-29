@@ -102,6 +102,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   **`--launcher-digest HEX`** pins it: any other file is never started — the run exits 1 in words, and a
   `sandbox-launcher` refusal is recorded. On Linux the file started is the very one hashed (a path swapped
   in between is not what runs); a launcher script's `$0` is then `/dev/fd/N` (D-V2-69).
+- **Fixed (security): a program's own strings reached the operator's terminal as control sequences**
+  (TERMINAL-TEXT-1). A pure program — no effect, no grant — could set the terminal's title, erase a line
+  and print a forged host line, or (where the terminal honours OSC 52) set the clipboard, through an
+  assertion's values, a path quoted in a refusal and its suggested `--grant`, a test's name, or a quoted
+  source line — in a plain run and under `--sandbox` alike. Every control character but a line break or
+  a tab, and the characters that reorder a line, are now shown escaped (`\u{1b}`) wherever `delulu` prints
+  such text for a person; a quoted source line shows each as `?`. JSON output is unchanged (D-V2-70).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

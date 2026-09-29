@@ -424,7 +424,8 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     let exit = match interp.run_main(Value::Root(Rc::new(RootVal::default()))) {
         Ok(_) => 0,
         Err(f) => {
-            eprintln!("error[{}]: {}", f.code, f.message);
+            // TERMINAL-TEXT-1: a fault can quote the program's own strings (an assertion's values).
+            eprintln!("error[{}]: {}", f.code, delulu_diag::terminal_line(&f.message));
             1
         }
     };

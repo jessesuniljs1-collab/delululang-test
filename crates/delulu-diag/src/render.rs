@@ -2,6 +2,7 @@
 //! freely between versions (the JSON envelope is the stable surface). Optimized for
 //! the human audiences the constitution names: learners and reviewers of AI code.
 
+use std::borrow::Cow;
 use std::fmt::Write as _;
 
 use crate::catalog::Catalog;
@@ -30,6 +31,52 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
 /// via semantic [`Role`]s so the theme decides the colors.
 pub fn render_human_with(d: &Diagnostic, map: &SourceMap, palette: &Palette) -> String {
     render_human_localized(d, map, palette, None)
+}
+
+/// TERMINAL-TEXT-1: text on its way to a person's terminal, with every control character but a line
+/// break or a tab — and the invisible characters that reorder or split a line — shown escaped
+/// (`\u{1b}`), so no string a program chose can drive the terminal: a pure program's `assert_eq` set
+/// the window title, erased a line and forged one of the host's, and a refusal quoted the program's
+/// path raw (witnessed on `3489b57`). Borrowed when there is nothing to escape. JSON never passes
+/// through here: its own escaping is exact.
+pub fn terminal_safe(text: &str) -> Cow<'_, str> {
+    escape_for_terminal(text, false)
+}
+
+/// [`terminal_safe`] for a line that must stay one line: a line break is escaped too, so it cannot
+/// start a forged line of its own (a test's name, a guest's fault).
+pub fn terminal_line(text: &str) -> Cow<'_, str> {
+    escape_for_terminal(text, true)
+}
+
+/// A character a terminal would act on or hide rather than show.
+fn hidden(c: char, one_line: bool) -> bool {
+    (c.is_control() && c != '\t' && (one_line || c != '\n'))
+        || matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{2028}' | '\u{2029}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+fn escape_for_terminal(text: &str, one_line: bool) -> Cow<'_, str> {
+    if !text.chars().any(|c| hidden(c, one_line)) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 16);
+    for c in text.chars() {
+        if hidden(c, one_line) {
+            out.extend(c.escape_unicode());
+        } else {
+            out.push(c);
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// A quoted source line keeps its columns — the caret below it counts characters — so a character
+/// [`terminal_line`] would escape is shown as one `?` instead.
+fn quotable(line: &str) -> Cow<'_, str> {
+    if !line.chars().any(|c| hidden(c, true)) {
+        return Cow::Borrowed(line);
+    }
+    Cow::Owned(line.chars().map(|c| if hidden(c, true) { '?' } else { c }).collect())
 }
 
 /// How many characters of a source line a diagnostic may quote.
@@ -94,7 +141,7 @@ pub fn render_human_localized(
     catalog: Option<&Catalog>,
 ) -> String {
     let localized = catalog.and_then(|c| c.render(d.code, &d.args));
-    let message: &str = localized.as_deref().unwrap_or(&d.message);
+    let message = terminal_safe(localized.as_deref().unwrap_or(&d.message));
     let sev_role = match d.severity {
         Severity::Error => Role::Error,
         Severity::Warning => Role::Warning,
@@ -119,9 +166,10 @@ pub fn render_human_localized(
         }
         let (line, col) = map.position(span.file, span.start);
         let arrow = if ls.secondary { "---" } else { "-->" };
-        let _ = writeln!(out, "  {} {}:{}:{}", arrow, map.name(span.file), line, col);
+        let _ = writeln!(out, "  {} {}:{}:{}", arrow, terminal_line(map.name(span.file)), line, col);
 
-        let full_text = map.line_text(span.file, line);
+        let full_text = quotable(map.line_text(span.file, line));
+        let full_text: &str = &full_text;
         let gutter_w = line.to_string().len().max(2);
 
         // Underline: clamp to the first line of the span.
@@ -155,7 +203,7 @@ pub fn render_human_localized(
         let underline = palette.paint(span_role, &underline);
         match &ls.label {
             Some(label) => {
-                let label = palette.paint(span_role, label);
+                let label = palette.paint(span_role, &terminal_line(label));
                 let _ = writeln!(out, "{:w$} | {} {}", "", underline, label, w = gutter_w);
             }
             None => {
@@ -198,6 +246,22 @@ mod tests {
         let d = Diagnostic::error("DL0301", "unknown name `boom`")
             .with_span(Span::new(f, 14, 18), "not found in this scope");
         (map, d)
+    }
+
+    /// TERMINAL-TEXT-1: every C0 and C1 control but a line break or a tab, and the characters that
+    /// reorder or split a line, are shown escaped; a one-line context escapes the line break too; text
+    /// with nothing to escape is borrowed untouched.
+    #[test]
+    fn text_for_a_terminal_carries_no_control_character() {
+        let hostile = "a\u{1b}]52;c;SGk=\u{7}b\rc\u{9b}2Jd\u{8}e\u{202e}f\u{2066}g\u{2028}h\u{0}i";
+        let safe = terminal_safe(hostile);
+        assert!(!safe.chars().any(|c| c.is_control() || matches!(c, '\u{202e}' | '\u{2066}' | '\u{2028}')), "{safe:?}");
+        assert!(safe.contains("\\u{1b}]52;c;SGk=\\u{7}"), "shown, not dropped: {safe}");
+        assert!(safe.contains("\\u{9b}"), "a C1 control (8-bit CSI) is escaped too: {safe}");
+        assert_eq!(terminal_safe("two\n\tlines"), "two\n\tlines", "a line break and a tab stay in a message");
+        assert_eq!(terminal_line("two\nlines"), "two\\u{a}lines", "but not in a line that must stay one");
+        assert!(matches!(terminal_safe("plain text — ünïcode"), Cow::Borrowed(_)), "nothing to escape, nothing copied");
+        assert_eq!(quotable("x\u{1b}[2Jy").chars().count(), "x\u{1b}[2Jy".chars().count(), "a quoted line keeps its columns");
     }
 
     /// Campaign finding C83 — a span naming a file the map never loaded must degrade, not panic.

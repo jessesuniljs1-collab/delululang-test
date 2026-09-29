@@ -103,7 +103,7 @@ fn handle(input: &str, decls: &mut Vec<String>, grants: &Grants) {
     let root = Value::Root(Rc::new(full_root(grants)));
     match interp.eval_toplevel(&expr, Some(root)) {
         Ok(v) => eprintln!("  => {}", v.display()),
-        Err(f) => eprintln!("  runtime {}: {}", f.code, f.message),
+        Err(f) => eprintln!("  runtime {}: {}", f.code, delulu_diag::terminal_line(&f.message)),
     }
 }
 

@@ -77,7 +77,9 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   shared with ADAPTER-SPELL-1's fix), hashed with BLAKE3, reported (`launcher_path`, `launcher_blake3`),
   pinnable (`--launcher-digest`), and on Linux started as the descriptor hashed (`fexecve`); LAUNCHER-SPELL-1
   (a planted `./lnch` ran through `.` on `PATH`) witnessed and closed (D-V2-69). Trap: `environ` inside a
-  `pre_exec` step is not the command's environment.
+  `pre_exec` step is not the command's environment. Then TERMINAL-TEXT-1 (D-V2-70): a pure program's
+  strings (assert_eq's values, refused paths, test names, quoted lines) reached the terminal as escape
+  sequences — escaped at the printers now; JSON unchanged.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

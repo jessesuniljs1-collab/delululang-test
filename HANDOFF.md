@@ -745,6 +745,10 @@ wins, and you should update the memory to match.
   operating system, whose `PATH` search honours `.`, so a `NAME` planted in the working directory ran while
   the report named `NAME`: ADAPTER-SPELL-1's shape again, one feature later. Now `resolve_driver` resolves
   it once, the bytes are hashed and reported, and on Linux the descriptor hashed is the file started.
+  **TERMINAL-TEXT-1** (the same run): a PURE program — no effect, no grant — wrote escape sequences to the
+  operator's terminal through `assert_eq`'s values (title, line erase, a forged `sandbox:` line; OSC 52
+  sets a clipboard), and the same bytes came through a refusal's quoted path, a test's name and a quoted
+  source line. Found by asking where a guest's standard error goes. Escaped at the printers now.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -856,6 +860,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
   claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs
   for another reason). A mutant per entry finds such a hole; a green suite does not.
+- **Ask of every string a program chose: where is it printed for a person?** (routine run 5,
+  TERMINAL-TEXT-1) — the effect row governs what a program DOES; the terminal it is reported on is outside
+  it, and an assertion's message was a way to it for a program with no effects. JSON escapes exactly; a
+  human renderer must escape too.
 - **`environ` in a `pre_exec` step is not the command's environment** (routine run 5): a step that execs by
   itself (`fexecve`) and passed `environ` started the launcher with none of the variables the host set on
   the command — caught only because a test asserted the launcher's environment. Build the environment from

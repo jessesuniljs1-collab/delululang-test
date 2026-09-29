@@ -25,6 +25,6 @@ pub use palette::{
     color_enabled, named_color_sgr, resolve_theme, ColorChoice, Palette, Role, Theme, RESET,
 };
 pub use catalog::{cli_string, placeholders_for, Catalog, CLI_STRINGS};
-pub use render::{render_human, render_human_localized, render_human_with};
+pub use render::{render_human, render_human_localized, render_human_with, terminal_line, terminal_safe};
 pub use source::{SourceFile, SourceMap};
 pub use span::{FileId, Span};

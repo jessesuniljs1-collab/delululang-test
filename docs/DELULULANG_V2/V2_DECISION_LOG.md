@@ -1452,6 +1452,34 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    attester vouching for a digest it measured itself; a statement that echoes the host's own digest back
    says nothing. RW 4.28 keeps it, with that question.
 
+## D-V2-70 — TERMINAL-TEXT-1: a program's strings are shown escaped wherever `delulu` prints them for a person — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **Witnessed on `3489b57`, found while scoping RW 4.32.** A PURE program — no effect in its row, no
+   grant — wrote escape sequences to the operator's terminal: `assert_eq("\u{1b}]0;PWNED\u{7}\u{1b}[2K\rsandbox:
+   forged", "x")` set the window title, erased the line and printed a forged host line, in a plain run (the
+   renderer) and under `--sandbox` (the guest's own fault line). The same bytes reached the terminal through
+   a refusal quoting the program's path (DL0703, twice — in the message and in the `--grant` it suggests),
+   through a test's name and failure in `delulu test`, and through a quoted source line. A terminal that
+   honours OSC 52 would have let the program set the clipboard. "A program can do nothing except what it was
+   explicitly handed" — and it had been handed no console.
+2. **Escaped at the points text is printed for a person, not where values enter messages.** Values reach
+   messages in more places than a list keeps up with (the runtime alone formats a value into a fault at nine
+   sites, and every refusal quotes a path), and a list misses the next one; the printers are few: the diagnostic renderer (message,
+   labels, file names, quoted lines), the guest's fault line, `delulu test`'s lines, the REPL's fault line.
+   `delulu_diag::terminal_safe` shows every control character but a line break or a tab — C0 and C1, and
+   the characters that reorder or split a line (bidi controls, U+2028/2029) — as `\u{…}`; `terminal_line`
+   escapes the line break too, for a line that must stay one; a quoted source line shows each as `?`, so
+   the caret keeps its column. Text with nothing to escape is borrowed untouched, so no ordinary output
+   changes.
+3. **JSON is unchanged.** Its own escaping is exact (`\u001b`), and an agent reading `--json` gets the
+   program's bytes as they were; a test holds that.
+4. **Named residual:** the renderer keeps line breaks in a diagnostic's message — one checker message lays
+   itself out on three lines (`delulu-check/src/plugin.rs`, a plugin signature mismatch) — so a path or a
+   value with a line break can still begin a new line inside a diagnostic it caused. No control sequence
+   reaches the terminal that way; a line that looks like another can. RW 4.34 keeps it. And a guest that
+   has ESCAPED its interpreter still writes raw bytes to its standard error, which is the operator's
+   terminal — RW 4.32's relay, still open.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

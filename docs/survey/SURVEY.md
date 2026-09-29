@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 288 |
-| Rust lines | 148921 |
-| Rust files outside `src/` (test/bench targets) | 129 |
+| Rust files | 289 |
+| Rust lines | 149127 |
+| Rust files outside `src/` (test/bench targets) | 130 |
 | Markdown documents | 252 |
-| Markdown lines | 66822 |
+| Markdown lines | 66930 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1469 / 12847 |
+| Nodes / edges in this map | 1470 / 12877 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 40 files, 36420 lines
+- **Modules:** 40 files, 36427 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 9817 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 9823 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 909 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
@@ -115,7 +115,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 2384 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 2385 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
 | `src/jail.rs` | 1564 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/launcher.rs` | 172 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
@@ -229,7 +229,7 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3873 lines
+- **Modules:** 9 files, 3937 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -239,7 +239,7 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 | `src/json.rs` | 190 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
 | `src/palette.rs` | 606 | The Palette — a role-based color system for every human-facing CLI surface (Surface addendum |
-| `src/render.rs` | 255 | Human-facing rendering. This text is presentation, not contract: it may change |
+| `src/render.rs` | 319 | Human-facing rendering. This text is presentation, not contract: it may change |
 | `src/source.rs` | 96 |  |
 | `src/span.rs` | 31 |  |
 

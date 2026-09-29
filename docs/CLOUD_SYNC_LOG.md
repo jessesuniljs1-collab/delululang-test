@@ -626,7 +626,8 @@ it on `origin` was made in the cloud and is listed below.
   `claude/friendly-thompson-gsorc5` first, then `master` fast-forwarded)   Pull request: none   Merged: n/a
 - Base: `cfc5b01` (routine run 4's last commit)
 - Commits: (1) `370d641` PS-E-04: the external launcher resolved once, hashed, pinnable, and started as the file hashed;
-  (2) `PS-E-04's records: D-V2-69, LAUNCHER-SPELL-1, the runners read; routine run 5's entry` — records only
+  (2) `3489b57` PS-E-04's records: D-V2-69, LAUNCHER-SPELL-1, the runners read; routine run 5's entry — records only;
+  (3) `TERMINAL-TEXT-1: a pure program wrote escape sequences to the operator's terminal; escaped at the printers (D-V2-70)`
 - Files and folders:
   A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
   M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
@@ -639,6 +640,15 @@ it on `origin` was made in the cloud and is listed below.
     the cross-OS targets in the background), `docs/REMAINING_WORK.md` (4.28), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
     (D-V2-69), `V2_LOG.md`, `V2_OPENSHELL_STUDY.md` (§4.4 built), `V2_PHASE_STATUS.md` (PS-E), `V2_SECURITY_MODEL.md`
     (§10), `docs/assistant-memory/cloud-period-2026-09-28.md` — (2)
+  A `crates/delulu/tests/terminal_text_cli.rs` (five witnesses) — (3)
+  M `crates/delulu-diag/src/render.rs` (`terminal_safe`, `terminal_line`, `quotable`; the renderer uses them;
+    a unit test), `crates/delulu-diag/src/lib.rs` (the two exported), `crates/delulu/src/guest.rs` (the guest's
+    fault line), `cli.rs` (`delulu test`'s lines), `repl.rs` (the fault line) — (3)
+  M `tests/core-invariance/SNAPSHOT.txt` — ONE line re-recorded (DL0107's quoted line: the raw U+202E is now
+    `?`), reviewed — (3)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 TERMINAL-TEXT-1; §11.5 where a program's strings are printed),
+    `docs/REMAINING_WORK.md` (4.34 new and closed; 4.32 widened), `V2_DECISION_LOG.md` (D-V2-70), `V2_LOG.md`,
+    `V2_SECURITY_MODEL.md` (§10), `docs/assistant-memory/cloud-period-2026-09-28.md` — (3)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,832 edges); `doctor --check` ok, all
@@ -652,13 +662,20 @@ it on `origin` was made in the cloud and is listed below.
   2,034 passed, 4 failed (the stale map only — `doctor_cli` three, the Survey's freshness; green once
   regenerated), 15 ignored (152 binaries). `witness.yml` at `370d641`: macOS `36595372725`, Windows `36595377128`,
   Linux arm64 `36595380398` — every test of the three external-launcher targets passed.
+  **(3):** TERMINAL-TEXT-1 witnessed red on `3489b57` on five paths (a pure program's `assert_eq` set the
+  terminal's title and forged a host line, plain and under `--sandbox`; a refused path; a test's name; a quoted
+  line); green after; M7–M12 red, restored byte for byte; clippy clean; the full suite alone 2,043 passed,
+  1 failed (the core-invariance snapshot — one reviewed line, re-recorded, green), 15 ignored (153 binaries).
 - Redo on the laptop: the suite on Windows and in WSL (the launcher path changed on every OS; WSL runs the
   `fexecve` path and the swap witness).
 - For the laptop's memory: `HANDOFF.md` §11.4 (LAUNCHER-SPELL-1) and §11.5 (`environ` in a `pre_exec` step;
   holding a race's window open with work the code does anyway); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Push runs read: see (2)'s follow-up line below, or the next run's entry.
-- Open / next: (1) read (2)'s push run if this entry does not; (2) E-04's remainder — Windows deny-write (needs a
-  witness first), the attestation binding a digest the attester measured; (3) run 3's inbox: PS-E-03 H6 (macOS
+- Push runs read: (2) `3489b57` `36596687623` — success on every job. (3): see the follow-up line, or the next run's entry.
+- Open / next: (1) read (2)'s and (3)'s push runs if this entry does not; (2) RW 4.32's relay — an ESCAPED
+  guest's standard error and the microVM's console still reach the terminal raw (TERMINAL-TEXT-1 escaped the
+  guest's own fault line; the relay is the rest) — and RW 4.34's line break in a message; (3) E-04's remainder
+  — Windows deny-write (needs a witness first), the attestation binding a digest the attester measured; (4) run
+  3's inbox: PS-E-03 H6 (macOS
   and Windows under the escaped-guest harness), the red-team pass on the filter by hand, RW 4.32's stderr relay
   and `setsid`, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
-  P9. **For the owner:** D-V2-69 is this run's decision.
+  P9. **For the owner:** D-V2-69 and D-V2-70 are this run's decisions.

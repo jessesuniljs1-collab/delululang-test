@@ -3241,3 +3241,42 @@ among them (`fexecve` on aarch64). Then `master` fast-forwarded to the branch.
 **Open in E-04** (RW 4.28): Windows could hold the launcher open deny-write between the hash and the start
 — not built, because nothing yet witnesses it; macOS has no `fexecve`; and an attestation that binds a
 launcher digest the attester measured itself.
+
+## 2026-09-29 — routine run 5: TERMINAL-TEXT-1 — a pure program wrote escape sequences to the operator's terminal (D-V2-70)
+
+**Found while scoping RW 4.32** (a guest's standard error is the operator's terminal): what does a guest
+itself print there? Its own fault line, `error[CODE]: message` — and a fault can quote the program's values.
+**Witnessed on `3489b57`:** `fn main(root: Root) { assert_eq("\u{1b}]0;PWNED\u{7}\u{1b}[2K\rsandbox: forged", "x") }`
+— a program with an empty effect row and no grant — printed `ESC ] 0 ; PWNED BEL ESC [ 2 K CR sandbox: forged`
+raw to standard error, in a plain run (the renderer) and under `--sandbox` (the guest's line): a title set, a
+line erased, a host line forged; OSC 52 would set a clipboard. The same through a refusal quoting the
+program's path (DL0703, in the message and in the `--grant` it suggests), a test's name and failure in
+`delulu test`, and a quoted source line. JSON was never affected (`\u001b`).
+
+**Fixed at the printers** (D-V2-70): `delulu_diag::terminal_safe` (every control but a line break or a tab,
+C1 included, and the bidi and line-separator characters, shown as `\u{…}`; borrowed when clean) in the
+renderer's message; `terminal_line` (the line break too) for labels, file names, the guest's fault line,
+`delulu test`'s `ok:`/`FAIL:` lines and the REPL's fault line; a quoted source line shows each as `?`, so its
+caret keeps its column.
+
+**Witnesses** (`tests/terminal_text_cli.rs`, new — five, each red on `3489b57`): an assertion's values in a
+plain run; the same as a sandboxed guest; a refusal's path (and the JSON envelope still exact); a quoted
+source line; a test's name carrying a line break and a forged `test result:` line (exactly one summary
+survives). And `render.rs`'s unit test over C0, C1 (the 8-bit CSI), bidi, U+2028 and NUL. **Mutants:** M7
+(the renderer's message raw), M8 (the guest's fault raw), M9 (`FAIL:` raw), M10 (a quoted line raw), M11 (C1
+and bidi not escaped — the unit test), M12 (a one-line context keeps its line break — the forged summary
+appeared) — each red, each restored byte for byte.
+
+**Named, not closed:** a line break inside a rendered message (one checker message is laid out on three
+lines), RW 4.34; an ESCAPED guest's raw standard error and the microVM's raw console relay, RW 4.32.
+
+**The core-invariance snapshot moved by one line, reviewed and re-recorded (D-NE-3):** of every case in
+`tests/core-invariance/SNAPSHOT.txt`, only `DL0107_bidi_override.delulu :: check` changed — its quoted source line
+carried the raw U+202E RIGHT-TO-LEFT OVERRIDE, so the diagnostic that warns a bidi control can make code
+render differently than it runs was itself re-ordering the operator's terminal; it now shows `?` in the
+character's column, the caret unmoved. Every other case unchanged, byte for byte.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone (`-j 4`), the map regenerated before it: 2,043
+passed, 1 failed, 15 ignored (153 binaries) — the one `core_invariance`, the snapshot above; re-recorded,
+green. No code in this slice is specific to an operating system (the new witnesses run on all three in the
+push run).

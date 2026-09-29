@@ -3254,7 +3254,7 @@ exit 1
 error[DL0107]: bidirectional control character U+202E (RIGHT-TO-LEFT OVERRIDE) in source
   --> tests/conformance/reject/DL0107_bidi_override.delulu:8:16
    |
- 8 |     // deny if ‮ not admin
+ 8 |     // deny if ? not admin
    |                ^ this can make the code render differently than it runs — use the `\u{…}` escape if a string truly needs it
   explain: delulu explain E-DL0107
 
