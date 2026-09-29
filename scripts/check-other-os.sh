@@ -14,12 +14,14 @@
 # the runner's (`witness.yml`, the push run). Nothing built here is ever executed.
 #
 # Linux on arm64 is checked too: its syscall table differs (no `fork`, other numbers), which is where a
-# seccomp list that compiles on x86-64 can fail to (the arm64 CI job once caught exactly that).
+# seccomp list that compiles on x86-64 can fail to (the arm64 CI job once caught exactly that). And Linux
+# on musl, the microVM's static guest: its `libc` types differ from glibc's (`Ioctl` is `c_int` there).
 #
 # usage: scripts/check-other-os.sh [TARGET…]
 #   default: aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu
+#            x86_64-unknown-linux-musl
 #   needs:   rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc \
-#              aarch64-unknown-linux-gnu
+#              aarch64-unknown-linux-gnu x86_64-unknown-linux-musl
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STUB="$ROOT/target/other-os-check-stub"
@@ -48,7 +50,7 @@ exit 0
 STUB_AR
 chmod +x "$STUB/cc" "$STUB/ar"
 
-TARGETS=${*:-"aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu"}
+TARGETS=${*:-"aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl"}
 for target in $TARGETS; do
   var=$(echo "$target" | tr '-' '_')
   echo "== $target: cargo clippy -p delulu --all-targets -- -D warnings"

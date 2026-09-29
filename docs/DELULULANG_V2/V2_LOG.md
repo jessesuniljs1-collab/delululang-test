@@ -2942,3 +2942,55 @@ guest's end closed before `open` — red on `dd2a542` (`Broken pipe (os error 32
 `open` and `send_program` put a failed write in words ("it had closed the channel before the host opened
 it"); the watcher exits 3 when the process it was given had already ended (`ESRCH`), and the host says so
 instead of "did not say it was armed within 10s". Green on the runners: `ff251bb` — `36530276934` (macOS `sandbox_external_cli`, 3 passed, the failing test among them), `36530279678` (macOS `sandbox_confirm_cli`, 12 passed, the guest gone 4.9 ms after the kill); and PS-E-03 on the other Linux runners: `36530282206` (arm64, the escaped-guest tests, 5 passed — a non-root runner whose FREE control read the operator's `environ`, opened the terminal, made a user namespace and every socket kind, and whose escaped guest reached none; `userfaultfd` and `fsopen` unmeasurable there, refused to an unprivileged user even unconfined), `36530285142` (x86-64 with the subordinate-uid guest, `sandbox_run_cli` 17 passed), `36530287510` (arm64 `sandbox_run_cli`, success).
+
+## 2026-09-29 — routine run 3: PS-E-03 H4 — a serving host is closed to its own user (D-V2-62)
+
+**Measured by hand first, as a non-root user in the VM** (`runuser -u delulutester`): a sandboxed host
+spinning a program, started with `DELULU_H4_SENTINEL=the-hosts-secret`; a second process of the same user
+read `/proc/<host>/environ` — the sentinel was there — and the file belonged to that user: the host was
+dumpable. With H3 closed an escaped guest can no longer reach it, but any other process of the operator's
+could, and where Yama is off (this VM, many containers) its memory too.
+
+**Witness** `a_serving_hosts_environment_and_memory_are_closed_to_its_own_user` (`sandbox_confirm_cli.rs`,
+Linux): the host serves a spinning program; the test, as the same user, reads the host's `environ` and opens
+its `mem`. Red on `30e3262` run as `delulutester` ("a process of the same user read the serving host's
+environment"): **HOST-DUMPABLE-1**. As root it says "unmeasurable" — root reads any process — and CI's
+runners are not root.
+
+**Fixed** (`guest.rs::serve_under`): `PR_SET_DUMPABLE = 0` right after the guest is launched — not before,
+because a child forked from a non-dumpable process keeps the flag until its `exec`, and the identity path
+writes that child's uid map then. Green as `delulutester`: `sandbox_confirm_cli` 13 passed; the red run is
+the mutant (the same tree without the line).
+
+**Verified:** clippy `-D warnings` clean; the full suite alone (as root): 2,025 passed, 0 failed, 15 ignored (152 binaries) — cargo exit 0 (the witness, as root, reports itself unmeasurable); as `delulutester`, `sandbox_confirm_cli` 13, `sandbox_run_cli` 17, `guest_cli` 5, `sandbox_external_cli` 3 — all passed.
+
+**Open (PS-E-03):** H5 (the Landlock ABI as a `hostile-agent` requirement) and H6 (macOS and Windows under
+the same harness).
+
+## 2026-09-29 — routine run 3: PS-E-03 H8 — an escaped guest typed into the operator's terminal (D-V2-63)
+
+**Asked while closing H4:** what else does an escaped guest hold? Its standard error stays attached to the
+operator's terminal (the host's, by design, so a failing guest can say why), and it shares the host's session
+— so that terminal is its controlling terminal. `dev.tty.legacy_tiocsti` is 1 in this VM (kernel 6.18).
+
+**Witness** `h8_an_escaped_guest_types_nothing_into_the_operators_terminal` (`jail::escaped_tests`): the child
+takes the pseudo-terminal as its controlling terminal before its lock-down, as the real guest inherits it,
+and after it tries `ioctl(TIOCSTI)`. **Red** on this run's tree: `still reached: ["TIOCSTI"]` —
+**GUEST-TIOCSTI-1**: a keystroke in the operator's input, for their shell to run after the guest is gone.
+
+**Fixed** (`lock_down_self`): `ioctl` with `TIOCSTI` or `TIOCLINUX` refused, compared on the command's low 32
+bits. **Mutants:** M7 (the rule dropped) red on `TIOCSTI` and `TIOCSTI_HIGH`; M8 (compared on 64 bits) red on
+`TIOCSTI_HIGH` alone — the same command with its high bits set, which the kernel truncates, walked past a
+64-bit comparison.
+
+`libc::Ioctl` is `c_int` on musl — the microVM's static guest — and `c_ulong` on glibc, so the rule's casts
+stay, allowed with that reason; `scripts/check-other-os.sh` now lints `x86_64-unknown-linux-musl` too
+(without the cast musl fails, E0308, where glibc compiles — only CI's `microvm` job would have said so).
+
+**Verified:** clippy `-D warnings` clean on Linux and the five other targets; the full suite alone: 2,026
+passed, 0 failed, 15 ignored (152 binaries), cargo exit 0. **CI:** `30e3262`'s push run `36531207166` —
+success on every job, `master` green again after `3ec690b`/`c9739db` (the macOS test job, and the `microvm`
+job whose guest runs PS-E-03's filter).
+
+**Open:** the guest's own output still reaches the terminal raw (escape sequences) — RW 4.32's relay; and
+the guest could be given no controlling terminal at all.

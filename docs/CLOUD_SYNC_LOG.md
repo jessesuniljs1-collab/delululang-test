@@ -393,7 +393,9 @@ it on `origin` was made in the cloud and is listed below.
   (8) `c9739db` PS-E-02 on Windows: the records - PS-E-02 complete (D-V2-60);
   (9) `dd2a542` PS-E-03, first step: the escaped guest; H1, H2, H3 confirmed and closed, H7 found (D-V2-61);
   (10) `ff251bb` A guest gone before the host opens the channel is told in words (macOS CI red, 36527491801);
-  (11) `PS-E-03 and the macOS CI fix: read green on every runner; the records` — this entry's commit
+  (11) `30e3262` PS-E-03 and the macOS CI fix: read green on every runner; the records;
+  (12) `6f88202` PS-E-03 H4: a serving host is closed to its own user (D-V2-62);
+  (13) `PS-E-03 H4's records; H8: an escaped guest cannot type into the operator's terminal (D-V2-62, D-V2-63)`
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -433,6 +435,12 @@ it on `origin` was made in the cloud and is listed below.
     (the watcher's `WATCH_NOTHING`) — (10)
   M `.github/workflows/witness.yml` (several targets, or `all`; `--no-fail-fast`), `docs/CLOUD_ROUTINE.md` (a
     green read covers every target), `HANDOFF.md` §11.5, `docs/DELULULANG_V2/V2_LOG.md` — (11)
+  M `crates/delulu/src/guest.rs` (`PR_SET_DUMPABLE` after the launch), `crates/delulu/tests/sandbox_confirm_cli.rs`
+    (the H4 witness) — (12)
+  M `crates/delulu/src/jail.rs` (`escaped_tests`: H8, `TIOCSTI`, `TIOCSTI_HIGH`; `lock_down_self`: the `ioctl`
+    rule), `scripts/check-other-os.sh` (musl), `docs/CLOUD_ROUTINE.md` — (13)
+  M `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-62, D-V2-63),
+    `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (13)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
   Deleted: nothing.
@@ -469,7 +477,21 @@ it on `origin` was made in the cloud and is listed below.
   (x86-64 subordinate-uid `sandbox_run_cli`, 17 passed), `36530287510` (arm64 `sandbox_run_cli`).
   `c9739db`'s push run `36529103180` carries the same macOS failure (the code of `3ec690b`).
   (11): the full suite alone on the landed tree 2,024 passed, 0 failed, 15 ignored (152 binaries), cargo
-  exit 0.
+  exit 0. `c9739db`'s push run `36529103180`: failure, one job, `test (macos-latest)` — the known one.
+  (12): H4 measured by hand as a non-root user (`runuser -u delulutester`: a same-user process read the
+  serving host's `environ`), then the witness red on `30e3262` as that user, green after; as that user
+  `sandbox_confirm_cli` 13, `sandbox_run_cli` 17, `guest_cli` 5, `sandbox_external_cli` 3 passed; the full
+  suite alone as root 2,025 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0. Read on the runners at
+  `6f88202`: `36531906893` (x86-64, non-root, the subordinate-uid guest: `sandbox_confirm_cli` 13 — the H4
+  witness measured —, `sandbox_run_cli` 17, `guest_cli` 5, `sandbox_external_cli` 3) and `36531909687`
+  (arm64, the same four) — success.
+  (13): H8's witness red on this run's tree (`TIOCSTI` into the controlling terminal after lock-down), green
+  after; mutants M7 (the rule dropped) and M8 (compared on 64 bits: `TIOCSTI_HIGH` got through) red.
+  `scripts/check-other-os.sh` now lints musl (the microVM guest's) — clean on all five targets, and red
+  without the musl cast (E0308) where glibc compiles. The full suite alone 2,026 passed, 0 failed, 15
+  ignored (152 binaries), cargo exit 0.
+  **`30e3262`'s push run `36531207166` — success on every job**: `master` green again, the macOS test job
+  among them, and the `microvm` job whose guest runs PS-E-03's filter.
 - Redo on the laptop: (9) changes the Linux guest's own lock-down — **rebuild the WSL microVM guest images**
   (the VM guest applies the same filter) and run the suite in WSL; Windows: nothing new beyond the suite.
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed

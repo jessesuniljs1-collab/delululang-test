@@ -663,6 +663,24 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
     rules.insert(libc::SYS_clone, clone_rules);
+    // H8 (GUEST-TIOCSTI-1, found with the escaped guest): a guest shares its host's session, so the
+    // operator's terminal is its controlling terminal and its standard error, and `TIOCSTI` pushed a
+    // keystroke into that terminal's input — for the operator's shell to read and RUN once the guest is
+    // gone (`dev.tty.legacy_tiocsti` is 1 here, as on many hosts). `TIOCLINUX` can paste a selection on
+    // a Linux console the same way. Compared on the low 32 bits, because the kernel truncates the command
+    // to them: a caller setting the high bits must not walk around the rule.
+    // `libc::Ioctl` is `c_ulong` on glibc and `c_int` on musl — the microVM's static guest — so the cast is
+    // needed there and redundant here.
+    #[allow(clippy::unnecessary_cast)]
+    let ioctl_rules = [libc::TIOCSTI as u64, libc::TIOCLINUX as u64]
+        .iter()
+        .map(|cmd| {
+            seccompiler::SeccompCondition::new(1, seccompiler::SeccompCmpArgLen::Dword, seccompiler::SeccompCmpOp::Eq, *cmd)
+                .and_then(|c| seccompiler::SeccompRule::new(vec![c]))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
+    rules.insert(libc::SYS_ioctl, ioctl_rules);
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
     // guest reports a refusal instead of vanishing and leaving the host to guess.
     let filter = SeccompFilter::new(
@@ -1192,6 +1210,18 @@ mod escaped_tests {
         let tty = std::env::var(TTY).expect("the operator's terminal");
         // libtest printed this test's name without a newline; the first `NAME=` line must not join it.
         println!();
+        // H8: a guest shares its host's session, so the operator's terminal is its CONTROLLING terminal and
+        // its standard error. This child takes the pseudo-terminal the same way, before its lock-down.
+        // SAFETY: `setsid` and one `ioctl` on a descriptor this child opens and keeps.
+        let controlling = unsafe {
+            let fd = std::ffi::CString::new(tty.clone()).map(|p| libc::open(p.as_ptr(), libc::O_RDWR)).unwrap_or(-1);
+            libc::setsid();
+            if fd >= 0 && libc::ioctl(fd, libc::TIOCSCTTY, 0) == 0 {
+                fd
+            } else {
+                -1
+            }
+        };
         if mode == "escaped" {
             let fs = super::confine_filesystem(Some(&chan));
             println!("LANDLOCK={}", fs.map(|a| a.join(",")).unwrap_or_else(|| "none".into()));
@@ -1249,6 +1279,18 @@ mod escaped_tests {
         println!("PROC_CMDLINE={}", std::fs::read(format!("/proc/{pid}/cmdline")).is_ok());
         // H7 — the operator's terminal, opened for reading: what is typed there.
         println!("TERMINAL={}", std::fs::File::open(&tty).is_ok());
+        // H8 — a keystroke pushed into the controlling terminal's input (`TIOCSTI`): what the operator's
+        // shell reads next, and runs, once the guest is gone.
+        // SAFETY: one `ioctl` with a one-byte buffer on the descriptor made above.
+        let injected = controlling >= 0 && unsafe { libc::ioctl(controlling, libc::TIOCSTI, c"x".as_ptr()) } == 0;
+        println!("TIOCSTI={injected}");
+        // The same command with its high 32 bits set: the kernel reads only the low 32, so a filter that
+        // compared all 64 would let this spelling through.
+        // SAFETY: as above, through the raw system call so the high bits reach the kernel.
+        #[allow(clippy::unnecessary_cast)] // `c_int` on musl, `c_ulong` on glibc
+        let high = libc::TIOCSTI as u64 | (1u64 << 32);
+        let injected = controlling >= 0 && unsafe { libc::syscall(libc::SYS_ioctl, controlling, high, c"x".as_ptr()) } == 0;
+        println!("TIOCSTI_HIGH={injected}");
         // What the guest itself must keep, or it cannot run: the control of any narrowing.
         println!("PROC_SELF={}", std::fs::read("/proc/self/status").is_ok());
         println!("DEV_NULL={}", std::fs::File::open("/dev/null").is_ok());
@@ -1358,6 +1400,14 @@ mod escaped_tests {
     #[test]
     fn h7_an_escaped_guest_opens_no_terminal() {
         let Some(open) = still_open("h7", &["TERMINAL"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H8: an escaped guest cannot push keystrokes into the operator's terminal — its controlling terminal,
+    /// shared with the host's session — for the operator's shell to run after the guest is gone.
+    #[test]
+    fn h8_an_escaped_guest_types_nothing_into_the_operators_terminal() {
+        let Some(open) = still_open("h8", &["TIOCSTI", "TIOCSTI_HIGH"]) else { return };
         assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
     }
 

@@ -305,7 +305,12 @@ namespace through `clone`), GUEST-SOCKET-1 (UDP, netlink, Unix sockets, a connec
 socket — while the report said `network: only the channel`), GUEST-PROC-1 (another process's `environ`).
 Building H3 found **H7, GUEST-DEV-1**: `/dev` granted whole let the guest open the operator's terminal.
 All four closed — the filter refuses the calls, every new socket and `clone`'s namespace flags (`clone3`
-ENOSYS); Landlock grants `/proc/self` and five devices — each with a mutant. Open: H4, H5, H6.
+ENOSYS); Landlock grants `/proc/self` and five devices — each with a mutant. **H4 the same run
+(D-V2-62):** red as a non-root user — a same-user process read a serving host's `environ`
+(HOST-DUMPABLE-1) — closed by `PR_SET_DUMPABLE = 0` once the guest is launched. **H8, found the same run
+(D-V2-63):** the guest shares its host's session, so the operator's terminal is its controlling terminal,
+and an escaped guest pushed keystrokes into it with `TIOCSTI` (GUEST-TIOCSTI-1) — closed in the filter,
+compared on the command's low 32 bits. Open: H5, H6.
 
 ### 4.4 PS-E-04 — the external launcher is resolved once, hashed, and optionally pinned
 

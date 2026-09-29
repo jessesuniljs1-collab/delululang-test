@@ -165,8 +165,8 @@ runs the changed code on that OS** (`target` takes several, or `all`: run 3 read
 three targets and a fourth went red on `master`); then fast-forward `master`
 to the branch — its history keeps the red witness, and `master` never goes red for it. Lint macOS and
 Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
-x86_64-pc-windows-msvc aarch64-unknown-linux-gnu`, then `scripts/check-other-os.sh` (clippy `-D warnings`
-for all four, compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
+x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
+(clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
 tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
 exit code. Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported.

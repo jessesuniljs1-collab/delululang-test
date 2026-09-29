@@ -250,9 +250,11 @@ The Linux guest's own layers are claimed against an ESCAPED guest since PS-E-03 
 witnesses and six falsified mutants (`crates/delulu/src/jail.rs`, `escaped_tests`): after it locks itself
 down, a guest that has escaped its interpreter opens no socket of any family (GUEST-SOCKET-1), reads no
 other process's `/proc` entry (GUEST-PROC-1) and no device but null, zero, full and the random ones
-(GUEST-DEV-1), and makes none of the unnamed calls or a namespace through `clone` (GUEST-SYSCALL-1). Not
-yet: the host non-dumpable (H4), the Landlock ABI as a requirement (H5), macOS and Windows under the same
-harness (H6).
+(GUEST-DEV-1), and makes none of the unnamed calls or a namespace through `clone` (GUEST-SYSCALL-1); and
+a serving Linux host is closed to its own user — non-dumpable once its guest is launched
+(HOST-DUMPABLE-1, D-V2-62); and an escaped guest cannot type into the operator's terminal (GUEST-TIOCSTI-1,
+D-V2-63). Not yet: the Landlock ABI as a requirement (H5), macOS and Windows under the
+same harness (H6).
 
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a

@@ -1306,6 +1306,32 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    `hostile-agent` requirement), H6 (macOS `mach-lookup`, Windows named objects — the same harness on those
    runners).
 
+## D-V2-62 — PS-E-03 H4: the host is non-dumpable while it serves a sandboxed run — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **On Linux the host sets `PR_SET_DUMPABLE = 0` once its guest is launched**, for the rest of its life: its
+   `/proc` entries become root's, so no process of the same user may read its environment or memory or
+   attach to it. Witnessed red as a non-root user (a same-user process read the serving host's `environ`,
+   sentinel and all — HOST-DUMPABLE-1); root may read any process, so the witness says "unmeasurable" as
+   root and CI's non-root runners carry it.
+2. **After the launch, not before:** a child forked from a non-dumpable process keeps the flag until its
+   `exec`, and the Linux identity path writes that child's `/proc` uid map in exactly that window.
+3. **Never undone**, and no core dump: the host exits when the run ends, and a dump would spill the same
+   bytes. macOS and Windows are H6's (the same question on those systems, through the same harness).
+
+## D-V2-63 — PS-E-03 H8: an escaped guest cannot type into the operator's terminal — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **A new hypothesis, H8, found and confirmed the same run.** A guest shares its host's session, so the
+   operator's terminal is its controlling terminal and its standard error. The escaped guest pushed a
+   keystroke into that terminal's input with `TIOCSTI` after its full lock-down — for the operator's shell to
+   read and RUN once the run is over (`dev.tty.legacy_tiocsti` is 1 in this VM, as on many hosts): a
+   sandbox escape through the terminal, the class of CVE-2017-5226 (GUEST-TIOCSTI-1).
+2. **The filter refuses `ioctl` with `TIOCSTI` or `TIOCLINUX`** (a console selection paste), comparing the low
+   32 bits of the command — the kernel truncates it to them, and a 64-bit comparison let the same command
+   through with its high bits set (the harness's `TIOCSTI_HIGH`; mutant M8).
+3. **Not taken here:** giving the guest no controlling terminal (`setsid`) and relaying its standard error
+   through the host instead of the terminal itself (RW 4.32 names the relay). The filter closes the escape;
+   those would narrow what a guest's own output can do to a terminal — escape sequences — and are open.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
