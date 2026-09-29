@@ -321,6 +321,84 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     Ok(value)
 }
 
+/// RW 4.32 (the red-team pass on `/3`): a deadline on each FRAME, not only on each read.
+///
+/// The host's channel had a deadline on every read, and a read returns as soon as ONE byte arrives —
+/// so a guest that sent a byte every 40 s met each read's 60 s and held one frame open for as long as
+/// it liked: a 16 MiB frame, one byte at a time, is months. This wraps the host's end of the channel
+/// and times the frame the host is waiting for from its first byte: when a read returns later than
+/// `deadline` after that byte, the frame is refused (`TimedOut`) and the channel's failure ends the run.
+///
+/// The host reads one request and then answers it, so its WRITE ends the frame: the clock stops there
+/// and starts again at the next request's first byte. Silence BEFORE a frame is not the frame's time —
+/// the per-read deadline already bounds it, as before.
+///
+/// What it bounds, exactly: the frame's bytes are judged when a read returns, and a read waits at most
+/// the per-read deadline — so a frame is refused at most one per-read deadline after its own ran out
+/// (under two minutes at 60 s and 60 s), where before it was never refused at all.
+pub struct FrameDeadline<C> {
+    inner: C,
+    deadline: std::time::Duration,
+    /// When the first byte of the frame now arriving came in; `None` between frames.
+    since: Option<std::time::Instant>,
+}
+
+impl<C> FrameDeadline<C> {
+    pub fn new(inner: C, deadline: std::time::Duration) -> Self {
+        FrameDeadline { inner, deadline, since: None }
+    }
+
+    fn overdue(&self) -> io::Result<()> {
+        match self.since {
+            Some(t) if t.elapsed() > self.deadline => Err(io::Error::new(io::ErrorKind::TimedOut, FrameOverdue(self.deadline))),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// The error [`FrameDeadline`] fails with. Its kind is `TimedOut`, like a silent peer's, so every path
+/// that ends a run on a deadline ends it on this one; its words are its own, because this peer was NOT
+/// silent — telling the operator "the guest said nothing" would be false (see [`is_frame_overdue`]).
+#[derive(Debug)]
+pub struct FrameOverdue(pub std::time::Duration);
+
+impl std::fmt::Display for FrameOverdue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the guest took longer than {:?} to send one frame, and the frame's deadline ended the run", self.0)
+    }
+}
+
+impl std::error::Error for FrameOverdue {}
+
+/// Whether `e` is a frame refused by [`FrameDeadline`], rather than a peer that said nothing at all.
+pub fn is_frame_overdue(e: &io::Error) -> bool {
+    e.get_ref().is_some_and(|inner| inner.is::<FrameOverdue>())
+}
+
+impl<C: Read> Read for FrameDeadline<C> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 && self.since.is_none() {
+            self.since = Some(std::time::Instant::now());
+        }
+        // Judged when the read returns — the last piece included: a frame is whole within its deadline,
+        // or it is refused.
+        self.overdue()?;
+        Ok(n)
+    }
+}
+
+impl<C: Write> Write for FrameDeadline<C> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.since = None;
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// The host side of the channel: it mints the handles, resolves them, and performs each operation
 /// through an [`EffectSink`] — [`crate::sink::LocalSink`] today, so a guest's effect goes through
 /// exactly the checks a local run makes. The table is per run and per connection: a handle means
@@ -1086,6 +1164,113 @@ mod tests {
         let e = read_frame::<Open>(&mut &frame[..]).unwrap_err();
         assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{e}");
         assert!(e.to_string().contains("after its value"), "{e}");
+    }
+
+    /// A peer that sends what it was scripted to, in pieces: each piece after its own pause.
+    struct Scripted {
+        pieces: std::collections::VecDeque<(std::time::Duration, Vec<u8>)>,
+        written: Vec<u8>,
+    }
+
+    impl Scripted {
+        /// `frames`, each cut into `cuts` pieces with `pause` before every piece.
+        fn dripping(frames: &[Vec<u8>], cuts: usize, pause: std::time::Duration) -> Scripted {
+            let mut pieces = std::collections::VecDeque::new();
+            for f in frames {
+                for chunk in f.chunks(f.len().div_ceil(cuts)) {
+                    pieces.push_back((pause, chunk.to_vec()));
+                }
+            }
+            Scripted { pieces, written: Vec::new() }
+        }
+    }
+
+    impl Read for Scripted {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let Some((pause, mut piece)) = self.pieces.pop_front() else { return Ok(0) };
+            std::thread::sleep(pause);
+            let n = piece.len().min(buf.len());
+            buf[..n].copy_from_slice(&piece[..n]);
+            if n < piece.len() {
+                self.pieces.push_front((std::time::Duration::ZERO, piece.split_off(n)));
+            }
+            Ok(n)
+        }
+    }
+
+    impl Write for Scripted {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.written.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn framed(req: &Request) -> Vec<u8> {
+        let mut f = Vec::new();
+        write_frame(&mut f, req).unwrap();
+        f
+    }
+
+    /// RW 4.32: a read returns at its first byte, so a peer that dripped a frame met every read's
+    /// deadline and held the frame open for as long as it liked. The frame now has a deadline of its
+    /// own, from its first byte — and the refusal says the peer was slow, not silent.
+    #[test]
+    #[cfg_attr(miri, ignore)] // its witness is the wall clock (D-V2-45)
+    fn a_frame_dripped_past_its_deadline_is_refused() {
+        let frame = framed(&confined(1, &["no file writes", "no new programs", "no debugger"]));
+        assert!(frame.len() >= 40, "a frame long enough to drip: {} bytes", frame.len());
+        // One byte every 20 ms: the whole frame would take about a second and more; its deadline is 100 ms.
+        let pause = std::time::Duration::from_millis(20);
+        let deadline = std::time::Duration::from_millis(100);
+        let mut peer = FrameDeadline::new(Scripted::dripping(std::slice::from_ref(&frame), frame.len(), pause), deadline);
+        let t = std::time::Instant::now();
+        let e = read_frame::<Request>(&mut peer).expect_err("a frame dripped past its deadline must be refused");
+        let took = t.elapsed();
+        assert_eq!(e.kind(), io::ErrorKind::TimedOut, "{e}");
+        assert!(is_frame_overdue(&e), "the frame's own refusal: {e}");
+        assert!(e.to_string().contains("to send one frame"), "{e}");
+        assert!(took < pause * (frame.len() as u32) / 2, "refused near the deadline, not at the frame's end: {took:?}");
+        assert!(!peer.inner.pieces.is_empty(), "the frame was never read whole");
+    }
+
+    /// The frame's clock starts at its first byte: a peer that is SILENT before a frame and then sends
+    /// it whole is the per-read deadline's business, as it always was — not a slow frame.
+    #[test]
+    #[cfg_attr(miri, ignore)] // its witness is the wall clock (D-V2-45)
+    fn silence_before_a_frame_is_not_the_frames_time() {
+        let req = confined(1, &["no file writes"]);
+        let deadline = std::time::Duration::from_millis(100);
+        let mut peer = FrameDeadline::new(Scripted::dripping(&[framed(&req)], 1, deadline * 3), deadline);
+        assert_eq!(read_frame::<Request>(&mut peer).expect("a whole frame after a silence"), req);
+    }
+
+    /// The host reads one request and then answers it: its answer ends the frame it waited for, so the
+    /// next request's clock starts at that request's first byte. Two frames that each arrive within
+    /// the deadline, but not together, are both taken when an answer lies between them — and the second
+    /// is refused when none does, which is what shows the answer is what restarts the clock.
+    #[test]
+    #[cfg_attr(miri, ignore)] // its witness is the wall clock (D-V2-45)
+    fn the_hosts_answer_starts_the_next_frames_clock() {
+        let (a, b) = (confined(1, &["no file writes"]), confined(2, &["no new programs"]));
+        // Each frame in ten pieces 60 ms apart — about 0.6 s — against a 1 s deadline: within it
+        // alone, past it together.
+        let pause = std::time::Duration::from_millis(60);
+        let deadline = std::time::Duration::from_secs(1);
+        let script = || Scripted::dripping(&[framed(&a), framed(&b)], 10, pause);
+
+        let mut peer = FrameDeadline::new(script(), deadline);
+        assert_eq!(read_frame::<Request>(&mut peer).expect("the first frame"), a);
+        write_frame(&mut peer, &Response::Ok(WireValue::Unit)).unwrap();
+        assert_eq!(read_frame::<Request>(&mut peer).expect("the second frame, after the answer"), b);
+        assert!(!peer.inner.written.is_empty(), "the answer went through to the peer");
+
+        let mut peer = FrameDeadline::new(script(), deadline);
+        assert_eq!(read_frame::<Request>(&mut peer).expect("the first frame"), a);
+        let e = read_frame::<Request>(&mut peer).expect_err("with no answer between them, one clock runs over both");
+        assert!(is_frame_overdue(&e), "{e}");
     }
 
     /// A truncated frame is a transport failure, never a half-read value.

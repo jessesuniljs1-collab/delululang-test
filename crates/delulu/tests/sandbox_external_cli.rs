@@ -365,3 +365,54 @@ fn the_launcher_started_is_the_file_that_was_hashed() {
     assert_eq!(out.status.code(), Some(0), "{}", text(&out));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ===== RW 4.32 · a deadline on each frame, not only on each read ===================================
+//
+// A read returns at its first byte, so a guest that dripped a frame — one byte a second — met every
+// read's 60 s deadline and held one frame open without end: witnessed on `dcf4fcb` by hand, a 200-byte
+// frame held the host for 201 s, all of it, and only then failed to decode. `FrameDeadline` times the
+// frame from its first byte.
+
+/// A launcher that drips a 1,000-byte frame, one byte a second, is ended at the frame's deadline — and
+/// the operator is told the guest was slow, not that it said nothing.
+#[cfg(unix)]
+#[test]
+fn a_launcher_that_drips_a_frame_is_ended_at_the_frames_deadline() {
+    let d = lab("drip");
+    hello(&d);
+    let lnch = d.join("drip.sh");
+    // The length says 1,000 bytes (little-endian); the body follows a byte a second — about 17 minutes
+    // for the whole frame, and every read's wait is a second.
+    script(&lnch, "#!/bin/sh\nprintf '\\350\\003\\000\\000'\ni=0\nwhile [ $i -lt 1000 ]; do printf a; sleep 1; i=$((i+1)); done\n");
+    let t = std::time::Instant::now();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &format!("external:{}", lnch.display())])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the binary runs");
+    // Twice the channel's 60 s and a margin: the frame is refused at the first byte that comes after
+    // its deadline, so at about 61 s.
+    let limit = std::time::Duration::from_secs(150);
+    while child.try_wait().expect("the run can be waited for").is_none() {
+        if t.elapsed() > limit {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("the host still held the dripped frame open after {limit:?} — no deadline on the frame");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let took = t.elapsed();
+    let out = child.wait_with_output().unwrap();
+    let words = text(&out);
+    assert_eq!(out.status.code(), Some(1), "{words}");
+    assert!(words.contains("took longer than 60s to send one frame"), "the frame's deadline, in its own words: {words}");
+    assert!(!words.contains("said nothing"), "the guest was slow, not silent: {words}");
+    assert!(words.contains("was not sent the program"), "{words}");
+    assert!(took >= std::time::Duration::from_secs(60), "not before the frame's deadline: {took:?}");
+    let _ = std::fs::remove_dir_all(&d);
+}

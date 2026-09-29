@@ -105,6 +105,8 @@ impl<C: Read + Write> Opened<C> {
         let req: Request = read_frame(&mut self.conn).map_err(|e| {
             unconfirmed(match e.kind() {
                 io::ErrorKind::UnexpectedEof => "it closed the channel first".to_string(),
+                // RW 4.32: one that dripped its report was not silent.
+                _ if delulu_runtime::channel::is_frame_overdue(&e) => e.to_string(),
                 io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => "it said nothing within the channel's deadline".to_string(),
                 _ => e.to_string(),
             })

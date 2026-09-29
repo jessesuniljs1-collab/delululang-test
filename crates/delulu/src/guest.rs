@@ -21,7 +21,7 @@
 use std::io;
 use std::rc::Rc;
 
-use delulu_runtime::channel::{read_frame, ChannelSink, HostChannel, Open, Program, CHANNEL_VERSION};
+use delulu_runtime::channel::{read_frame, ChannelSink, FrameDeadline, HostChannel, Open, Program, CHANNEL_VERSION};
 use delulu_runtime::interp::Interp;
 use delulu_runtime::sink::LocalSink;
 use delulu_runtime::value::{RootVal, Value};
@@ -1882,6 +1882,8 @@ fn converse(
 /// happened ("frame length exceeds the channel's bound").
 fn in_words(e: io::Error) -> io::Error {
     match e.kind() {
+        // RW 4.32: a guest that dripped a frame was not silent, and its words say so.
+        _ if delulu_runtime::channel::is_frame_overdue(&e) => e,
         io::ErrorKind::UnexpectedEof => {
             io::Error::new(io::ErrorKind::UnexpectedEof, "the guest closed the channel without saying goodbye")
         }
@@ -1897,9 +1899,16 @@ fn in_words(e: io::Error) -> io::Error {
 trait Channel: io::Read + io::Write {}
 impl<T: io::Read + io::Write> Channel for T {}
 
-/// The host's end of the guest's channel, with `deadline` on every read. A contained guest already
-/// holds its pipes; a plain one is connected to by name within the connect deadline.
+/// The host's end of the guest's channel, with `deadline` on every read AND on every frame: a read
+/// returns at the first byte, so a guest dripping a byte just inside each read's deadline held one
+/// frame open without end (RW 4.32) — [`FrameDeadline`] times the frame from its first byte.
 fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::Duration) -> io::Result<Box<dyn Channel>> {
+    Ok(Box::new(FrameDeadline::new(open_transport(child, dir, deadline)?, deadline)))
+}
+
+/// The transport under the channel, with `deadline` on every read. A contained guest already holds its
+/// pipes; a plain one is connected to by name within the connect deadline.
+fn open_transport(child: &mut Guest, dir: &std::path::Path, deadline: std::time::Duration) -> io::Result<Box<dyn Channel>> {
     // PS-D-01: an external launcher's channel is its standard output and input, read with a deadline.
     if let Guest::External(c) = child {
         let (Some(input), Some(output)) = (c.stdin.take(), c.stdout.take()) else {
@@ -2457,6 +2466,20 @@ pub(crate) fn channel_tag() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 4.32: once the program runs, a channel failure reaches the operator through `in_words`. A
+    /// silent guest is told as silent; one whose frame ran past its deadline was NOT silent, and keeps
+    /// the frame's own words.
+    #[test]
+    fn a_slow_frame_is_not_told_as_a_silent_guest() {
+        let silent = in_words(io::Error::new(io::ErrorKind::TimedOut, "timed out")).to_string();
+        assert!(silent.contains("said nothing"), "{silent}");
+        let slow = io::Error::new(io::ErrorKind::TimedOut, delulu_runtime::channel::FrameOverdue(CHANNEL_DEADLINE));
+        let told = in_words(slow);
+        assert_eq!(told.kind(), io::ErrorKind::TimedOut);
+        assert!(told.to_string().contains("to send one frame"), "{told}");
+        assert!(!told.to_string().contains("said nothing"), "{told}");
+    }
 
     /// PS-A-05: a guest inherits nothing. The environment is where secrets actually live, so the
     /// child gets an empty one plus only what the OS needs to start a process at all.
