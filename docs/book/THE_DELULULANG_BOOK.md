@@ -601,7 +601,7 @@ report names which:
 | Platform | What the guest is held to |
 |---|---|
 | Windows | a Job Object applied to a **suspended** child, before its first instruction: one process, memory and processor-time ceilings, killed with the host, no desktop, clipboard or global atoms |
-| Linux | no-new-privs, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, applied by the guest to itself, a Landlock ruleset — nothing writable anywhere, reads only from the system paths, no TCP — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
+| Linux | no-new-privs, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, applied by the guest to itself, a Landlock ruleset — nothing writable anywhere, reads only from the system paths and its own `/proc` entry, no TCP — and a seccomp filter: no new programs, no new sockets, no debugger, no namespace, mount or kernel-module calls |
 | macOS | a processor-time ceiling and no core dump, a watcher outside the guest that ends it with its host, plus a deny-default Seatbelt profile permitting only reads, one `sysctl` class, the guest's own `exec`, and its channel socket |
 
 **Read the report, not the program's output.** The program writes to its own stdout and could forge

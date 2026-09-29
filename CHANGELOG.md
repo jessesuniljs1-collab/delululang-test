@@ -33,6 +33,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   outside the guest now ends it (and the launcher) when the host is gone, and the report claims "killed
   with the host" only once the watcher is armed (`host_loss_ends_guest` is now established on macOS)
   (D-V2-60).
+- **Fixed (security, PS-E-03): a Linux guest that escaped its interpreter could still reach past its
+  boundary.** An escaped-guest witness, applying exactly the guest's own lock-down, could create UDP,
+  netlink and Unix sockets and connect to the operator's own socket; read the operator's other processes'
+  environment and command line through `/proc`; open the operator's terminal for reading; and make
+  `memfd`, `io_uring`, `userfaultfd`, `pidfd` and new-mount-API calls and a user namespace through
+  `clone`. Each is now refused (a guest needs none of them once it holds its channel), and a report says
+  `network: only the channel` only when every new socket is refused — until now Linux reports said it on
+  the strength of a TCP-only rule (D-V2-61).
 - **Fixed: on Windows an external launcher outlived a host that was ended.** It now joins a Job Object
   whose only limit is kill-on-close, so it — and what it started inside the job — ends with the host.
   Nothing else is imposed on it, and nothing is claimed: the level stays 3 (D-V2-60).

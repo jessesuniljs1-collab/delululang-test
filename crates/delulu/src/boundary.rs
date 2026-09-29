@@ -371,19 +371,28 @@ mod property_tests {
         let linux = [
             "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
             "no file writes", "reads only from the system paths", "no TCP bind or connect", "no new programs",
-            "no debugger", "no namespace or module tricks",
+            "no debugger", "no namespace or module tricks", "no sockets but the channel",
         ];
         let v = properties(&linux, true);
         assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
         assert!(v["filesystem_confinement"]["by"].as_str().unwrap().contains("confined to the system paths"), "{v}");
 
-        // Linux on a kernel with no Landlock: the guest narrows nothing, so its files and its network are open.
-        let old_kernel = ["memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host", "no new programs"];
+        // Linux on a kernel with no Landlock: its files are open, but its filter still refuses every new
+        // socket (PS-E-03 H2), so its network is the channel alone.
+        let old_kernel = [
+            "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
+            "no new programs", "no sockets but the channel",
+        ];
         let v = properties(&old_kernel, true);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
+        assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
+        assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
+        // Landlock's TCP rule alone is NOT the channel alone: UDP, netlink and Unix sockets stayed open
+        // under it (GUEST-SOCKET-1), so without the filter's word the network is not confined.
+        let tcp_only = ["no file writes", "reads only from the system paths", "no TCP bind or connect"];
+        let v = properties(&tcp_only, true);
         assert_eq!(state_of(&v, "egress_confinement"), "absent", "{v}");
         assert!(v["egress_confinement"]["why"].as_str().unwrap().contains("network: not confined"), "{v}");
-        assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
 
         // macOS L1: Seatbelt denies writes and the network, but reads stay open and no memory ceiling is
         // claimed (RLIMIT_DATA is refused there). Since PS-E-02 (D-V2-60) a watcher outside the guest ends

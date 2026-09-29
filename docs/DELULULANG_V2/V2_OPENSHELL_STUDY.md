@@ -298,6 +298,15 @@ Each confirmed hypothesis is a finding with a name (`GUEST-SOCKET-1`, `GUEST-PRO
 `HOST-DUMPABLE-1`, … — chosen when witnessed), a witness red on the old code, a fix, a mutant, and a
 line in `V2_SECURITY_MODEL.md` §10.
 
+**Built so far (2026-09-29, routine run 3, D-V2-61).** The escaped guest is a test-only child
+(`jail::escaped_tests`) — the guest's own lock-down, then raw calls, against a free control. **H1, H2 and H3
+were all red** on `1a63829`: GUEST-SYSCALL-1 (memfd, io_uring, userfaultfd, pidfd, fsopen, and a user
+namespace through `clone`), GUEST-SOCKET-1 (UDP, netlink, Unix sockets, a connect to the operator's
+socket — while the report said `network: only the channel`), GUEST-PROC-1 (another process's `environ`).
+Building H3 found **H7, GUEST-DEV-1**: `/dev` granted whole let the guest open the operator's terminal.
+All four closed — the filter refuses the calls, every new socket and `clone`'s namespace flags (`clone3`
+ENOSYS); Landlock grants `/proc/self` and five devices — each with a mutant. Open: H4, H5, H6.
+
 ### 4.4 PS-E-04 — the external launcher is resolved once, hashed, and optionally pinned
 
 **Now.** `launch_external` passes the command's first word to `Command::new`, which looks it up on

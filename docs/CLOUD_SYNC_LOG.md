@@ -390,7 +390,8 @@ it on `origin` was made in the cloud and is listed below.
   (6) `37828ab` PS-E-02 witness: an external launcher ends with its host on Windows (red expected) — it also
   carried `scripts/check-other-os.sh`, already staged when it was committed (its message does not say so);
   (7) `1a63829` PS-E-02, Windows: an external launcher joins a kill-on-close job;
-  (8) `PS-E-02 on Windows: the records` — its records
+  (8) `c9739db` PS-E-02 on Windows: the records - PS-E-02 complete (D-V2-60);
+  (9) `PS-E-03, first step: the escaped guest; H1, H2, H3 confirmed and closed, H7 found (D-V2-61)`
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -417,6 +418,15 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (§11.5: `git stash pop`), `docs/REMAINING_WORK.md` (4.26 closed),
     `V2_DECISION_LOG.md` (D-V2-60 §4), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.2,
     `V2_SECURITY_MODEL.md`, `V2_IMPLEMENTATION_ROADMAP.md` — (8)
+  M `crates/delulu/src/jail.rs` — (9) `escaped_tests` (the escaped guest; H1, H2, H3, H7), `SYSTEM_READ`
+    (`/proc/self`, five devices), `lock_down_self` (sockets, the H1 calls, `clone`'s namespace flags, `clone3`
+    ENOSYS, the new word); `crates/delulu-runtime/src/channel.rs` (`SELF_APPLIED`: "no sockets but the
+    channel"); `crates/delulu/src/policy.rs` (the network row needs it); `crates/delulu/src/boundary.rs` (the
+    property test); `crates/delulu-diag/src/codes.rs` (the SANDBOX topic's Linux line) — (9)
+  M `scripts/check-other-os.sh` (arm64 Linux in the defaults), `docs/CLOUD_ROUTINE.md` — (9)
+  M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4 the four findings), `docs/DEPLOYMENT.md` and
+    `docs/book/THE_DELULULANG_BOOK.md` (the Linux rows), `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md`
+    (D-V2-61), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (9)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
   Deleted: nothing.
@@ -439,6 +449,14 @@ it on `origin` was made in the cloud and is listed below.
   (`sandbox_run_cli`). The Linux suite was not re-run for (7): every line it changed is compiled only for
   Windows (on Linux the cfg selects the same code as before), Linux clippy is clean, and
   `sandbox_confirm_cli`, `doctor_cli`, `repository_structure` and `evidence_claims` pass.
+  (9): the escaped-guest witnesses red on `1a63829` for H1, H2, H3 (the whole list in `V2_LOG.md`), H7 red by
+  mutant; green after; six mutants red; clippy clean on Linux, arm64 Linux, macOS and Windows; the generated
+  reference in sync; the full suite alone 2,023 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
+  **CI red, read:** `3ec690b`'s push run `36527491801` failed one job, `test (macos-latest)`, one target,
+  `sandbox_external_cli` — `a_backend_that_is_not_one_or_a_launcher_that_dies_fails_legibly`: a launcher
+  that exits at once (`delulu --version`) got "Broken pipe (os error 32)" raw, because the macOS watcher's
+  start delays the host's first write past that launcher's death (read again on its own: `witness.yml`
+  `36529502237`, the same failure). Fixed in (10).
 - Redo on the laptop: nothing for Windows or WSL (the change is macOS-only; the Linux witness is new and
   runs everywhere Linux does).
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed

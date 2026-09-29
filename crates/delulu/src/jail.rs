@@ -475,13 +475,26 @@ pub fn confine_filesystem(channel_dir: Option<&std::path::Path>) -> Option<Vec<&
     };
 
     // Read-only, and only what a running process needs: its loader and libraries, the system
-    // configuration a libc call may consult, `/proc` and `/sys` for the process's own facts, and
-    // `/dev` for the random and null devices. Nothing under `/home`, `/root`, `/tmp` or a
-    // workspace — that is the operator's data, and the guest has no business reading any of it.
-    // Paths that do not exist on this host are skipped by `path_beneath_rules`, which is why
-    // `/lib64` may be named on an architecture that has no such directory.
-    const SYSTEM_READ: &[&str] =
-        &["/usr", "/lib", "/lib64", "/lib32", "/bin", "/sbin", "/etc", "/proc", "/sys", "/dev"];
+    // configuration a libc call may consult, `/sys`, its OWN `/proc` entry, and the null, zero and
+    // random devices. Nothing under `/home`, `/root`, `/tmp` or a workspace — that is the operator's
+    // data, and the guest has no business reading any of it. Paths that do not exist on this host are
+    // skipped by `path_beneath_rules`, which is why `/lib64` may be named on an architecture that has
+    // no such directory.
+    //
+    // PS-E-03 (`V2_OPENSHELL_STUDY.md` §4.3), each witnessed by the escaped guest (`escaped_tests`)
+    // before it was narrowed:
+    // - H3 (GUEST-PROC-1): this named `/proc`, and an escaped guest read another process of the same
+    //   user's `environ` and `cmdline` — an API key in a shell's environment — because the read-mode
+    //   ptrace check passes for the same uid. `/proc/self` is resolved when the rule is made, in the
+    //   guest itself, so the rule is the guest's own entry and no other. Traced: after it locks itself
+    //   down, a guest running a program opens no file at all, so nothing global under `/proc` is needed.
+    // - H7 (GUEST-DEV-1, found while building H3): this named `/dev`, so an escaped same-user guest
+    //   could open the operator's terminal (`/dev/pts/N`) for reading — keystrokes. The devices a
+    //   process may reasonably read are named one by one.
+    const SYSTEM_READ: &[&str] = &[
+        "/usr", "/lib", "/lib64", "/lib32", "/bin", "/sbin", "/etc", "/sys", "/proc/self", "/dev/null", "/dev/zero",
+        "/dev/full", "/dev/random", "/dev/urandom",
+    ];
 
     // The rights are requested at ABI v3 for the filesystem, because v3 is where `truncate` became
     // mediated: without it a guest could still empty a file it can no longer open, and "no file
@@ -558,6 +571,32 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     const ARCH_DENIED: &[libc::c_long] = &[];
 
     let denied: Vec<libc::c_long> = [
+        // PS-E-03 (`V2_OPENSHELL_STUDY.md` §4.3), each witnessed by the escaped guest (`escaped_tests`):
+        // H2 (GUEST-SOCKET-1) — no new socket of any family. Landlock mediates TCP only, and an escaped
+        // guest opened UDP, netlink and Unix sockets and CONNECTED to the operator's own socket (an SSH
+        // agent's, a session bus's). The guest's channel is connected before this runs, and it needs no
+        // other socket: every effect is the host's.
+        libc::SYS_socket,
+        libc::SYS_socketpair,
+        // H1 (GUEST-SYSCALL-1) — calls the filter did not name: anonymous memory files, io_uring (its own
+        // path to the kernel's operations), userfaultfd, process file descriptors, the new mount API and
+        // the other `kexec`. None is needed to interpret a program.
+        libc::SYS_memfd_create,
+        libc::SYS_io_uring_setup,
+        libc::SYS_io_uring_enter,
+        libc::SYS_io_uring_register,
+        libc::SYS_userfaultfd,
+        libc::SYS_pidfd_open,
+        libc::SYS_pidfd_getfd,
+        libc::SYS_pidfd_send_signal,
+        libc::SYS_fsopen,
+        libc::SYS_fsconfig,
+        libc::SYS_fsmount,
+        libc::SYS_fspick,
+        libc::SYS_move_mount,
+        libc::SYS_open_tree,
+        libc::SYS_mount_setattr,
+        libc::SYS_kexec_file_load,
         libc::SYS_execve,
         libc::SYS_execveat,
         libc::SYS_ptrace,
@@ -582,8 +621,36 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     .collect();
     // `c_long` IS `i64` on every Linux target this builds for, so a cast here is not just redundant,
     // it is a lint error under `-D warnings`.
-    let rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
+    let mut rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
         denied.iter().map(|s| (*s, Vec::new())).collect();
+    // H1: `unshare` was denied, and `clone` with a namespace flag did the same thing — an escaped guest
+    // made a user namespace with it. `clone` itself stays, because threads are made with it: only its
+    // namespace flags are refused, one rule per flag (a call matches if ANY rule does). `CLONE_NEWTIME`
+    // is not among them: in `clone` its bit is part of the exit signal.
+    let namespaces = [
+        libc::CLONE_NEWNS,
+        libc::CLONE_NEWCGROUP,
+        libc::CLONE_NEWUTS,
+        libc::CLONE_NEWIPC,
+        libc::CLONE_NEWUSER,
+        libc::CLONE_NEWPID,
+        libc::CLONE_NEWNET,
+    ];
+    let clone_rules = namespaces
+        .iter()
+        .map(|f| {
+            let flag = *f as u64;
+            seccompiler::SeccompCondition::new(
+                0,
+                seccompiler::SeccompCmpArgLen::Qword,
+                seccompiler::SeccompCmpOp::MaskedEq(flag),
+                flag,
+            )
+            .and_then(|c| seccompiler::SeccompRule::new(vec![c]))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
+    rules.insert(libc::SYS_clone, clone_rules);
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
     // guest reports a refusal instead of vanishing and leaving the host to guess.
     let filter = SeccompFilter::new(
@@ -596,7 +663,20 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     let program: seccompiler::BpfProgram =
         filter.try_into().map_err(|e| format!("the syscall filter could not be compiled: {e}"))?;
     seccompiler::apply_filter(&program).map_err(|e| format!("the syscall filter could not be installed: {e}"))?;
-    Ok(vec!["no new programs", "no debugger", "no namespace or module tricks"])
+    // H1: `clone3` carries its flags in memory, where no filter can read them, so it is answered as if
+    // the kernel had no such call — ENOSYS — and the C library makes its threads with `clone`, whose
+    // flags the rule above does read. A second filter, because its answer differs from the first's.
+    let clone3 = SeccompFilter::new(
+        [(libc::SYS_clone3, Vec::new())].into_iter().collect(),
+        SeccompAction::Allow,
+        SeccompAction::Errno(libc::ENOSYS as u32),
+        std::env::consts::ARCH.try_into().map_err(|e| format!("this architecture has no seccomp backend: {e:?}"))?,
+    )
+    .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
+    let clone3: seccompiler::BpfProgram =
+        clone3.try_into().map_err(|e| format!("the syscall filter could not be compiled: {e}"))?;
+    seccompiler::apply_filter(&clone3).map_err(|e| format!("the syscall filter could not be installed: {e}"))?;
+    Ok(vec!["no new programs", "no debugger", "no namespace or module tricks", "no sockets but the channel"])
 }
 
 /// Elsewhere the guest's confinement is entirely the host's doing (the Job Object, the Seatbelt
@@ -1066,6 +1146,216 @@ mod linux_tests {
 {confined}");
         }
         let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+/// PS-E-03 (`V2_OPENSHELL_STUDY.md` §4.3): the ESCAPED GUEST. A guest whose interpreter an attacker has
+/// taken over is a process that has applied everything the guest applies to itself — Landlock, then the
+/// syscall filter, as `serve_as_guest` does — and then makes whatever system calls it likes. This child is
+/// exactly that, with no interpreter in the way: the guest's own lock-down, then raw attempts at what
+/// §4.3's hypotheses say may still be open, each printed as `NAME=true|false`. The parent runs it twice —
+/// FREE, the control (an attempt that fails unconfined proves nothing when it fails confined, and is
+/// reported as unmeasurable here) and ESCAPED — and a hypothesis is a finding only where the escaped
+/// attempt succeeds. What a jailed guest's HOST adds on top (the rlimits, a separate identity) is not
+/// applied here: this measures the guest's own layers, which every Linux guest has.
+#[cfg(all(test, target_os = "linux"))]
+mod escaped_tests {
+    use std::collections::BTreeMap;
+
+    const MODE: &str = "DELULU_ESCAPED_TEST_MODE";
+    const CHAN: &str = "DELULU_ESCAPED_TEST_CHAN";
+    const SOCK: &str = "DELULU_ESCAPED_TEST_SOCK";
+    const PID: &str = "DELULU_ESCAPED_TEST_PID";
+    const TTY: &str = "DELULU_ESCAPED_TEST_TTY";
+    /// What the operator's other process holds in its environment — an API key, in life.
+    const SENTINEL: &str = "DELULU_ESCAPED_SENTINEL=the-operators-key";
+
+    /// The child half; without the environment variable it is not a test of anything and returns.
+    #[test]
+    fn escaped_guest_child() {
+        let Ok(mode) = std::env::var(MODE) else { return };
+        let chan = std::path::PathBuf::from(std::env::var(CHAN).expect("the channel directory"));
+        let sock = std::path::PathBuf::from(std::env::var(SOCK).expect("the operator's socket"));
+        let pid: i32 = std::env::var(PID).expect("the operator's process").parse().expect("a pid");
+        let tty = std::env::var(TTY).expect("the operator's terminal");
+        // libtest printed this test's name without a newline; the first `NAME=` line must not join it.
+        println!();
+        if mode == "escaped" {
+            let fs = super::confine_filesystem(Some(&chan));
+            println!("LANDLOCK={}", fs.map(|a| a.join(",")).unwrap_or_else(|| "none".into()));
+            println!("SECCOMP={}", super::lock_down_self().is_ok());
+        }
+        let ok = |name: &str, fd: libc::c_long| {
+            println!("{name}={}", fd >= 0);
+            if fd >= 0 {
+                // SAFETY: a descriptor this child just made.
+                unsafe { libc::close(fd as libc::c_int) };
+            }
+        };
+        // SAFETY: each is one raw system call on this child's own behalf; every descriptor it returns is
+        // closed at once, and the clone's child does nothing but `_exit`.
+        unsafe {
+            // H2 — sockets. Landlock mediates TCP only.
+            ok("UDP", libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) as libc::c_long);
+            ok("NETLINK", libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, libc::NETLINK_ROUTE) as libc::c_long);
+            ok("UNIX_SOCKET", libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) as libc::c_long);
+            println!("UNIX_CONNECT={}", std::os::unix::net::UnixStream::connect(&sock).is_ok());
+            // H1 — system calls the filter does not name.
+            ok("MEMFD", libc::syscall(libc::SYS_memfd_create, c"escaped".as_ptr(), 0));
+            let mut params = [0u8; 120];
+            ok("IO_URING", libc::syscall(libc::SYS_io_uring_setup, 1, params.as_mut_ptr()));
+            ok("USERFAULTFD", libc::syscall(libc::SYS_userfaultfd, libc::O_CLOEXEC));
+            ok("PIDFD_OPEN", libc::syscall(libc::SYS_pidfd_open, pid, 0));
+            ok("FSOPEN", libc::syscall(libc::SYS_fsopen, c"tmpfs".as_ptr(), 0));
+            let child = libc::syscall(libc::SYS_clone, (libc::CLONE_NEWUSER | libc::SIGCHLD) as libc::c_ulong, 0, 0, 0, 0);
+            if child == 0 {
+                libc::_exit(0);
+            }
+            if child > 0 {
+                libc::waitpid(child as libc::pid_t, std::ptr::null_mut(), 0);
+            }
+            println!("CLONE_NEWUSER={}", child > 0);
+            // `clone3` carries its flags in memory, out of any filter's reach: the same namespace, asked
+            // for through it (`struct clone_args`, its first version: flags … tls, eight words).
+            let mut args = [0u64; 8];
+            args[0] = libc::CLONE_NEWUSER as u64;
+            args[4] = libc::SIGCHLD as u64;
+            let child = libc::syscall(libc::SYS_clone3, args.as_mut_ptr(), std::mem::size_of_val(&args));
+            if child == 0 {
+                libc::_exit(0);
+            }
+            if child > 0 {
+                libc::waitpid(child as libc::pid_t, std::ptr::null_mut(), 0);
+            }
+            println!("CLONE3={}", child > 0);
+        }
+        // H3 — another process of the same user, through `/proc`.
+        let environ = std::fs::read(format!("/proc/{pid}/environ"))
+            .map(|b| String::from_utf8_lossy(&b).contains(SENTINEL))
+            .unwrap_or(false);
+        println!("PROC_ENVIRON={environ}");
+        println!("PROC_CMDLINE={}", std::fs::read(format!("/proc/{pid}/cmdline")).is_ok());
+        // H7 — the operator's terminal, opened for reading: what is typed there.
+        println!("TERMINAL={}", std::fs::File::open(&tty).is_ok());
+        // What the guest itself must keep, or it cannot run: the control of any narrowing.
+        println!("PROC_SELF={}", std::fs::read("/proc/self/status").is_ok());
+        println!("DEV_NULL={}", std::fs::File::open("/dev/null").is_ok());
+    }
+
+    /// The operator's world beside the guest: a Unix socket outside anything granted (an SSH agent, a
+    /// session bus), and a process of the same user holding a secret in its environment.
+    struct World {
+        base: std::path::PathBuf,
+        _listener: std::os::unix::net::UnixListener,
+        operator: std::process::Child,
+        /// The operator's terminal: a pseudo-terminal this test holds open, and the path of its other end.
+        terminal: (libc::c_int, String),
+    }
+
+    impl Drop for World {
+        fn drop(&mut self) {
+            // SAFETY: the terminal's descriptor this world opened, closed once.
+            unsafe { libc::close(self.terminal.0) };
+            let _ = self.operator.kill();
+            let _ = self.operator.wait();
+            let _ = std::fs::remove_dir_all(&self.base);
+        }
+    }
+
+    fn world(tag: &str) -> World {
+        let base = std::env::temp_dir().join(format!("delulu-escaped-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("chan")).expect("a channel directory");
+        std::fs::create_dir_all(base.join("operator")).expect("the operator's directory");
+        let listener = std::os::unix::net::UnixListener::bind(base.join("operator/agent.sock")).expect("the operator's socket");
+        let (k, v) = SENTINEL.split_once('=').unwrap();
+        let operator = std::process::Command::new("sleep").arg("60").env(k, v).spawn().expect("the operator's process");
+        // SAFETY: the documented sequence for a new pseudo-terminal; the name is copied out at once.
+        let terminal = unsafe {
+            let fd = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC);
+            assert!(fd >= 0 && libc::grantpt(fd) == 0 && libc::unlockpt(fd) == 0, "a pseudo-terminal");
+            let mut name = [0 as libc::c_char; 128];
+            assert_eq!(libc::ptsname_r(fd, name.as_mut_ptr(), name.len()), 0, "its name");
+            (fd, std::ffi::CStr::from_ptr(name.as_ptr()).to_string_lossy().into_owned())
+        };
+        World { base, _listener: listener, operator, terminal }
+    }
+
+    /// Run the child half in `mode`; every `NAME=true|false` it printed.
+    fn probe(w: &World, mode: &str) -> BTreeMap<String, String> {
+        let out = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+            .args(["--exact", "jail::escaped_tests::escaped_guest_child", "--nocapture", "--test-threads=1"])
+            .env(MODE, mode)
+            .env(CHAN, w.base.join("chan"))
+            .env(SOCK, w.base.join("operator/agent.sock"))
+            .env(PID, w.operator.id().to_string())
+            .env(TTY, &w.terminal.1)
+            .output()
+            .expect("the child test process runs");
+        assert!(out.status.success(), "the child failed: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| l.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
+            .filter(|(k, _)| k.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
+            .collect()
+    }
+
+    /// The attempts in `names` that an escaped guest still succeeds at, where the free control succeeded
+    /// too; `None` when this kernel has no Landlock (nothing of the guest's own confinement to measure).
+    fn still_open(tag: &str, names: &[&str]) -> Option<Vec<String>> {
+        let w = world(tag);
+        let free = probe(&w, "free");
+        let escaped = probe(&w, "escaped");
+        if escaped.get("LANDLOCK").map(String::as_str) == Some("none") {
+            eprintln!("this kernel has no Landlock; nothing of the guest's own confinement to measure: {escaped:?}");
+            return None;
+        }
+        assert_eq!(escaped.get("SECCOMP").map(String::as_str), Some("true"), "the filter was not installed: {escaped:?}");
+        assert_eq!(escaped.get("PROC_SELF").map(String::as_str), Some("true"), "the guest cannot read itself: {escaped:?}");
+        assert_eq!(escaped.get("DEV_NULL").map(String::as_str), Some("true"), "the guest cannot open /dev/null: {escaped:?}");
+        let mut open = Vec::new();
+        for n in names {
+            match (free.get(*n).map(String::as_str), escaped.get(*n).map(String::as_str)) {
+                (Some("true"), Some("true")) => open.push(n.to_string()),
+                (Some("true"), Some("false")) => {}
+                // An attempt the child never reported is the harness's fault, not the host's: fail.
+                (None, _) | (_, None) => panic!("{n} was not reported: free {free:?}, escaped {escaped:?}"),
+                (f, e) => eprintln!("{n}: unmeasurable on this host (free {f:?}, escaped {e:?})"),
+            }
+        }
+        eprintln!("free: {free:?}\nescaped: {escaped:?}");
+        Some(open)
+    }
+
+    /// H2: after lock-down an escaped guest opens no socket — no UDP (a DNS exfiltration channel where the
+    /// host has a network), no netlink, and no Unix socket to reach the operator's agent or session bus.
+    #[test]
+    fn h2_an_escaped_guest_opens_no_socket() {
+        let Some(open) = still_open("h2", &["UDP", "NETLINK", "UNIX_SOCKET", "UNIX_CONNECT"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H3: an escaped guest reads nothing of the operator's other processes through `/proc` — not the
+    /// environment (an API key), not the command line.
+    #[test]
+    fn h3_an_escaped_guest_reads_no_other_process() {
+        let Some(open) = still_open("h3", &["PROC_ENVIRON", "PROC_CMDLINE"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H7: an escaped guest cannot open the operator's terminal to read what is typed there.
+    #[test]
+    fn h7_an_escaped_guest_opens_no_terminal() {
+        let Some(open) = still_open("h7", &["TERMINAL"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H1: the system calls the filter did not name are refused after lock-down.
+    #[test]
+    fn h1_an_escaped_guest_makes_none_of_the_unnamed_calls() {
+        let Some(open) = still_open("h1", &["MEMFD", "IO_URING", "USERFAULTFD", "PIDFD_OPEN", "FSOPEN", "CLONE_NEWUSER", "CLONE3"]) else {
+            return;
+        };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
     }
 }
 

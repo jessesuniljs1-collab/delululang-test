@@ -58,7 +58,11 @@ the assistant's memory — which now also travels file by file in
   before its fix reaches `master`; with them **PS-E-02 on macOS** — a guest computing when its host was
   killed lived on until its CPU ceiling (red on a runner); a watcher OUTSIDE the guest now ends it and the
   external launcher (D-V2-60).
-- **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job), E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
+- **PS-E-03 begun (routine run 3, D-V2-61):** an escaped-guest harness found H1, H2 and H3 all real — an
+  escaped Linux guest could open sockets (and connect to the operator's own), read other processes'
+  `environ`, make io_uring/memfd/userfaultfd/pidfd calls and a user namespace — plus H7, the operator's
+  terminal; all closed, each with a mutant.
+- **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H4–H6, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
@@ -720,6 +724,12 @@ wins, and you should update the memory to match.
   run's red-team pass: **GUEST-WAIT-1** (a failed channel's guest was waited for, not ended),
   **RAN-SENT-1** (`ran` meant confirmed, not sent), **GUEST-TEXT-1** (a guest's words forged audit rows
   and filled the chain), **PIPE-WRITE-1** and **PIPE-FLOOD-1** (an external launcher's pipes unbounded).
+  **Routine run 3 (2026-09-29, PS-E-03), each red under an escaped guest — a child applying the guest's own
+  lock-down, then raw calls:** **GUEST-SOCKET-1** (UDP, netlink and Unix sockets, and a connect to the
+  operator's own socket, while every Linux report said `network: only the channel` on a TCP-only rule),
+  **GUEST-PROC-1** (another process's `environ` through `/proc`), **GUEST-DEV-1** (the operator's terminal
+  through `/dev`), **GUEST-SYSCALL-1** (memfd, io_uring, userfaultfd, pidfd, the new mount API, a user
+  namespace through `clone`).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

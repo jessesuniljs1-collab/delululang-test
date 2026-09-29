@@ -13,9 +13,13 @@
 # proves is that the Rust compiles and lints for those targets — NOT that it runs there: that is still
 # the runner's (`witness.yml`, the push run). Nothing built here is ever executed.
 #
+# Linux on arm64 is checked too: its syscall table differs (no `fork`, other numbers), which is where a
+# seccomp list that compiles on x86-64 can fail to (the arm64 CI job once caught exactly that).
+#
 # usage: scripts/check-other-os.sh [TARGET…]
-#   default: aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc
-#   needs:   rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc
+#   default: aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu
+#   needs:   rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc \
+#              aarch64-unknown-linux-gnu
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STUB="$ROOT/target/other-os-check-stub"
@@ -44,7 +48,7 @@ exit 0
 STUB_AR
 chmod +x "$STUB/cc" "$STUB/ar"
 
-TARGETS=${*:-"aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc"}
+TARGETS=${*:-"aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu"}
 for target in $TARGETS; do
   var=$(echo "$target" | tr '-' '_')
   echo "== $target: cargo clippy -p delulu --all-targets -- -D warnings"

@@ -246,6 +246,14 @@ classified; special-use refusal unless `net.special=`; redirects re-checked; the
 certificate verification against the platform store; proxy variables ignored; no resolver reachable
 by the client itself.
 
+The Linux guest's own layers are claimed against an ESCAPED guest since PS-E-03 (D-V2-61), with
+witnesses and six falsified mutants (`crates/delulu/src/jail.rs`, `escaped_tests`): after it locks itself
+down, a guest that has escaped its interpreter opens no socket of any family (GUEST-SOCKET-1), reads no
+other process's `/proc` entry (GUEST-PROC-1) and no device but null, zero, full and the random ones
+(GUEST-DEV-1), and makes none of the unnamed calls or a namespace through `clone` (GUEST-SYSCALL-1). Not
+yet: the host non-dumpable (H4), the Landlock ABI as a requirement (H5), macOS and Windows under the same
+harness (H6).
+
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
 host watchdog on every engine at a stated 25 ms resolution.
@@ -255,7 +263,5 @@ level or guarantee a run's report does not list); content inspection of permitte
 anything to a host it was granted — category 7, and the grant is the control);
 identity separation where the host forbids it (macOS; Linux without user namespaces); anything about
 an L3 environment — PS-D-01 reports it as unmeasured, and PS-D-02's attestation seam carries only
-what the attester signs; the Linux guest's confinement of sockets other than TCP (Landlock's
-network rules cover TCP only — PS-E-03 H2) and of other processes' `/proc` entries (H3);
-anything about OpenShell's enforcement (designed as an L3 backend, PS-E-05, not yet run);
+what the attester signs; anything about OpenShell's enforcement (designed as an L3 backend, PS-E-05, not yet run);
 multi-tenancy on one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.

@@ -719,8 +719,9 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  desktop, clipboard or global atoms.\n\
                  - Linux: no-new-privs, PDEATHSIG, heap and processor-time ceilings, no core dump; \
                  then, installed by the guest on itself, a Landlock ruleset — nothing writable \
-                 anywhere, reads only from the system paths, no TCP bind or connect — and a seccomp \
-                 filter: no new programs, no debugger, no namespace, mount or kernel-module calls.\n\
+                 anywhere, reads only from the system paths and its own /proc entry, no TCP bind or \
+                 connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or \
+                 kernel-module calls, no new sockets.\n\
                  - macOS: a processor-time ceiling and no core dump, plus a deny-default Seatbelt \
                  profile permitting only reads, one sysctl class, the guest's own exec and its channel \
                  socket.\n\n\

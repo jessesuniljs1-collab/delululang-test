@@ -2872,3 +2872,52 @@ accessor. Green on Windows, the same branch: `1a63829`: `36528140459` (`sandbox_
 external launcher), Windows (the job: guest and launcher), macOS (the watcher: guest and launcher) — each
 witnessed red where it was missing and green after, and Linux's own death signal witnessed for the first
 time. What an external launcher STARTS outside itself (a container a daemon runs) remains the launcher's.
+
+## 2026-09-29 — routine run 3: PS-E-03, first step — the escaped guest; H1, H2, H3 confirmed and closed, H7 found (D-V2-61)
+
+**The escaped guest (`jail::escaped_tests`).** A test-only child that applies exactly the guest's own
+lock-down — Landlock, then the syscall filter, as `serve_as_guest` does — and then makes raw system calls,
+printing `NAME=true|false`; the parent runs it FREE (the control: each attempt must succeed, or its refusal
+proves nothing) and ESCAPED, beside an operator's world: a Unix socket outside anything granted (an SSH
+agent's), a process of the same user holding `DELULU_ESCAPED_SENTINEL=the-operators-key` in its
+environment, and a pseudo-terminal. A hypothesis is a finding only where the escaped attempt succeeds.
+
+**Red on `1a63829`, all three hypotheses tested** (this VM, Linux 6.18, Landlock with network rights; the
+control succeeded at every attempt):
+- **H1 — GUEST-SYSCALL-1:** `memfd_create`, `io_uring_setup`, `userfaultfd`, `pidfd_open`, `fsopen` and
+  `clone(CLONE_NEWUSER)` all succeeded after lock-down (`unshare` was denied; `clone` did the same thing).
+- **H2 — GUEST-SOCKET-1:** UDP, netlink and Unix sockets were created, and the guest CONNECTED to the
+  operator's socket outside its grant. And the report had said `network: only the channel` all along,
+  answered from Landlock's TCP rule alone.
+- **H3 — GUEST-PROC-1:** the guest read the operator's other process's `environ` — the sentinel — and its
+  `cmdline`.
+- **H7 — GUEST-DEV-1** (not in the study; found while narrowing `/proc`): `/dev` was granted whole, so the
+  guest opened the operator's terminal (`/dev/pts/N`) for reading — keystrokes. Witnessed by mutant M3
+  below (the old rule restored), red.
+
+**Traced before narrowing.** `strace -f` of a sandboxed run: after `landlock_restrict_self` and `seccomp`,
+the guest opens no file and makes no `socket`, `clone`, `memfd` or `io_uring` call at all — it interprets
+and talks over the channel it already holds. So nothing global under `/proc` or `/dev` is granted.
+
+**The fixes.** `lock_down_self` refuses `socket`, `socketpair`, the H1 calls, `clone` with any namespace
+flag (one argument rule per flag), and answers `clone3` ENOSYS by a second filter; it reports the new known
+word "no sockets but the channel", and the posture's network row now requires it (D-V2-61 §2).
+`confine_filesystem` grants `/proc/self` (resolved in the guest, so its own entry) and five devices instead
+of `/proc` and `/dev`. The explanation text (the SANDBOX topic) says so; the generated reference is in sync.
+
+**Green, and falsified.** The four witnesses pass (every escaped attempt refused; `/proc/self` and
+`/dev/null` still readable — the controls of the narrowing). Six mutants, each one fix reverted, each red:
+M1 sockets allowed (UDP, NETLINK, UNIX_SOCKET, UNIX_CONNECT), M2 `/proc` whole (PROC_ENVIRON,
+PROC_CMDLINE), M3 `/dev` whole (TERMINAL), M4 the `clone` flag rules dropped (CLONE_NEWUSER), M5 the
+`clone3` filter dropped (CLONE3), M6 `memfd_create` allowed (MEMFD). The harness itself was caught twice
+before it could be trusted: libtest's name line swallowed the child's first `NAME=` line, and a key filter
+that allowed no digits dropped `CLONE3` — so an unreported attempt now fails the test.
+
+**Verified:** clippy `-D warnings` clean on Linux, and by `scripts/check-other-os.sh` on arm64 Linux (whose
+syscall table differs — now in the script's defaults), macOS and Windows; `delulu-conform --check-reference`
+in sync; the full suite alone: 2,023 passed, 0 failed, 15 ignored (152 binaries) — cargo exit 0.
+
+**Open (PS-E-03):** H4 (the host non-dumpable during a run), H5 (the Landlock ABI as a `hostile-agent`
+requirement), H6 (macOS and Windows, through the same harness on their runners). CI's own proof of this
+slice is the next push run: the x86-64 job's subordinate-uid guest, arm64, and the microVM guest (which
+locks itself down with the same filter) all run it.

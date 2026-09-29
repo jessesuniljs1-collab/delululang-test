@@ -188,7 +188,9 @@ impl SandboxPolicy {
             (
                 "network",
                 "only the channel",
-                has("no TCP bind or connect")
+                // Not "no TCP bind or connect" alone: Landlock mediates TCP only, and an escaped guest
+                // under it still opened UDP, netlink and Unix sockets (PS-E-03 H2, GUEST-SOCKET-1).
+                has("no sockets but the channel")
                     || has("no network but the channel")
                     || has("no network device")
                     || windows_identity,
@@ -390,6 +392,7 @@ mod tests {
             "no file writes",
             "reads only from the system paths",
             "no TCP bind or connect",
+            "no sockets but the channel",
             "no new programs",
             "memory ceiling",
             "processor-time ceiling",

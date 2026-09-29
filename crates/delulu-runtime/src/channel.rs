@@ -44,6 +44,9 @@ pub const SELF_APPLIED: &[&str] = &[
     "no new programs",
     "no debugger",
     "no namespace or module tricks",
+    // PS-E-03 H2 (GUEST-SOCKET-1): the Linux guest's filter refuses every new socket, of every family —
+    // Landlock's "no TCP bind or connect" alone left UDP, netlink and Unix sockets open.
+    "no sockets but the channel",
     // PS-C-03: the microVM guest asks its own kernel for an IPv4 and an IPv6 socket before its program
     // runs, and reports this only when BOTH are refused as an unsupported family — a measurement, not
     // a reading of the kernel's configuration.

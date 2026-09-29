@@ -1279,6 +1279,33 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    Red: `36526271163` (the guest, "outlived its host by more than 3.15 s"), `36526351005` (the launcher);
    green: `36526707055` (`sandbox_confirm_cli`, 12 passed — the guest gone 3.6 ms after its host's SIGKILL, the launcher's witness green too), `36526709263` (`guest_cli`, 5 passed — the jail's report names "killed with the host"), `36526711462` (the boundary unit tests, 3 passed), all on `2d9d2a0`.
 
+## D-V2-61 — PS-E-03's first step: the escaped guest; H1, H2, H3 confirmed and closed, H7 found — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **The escaped guest is a test-only child, not a mode of the shipping binary.** `jail::escaped_tests`
+   re-runs the test binary as a child that applies exactly the guest's own lock-down (`confine_filesystem`,
+   `lock_down_self`) and then makes raw system calls, against a FREE control that must succeed at each one.
+   A guest mode in `delulu` itself would be a switch in every shipped guest; the child is the same code
+   with no interpreter in the way, which is the escaped guest's position. An attempt the child does not
+   report fails the test — the harness first dropped `CLONE3` unmeasured.
+2. **H2 (GUEST-SOCKET-1): the filter refuses `socket` and `socketpair`.** The guest's channel is connected
+   before it locks down, and every effect is the host's, so it needs no other socket. It reports the new
+   known word "no sockets but the channel" (`channel::SELF_APPLIED`), and the posture's `network: only the
+   channel` now needs THAT word (or macOS's, a VM's, an AppContainer): Landlock's "no TCP bind or connect"
+   alone had been answering "only the channel" while UDP, netlink and Unix sockets were open — an
+   over-claim in every Linux report until now.
+3. **H1 (GUEST-SYSCALL-1): the calls the filter did not name are refused** — `memfd_create`, `io_uring_*`,
+   `userfaultfd`, `pidfd_*`, the new mount API, `kexec_file_load` — and `clone` with any namespace flag
+   (one rule per flag); `clone3`, whose flags no filter can read, is answered ENOSYS by a second filter, so
+   the C library makes threads with `clone`. No new word is claimed for these: "no namespace or module
+   tricks" already said it, and is now true of `clone` too.
+4. **H3 (GUEST-PROC-1): Landlock grants `/proc/self`, not `/proc`.** Traced first: after it locks itself
+   down a guest running a program opens no file at all, so nothing global under `/proc` is granted.
+   **H7 (GUEST-DEV-1), found building H3: `/dev` is narrowed to null, zero, full, random and urandom** — the
+   whole of `/dev` let an escaped same-user guest open the operator's terminal for reading.
+5. **Open:** H4 (the host non-dumpable during a run — depth now that H3 is closed), H5 (the Landlock ABI as a
+   `hostile-agent` requirement), H6 (macOS `mach-lookup`, Windows named objects — the same harness on those
+   runners).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
