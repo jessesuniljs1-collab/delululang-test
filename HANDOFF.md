@@ -911,7 +911,10 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
 - **No chain-of-thought is kept** — findings, evidence and decisions only (owner, 2026-09-17).
 - **A sous-chef's brief can be stopped before the agent starts** (routine run 4): a safety classifier stopped
   the response that was briefing a red-team pass on the guest's filter; nothing ran. Do that kind of pass by
-  hand, one witnessed hypothesis at a time, as PS-E-03 did.
+  hand, one witnessed hypothesis at a time, as PS-E-03 did. **Routine run 5:** the head chef's own response
+  starting PS-E-03 H6 — an escaped-guest harness for macOS's Seatbelt profile — was stopped the same way,
+  before anything of it ran. Twice now escaped-guest work in a routine run has been stopped (the filter's
+  red-team pass, H6); H6 may be one to do with the owner at the laptop.
 - **The defects are rarely IN the guarantee under test** (routine run 2): a Sonnet 5.5 red-team pass on
   `/3` found the guarantee held in ~85 attempts and 700 fuzzed frames — and seven real defects AROUND it
   (waiting, reporting, text, pipes). Brief a tester to attack the guarantee and to list every oddity.

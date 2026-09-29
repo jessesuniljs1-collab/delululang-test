@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 289 |
-| Rust lines | 149309 |
+| Rust lines | 149347 |
 | Rust files outside `src/` (test/bench targets) | 130 |
 | Markdown documents | 252 |
-| Markdown lines | 67024 |
+| Markdown lines | 67065 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1470 / 12894 |
+| Nodes / edges in this map | 1471 / 12902 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -229,7 +229,7 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3937 lines
+- **Modules:** 9 files, 3950 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -239,7 +239,7 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 | `src/json.rs` | 190 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
 | `src/palette.rs` | 606 | The Palette — a role-based color system for every human-facing CLI surface (Surface addendum |
-| `src/render.rs` | 319 | Human-facing rendering. This text is presentation, not contract: it may change |
+| `src/render.rs` | 332 | Human-facing rendering. This text is presentation, not contract: it may change |
 | `src/source.rs` | 96 |  |
 | `src/span.rs` | 31 |  |
 
@@ -394,6 +394,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 
 | Range | Codes | Raised in |
 |---|---:|---|
+| `DL00xx` | 1 | `delulu` |
 | `DL01xx` | 8 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
 | `DL02xx` | 13 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
 | `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax` |

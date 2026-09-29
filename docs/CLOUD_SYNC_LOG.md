@@ -630,7 +630,8 @@ it on `origin` was made in the cloud and is listed below.
   (3) `6cd68c8` TERMINAL-TEXT-1: a pure program wrote escape sequences to the operator's terminal; escaped at the printers (D-V2-70);
   (4) `ac65c0e` RW 4.32: a guest's standard error relayed by the host, escaped, marked and bounded;
   (5) `d1dbf2e` TERMINAL-TEXT-1's refusal witness takes the same path on Windows: no `:` in its path;
-  (6) `RW 4.32's records: D-V2-71; master red on Windows for a test, fixed; the loop's lessons` — records only
+  (6) `41ac869` RW 4.32's records: D-V2-71; master red on Windows for a test, fixed; the loop's lessons — records only;
+  (7) `RW 4.34: a program's line break begins no line of its own in a diagnostic (D-V2-72); H6 stopped`
 - Files and folders:
   A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
   M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
@@ -659,6 +660,9 @@ it on `origin` was made in the cloud and is listed below.
     `docs/CLOUD_ROUTINE.md` (step 5: the suite after `survey build`, the gates to re-run after records; a slice's
     new tests on every runner; reading a witness job), `docs/REMAINING_WORK.md` (4.32), `V2_DECISION_LOG.md`
     (D-V2-71), `V2_LOG.md`, `V2_SECURITY_MODEL.md` (§10) — (6)
+  M `crates/delulu-diag/src/render.rs` (`indented_continuations`), `crates/delulu/tests/terminal_text_cli.rs`
+    (one witness), `CHANGELOG.md`, `HANDOFF.md` (§11.7: H6 stopped by a classifier), `docs/REMAINING_WORK.md`
+    (4.34 closed), `V2_DECISION_LOG.md` (D-V2-72), `V2_LOG.md`, `V2_SECURITY_MODEL.md` (§10) — (7)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,832 edges); `doctor --check` ok, all
@@ -681,17 +685,20 @@ it on `origin` was made in the cloud and is listed below.
   0 failed, 15 ignored (153 binaries), cargo exit 0. `witness.yml` at `ac65c0e`, six targets: Linux x86-64
   `36599642591` and macOS `36599633669` green; Windows `36599638102` red on one test — TERMINAL-TEXT-1's
   refusal witness (a `:` in its path, DL0904 on Windows first) — fixed by (5), read green `36600749661`.
+  **(7):** the line-break witness red on `41ac869`, green after; M18 red; clippy clean; the full suite alone 2,049 passed, 0 failed, 15 ignored (153 binaries), cargo exit 0.
+  **Not run:** PS-E-03 H6 — the head chef's response starting a macOS escaped-guest harness was stopped by a
+  safety classifier before anything of it ran; no fallback notice was shown (commits keep naming Opus 5.5).
 - Redo on the laptop: the suite on Windows and in WSL (the launcher path changed on every OS; WSL runs the
   `fexecve` path and the swap witness).
 - For the laptop's memory: `HANDOFF.md` §11.4 (LAUNCHER-SPELL-1) and §11.5 (`environ` in a `pre_exec` step;
   holding a race's window open with work the code does anyway); `docs/assistant-memory/cloud-period-2026-09-28.md`.
 - Push runs read: (2) `3489b57` `36596687623` — success on every job. (3) `6cd68c8` `36599039239` — **failure, one job of 16:** `test (windows-latest)`, one test — TERMINAL-TEXT-1's refusal witness (a `:` in its path; DL0904 on Windows first, its message escaped); every other test on Windows passed, every other job green; fixed by (5), read green on Windows first (`36600749661`).
-  (6): see the follow-up line, or the next run's entry.
+  (6) `41ac869` `36601247472` — running at this writing. (7): see the follow-up line, or the next run's entry.
 - Open / next: (1) read (6)'s push run if this entry does not; (2) RW 4.32's rest — the microVM's console relay
   (still raw, capped; its witness needs the KVM job), the per-frame deadline, the accepted words in the death
-  record — and RW 4.34's line break in a message; (3) E-04's remainder
+  record; (3) E-04's remainder
   — Windows deny-write (needs a witness first), the attestation binding a digest the attester measured; (4) run
-  3's inbox: PS-E-03 H6 (macOS
-  and Windows under the escaped-guest harness), the red-team pass on the filter by hand, RW 4.32's stderr relay
-  and `setsid`, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
-  P9. **For the owner:** D-V2-69, D-V2-70 and D-V2-71 are this run's decisions.
+  3's inbox: PS-E-03 H6 (macOS and Windows under the escaped-guest harness — stopped by a classifier in run 5,
+  `HANDOFF.md` §11.7; perhaps one for the laptop), the red-team pass on the filter, `setsid` for the guest, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
+  P9. **For the owner:** D-V2-69, D-V2-70, D-V2-71 and D-V2-72 are this run's decisions; H6 was stopped
+  by a safety classifier (§11.7).

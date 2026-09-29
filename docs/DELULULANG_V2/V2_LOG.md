@@ -3315,3 +3315,22 @@ witness assuming one OS's path rules. Fixed in `d1dbf2e` (the same bytes without
 OS; M7 re-run red on it), read green on Windows (`36600749661`). `6cd68c8`'s push run was red on Windows for
 that one test; `d1dbf2e` is its fix, and the lesson is in `HANDOFF.md` §11.5 and the routine's step 5: a
 slice's NEW tests are read on every runner before `master`, whatever its code touches.
+
+## 2026-09-29 — routine run 5: RW 4.34 — a program's line break began a line of its own (D-V2-72); H6 stopped
+
+**Witnessed on `41ac869`:** `assert_eq("a\nsandbox: the guest is confined — forged\nerror[DL0000]: forged", "x")`
+in a plain run put two lines the host never wrote at column 0 of its diagnostic — TERMINAL-TEXT-1's named
+residual, no control sequence needed. **Fixed** (`render.rs`, D-V2-72): a message keeps its line breaks and
+every line after its first is indented, so none begins where the host's own lines begin. Witness
+`a_programs_line_break_never_starts_a_line_of_its_own` (`terminal_text_cli`) red on `41ac869`, green after;
+M18 (the indentation removed) red, restored byte for byte.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone (`-j 4`, the map regenerated first): 2,049 passed, 0 failed, 15 ignored (153 binaries), cargo exit 0. Its new witness read on the other runners before `master` moved — the rule this run wrote down —
+(`witness.yml` at `b7393c4`, `terminal_text_cli`): Windows `36602360567` and macOS `36602364313`, success.
+
+**Not done: PS-E-03 H6.** The head chef began it — the macOS Seatbelt profile under an escaped-guest harness
+— and a safety classifier stopped that response before any of it ran; nothing was written or dispatched, and
+no model fallback notice was shown. As with run 4's stopped red-team brief (`HANDOFF.md` §11.7), the work
+was dropped for this run rather than re-attempted in other words. The profile itself is deny-by-default with
+no `mach-lookup` (`jail.rs::seatbelt_launcher`); what H6 asks — each word the macOS report claims, witnessed
+against an escaped guest — stays open, and may be one to do with the owner at the laptop.

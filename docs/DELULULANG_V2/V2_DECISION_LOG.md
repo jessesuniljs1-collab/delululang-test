@@ -1499,6 +1499,16 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 5. **Not in this slice: the microVM's console relay**, which still writes the guest's bytes raw (capped).
    Its change is witnessed only on the KVM job; RW 4.32 keeps it.
 
+## D-V2-72 — RW 4.34: a message's continuation lines are indented, not escaped — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+A program's string with a line break began a line of its own at column 0 inside a diagnostic it caused —
+witnessed on `41ac869`: an assertion's value put a forged `sandbox: the guest is confined` line and a forged
+`error[DL0000]` line there. Escaping the line break (as a one-line context does) would flatten the one checker
+message that lays itself out on three lines, and any multi-line error text a message quotes; so the renderer
+keeps a message's line breaks and indents every line after the first by two spaces. No line a message carries
+can then begin where the host's own lines begin. A slight change in layout: the plugin signature mismatch's
+`manifest:`/`code:` lines are indented four spaces instead of two. JSON unchanged.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

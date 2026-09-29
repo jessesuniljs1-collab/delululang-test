@@ -109,6 +109,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   source line — in a plain run and under `--sandbox` alike. Every control character but a line break or
   a tab, and the characters that reorder a line, are now shown escaped (`\u{1b}`) wherever `delulu` prints
   such text for a person; a quoted source line shows each as `?`. JSON output is unchanged (D-V2-70).
+  And a line break in such a string no longer begins a line of its own: every line of a diagnostic's
+  message after its first is indented (D-V2-72).
 - **A sandboxed guest's standard error reaches you through the host, marked and escaped.** It was your
   terminal itself, so a guest that escaped its interpreter could write control sequences, or lines that
   read like the host's, straight onto it. Each line is now printed by the host, escaped and prefixed
