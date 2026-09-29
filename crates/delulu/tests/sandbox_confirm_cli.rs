@@ -508,6 +508,53 @@ fn a_computing_guest_ends_when_its_host_is_killed() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// PS-E-03 H4 (`V2_OPENSHELL_STUDY.md` §4.3): while it serves a sandboxed run the host holds custody — lease
+/// tokens, a secret's bytes on their way to `expose` — so no other process of the same user may read its
+/// environment or its memory through `/proc`. A same-user process read the host's `environ`, sentinel and
+/// all (red as a non-root user in the VM on `30e3262`: HOST-DUMPABLE-1). Root may read any process, so as
+/// root this measures nothing and says so; CI's runners are not root.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_serving_hosts_environment_and_memory_are_closed_to_its_own_user() {
+    use std::io::BufRead as _;
+    // SAFETY: a plain query of this process's effective uid.
+    if unsafe { libc::geteuid() } == 0 {
+        eprintln!("HOST-DUMPABLE-1: unmeasurable as root, which may read any process");
+        return;
+    }
+    let d = lab("dumpable");
+    std::fs::write(
+        d.join("s.delulu"),
+        "module s\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"spinning\")\n    var i = 0\n    while i >= 0 {\n        i = i + 1\n    }\n}\n",
+    )
+    .unwrap();
+    let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_HOME", d.join("home"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_H4_SENTINEL", "the-hosts-secret")
+        .args(["run", "s.delulu", "--sandbox", "--grant", "console"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the host starts");
+    // Serving: the program's first line has come back through the host.
+    let out = host.stdout.take().expect("the host's output");
+    let mut line = String::new();
+    let _ = std::io::BufReader::new(out).read_line(&mut line);
+    let pid = host.id();
+    let environ = std::fs::read(format!("/proc/{pid}/environ"));
+    let mem = std::fs::File::open(format!("/proc/{pid}/mem"));
+    let _ = host.kill();
+    let _ = host.wait();
+    let _ = std::fs::remove_dir_all(&d);
+    assert_eq!(line.trim(), "spinning", "the host never served the program");
+    let leaked = environ.as_ref().map(|b| String::from_utf8_lossy(b).contains("the-hosts-secret")).unwrap_or(false);
+    assert!(!leaked, "a process of the same user read the serving host's environment");
+    assert!(mem.is_err(), "a process of the same user opened the serving host's memory");
+}
+
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), for an external launcher: the launcher ends when its host is
 /// killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none, so a host
 /// killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host). Linux got the

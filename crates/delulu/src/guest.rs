@@ -1052,6 +1052,18 @@ fn serve_under(
             return Err(e);
         }
     };
+    // PS-E-03 H4 (HOST-DUMPABLE-1): from here this host holds the run's custody — lease tokens, a secret's
+    // bytes on their way to `expose` — and a process of the same user could read its environment and its
+    // memory through `/proc` (witnessed as a non-root user: the host's `environ`, sentinel and all).
+    // Non-dumpable, its `/proc` entries are root's and no same-user process may read them or attach.
+    // Set only now, after the launch: a child forked before it would inherit the flag until its `exec`,
+    // and the Linux identity path writes that child's `/proc` uid map in exactly that window. Never
+    // undone — a core dump of this process would spill the same bytes.
+    #[cfg(target_os = "linux")]
+    // SAFETY: a flag on this process alone.
+    unsafe {
+        libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0);
+    }
     // SANDBOX-STOP-1: a process guest's wall-clock ceiling is the host's watchdog, started below. Not
     // claimed for an external launcher: ending the launcher's process need not end what it started (a
     // container can outlive its client), so it is attempted there and never counted.
