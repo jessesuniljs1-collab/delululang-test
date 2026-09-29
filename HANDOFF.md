@@ -812,6 +812,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   read it with `tail_lines` ≈ 90.
 - **`git stash pop` keeps a staged new file staged** (routine run 3): the next `git add <one file>` and
   `git commit` carried it too (`37828ab`). Read `git diff --cached --stat` before every commit.
+- **A green read covers every target that runs the changed code on that OS** (routine run 3): the macOS
+  watcher was read green on three targets; a fourth, `sandbox_external_cli`, went red on `master` — the
+  watcher's start changed a race's winner and a raw `Broken pipe (os error 32)` reached the operator.
+  `witness.yml` takes several targets, or `all`.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

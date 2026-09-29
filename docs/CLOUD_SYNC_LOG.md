@@ -391,7 +391,9 @@ it on `origin` was made in the cloud and is listed below.
   carried `scripts/check-other-os.sh`, already staged when it was committed (its message does not say so);
   (7) `1a63829` PS-E-02, Windows: an external launcher joins a kill-on-close job;
   (8) `c9739db` PS-E-02 on Windows: the records - PS-E-02 complete (D-V2-60);
-  (9) `PS-E-03, first step: the escaped guest; H1, H2, H3 confirmed and closed, H7 found (D-V2-61)`
+  (9) `dd2a542` PS-E-03, first step: the escaped guest; H1, H2, H3 confirmed and closed, H7 found (D-V2-61);
+  (10) `ff251bb` A guest gone before the host opens the channel is told in words (macOS CI red, 36527491801);
+  (11) `PS-E-03 and the macOS CI fix: read green on every runner; the records` — this entry's commit
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -427,6 +429,10 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4 the four findings), `docs/DEPLOYMENT.md` and
     `docs/book/THE_DELULULANG_BOOK.md` (the Linux rows), `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md`
     (D-V2-61), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (9)
+  M `crates/delulu/src/boundary.rs` (`open`, `send_program` in words; the witness), `crates/delulu/src/jail.rs`
+    (the watcher's `WATCH_NOTHING`) — (10)
+  M `.github/workflows/witness.yml` (several targets, or `all`; `--no-fail-fast`), `docs/CLOUD_ROUTINE.md` (a
+    green read covers every target), `HANDOFF.md` §11.5, `docs/DELULULANG_V2/V2_LOG.md` — (11)
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
   Deleted: nothing.
@@ -456,9 +462,16 @@ it on `origin` was made in the cloud and is listed below.
   `sandbox_external_cli` — `a_backend_that_is_not_one_or_a_launcher_that_dies_fails_legibly`: a launcher
   that exits at once (`delulu --version`) got "Broken pipe (os error 32)" raw, because the macOS watcher's
   start delays the host's first write past that launcher's death (read again on its own: `witness.yml`
-  `36529502237`, the same failure). Fixed in (10).
-- Redo on the laptop: nothing for Windows or WSL (the change is macOS-only; the Linux witness is new and
-  runs everywhere Linux does).
+  `36529502237`, the same failure). Fixed in (10): the witness red on `dd2a542` ("Broken pipe (os error
+  32)"), green after; read green on the runners at `ff251bb` — `36530276934` (macOS `sandbox_external_cli`,
+  3 passed), `36530279678` (macOS `sandbox_confirm_cli`, 12 passed) — with PS-E-03's first CI reads:
+  `36530282206` (arm64 escaped-guest tests, 5 passed, measured on a non-root runner), `36530285142`
+  (x86-64 subordinate-uid `sandbox_run_cli`, 17 passed), `36530287510` (arm64 `sandbox_run_cli`).
+  `c9739db`'s push run `36529103180` carries the same macOS failure (the code of `3ec690b`).
+  (11): the full suite alone on the landed tree 2,024 passed, 0 failed, 15 ignored (152 binaries), cargo
+  exit 0.
+- Redo on the laptop: (9) changes the Linux guest's own lock-down — **rebuild the WSL microVM guest images**
+  (the VM guest applies the same filter) and run the suite in WSL; Windows: nothing new beyond the suite.
 - For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed
   guarantee needs its own witness); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
 - Open / next: this run is in progress — the push runs of (5) and (8) to read; then PS-E-03 (the escaped guest).

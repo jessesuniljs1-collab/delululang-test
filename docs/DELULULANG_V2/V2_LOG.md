@@ -2921,3 +2921,24 @@ in sync; the full suite alone: 2,023 passed, 0 failed, 15 ignored (152 binaries)
 requirement), H6 (macOS and Windows, through the same harness on their runners). CI's own proof of this
 slice is the next push run: the x86-64 job's subordinate-uid guest, arm64, and the microVM guest (which
 locks itself down with the same filter) all run it.
+
+## 2026-09-29 — routine run 3: CI red on macOS, read and fixed — a guest gone before the host opens is told in words
+
+**Read:** `3ec690b`'s push run `36527491801` — **failure**, one job, `test (macos-latest)`, one target,
+`sandbox_external_cli`: `a_backend_that_is_not_one_or_a_launcher_that_dies_fails_legibly` requires a launcher
+that exits at once (`delulu --version`) to fail in words, and the host printed `Broken pipe (os error 32)`.
+Read again alone (`witness.yml` `36529502237`): the same. Every other job green. `c9739db`'s push run
+`36529103180` carries the same code.
+
+**Cause:** this run's macOS watcher. Starting it (a process, ~50 ms) delays the host's first write until such
+a launcher has died, and `boundary::open`'s write error went to the operator raw — the reads beside it were
+already in words. The race is older than the watcher; on Linux the first write lands before the launcher is
+gone. The green reads of the watcher covered `sandbox_confirm_cli`, `guest_cli` and the boundary unit tests,
+not `sandbox_external_cli`: a green read must cover every target that runs the changed code on that OS
+(`witness.yml` now takes several, or `all`).
+
+**Witness** `a_guest_gone_before_the_host_opens_the_channel_is_told_in_words` (`boundary.rs`, Unix): the
+guest's end closed before `open` — red on `dd2a542` (`Broken pipe (os error 32)`), green after. **Fixed:**
+`open` and `send_program` put a failed write in words ("it had closed the channel before the host opened
+it"); the watcher exits 3 when the process it was given had already ended (`ESRCH`), and the host says so
+instead of "did not say it was armed within 10s". Green on the runners: `ff251bb` — `36530276934` (macOS `sandbox_external_cli`, 3 passed, the failing test among them), `36530279678` (macOS `sandbox_confirm_cli`, 12 passed, the guest gone 4.9 ms after the kill); and PS-E-03 on the other Linux runners: `36530282206` (arm64, the escaped-guest tests, 5 passed — a non-root runner whose FREE control read the operator's `environ`, opened the terminal, made a user namespace and every socket kind, and whose escaped guest reached none; `userfaultfd` and `fsopen` unmeasurable there, refused to an unprivileged user even unconfined), `36530285142` (x86-64 with the subordinate-uid guest, `sandbox_run_cli` 17 passed), `36530287510` (arm64 `sandbox_run_cli`, success).

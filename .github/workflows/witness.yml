@@ -23,7 +23,7 @@ on:
         type: string
         default: delulu
       target:
-        description: "The test target: an integration test's file name without .rs; `lib`; or `bin:NAME` for a binary's unit tests"
+        description: "Test targets, space-separated: an integration test's file name without .rs, `lib`, `bin:NAME` (a binary's unit tests); or `all` for the package's every test"
         type: string
         required: true
       filter:
@@ -60,10 +60,16 @@ jobs:
           TARGET: ${{ inputs.target }}
           FILTER: ${{ inputs.filter }}
         run: |
-          case "$TARGET" in
-            lib) sel=(--lib) ;;
-            bin:*) sel=(--bin "${TARGET#bin:}") ;;
-            *) sel=(--test "$TARGET") ;;
-          esac
-          echo "cargo test -p $PKG ${sel[*]} -- $FILTER --nocapture"
-          cargo test -p "$PKG" "${sel[@]}" -- "$FILTER" --nocapture
+          # Several targets in one run: a green read must cover every target that exercises the changed
+          # code on this OS (routine run 3 read the macOS watcher green on three and missed a fourth).
+          sel=()
+          for t in $TARGET; do
+            case "$t" in
+              all) sel=() ; break ;;
+              lib) sel+=(--lib) ;;
+              bin:*) sel+=(--bin "${t#bin:}") ;;
+              *) sel+=(--test "$t") ;;
+            esac
+          done
+          echo "cargo test -p $PKG ${sel[*]} --no-fail-fast -- $FILTER --nocapture"
+          cargo test -p "$PKG" "${sel[@]}" --no-fail-fast -- "$FILTER" --nocapture
