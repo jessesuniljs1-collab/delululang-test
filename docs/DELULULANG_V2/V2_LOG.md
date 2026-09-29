@@ -3352,3 +3352,39 @@ Witness `the_death_record_names_the_words_the_guest_confirmed_with` (`sandbox_co
 **`41ac869`'s push run, `36601247472` — success on every job (16): `master` green again** after `6cd68c8`'s
 Windows red; Windows' properties line on `6cd68c8`'s run read all five established, its ping-pong NOT
 MEASURED (the runner busy).
+
+## 2026-09-29 — routine run 5: RW 4.32 — the microVM's console, escaped
+
+The last raw path of RW 4.32's terminal item: `microvm.rs::relay_console` wrote the microVM guest's console —
+its kernel's text and its standard error — to the operator's terminal as bytes (capped at 64 KiB), and kept
+the same bytes for the probe's answer. **Witnessed on `ec4d39d`** with the relay driven by a real child printing
+`ESC ] 0 ; PWNED BEL`: relayed raw. **Fixed:** each line the relay already assembles (CR LF folded) is shown
+through `terminal_line`, for the operator and the probe alike; an ordinary line is unchanged; no prefix — the
+console is the VM's only voice. Witness `microvm::tests::the_console_relay_shows_a_guests_control_sequences_escaped`
+red on `ec4d39d`, green after; M20 (the line emitted raw) red, restored byte for byte.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone: 2,051 passed, 0 failed, 15 ignored (153 binaries), cargo exit 0. **The KVM job read on the branch before
+`master` moved** (`ci.yml` dispatched at `1721539`, run `36604242542`): `microvm` success — the lifecycle tests, criterion 8, the probe from a boot and the hostile guests against the host, all on the image built in the job. The same run's `test (macos-latest)` failed on four tests only — `doctor_cli` three times and the Survey's freshness test — because the branch commit carried the code without the regenerated map; every other macOS test passed. The run was then cancelled (its Miri jobs run for hours); the routine now says to commit the map with a branch commit the whole CI will read.
+
+**Routine run 5, closed.** `master` green on arrival (`cfc5b01`); the nightly on `9fc4d86` red on `supply-chain`
+only, the advisories `63a375e` had fixed. Built: **PS-E-04** (D-V2-69) — the external launcher resolved once,
+hashed, pinnable, and on Linux started as the file hashed; LAUNCHER-SPELL-1 found and closed. Found while scoping
+RW 4.32: **TERMINAL-TEXT-1** (D-V2-70) — a pure program wrote escape sequences to the operator's terminal
+through its own strings; escaped at every printer, one core-snapshot line re-recorded (DL0107's own quoted line
+carried the raw U+202E it warns about). Then **RW 4.32's stream** (D-V2-71) — a guest's standard error relayed by
+the host, escaped, marked, bounded; the microVM's console escaped; the death record's `guest_words` — and **RW
+4.34** (D-V2-72), a line break that began a line of its own. Twenty mutants, M1–M20, each red — M16 only once the witness it had survived was written. `master` went red
+once, on Windows, for a TEST whose path held `:` (`6cd68c8`), fixed in `d1dbf2e` and green from `41ac869`; the
+lesson is in the routine — a slice's new tests are read on every runner before `master`. Not done: PS-E-03 H6,
+whose start a safety classifier stopped before anything ran.
+
+**`ec4d39d`'s push run, `36603987907` — red on one job, `arm64`, one test** (read at 17:36 UTC):
+`estop_cli::with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm` — the control run, which nobody
+revokes, printed `REVOKED: the lease on arm0/elbow was revoked (operator-revoke)`. Not this run's code: `ec4d39d`
+is records only over `30d1563`, whose change is a sandbox death record, and `estop_cli` runs no sandbox; the same
+device and broker code passed on arm64 at `41ac869` and `d566295`. **Not root-caused:** the program's line says
+`operator-revoke` for every probe that came back dead — revoked, expired, or a broker silent past DEADMAN-1's 1 s,
+a collapse `device.rs`'s own unit test holds on purpose, the journal keeping the reason — and the test printed only
+that line. Eight busy loops on the VM's four CPUs did not reproduce it (two runs, 5 passed each, 29 s against the
+runner's 12 s). **Done:** the control test now prints the journal beside a failure, so the next occurrence names
+its reason; RW 7.17 holds the question, and whether an unanswered probe deserves its own recorded cause.

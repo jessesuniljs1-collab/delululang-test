@@ -180,7 +180,11 @@ OS-neutral still has its NEW tests read on the other runners first** — a test'
 platform rules (run 5: a witness's path held `:`, which Windows refuses before the check the test was about,
 and `master` went red on Windows for a test, not the product). A witness job's results sit just before its
 cache save and git's cleanup (about 70 lines): ask for about 70 lines plus 15 per target; a log over about
-100 KB comes back as a file to grep instead (run 5: 1,135 lines did, 518 did not). Lint macOS and
+100 KB comes back as a file to grep instead (run 5: 1,135 lines did, 518 did not). **A change the KVM job must
+read** (`microvm.rs`) is read on the branch by dispatching `ci.yml` with `jobs` `everything` at it — commit the
+regenerated map WITH the branch commit, or `doctor_cli` and the freshness test fail there for that reason alone
+(run 5) — then cancel the run once the `microvm` job is read (`actions_run_trigger` `cancel_workflow_run`): its
+Miri jobs run for hours. Lint macOS and
 Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
 x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
 (clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected

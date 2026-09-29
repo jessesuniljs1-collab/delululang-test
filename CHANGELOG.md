@@ -115,7 +115,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   terminal itself, so a guest that escaped its interpreter could write control sequences, or lines that
   read like the host's, straight onto it. Each line is now printed by the host, escaped and prefixed
   `guest:` (or `launcher:` for an external launcher, which carries its guest's output), cut at 1 MiB with a
-  note (D-V2-71). The microVM's console is unchanged for now.
+  note (D-V2-71). A microVM guest's console is shown escaped too, a line at a time.
 - **A sandboxed run's `sandbox-death` audit record names the words its guest confirmed its boundary with**
   (`guest_words`), so the chain — not only a report that can be discarded — says what the guest claimed to
   have applied to itself.

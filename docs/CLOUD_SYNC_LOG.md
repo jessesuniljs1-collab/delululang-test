@@ -634,7 +634,9 @@ it on `origin` was made in the cloud and is listed below.
   (7) `b7393c4` RW 4.34: a program's line break begins no line of its own in a diagnostic (D-V2-72);
   (8) `d566295` RW 4.34's records: D-V2-72, read on macOS and Windows first; H6 stopped by a classifier — records only;
   (9) `30d1563` RW 4.32: the death record names the words the guest confirmed its boundary with;
-  (10) `RW 4.32's death-record words recorded; master green again at 41ac869` — records only
+  (10) `ec4d39d` RW 4.32's death-record words recorded; master green again at 41ac869 — records only;
+  (11) `1721539` RW 4.32: the microVM's console reaches the operator escaped, a line at a time;
+  (12) `RW 4.32's microVM console recorded, read on the KVM job first; the run's close` — records only
 - Files and folders:
   A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
   M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
@@ -669,6 +671,11 @@ it on `origin` was made in the cloud and is listed below.
     `V2_PHASE_STATUS.md` (PS-E) — (7), (8)
   M `crates/delulu/src/guest.rs` (`guest_words` in every death record), `crates/delulu/tests/sandbox_confirm_cli.rs`
     (one witness) — (9); `CHANGELOG.md`, `docs/REMAINING_WORK.md` (4.32), `V2_LOG.md` — (10)
+  M `crates/delulu/tests/estop_cli.rs` (the control test prints the journal with a failure), `docs/REMAINING_WORK.md`
+    (7.17, new) — (12)
+  M `crates/delulu/src/microvm.rs` (`relay_console` escapes each line; a unit test) — (11); `CHANGELOG.md`,
+    `docs/REMAINING_WORK.md` (4.32: the per-frame deadline left), `V2_SECURITY_MODEL.md` (§10), `V2_LOG.md`,
+    `docs/CLOUD_ROUTINE.md` (reading the KVM job on a branch), `docs/assistant-memory/cloud-period-2026-09-28.md` — (12)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,832 edges); `doctor --check` ok, all
@@ -695,6 +702,10 @@ it on `origin` was made in the cloud and is listed below.
   **(9):** the death-record witness red on `d566295`, green after; M19 red; clippy clean; the full suite alone 2,050
   passed, 0 failed, 15 ignored (153 binaries), cargo exit 0; read on Windows `36602983681` and macOS `36602987750`
   first, success.
+  **(11):** the console witness red on `ec4d39d`, green after; M20 red; clippy clean; the full suite alone 2,051
+  passed, 0 failed, 15 ignored (153 binaries), cargo exit 0; `ci.yml` dispatched on the branch at `1721539`
+  (`36604242542`): `microvm` success (lifecycle, criterion 8, the probe, the hostile guests); `test (macos-latest)`
+  red on the stale map only (the branch commit lacked the regenerated map); cancelled after the read.
   **Not run:** PS-E-03 H6 — the head chef's response starting a macOS escaped-guest harness was stopped by a
   safety classifier before anything of it ran; no fallback notice was shown (commits keep naming Opus 5.5).
 - Redo on the laptop: the suite on Windows and in WSL (the launcher path changed on every OS; WSL runs the
@@ -702,9 +713,13 @@ it on `origin` was made in the cloud and is listed below.
 - For the laptop's memory: `HANDOFF.md` §11.4 (LAUNCHER-SPELL-1) and §11.5 (`environ` in a `pre_exec` step;
   holding a race's window open with work the code does anyway); `docs/assistant-memory/cloud-period-2026-09-28.md`.
 - Push runs read: (2) `3489b57` `36596687623` — success on every job. (3) `6cd68c8` `36599039239` — **failure, one job of 16:** `test (windows-latest)`, one test — TERMINAL-TEXT-1's refusal witness (a `:` in its path; DL0904 on Windows first, its message escaped); every other test on Windows passed, every other job green; fixed by (5), read green on Windows first (`36600749661`).
-  (6) `41ac869` `36601247472` — **success on every job; `master` green again.** (8) `d566295` `36602779695` — running at
-  this writing; (10): the next run reads both.
-- Open / next: (1) read (6)'s push run if this entry does not; (2) RW 4.32's rest — the microVM's console relay
+  (6) `41ac869` `36601247472` — **success on every job; `master` green again.** (8) `d566295` `36602779695` — success on
+  every job. (10) `ec4d39d` `36603987907` — **red on
+  one job, `arm64`: `estop_cli`'s control test printed `REVOKED (operator-revoke)` for a run nobody revoked** — code this run
+  did not touch, passed on arm64 at `41ac869` and `d566295`; not reproduced by starving the VM; not root-caused (RW 7.17;
+  the test now prints the journal's reason). (12): the next run reads it.
+- Open / next: (1) read (12)'s push run first — and RW 7.17: if `estop_cli`'s control test fails again, its message now
+  carries the journal's reason; root-cause it before anything else; (2) RW 4.32's rest — the microVM's console relay
   (still raw, capped; its witness needs the KVM job), the per-frame deadline, the accepted words in the death
   record; (3) E-04's remainder
   — Windows deny-write (needs a witness first), the attestation binding a digest the attester measured; (4) run

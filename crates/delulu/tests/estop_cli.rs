@@ -287,9 +287,12 @@ fn with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm() {
     let se = stderr(&o);
     assert!(o.status.success(), "the control run must succeed:\n{so}\n{se}");
     assert!(so.contains("SUPERVISOR DOWN"), "{so}");
+    // The journal on standard error carries the WHY of any revocation — the program's own line says
+    // `operator-revoke` for every probe that came back dead, an unanswered one included — so a failure
+    // shows both (it failed once on an arm64 runner, `ec4d39d`, with only the program's line to read).
     assert!(
         !so.contains("REVOKED:") && !so.contains("REFUSED:"),
-        "an unrevoked, in-envelope run loses nothing:\n{so}"
+        "an unrevoked, in-envelope run loses nothing:\n{so}\n--- the journal ---\n{se}"
     );
     assert!(
         !se.contains("lease.revoked"),

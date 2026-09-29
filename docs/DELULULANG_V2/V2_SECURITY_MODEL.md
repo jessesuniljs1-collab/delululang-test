@@ -270,7 +270,7 @@ an assertion's values, a refusal's quoted path and suggested grant, a test's nam
 a sandboxed guest's own fault line — and, since D-V2-71, whatever a jailed guest or an external launcher
 writes on its standard error, which the host relays escaped and marked as the guest's or the launcher's.
 A line break in a program's string begins no line of its own at column 0 inside a rendered diagnostic
-(D-V2-72). Not claimed: a microVM guest's console, still relayed raw (RW 4.32).
+(D-V2-72), and a microVM guest's console reaches the operator escaped too (RW 4.32).
 
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a

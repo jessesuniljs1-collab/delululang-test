@@ -79,7 +79,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   (a planted `./lnch` ran through `.` on `PATH`) witnessed and closed (D-V2-69). Trap: `environ` inside a
   `pre_exec` step is not the command's environment. Then TERMINAL-TEXT-1 (D-V2-70): a pure program's
   strings (assert_eq's values, refused paths, test names, quoted lines) reached the terminal as escape
-  sequences — escaped at the printers now; JSON unchanged.
+  sequences — escaped at the printers now; JSON unchanged. Then RW 4.32's stream (D-V2-71): the host relays
+  a guest's standard error — `guest:`/`launcher:`, escaped, 1 MiB — and the microVM console escaped; the
+  death record names the guest's words; RW 4.34 (D-V2-72): a message's continuation lines indented.
+  `master` went red on Windows once, for a TEST whose path held `:` — rule: a slice's new tests are read on
+  every runner first. A classifier stopped the start of H6 (a macOS escaped-guest harness) — nothing ran.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
