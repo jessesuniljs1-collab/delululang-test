@@ -423,13 +423,88 @@ fn an_external_guests_own_words_are_its_own_not_the_hosts() {
 }
 
 /// Is this process gone — exited, or a zombie nobody has reaped yet (in a container, PID 1 may never)?
-#[cfg(target_os = "linux")]
+/// Asked of `ps`, which Linux and macOS both have, so the same witness reads both (this read `/proc`,
+/// which macOS has not, until PS-E-02's macOS half needed it there).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn gone(pid: u32) -> bool {
-    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-        Err(_) => true,
-        // The state is the first field after the command's closing parenthesis.
-        Ok(stat) => stat.rsplit_once(") ").is_some_and(|(_, rest)| rest.starts_with('Z') || rest.starts_with('X')),
+    let out = Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]).output().expect("ps runs");
+    let stat = String::from_utf8_lossy(&out.stdout);
+    let stat = stat.trim();
+    stat.is_empty() || stat.starts_with('Z') || stat.starts_with('X')
+}
+
+/// The sandbox guest a host started: its child whose arguments include the guest subcommand (the
+/// jailed guest, the contained one and the one Seatbelt `exec`s all carry it; nothing else the host
+/// starts does).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn guest_of(host: u32) -> Option<u32> {
+    let out = Command::new("ps").args(["-A", "-o", "pid=,ppid=,command="]).output().ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
+        let mut f = l.split_whitespace();
+        let pid: u32 = f.next()?.parse().ok()?;
+        let ppid: u32 = f.next()?.parse().ok()?;
+        (ppid == host && f.any(|w| w == "__guest")).then_some(pid)
+    })
+}
+
+/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2): a jailed guest (L1) that is COMPUTING — past its boundary,
+/// running the program, asking the host for nothing — ends when its host is killed. It is the case the
+/// channel cannot cover: an idle channel never fails under a guest that does not read it. Linux ends it
+/// with `PR_SET_PDEATHSIG`, Windows with the job's kill-on-close; on macOS nothing did, and the orphan
+/// lived until its processor-time ceiling (five minutes by default) — red on `a39b423` (`witness.yml`).
+/// Measured from outside both: the guest's pid, gone within 3 s of the host's SIGKILL.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_computing_guest_ends_when_its_host_is_killed() {
+    use std::io::BufRead as _;
+    let d = lab("orphan-guest");
+    std::fs::write(
+        d.join("s.delulu"),
+        "module s\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"spinning\")\n    var i = 0\n    while i >= 0 {\n        i = i + 1\n    }\n}\n",
+    )
+    .unwrap();
+    let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_HOME", d.join("home"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["run", "s.delulu", "--sandbox", "--grant", "console"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the host starts");
+    // The program's first line, performed by the host: the guest is past its boundary and computing.
+    let out = host.stdout.take().expect("the host's output");
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            let _ = tx.send(line);
+        }
+    });
+    let started = rx.recv_timeout(std::time::Duration::from_secs(60)).map(|l| l == "spinning").unwrap_or(false);
+    let guest = guest_of(host.id());
+    if !started || guest.is_none() {
+        let _ = host.kill();
+        let _ = host.wait();
+        panic!("the guest never reached its program (line: {started}, guest: {guest:?})");
     }
+    let guest = guest.unwrap();
+    assert!(!gone(guest), "the guest is running before its host is killed");
+    host.kill().expect("the host is killed");
+    let _ = host.wait();
+    let t = std::time::Instant::now();
+    while !gone(guest) && t.elapsed() < std::time::Duration::from_secs(3) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let took = t.elapsed();
+    let outlived = !gone(guest);
+    if outlived {
+        // SAFETY: a plain signal to the stray guest this test started, so it does not linger.
+        unsafe { libc::kill(guest as i32, libc::SIGKILL) };
+    }
+    assert!(!outlived, "the guest outlived its host by more than {took:?}");
+    eprintln!("PS-E-02: the guest was gone {took:?} after its host was killed");
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), its Linux half for an external launcher: the launcher ends when
