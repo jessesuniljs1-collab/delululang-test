@@ -1480,6 +1480,25 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
    has ESCAPED its interpreter still writes raw bytes to its standard error, which is the operator's
    terminal — RW 4.32's relay, still open.
 
+## D-V2-71 — RW 4.32: the host relays a guest's standard error — escaped, marked `guest:` or `launcher:`, cut at 1 MiB — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **Why.** After TERMINAL-TEXT-1 (D-V2-70) a guest's own lines were escaped, but its standard error was
+   still the operator's terminal, inherited, and so was an external launcher's. A guest that escaped its
+   interpreter writes raw bytes there. Witnessed on `6cd68c8` with a launcher standing in for one: control
+   sequences raw, a forged `sandbox:` line unmarked, 3 MiB passed whole.
+2. **The host reads it and prints it a line at a time**, each through `terminal_line`, prefixed with whose
+   it is: `guest:` at L1, where the host started the guest itself; `launcher:` at L3, where the stream is the
+   launcher's and carries the guest's inside it, and the host cannot tell the two apart. A prefix rather
+   than a colour: it survives a log file, and it cannot be stripped by the text it marks.
+3. **Bounded at 1 MiB** — more than the microVM console's 64 KiB, because at L3 the stream is also the
+   launcher's own tooling, which may say more than a guest — and drained past it (a full pipe would stall
+   the writer, and a stalled guest is a hung run), said once. A line longer than 8 KiB is cut there.
+4. **The host waits up to two seconds, once the guest is gone, for the last line** — a guest's fault is its
+   last word, and a host that exits at once can lose it. The bound is there because at L3 something the
+   launcher started may hold the stream open indefinitely.
+5. **Not in this slice: the microVM's console relay**, which still writes the guest's bytes raw (capped).
+   Its change is witnessed only on the KVM job; RW 4.32 keeps it.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

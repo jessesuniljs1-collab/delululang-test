@@ -860,6 +860,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `higher_order_callback_arg` named a pinning test that never existed, and one of the five entries it
   claimed pinned was pinned by nothing (a mutant removing it passed, another check refusing the same programs
   for another reason). A mutant per entry finds such a hole; a green suite does not.
+- **A new test runs on every OS, and its own assumptions are platform rules** (routine run 5): TERMINAL-TEXT-1
+  was OS-neutral code, so it went to `master` unread on the other runners — and its refusal witness asked for
+  a path holding `:`, which Windows refuses first as an alternate data stream (DL0904), so the test's DL0703
+  never came. The product held; the test was red on `master`. Read a slice's NEW tests on every runner before
+  `master` moves, whatever its code touches.
+- **A mutant that survives every witness names the witness that is missing** (routine run 5): M16 — the
+  relay's last line not waited for — passed four tests, because the relay thread wins that race in practice;
+  a launcher that left a writer holding the stream for a second after the guest had gone made it red, 3 of 3.
 - **Ask of every string a program chose: where is it printed for a person?** (routine run 5,
   TERMINAL-TEXT-1) — the effect row governs what a program DOES; the terminal it is reported on is outside
   it, and an assertion's message was a way to it for a program with no effects. JSON escapes exactly; a

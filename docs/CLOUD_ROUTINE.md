@@ -175,12 +175,20 @@ read it red (`get_job_logs` with `tail_lines` ≈ 90 — the cache save and git'
 test's lines); commit the fix on the branch, dispatch again, read it green — **on every test target that
 runs the changed code on that OS** (`target` takes several, or `all`: run 3 read its macOS watcher green on
 three targets and a fourth went red on `master`); then fast-forward `master`
-to the branch — its history keeps the red witness, and `master` never goes red for it. Lint macOS and
+to the branch — its history keeps the red witness, and `master` never goes red for it. **A slice whose code is
+OS-neutral still has its NEW tests read on the other runners first** — a test's own assumptions are
+platform rules (run 5: a witness's path held `:`, which Windows refuses before the check the test was about,
+and `master` went red on Windows for a test, not the product). A witness job's results sit just before its
+cache save and git's cleanup (about 70 lines): ask for about 70 lines plus 15 per target; a log over about
+100 KB comes back as a file to grep instead (run 5: 1,135 lines did, 518 did not). Lint macOS and
 Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
 x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
 (clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
-tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
-exit code. An `#[ignore]`d gate is not in that count: a change to either WebAssembly engine also runs the
+tests, then `cargo run -p delulu-survey -- build` (the suite checks the map: run 5's first suite lost four
+tests to a stale one), then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
+exit code; records written after it need only a second `build` and the gates that read documents —
+`doctor_cli`, `repository_structure`, `evidence_claims`, `governance`, `distribution`, `book`, `core_invariance`
+and the Survey's own tests. An `#[ignore]`d gate is not in that count: a change to either WebAssembly engine also runs the
 two-engine differential by hand, `cargo test -p delulu-wasm --release --test differential -- --ignored`
 (50,000 programs, about 150 s once built — CI runs it only in `heavy-gates`, run 4). Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported.
@@ -201,7 +209,8 @@ Commit with the trailers in `CLAUDE.md`, push.
 takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and
 `list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply; `get_workflow_run_usage`
 names a run's job ids in a few bytes and gains a `run_duration_ms` only once the run is complete, and
-`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run; `workflow_runs_filter.status` `in_progress` answered NO runs while two were
+`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run; and
+`get_job_logs` with `run_id`, `failed_only` and `tail_lines` 2 names a finished run's red jobs in a few lines (run 5); `workflow_runs_filter.status` `in_progress` answered NO runs while two were
 running (run 4) — filter by `event` instead and read each run's `status`) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.

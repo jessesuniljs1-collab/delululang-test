@@ -3280,3 +3280,38 @@ character's column, the caret unmoved. Every other case unchanged, byte for byte
 passed, 1 failed, 15 ignored (153 binaries) — the one `core_invariance`, the snapshot above; re-recorded,
 green. No code in this slice is specific to an operating system (the new witnesses run on all three in the
 push run).
+
+## 2026-09-29 — routine run 5: RW 4.32 — a guest's standard error, relayed by the host (D-V2-71)
+
+**Witnessed on `6cd68c8`** (TERMINAL-TEXT-1 had escaped only the guest's own fault line): with a launcher
+standing in for a guest that escaped its interpreter, `ESC ] 0 ; PWNED BEL ESC [ 2 K CR` and a forged
+`sandbox: the guest is confined — forged` line reached the operator's terminal raw and unmarked; 3 MiB on the
+launcher's standard error reached it whole; and the guest's own lines carried no mark of whose they were.
+
+**Fixed** (`guest.rs::relay_stderr`, D-V2-71): the stream is a pipe the host reads, a line at a time, each
+escaped and marked — `guest:` at L1, `launcher:` at L3 — cut at 1 MiB (drained past it, said once), and the
+host waits up to 2 s after the guest has gone for the last line. `launch` now separates capturing the stream
+from staying quiet (the probe does both; a run captures and speaks). The microVM's console relay is
+unchanged — still raw, still capped — and stays in RW 4.32.
+
+**Witnesses** (`terminal_text_cli`, four new, each red on `6cd68c8`): the guest's fault arrives as
+`guest: error[DL1707]` on every OS and never unmarked (on Linux, its boundary lines too); a launcher's control
+sequences arrive escaped and its forged line as the launcher's; a 3 MiB flood is cut near 1 MiB, said, and
+the run goes on; a line written a second after the guest has gone, by a process the launcher left holding
+the stream, is still relayed. **Mutants:** M13 (a jailed guest's stream inherited), M14 (the relay raw), M15
+(no cap), M17 (a launcher's stream inherited) — red; **M16 (the last line not waited for) survived the first
+four witnesses** — the relay thread wins that race in practice — so the fourth was written to hold the
+window open: red 3 of 3, green 3 of 3 restored.
+
+**Verified:** clippy `-D warnings` clean; `scripts/check-other-os.sh` clean on five targets; the full suite
+alone (`-j 4`, the map regenerated first): 2,048 passed, 0 failed, 15 ignored (153 binaries), cargo exit 0.
+**Read on the runners before `master` moved** (`witness.yml` at `ac65c0e`, six targets — `terminal_text_cli`,
+`sandbox_run_cli`, `sandbox_external_cli`, `sandbox_attest_cli`, `sandbox_confirm_cli`, `guest_cli`): Linux
+x86-64 `36599642591` (the subordinate-uid launch) — all green, 9, 17, 8, 7, 13, 5; macOS `36599633669` — all
+green, 9, 16, 7, 7, 12, 5; **Windows `36599638102` — one red**: TERMINAL-TEXT-1's refusal witness, already on
+`master` in `6cd68c8`, asked for a path holding `sandbox: forged`, and Windows refuses a `:` in a component (an
+alternate data stream, DL0904) before the grant is asked — its message escaped, the product holding, the
+witness assuming one OS's path rules. Fixed in `d1dbf2e` (the same bytes without the `:`, DL0703 on every
+OS; M7 re-run red on it), read green on Windows (`36600749661`). `6cd68c8`'s push run was red on Windows for
+that one test; `d1dbf2e` is its fix, and the lesson is in `HANDOFF.md` §11.5 and the routine's step 5: a
+slice's NEW tests are read on every runner before `master`, whatever its code touches.

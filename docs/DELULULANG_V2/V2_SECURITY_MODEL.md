@@ -267,8 +267,10 @@ claimed: that window on macOS and Windows, or an in-place change by someone who 
 A program's strings are claimed to reach the operator's terminal only escaped since TERMINAL-TEXT-1
 (D-V2-70), with witnesses on five paths and six falsified mutants (`crates/delulu/tests/terminal_text_cli.rs`):
 an assertion's values, a refusal's quoted path and suggested grant, a test's name, a quoted source line, and
-a sandboxed guest's own fault line. Not claimed: the output of a guest that has escaped its interpreter,
-which still reaches the terminal raw (RW 4.32), and a line break inside a diagnostic's message (RW 4.34).
+a sandboxed guest's own fault line — and, since D-V2-71, whatever a jailed guest or an external launcher
+writes on its standard error, which the host relays escaped and marked as the guest's or the launcher's.
+Not claimed: a microVM guest's console, still relayed raw (RW 4.32), and a line break inside a diagnostic's
+message (RW 4.34).
 
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a

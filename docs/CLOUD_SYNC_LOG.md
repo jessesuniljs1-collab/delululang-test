@@ -627,7 +627,10 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `cfc5b01` (routine run 4's last commit)
 - Commits: (1) `370d641` PS-E-04: the external launcher resolved once, hashed, pinnable, and started as the file hashed;
   (2) `3489b57` PS-E-04's records: D-V2-69, LAUNCHER-SPELL-1, the runners read; routine run 5's entry — records only;
-  (3) `TERMINAL-TEXT-1: a pure program wrote escape sequences to the operator's terminal; escaped at the printers (D-V2-70)`
+  (3) `6cd68c8` TERMINAL-TEXT-1: a pure program wrote escape sequences to the operator's terminal; escaped at the printers (D-V2-70);
+  (4) `ac65c0e` RW 4.32: a guest's standard error relayed by the host, escaped, marked and bounded;
+  (5) `d1dbf2e` TERMINAL-TEXT-1's refusal witness takes the same path on Windows: no `:` in its path;
+  (6) `RW 4.32's records: D-V2-71; master red on Windows for a test, fixed; the loop's lessons` — records only
 - Files and folders:
   A `crates/delulu/src/launcher.rs` (resolve, hash, pin, `fexecve` on Linux) — (1)
   M `crates/delulu/src/guest.rs` (`Isolation::External` carries the pin; `serve_under` resolves and refuses
@@ -649,6 +652,13 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (§11.4 TERMINAL-TEXT-1; §11.5 where a program's strings are printed),
     `docs/REMAINING_WORK.md` (4.34 new and closed; 4.32 widened), `V2_DECISION_LOG.md` (D-V2-70), `V2_LOG.md`,
     `V2_SECURITY_MODEL.md` (§10), `docs/assistant-memory/cloud-period-2026-09-28.md` — (3)
+  M `crates/delulu/src/guest.rs` (`relay_stderr`; `launch` separates capture from quiet; the launcher's stream
+    piped), `crates/delulu/src/microvm.rs` (`take_console` is `Send`), `crates/delulu/tests/terminal_text_cli.rs`
+    (four relay witnesses) — (4); `crates/delulu/tests/terminal_text_cli.rs` (the refusal witness's path) — (5)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.5: a new test's platform rules; a surviving mutant names a missing witness),
+    `docs/CLOUD_ROUTINE.md` (step 5: the suite after `survey build`, the gates to re-run after records; a slice's
+    new tests on every runner; reading a witness job), `docs/REMAINING_WORK.md` (4.32), `V2_DECISION_LOG.md`
+    (D-V2-71), `V2_LOG.md`, `V2_SECURITY_MODEL.md` (§10) — (6)
   M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,468 nodes, 12,832 edges); `doctor --check` ok, all
@@ -666,16 +676,22 @@ it on `origin` was made in the cloud and is listed below.
   terminal's title and forged a host line, plain and under `--sandbox`; a refused path; a test's name; a quoted
   line); green after; M7–M12 red, restored byte for byte; clippy clean; the full suite alone 2,043 passed,
   1 failed (the core-invariance snapshot — one reviewed line, re-recorded, green), 15 ignored (153 binaries).
+  **(4):** the relay's four witnesses red on `6cd68c8`; green after; M13–M17 red (M16 only once the last-line
+  witness held its window open); clippy clean; `check-other-os.sh` clean; the full suite alone 2,048 passed,
+  0 failed, 15 ignored (153 binaries), cargo exit 0. `witness.yml` at `ac65c0e`, six targets: Linux x86-64
+  `36599642591` and macOS `36599633669` green; Windows `36599638102` red on one test — TERMINAL-TEXT-1's
+  refusal witness (a `:` in its path, DL0904 on Windows first) — fixed by (5), read green `36600749661`.
 - Redo on the laptop: the suite on Windows and in WSL (the launcher path changed on every OS; WSL runs the
   `fexecve` path and the swap witness).
 - For the laptop's memory: `HANDOFF.md` §11.4 (LAUNCHER-SPELL-1) and §11.5 (`environ` in a `pre_exec` step;
   holding a race's window open with work the code does anyway); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Push runs read: (2) `3489b57` `36596687623` — success on every job. (3): see the follow-up line, or the next run's entry.
-- Open / next: (1) read (2)'s and (3)'s push runs if this entry does not; (2) RW 4.32's relay — an ESCAPED
-  guest's standard error and the microVM's console still reach the terminal raw (TERMINAL-TEXT-1 escaped the
-  guest's own fault line; the relay is the rest) — and RW 4.34's line break in a message; (3) E-04's remainder
+- Push runs read: (2) `3489b57` `36596687623` — success on every job. (3) `6cd68c8` `36599039239` — **failure, one job of 16:** `test (windows-latest)`, one test — TERMINAL-TEXT-1's refusal witness (a `:` in its path; DL0904 on Windows first, its message escaped); every other test on Windows passed, every other job green; fixed by (5), read green on Windows first (`36600749661`).
+  (6): see the follow-up line, or the next run's entry.
+- Open / next: (1) read (6)'s push run if this entry does not; (2) RW 4.32's rest — the microVM's console relay
+  (still raw, capped; its witness needs the KVM job), the per-frame deadline, the accepted words in the death
+  record — and RW 4.34's line break in a message; (3) E-04's remainder
   — Windows deny-write (needs a witness first), the attestation binding a digest the attester measured; (4) run
   3's inbox: PS-E-03 H6 (macOS
   and Windows under the escaped-guest harness), the red-team pass on the filter by hand, RW 4.32's stderr relay
   and `setsid`, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
-  P9. **For the owner:** D-V2-69 and D-V2-70 are this run's decisions.
+  P9. **For the owner:** D-V2-69, D-V2-70 and D-V2-71 are this run's decisions.
