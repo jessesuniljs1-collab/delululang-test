@@ -1,0 +1,65 @@
+# A witness on one operating system, by hand (routine run 3, 2026-09-29 — loop engineering).
+#
+# AGENTS.md: witness a defect failing BEFORE fixing it. A defect that lives only on macOS or Windows
+# can be witnessed only on a runner, and the push run's whole matrix is the slow way to do it — and the
+# wrong place, because a red witness pushed to `master` turns master red. So: push the witness alone
+# to a branch, dispatch this at that branch, read it RED; add the fix, dispatch again, read it GREEN;
+# only then does either reach `master`. It runs ONE test target of ONE package on ONE runner.
+#
+# The inputs reach the script through the environment, never spliced into it (a dispatcher's text is
+# data, not shell). Runs only by hand; it gates nothing and publishes nothing.
+name: witness
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "The runner"
+        type: choice
+        options: [macos-latest, windows-latest, ubuntu-24.04, ubuntu-24.04-arm]
+        default: macos-latest
+      package:
+        description: "The cargo package"
+        type: string
+        default: delulu
+      target:
+        description: "The test target (an integration test's file name without .rs), or `lib` for the unit tests"
+        type: string
+        required: true
+      filter:
+        description: "A test-name filter (empty: every test in the target)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  witness:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The test job's Python, so the binary under test is the one the push run builds.
+      - uses: actions/setup-python@v6
+        if: inputs.os != 'ubuntu-24.04-arm'
+        with:
+          python-version: "3.13"
+      # As the test job does on Linux x86-64 (PS-B-03b): a guest there gets a subordinate uid.
+      - name: Allow unprivileged user namespaces (Linux x86-64)
+        if: inputs.os == 'ubuntu-24.04'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          echo "DELULU_REQUIRE_SUBORDINATE_UID=1" >> "$GITHUB_ENV"
+      - name: The witness
+        shell: bash
+        env:
+          PKG: ${{ inputs.package }}
+          TARGET: ${{ inputs.target }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          if [ "$TARGET" = lib ]; then sel=(--lib); else sel=(--test "$TARGET"); fi
+          echo "cargo test -p $PKG ${sel[*]} -- $FILTER --nocapture"
+          cargo test -p "$PKG" "${sel[@]}" -- "$FILTER" --nocapture

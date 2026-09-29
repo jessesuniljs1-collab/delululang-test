@@ -41,7 +41,10 @@ everything using survey and doctor"*).
   `gh api repos/jessesuniljs1-collab/delululang-test/actions/jobs/<job-id>/logs`. Manual runs:
   `gh workflow run ci.yml --ref <branch> -f jobs=everything|heavy|heavy-gates|miri-slow`; also
   `release.yml` (a dry run unless a `v*` tag — never push a tag), `channel-measure.yml`,
-  `host-capability-probe.yml`.
+  `host-capability-probe.yml`; and **`witness.yml`** — one test target on one runner at any ref
+  (`-f os=macos-latest -f target=<test file> -f filter=<name>`), for a macOS- or Windows-only witness
+  read red on a branch before its fix reaches `master` (`docs/CLOUD_ROUTINE.md` step 5). macOS code is
+  linted in the VM first with `scripts/check-macos.sh`.
 - A background job can be stopped if the VM runs short of memory: run the full suite alone, `-j 4`.
 
 ## Commits

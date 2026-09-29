@@ -376,3 +376,24 @@ it on `origin` was made in the cloud and is listed below.
   attested L3 can satisfy `hostile-agent`), then `contained`'s set once macOS's gaps close; (4) E-03 …
   E-06, P8, P9; RW 4.32's channel hygiene. **For the
   owner:** D-V2-59 narrows D-V2-53 §2 (flagged); D-V2-49 and D-V2-53's consequence stay flagged.
+
+### 2026-09-29 — routine run 3: a one-runner witness workflow; macOS linted from Linux; PS-E-02's macOS half
+- Session: `https://claude.ai/code/session_011rtmJDeAZtHQ5iCE18Pofo`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there); red witnesses on `claude/wonderful-hamilton-mjutjd` first   Pull request: none   Merged: n/a
+- Base: `7b9aac8` (routine run 2's last commit)
+- Commits: (1) `witness.yml` and `scripts/check-macos.sh` — CI-only witnesses off `master` (this commit)
+- Files and folders:
+  A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand
+  A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux
+  M `docs/CLOUD_ROUTINE.md` (step 5: a CI-only witness, red on a branch first), `CLAUDE.md` (the manual
+    runs), `docs/REPOSITORY_STRUCTURE.md` (both rows) — (1)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,466 nodes, 12,743 edges); `doctor --check` ok,
+  all checks pass (26 in this VM). After each slice: in its commit message.
+- Verified: routine run 2's last push run, `7b9aac8` `36494315402` — success (read by id). No nightly
+  since `36402530469`. (1): `witness.yml` parses; `scripts/check-macos.sh` clean on both macOS targets
+  at `7b9aac8`, and red (E0308) with a macOS-only type error planted in `jail.rs`, restored.
+- Redo on the laptop: nothing yet.
+- For the laptop's memory: nothing yet.
+- Open / next: this run is in progress.

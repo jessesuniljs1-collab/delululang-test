@@ -283,6 +283,8 @@ DeluluLang/
 │   │                               #   workflow runs this same script; it names the build's commit)
 │   ├── check-install.sh            # [P5-05] the install gate: runs INSTALL.md's `install-gate` block,
 │   │                               #   read out of the page, against a real archive
+│   ├── check-macos.sh              # clippy -D warnings for macOS from Linux (a stand-in C compiler;
+│   │                               #   compiled, never run) — routine run 3's loop engineering
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact
 │                                   #   exit code. It was performed by hand every pass before
@@ -304,6 +306,8 @@ DeluluLang/
 ├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
 ├── .github/workflows/              # the three-OS CI matrix (live since 2026-09-14; runs recorded in CROSS_PLATFORM_VERIFICATION §9)
+│                                   #   `witness.yml`: one test on one runner at any ref, by hand — a
+│                                   #   macOS/Windows witness read red on a branch before its fix
 │                                   #   + release.yml [P5, D-V2-42]: the archive on four targets, installed
 │                                   #   as INSTALL.md says; publishes nothing without a tag AND the owner's
 │                                   #   `RELEASES` switch, and then only a draft
