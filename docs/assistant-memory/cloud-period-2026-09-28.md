@@ -63,6 +63,10 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   a stand-in C compiler; libffi-sys's build script replaced through its `links` key). PS-E-02 on macOS: a computing guest outlived a killed host (red on a runner);
   a watcher OUTSIDE the guest (`__host_watch`, kqueue on the host's pipe and the guest's exit) ends it
   and the external launcher (D-V2-60) — not a thread in the guest, which an escaped guest could stop.
+- **Routine run 3, later:** PS-E-02 complete (Windows launcher: kill-on-close job); PS-E-03's escaped-guest
+  harness (`jail::escaped_tests`) confirmed H1–H5 and found H7–H10 (terminal read, TIOCSTI keystrokes,
+  signals, other processes) — all closed with mutants (D-V2-61–D-V2-66); `master` red once on macOS (a raw
+  `Broken pipe` a timing change exposed), fixed at its cause.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

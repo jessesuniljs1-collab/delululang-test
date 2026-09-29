@@ -827,6 +827,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   watcher was read green on three targets; a fourth, `sandbox_external_cli`, went red on `master` — the
   watcher's start changed a race's winner and a raw `Broken pipe (os error 32)` reached the operator.
   `witness.yml` takes several targets, or `all`.
+- **A probe that parses its own output must fail on an attempt it did not hear** (routine run 3): the
+  escaped-guest harness lost its first `NAME=` line to libtest's name line, and a key filter without
+  digits dropped `CLONE3` — both would have passed as "nothing reached". Unreported now fails.
+- **A pin can find the defect** (routine run 3): a test written to prove H5 already held went red — the
+  posture matched "no file writes" INSIDE "no file writes but truncation". Write the pin even when reading
+  says it holds.
+- **Two checkouts sharing one `CARGO_TARGET_DIR` share `target/debug/delulu`** (routine run 3): the last
+  build wins, so the other tree's integration tests can run the wrong binary. Give a worktree its own
+  target, or rebuild (`touch src/main.rs`) before testing. And `a && b && (suite) &` backgrounds the WHOLE
+  chain — its first commands' output is lost.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

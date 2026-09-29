@@ -398,7 +398,8 @@ it on `origin` was made in the cloud and is listed below.
   (13) `e584f8d` PS-E-03 H8: an escaped guest cannot type into the operator's terminal (D-V2-63); H4's records;
   (14) `407e423` PS-E-03 H9: an escaped guest signals only itself (D-V2-64);
   (15) `be749d1` PS-E-03 H10: an escaped guest changes no other process (D-V2-65);
-  (16) `PS-E-03 H5: writes are denied only where truncation is too (D-V2-66); the run closed`
+  (16) `33c20e5` PS-E-03 H5: writes are denied only where truncation is too (D-V2-66); routine run 3's records;
+  (17) `Routine run 3 closed: every push run read; master green at 33c20e5` — its last lines
 - Files and folders:
   A `.github/workflows/witness.yml` — (1) one test target on one runner at any ref, by hand; (4) `bin:NAME`
   A `scripts/check-macos.sh` — (1) clippy `-D warnings` for `aarch64`/`x86_64-apple-darwin` from Linux;
@@ -450,6 +451,8 @@ it on `origin` was made in the cloud and is listed below.
     `lock_down_self`: the setters and the `prlimit64` rule), `CHANGELOG.md`, `HANDOFF.md`,
     `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-65), `V2_LOG.md`, `V2_PHASE_STATUS.md`,
     `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10 — (15)
+  M `HANDOFF.md` §11.5 (three more lessons), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+    `docs/CLOUD_ROUTINE.md` (a run's completion from `get_workflow_run_usage`), `V2_LOG.md` — (17)
   M `crates/delulu/src/policy.rs` (`exact` for "no file writes"), `crates/delulu/src/boundary.rs` (the H5 pin),
     `CHANGELOG.md`, `HANDOFF.md`, `docs/REMAINING_WORK.md` (4.27), `V2_DECISION_LOG.md` (D-V2-66), `V2_LOG.md`
     (H5; the run closed), `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.3, `V2_SECURITY_MODEL.md` §10,
@@ -517,10 +520,13 @@ it on `origin` was made in the cloud and is listed below.
   green after; the full suite alone 2,028 passed, 0 failed, 15 ignored (152 binaries), cargo exit 0.
 - Redo on the laptop: (9) changes the Linux guest's own lock-down — **rebuild the WSL microVM guest images**
   (the VM guest applies the same filter) and run the suite in WSL; Windows: nothing new beyond the suite.
-- For the laptop's memory: `HANDOFF.md` §11.5 (two lessons: CI-only witnesses off `master`; a claimed
-  guarantee needs its own witness); `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
-- Push runs read: `a39b423` `36526041627` success; `3ec690b` `36527491801` **failure** (macOS `sandbox_external_cli`, a raw `Broken pipe` — fixed in `ff251bb`); `c9739db` `36529103180` **failure** (the same); `30e3262` `36531207166` success (every job — `master` green again); `e584f8d` `36533139190` success; `407e423`, `be749d1` and this entry's commit — running as it was written (Open / next (1))
-- Open / next: (1) read the push runs this entry names as unread, first; (2) **PS-E-03's rest** — H5 (the
+- For the laptop's memory: `HANDOFF.md` §11.4 (the run's findings) and §11.5 (the lessons: CI-only
+  witnesses off `master`; a green read covers every target; `git stash pop`; a probe fails on what it did not
+  hear; a pin can find the defect; a shared `CARGO_TARGET_DIR`; a claimed guarantee needs its own witness);
+  `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 3).
+- Push runs read: `a39b423` `36526041627` success; `3ec690b` `36527491801` **failure** (macOS `sandbox_external_cli`, a raw `Broken pipe` — fixed in `ff251bb`); `c9739db` `36529103180` **failure** (the same); `30e3262` `36531207166` success (every job — `master` green again); `e584f8d` `36533139190` success; `407e423` `36533983121` success; `be749d1` `36534873999` success; `33c20e5` `36535808138` success —
+  every push run of this run read; `master` green at `33c20e5`. Only (17)'s own run is left to the next run
+- Open / next: (1) read (17)'s push run first — the only one this run did not read (records only); (2) **PS-E-03's rest** — H5 (the
   Landlock ABI as a `hostile-agent` requirement; the report states the effective ABI), H6 (the escaped-guest
   harness on macOS and Windows through `witness.yml`: Seatbelt's and the AppContainer's reach), and a
   **red-team pass on the new filter** (a Sonnet 5.5 sous-chef adding attempts to a copy of

@@ -3054,3 +3054,6 @@ and found H7, H8 (keystrokes into the operator's terminal), H9 (signals) and H10
 closed, each with mutants — and H4 (the host non-dumpable) as a non-root user. `master` went red once
 (`3ec690b`/`c9739db`, macOS, a raw `Broken pipe`), was read, fixed at its cause and read green
 (`36531207166`). Push runs: `a39b423` `36526041627` success; `3ec690b` `36527491801` **failure** (macOS `sandbox_external_cli`, a raw `Broken pipe` — fixed in `ff251bb`); `c9739db` `36529103180` **failure** (the same); `30e3262` `36531207166` success (every job — `master` green again); `e584f8d` `36533139190` success; `407e423`, `be749d1` and this entry's commit — running as it was written (Open / next (1))
+
+**Every push run read (07:34 UTC):** `407e423` `36533983121`, `be749d1` `36534873999`, `33c20e5` `36535808138`
+— success. `master` is green at `33c20e5`; the only run left unread is the closing commit's own.
