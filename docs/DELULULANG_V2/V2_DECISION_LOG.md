@@ -1344,6 +1344,19 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 3. **Landlock's signal scoping (ABI 6) is not what closes it:** CI's Ubuntu 24.04 kernels predate it, and the
    filter holds on every kernel the guest runs on. Where ABI 6 exists it would be depth.
 
+## D-V2-65 — PS-E-03 H10: an escaped guest changes no other process — TAKEN (head chef, 2026-09-29, under the owner's delegation)
+
+1. **H10, found and confirmed the same run:** beside signals, the calls that act on another process of the
+   same user by pid — its resource limits (`prlimit64`), priority (`setpriority`), CPUs
+   (`sched_setaffinity`), scheduling class (`sched_setscheduler`), I/O priority (`ioprio_set`) — all
+   succeeded on the operator's process after the guest's lock-down (GUEST-PROCESS-1; witnessed by setting
+   each to the value it already had, so nothing was changed).
+2. **The setters are refused outright** — with `sched_setparam`, `sched_setattr` and `process_madvise` — since
+   a guest sets none of them even on itself; **`prlimit64` is refused unless it names the guest** (0 or its
+   own pid), because the C library reads its own limits through it (the witness's control, `PRLIMIT_SELF`).
+3. The class — "an escaped guest acts on another process of its user" — is now covered for signals (H9) and
+   these; `ptrace`, `process_vm_*` and `pidfd_*` were already refused.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

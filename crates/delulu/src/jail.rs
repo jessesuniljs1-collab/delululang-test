@@ -609,6 +609,17 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
         libc::SYS_open_tree,
         libc::SYS_mount_setattr,
         libc::SYS_kexec_file_load,
+        // H10 (GUEST-PROCESS-1): the calls that ACT on another process of the same user and name it by pid —
+        // its priority, CPUs, scheduling class, I/O priority, memory advice. An escaped guest set each one
+        // on the operator's process; a guest sets none of them even on itself. (`prlimit64` is ruled below:
+        // the C library reads its own limits through it.)
+        libc::SYS_setpriority,
+        libc::SYS_sched_setaffinity,
+        libc::SYS_sched_setscheduler,
+        libc::SYS_sched_setparam,
+        libc::SYS_sched_setattr,
+        libc::SYS_ioprio_set,
+        libc::SYS_process_madvise,
         libc::SYS_execve,
         libc::SYS_execveat,
         libc::SYS_ptrace,
@@ -698,6 +709,15 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
         rules.insert(call, vec![not_self()?]);
     }
     rules.insert(libc::SYS_tkill, Vec::new());
+    // H10: `prlimit64` on a process other than itself (0 or its own pid) is refused — an escaped guest lowered
+    // the operator's process's limits through it; its own, the C library still reads.
+    let not_self_nor_zero = [0, own]
+        .iter()
+        .map(|v| seccompiler::SeccompCondition::new(0, seccompiler::SeccompCmpArgLen::Dword, seccompiler::SeccompCmpOp::Ne, *v))
+        .collect::<Result<Vec<_>, _>>()
+        .and_then(seccompiler::SeccompRule::new)
+        .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
+    rules.insert(libc::SYS_prlimit64, vec![not_self_nor_zero]);
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
     // guest reports a refusal instead of vanishing and leaving the host to guess.
     let filter = SeccompFilter::new(
@@ -1323,6 +1343,33 @@ mod escaped_tests {
             // The guest must still be able to signal ITSELF: `abort` is a signal to itself.
             println!("SIGNAL_SELF={}", libc::kill(libc::getpid(), 0) == 0);
         }
+        // H10 — the other calls that ACT on another process of the same user: its resource limits, its
+        // priority, its CPUs, its scheduling class, its I/O priority. Each is set to the value it already
+        // has, read first, so nothing is changed even unconfined — and a refused read sets nothing.
+        // SAFETY: each call is given buffers of the size it names; values are only ever written back as read.
+        unsafe {
+            let mut lim: libc::rlimit64 = std::mem::zeroed();
+            let read = libc::prlimit64(pid, libc::RLIMIT_CORE, std::ptr::null(), &mut lim) == 0;
+            println!("PRLIMIT_OTHER={}", read && libc::prlimit64(pid, libc::RLIMIT_CORE, &lim, std::ptr::null_mut()) == 0);
+            *libc::__errno_location() = 0;
+            let nice = libc::getpriority(libc::PRIO_PROCESS, pid as libc::id_t);
+            let read = *libc::__errno_location() == 0;
+            println!("PRIORITY_OTHER={}", read && libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, nice) == 0);
+            let mut cpus: libc::cpu_set_t = std::mem::zeroed();
+            let size = std::mem::size_of::<libc::cpu_set_t>();
+            let read = libc::sched_getaffinity(pid, size, &mut cpus) == 0;
+            println!("AFFINITY_OTHER={}", read && libc::sched_setaffinity(pid, size, &cpus) == 0);
+            // Zeroed rather than spelled: musl's `sched_param` has fields glibc's has not.
+            let param: libc::sched_param = std::mem::zeroed();
+            let policy = libc::sched_getscheduler(pid);
+            println!("SCHEDULER_OTHER={}", policy == libc::SCHED_OTHER && libc::sched_setscheduler(pid, libc::SCHED_OTHER, &param) == 0);
+            // `ioprio_get`/`ioprio_set` for a process (`IOPRIO_WHO_PROCESS` is 1).
+            let prio = libc::syscall(libc::SYS_ioprio_get, 1, pid);
+            println!("IOPRIO_OTHER={}", prio >= 0 && libc::syscall(libc::SYS_ioprio_set, 1, pid, prio) == 0);
+            // The guest's own limits stay readable: the C library asks for its stack limit.
+            let mut own: libc::rlimit64 = std::mem::zeroed();
+            println!("PRLIMIT_SELF={}", libc::prlimit64(0, libc::RLIMIT_STACK, std::ptr::null(), &mut own) == 0);
+        }
         // What the guest itself must keep, or it cannot run: the control of any narrowing.
         println!("PROC_SELF={}", std::fs::read("/proc/self/status").is_ok());
         println!("DEV_NULL={}", std::fs::File::open("/dev/null").is_ok());
@@ -1399,6 +1446,7 @@ mod escaped_tests {
         assert_eq!(escaped.get("PROC_SELF").map(String::as_str), Some("true"), "the guest cannot read itself: {escaped:?}");
         assert_eq!(escaped.get("DEV_NULL").map(String::as_str), Some("true"), "the guest cannot open /dev/null: {escaped:?}");
         assert_eq!(escaped.get("SIGNAL_SELF").map(String::as_str), Some("true"), "the guest cannot signal itself: {escaped:?}");
+        assert_eq!(escaped.get("PRLIMIT_SELF").map(String::as_str), Some("true"), "the guest cannot read its own limits: {escaped:?}");
         let mut open = Vec::new();
         for n in names {
             match (free.get(*n).map(String::as_str), escaped.get(*n).map(String::as_str)) {
@@ -1449,6 +1497,15 @@ mod escaped_tests {
     #[test]
     fn h9_an_escaped_guest_signals_no_other_process() {
         let Some(open) = still_open("h9", &["SIGNAL_OTHER", "SIGNAL_GROUP", "SIGNAL_QUEUE"]) else { return };
+        assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
+    }
+
+    /// H10: an escaped guest cannot act on another process of the operator's by any other call either —
+    /// lower its limits, its priority or its I/O priority, pin it to one CPU, or change its scheduling.
+    #[test]
+    fn h10_an_escaped_guest_changes_no_other_process() {
+        let names = ["PRLIMIT_OTHER", "PRIORITY_OTHER", "AFFINITY_OTHER", "SCHEDULER_OTHER", "IOPRIO_OTHER"];
+        let Some(open) = still_open("h10", &names) else { return };
         assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
     }
 

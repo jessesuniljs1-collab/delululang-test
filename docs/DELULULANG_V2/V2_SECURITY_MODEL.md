@@ -253,7 +253,8 @@ other process's `/proc` entry (GUEST-PROC-1) and no device but null, zero, full 
 (GUEST-DEV-1), and makes none of the unnamed calls or a namespace through `clone` (GUEST-SYSCALL-1); and
 a serving Linux host is closed to its own user — non-dumpable once its guest is launched
 (HOST-DUMPABLE-1, D-V2-62); an escaped guest cannot type into the operator's terminal (GUEST-TIOCSTI-1,
-D-V2-63); and it signals no process but itself (GUEST-SIGNAL-1, D-V2-64). Not yet: the Landlock ABI as a requirement (H5), macOS and Windows under the
+D-V2-63); it signals no process but itself (GUEST-SIGNAL-1, D-V2-64) and changes no other process's
+limits, priority, CPUs or scheduling (GUEST-PROCESS-1, D-V2-65). Not yet: the Landlock ABI as a requirement (H5), macOS and Windows under the
 same harness (H6).
 
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified

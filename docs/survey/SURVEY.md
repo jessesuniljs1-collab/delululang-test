@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 287 |
-| Rust lines | 148161 |
+| Rust lines | 148218 |
 | Rust files outside `src/` (test/bench targets) | 129 |
 | Markdown documents | 252 |
-| Markdown lines | 66173 |
+| Markdown lines | 66218 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1468 / 12787 |
+| Nodes / edges in this map | 1468 / 12789 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 39 files, 36064 lines
+- **Modules:** 39 files, 36121 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -117,7 +117,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/guest.rs` | 2323 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
-| `src/jail.rs` | 1507 | PS-A-04: the OS jail around a sandbox guest. |
+| `src/jail.rs` | 1564 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1995 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 99 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |

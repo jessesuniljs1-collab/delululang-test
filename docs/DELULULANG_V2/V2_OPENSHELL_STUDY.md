@@ -311,8 +311,9 @@ ENOSYS); Landlock grants `/proc/self` and five devices — each with a mutant. *
 (D-V2-63):** the guest shares its host's session, so the operator's terminal is its controlling terminal,
 and an escaped guest pushed keystrokes into it with `TIOCSTI` (GUEST-TIOCSTI-1) — closed in the filter,
 compared on the command's low 32 bits. **H9, the same run (D-V2-64):** it could signal any process of the
-same user — its host's process group, or `kill(-1)` (GUEST-SIGNAL-1); now it signals only itself. Open: H5,
-H6.
+same user — its host's process group, or `kill(-1)` (GUEST-SIGNAL-1); now it signals only itself. **H10
+(D-V2-65):** and it could change their limits, priority, CPUs and scheduling (GUEST-PROCESS-1) — refused.
+Open: H5, H6.
 
 ### 4.4 PS-E-04 — the external launcher is resolved once, hashed, and optionally pinned
 

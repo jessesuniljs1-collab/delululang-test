@@ -3010,3 +3010,20 @@ The control `SIGNAL_SELF` — a guest must still signal itself, as `abort` does 
 
 **Verified:** clippy `-D warnings` clean on Linux, arm64 Linux and musl; the full suite alone: 2,027 passed,
 0 failed, 15 ignored (152 binaries), cargo exit 0.
+
+## 2026-09-29 — routine run 3: PS-E-03 H10 — an escaped guest could change the operator's processes (D-V2-65)
+
+**The rest of H9's class:** the calls that act on another process by pid. **Witness**
+`h10_an_escaped_guest_changes_no_other_process` (`jail::escaped_tests`), each call setting the value it just
+read, so nothing is changed: **red** on `407e423` — `PRLIMIT_OTHER`, `PRIORITY_OTHER`, `AFFINITY_OTHER`,
+`SCHEDULER_OTHER`, `IOPRIO_OTHER` — **GUEST-PROCESS-1**: an escaped guest could lower the operator's
+processes' limits and priorities, pin them to one CPU, or change their scheduling.
+
+**Fixed** (`lock_down_self`): `setpriority`, `sched_setaffinity`, `sched_setscheduler`, `sched_setparam`,
+`sched_setattr`, `ioprio_set`, `process_madvise` refused; `prlimit64` refused unless its pid is 0 or the
+guest's own (the C library reads its own stack limit — the control `PRLIMIT_SELF`). **Mutants:** M11 (the
+setters allowed) red on four; M12 (`prlimit64` allowed) red on `PRLIMIT_OTHER`; M13 (pid 0 refused too) red on
+the control. The musl lint caught the witness's `sched_param` spelled glibc's way (musl's has more fields).
+
+**Verified:** clippy `-D warnings` clean on Linux, arm64 Linux and musl; the full suite alone: 2,028 passed,
+0 failed, 15 ignored (152 binaries), cargo exit 0.
