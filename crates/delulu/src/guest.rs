@@ -165,7 +165,22 @@ fn launch_external(
         };
         io::Error::other(format!("the external launcher `{program}` could not be started: {why}"))
     })?;
-    Ok((Guest::External(child), crate::jail::Jail::none(), Vec::new()))
+    // PS-E-02 on macOS, which has no death signal: the watcher that ends a jailed guest with its host
+    // ends the launcher (D-V2-60). Nothing is claimed for it either way — the level stays 3.
+    #[cfg(target_os = "macos")]
+    let jail = match std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|exe| crate::jail::HostWatch::start(&exe, &child, CONNECT_DEADLINE))
+    {
+        Ok(watch) => crate::jail::Jail::none().watched_by(watch),
+        Err(why) => {
+            eprintln!("sandbox: the external launcher will not be ended if this host dies ({why})");
+            crate::jail::Jail::none()
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let jail = crate::jail::Jail::none();
+    Ok((Guest::External(child), jail, Vec::new()))
 }
 
 /// Run as the guest. Returns the process exit status.
@@ -1571,6 +1586,22 @@ fn launch(
         let _ = child.wait();
         return Err(io::Error::other("the sandbox guest could not be started under its jail"));
     }
+    // PS-E-02 (D-V2-60): on macOS nothing in the kernel ends the guest with its host; a watcher outside
+    // it does, and "killed with the host" is claimed only once the watcher says it is armed. The guest is
+    // still waiting for its channel here, so no program byte exists in it yet.
+    #[cfg(target_os = "macos")]
+    let jail = match crate::jail::HostWatch::start(exe, &child, CONNECT_DEADLINE) {
+        Ok(watch) => {
+            applied.push("killed with the host");
+            jail.watched_by(watch)
+        }
+        Err(why) => {
+            if !capture_stderr {
+                eprintln!("sandbox: nothing will end the guest if this host dies ({why})");
+            }
+            jail
+        }
+    };
     Ok((Guest::Plain(child), jail, applied))
 }
 

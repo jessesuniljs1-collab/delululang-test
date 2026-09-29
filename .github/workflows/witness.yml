@@ -23,7 +23,7 @@ on:
         type: string
         default: delulu
       target:
-        description: "The test target (an integration test's file name without .rs), or `lib` for the unit tests"
+        description: "The test target: an integration test's file name without .rs; `lib`; or `bin:NAME` for a binary's unit tests"
         type: string
         required: true
       filter:
@@ -60,6 +60,10 @@ jobs:
           TARGET: ${{ inputs.target }}
           FILTER: ${{ inputs.filter }}
         run: |
-          if [ "$TARGET" = lib ]; then sel=(--lib); else sel=(--test "$TARGET"); fi
+          case "$TARGET" in
+            lib) sel=(--lib) ;;
+            bin:*) sel=(--bin "${TARGET#bin:}") ;;
+            *) sel=(--test "$TARGET") ;;
+          esac
           echo "cargo test -p $PKG ${sel[*]} -- $FILTER --nocapture"
           cargo test -p "$PKG" "${sel[@]}" -- "$FILTER" --nocapture

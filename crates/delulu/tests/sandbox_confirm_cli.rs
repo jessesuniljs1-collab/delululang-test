@@ -451,7 +451,8 @@ fn guest_of(host: u32) -> Option<u32> {
 /// running the program, asking the host for nothing — ends when its host is killed. It is the case the
 /// channel cannot cover: an idle channel never fails under a guest that does not read it. Linux ends it
 /// with `PR_SET_PDEATHSIG`, Windows with the job's kill-on-close; on macOS nothing did, and the orphan
-/// lived until its processor-time ceiling (five minutes by default) — red on `a39b423` (`witness.yml`).
+/// lived until its processor-time ceiling (five minutes by default) — red on `2d08622` (`witness.yml` run
+/// 36526271163: "outlived its host by more than 3.15 s"). Now a watcher outside the guest ends it (D-V2-60).
 /// Measured from outside both: the guest's pid, gone within 3 s of the host's SIGKILL.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
@@ -510,7 +511,8 @@ fn a_computing_guest_ends_when_its_host_is_killed() {
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), for an external launcher: the launcher ends when its host is
 /// killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none, so a host
 /// killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host). Linux got the
-/// death signal then; macOS has none, and this is its witness too.
+/// death signal then; macOS has none, and was red on `9c38027` (`witness.yml` run 36526351005) until the
+/// guest's watcher ended the launcher too (D-V2-60).
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn an_external_launcher_ends_when_its_host_is_killed() {

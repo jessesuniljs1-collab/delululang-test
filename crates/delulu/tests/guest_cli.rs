@@ -101,6 +101,10 @@ fn the_run_reports_what_the_jail_enforced() {
     if cfg!(windows) {
         assert!(err.contains("one process only"), "{err}");
     }
+    // PS-E-02 (D-V2-60): on macOS a watcher outside the guest, claimed only once it is armed.
+    if cfg!(target_os = "macos") {
+        assert!(err.contains("killed with the host"), "{err}");
+    }
     if cfg!(target_os = "linux") {
         assert!(err.contains("no privilege escalation"), "{err}");
         assert!(err.contains("killed with the host"), "{err}");

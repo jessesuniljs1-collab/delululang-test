@@ -385,20 +385,24 @@ mod property_tests {
         assert!(v["egress_confinement"]["why"].as_str().unwrap().contains("network: not confined"), "{v}");
         assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
 
-        // macOS L1: Seatbelt denies writes and the network, but reads stay open, no memory ceiling is
-        // claimed (RLIMIT_DATA is refused there) and nothing ends the guest with its host (PS-E-02).
+        // macOS L1: Seatbelt denies writes and the network, but reads stay open and no memory ceiling is
+        // claimed (RLIMIT_DATA is refused there). Since PS-E-02 (D-V2-60) a watcher outside the guest ends
+        // it with its host, claimed once the watcher is armed; a run whose watcher did not arm says so.
         let macos = [
             "deny by default", "no file writes", "no network but the channel", "no new programs", "no Mach services",
-            "no signals or process info beyond itself", "processor-time ceiling", "no core dump",
+            "no signals or process info beyond itself", "processor-time ceiling", "no core dump", "killed with the host",
         ];
         let v = properties(&macos, true);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
         assert_eq!(state_of(&v, "privilege_floor"), "established", "{v}");
-        assert_eq!(state_of(&v, "host_loss_ends_guest"), "absent", "{v}");
-        assert!(v["host_loss_ends_guest"]["why"].as_str().unwrap().contains("PS-E-02"), "{v}");
+        assert_eq!(state_of(&v, "host_loss_ends_guest"), "established", "{v}");
         assert_eq!(state_of(&v, "resource_ceiling"), "absent", "{v}");
         assert!(v["resource_ceiling"]["why"].as_str().unwrap().contains("memory: not confined"), "{v}");
+        let unwatched: Vec<&str> = macos.iter().copied().filter(|w| *w != "killed with the host").collect();
+        let v = properties(&unwatched, true);
+        assert_eq!(state_of(&v, "host_loss_ends_guest"), "absent", "{v}");
+        assert!(v["host_loss_ends_guest"]["why"].as_str().unwrap().contains("PS-E-02"), "{v}");
 
         // Windows L1: the Job Object and a per-run AppContainer — the identity is the privilege floor.
         let windows = ["one process only", "memory ceiling", "processor-time ceiling", "killed with the host", crate::identity::WINDOWS_GUARANTEE];

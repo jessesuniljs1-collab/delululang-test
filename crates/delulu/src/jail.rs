@@ -234,7 +234,9 @@ pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static 
 /// it exits. But a guest that is COMPUTING and asking for nothing never notices the host is gone, and
 /// the channel it would fail on is idle. On Linux `PR_SET_PDEATHSIG` and `RLIMIT_CPU` both cover that;
 /// on Windows the Job Object's kill-on-close does. On macOS there is no `PDEATHSIG`, so the
-/// processor-time ceiling IS the bound on a spinning orphan — and without it the bound was "for ever".
+/// processor-time ceiling WAS the bound on a spinning orphan — and without it the bound was "for ever".
+/// Since PS-E-02 (D-V2-60) a watcher outside the guest ends it with its host ([`HostWatch`]); the ceiling
+/// stays the bound should the watcher itself be gone.
 ///
 /// Both claims are measured, and the one that is not claimed is measured too (experiment run
 /// 35480762820, `macos-rlimit-enforcement`):
@@ -269,6 +271,169 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
         });
     }
     vec!["processor-time ceiling", "no core dump"]
+}
+
+/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2, D-V2-60): on macOS nothing in the kernel ends a guest when its
+/// host dies — there is no `PR_SET_PDEATHSIG` and no job object — so a guest that computes and asks for
+/// nothing outlived a killed host until its processor-time ceiling (witnessed red on a macOS runner,
+/// `witness.yml`). A WATCHER takes the kernel's place: a small process of this binary, started by the
+/// host right after the guest, that waits on two things with `kqueue` — its standard input, a pipe only
+/// the host holds (end of file: the host is gone, by dying or by finishing), and the guest's exit
+/// (`EVFILT_PROC`/`NOTE_EXIT`). The host gone first ends the guest with SIGKILL; the guest gone first ends
+/// the watcher. Dropping the [`Jail`] that holds it closes the pipe, so — as the Windows job's
+/// kill-on-close does — a guest the host is finished with never outlives it.
+///
+/// It runs OUTSIDE the guest, not as a thread inside it (the design's first shape): a watcher in the
+/// guest is the guest's own word, and a guest that escapes the interpreter could stop it. Outside, the
+/// guest cannot reach it — its Seatbelt profile denies every signal. The guest's exit is registered
+/// while the host still holds the guest unreaped, so the pid it would kill is the guest's and no other.
+/// The guarantee is claimed only once the watcher says it is armed ([`HostWatch::start`]).
+#[cfg(target_os = "macos")]
+pub const HOST_WATCH_SUBCOMMAND: &str = "__host_watch";
+
+/// The byte a watcher writes once both of its waits are registered.
+#[cfg(target_os = "macos")]
+const WATCH_ARMED: u8 = 0x06;
+
+/// A running watcher, owned by the host for as long as it owns the guest.
+#[cfg(target_os = "macos")]
+pub struct HostWatch {
+    pipe: Option<std::process::ChildStdin>,
+    watcher: std::process::Child,
+}
+
+#[cfg(target_os = "macos")]
+impl HostWatch {
+    /// Start a watcher for `guest` and wait (within `deadline`) for it to say it is armed. On any failure
+    /// the watcher is ended FIRST, then its pipe closed, so a watcher that armed late cannot end a guest
+    /// the host goes on serving without the guarantee.
+    pub fn start(exe: &std::path::Path, guest: &std::process::Child, deadline: std::time::Duration) -> Result<HostWatch, String> {
+        use std::io::Read as _;
+        use std::os::fd::AsRawFd as _;
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg(HOST_WATCH_SUBCOMMAND)
+            .arg(guest.id().to_string())
+            .env_clear()
+            .current_dir("/")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        for name in crate::guest::LOADER_ENV {
+            if let Ok(v) = std::env::var(name) {
+                cmd.env(name, v);
+            }
+        }
+        let mut watcher = cmd.spawn().map_err(|e| format!("the watcher could not be started: {e}"))?;
+        let pipe = watcher.stdin.take();
+        let armed = watcher.stdout.take().is_some_and(|mut out| {
+            let mut p = libc::pollfd { fd: out.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            let ms = deadline.as_millis().min(i32::MAX as u128) as libc::c_int;
+            // SAFETY: one `pollfd` on a descriptor this function owns, for the length given.
+            let ready = unsafe { libc::poll(&mut p, 1, ms) } == 1;
+            let mut byte = [0u8; 1];
+            ready && matches!(out.read(&mut byte), Ok(1)) && byte[0] == WATCH_ARMED
+        });
+        if !armed {
+            let _ = watcher.kill();
+            let _ = watcher.wait();
+            drop(pipe);
+            return Err(format!("the watcher did not say it was armed within {deadline:?}"));
+        }
+        Ok(HostWatch { pipe, watcher })
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for HostWatch {
+    fn drop(&mut self) {
+        // The host is done with the guest: the pipe's end of file tells the watcher so. A guest already
+        // reaped was seen exiting first, and the watcher has gone or goes without acting.
+        drop(self.pipe.take());
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match self.watcher.try_wait() {
+                Ok(Some(_)) | Err(_) => return,
+                Ok(None) if std::time::Instant::now() >= until => {
+                    let _ = self.watcher.kill();
+                    let _ = self.watcher.wait();
+                    return;
+                }
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(5)),
+            }
+        }
+    }
+}
+
+/// `__host_watch <guest pid>` — the watcher's side of [`HostWatch`]. Exit 0 when it has done its work
+/// (the guest gone, or ended because the host was), 1 when it could not arm, 2 on a bad invocation.
+#[cfg(target_os = "macos")]
+pub fn run_host_watch(args: &[String]) -> i32 {
+    let [guest] = args else { return 2 };
+    let Ok(guest) = guest.parse::<libc::pid_t>() else { return 2 };
+    if guest <= 1 {
+        return 2;
+    }
+    let event = |ident: usize, filter: i16, fflags: u32| libc::kevent {
+        ident,
+        filter,
+        flags: libc::EV_ADD,
+        fflags,
+        data: 0,
+        udata: std::ptr::null_mut(),
+    };
+    // SAFETY: a kqueue this process owns, its own standard input and a plain `kill`; every buffer passed
+    // is a local array of the length given.
+    unsafe {
+        let kq = libc::kqueue();
+        if kq < 0 {
+            return 1;
+        }
+        let host = [event(0, libc::EVFILT_READ, 0)];
+        if libc::kevent(kq, host.as_ptr(), 1, std::ptr::null_mut(), 0, std::ptr::null()) != 0 {
+            return 1;
+        }
+        let exit = [event(guest as usize, libc::EVFILT_PROC, libc::NOTE_EXIT)];
+        if libc::kevent(kq, exit.as_ptr(), 1, std::ptr::null_mut(), 0, std::ptr::null()) != 0 {
+            // ESRCH: the guest is already gone, and there is nothing to watch.
+            return 1;
+        }
+        if libc::write(1, [WATCH_ARMED].as_ptr().cast(), 1) != 1 {
+            return 1;
+        }
+        libc::close(1);
+        let mut got: [libc::kevent; 2] = std::mem::zeroed();
+        loop {
+            let n = libc::kevent(kq, std::ptr::null(), 0, got.as_mut_ptr(), 2, std::ptr::null());
+            if n < 0 {
+                if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                // The kqueue failed under the watcher: the host is still here to end its guest itself.
+                return 1;
+            }
+            let seen = &got[..n as usize];
+            // The guest's exit first, whatever else arrived with it: then there is no guest to end.
+            if seen.iter().any(|e| e.filter == libc::EVFILT_PROC) {
+                return 0;
+            }
+            if seen.iter().any(|e| e.filter == libc::EVFILT_READ && e.flags & libc::EV_EOF != 0) {
+                // One last look, without waiting, for an exit that raced the end of file.
+                let zero = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+                let late = libc::kevent(kq, std::ptr::null(), 0, got.as_mut_ptr(), 2, &zero);
+                if late > 0 && got[..late as usize].iter().any(|e| e.filter == libc::EVFILT_PROC) {
+                    return 0;
+                }
+                libc::kill(guest, libc::SIGKILL);
+                return 0;
+            }
+            // Bytes on the pipe: the host writes none, so anything there is read and dropped.
+            let mut sink = [0u8; 64];
+            if libc::read(0, sink.as_mut_ptr().cast(), sink.len()) == 0 {
+                libc::kill(guest, libc::SIGKILL);
+                return 0;
+            }
+        }
+    }
 }
 
 /// Anywhere else the guest is confined only by the channel, and the run says so rather than implying
@@ -744,17 +909,31 @@ mod windows_tests {
 /// means the guest holds no DeluluLang authority.
 #[cfg(not(windows))]
 mod other {
-    pub struct Jail;
+    /// Nothing to hold on Linux (the kernel's death signal and limits need no handle); on macOS the
+    /// watcher that ends the guest with its host (PS-E-02, [`super::HostWatch`]), for as long as the host
+    /// holds the guest.
+    #[derive(Default)]
+    pub struct Jail {
+        #[cfg(target_os = "macos")]
+        watch: Option<super::HostWatch>,
+    }
 
     impl Jail {
         /// No jail: the guest is confined by something DeluluLang did not apply (PS-D-01, L3).
         pub fn none() -> Jail {
-            Jail
+            Jail::default()
+        }
+
+        /// This jail, now also holding the watcher that ends the guest with its host.
+        #[cfg(target_os = "macos")]
+        pub fn watched_by(mut self, watch: super::HostWatch) -> Jail {
+            self.watch = Some(watch);
+            self
         }
     }
 
     pub fn confine<T>(_child: &T, _limits: super::Limits) -> (Jail, super::Enforced) {
-        (Jail, super::Enforced::default())
+        (Jail::default(), super::Enforced::default())
     }
 }
 

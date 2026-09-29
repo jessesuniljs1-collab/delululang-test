@@ -1153,6 +1153,9 @@ fn run_inner(args: &[String]) -> i32 {
         // PS-C-03b: ends a jailed microVM's VMM when its host is gone. Linux only, like the jailer.
         #[cfg(target_os = "linux")]
         s if s == crate::microvm::REAPER_SUBCOMMAND => crate::microvm::run_reaper(rest),
+        // PS-E-02 (D-V2-60): ends a macOS guest when its host is gone, as Linux's death signal does.
+        #[cfg(target_os = "macos")]
+        s if s == crate::jail::HOST_WATCH_SUBCOMMAND => crate::jail::run_host_watch(rest),
         "completions" => crate::completions::cmd_completions(rest),
         // `delulu help <cmd>` is the same answer as `delulu <cmd> --help`, reached the way people
         // reach for it. It ignored its argument and printed the whole usage, which made the
