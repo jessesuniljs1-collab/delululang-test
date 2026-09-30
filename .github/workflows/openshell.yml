@@ -20,6 +20,10 @@ on:
         description: "The OpenShell release tag whose prover checks the export (the study read v0.1.2)"
         type: string
         default: "v0.1.2"
+      runtime:
+        description: "Also run the export under a real OpenShell sandbox (a local gateway, the Docker driver) — PS-E-05's runtime witnesses, by hand first"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,33 +39,28 @@ jobs:
       - name: Build delulu
         run: cargo build -p delulu --locked
       - name: Install OpenShell's pinned release, checksums verified
-        shell: bash
         env:
           TAG: ${{ inputs.version || 'v0.1.2' }}
-        run: |
-          set -euo pipefail
-          base="https://github.com/NVIDIA/OpenShell/releases/download/$TAG"
-          cd "$RUNNER_TEMP"
-          curl -fsSL -o sums.txt "$base/openshell-checksums-sha256.txt"
-          echo "== the release's assets ($TAG)"
-          awk '{ n = $2; sub(/^\*/, "", n); print n }' sums.txt
-          arch="$(dpkg --print-architecture)"
-          # Every Debian package for this architecture: the CLI's, and the prover's if it ships apart.
-          mapfile -t debs < <(awk -v a="$arch" '{ n = $2; sub(/^\*/, "", n); if (n ~ ("^openshell.*[-_]" a "[.]deb$")) print n }' sums.txt)
-          [ "${#debs[@]}" -gt 0 ] || { echo "no Debian package for $arch in $TAG"; exit 1; }
-          pick=()
-          for d in "${debs[@]}"; do
-            case "$d" in *prover*) pick+=("$d") ;; esac
-          done
-          [ "${#pick[@]}" -gt 0 ] || pick=("${debs[0]}")
-          for d in "${pick[@]}"; do
-            curl -fsSL -o "$d" "$base/$d"
-            want="$(awk -v n="$d" '{ m = $2; sub(/^\*/, "", m); if (m == n) { print $1; exit } }' sums.txt)"
-            [ -n "$want" ] || { echo "no checksum for $d"; exit 1; }
-            echo "$want  $d" | sha256sum -c -
-          done
-          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${pick[@]/#/./}"
-          command -v openshell-prover
-          openshell-prover --version || true
+        run: scripts/openshell-install.sh "$TAG"
       - name: The export, checked by the prover
         run: scripts/openshell-prove.sh target/debug/delulu
+
+  # The export ENFORCED: a local gateway with the Docker driver creates a sandbox from an image holding this
+  # build's delulu and a program, under exactly the exported policy; the granted program runs, a greedy one is
+  # refused by DeluluLang, and curl to an unlisted host is denied by OpenShell (scripts/openshell-runtime.sh).
+  runtime:
+    if: ${{ inputs.runtime }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build delulu
+        run: cargo build -p delulu --locked
+      - name: Install OpenShell's pinned release, checksums verified
+        env:
+          TAG: ${{ inputs.version || 'v0.1.2' }}
+        run: scripts/openshell-install.sh "$TAG"
+      - name: The export under a real OpenShell sandbox
+        run: scripts/openshell-runtime.sh target/debug/delulu

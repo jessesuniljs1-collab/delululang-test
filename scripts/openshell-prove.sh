@@ -5,8 +5,8 @@
 # `delulu run` from the program's authority and its grants. This script asks NVIDIA's independent SMT
 # model the same question: given a boundary the operator wrote BY HAND (below — this repository's own
 # text), does the export stay inside it? And it proves the question can be answered no: every mutation of
-# the export that widens it (a preset that adds HEAD and OPTIONS, a granted read made writable, another
-# binary, a host the boundary lacks) must come back `exceeds_boundary`, and a field the format does not have must be
+# the export that widens it (a preset that adds HEAD and OPTIONS, Landlock weakened to best effort, a write
+# where the boundary grants none, another binary, a host the boundary lacks) must come back `exceeds_boundary`, and a field the format does not have must be
 # refused by the prover's parser — the same fail-closed parser OpenShell's runtime uses — so a
 # `within_boundary` also says the document is OpenShell's format.
 #
@@ -152,16 +152,12 @@ mutate a.yaml a-preset.yaml "$rules_block" '        access: read-only
       - path: "/usr/local/bin/delulu"
   "delulu_https_2":'
 expect exceeds_boundary a-preset.yaml boundary-a.yaml 'HEAD|OPTIONS'
-# A granted READ made writable. (A path the boundary does not list at all is `unsupported`, not
-# `exceeds_boundary` — the prover compares only paths both policies name, since a link in the image could
-# move one under another; run 1 answered exactly that for an added `/tmp`.)
-mutate a.yaml a-write.yaml '    - "/sandbox/data"
-' ''
-mutate a-write.yaml a-write2.yaml '  read_write:
-    - "/sandbox/out"' '  read_write:
-    - "/sandbox/data"
-    - "/sandbox/out"'
-expect exceeds_boundary a-write2.yaml boundary-a.yaml /sandbox/data
+# Landlock weakened: `hard_requirement` to `best_effort` must exceed. (The filesystem falsifier is program
+# B's below: the prover compares only paths both policies name — a link in the image could move one under
+# another — so an added `/tmp` (run 1) and a granted read made writable beside another writable path (run 2)
+# were both `unsupported`; a write where the boundary grants NO write access is what it calls exceeding.)
+mutate a.yaml a-besteffort.yaml 'compatibility: "hard_requirement"' 'compatibility: "best_effort"'
+expect exceeds_boundary a-besteffort.yaml boundary-a.yaml landlock
 sed 's#      - path: "/usr/local/bin/delulu"#      - path: "/usr/bin/curl"#' a.yaml > a-curl.yaml
 grep -q '/usr/bin/curl' a-curl.yaml || fail "the binary mutation did not land"
 expect exceeds_boundary a-curl.yaml boundary-a.yaml /usr/bin/curl
@@ -209,6 +205,12 @@ network_policies:
       - path: /usr/local/bin/delulu
 EOF
 expect within_boundary b.yaml boundary-b.yaml
+# The program's own file made writable, under a boundary that grants no write access at all.
+mutate b.yaml b-write.yaml '  read_write: []' '  read_write:
+    - "/sandbox/b.delulu"'
+mutate b-write.yaml b-write2.yaml '    - "/sandbox/b.delulu"
+    - "/usr"' '    - "/usr"'
+expect exceeds_boundary b-write2.yaml boundary-b.yaml /sandbox/b.delulu
 sed 's#^network_policies:$#network_policies: {}#; /^  cdn:/,$d' boundary-b.yaml > boundary-b-none.yaml
 expect exceeds_boundary b.yaml boundary-b-none.yaml cdn.example.org
 
