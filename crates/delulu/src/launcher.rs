@@ -12,10 +12,13 @@
 //!
 //! What starts is, on Linux, the descriptor the digest was read from (`fexecve`), so a path swapped
 //! between the hash and the start — by anyone who can write the launcher's directory, or a link on its
-//! way — is not what runs. Elsewhere the resolved path is started, and that window stays open to such a
-//! writer; the deployment rule for a driver holds for a launcher too (`DEPLOYMENT.md` §5: only the
-//! operator can write where it lives). Neither closes a change to the file's own BYTES, in place, by
-//! someone who may write the file itself.
+//! way — is not what runs. On Windows, which has no `fexecve`, the file is held open from the hash until
+//! the run ends, sharing reads only: it cannot be written, or renamed or deleted away — a rename over it
+//! is a deletion — so the path started names the bytes hashed (witnessed on Windows first: a launcher
+//! renamed over while the host hashed it was what ran). On macOS the resolved path is started, and that
+//! window stays open to such a writer; the deployment rule for a driver holds for a launcher too
+//! (`DEPLOYMENT.md` §5: only the operator can write where it lives). Linux does not close a change to the
+//! file's own BYTES, in place, by someone who may write the file itself; Windows' share mode does.
 
 use std::io::{self, Read as _};
 use std::path::PathBuf;
@@ -27,7 +30,8 @@ pub(crate) struct Launcher {
     pub(crate) path: PathBuf,
     /// BLAKE3 of the bytes read from `file`, in lowercase hex.
     pub(crate) blake3: String,
-    /// The file the digest was read from: on Linux, the one started.
+    /// The file the digest was read from: on Linux, the one started; on Windows, held — sharing reads
+    /// only — for as long as this value lives, which is the run.
     file: std::fs::File,
     /// A `#!` script: its interpreter reads it back through `/dev/fd/N`, so on Linux the descriptor must
     /// survive the start rather than close with it.
@@ -62,6 +66,11 @@ impl Launcher {
         // Never blocks: a name swapped for a FIFO after `resolve_driver` saw a file would hang the open.
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NONBLOCK);
+        // Windows: sharing reads only — the standard library's default shares writing and deletion too, and
+        // a launcher renamed over while it was hashed was the one started. Nobody can then write, rename or
+        // delete it until this `Launcher` is dropped; starting it (a read) is still shared.
+        #[cfg(windows)]
+        std::os::windows::fs::OpenOptionsExt::share_mode(&mut open, windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ);
         let mut file = open.open(&path).map_err(cannot)?;
         // What was OPENED is what is judged: `resolve_driver` looked at the name, a moment before.
         if !file.metadata().map_err(cannot)?.is_file() {
@@ -107,7 +116,8 @@ impl Launcher {
     /// through `/dev/fd/N`; the launcher then holds a read-only descriptor of its own script, nothing more.
     /// Everything the child needs is built here, before the fork: nothing may allocate after it.
     ///
-    /// Elsewhere this does nothing: the command starts [`Launcher::path`] by name (the module's note).
+    /// Elsewhere this does nothing: the command starts [`Launcher::path`] by name — on Windows while the
+    /// file is held against any writer (the module's note).
     pub(crate) fn start_as_hashed(&self, c: &mut std::process::Command) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {

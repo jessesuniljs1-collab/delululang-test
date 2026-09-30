@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 289 |
-| Rust lines | 149804 |
+| Rust lines | 149913 |
 | Rust files outside `src/` (test/bench targets) | 130 |
 | Markdown documents | 252 |
 | Markdown lines | 67335 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 40 files, 36669 lines
+- **Modules:** 40 files, 36679 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -118,7 +118,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/guest.rs` | 2499 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
 | `src/jail.rs` | 1564 | PS-A-04: the OS jail around a sandbox guest. |
-| `src/launcher.rs` | 172 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
+| `src/launcher.rs` | 182 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1995 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 100 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
