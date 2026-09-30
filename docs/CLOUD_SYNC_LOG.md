@@ -746,7 +746,9 @@ it on `origin` was made in the cloud and is listed below.
   (7) `9bf09b9` PS-E-04 on Windows, recorded: D-V2-74, red then green on a Windows runner — records only;
   (8) `68b8888` REQUEST-HANG-1, PROBE-DRIP-1: every round trip to the broker owes its whole answer within a bound (D-V2-75);
   (9) `3ca49e4` BROKER-RELDIR-1: broker start with a relative state dir served one level down and was left running;
-  (10) `The red-team pass on FRAME-DRIP-1, recorded: D-V2-75, BROKER-RELDIR-1, RW 4.35-4.40` — records only
+  (10) `76aa676` The red-team pass on FRAME-DRIP-1, recorded: D-V2-75, BROKER-RELDIR-1, RW 4.35-4.40 — records only;
+  (11) `5db4df1` REGISTRY-BOUNDS-1: delulu-registry serve bounds every connection; one slow client delays no other (D-V2-76);
+  (12) `REGISTRY-BOUNDS-1, recorded: D-V2-76, read on Windows and macOS first` — records only
 - Files and folders:
   M `crates/delulu/src/brokerd.rs` (a witness) — (1); `crates/delulu/tests/foreign_worker.rs` (the `dl_drip` fixture, a witness) — (1)
   M `crates/delulu-runtime/src/channel.rs` (`Within`, `FrameTooSlow`, `FRAME_DEADLINE`; `HostChannel::with_frame_deadline`,
@@ -770,7 +772,11 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md` (4.35–4.40, new), `V2_DECISION_LOG.md` (D-V2-75;
     D-V2-73's last line corrected), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_SECURITY_MODEL.md` (§10),
     `docs/assistant-memory/delulu-ipc-deadman-findings.md` — (10)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6), (7), (8), (9), (10)
+  M `crates/delulu-registry/src/lib.rs` (`Limits`, `serve_with`, a thread per connection, `bounded_line`, `refuse`);
+    A `crates/delulu-registry/tests/serve_bounds.rs` (four witnesses) — (11)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md` (4.36 closed), `V2_DECISION_LOG.md` (D-V2-76),
+    `V2_LOG.md`, `V2_PHASE_STATUS.md` — (12)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6)–(12)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,471 nodes, 12,914 edges); `doctor --check` ok, 26 checks
   passed. After the last edit: in (4)'s commit message.
@@ -790,7 +796,9 @@ it on `origin` was made in the cloud and is listed below.
   witnesses red on `9bf09b9` (40.2 s; 6.0 s), M28–M30 red, the full suite alone 2,060 passed, 0 failed, 15 ignored
   (153 binaries); macOS `36655171914`, Windows `36655174168` green. **(9):** the witness red on `68b8888`, green after;
   the full suite alone 2,061 passed, 0 failed, 15 ignored, cargo exit 0; `broker_cli` green on Windows `36655636658`
-  and macOS `36655638846`.
+  and macOS `36655638846`. **(11):** three witnesses red on `76aa676` (3.2 s; the crash; the endless line), M31–M34 red;
+  the full suite alone 2,065 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; every `delulu-registry` target
+  green on Windows `36657264839` and macOS `36657267414`.
 - Redo on the laptop: the suite on Windows and in WSL (the broker's serve loop and the foreign worker's call changed on
   every OS; on Windows the external launcher is now held open sharing reads only for the run).
 - For the laptop's memory: `HANDOFF.md` §11.4 (FRAME-DRIP-1) and §11.5 (a per-read deadline is not a per-message one;

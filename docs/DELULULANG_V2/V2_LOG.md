@@ -3509,3 +3509,22 @@ suite alone at `68b8888`: 2,060 passed, 0 failed, 15 ignored (153 binaries); at 
 140, both new witnesses among them; `broker_cli` 3, `dead_man_cli` 16, `estop_cli` 5), Windows `36655174168` (bin 132,
 `broker_cli` 2, `dead_man_cli` 16, `estop_cli` 5); `3ca49e4` — `broker_cli` success on Windows `36655636658` and macOS
 `36655638846`.
+
+## 2026-09-30 — routine run 6: REGISTRY-BOUNDS-1 — `delulu-registry serve` bounds every connection (D-V2-76)
+
+RW 4.36, from the red-team pass's F3, re-run by the head chef on the current registry binary first (one idle TCP
+connection stalled a GET past 5 s; `Content-Length: 18446744073709551615` crashed the server). The registry's port is
+reachable by whoever can reach it, and reading it needs no token. **Witnessed on `76aa676`** (`crates/delulu-registry/tests/serve_bounds.rs`):
+a client behind one idle connection got no answer in 3.2 s; the huge `Content-Length` panicked the server
+(`raw_vec` capacity overflow) and the next connect was refused; a 1 MiB request line with no end was read on and never
+answered. **Fixed (`5db4df1`, D-V2-76):** `Limits` (10 s a read, 60 s a whole request through `Within::from_now`, 8 KiB a
+line, 64 headers, a 16 MiB body, 64 connections) and `serve_with`; a thread per connection, the requests still handled one
+at a time under one lock (a publish rewrites a package's index); a panic kept on its connection's thread; 413, 431 or 400
+past a bound, with DL1706. A fourth witness drips a request past a 1 s bound (dropped at about 1.2 s). **Mutants M31–M34**
+(no body cap, one connection at a time, lines unbounded, per read only) each red on its own witness, restored byte for
+byte. The line witness first failed on the fix itself — the server's close with the client's bytes still unread reaches
+the client as a reset, which can cut the 431 short — so it accepts the refusal or the reset; the old server did neither.
+
+**Verified:** clippy `-D warnings` clean; the full suite alone: 2,065 passed, 0 failed, 15 ignored (154 binaries), cargo
+exit 0. Read on the runners before `master` moved (`witness.yml`, `delulu-registry`, every target): Windows
+`36657264839` (`serve_bounds` 4 passed, `criterion5_e2e` 3, lib 20) and macOS `36657267414`, success.

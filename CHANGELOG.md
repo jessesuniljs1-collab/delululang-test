@@ -142,6 +142,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed: `delulu broker start` with a relative state directory** (`DELULU_STATE_DIR=st`, `--state-dir st`) started
   the daemon one level down, at `st/st`, reported "did not come up within 5s", and left it running with nothing to
   stop it (BROKER-RELDIR-1). The state directory is made absolute before the daemon is started.
+- **Fixed (security): `delulu-registry serve` could be stalled by one idle connection and crashed by one number**
+  (REGISTRY-BOUNDS-1). It served one connection at a time with no deadline, read lines with no cap, and allocated a
+  body at whatever `Content-Length` said — `18446744073709551615` took it down. Each connection now has its own thread
+  and bounds — 10 s a read, 60 s a request, 8 KiB a line, 64 headers, a 16 MiB body, 64 connections at once — and a
+  request past them is answered 413, 431 or 400; requests are still handled one at a time (D-V2-76).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

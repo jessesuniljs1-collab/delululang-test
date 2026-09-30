@@ -766,6 +766,8 @@ wins, and you should update the memory to match.
   words — it served at `st/st`, the caller said "did not come up", and the daemon was left running (fixed: made
   absolute at the edge). Its other findings — an unbounded reply write, the registry's unbounded connections and
   crash, a FIFO in the audit directory — are RW 4.35–4.40, each re-run by the head chef or marked code reading.
+  The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
+  `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

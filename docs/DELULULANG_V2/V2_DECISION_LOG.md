@@ -1574,6 +1574,20 @@ turns into DL1401 or its refusal; no new code. **Consequence:** a broker whose q
 (5 s each) now fails an operator's command after 15 s instead of answering after them — fail closed, and the
 command can be asked again; the dead-man probe parks the devices meanwhile, as it always did.
 
+## D-V2-76 — REGISTRY-BOUNDS-1: `delulu-registry serve` bounds every connection, and one slow client delays no other — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+The registry's port is reachable by whoever can reach it, and reading it needs no token. It served one connection at
+a time, read its request and header lines with no deadline and no cap, and allocated the body at whatever
+`Content-Length` said before reading a byte. Witnessed on `76aa676` (`tests/serve_bounds.rs`): a client behind one idle
+connection got no answer in 3.2 s; `Content-Length: 18446744073709551615` panicked the server (the next connect
+refused); a 1 MiB request line with no end was read on and never answered. Decided: **`Limits`**, with defaults — 10 s
+for any one read, 60 s for the whole request from its acceptance (`Within::from_now`, FRAME-DRIP-1's reader), 8 KiB for
+a request or header line, 64 headers, a 16 MiB body (the sandbox channel's frame bound), 64 connections at once (one
+past it is closed at once) — and `serve_with` so a test can shrink them. **Each connection is read on a thread of its
+own; the requests are still handled one at a time under one lock**, because a publish reads and rewrites a package's
+index. A panic stays on its connection's thread. Past a bound the client is answered in HTTP's own words — 413, 431,
+400 — with the registry's existing code, DL1706; no new code.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
