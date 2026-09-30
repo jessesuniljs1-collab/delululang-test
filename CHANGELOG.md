@@ -166,6 +166,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   escaped on one line; `--json` is unchanged and exact (D-V2-79). **`grants tree`, `grants list` and `grants inspect`
   likewise** (RW 4.42): a delegation's scopes and holder — the delegating party's strings — could clear the owner's
   screen, and a line break in a path forged a node line.
+- **Fixed: `delulu lsp` panicked on a huge `Content-Length`, and `delulu mcp` held a request line of any length**
+  (RW 4.39). The LSP reads what arrives rather than allocating what a header promised, and ends the session in words
+  past 64 MiB a message or 8 KiB a header line; the MCP server answers a line past 16 MiB with an error naming the bound,
+  without holding it, and serves what follows.
 - **A capability use's audit record names its effect** (`{"op": "FsWrite"}`, `"Net"`, … in the record's payload slot),
   allowed or refused, and the OCSF export maps it: an allowed file use is File System Activity (1001, Read or Update, with
   the path), an allowed network use HTTP Activity (4002, Get, with the host). Records written before name no effect and

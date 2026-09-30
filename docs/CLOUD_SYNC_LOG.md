@@ -845,7 +845,9 @@ it on `origin` was made in the cloud and is listed below.
   (6) `6c7aca3` RW 4.38's remainder: the secret store is read and written only if it is a regular file;
   (7) `634e9f0` RW 4.38 closed, recorded; ocsf.yml joins the push triggers, read green by hand;
   (8) `297f976` RW 4.42: grants tree, list and inspect show a delegation's strings escaped;
-  (9) routine run 7 closed: RW 4.42 recorded; the loop's lessons
+  (9) `eff5367` routine run 7 closed: RW 4.42 recorded; the loop's lessons;
+  (10) `dca734a` RW 4.39's rest: delulu lsp and delulu mcp bound what one message may hold;
+  (11) RW 4.39's rest, recorded
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -877,7 +879,10 @@ it on `origin` was made in the cloud and is listed below.
     §11.5 a fake peer, again), `docs/CLOUD_ROUTINE.md` (step 5: the OCSF check; a real-run witness beside a fixture;
     overlap a slice's runner read with its suite), `docs/REMAINING_WORK.md` (4.42 closed), `V2_DECISION_LOG.md`
     (D-V2-79's note), `V2_LOG.md`, `V2_PHASE_STATUS.md` — (9)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(9)
+  M `crates/delulu/src/lsp.rs` (`read_message`: `MAX_MESSAGE`, `MAX_HEADER_LINE`), `crates/delulu/src/mcp.rs` (`MAX_LINE`,
+    `skip_line`), `crates/delulu/tests/lsp_cli.rs`, `crates/delulu/tests/mcp_cli.rs` (a witness each) — (10);
+    `CHANGELOG.md`, `docs/REMAINING_WORK.md` (4.39: the log's words left), `V2_LOG.md` — (11)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(11)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -894,7 +899,7 @@ it on `origin` was made in the cloud and is listed below.
   suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved (witness.yml,
   `audit_cli guard_e2e` at `9c58cbb`): macOS `36676784576` (12, 3) and Windows `36676787378` (12, 3) — success; `master`
   fast-forwarded to `9c58cbb`. **(4):** M47–M49 red, restored; the corpus validated (0 problems), five more export
-  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0. **(6)–(7):** the witness red on `3d84304`; M50–M52 red, restored; clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success. **(8)–(9):** the witness red on `634e9f0`; M53–M55 red, restored; clippy clean; the full suite alone 2,079 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `297f976` (`grants_cli guard_e2e broker_cli`): macOS `36680482439` and Windows `36680485122` — success.
+  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0. **(6)–(7):** the witness red on `3d84304`; M50–M52 red, restored; clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success. **(8)–(9):** the witness red on `634e9f0`; M53–M55 red, restored; clippy clean; the full suite alone 2,079 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `297f976` (`grants_cli guard_e2e broker_cli`): macOS `36680482439` and Windows `36680485122` — success. **(10)–(11):** both witnesses red on `eff5367`; M56, M57 red, restored; clippy clean; the full suite alone 2,081 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `dca734a` (`lsp_cli mcp_cli`): macOS `36681858200` and Windows `36681860992` — success.
 - Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
   `COMPUTERNAME` on Windows).
 - For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and
@@ -904,8 +909,9 @@ it on `origin` was made in the cloud and is listed below.
   egress, host loss and privilege floor established, filesystem reads and the memory ceiling absent, ping-pong NOT
   MEASURED — 3 hardware threads, 2.15x observed; Windows: all five established, ping-pong NOT MEASURED — the runner busy;
   the Linux jobs' notices not read this run). `ocsf.yml` `36678699774` (by hand, `3d84304`) — success, read from its log.
-  Unread when this entry was written: `3d84304`'s, `634e9f0`'s and this commit's push runs, and `634e9f0`'s `ocsf.yml`
-  push run — the next run reads them first. No nightly since `36548984501` (none had fired by 07:00 UTC).
+  `3d84304` `36678692933` and `634e9f0` `36680110785` — success; `ocsf.yml` on push: `634e9f0` `36680110806` and `eff5367`
+  `36681499372` — success. Unread when this entry was written: `eff5367`'s CI push run `36681499405` and this commit's —
+  the next run reads them first. No nightly since `36548984501` (none had fired by 07:00 UTC).
 - Open / next: (1) read the push runs above, and the next nightly (its `miri-slow` interprets `read_regular` and the
   store's write — both leave out `O_NONBLOCK` under Miri); (2) **PS-E's rest:** E-05 — OpenShell as a tested L3 and
   `sandbox policy --format openshell` (by hand: an `openshell.yml` that downloads the pinned release on a runner, as the
@@ -913,5 +919,5 @@ it on `origin` was made in the cloud and is listed below.
   itself); E-01's remainder (attesters' claims as properties; `contained`'s set); E-03 H6 (a classifier stopped it twice —
   perhaps with the owner); then P8 (P8-01 first), P9; (3) the red-team rows still open: RW 4.35 (the broker's reply write
   — a whole-write bound; Windows `WriteFile` blocks), 4.37 (the host's writes to a guest — needs the escaped-guest
-  harness to stop reading), 4.39's rest (the LSP's and MCP's sizes), 4.40 (the broker's queue); (4) RW 7.17 — keep
+  harness to stop reading), 4.39's last item (the broker log's three wordings of one drop), 4.40 (the broker's queue); (4) RW 7.17 — keep
   watching arm64's `estop_cli`. **For the owner:** D-V2-78 to D-V2-80 are this run's decisions.

@@ -3671,3 +3671,16 @@ agent's stored strings raw; **RW 4.38's remainder** — the secret store read an
 each red. Every slice read on macOS and Windows before `master` moved; push runs read green up to `9c58cbb`. Loop
 engineering: the routine's step 5 gains the OCSF check, a real-run witness beside every fixture that fakes the host, and
 overlapping a slice's runner read with its suite; HANDOFF §11.3, §11.4, §11.5.
+
+## 2026-09-30 — routine run 7, after the close: RW 4.39's rest — `delulu lsp` and `delulu mcp` bound one message
+
+From the red-team pass on FRAME-DRIP-1. **Witnessed on `eff5367`:** `lsp_cli::a_content_length_past_the_bound_is_refused_in_words_not_allocated`
+— `Content-Length: 18446744073709551615` panicked the server (`capacity overflow`, exit 101), because `read_message`
+allocated `vec![0; n]` before reading a byte; `mcp_cli::a_request_line_past_the_bound_is_refused_and_the_session_goes_on`
+— a 17 MiB line was read whole (`lines()`) and answered "not JSON". **Fixed:** the LSP reads what arrives (`take(n)`,
+`read_to_end`), bounds a message at 64 MiB and a header line at 8 KiB, and past either ends the session in words — a
+stream whose framing cannot be trusted cannot be resynchronised; the MCP server reads at most 16 MiB of a line, skips
+the rest without holding it, answers -32600 naming the bound, and serves the next request. **Mutants M56** (the LSP's
+bound removed — no panic now, since nothing is pre-allocated, but no refusal in words either) **and M57** (the MCP's),
+each red; restored. **Verified:** clippy clean; the full suite alone 2,081 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `dca734a` (`lsp_cli mcp_cli`): macOS `36681858200` and Windows `36681860992` — success. RW 4.39 keeps one item: the broker log's three
+wordings of one class of drop.
