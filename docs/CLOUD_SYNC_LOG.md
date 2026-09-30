@@ -750,7 +750,9 @@ it on `origin` was made in the cloud and is listed below.
   (11) `5db4df1` REGISTRY-BOUNDS-1: delulu-registry serve bounds every connection; one slow client delays no other (D-V2-76);
   (12) `2734ba9` REGISTRY-BOUNDS-1, recorded: D-V2-76, read on Windows and macOS first — records only;
   (13) `cc3857b` AUDIT-FIFO-1: an audit day log is read only if it is a regular file (D-V2-77);
-  (14) `Routine run 6 closed: AUDIT-FIFO-1 recorded; the loop's lessons` — records only
+  (14) `cc157bc` Routine run 6 closed: AUDIT-FIFO-1 recorded; the loop's lessons — records only;
+  (15) `efe76a0` RW 4.39: the broker wire refuses bytes after a frame's value;
+  (16) `RW 4.39's frame reader recorded; the disk's stale test executables` — records only
 - Files and folders:
   M `crates/delulu/src/brokerd.rs` (a witness) — (1); `crates/delulu/tests/foreign_worker.rs` (the `dl_drip` fixture, a witness) — (1)
   M `crates/delulu-runtime/src/channel.rs` (`Within`, `FrameTooSlow`, `FRAME_DEADLINE`; `HostChannel::with_frame_deadline`,
@@ -783,7 +785,9 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (§11.4; §11.5 the VM's disk, a Windows busy pipe), `docs/CLOUD_ROUTINE.md` (step 5:
     the disk; reading a witness job), `docs/REMAINING_WORK.md` (4.38), `V2_DECISION_LOG.md` (D-V2-77), `V2_LOG.md`,
     `V2_PHASE_STATUS.md` — (14)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6)–(14)
+  M `crates/delulu/src/broker_ipc.rs` (`read_frame` refuses trailing bytes; a witness) — (15); `CHANGELOG.md`,
+    `docs/CLOUD_ROUTINE.md` (the disk: stale test executables), `docs/REMAINING_WORK.md` (4.39), `V2_LOG.md` — (16)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6)–(16)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,471 nodes, 12,914 edges); `doctor --check` ok, 26 checks
   passed. After the last edit: in (4)'s commit message.
@@ -808,14 +812,15 @@ it on `origin` was made in the cloud and is listed below.
   green on Windows `36657264839` and macOS `36657267414`. **(13):** the witness red on `2734ba9` (5 s), M35–M37 red; the
   full suite alone 2,066 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; `delulu-broker` lib green on macOS
   `36658766644 (170 passed, the witness among them)` and Windows `36658768992 (169 passed; the witness is Unix-only)`.
+  **(15):** the witness red on `cc157bc`; the full suite alone 2,067 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; macOS `36659893368 (bin 141, the witness among them; broker_cli 4, foreign_worker 5)`, Windows `36659895529 (bin 133; broker_cli 3, foreign_worker 4)`.
 - Redo on the laptop: the suite on Windows and in WSL (the broker's serve loop and the foreign worker's call changed on
   every OS; on Windows the external launcher is now held open sharing reads only for the run).
 - For the laptop's memory: `HANDOFF.md` §11.4 (FRAME-DRIP-1) and §11.5 (a per-read deadline is not a per-message one;
   install the pinned toolchain before any concurrent `rustup`/`cargo`); `docs/assistant-memory/cloud-period-2026-09-28.md`
   and `delulu-ipc-deadman-findings.md`.
 - Push runs read: (4) `1997997` `36652712551` — success on every job (16). (7) `9bf09b9` `36653912917` — success.
-  (10) `76aa676` `36656353251` — success on every job (16). (12) `2734ba9` `36657621780` — complete, no failed job of 16. (14), this entry's last commit:
-  the next run reads it.
+  (10) `76aa676` `36656353251` — success on every job (16). (12) `2734ba9` `36657621780` — complete, no failed job of 16.
+  (14) `cc157bc` `36659209716` — still running at 02:37 UTC, no job failed by then — the next run reads it. (16), this entry's last commit: the next run reads it.
 - Open / next: (1) read (14)'s push run, and the nightly after it — its `miri-slow` interprets `read_day` under Miri, the
   `O_NONBLOCK` flag left out there; (2) the red-team pass's open rows: **RW 4.35** (the broker's reply write — a whole-write
   bound; on Windows `WriteFile` blocks, so an overlapped write with a deadline), **4.37** (the host's writes to a guest —

@@ -149,6 +149,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   request past them is answered 413, 431 or 400; requests are still handled one at a time (D-V2-76).
 - **Fixed: a FIFO named like an audit day log hung `delulu audit verify`, `audit tail`, `audit query` and `broker start`**
   (AUDIT-FIFO-1). A day log is now read only if it is a regular file, and anything else is refused in words (D-V2-77).
+- **The broker daemon's wire refuses bytes after a frame's value**, as the sandbox channel has since RW 4.32: one frame,
+  one value, so one request has one spelling (RW 4.39).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

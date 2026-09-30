@@ -3548,3 +3548,11 @@ its guarantee and found **PROBE-DRIP-1** (closed with **REQUEST-HANG-1**, D-V2-7
 registry's unbounded port (**REGISTRY-BOUNDS-1**, D-V2-76) and a FIFO in the audit directory (**AUDIT-FIFO-1**, D-V2-77);
 the rest are RW 4.35, 4.37, 4.39, 4.40. Mutants M21–M37, each red. Every slice read on macOS and Windows before
 `master` moved; every push run of the run read green up to ``2734ba9``.
+
+**After the close, one more slice (RW 4.39's first half):** `broker_ipc::read_frame` — the broker daemon's wire, and the
+foreign worker's — decoded a frame's value and ignored whatever followed it inside the frame's length; the red team's
+`Status` with 70 more bytes was answered. **Witnessed on `cc157bc`** (`broker_ipc::tests::a_frame_with_bytes_after_its_value_is_refused`:
+the padded frame read as `Status`); refused now in words, as the sandbox channel's reader has since F12. The red run on
+`cc157bc` is the falsification. **Verified:** clippy clean; `broker_ipc` 5, `foreign_worker` 4, `broker_cli` 5 passed;
+the full suite alone 2,067 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; read on the runners first (`delulu` bin, `broker_cli`, `foreign_worker`): macOS
+`36659893368 (bin 141, the witness among them; broker_cli 4, foreign_worker 5)`, Windows `36659895529 (bin 133; broker_cli 3, foreign_worker 4)`.
