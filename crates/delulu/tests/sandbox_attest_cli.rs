@@ -288,7 +288,9 @@ fn the_reference_attester_refuses_in_words_and_never_reads_its_commands_words() 
     for (extra, says) in [
         (vec!["--json", "--", exe.as_str(), "--version"], "has no `--json`"),
         (vec![], "goes after `--`"),
-        (vec!["--grant", "console", "--", exe.as_str()], "does not know this option"),
+        // Refused by `attest`'s own parser since `--grant` is documented for `sandbox` (PS-E-05's
+        // `policy --format openshell`, routine run 8); the dispatcher refused it before. Exit 2 either way.
+        (vec!["--grant", "console", "--", exe.as_str()], "does not take `--grant`"),
     ] {
         let mut a = base.to_vec();
         a.extend(extra.iter().copied());

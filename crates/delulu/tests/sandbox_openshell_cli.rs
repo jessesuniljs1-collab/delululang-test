@@ -256,3 +256,19 @@ fn a_secret_is_named_never_shown_and_every_string_stays_quoted() {
     assert!(doc.contains(quoted), "the path, escaped and whole:\n{doc}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The export's flags are documented for `sandbox`, so the dispatcher lets them by — and `sandbox status
+/// --grant x` then ran and ignored the flag (routine run 8, found by the suite on `8c7894e`). They belong
+/// to `policy` alone; on any other verb they are refused, never ignored.
+#[test]
+fn the_exports_flags_belong_to_policy_alone() {
+    let dir = scratch("verbs");
+    for verb in ["status", "probe"] {
+        for flag in [["--grant", "console"], ["--format", "openshell"], ["--workdir", "/w"], ["--binary", "/b"], ["--run-as", "5"]] {
+            let o = delulu(&dir, &["sandbox", verb, flag[0], flag[1]]);
+            assert_eq!(o.status.code(), Some(2), "sandbox {verb} {flag:?}: {}", text(&o.stderr));
+            assert!(text(&o.stderr).contains("belongs to `sandbox policy"), "sandbox {verb} {flag:?}: {}", text(&o.stderr));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

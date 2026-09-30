@@ -276,6 +276,9 @@ pub fn to_json(levels: &[Level]) -> Json {
 /// shape an OpenShell export (PS-E-05) and are refused without `--format openshell`, never ignored.
 const VALUE_FLAGS: [&str; 6] = ["--sandbox-profile", "--format", "--grant", "--workdir", "--binary", "--run-as"];
 
+/// The OpenShell export's own flags (PS-E-05) — refused on every verb but `policy`.
+const OPENSHELL_FLAGS: [&str; 5] = ["--format", "--grant", "--workdir", "--binary", "--run-as"];
+
 /// Every value given for `flag`, as `--flag V` or `--flag=V`; a flag with no value is an error.
 fn values_of(rest: &[String], flag: &str) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
@@ -561,6 +564,17 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
         eprintln!("error: `sandbox` does not know this option: {bad}");
         eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
         return 2;
+    }
+    // The OpenShell export's flags belong to `sandbox policy` alone: `sandbox status --grant x` would
+    // otherwise run and ignore them (they are documented for `sandbox`, so the dispatcher lets them by).
+    if verbs.first() != Some(&"policy") {
+        if let Some(bad) = rest.iter().find(|a| {
+            OPENSHELL_FLAGS.iter().any(|f| *a == f || a.strip_prefix(f).is_some_and(|r| r.starts_with('=')))
+        }) {
+            eprintln!("error: `{bad}` belongs to `sandbox policy <file> --format openshell` only");
+            eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+            return 2;
+        }
     }
     match verbs.as_slice() {
         ["status"] => cmd_status(json),

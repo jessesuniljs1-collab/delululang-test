@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 294 |
-| Rust lines | 152994 |
+| Rust lines | 153026 |
 | Rust files outside `src/` (test/bench targets) | 133 |
 | Markdown documents | 252 |
 | Markdown lines | 68149 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 37989 lines
+- **Modules:** 41 files, 38003 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -131,7 +131,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/policy.rs` | 511 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1732 | `delulu run` — the command that actually executes a program. |
-| `src/sandbox.rs` | 674 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
+| `src/sandbox.rs` | 688 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/schema.rs` | 1001 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 171 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
