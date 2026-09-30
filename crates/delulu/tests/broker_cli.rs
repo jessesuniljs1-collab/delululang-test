@@ -105,6 +105,41 @@ fn broker_start_creates_a_state_dir_that_does_not_exist_yet() {
     let _ = std::fs::remove_dir_all(&state);
 }
 
+/// `broker start` with a RELATIVE state directory (`DELULU_STATE_DIR=st`, or `--state-dir st`) starts the
+/// daemon there — the directory the caller named — and the caller finds it.
+///
+/// The daemon is spawned with the state directory as its working directory, and it was handed the same
+/// relative words: it served at `st/st`, one level down, while the caller waited at `st` and said "did not
+/// come up within 5s" — leaving a daemon running that nothing would stop (found by the red-team pass on
+/// FRAME-DRIP-1, 2026-09-30; red on `68b8888`). Resolved at the edge now: the daemon is given the absolute
+/// path.
+#[test]
+fn broker_start_with_a_relative_state_dir_serves_where_the_caller_looks() {
+    let base = std::env::temp_dir().join(format!("dl_rel_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    // Whatever happens, stop a daemon at either place before the directory goes.
+    struct Both(PathBuf);
+    impl Drop for Both {
+        fn drop(&mut self) {
+            for s in [self.0.join("st"), self.0.join("st").join("st")] {
+                let _ = Command::new(env!("CARGO_BIN_EXE_delulu"))
+                    .current_dir(std::env::temp_dir())
+                    .env("DELULU_STATE_DIR", &s)
+                    .args(["broker", "stop"])
+                    .output();
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _both = Both(base.clone());
+    let o = delulu_in(&base, Path::new("st"), &["broker", "start"]);
+    assert!(o.status.success(), "broker start with a relative state dir: {}", stderr(&o));
+    let o = delulu_in(&base, Path::new("st"), &["broker", "status"]);
+    assert!(o.status.success(), "the caller finds the daemon where it named it: {}", stderr(&o));
+    assert!(!base.join("st").join("st").exists(), "and no second state directory was made inside the first");
+}
+
 #[test]
 fn daemon_lifecycle_run_expose_stop_fail_closed() {
     // ----- arrange: temp workspace + programs + broker-resident secret ------------------------

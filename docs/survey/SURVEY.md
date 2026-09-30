@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 289 |
-| Rust lines | 149991 |
+| Rust lines | 150038 |
 | Rust files outside `src/` (test/bench targets) | 130 |
 | Markdown documents | 252 |
 | Markdown lines | 67403 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 40 files, 36757 lines
+- **Modules:** 40 files, 36769 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -102,7 +102,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_client.rs` | 472 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 391 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 584 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 2395 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 2407 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |

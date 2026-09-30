@@ -1238,6 +1238,18 @@ fn start_detached(state_dir: &Path, json: bool, bypass: bool) -> i32 {
         eprintln!("error: cannot create state dir `{}`: {e}", state_dir.display());
         return 2;
     }
+    // Resolved at the edge (Ruling 2). The daemon is spawned with the state dir as its working directory
+    // (below), so a RELATIVE state dir handed on as given named a directory inside itself: the daemon
+    // served at `st/st` while this process waited at `st`, said "did not come up", and left it running
+    // (found by the red-team pass on FRAME-DRIP-1, 2026-09-30). From here on, the absolute path.
+    let absolute = match std::path::absolute(state_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: cannot resolve the state dir `{}`: {e}", state_dir.display());
+            return 2;
+        }
+    };
+    let state_dir = absolute.as_path();
     // The daemon refuses a socket path the kernel cannot hold, by name — but it is detached and its
     // output goes to `broker.log`, so on the first real Mac (CI, 2026-09-14) that refusal reached the
     // user as a five-second wait and "did not come up". The same check, here, where the user is.
