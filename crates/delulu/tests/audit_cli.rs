@@ -328,3 +328,43 @@ fn secrets_list_on_an_empty_store_says_so() {
     );
     assert!(out.contains("no secrets"), "and it says which condition it is: {out}");
 }
+
+/// AUDIT-TEXT-1 (routine run 7): a record's target is often a string the PROGRAM chose — the path of a
+/// use inside its grant — and `audit tail`/`query` printed it raw. Witnessed on `b50bb36` through a real
+/// leased run: a program wrote `./out/ESC]0;PWNED BEL ESC[2J …` inside its `./out` grant, and the
+/// investigator's `audit tail` set the terminal's title and cleared its screen. A file name can hold a line
+/// break, so a program could forge whole records on that screen. Each field is now one escaped line
+/// (TERMINAL-TEXT-1's `terminal_line`); `--json` was always exact.
+#[test]
+fn a_programs_string_in_a_record_is_shown_escaped_never_obeyed() {
+    let dir = std::env::temp_dir().join(format!("delulu_audit_cli_{}_text", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let log = AuditLog::open(&dir).unwrap();
+    let clock = Rc::new(ManualClock::new(1_752_192_000_000));
+    let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock)).with_sink(Box::new(log));
+    let root = b
+        .issue_root(
+            Holder::new("process", "cli-test", "pid:0"),
+            Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+            None,
+        )
+        .unwrap();
+    let hostile = "./out/\u{1b}]0;PWNED\u{7}\u{1b}[2J\nseq     9  2026-01-01T00:00:00.000Z  revoke     allow\u{202e}.txt";
+    assert!(b.check(&root, Op::FsWrite, Some(hostile)).is_allow(), "inside the grant: an ordinary allowed use");
+    let d = dir.to_string_lossy().to_string();
+    for sub in [vec!["audit", "tail", "--dir", &d], vec!["audit", "query", "--dir", &d]] {
+        let o = delulu(&sub);
+        assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+        let out = stdout(&o);
+        assert!(!out.contains('\u{1b}') && !out.contains('\u{7}') && !out.contains('\u{202e}'), "raw control characters reached the terminal: {out:?}");
+        let records = delulu_broker::tail(&dir, 100).unwrap().len();
+        assert_eq!(records, 2, "the issue and the use");
+        assert_eq!(out.lines().count(), records, "one line per record — the program's line break forged none: {out:?}");
+        assert!(out.contains("\\u{1b}]0;PWNED"), "the string is shown, escaped: {out:?}");
+    }
+    // The machine surface stays exact: JSON escapes by itself.
+    let o = delulu(&["audit", "query", "--dir", &d, "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let records = v["records"].as_array().expect("records");
+    assert!(records.iter().any(|r| r["target"] == hostile), "the JSON carries the record's own bytes");
+}

@@ -7529,8 +7529,18 @@ fn cmd_guard_pending(state_dir: &std::path::Path, json: bool) -> i32 {
     } else if requests.is_empty() {
         println!("(no guard requests)");
     } else {
+        // AUDIT-TEXT-1: this list is what the owner decides on, and `why` is the requesting agent's own
+        // text — raw, it could erase the real request's line and print another. One escaped line each.
+        use delulu_diag::terminal_line;
         for r in &requests {
-            println!("{}  [{}]  {}  use=[{}]  why: {}", r.id, r.status, r.node, r.uses.join(","), r.why);
+            println!(
+                "{}  [{}]  {}  use=[{}]  why: {}",
+                terminal_line(&r.id),
+                terminal_line(&r.status),
+                terminal_line(&r.node),
+                terminal_line(&r.uses.join(",")),
+                terminal_line(&r.why)
+            );
         }
     }
     0
@@ -8352,19 +8362,25 @@ fn audit_dir_from(
 
 /// One human line per record: seq, UTC time (display-only ISO render of the stored epoch millis),
 /// action, decision, then whichever of actor/target the record carries.
+/// One record, one line, for a person. AUDIT-TEXT-1 (routine run 7): a record's target is often a string
+/// the PROGRAM chose — the path of a use inside its grant — and it reached the investigator's terminal
+/// raw: a leased program's file name set the window title and cleared the screen, and a line break in it
+/// could forge whole records. Every field is escaped onto one line (TERMINAL-TEXT-1's `terminal_line`);
+/// `--json` is exact without it.
 fn render_audit_record(r: &delulu_broker::AuditRecord) -> String {
+    use delulu_diag::terminal_line;
     let mut s = format!(
         "seq {:>5}  {}  {:<10} {:<5}",
         r.seq,
         delulu_broker::render_ts_utc(r.ts),
-        r.action,
-        r.decision
+        terminal_line(&r.action),
+        terminal_line(&r.decision)
     );
     if let Some(a) = &r.actor_node {
-        s.push_str(&format!("  actor={a}"));
+        s.push_str(&format!("  actor={}", terminal_line(a)));
     }
     if let Some(t) = &r.target {
-        s.push_str(&format!("  target={t}"));
+        s.push_str(&format!("  target={}", terminal_line(t)));
     }
     s
 }

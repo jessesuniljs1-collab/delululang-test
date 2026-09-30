@@ -1639,6 +1639,20 @@ and verifies with `--expect-start` = the previous export's head; the device labe
 broken chain is. The audit holds no secret bytes and no query string (a network use records the host,
 `interp.rs::custody_op_for`), and the export adds nothing a record does not hold.
 
+## D-V2-79 — AUDIT-TEXT-1: what a program or an agent wrote is shown escaped where a person investigates or approves — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+TERMINAL-TEXT-1 (D-V2-70) escaped a program's strings on the surfaces that print them LIVE. Two surfaces print them
+LATER, from storage, and stayed raw. **`delulu audit tail` and `audit query`**: a use's record names its argument — a
+path the program chose inside its grant — and `render_audit_record` printed it as stored. Witnessed on `b50bb36` through
+a real leased run: a program wrote `./out/ESC]0;PWNED BEL ESC[2J ESC[31mFORGED.txt` inside its `./out` grant (an
+ordinary, allowed use), and the investigator's `audit tail` set the terminal's title, cleared the screen and turned the
+text red; a file name can hold a line break, so the witness forged a whole `seq 9 … revoke allow` record on that screen.
+**`delulu guard pending`**: the owner's decision surface printed each request's `why` — the requesting agent's own text —
+raw; the witness's `why` erased the real request's line (`use=[fs_write:*]`) and printed a request for `fs_read:./data`
+in its place. Decided: every field of both listings is escaped onto one line with `terminal_line` (the record's action,
+decision, actor and target; the request's id, status, node, uses and why). The chain, the queue and `--json` keep the
+bytes exactly — the escaping is only where a person reads. No new code.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

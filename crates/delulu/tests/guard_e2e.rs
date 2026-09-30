@@ -215,6 +215,39 @@ fn guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end() {
 /// Criterion 7's other half: `broker start --dangerously-bypass-guard` prints the exact banner at
 /// start, `guard status --json` reports bypass (valid machine JSON), and a leased guarded use
 /// proceeds with the `guard_bypassed_use` audit event from the very first run.
+/// AUDIT-TEXT-1 (routine run 7): `guard pending` is the owner's decision surface, and an agent's `--why`
+/// reached it raw — an agent asking for authority could clear the owner's screen, or break the line and
+/// print a request that is not the one it made. Each field is now one escaped line; `--json` is exact.
+#[test]
+fn guard_pending_shows_an_agents_why_escaped_never_obeyed() {
+    let base = std::env::temp_dir().join(format!("delulu_guard_text_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(cwd.join("data")).unwrap();
+    std::fs::create_dir_all(cwd.join("out")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let owner = extract_owner_code(&format!("{}{}", stdout(&o), stderr(&o))).expect("owner code");
+    let o = delulu_in(&cwd, &state, &["guard", "policy", "set", "fs_write:*", "guarded", "--owner", &owner]);
+    assert!(o.status.success(), "policy set: {}", stderr(&o));
+    let (node, _token) = delegate_rw(&cwd, &state, &owner);
+
+    let why = "tidy the logs\u{1b}[2K\r\u{1b}[1A\ng_000  [pending]  g_000  use=[fs_read:./data]  why: read one file";
+    let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", "fs_write:*", "--why", why]);
+    assert!(o.status.success(), "request: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["guard", "pending"]);
+    let out = stdout(&o);
+    assert!(!out.contains('\u{1b}') && !out.contains('\r'), "raw control characters reached the owner: {out:?}");
+    assert_eq!(out.lines().count(), 1, "one request, one line — the agent's line break forged none: {out:?}");
+    assert!(out.contains("use=[fs_write:*]") && out.contains("\\u{1b}[2K"), "the real request, its why escaped: {out:?}");
+    let o = delulu_in(&cwd, &state, &["guard", "pending", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("pending --json");
+    assert_eq!(v["requests"][0]["why"], why, "the JSON carries the agent's own bytes");
+}
+
 #[test]
 fn broker_start_dangerously_bypass_guard_prints_the_banner() {
     let base = std::env::temp_dir().join(format!("delulu_guard_bypass_start_{}", std::process::id()));

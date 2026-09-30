@@ -3603,3 +3603,20 @@ labels (1); a refusal is not a finding (3); a refused guest's end is a finding (
 
 **Verified:** clippy clean; `check-other-os.sh` clean for macOS (arm64) and Windows (the host-name lookup is per OS);
 the full suite alone 2,074 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; the export of a real sandboxed chain and of the corpus validated against OCSF 1.8.0, 0 problems.
+
+## 2026-09-30 — routine run 7: AUDIT-TEXT-1 — the investigator's and the approver's screens printed an adversary's text raw (D-V2-79)
+
+Found reading `render_audit_record` while building PS-E-06: a record's `target` printed as stored, and a use's target is
+the path the PROGRAM chose. **Witnessed on `b50bb36`, end to end in the VM:** a broker daemon, a lease for `fs.write=./out`,
+and a program writing `./out/ESC]0;PWNED BEL ESC[2J ESC[31mFORGED.txt` — inside its grant, an ordinary allowed use; `delulu
+audit tail | cat -v` showed the raw `^[]0;PWNED^G^[[2J^[[31m` (on a terminal: the title set, the screen cleared, the text
+red). Reading on, `guard pending` printed each request's `why` — the requesting agent's own text — raw too. Two witnesses,
+each red on the unfixed binary: `audit_cli::a_programs_string_in_a_record_is_shown_escaped_never_obeyed` (a target holding
+ESC, BEL, U+202E and a line break followed by a forged `seq 9 … revoke allow`: the raw bytes reached stdout and the forged
+record printed as a line of its own) and `guard_e2e::guard_pending_shows_an_agents_why_escaped_never_obeyed` (a `why`
+of `ESC[2K CR ESC[1A` and a line break, then a forged request for `fs_read:./data` — on a terminal the owner would have
+seen that request, not the real `fs_write:*`). **Fixed (D-V2-79):** every field of both listings is shown with
+`terminal_line`; `--json` is exact, and asserted so. **Mutants M45** (the target unescaped) **and M46** (the why unescaped),
+each red; restored. The leased-program witness re-run on the fixed binary: `\u{1b}]0;PWNED\u{7}…` shown, no raw byte.
+`grants tree`/`list`/`inspect` print broker-rendered text an agent may partly choose — recorded as RW 4.42, a hypothesis to
+witness. **Verified:** clippy clean; the full suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.

@@ -780,6 +780,13 @@ security decision made on an **unnormalized or unresolved representation**, walk
 a relative guard pattern. Ask it of every string compared to decide a security outcome: **what else
 spells the same thing?**
 
+- **2026-09-30 — AUDIT-TEXT-1: the investigator's and the approver's screens printed an adversary's text raw.**
+  TERMINAL-TEXT-1 escaped a program's strings where they are printed live; `audit tail`/`query` (a use's target is a
+  path the program chose) and `guard pending` (a request's `why` is the agent's) print them from storage, and did not.
+  A leased program's file name cleared the investigator's screen and could forge audit lines; an agent's `why` could
+  replace its real request on the owner's screen with another. Escaped per field since D-V2-79; `grants tree` is the
+  next surface to witness (RW 4.42).
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -925,6 +932,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Install the pinned toolchain before anything else runs `cargo` or `rustup`** (routine run 6): the first
   `cargo` call installs it, and a `rustup target add` started beside it raced the install — the toolchain was left
   with `cargo` "not applicable" and a component conflict, and had to be reinstalled.
+- **A string that is STORED is printed later — ask where** (routine run 7, AUDIT-TEXT-1): TERMINAL-TEXT-1 escaped every
+  live surface, and the audit chain and the Guard's queue kept a program's and an agent's strings to print a day later,
+  raw, on the screens where a person investigates and approves. For every string an untrusted party can put into a
+  store, find each command that prints the store for a person.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

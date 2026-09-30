@@ -159,6 +159,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   record maps to, and the records must chain — an edited or removed event fails (DL1405), and a removed last one is
   shown by comparing heads. A chain that does not verify is not exported. `scripts/ocsf-validate.py` checks an export
   against the published schema, fetched at run time (D-V2-78).
+- **Fixed (security): `delulu audit tail`/`query` and `delulu guard pending` printed a program's or an agent's text raw**
+  (AUDIT-TEXT-1). A leased program's file name, recorded as its use's target, set the investigator's terminal title,
+  cleared the screen and could forge whole audit lines; an agent's `guard request --why` could erase its real request's
+  line on the owner's screen and print a different request in its place. Every field of both listings is now shown
+  escaped on one line; `--json` is unchanged and exact (D-V2-79).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

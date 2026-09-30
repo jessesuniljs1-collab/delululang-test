@@ -837,7 +837,9 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (each slice read on the other runners from `claude/compassionate-pasteur-02il9s` first, then
   `master` fast-forwarded)   Pull request: none   Merged: n/a
 - Base: `7940188` (routine run 6's last commit)
-- Commits: (1) PS-E-06: the audit chain exported as OCSF 1.8.0, each event carrying its record (D-V2-78)
+- Commits: (1) `151dd8c` PS-E-06: the audit chain exported as OCSF 1.8.0, each event carrying its record (D-V2-78);
+  (2) `b50bb36` PS-E-06's witness names the machine: the export with no --device-name, on every OS;
+  (3) AUDIT-TEXT-1: what a program or an agent wrote is shown escaped in audit tail and guard pending (D-V2-79)
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -847,7 +849,12 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `docs/DEPLOYMENT.md` (§3: sending the chain to a SIEM; §7), `docs/REMAINING_WORK.md` (6.14 closed,
     its next step), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-78), `V2_IMPLEMENTATION_ROADMAP.md`,
     `V2_OPENSHELL_STUDY.md` (§4.6 built), `V2_LOG.md`, `V2_PHASE_STATUS.md` (PS-E)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
+  M `crates/delulu/tests/audit_ocsf_cli.rs` (the export with no `--device-name`) — (2)
+  M `crates/delulu/src/cli.rs` (`render_audit_record`, `guard pending`: every field `terminal_line`),
+    `crates/delulu/tests/audit_cli.rs`, `crates/delulu/tests/guard_e2e.rs` (a witness each), `CHANGELOG.md`, `HANDOFF.md`
+    (§11.4 AUDIT-TEXT-1; §11.5 a stored string is printed later), `docs/REMAINING_WORK.md` (4.41 closed, 4.42 new),
+    `V2_DECISION_LOG.md` (D-V2-79), `V2_LOG.md` — (3)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(3)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -856,7 +863,12 @@ it on `origin` was made in the cloud and is listed below.
   **(1):** seven witnesses; M38–M43 red, each restored byte for byte; clippy clean; `check-other-os.sh` clean for macOS
   (arm64) and Windows; the full suite alone 2,074 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; a real
   sandboxed chain's export and the witnesses' corpus validated against OCSF 1.8.0 (0 problems), thirteen mutations of an
-  export caught by the validator.
+  export caught by the validator. **(2):** M44 (the machine unnamed) red; read before `master` moved (witness.yml,
+  `audit_ocsf_cli audit_cli cli_contract json_contract` at `b50bb36`): macOS `36675486769` (`audit_ocsf_cli` 7,
+  `cli_contract` 19, `json_contract` 14) and Windows `36675489012` (7, 19, 13) — success; `master` fast-forwarded to
+  `b50bb36`. **(3):** witnessed end to end in the VM on `b50bb36` (a leased program's file name reached `audit tail` raw:
+  `^[]0;PWNED^G^[[2J^[[31m`); both witnesses red on the unfixed binary, M45 and M46 red, restored; clippy clean; the full
+  suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
 - Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
   `COMPUTERNAME` on Windows).
 - For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and
