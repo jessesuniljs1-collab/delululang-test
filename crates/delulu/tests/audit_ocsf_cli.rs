@@ -133,6 +133,15 @@ fn export(dir: &Path, extra: &[&str]) -> (Output, PathBuf) {
     (delulu(&args), out)
 }
 
+/// `ocsf.yml` validates the witnesses' exports against the published schema, which the tests cannot reach:
+/// with `DELULU_OCSF_CORPUS_OUT` set, a test leaves a copy of its export there, under its own suffix.
+fn keep_corpus(export: &Path, suffix: &str) {
+    if let Ok(dir) = std::env::var("DELULU_OCSF_CORPUS_OUT") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::copy(export, Path::new(&dir).join(format!("{suffix}.jsonl"))).unwrap();
+    }
+}
+
 fn lines(path: &Path) -> Vec<Value> {
     std::fs::read_to_string(path).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect()
 }
@@ -154,6 +163,7 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
     let dir = seeded("whole");
     let (o, file) = export(&dir, &[]);
     assert_eq!(o.status.code(), Some(0), "export failed: {}", text(&o.stderr));
+    keep_corpus(&file, "corpus");
     let events = lines(&file);
     let chain = delulu_broker::verify(&dir).expect("the seeded chain verifies");
     assert_eq!(events.len(), chain.records, "one event per record");
@@ -380,6 +390,7 @@ fn a_real_sandboxed_runs_records_export_and_verify_its_launch_and_death_paired()
     let out = d.join("real.jsonl");
     let e = run(&["audit", "export", "--format", "ocsf", "--out", out.to_str().unwrap(), "--device-name", "lab"]);
     assert_eq!(e.status.code(), Some(0), "{}", text(&e.stderr));
+    keep_corpus(&out, "real-run");
     let events = lines(&out);
     let of = |action: &str| -> Vec<&Value> {
         events.iter().filter(|e| e["unmapped"]["delulu"]["action"] == action).collect()

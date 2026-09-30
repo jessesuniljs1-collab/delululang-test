@@ -308,6 +308,8 @@ DeluluLang/
 ├── .github/workflows/              # the three-OS CI matrix (live since 2026-09-14; runs recorded in CROSS_PLATFORM_VERIFICATION §9)
 │                                   #   `witness.yml`: one test on one runner at any ref, by hand — a
 │                                   #   macOS/Windows witness read red on a branch before its fix
+│                                   #   + ocsf.yml [PS-E-06]: the audit export checked against OCSF's
+│                                   #   published schema, read at run time (by hand first)
 │                                   #   + release.yml [P5, D-V2-42]: the archive on four targets, installed
 │                                   #   as INSTALL.md says; publishes nothing without a tag AND the owner's
 │                                   #   `RELEASES` switch, and then only a draft

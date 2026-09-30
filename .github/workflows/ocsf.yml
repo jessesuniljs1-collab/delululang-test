@@ -1,0 +1,54 @@
+# The OCSF export, checked against the published schema (PS-E-06, D-V2-78 and D-V2-80; routine run 7).
+#
+# `delulu audit export --format ocsf` writes OCSF 1.8.0 events. Whether they ARE OCSF is a question for
+# OCSF's own schema, which the test suite cannot reach (tests read no network) and this repository does
+# not copy (its files are read at run time from raw.githubusercontent.com, pinned by tag). So: the OCSF
+# witnesses run and leave their exports — a corpus of every class the export maps to, and a real
+# sandboxed run's chain — and `scripts/ocsf-validate.py` checks each against the schema, then proves it
+# can fail (`--self-test`: every mutation the schema forbids must be caught).
+#
+# By hand first, as `container.yml` and `editor-e2e.yml` were: once read green it joins the push
+# triggers for the files that decide the export. It gates nothing and publishes nothing.
+name: ocsf
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The OCSF schema version (a tag of github.com/ocsf/ocsf-schema, without the v)"
+        type: string
+        default: "1.8.0"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # As the test job does on Linux x86-64 (PS-B-03b), so the real run's guest is jailed as it is there.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: The OCSF witnesses, leaving their exports
+        env:
+          DELULU_OCSF_CORPUS_OUT: ${{ runner.temp }}/ocsf-corpus
+        run: cargo test -p delulu --test audit_ocsf_cli --no-fail-fast
+      - name: Each export against the published schema, and the validator's self-test
+        shell: bash
+        env:
+          CORPUS: ${{ runner.temp }}/ocsf-corpus
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test -s "$CORPUS/corpus.jsonl" && test -s "$CORPUS/real-run.jsonl"
+          for f in "$CORPUS"/*.jsonl; do
+            echo "== $f"
+            python3 scripts/ocsf-validate.py "$f" --version "$VERSION" --cache "$RUNNER_TEMP/ocsf-schema" --self-test
+          done

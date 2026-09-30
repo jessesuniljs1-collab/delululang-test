@@ -14,9 +14,17 @@ For every event it checks what the schema says, not what the exporter meant:
   * every value's type against the dictionary (string, integer, boolean, array or object), and every
     enumerated `_id` against its enum.
 
-Exit 0 when every event validates, 1 when one does not (each problem printed), 2 on a bad invocation.
-Usage: scripts/ocsf-validate.py EXPORT.jsonl [--schema DIR] [--version 1.8.0] [--cache DIR]
+`--self-test` then proves the check can fail: it mutates events of the export in ways the schema forbids
+(a required attribute removed, an enum value out of range, an attribute misspelt, a wrong type, a wrong
+class or category or `type_uid`, the wrong schema version) and requires every mutation to be caught — a
+validator that passes everything is not a gate.
+
+Exit 0 when every event validates (and, with --self-test, every mutation is caught), 1 otherwise (each
+problem printed), 2 on a bad invocation.
+Usage: scripts/ocsf-validate.py EXPORT.jsonl [--schema DIR] [--version 1.8.0] [--cache DIR] [--self-test]
 """
+
+import copy
 
 import json
 import os
@@ -217,12 +225,53 @@ def check_event(schema, ev):
     return problems
 
 
+# Mutations the schema forbids, by the class they apply to (None: any event). Each returns nothing and
+# edits the event in place; `self_test` requires check_event to report at least one problem for each.
+MUTATIONS = [
+    ("the metadata's version is not the schema's", None, lambda e: e["metadata"].__setitem__("version", "0.0.1")),
+    ("severity_id is out of its enum", None, lambda e: e.__setitem__("severity_id", 7)),
+    ("time is a string", None, lambda e: e.__setitem__("time", "now")),
+    ("an attribute the class does not define", None, lambda e: e.__setitem__("findings_info", {})),
+    ("type_uid is not class_uid*100 + activity_id", None, lambda e: e.__setitem__("type_uid", e["type_uid"] + 50)),
+    ("the device's type is out of its enum", None, lambda e: e["device"].__setitem__("type_id", 42)),
+    ("the category is another class's", None, lambda e: e.__setitem__("category_uid", (e["category_uid"] + 1) % 7)),
+    ("a finding without its uid", 2004, lambda e: e["finding_info"].pop("uid")),
+    ("a finding claimed as an unknown class", 2004, lambda e: (e.__setitem__("class_uid", 2099), e.__setitem__("type_uid", 209901))),
+    ("a user with no identity", 3005, lambda e: e.__setitem__("user", {"type_id": 99})),
+    ("privileges not an array", 3005, lambda e: e.__setitem__("privileges", "Write")),
+    ("a process activity without its process", 1007, lambda e: e.pop("process")),
+    ("a system activity without its device", 1007, lambda e: e.pop("device")),
+    ("a file activity whose file has no name", 1001, lambda e: e["file"].pop("name")),
+    ("an http request field misspelt", 4002, lambda e: e["http_request"].__setitem__("method", "GET")),
+    ("a host that is a number", 4002, lambda e: e["dst_endpoint"].__setitem__("hostname", 5)),
+]
+
+
+def self_test(schema, events):
+    missed, tried = [], 0
+    for name, cls, mutate in MUTATIONS:
+        target = next((e for e in events if cls is None or e.get("class_uid") == cls), None)
+        if target is None:
+            continue
+        tried += 1
+        ev = copy.deepcopy(target)
+        mutate(ev)
+        if not check_event(schema, ev):
+            missed.append(name)
+    for m in missed:
+        print(f"self-test: NOT caught — {m}")
+    print(f"self-test: {tried - len(missed)} of {tried} mutation(s) caught")
+    return tried > 0 and not missed
+
+
 def main(argv):
     args = argv[1:]
-    export, local, version, cache = None, None, "1.8.0", None
+    export, local, version, cache, selftest = None, None, "1.8.0", None, False
     while args:
         a = args.pop(0)
-        if a in ("--schema", "--version", "--cache") and args:
+        if a == "--self-test":
+            selftest = True
+        elif a in ("--schema", "--version", "--cache") and args:
             v = args.pop(0)
             local, version, cache = (v, version, cache) if a == "--schema" else (local, v, cache) if a == "--version" else (local, version, v)
         elif not a.startswith("-") and export is None:
@@ -238,25 +287,28 @@ def main(argv):
         print(f"error: the schema says it is {schema.get('version.json').get('version')}, not {version}", file=sys.stderr)
         return 2
     bad = 0
-    events = 0
+    parsed = []
     with open(export, encoding="utf-8") as f:
         for n, line in enumerate(f, 1):
             if not line.strip():
                 continue
-            events += 1
             try:
                 ev = json.loads(line)
             except json.JSONDecodeError as e:
                 print(f"line {n}: not JSON: {e}")
                 bad += 1
                 continue
+            parsed.append(ev)
             for p in check_event(schema, ev):
                 print(f"line {n} (class {ev.get('class_uid')}): {p}")
                 bad += 1
-    if events == 0:
+    if not parsed and bad == 0:
         print("error: the export holds no events", file=sys.stderr)
         return 1
-    print(f"{'ok' if bad == 0 else 'FAILED'}: {events} event(s) against OCSF {version}; {bad} problem(s)")
+    classes = sorted({e.get("class_uid") for e in parsed})
+    print(f"{'ok' if bad == 0 else 'FAILED'}: {len(parsed)} event(s) of class(es) {classes} against OCSF {version}; {bad} problem(s)")
+    if selftest and not self_test(schema, parsed):
+        return 1
     return 0 if bad == 0 else 1
 
 
