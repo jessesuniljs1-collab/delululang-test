@@ -3651,3 +3651,23 @@ a regular file loads as none and a refresh keeps what was loaded; the Unix write
 with no reader) to the same refusal in words, judges what it opened and only then truncates. The witness covers the
 reader's case too (nothing reaches the reader). **Mutants M50** (the blocking read), **M51** (the blocking write-open),
 **M52** (the write without the check), each red; restored. **Verified:** clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success.
+
+## 2026-09-30 — routine run 7: RW 4.42 — `grants tree`, `list` and `inspect` printed a delegation's strings raw
+
+AUDIT-TEXT-1's next surface, recorded as a hypothesis in `9c58cbb`. **Witnessed on `634e9f0`** in the VM and in the new
+`grants_cli::a_delegations_strings_are_shown_escaped_in_tree_list_and_inspect`: a real broker daemon, a delegation whose
+`fs.write` path carries `ESC]0;PWNED BEL ESC[2J`, a line break and `g_forged [live] effects={Read,Write,Net}`, and whose
+`net` host carries `ESC[31m` — `grants tree` and `grants list` printed four raw escapes each, and the forged node line
+began a line of its own (`inspect` the same). **Fixed (D-V2-79's rule):** `Broker::tree` builds one line per node, so
+each field is escaped where the line is built; the CLI escapes its list line and each of inspect's fields; `--json`
+stays exact, and the witness asserts it. **Mutants M53** (the tree's authority), **M54** (the list's), **M55**
+(inspect's) unescaped, each red; restored. **Verified:** clippy clean; the full suite alone 2,079 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `297f976` (`grants_cli guard_e2e broker_cli`): macOS `36680482439` and Windows `36680485122` — success.
+
+**Routine run 7, closed.** CI on arrival green (`cc157bc`, `7940188`). Built: **PS-E-06, complete** — the audit chain as
+OCSF 1.8.0, each event carrying its record (D-V2-78), a use's record naming its effect (D-V2-80), the schema read at run
+time in the VM and on a runner (`ocsf.yml`, read green by hand, then on push). Found and closed: **AUDIT-TEXT-1**
+(D-V2-79) — `audit tail`/`query`, `guard pending`, then `grants tree`/`list`/`inspect` (RW 4.42) printed a program's or an
+agent's stored strings raw; **RW 4.38's remainder** — the secret store read and written the FIFO way. Mutants M38–M55,
+each red. Every slice read on macOS and Windows before `master` moved; push runs read green up to `9c58cbb`. Loop
+engineering: the routine's step 5 gains the OCSF check, a real-run witness beside every fixture that fakes the host, and
+overlapping a slice's runner read with its suite; HANDOFF §11.3, §11.4, §11.5.

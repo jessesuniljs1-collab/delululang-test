@@ -1651,7 +1651,9 @@ text red; a file name can hold a line break, so the witness forged a whole `seq 
 raw; the witness's `why` erased the real request's line (`use=[fs_write:*]`) and printed a request for `fs_read:./data`
 in its place. Decided: every field of both listings is escaped onto one line with `terminal_line` (the record's action,
 decision, actor and target; the request's id, status, node, uses and why). The chain, the queue and `--json` keep the
-bytes exactly — the escaping is only where a person reads. No new code.
+bytes exactly — the escaping is only where a person reads. No new code. **Applied the same run to `grants tree`, `list`
+and `inspect`** (RW 4.42, witnessed on `634e9f0`): the broker's tree renderer escapes each field of its node's one line,
+the CLI its list line and inspect's fields.
 
 ## D-V2-80 — PS-E-06's remainder: a use's audit record names its effect, and the export maps it — TAKEN (head chef, 2026-09-30, under the owner's delegation)
 

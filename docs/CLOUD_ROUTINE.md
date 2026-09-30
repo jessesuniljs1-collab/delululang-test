@@ -197,8 +197,14 @@ exit code; records written after it need only a second `build` and the gates tha
 `doctor_cli`, `repository_structure`, `evidence_claims`, `governance`, `distribution`, `book`, `core_invariance`
 and the Survey's own tests. An `#[ignore]`d gate is not in that count: a change to either WebAssembly engine also runs the
 two-engine differential by hand, `cargo test -p delulu-wasm --release --test differential -- --ignored`
-(50,000 programs, about 150 s once built — CI runs it only in `heavy-gates`, run 4). Freeze the tree while it runs: draft the records (step 6) as a patch script in the
-scratchpad meanwhile, and apply it once the suite has reported.
+(50,000 programs, about 150 s once built — CI runs it only in `heavy-gates`, run 4). A change to the audit records or
+their export is checked against OCSF's published schema: `scripts/ocsf-validate.py EXPORT --self-test` in the VM (the
+schema's raw files are reachable, run 7), and `ocsf.yml` runs it on the runners for every push that touches them.
+A fixture that fakes what the host writes has a real-run witness beside it (run 7: a faked generation hid a wrong reading).
+Freeze the tree while it runs: draft the records (step 6) as a patch script in the
+scratchpad meanwhile, and apply it once the suite has reported. While the suite runs, a fix may be COMMITTED (a commit
+changes no file) and pushed to the branch for its runner witnesses — `witness.yml` with a warm cache answers in 2–4
+minutes (run 7), so a slice's runner read and its local suite overlap.
 
 After a security-relevant slice, a **red-team pass** is worth its cost: one Sonnet 5.5 sous-chef, briefed
 to break the new guarantee and to list every oddity, against a frozen COPY of the binary in a scratch

@@ -787,8 +787,9 @@ spells the same thing?**
   TERMINAL-TEXT-1 escaped a program's strings where they are printed live; `audit tail`/`query` (a use's target is a
   path the program chose) and `guard pending` (a request's `why` is the agent's) print them from storage, and did not.
   A leased program's file name cleared the investigator's screen and could forge audit lines; an agent's `why` could
-  replace its real request on the owner's screen with another. Escaped per field since D-V2-79; `grants tree` is the
-  next surface to witness (RW 4.42).
+  replace its real request on the owner's screen with another. Escaped per field since D-V2-79 — and `grants tree`,
+  `list` and `inspect` the same run (RW 4.42): a delegation's path with a line break forged a node line on the owner's
+  screen.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -886,7 +887,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A fake peer keeps the protocol it fakes** (routine run 4): the attestation replay test's launcher wrote
   with `cp`, which the protocol forbids — the host reads the document the moment it exists — and macOS lost
   that race once. Witness a race by holding its window open (a `sleep` between creating and filling), never
-  by re-running until it shows.
+  by re-running until it shows. **Again in routine run 7:** a fixture wrote the sandbox records' generation as an
+  integer where the host writes 64 hex characters, and the export read the fixture's spelling. Beside every fixture
+  that fakes what the host writes, keep one witness that runs the host for real.
 - **An ignored gate is not in the suite's count** (routine run 4): `delulu-wasm/tests/differential.rs`, the
   two-engine differential, is `#[ignore]`d and runs only in `heavy-gates`, so a green suite says nothing
   about it. A change to either WebAssembly engine runs it by hand (release, 50,000 programs, ~150 s).

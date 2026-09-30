@@ -163,7 +163,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   (AUDIT-TEXT-1). A leased program's file name, recorded as its use's target, set the investigator's terminal title,
   cleared the screen and could forge whole audit lines; an agent's `guard request --why` could erase its real request's
   line on the owner's screen and print a different request in its place. Every field of both listings is now shown
-  escaped on one line; `--json` is unchanged and exact (D-V2-79).
+  escaped on one line; `--json` is unchanged and exact (D-V2-79). **`grants tree`, `grants list` and `grants inspect`
+  likewise** (RW 4.42): a delegation's scopes and holder — the delegating party's strings — could clear the owner's
+  screen, and a line break in a path forged a node line.
 - **A capability use's audit record names its effect** (`{"op": "FsWrite"}`, `"Net"`, … in the record's payload slot),
   allowed or refused, and the OCSF export maps it: an allowed file use is File System Activity (1001, Read or Update, with
   the path), an allowed network use HTTP Activity (4002, Get, with the host). Records written before name no effect and

@@ -843,7 +843,9 @@ it on `origin` was made in the cloud and is listed below.
   (4) `5a2bbfe` PS-E-06 complete: a use's audit record names its effect, and the export maps it (D-V2-80);
   (5) `3d84304` ocsf.yml: the export checked against OCSF's published schema on a runner, by hand first;
   (6) `6c7aca3` RW 4.38's remainder: the secret store is read and written only if it is a regular file;
-  (7) RW 4.38 closed, recorded; ocsf.yml joins the push triggers, read green by hand
+  (7) `634e9f0` RW 4.38 closed, recorded; ocsf.yml joins the push triggers, read green by hand;
+  (8) `297f976` RW 4.42: grants tree, list and inspect show a delegation's strings escaped;
+  (9) routine run 7 closed: RW 4.42 recorded; the loop's lessons
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -870,7 +872,12 @@ it on `origin` was made in the cloud and is listed below.
   M `crates/delulu-broker/src/audit.rs` (`read_day` → `read_regular(path, what)`; `NotRegular` names what),
     `crates/delulu-broker/src/secrets.rs` (`read_store`; the Unix write; a witness) — (6); `CHANGELOG.md`, `HANDOFF.md`
     (§11.4), `docs/REMAINING_WORK.md` (4.38 closed), `V2_LOG.md`, `.github/workflows/ocsf.yml` (push, by paths) — (7)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(7)
+  M `crates/delulu-broker/src/tree.rs` (`render_node`), `crates/delulu/src/cli.rs` (`render_node_line`, `grants
+    inspect`), `crates/delulu/tests/grants_cli.rs` (a witness) — (8); `CHANGELOG.md`, `HANDOFF.md` (§11.4 AUDIT-TEXT-1;
+    §11.5 a fake peer, again), `docs/CLOUD_ROUTINE.md` (step 5: the OCSF check; a real-run witness beside a fixture;
+    overlap a slice's runner read with its suite), `docs/REMAINING_WORK.md` (4.42 closed), `V2_DECISION_LOG.md`
+    (D-V2-79's note), `V2_LOG.md`, `V2_PHASE_STATUS.md` — (9)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(9)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -887,9 +894,24 @@ it on `origin` was made in the cloud and is listed below.
   suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved (witness.yml,
   `audit_cli guard_e2e` at `9c58cbb`): macOS `36676784576` (12, 3) and Windows `36676787378` (12, 3) — success; `master`
   fast-forwarded to `9c58cbb`. **(4):** M47–M49 red, restored; the corpus validated (0 problems), five more export
-  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0. **(6)–(7):** the witness red on `3d84304`; M50–M52 red, restored; clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success.
+  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0. **(6)–(7):** the witness red on `3d84304`; M50–M52 red, restored; clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success. **(8)–(9):** the witness red on `634e9f0`; M53–M55 red, restored; clippy clean; the full suite alone 2,079 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `297f976` (`grants_cli guard_e2e broker_cli`): macOS `36680482439` and Windows `36680485122` — success.
 - Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
   `COMPUTERNAME` on Windows).
 - For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and
-  `schema.ocsf.io` are not).
-- Open / next: (to be completed at the run's close)
+  `schema.ocsf.io` are not), §11.4 (AUDIT-TEXT-1 and RW 4.42; the secret store's FIFO), §11.5 (a string that is stored
+  is printed later — ask where; a fake peer kept the wrong protocol again); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Push runs read: `b50bb36` `36675985008` — 16 jobs, none failed; `9c58cbb` `36677275938` — 16 jobs, none failed (macOS:
+  egress, host loss and privilege floor established, filesystem reads and the memory ceiling absent, ping-pong NOT
+  MEASURED — 3 hardware threads, 2.15x observed; Windows: all five established, ping-pong NOT MEASURED — the runner busy;
+  the Linux jobs' notices not read this run). `ocsf.yml` `36678699774` (by hand, `3d84304`) — success, read from its log.
+  Unread when this entry was written: `3d84304`'s, `634e9f0`'s and this commit's push runs, and `634e9f0`'s `ocsf.yml`
+  push run — the next run reads them first. No nightly since `36548984501` (none had fired by 07:00 UTC).
+- Open / next: (1) read the push runs above, and the next nightly (its `miri-slow` interprets `read_regular` and the
+  store's write — both leave out `O_NONBLOCK` under Miri); (2) **PS-E's rest:** E-05 — OpenShell as a tested L3 and
+  `sandbox policy --format openshell` (by hand: an `openshell.yml` that downloads the pinned release on a runner, as the
+  study's §4.5 says; nothing of OpenShell is ever committed); E-04's attestation binding (a digest the attester measured
+  itself); E-01's remainder (attesters' claims as properties; `contained`'s set); E-03 H6 (a classifier stopped it twice —
+  perhaps with the owner); then P8 (P8-01 first), P9; (3) the red-team rows still open: RW 4.35 (the broker's reply write
+  — a whole-write bound; Windows `WriteFile` blocks), 4.37 (the host's writes to a guest — needs the escaped-guest
+  harness to stop reading), 4.39's rest (the LSP's and MCP's sizes), 4.40 (the broker's queue); (4) RW 7.17 — keep
+  watching arm64's `estop_cli`. **For the owner:** D-V2-78 to D-V2-80 are this run's decisions.

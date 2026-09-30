@@ -91,6 +91,12 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   inside it; install the pinned toolchain before any concurrent `rustup`/`cargo` (a race broke it). Then PS-E-04's
   Windows window (D-V2-74): the launcher held open sharing reads only until the run ends — red on a Windows runner
   first, the swap timed by `FileProcessIdsUsingFileInformation` (Windows' view of who holds a file open).
+- **Routine run 7 (2026-09-30):** PS-E-06 complete — `delulu audit export --format ocsf` / `audit verify --ocsf`,
+  each event carrying its whole record (D-V2-78), and a use's record naming its effect (D-V2-80); OCSF's schema read
+  at run time (`scripts/ocsf-validate.py --self-test`, `ocsf.yml`) — its raw files ARE reachable from the VM.
+  AUDIT-TEXT-1 (D-V2-79): `audit tail`/`query`, `guard pending` and `grants tree`/`list`/`inspect` printed a
+  program's or an agent's stored strings raw — a string that is stored is printed later; ask where. The secret store
+  had AUDIT-FIFO-1's shape (RW 4.38 closed). Trap, again: a fixture faked the host's generation as an integer.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
