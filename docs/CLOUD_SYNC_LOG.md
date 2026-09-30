@@ -950,7 +950,8 @@ it on `origin` was made in the cloud and is listed below.
   (13) `cb96c40` … run 7's reading — the witnesses' own mistake fixed, the nested guest's refusal witnessed;
   (14) `74fb2b0` PS-E-05 (a) enforced by a real OpenShell sandbox, read green; OpenShell's deny line asserted; the nested
   guest recorded; (15) `af09d42` openshell-runtime.sh: OpenShell's deny line waited for with a bound; two more lessons
-  for HANDOFF; (16) the run's close: `openshell.yml` on push (the prover job); the last readings — this commit
+  for HANDOFF; (16) `adff7a8` routine run 8 closed: openshell.yml's prover job on push; the nightly green; the last
+  readings; (17) the run's last reading — this commit
 - Files and folders (`git diff --name-status 381fed8..HEAD`):
   A `crates/delulu/src/openshell.rs` (the export: `export`, `run_as`, the canonical-host and path rules, the YAML written
     from the JSON policy; five unit tests), `crates/delulu/tests/sandbox_openshell_cli.rs` (seven witnesses),
@@ -1017,12 +1018,14 @@ it on `origin` was made in the cloud and is listed below.
   success, and `9594e87` `36710708824`, `625b6aa` `36711469433`, `cc3990f` `36712231055` — success. **Run 9**
   `36713676712` (`74fb2b0`): the runtime job red on the new deny-line assertion alone (the log arrives asynchronously);
   **run 10 `36714033297` (`af09d42`): both jobs green**, the deny line asserted and present. **The nightly `36694905248`
-  (`381fed8`): complete, every job success, `miri-slow` included.**
+  (`381fed8`): complete, every job success, `miri-slow` included.** **The last readings:** `cb96c40` `36712886514`,
+  `74fb2b0` `36713671193`, `af09d42` `36714026123` — success; **`adff7a8` `36714603166` — 16 jobs, none failed**; and
+  `openshell.yml`'s first PUSH run, `36714603164` at `adff7a8` — success (the prover job; the runtime job skipped, as on
+  every push).
 - Redo on the laptop: nothing beyond the suite (the export's Windows-spelling refusal is witnessed on the Windows runner).
 - For the laptop's memory: `HANDOFF.md` §11.4 (SCOPE-HIDDEN-1), §11.5 (a mutant loop leaves the last mutant's binary;
   a workflow is dispatchable only once on the default branch); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read the push runs of `cb96c40`, `74fb2b0`, `af09d42` and this commit, and this commit's
-  `openshell.yml` push run (its first on push: the prover job only);
+- Open / next: (1) read this commit's push run (records only) — every earlier one of this run was read green;
   (2) **E-05 (b) — the guest inside OpenShell:** run 8 witnessed that the guest cannot run nested — its own `seccomp`
   filter is refused inside OpenShell's sandbox (EPERM), so it fails closed and the host never sends the program. A
   DECISION first (D-V2-nn): how the guest locks itself down under an outer wall that forbids adding a filter (e.g. accept

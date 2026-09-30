@@ -3810,8 +3810,9 @@ times, runs 3–10); the runtime job stays by hand.
 **CI:** the nightly `36694905248` (`381fed8`) — **complete, every job success**, `miri-slow` included (run 7 had asked for
 it: it interprets `read_regular` and the secret store's write). Push runs `7dfb566` `36708157193`, `804ddc8`
 `36708404843`, `d447b29` `36708628013`, `a3b2c90` `36709029216`, `154310c` `36709802148`, `9594e87` `36710708824`,
-`625b6aa` `36711469433`, `cc3990f` `36712231055` — success; `cb96c40`, `74fb2b0`, `af09d42` and this commit's were running
-when this entry was written.
+`625b6aa` `36711469433`, `cc3990f` `36712231055`, `cb96c40` `36712886514`, `74fb2b0` `36713671193`, `af09d42` `36714026123`
+— success; `adff7a8` `36714603166` — 16 jobs, none failed; `openshell.yml`'s first push run `36714603164` (`adff7a8`) —
+success (the prover job; the runtime job skipped on push). Only the run's last records commit is left for the next run.
 
 **Routine run 8, closed.** SCOPE-HIDDEN-1 (D-V2-81) found and fixed; **PS-E-05 (a) complete** — `delulu sandbox policy
 --format openshell` (D-V2-82), read on macOS and Windows before `master` moved, checked by OpenShell's own prover and
