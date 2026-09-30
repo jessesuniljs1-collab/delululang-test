@@ -836,6 +836,13 @@ fn day_path(dir: &Path, day: &str) -> PathBuf {
 /// `query` and the log's own open — waiting for a writer that never came. Opened non-blocking, so opening
 /// a FIFO returns at once, and judged by what was OPENED (ATTEST-FIFO-1's rule).
 fn read_day(path: &Path) -> std::io::Result<String> {
+    read_regular(path, "an audit day log")
+}
+
+/// [`read_day`]'s rule for any file the broker keeps: read `path` only if what was opened is a regular
+/// file, and refuse anything else in words naming `what` it had to be. The secret store reads through it
+/// too (RW 4.38's remainder).
+pub(crate) fn read_regular(path: &Path, what: &'static str) -> std::io::Result<String> {
     use std::io::Read as _;
     let mut open = fs::OpenOptions::new();
     open.read(true);
@@ -845,21 +852,21 @@ fn read_day(path: &Path) -> std::io::Result<String> {
     std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NONBLOCK);
     let mut f = open.open(path)?;
     if !f.metadata()?.is_file() {
-        return Err(std::io::Error::other(NotRegular(path.to_path_buf())));
+        return Err(std::io::Error::other(NotRegular(path.to_path_buf(), what)));
     }
     let mut text = String::new();
     f.read_to_string(&mut text)?;
     Ok(text)
 }
 
-/// [`read_day`]'s refusal: named, so the readers that treat an unreadable day log as empty do not treat
+/// [`read_regular`]'s refusal: named, so the readers that treat an unreadable day log as empty do not treat
 /// this one so.
 #[derive(Debug)]
-struct NotRegular(PathBuf);
+pub(crate) struct NotRegular(pub(crate) PathBuf, pub(crate) &'static str);
 
 impl std::fmt::Display for NotRegular {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`{}` is not a regular file, and an audit day log must be one", self.0.display())
+        write!(f, "`{}` is not a regular file, and {} must be one", self.0.display(), self.1)
     }
 }
 

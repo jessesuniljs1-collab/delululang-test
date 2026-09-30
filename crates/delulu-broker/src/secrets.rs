@@ -39,10 +39,12 @@ struct DerivedSecret {
 }
 
 impl SecretStore {
-    /// Load the store from `path` (missing file ⇒ empty store; the file is created on first `set`).
+    /// Load the store from `path` (missing file ⇒ empty store; the file is created on first `set`). Read
+    /// only if it is a regular file (RW 4.38's remainder): a FIFO at the path held `load` — and so
+    /// `secrets list` and the daemon's start — waiting for a writer; anything else loads as none.
     pub fn load(path: impl Into<PathBuf>) -> SecretStore {
         let path = path.into();
-        let entries = match std::fs::read_to_string(&path) {
+        let entries = match read_store(&path) {
             Ok(text) => parse_entries(&text),
             Err(_) => BTreeMap::new(),
         };
@@ -52,6 +54,12 @@ impl SecretStore {
             derived: RefCell::new(BTreeMap::new()),
             next_derived: RefCell::new(0),
         }
+    }
+
+    /// An empty store bound to `path`, not read from it: the next `set` writes the path (the FIFO witness).
+    #[cfg(test)]
+    fn in_memory_at(path: &Path) -> SecretStore {
+        SecretStore { path: Some(path.to_path_buf()), ..SecretStore::in_memory() }
     }
 
     /// A purely in-memory store (tests / embedded experiments). Nothing persists.
@@ -72,7 +80,7 @@ impl SecretStore {
     /// that cannot be read keeps what was loaded rather than guessing. Derived entries are untouched.
     pub fn refresh(&self) {
         let Some(path) = &self.path else { return };
-        match std::fs::read_to_string(path) {
+        match read_store(path) {
             Ok(text) => *self.entries.borrow_mut() = parse_entries(&text),
             // Gone (not merely unreadable): an empty store. Asked of the path rather than the error,
             // so holder-neutrality's `.kind` sweep has nothing to misread.
@@ -137,6 +145,11 @@ impl SecretStore {
     }
 }
 
+/// The store's one reader: a regular file only, never waited on (`audit::read_regular`).
+fn read_store(path: &Path) -> std::io::Result<String> {
+    crate::audit::read_regular(path, "the secret store")
+}
+
 fn parse_entries(text: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     if let Ok(serde_json::Value::Object(map)) = serde_json::from_str(text) {
@@ -153,12 +166,24 @@ fn parse_entries(text: &str) -> BTreeMap<String, String> {
 fn write_secret_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::OpenOptionsExt as _;
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600) // owner-only, like the broker key
-        .open(path)?;
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true).create(true).mode(0o600); // owner-only, like the broker key
+    // Non-blocking, and truncated only once it is known to be a regular file (RW 4.38's remainder):
+    // opening a FIFO for writing waits for a reader, and `secrets set` waited with it. Not under Miri,
+    // whose `open` takes a short list of flags and which never makes a FIFO.
+    #[cfg(not(miri))]
+    open.custom_flags(libc::O_NONBLOCK);
+    let not_regular = || std::io::Error::other(crate::audit::NotRegular(path.to_path_buf(), "the secret store"));
+    let mut f = match open.open(path) {
+        Ok(f) => f,
+        // POSIX's answer to a non-blocking write-open of a FIFO that has no reader.
+        Err(e) if e.raw_os_error() == Some(libc::ENXIO) => return Err(not_regular()),
+        Err(e) => return Err(e),
+    };
+    if !f.metadata()?.is_file() {
+        return Err(not_regular());
+    }
+    f.set_len(0)?;
     f.write_all(bytes)
 }
 
@@ -455,6 +480,67 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 4.38's remainder (routine run 7): the store was read and written by name, and a FIFO at its path
+    /// held every one of them — `load` (`secrets list`, the daemon's start), `refresh` (which the daemon
+    /// runs before EVERY secret operation, on its one-connection serve loop) and `set` (whose write waits
+    /// for a reader). AUDIT-FIFO-1's rule: judge what was opened, and refuse what is not a regular file.
+    #[cfg(unix)]
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn a_store_that_is_not_a_regular_file_is_refused_not_waited_on() {
+        let dir = std::env::temp_dir().join(format!("delulu_secrets_fifo_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.json");
+        let within = |what: &str, f: Box<dyn FnOnce() -> String + Send>| -> String {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(f());
+            });
+            rx.recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap_or_else(|_| panic!("`{what}` was still waiting on the FIFO after 5 s"))
+        };
+        // A store that was a real one, then replaced by a FIFO under the daemon.
+        let store = SecretStore::load(&path);
+        store.set("API_KEY", "hunter2").unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert!(std::process::Command::new("mkfifo").arg(&path).status().expect("mkfifo runs").success());
+
+        let p = path.clone();
+        let loaded = within("load", Box::new(move || format!("{:?}", SecretStore::load(&p).names())));
+        assert_eq!(loaded, "[]", "a store that is not a regular file loads as none, not as whatever a writer sends");
+        let kept = within(
+            "refresh",
+            Box::new(move || {
+                store.refresh();
+                let names = format!("{:?}", store.names());
+                let set = store.set("OTHER", "x").map_err(|e| e.to_string());
+                format!("{names} {set:?}")
+            }),
+        );
+        assert!(kept.starts_with("[\"API_KEY\"]"), "an unreadable store keeps what was loaded: {kept}");
+        assert!(kept.contains("not a regular file"), "and a write onto it is refused in words: {kept}");
+
+        // With a reader on the FIFO the write-open succeeds, and only the check stands between the store's
+        // secrets and whoever is reading.
+        use std::io::Read as _;
+        use std::os::unix::fs::OpenOptionsExt as _;
+        let mut reader = std::fs::OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(&path).unwrap();
+        let p = path.clone();
+        let wrote = within(
+            "set, a reader waiting",
+            Box::new(move || {
+                let store = SecretStore::in_memory_at(&p);
+                store.set("API_KEY", "hunter2-to-the-reader").map_err(|e| e.to_string()).err().unwrap_or_default()
+            }),
+        );
+        assert!(wrote.contains("not a regular file"), "refused in words: {wrote}");
+        let mut got = Vec::new();
+        let _ = reader.read_to_end(&mut got);
+        assert!(got.is_empty(), "the reader received the store: {:?}", String::from_utf8_lossy(&got));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn set_get_persist_roundtrip() {

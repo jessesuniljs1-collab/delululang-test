@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 292 |
-| Rust lines | 151548 |
+| Rust lines | 151641 |
 | Rust files outside `src/` (test/bench targets) | 132 |
 | Markdown documents | 252 |
 | Markdown lines | 67935 |
@@ -158,11 +158,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 10821 lines
+- **Modules:** 16 files, 10914 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/audit.rs` | 1412 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
+| `src/audit.rs` | 1419 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 472 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/budget_scope.rs` | 177 | PS-B-05: the resource-budget dimension of authority. |
 | `src/cert.rs` | 1752 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
@@ -174,7 +174,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/lib.rs` | 63 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/ocsf.rs` | 333 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
-| `src/secrets.rs` | 679 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
+| `src/secrets.rs` | 765 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1129 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 602 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
