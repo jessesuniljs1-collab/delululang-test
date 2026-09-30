@@ -1885,6 +1885,11 @@ fn in_words(e: io::Error) -> io::Error {
         io::ErrorKind::UnexpectedEof => {
             io::Error::new(io::ErrorKind::UnexpectedEof, "the guest closed the channel without saying goodbye")
         }
+        // RW 4.32: not silence — a frame begun and not finished within the frame deadline.
+        _ if delulu_runtime::channel::FrameTooSlow::is(&e) => io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("the guest {}, and the channel's deadline ended the run", e.get_ref().map_or_else(String::new, |x| x.to_string())),
+        ),
         io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => io::Error::new(
             io::ErrorKind::TimedOut,
             format!("the guest said nothing for {CHANNEL_DEADLINE:?}, and the channel's deadline ended the run"),
@@ -2457,6 +2462,20 @@ pub(crate) fn channel_tag() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 4.32: a guest that dripped a frame past the frame deadline is not told of as a SILENT one —
+    /// the operator reads what it did, and a silence keeps its own words.
+    #[test]
+    fn a_slow_frame_and_a_silence_are_told_apart() {
+        let slow = io::Error::new(
+            io::ErrorKind::TimedOut,
+            delulu_runtime::channel::FrameTooSlow { within: delulu_runtime::channel::FRAME_DEADLINE },
+        );
+        let said = in_words(slow).to_string();
+        assert_eq!(said, "the guest did not send one whole frame within 60s, and the channel's deadline ended the run");
+        let quiet = in_words(io::Error::from(io::ErrorKind::TimedOut)).to_string();
+        assert!(quiet.contains("said nothing for 60s"), "{quiet}");
+    }
 
     /// PS-A-05: a guest inherits nothing. The environment is where secrets actually live, so the
     /// child gets an empty one plus only what the OS needs to start a process at all.

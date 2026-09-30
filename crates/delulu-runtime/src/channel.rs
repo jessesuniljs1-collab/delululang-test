@@ -85,6 +85,11 @@ pub const MAX_DENIED_CHARS: usize = 512;
 /// must not make the peer allocate unboundedly.
 pub const MAX_FRAME: u32 = 16 * 1024 * 1024;
 
+/// How long a host gives a guest to send one whole frame, from the frame's first byte (RW 4.32,
+/// FRAME-DRIP-1). The transport's own deadline bounds each READ — a guest that says nothing — but a
+/// guest sending one byte just inside it could hold a frame, and the host, open for ever.
+pub const FRAME_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// An opaque capability reference. The number means nothing outside the host's table for one run.
 pub type Handle = u64;
 
@@ -321,6 +326,79 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     Ok(value)
 }
 
+/// A deadline on a whole FRAME, not on each read (RW 4.32, FRAME-DRIP-1).
+///
+/// Every channel that reads a peer DeluluLang does not trust bounds each read — the guest's (the host's
+/// side), the broker daemon's (one client at a time), a foreign worker's. None bounded the frame: a peer
+/// sending one byte just inside the read deadline kept a frame open for as long as it liked, and on the
+/// broker's single-connection loop that held every other custody operation, the operator's e-stop
+/// revoke among them. Read a frame through this and it must arrive whole within `within`. The check is
+/// made around each read, so a frame is abandoned no later than `within` plus one read deadline after
+/// its time began; a read already in flight is not cut short.
+pub struct Within<'a, R: Read + ?Sized> {
+    inner: &'a mut R,
+    within: std::time::Duration,
+    began: Option<std::time::Instant>,
+}
+
+impl<'a, R: Read + ?Sized> Within<'a, R> {
+    /// The frame's time starts now: for a peer that owes its frame at once — a request on a connection
+    /// just accepted, the reply to a call just made.
+    pub fn from_now(inner: &'a mut R, within: std::time::Duration) -> Self {
+        Within { inner, within, began: Some(std::time::Instant::now()) }
+    }
+
+    /// The frame's time starts at its first byte: for a peer that may be quiet between frames (a guest
+    /// computing), whose silence the transport's own read deadline bounds.
+    pub fn from_first_byte(inner: &'a mut R, within: std::time::Duration) -> Self {
+        Within { inner, within, began: None }
+    }
+
+    fn late(&self) -> io::Result<()> {
+        match self.began {
+            Some(t) if t.elapsed() > self.within => {
+                Err(io::Error::new(io::ErrorKind::TimedOut, FrameTooSlow { within: self.within }))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+impl<R: Read + ?Sized> Read for Within<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.late()?;
+        let n = self.inner.read(buf)?;
+        if n > 0 && self.began.is_none() {
+            self.began = Some(std::time::Instant::now());
+        }
+        self.late()?;
+        Ok(n)
+    }
+}
+
+/// The error a [`Within`] gives: the peer did not send one whole frame in time. Its kind is
+/// `TimedOut`, like a read deadline's; a caller that words the two differently can tell them apart by
+/// this type (`io::Error::get_ref`).
+#[derive(Debug)]
+pub struct FrameTooSlow {
+    pub within: std::time::Duration,
+}
+
+impl std::fmt::Display for FrameTooSlow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "did not send one whole frame within {:?}", self.within)
+    }
+}
+
+impl std::error::Error for FrameTooSlow {}
+
+impl FrameTooSlow {
+    /// Whether `e` is a [`Within`]'s refusal.
+    pub fn is(e: &io::Error) -> bool {
+        e.get_ref().is_some_and(|inner| inner.is::<FrameTooSlow>())
+    }
+}
+
 /// The host side of the channel: it mints the handles, resolves them, and performs each operation
 /// through an [`EffectSink`] — [`crate::sink::LocalSink`] today, so a guest's effect goes through
 /// exactly the checks a local run makes. The table is per run and per connection: a handle means
@@ -357,6 +435,8 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// is decided by the broker — revocation, expiry, the Guard's `guarded` and `sealed` tiers and
     /// its permits — exactly as for a program the host interprets itself (REMAINING_WORK 4.20).
     custody: Option<Box<dyn crate::custody::Custody>>,
+    /// How long the guest has to send one whole frame, from its first byte ([`FRAME_DEADLINE`]).
+    frame_deadline: std::time::Duration,
 }
 
 /// How many refusals a report keeps. Past this the count still rises but nothing more is stored.
@@ -374,7 +454,21 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             self_applied: Vec::new(),
             generation: None,
             custody: None,
+            frame_deadline: FRAME_DEADLINE,
         }
+    }
+
+    /// A deadline on each whole frame the guest sends other than [`FRAME_DEADLINE`] — shorter, for a
+    /// test that must not wait a minute to see it kept.
+    pub fn with_frame_deadline(mut self, within: std::time::Duration) -> Self {
+        self.frame_deadline = within;
+        self
+    }
+
+    /// The deadline on each whole frame the guest sends. The host's other reads of the guest — its
+    /// confinement report, before the program is sent — keep the same one.
+    pub fn frame_deadline(&self) -> std::time::Duration {
+        self.frame_deadline
     }
 
     /// PS-E-01: the generation this run was opened with ([`Open`]); the guest's confinement report must
@@ -639,7 +733,9 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// handle for no reason.
     pub fn serve(&mut self, io: &mut (impl Read + Write)) -> io::Result<i32> {
         loop {
-            let req: Request = read_frame(io)?;
+            // RW 4.32: the guest may be quiet between frames (the transport's deadline bounds that), but
+            // a frame it has begun is owed whole within the frame deadline.
+            let req: Request = read_frame(&mut Within::from_first_byte(&mut *io, self.frame_deadline))?;
             let done = matches!(req.body, ReqBody::Done { .. });
             let exit = if let ReqBody::Done { exit } = req.body { exit } else { 0 };
             let resp = self.answer(&req);
@@ -1086,6 +1182,98 @@ mod tests {
         let e = read_frame::<Open>(&mut &frame[..]).unwrap_err();
         assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{e}");
         assert!(e.to_string().contains("after its value"), "{e}");
+    }
+
+    /// A guest's end of the channel that waits `pause` before its first byte, then sends its frames
+    /// one byte per read with `gap` before each — a peer each of whose reads is prompt.
+    struct Drip {
+        bytes: Vec<u8>,
+        at: usize,
+        pause: std::time::Duration,
+        gap: std::time::Duration,
+        answers: Vec<u8>,
+    }
+
+    impl Read for Drip {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.at == self.bytes.len() || buf.is_empty() {
+                return Ok(0);
+            }
+            std::thread::sleep(if self.at == 0 { self.pause } else { self.gap });
+            buf[0] = self.bytes[self.at];
+            self.at += 1;
+            Ok(1)
+        }
+    }
+
+    impl Write for Drip {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            self.answers.extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn done_frame() -> Vec<u8> {
+        let mut f = Vec::new();
+        write_frame(&mut f, &Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 7 } }).unwrap();
+        f
+    }
+
+    /// RW 4.32, FRAME-DRIP-1: the host's deadline was on each READ, so a guest sending one byte just
+    /// inside it held a frame — and the host — open for as long as it liked. A frame begun is now owed
+    /// whole within the frame deadline; `serve` refuses one that is not, in its own words. (The wall
+    /// clock is the witness, so Miri does not run it.)
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn a_frame_dripped_past_the_frame_deadline_is_refused() {
+        let frame = done_frame();
+        assert!(frame.len() >= 10, "a frame long enough to drip: {} bytes", frame.len());
+        let gap = std::time::Duration::from_millis(30);
+        let mut drip = Drip { bytes: frame, at: 0, pause: gap, gap, answers: Vec::new() };
+        let within = std::time::Duration::from_millis(150);
+        let t = std::time::Instant::now();
+        let e = HostChannel::new(crate::sink::LocalSink).with_frame_deadline(within).serve(&mut drip).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::TimedOut, "{e}");
+        assert!(FrameTooSlow::is(&e), "the frame deadline's own error, not a read's: {e}");
+        assert!(e.to_string().contains("did not send one whole frame within 150ms"), "{e}");
+        assert!(drip.at < drip.bytes.len(), "abandoned mid-frame, not read to its end: {} of {}", drip.at, drip.bytes.len());
+        assert!(t.elapsed() < std::time::Duration::from_secs(2), "{:?}", t.elapsed());
+        assert!(drip.answers.is_empty(), "nothing answered for a frame never finished");
+    }
+
+    /// The deadline is on a frame, not on the quiet before it: a guest may compute between frames for
+    /// as long as the transport's own read deadline allows. The control for the witness above: the
+    /// same frame, after a pause twice the frame deadline, sent at once, is served.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn a_pause_before_a_frame_is_not_a_slow_frame() {
+        let within = std::time::Duration::from_millis(150);
+        let mut drip = Drip {
+            bytes: done_frame(),
+            at: 0,
+            pause: within * 2,
+            gap: std::time::Duration::ZERO,
+            answers: Vec::new(),
+        };
+        let exit = HostChannel::new(crate::sink::LocalSink).with_frame_deadline(within).serve(&mut drip).unwrap();
+        assert_eq!(exit, 7);
+        assert!(!drip.answers.is_empty(), "the goodbye was answered");
+    }
+
+    /// `from_now` counts from its making, not from a first byte: a peer that owes its frame at once
+    /// (a request just accepted, a reply to a call just made) gets no free wait before it.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn from_now_counts_the_wait_before_the_first_byte() {
+        let within = std::time::Duration::from_millis(100);
+        let mut late = Drip { bytes: done_frame(), at: 0, pause: within * 2, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let e = read_frame::<Request>(&mut Within::from_now(&mut late, within)).unwrap_err();
+        assert!(FrameTooSlow::is(&e), "{e}");
+        let mut prompt = Drip { bytes: done_frame(), at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        assert!(read_frame::<Request>(&mut Within::from_now(&mut prompt, within)).is_ok());
     }
 
     /// A truncated frame is a transport failure, never a half-read value.

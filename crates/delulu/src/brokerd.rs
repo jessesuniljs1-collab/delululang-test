@@ -887,10 +887,12 @@ pub(crate) fn serve_inner(
 
     // The serve loop never propagates an error via `?` (transient accept/frame errors `continue`;
     // a `Shutdown` request `break`s), so no IIFE is needed to guarantee the pid-file cleanup below.
-    // IPC-1: a single blocking read may not exceed this. Generous for local IPC (a legit client sends
-    // its whole frame immediately after connecting); a client that connects and stalls, or dribbles a
-    // partial frame, is dropped after this so it cannot hang the single-connection serve loop — and
-    // thus deny every other custody op, INCLUDING the operator's e-stop revoke — indefinitely.
+    // IPC-1: a client's whole request is owed within this of its connection being accepted. Generous
+    // for local IPC (a legit client sends its whole frame immediately after connecting); a client that
+    // connects and stalls, or dribbles a partial frame, is dropped so it cannot hang the
+    // single-connection serve loop — and thus deny every other custody op, INCLUDING the operator's
+    // e-stop revoke — indefinitely. It bounds each read AND the whole frame: until RW 4.32 it bounded
+    // only each read, and a client sending one byte every two seconds was never dropped (FRAME-DRIP-1).
     const SERVE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
     loop {
         let mut conn = match listener.accept() {
@@ -908,7 +910,7 @@ pub(crate) fn serve_inner(
         }
         // Read exactly one request; a malformed/short/slow frame closes this connection (fail closed)
         // without taking down the daemon.
-        let req: Request = match read_frame(&mut conn) {
+        let req: Request = match read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT)) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("delulu broker: bad frame (dropping connection): {e}");

@@ -23,7 +23,9 @@
 
 use std::io::{self, Read, Write};
 
-use delulu_runtime::channel::{read_frame, write_frame, HostChannel, Open, Program, ReqBody, Request, Response, CHANNEL_VERSION};
+use delulu_runtime::channel::{
+    read_frame, write_frame, FrameTooSlow, HostChannel, Open, Program, ReqBody, Request, Response, Within, CHANNEL_VERSION,
+};
 
 /// A guest that has been told its generation and has not confirmed its boundary. It holds the channel
 /// so that nothing else can write to it. (The generation it must echo is the host's: `HostChannel`
@@ -102,9 +104,12 @@ impl<C: Read + Write> Opened<C> {
         host: &mut HostChannel<S>,
         need: &Requirement<'_>,
     ) -> io::Result<Confirmed<C>> {
-        let req: Request = read_frame(&mut self.conn).map_err(|e| {
+        // RW 4.32: its report is a frame like any other, owed whole within the host's frame deadline.
+        let within = host.frame_deadline();
+        let req: Request = read_frame(&mut Within::from_first_byte(&mut self.conn, within)).map_err(|e| {
             unconfirmed(match e.kind() {
                 io::ErrorKind::UnexpectedEof => "it closed the channel first".to_string(),
+                _ if FrameTooSlow::is(&e) => format!("it {}", e.get_ref().map_or_else(String::new, |x| x.to_string())),
                 io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => "it said nothing within the channel's deadline".to_string(),
                 _ => e.to_string(),
             })
@@ -292,6 +297,34 @@ mod tests {
         let (generation, p) = rx.recv().unwrap();
         assert_eq!(generation, GEN, "the guest was told this run's generation");
         assert_eq!(p, program());
+    }
+
+    /// RW 4.32, FRAME-DRIP-1: the guest's confinement report is a frame like any other — begun, it is
+    /// owed whole within the host's frame deadline, or the guest is not confirmed. Each byte here comes
+    /// well inside the channel's five-second read deadline; the report as a whole does not.
+    #[test]
+    fn a_confinement_report_dripped_past_the_frame_deadline_does_not_confirm() {
+        use std::io::Write as _;
+        let (conn, t) = with_guest(|mut g, open| {
+            let mut frame = Vec::new();
+            let req = Request {
+                version: CHANNEL_VERSION.into(),
+                seq: 1,
+                body: ReqBody::Confined { applied: vec!["no new programs".into()], generation: open.generation.clone() },
+            };
+            write_frame(&mut frame, &req).unwrap();
+            for b in frame {
+                if g.write_all(&[b]).is_err() {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            let _ = rest(g);
+        });
+        let mut host = HostChannel::new(LocalSink).with_generation(GEN).with_frame_deadline(std::time::Duration::from_millis(200));
+        let said = open(conn, GEN).unwrap().confirm(&mut host, &NEED).err().expect("not confirmed").to_string();
+        assert!(said.contains("did not send one whole frame within 200ms"), "{said}");
+        t.join().unwrap();
     }
 
     /// A guest gone before the host opens the channel — a launcher that exits at once — fails the host's

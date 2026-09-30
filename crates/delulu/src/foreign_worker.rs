@@ -44,6 +44,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use delulu_runtime::channel::Within;
 use delulu_runtime::foreign::{self, LoadedLib};
 use delulu_runtime::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig};
 
@@ -326,7 +327,7 @@ impl WorkerConn {
         if write_frame(&mut conn, &req).is_err() {
             return Err(ForeignErr::WorkerDied("worker channel closed during bind handshake".into()));
         }
-        match read_frame::<_, WorkerResp>(&mut conn) {
+        match read_frame::<_, WorkerResp>(&mut Within::from_now(&mut conn, Duration::from_secs(10))) {
             Ok(WorkerResp::Bound { ok: true, .. }) => {}
             Ok(WorkerResp::Bound { ok: false, err }) => {
                 return Err(err.map(wire_to_err).unwrap_or_else(|| ForeignErr::Unavailable("worker bind failed".into())));
@@ -393,7 +394,10 @@ impl BoundForeign for WorkerConn {
         if write_frame(&mut *conn, &req).is_err() {
             return Err(ForeignErr::WorkerDied("channel write failed (worker process gone)".into()));
         }
-        match read_frame::<_, WorkerResp>(&mut *conn) {
+        // RW 4.32 (FRAME-DRIP-1): the whole reply is owed within the call's deadline. The channel's
+        // own deadline is per READ, and foreign code owns the worker's end of it: one byte just inside
+        // that bound, again and again, held the host for as long as the code liked.
+        match read_frame::<_, WorkerResp>(&mut Within::from_now(&mut *conn, self.call_deadline)) {
             Ok(WorkerResp::Value(v)) => Ok(wire_to_fval(v)),
             Ok(WorkerResp::Err(e)) => Err(wire_to_err(e)),
             Ok(WorkerResp::Bound { .. }) => Err(ForeignErr::WorkerDied("worker sent a bind response to a call".into())),
