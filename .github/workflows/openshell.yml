@@ -56,8 +56,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Build delulu
-        run: cargo build -p delulu --locked
+      # As the repository's Dockerfile builds it: the default build links the embedded Python, which a plain
+      # image lacks (run 5: `libpython3.12.so.1.0: cannot open shared object file` inside the sandbox).
+      - name: Build delulu (no embedded Python, as the Dockerfile builds it)
+        run: cargo build -p delulu --locked --no-default-features --features net
       - name: Install OpenShell's pinned release, checksums verified
         env:
           TAG: ${{ inputs.version || 'v0.1.2' }}

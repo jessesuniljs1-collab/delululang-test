@@ -138,7 +138,9 @@ out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- curl -sS -m 20 
 code=$?
 echo "exit $code: $out"
 [ "$code" != 0 ] || fail "(3) curl reached example.org"
-openshell logs dl --tail 200 2>/dev/null | grep -iE 'deny|denied' | tail -10 || true
+# OpenShell's own account of the refusal (`--tail` streams, so a bounded window is read instead).
+echo "OpenShell's deny lines for this sandbox:"
+timeout 30 openshell logs dl --since 10m 2>&1 | grep -iE 'deny|denied|example\.org' | tail -10 || echo "(none printed)"
 
 step "(4) the effective policy — what OpenShell added — against the export"
 openshell sandbox get dl --policy-only > effective.yaml || fail "(4) no effective policy"
