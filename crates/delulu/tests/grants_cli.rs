@@ -194,3 +194,38 @@ fn delegate_lease_run_revoke_orchestration_end_to_end() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// RW 4.42 (routine run 7, AUDIT-TEXT-1's next surface): a delegation's scopes are the delegating party's
+/// strings, and `grants tree`, `grants list` and `grants inspect` printed them raw on the owner's terminal —
+/// witnessed on `634e9f0`: an escape set the title and cleared the screen, and a line break in a path began
+/// a forged line of its own. Each field is now shown escaped on its line; `--json` stays exact.
+#[test]
+fn a_delegations_strings_are_shown_escaped_in_tree_list_and_inspect() {
+    let base = std::env::temp_dir().join(format!("delulu_grants_text_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let path = "./out/\u{1b}]0;PWNED\u{7}\u{1b}[2J\ng_forged [live] effects={Read,Write,Net}";
+    let host = "evil\u{1b}[31m.example";
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write,Net", "--fs-write", path, "--net", host, "--ttl", "1h", "--json"]);
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let node = v["node"].as_str().expect("node").to_string();
+
+    for args in [vec!["grants", "tree"], vec!["grants", "list"], vec!["grants", "inspect", &node]] {
+        let o = delulu_in(&cwd, &state, &args);
+        assert!(o.status.success(), "{args:?}: {}", stderr(&o));
+        let out = stdout(&o);
+        assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{args:?}: raw control characters reached the owner: {out:?}");
+        assert!(!out.lines().any(|l| l.starts_with("g_forged")), "{args:?}: the path's line break forged a line: {out:?}");
+        assert!(out.contains("\\u{1b}]0;PWNED"), "{args:?}: the string is shown, escaped: {out:?}");
+    }
+    let o = delulu_in(&cwd, &state, &["grants", "inspect", &node, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("inspect --json");
+    assert!(v.to_string().contains("evil\\u001b[31m.example"), "the JSON carries the delegation's own bytes: {v}");
+}

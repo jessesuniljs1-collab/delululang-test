@@ -926,13 +926,16 @@ impl Broker {
         // holder fields are display-only data (never a decision input).
         let holder_desc = &n.holder.desc; // KIND_IS_DATA: desc is descriptive metadata
         let holder_kind = &n.holder.kind; // KIND_IS_DATA: kind is stored/displayed, never switched on
+        // RW 4.42 (routine run 7): a scope and a holder are the delegating party's strings, and this text is
+        // printed on the owner's terminal — each field escaped onto its node's one line (TERMINAL-TEXT-1).
+        use delulu_diag::terminal_line;
         out.push_str(&format!(
             "{indent}{} [{}] {} ({}) — {}\n",
-            n.id.as_str(),
+            terminal_line(n.id.as_str()),
             state,
-            n.authority.render_compact(),
-            holder_kind,
-            holder_desc,
+            terminal_line(&n.authority.render_compact()),
+            terminal_line(holder_kind),
+            terminal_line(holder_desc),
         ));
         let mut children: Vec<&GrantId> =
             self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();

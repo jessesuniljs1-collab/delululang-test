@@ -6296,7 +6296,17 @@ fn render_node_line(n: &crate::broker_ipc::NodeInfo) -> String {
         (s, _) => s.to_string(),
     };
     let parent = n.parent.as_deref().unwrap_or("-");
-    format!("{}  [{}]  parent={}  {}  ({}) {}", n.id, state, parent, authority, n.holder_kind, n.holder_desc)
+    // RW 4.42: the delegating party's strings, on the owner's terminal — one escaped line (TERMINAL-TEXT-1).
+    use delulu_diag::terminal_line;
+    format!(
+        "{}  [{}]  parent={}  {}  ({}) {}",
+        terminal_line(&n.id),
+        terminal_line(&state),
+        terminal_line(parent),
+        terminal_line(&authority),
+        terminal_line(&n.holder_kind),
+        terminal_line(&n.holder_desc)
+    )
 }
 
 fn cmd_grants(rest: &[String]) -> i32 {
@@ -6400,13 +6410,20 @@ fn cmd_grants(rest: &[String]) -> i32 {
             if json {
                 print_success_envelope("grants", json!({ "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") }));
             } else {
-                println!("id:        {}", n.id);
-                println!("parent:    {}", n.parent.as_deref().unwrap_or("(root)"));
+                // RW 4.42: every field the delegating party chose is shown escaped on its line.
+                use delulu_diag::terminal_line;
+                println!("id:        {}", terminal_line(&n.id));
+                println!("parent:    {}", terminal_line(n.parent.as_deref().unwrap_or("(root)")));
                 // Display only — the holder is data, never a decision input (criterion 9).
-                println!("holder:    {} — {} [{}]", n.holder_kind, n.holder_desc, n.holder_peer);
+                println!(
+                    "holder:    {} — {} [{}]",
+                    terminal_line(&n.holder_kind),
+                    terminal_line(&n.holder_desc),
+                    terminal_line(&n.holder_peer)
+                );
                 match (n.state.as_str(), n.by_seq) {
                     ("revoked", Some(seq)) => println!("state:     revoked (by audit seq {seq})"),
-                    (s, _) => println!("state:     {s}"),
+                    (s, _) => println!("state:     {}", terminal_line(s)),
                 }
                 match n.ttl_millis {
                     Some(ttl) => println!("ttl:       {}", delulu_broker::render_ts_utc(ttl)),
@@ -6414,7 +6431,10 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 }
                 println!("created:   {}", delulu_broker::render_ts_utc(n.created_millis));
                 println!("audit_seq: {}", n.audit_seq);
-                println!("authority: {}", crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact());
+                println!(
+                    "authority: {}",
+                    terminal_line(&crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact())
+                );
             }
             0
         }
