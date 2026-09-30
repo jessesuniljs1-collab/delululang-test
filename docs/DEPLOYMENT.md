@@ -188,10 +188,13 @@ run exits 1 in words naming both digests, and a `sandbox-launcher` refusal goes 
 Take the digest from a run's report, or `b3sum`. On **Linux** what starts is the very descriptor the
 digest was read from (`fexecve`), so a path swapped between the hash and the start is not what runs; a
 script's interpreter reads it back through `/dev/fd/N`, so `$0` in a launcher script is that name, not
-the script's path. On **macOS and Windows** the resolved path is started by name, and a swap in that
-moment by someone who can write the launcher's directory is not closed — keep launchers where only you
-can write (§5). Nowhere does the digest stop a change to the file's own bytes, in place, by someone who
-may write the file: the pin then refuses the NEXT run, which is what a pin is for.
+the script's path. On **Windows** the resolved path is started while the file is held open, sharing reads only,
+from the hash until the run ends: nobody can write it, rename it or delete it in that time, so a swap is
+refused — and a launcher another process holds open for writing cannot be hashed, and the run fails in
+words. On **macOS** the resolved path is started by name, and a swap in that moment by someone who can
+write the launcher's directory is not closed — keep launchers where only you can write (§5). Except on
+Windows for a run's length, the digest does not stop a change to the file's own bytes, in place, by
+someone who may write the file: the pin then refuses the NEXT run, which is what a pin is for.
 
 A reference recipe — **documented, not shipped, and not tested by this project** — for Docker with gVisor
 and no network:

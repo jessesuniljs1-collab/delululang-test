@@ -3447,3 +3447,27 @@ witness could not pass there as written.
 **Not changed, recorded:** the broker still serves one connection at a time, so clients queued behind one another each
 take their bound; on Windows a client that finds the pipe busy is refused after 1 s rather than queued; the operator's
 `request` still waits without a bound for a broker that accepted and never answered (the dead-man probe's does not).
+
+## 2026-09-30 — routine run 6: PS-E-04 on Windows — the launcher held open, sharing reads only, until the run ends (D-V2-74)
+
+E-04's Windows remainder, from the inbox. D-V2-69 left Windows starting the resolved launcher by name — "Windows could
+hold the file open deny-write, but no witness for that exists yet, so it is not built and not claimed". The witness,
+`the_launcher_started_is_the_file_that_was_hashed_on_windows` (`sandbox_external_cli`, Windows): A is the binary plus
+64 MiB its loader never reads, pinned; B is a copy of `hostname.exe`, not a guest; the moment Windows says the host
+holds A open, B is renamed over it, and again for as long as the host holds it. "The host holds A" is asked of Windows
+itself — `NtQueryInformationFile(FileProcessIdsUsingFileInformation)` through a handle that reads attributes only and
+so takes part in no sharing check — the Windows view the Linux witness gets from `/proc/<pid>/fd`; never by re-running
+until a race shows.
+
+**Red on `34cfc38`** (`witness.yml` `36652740569`, Windows): the host hashed A through the standard library's
+`File::open`, which shares reading, writing AND deletion; the rename succeeded while it hashed; the pin passed on A's
+bytes; B was started under A's name — "the guest never confirmed its boundary, so it was not sent the program: it closed
+the channel first", exit 1. **Fixed (`8aa6249`, D-V2-74):** `Launcher::resolve` opens the file sharing reads only, and
+the `Launcher` lives until the run's report is written, so nobody can write, rename or delete it from the hash to the
+end of the run; starting it is a read, still shared. **Green on `8aa6249`** (`36653274720`, Windows):
+`sandbox_external_cli` 5 passed (the swap witness among them), `sandbox_confirm_cli` 8, `sandbox_attest_cli` 4,
+`sandbox_run_cli` 17. The red read is the falsification: the same witness against the code before the fix. macOS keeps
+its window (no `fexecve`, no share modes), and `DEPLOYMENT.md` says so.
+
+**Verified in the VM:** clippy `-D warnings` clean; `scripts/check-other-os.sh` clean for `x86_64-pc-windows-msvc` and
+`x86_64-apple-darwin`; `sandbox_external_cli` 8 passed on Linux (the change and its witness are Windows-only).

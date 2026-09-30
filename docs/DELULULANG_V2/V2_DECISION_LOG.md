@@ -1537,6 +1537,20 @@ still serves one connection at a time, so clients queued one behind another each
 process that can do that can also stop the broker (category 7, as IPC-1 recorded); the operator's `request` still
 waits without a bound for a broker that accepted and never answered (the dead-man probe's `request_timed` does not).
 
+## D-V2-74 — PS-E-04 on Windows: the launcher is held open, sharing reads only, from the hash until the run ends — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+D-V2-69 left Windows starting the resolved launcher by name, "not built and not claimed" until a witness existed.
+**Witnessed on `34cfc38`** (`witness.yml` `36652740569`, Windows): the host hashed the launcher through the
+standard library's `File::open`, which shares reading, writing AND deletion, then started it by path — B, renamed
+over the pinned A the moment Windows said the host held A open, was what started: "the guest never confirmed its boundary, so it was not sent the program: it closed the channel first", exit 1 (B is `hostname.exe`, not a guest). Decided: `Launcher::resolve`
+opens the file sharing reads only (`FILE_SHARE_READ`) and the `Launcher` — the handle with it — lives until the
+run's report is written, so from the hash to the end of the run nobody can write the file, or rename or delete it
+(a rename over it is a deletion): the path started names the bytes hashed, and on Windows the pin now also stops an
+in-place change for the run's length. Starting it is a read, still shared. **Consequence:** a launcher some other
+process already holds open for writing cannot be hashed — the run fails in words ("cannot be read to be hashed")
+rather than hash a file in the middle of being written. macOS has no equivalent (no `fexecve`, no share modes): its
+window stays open and `DEPLOYMENT.md` says so.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

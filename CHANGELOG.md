@@ -127,6 +127,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   a broker request within 5 s of its connection, a foreign call's reply within the call's deadline (DL1409 past
   it, as for a silent worker), a sandboxed guest's frame within 60 s of its first byte — the run then ends in
   words that say so (D-V2-73).
+- **Fixed (security, PS-E-04 on Windows): an external launcher renamed over between its hash and its start was
+  the file started** — the pin passed on the bytes hashed and another file ran under their name. Windows has no way
+  to start the very descriptor hashed, so the host now holds the launcher open, sharing reads only, from the hash
+  until the run ends: nobody can write, rename or delete it meanwhile. A launcher another process holds open for
+  writing can no longer be hashed, and the run fails in words (D-V2-74).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

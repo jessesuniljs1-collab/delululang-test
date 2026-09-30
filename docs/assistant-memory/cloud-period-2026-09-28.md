@@ -88,7 +88,9 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   broker daemon (a dribbling client held its one-connection loop, the e-stop revoke behind it; IPC-1's fix had
   bounded each read only) and a foreign call (foreign code dripping its reply). `channel::Within` owes each
   frame whole (D-V2-73). Traps: a per-read deadline is not a per-message one — test the peer answering just
-  inside it; install the pinned toolchain before any concurrent `rustup`/`cargo` (a race broke it).
+  inside it; install the pinned toolchain before any concurrent `rustup`/`cargo` (a race broke it). Then PS-E-04's
+  Windows window (D-V2-74): the launcher held open sharing reads only until the run ends — red on a Windows runner
+  first, the swap timed by `FileProcessIdsUsingFileInformation` (Windows' view of who holds a file open).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

@@ -261,8 +261,10 @@ same harness (H6).
 An external (L3) launcher is claimed resolved once and named by its bytes since PS-E-04 (D-V2-69), with
 witnesses and six falsified mutants (`crates/delulu/tests/sandbox_external_cli.rs`): a bare name is never a
 file in the working directory (LAUNCHER-SPELL-1); the report's `launcher_blake3` is the file's; a pinned run
-starts no other file; and on Linux a path swapped between the hash and the start is not what runs. Not
-claimed: that window on macOS and Windows, or an in-place change by someone who may write the file.
+starts no other file; and on Linux a path swapped between the hash and the start is not what runs — on Windows
+neither, since D-V2-74 (the file held open sharing reads only until the run ends, which also stops an in-place
+change for the run's length). Not claimed: that window on macOS, or on Linux an in-place change by someone who
+may write the file.
 
 A program's strings are claimed to reach the operator's terminal only escaped since TERMINAL-TEXT-1
 (D-V2-70), with witnesses on five paths and six falsified mutants (`crates/delulu/tests/terminal_text_cli.rs`):

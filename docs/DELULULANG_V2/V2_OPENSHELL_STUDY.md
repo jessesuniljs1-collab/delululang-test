@@ -342,8 +342,8 @@ descriptor (`fexecve`); the report and the launch record carry `launcher_path` a
 two flat fields beside the existing `launcher` string rather than the object above, because schema 1
 promises `launcher` is a string; `--launcher-digest HEX` refuses any other file (exit 1, recorded). The
 swap witness holds the window open with a 64 MiB launcher and swaps the path the moment the host is seen
-holding it; the mutant that hashes one file and starts another ran B three times in three. Open: Windows
-held deny-write, macOS (no `fexecve`), and the attestation binding — which needs a digest the attester
+holding it; the mutant that hashes one file and starts another ran B three times in three. Windows held deny-write
+was built by routine run 6 (D-V2-74, witnessed red on Windows first). Open: macOS (no `fexecve`), and the attestation binding — which needs a digest the attester
 measured itself, not the host's echoed back.
 
 ### 4.5 PS-E-05 — OpenShell as a tested L3 backend, and DeluluLang as its policy author

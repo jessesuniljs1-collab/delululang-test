@@ -754,7 +754,9 @@ wins, and you should update the memory to match.
   ever. On the broker daemon (one connection at a time) a `Status` behind a client dribbling one byte every 2 s
   waited 23.7 s, its whole life — though IPC-1's fix (2026-08-08) had recorded the indefinite hang closed and the
   serve loop's comment promised a dribbler dropped; on a foreign call, foreign code dripping its reply held the
-  host past 20 s. `delulu_runtime::channel::Within` owes each frame whole (D-V2-73).
+  host past 20 s. `delulu_runtime::channel::Within` owes each frame whole (D-V2-73). The same run closed
+  PS-E-04's Windows window (D-V2-74): the launcher was hashed through a `File::open` that shares deletion, so a
+  launcher renamed over while it was hashed was started — now held sharing reads only until the run ends.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -893,6 +895,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   one byte just inside it holds the message open for ever. For every timeout on a channel, ask what a peer
   answering JUST inside it can hold — and test that peer, not a silent one: IPC-1's witness was a client that
   stalled, so the dribbling client the same comment named was never tried.
+- **Windows' `/proc/<pid>/fd` is `NtQueryInformationFile(FileProcessIdsUsingFileInformation)`** (routine run 6):
+  asked through a handle opened for `FILE_READ_ATTRIBUTES` only — which takes part in no sharing check, so the
+  witness neither blocks the host's open nor is blocked by it — it lists the processes holding a file open. It let
+  a Windows race witness act at the moment the host held the launcher, never by re-running. And the standard
+  library's `File::open` on Windows shares reading, writing AND deletion: hold a file against change with
+  `share_mode(FILE_SHARE_READ)`.
 - **Install the pinned toolchain before anything else runs `cargo` or `rustup`** (routine run 6): the first
   `cargo` call installs it, and a `rustup target add` started beside it raced the install — the toolchain was left
   with `cargo` "not applicable" and a component conflict, and had to be reinstalled.
