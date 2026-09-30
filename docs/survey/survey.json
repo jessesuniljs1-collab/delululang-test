@@ -708,7 +708,7 @@
     {"id":"file:scripts/ocsf-validate.py","kind":"other","name":"ocsf-validate.py","path":"scripts/ocsf-validate.py","lines":316},
     {"id":"file:scripts/openshell-install.sh","kind":"other","name":"openshell-install.sh","path":"scripts/openshell-install.sh","lines":36},
     {"id":"file:scripts/openshell-prove.sh","kind":"other","name":"openshell-prove.sh","path":"scripts/openshell-prove.sh","lines":221},
-    {"id":"file:scripts/openshell-runtime.sh","kind":"other","name":"openshell-runtime.sh","path":"scripts/openshell-runtime.sh","lines":212},
+    {"id":"file:scripts/openshell-runtime.sh","kind":"other","name":"openshell-runtime.sh","path":"scripts/openshell-runtime.sh","lines":227},
     {"id":"file:scripts/package-toolchain.sh","kind":"other","name":"package-toolchain.sh","path":"scripts/package-toolchain.sh","lines":156},
     {"id":"file:tests/conformance/witnesses.toml","kind":"other","name":"witnesses.toml","path":"tests/conformance/witnesses.toml","lines":2862,"entrenched":{"owner":"@PENDING-PUBLIC-project-lead","pattern":"/tests/conformance/witnesses.toml","file":".github/CODEOWNERS","line":37}},
     {"id":"file:tests/core-invariance/SNAPSHOT.txt","kind":"other","name":"SNAPSHOT.txt","path":"tests/core-invariance/SNAPSHOT.txt","lines":10912},

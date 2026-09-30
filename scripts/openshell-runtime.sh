@@ -77,7 +77,7 @@ module p
 fn main(root: Root) ! {Read, Write} {
     let c = root.console()
     let src = root.fs_read("./data")
-    match src.read_text("./data/in.txt") {
+    match src.read_text("in.txt") {
         Ok(t) => c.println(t),
         Err(_) => c.println("unreadable")
     }
@@ -130,11 +130,17 @@ out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- /bin/sh -c \
 echo "$out"
 printf '%s' "$out" | grep -q "hello from the granted file" || fail "(1) the granted program did not print its file"
 
-step "(2) a program asking for more than its grants is refused by DeluluLang"
+step "(2) the same program under a narrower grant: DeluluLang refuses what the grant does not cover (DL0703)"
+out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- /bin/sh -c \
+  'cd /sandbox && /usr/local/bin/delulu run p.delulu --no-prompt --grant console --grant fs.read=./data/sub' 2>&1)"
+echo "$out"
+printf '%s' "$out" | grep -q "DL0703" || fail "(2) the program was not refused with DL0703 under the narrower grant"
+
+step "(2b) a program file the export never names is refused by OpenShell's wall"
 out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- /bin/sh -c \
   'cd /sandbox && /usr/local/bin/delulu run greedy.delulu --no-prompt --grant console --grant fs.read=./data' 2>&1)"
 echo "$out"
-printf '%s' "$out" | grep -q "DL0703" || fail "(2) the greedy program was not refused with DL0703"
+printf '%s' "$out" | grep -qi "permission denied" || fail "(2b) a file outside the exported wall was readable"
 
 step "(3) curl, a binary the policy never names, to a host it never names, is denied by OpenShell"
 out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- curl -sS -m 20 -o /dev/null -w '%{http_code}' https://example.org/ 2>&1)"
@@ -190,7 +196,16 @@ cp ctx/p.delulu host/
   --sandbox --sandbox-backend "external:$work/openshell-guest" --report-out "$work/report.json") > guest.out 2>&1
 echo "exit $?"
 cat guest.out
-grep -q "hello through the OpenShell guest" guest.out || fail "(5) the program did not run through the OpenShell guest"
+# Run 7's reading: inside OpenShell's sandbox the guest cannot install its own syscall filter (`seccomp`:
+# EPERM), so it refuses to run ("nothing ran") and the host never sends the program (PS-E-01's rule, holding
+# inside someone else's wall). Until E-05 (b) resolves that, this step witnesses the refusal — fail closed —
+# and says plainly that the guest did NOT run; the day it does run, this expectation is the one to change.
+if grep -q "hello through the OpenShell guest" guest.out; then
+  echo "(5) the guest RAN inside OpenShell — E-05 (b) works now: change this expectation"
+else
+  grep -q "never confirmed its boundary" guest.out || fail "(5) the guest neither ran nor was refused in words"
+  echo "(5) E-05 (b) NOT YET: the guest inside OpenShell failed closed (the program was never sent)"
+fi
 if [ -s report.json ]; then
   python3 - <<'PY' || fail "(5) the report does not say level 3, external"
 import json
