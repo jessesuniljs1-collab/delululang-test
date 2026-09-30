@@ -10,10 +10,23 @@
 # The prover is a pinned OpenShell release, downloaded HERE on the runner and checked against the
 # release's own SHA-256 list; the VM cannot reach release assets of another repository. Nothing of
 # OpenShell enters this repository (D-V2-52): no asset, script, schema or text is committed, cached or
-# uploaded. By hand first, as `container.yml` and `ocsf.yml` were. It gates nothing and publishes nothing.
+# uploaded. By hand first, as `container.yml` and `ocsf.yml` were — read green by hand, then on push (the prover
+# job). It gates nothing and publishes nothing.
 name: openshell
 
 on:
+  # The prover job was read green by hand eight times (runs 3-10, routine run 8), so it runs on every push that
+  # changes what decides the export; the runtime job stays by hand (`runtime` is unset on a push).
+  push:
+    branches: [master]
+    paths:
+      - "crates/delulu/src/openshell.rs"
+      - "crates/delulu/src/sandbox.rs"
+      - "crates/delulu/src/cli.rs"
+      - "crates/delulu-runtime/src/broker.rs"
+      - "crates/delulu-runtime/src/egress.rs"
+      - "scripts/openshell-*.sh"
+      - ".github/workflows/openshell.yml"
   workflow_dispatch:
     inputs:
       version:

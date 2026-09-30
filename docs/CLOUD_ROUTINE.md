@@ -200,7 +200,9 @@ and the Survey's own tests. An `#[ignore]`d gate is not in that count: a change 
 two-engine differential by hand, `cargo test -p delulu-wasm --release --test differential -- --ignored`
 (50,000 programs, about 150 s once built — CI runs it only in `heavy-gates`, run 4). A change to the audit records or
 their export is checked against OCSF's published schema: `scripts/ocsf-validate.py EXPORT --self-test` in the VM (the
-schema's raw files are reachable, run 7), and `ocsf.yml` runs it on the runners for every push that touches them.
+schema's raw files are reachable, run 7), and `ocsf.yml` runs it on the runners for every push that touches them. A change to the OpenShell export
+(`openshell.rs`, the grant parser, egress, the scripts) is checked by OpenShell's own prover in `openshell.yml` on push;
+dispatch it with `runtime: true` to see the export ENFORCED by a real OpenShell sandbox (run 8).
 A fixture that fakes what the host writes has a real-run witness beside it (run 7: a faked generation hid a wrong reading).
 **A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
