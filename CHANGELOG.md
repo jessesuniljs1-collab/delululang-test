@@ -168,6 +168,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   allowed or refused, and the OCSF export maps it: an allowed file use is File System Activity (1001, Read or Update, with
   the path), an allowed network use HTTP Activity (4002, Get, with the host). Records written before name no effect and
   stay Base Events; every chain still verifies (D-V2-80).
+- **Fixed (security): a FIFO at the secret store's path hung `delulu secrets`, the broker's start and every secret
+  operation of a running broker daemon — and, with a reader attached, `secrets set` would have written the store's
+  secrets into it** (RW 4.38's remainder). The store is now read and written only if it is a regular file, and anything
+  else is refused in words (D-V2-77's rule, shared with the audit chain).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

@@ -3637,3 +3637,17 @@ use's finding without it) red in `audit_ocsf_cli`; restored. **The schema:** the
 against OCSF 1.8.0 with 0 problems, and five more mutations — a file with no name, no file, a misspelt `http_request`
 field, a numeric host, an activity out of the file class's enum — each caught. **Verified:** clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
 **PS-E-06 is complete.**
+
+## 2026-09-30 — routine run 7: RW 4.38's remainder — the secret store, read and written only if it is a regular file
+
+D-V2-77 closed AUDIT-FIFO-1 and named `secrets.rs` as read the same way, not tried. **Tried, on `3d84304`:** the new
+witness `secrets::tests::a_store_that_is_not_a_regular_file_is_refused_not_waited_on` replaces a real store with a FIFO
+and found `SecretStore::load` still waiting at 5 s. Reading on: `refresh` — which the broker daemon runs before EVERY
+secret operation, on its one-connection serve loop — read the same way, so a FIFO there held every client behind it, the
+e-stop's revoke included; and `set` opened the path for writing, blocking, so it waited for a reader — and with a reader
+attached the write-open succeeds and the store's secrets go to whoever is reading. **Fixed (D-V2-77's rule, shared
+rather than copied):** `audit::read_day` became `read_regular(path, what)`, the store's one reader; a store that is not
+a regular file loads as none and a refresh keeps what was loaded; the Unix write opens non-blocking, maps ENXIO (a FIFO
+with no reader) to the same refusal in words, judges what it opened and only then truncates. The witness covers the
+reader's case too (nothing reaches the reader). **Mutants M50** (the blocking read), **M51** (the blocking write-open),
+**M52** (the write without the check), each red; restored. **Verified:** clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success.

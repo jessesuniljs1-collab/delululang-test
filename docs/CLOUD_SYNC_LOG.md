@@ -841,7 +841,9 @@ it on `origin` was made in the cloud and is listed below.
   (2) `b50bb36` PS-E-06's witness names the machine: the export with no --device-name, on every OS;
   (3) `9c58cbb` AUDIT-TEXT-1: what a program or an agent wrote is shown escaped in audit tail and guard pending (D-V2-79);
   (4) `5a2bbfe` PS-E-06 complete: a use's audit record names its effect, and the export maps it (D-V2-80);
-  (5) ocsf.yml: the export checked against OCSF's published schema on a runner, by hand first
+  (5) `3d84304` ocsf.yml: the export checked against OCSF's published schema on a runner, by hand first;
+  (6) `6c7aca3` RW 4.38's remainder: the secret store is read and written only if it is a regular file;
+  (7) RW 4.38 closed, recorded; ocsf.yml joins the push triggers, read green by hand
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -865,7 +867,10 @@ it on `origin` was made in the cloud and is listed below.
   A `.github/workflows/ocsf.yml` (dispatch only: the OCSF witnesses leave their exports, `ocsf-validate.py --self-test`
     checks each); M `scripts/ocsf-validate.py` (`--self-test`: sixteen mutations the schema forbids, each must be
     caught), `crates/delulu/tests/audit_ocsf_cli.rs` (`DELULU_OCSF_CORPUS_OUT`), `docs/REPOSITORY_STRUCTURE.md` — (5)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(5)
+  M `crates/delulu-broker/src/audit.rs` (`read_day` → `read_regular(path, what)`; `NotRegular` names what),
+    `crates/delulu-broker/src/secrets.rs` (`read_store`; the Unix write; a witness) — (6); `CHANGELOG.md`, `HANDOFF.md`
+    (§11.4), `docs/REMAINING_WORK.md` (4.38 closed), `V2_LOG.md`, `.github/workflows/ocsf.yml` (push, by paths) — (7)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(7)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -882,7 +887,7 @@ it on `origin` was made in the cloud and is listed below.
   suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved (witness.yml,
   `audit_cli guard_e2e` at `9c58cbb`): macOS `36676784576` (12, 3) and Windows `36676787378` (12, 3) — success; `master`
   fast-forwarded to `9c58cbb`. **(4):** M47–M49 red, restored; the corpus validated (0 problems), five more export
-  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
+  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0. **(6)–(7):** the witness red on `3d84304`; M50–M52 red, restored; clippy clean; the full suite alone 2,078 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `6c7aca3`: macOS `36679046053` (`delulu-broker` lib 171, the witness among them) and `36679062748` (`secret_verify_cli`, `broker_cli`), Windows `36679048557` (lib; the witness is Unix-only) — success.
 - Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
   `COMPUTERNAME` on Windows).
 - For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and

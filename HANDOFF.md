@@ -772,7 +772,10 @@ wins, and you should update the memory to match.
   The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
   `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
   And **AUDIT-FIFO-1** (D-V2-77): a FIFO named like a day log hung every reader of the audit chain, `broker start`
-  included — ATTEST-FIFO-1's shape in the audit; read only if regular now.
+  included — ATTEST-FIFO-1's shape in the audit; read only if regular now. **The secret store had it too** (routine
+  run 7, RW 4.38's rest): the daemon re-reads the store before every secret operation on its one-connection loop, so a
+  FIFO there held the e-stop's revoke; and a FIFO with a READER would have received the store's secrets on `secrets set`.
+  One shared reader now (`audit::read_regular`), and a write that judges what it opened before it truncates.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

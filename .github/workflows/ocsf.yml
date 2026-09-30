@@ -7,11 +7,28 @@
 # sandboxed run's chain — and `scripts/ocsf-validate.py` checks each against the schema, then proves it
 # can fail (`--self-test`: every mutation the schema forbids must be caught).
 #
-# By hand first, as `container.yml` and `editor-e2e.yml` were: once read green it joins the push
-# triggers for the files that decide the export. It gates nothing and publishes nothing.
+# By hand first, as `container.yml` and `editor-e2e.yml` were — read green by hand on `3d84304` (run
+# `36678699774`: 13 and 5 events, 0 problems, self-tests 16 and 11 of each caught), so it now also runs on
+# every push that changes what decides the export: the records' writers, the mapping, its witnesses, the
+# validator. It gates nothing and publishes nothing.
 name: ocsf
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - "crates/delulu-broker/src/audit.rs"
+      - "crates/delulu-broker/src/ocsf.rs"
+      - "crates/delulu-broker/src/validate.rs"
+      - "crates/delulu-broker/src/tree.rs"
+      - "crates/delulu-broker/src/lease.rs"
+      - "crates/delulu-broker/src/cert.rs"
+      - "crates/delulu-broker/src/guard.rs"
+      - "crates/delulu-broker/src/secrets.rs"
+      - "crates/delulu/src/guest.rs"
+      - "crates/delulu/tests/audit_ocsf_cli.rs"
+      - "scripts/ocsf-validate.py"
+      - ".github/workflows/ocsf.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -44,7 +61,7 @@ jobs:
         shell: bash
         env:
           CORPUS: ${{ runner.temp }}/ocsf-corpus
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ inputs.version || '1.8.0' }}
         run: |
           set -euo pipefail
           test -s "$CORPUS/corpus.jsonl" && test -s "$CORPUS/real-run.jsonl"
