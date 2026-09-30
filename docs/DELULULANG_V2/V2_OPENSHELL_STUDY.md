@@ -388,6 +388,14 @@ boundary missing one granted host answers `exceeds_boundary` with that host as t
 program. A unit test in-tree holds the export's soundness rule over every example program
 (`delulu examples`): each emitted endpoint and path traces to a grant.
 
+**For the workflow — facts read by routine run 7 (2026-09-30), not yet exercised.** OpenShell's own installer
+(`install.sh` at `36b0386`, readable from the VM at raw.githubusercontent.com; its release ASSETS are not) installs on
+Linux from a release package — a `.deb` on Ubuntu (`linux-amd64-deb`, `linux-arm64-deb`), an `.rpm` elsewhere — checked
+against the release's `openshell-checksums-sha256.txt`, with the tag chosen by `OPENSHELL_VERSION`; the CLI, the
+gateway, the VM driver and `openshell-prover` are separate assets; and gateway state from before 0.0.37 is refused by
+later releases. So `openshell.yml` pins a tag (v0.1.2 was studied), downloads that package and the checksum file on the
+runner, verifies, installs — and keeps nothing: no asset, script or text of OpenShell enters this repository.
+
 ### 4.6 PS-E-06 — the audit chain, exported as OCSF, still verifiable
 
 `delulu audit export --format ocsf [--since SEQ]` writes JSON Lines, one OCSF v1.8.0 event per audit
