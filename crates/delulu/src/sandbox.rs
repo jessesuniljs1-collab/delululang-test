@@ -272,6 +272,36 @@ pub fn to_json(levels: &[Level]) -> Json {
 /// `--sandbox-profile <name>` for the `policy` verb; `Err(name)` when the name is not one of the
 /// three (D-V2-25). Refused, never defaulted: a typo must not silently report a different policy
 /// from the one a run would use.
+/// The flags of `sandbox policy` that take a value — a value is never counted as a verb. The last four
+/// shape an OpenShell export (PS-E-05) and are refused without `--format openshell`, never ignored.
+const VALUE_FLAGS: [&str; 6] = ["--sandbox-profile", "--format", "--grant", "--workdir", "--binary", "--run-as"];
+
+/// Every value given for `flag`, as `--flag V` or `--flag=V`; a flag with no value is an error.
+fn values_of(rest: &[String], flag: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == flag {
+            match it.next() {
+                Some(v) => out.push(v.clone()),
+                None => return Err(format!("`{flag}` needs a value")),
+            }
+        } else if let Some(v) = a.strip_prefix(flag).and_then(|r| r.strip_prefix('=')) {
+            out.push(v.to_string());
+        }
+    }
+    Ok(out)
+}
+
+/// At most one value for `flag`.
+fn one_of(rest: &[String], flag: &str) -> Result<Option<String>, String> {
+    let mut v = values_of(rest, flag)?;
+    match v.len() {
+        0 | 1 => Ok(v.pop()),
+        _ => Err(format!("`{flag}` is given more than once")),
+    }
+}
+
 fn profile_flag(rest: &[String]) -> Result<crate::policy::Profile, String> {
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -418,6 +448,83 @@ fn cmd_status(json: bool) -> i32 {
     0
 }
 
+/// What `sandbox policy`'s OpenShell flags asked for (PS-E-05).
+struct Shaping {
+    openshell: bool,
+    grants: Vec<String>,
+    workdir: Option<String>,
+    binary: Option<String>,
+    run_as: Option<String>,
+}
+
+impl Shaping {
+    fn of(rest: &[String]) -> Result<Shaping, String> {
+        let openshell = match one_of(rest, "--format")?.as_deref() {
+            None => false,
+            Some("openshell") => true,
+            Some(other) => return Err(format!("`--format {other}` is not a policy format (openshell)")),
+        };
+        let s = Shaping {
+            openshell,
+            grants: values_of(rest, "--grant")?,
+            workdir: one_of(rest, "--workdir")?,
+            binary: one_of(rest, "--binary")?,
+            run_as: one_of(rest, "--run-as")?,
+        };
+        if !openshell && (!s.grants.is_empty() || s.workdir.is_some() || s.binary.is_some() || s.run_as.is_some()) {
+            return Err("`--grant`, `--workdir`, `--binary` and `--run-as` shape an OpenShell export; pass `--format openshell`".into());
+        }
+        Ok(s)
+    }
+}
+
+/// `sandbox policy FILE --format openshell` (PS-E-05, D-V2-82): the program's authority report, from
+/// the same pipeline `delulu authority` uses, handed to [`crate::openshell::export`]. Exit 1 when the
+/// grants cannot be written without widening them; 2 when the request itself is malformed.
+fn export_openshell(file: &str, program: &str, shaping: Shaping, limits: &crate::jail::Limits, json: bool) -> i32 {
+    use crate::openshell::{Refused, DEFAULT_BINARY, DEFAULT_RUN_AS};
+    let report = match crate::cli::authority_of_text(file, program) {
+        Ok(r) => r,
+        Err(n) => {
+            eprintln!("error: `{file}` does not check ({n} error(s)) — `delulu check {file}` says why; nothing was exported");
+            return 1;
+        }
+    };
+    let refused = |r: Refused| match r {
+        Refused::Usage(why) => {
+            eprintln!("error: {why}");
+            eprintln!("  nothing was exported");
+            2
+        }
+        Refused::Unrepresentable(why) => {
+            eprintln!("error: these grants cannot be written as an OpenShell policy without widening them: {why}");
+            eprintln!("  nothing was exported — the wall is never wider than the program's authority and its grants");
+            1
+        }
+    };
+    let (run_as_user, run_as_group) = match crate::openshell::run_as(shaping.run_as.as_deref().unwrap_or(DEFAULT_RUN_AS)) {
+        Ok(ids) => ids,
+        Err(r) => return refused(r),
+    };
+    let opts = crate::openshell::Options {
+        workdir: shaping.workdir,
+        binary: shaping.binary.unwrap_or_else(|| DEFAULT_BINARY.into()),
+        run_as_user,
+        run_as_group,
+    };
+    match crate::openshell::export(file, &report, &shaping.grants, limits, &opts) {
+        Ok(e) => {
+            if json {
+                crate::cli::print_success_envelope("sandbox", serde_json::json!({ "openshell": e.payload }));
+            } else {
+                print!("{}", e.document);
+            }
+            0
+        }
+        Err(r) => refused(r),
+    }
+}
+
 pub fn cmd_sandbox(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
     // PS-B-06: the host policy and break-glass. Each verb parses its own flags strictly.
@@ -438,7 +545,7 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
             skip_next = false;
             continue;
         }
-        if a == "--sandbox-profile" {
+        if VALUE_FLAGS.contains(&a) {
             skip_next = true;
             continue;
         }
@@ -446,10 +553,11 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
             verbs.push(a);
         }
     }
-    if let Some(bad) = rest
-        .iter()
-        .find(|a| a.starts_with('-') && *a != "--json" && *a != "--sandbox-profile" && !a.starts_with("--sandbox-profile="))
-    {
+    if let Some(bad) = rest.iter().find(|a| {
+        a.starts_with('-')
+            && *a != "--json"
+            && !VALUE_FLAGS.iter().any(|f| *a == f || a.strip_prefix(f).is_some_and(|r| r.starts_with('=')))
+    }) {
         eprintln!("error: `sandbox` does not know this option: {bad}");
         eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
         return 2;
@@ -490,6 +598,16 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
                     return 2;
                 }
             };
+            // PS-E-05 (D-V2-82): `--format openshell` writes the wall an OpenShell sandbox should put
+            // around `delulu run`; its four shaping flags mean nothing without it and are refused.
+            let shaping = match Shaping::of(rest) {
+                Ok(s) => s,
+                Err(why) => {
+                    eprintln!("error: {why}");
+                    eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+                    return 2;
+                }
+            };
             // A package is previewed from the flattened text `run <dir> --sandbox` would hand its
             // guest (P5, D-V2-42); it used to be read as a file and answered with the raw OS error.
             let program = if std::path::Path::new(file).is_dir() {
@@ -513,6 +631,9 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
                 }
             };
             let policy = crate::policy::SandboxPolicy::derive(1, profile, None, crate::policy::Mode::Strict);
+            if shaping.openshell {
+                return export_openshell(file, &program, shaping, &policy.limits, json);
+            }
             let carried = crate::guest::unsupported_surface(&program);
             if json {
                 let mut obj = policy.to_json("process", &[]);
@@ -541,6 +662,7 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
                 concat!(
                     "error: `sandbox` needs a verb: probe [--json] | status [--json] | ",
                     "policy <file.delulu> [--sandbox-profile P] [--json] | ",
+                    "policy <file.delulu> --format openshell [--grant K[=V]].. [--workdir DIR] [--binary PATH] [--run-as ID[:ID]] [--json] | ",
                     "require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET | ",
                     "ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE] | ",
                     "attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND.."

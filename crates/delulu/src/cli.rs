@@ -1392,6 +1392,9 @@ fn usage() -> &'static str {
      \x20 delulu sandbox   policy <file.delulu> [--sandbox-profile dev|contained|hostile-agent] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (what confinement a run WOULD have, without running: the limits, the mode, the policy hash,\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and whether the channel can carry this program's surface at all)\n\
+     \x20 delulu sandbox   policy <file.delulu> --format openshell [--grant K[=V]].. [--workdir DIR] [--binary PATH]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--run-as ID[:ID]] [--json]   (PS-E-05: the OpenShell policy for running `delulu run` in its sandbox,\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 derived from the program's authority and grants and never wider than both; every grant accounted for)\n\
      \x20 delulu sandbox   require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-B-06: the operator requires the sandbox for every program `delulu` runs on this host;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 only a ticket signed by a pinned key lets one program past it, or takes the policy off)\n\

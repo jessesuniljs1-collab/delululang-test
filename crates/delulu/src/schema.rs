@@ -32,6 +32,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ("toolchain", "what `delulu toolchain --json` carries under `toolchain`"),
     ("edit", "what `delulu edit --json` carries under `edit`: the checked edit, or why it was refused"),
     ("chain", "what `delulu atlas chain --json` carries under `chain`: program to execution boundary, in ten links"),
+    ("openshell", "what `delulu sandbox policy --format openshell --json` carries under `openshell`: the policy, and where each grant went"),
 ];
 
 fn t(ty: &str) -> Value {
@@ -624,6 +625,61 @@ fn toolchain_payload() -> Value {
     )
 }
 
+/// PS-E-05: the OpenShell export — the policy exactly as the document states it, and the account of
+/// every grant (emitted, omitted, unrepresented, narrowed).
+fn openshell_payload() -> Value {
+    let s = || t("string");
+    let strs = || arr(t("string"));
+    let rule = obj(&[("allow", obj(&[("method", en(&["GET"])), ("path", s())], &[]))], &[]);
+    let endpoint = obj(
+        &[
+            ("host", s()),
+            ("port", t("integer")),
+            ("protocol", en(&["rest"])),
+            ("enforcement", en(&["enforce"])),
+            ("rules", arr(rule)),
+        ],
+        &[],
+    );
+    let network_rule = obj(&[("endpoints", arr(endpoint)), ("binaries", arr(obj(&[("path", s())], &[])))], &[]);
+    let policy = obj(
+        &[
+            ("version", json!({ "const": 1 })),
+            (
+                "filesystem_policy",
+                obj(&[("include_workdir", t("boolean")), ("read_only", strs()), ("read_write", strs())], &[]),
+            ),
+            ("landlock", obj(&[("compatibility", en(&["hard_requirement"]))], &[])),
+            ("process", obj(&[("run_as_user", s()), ("run_as_group", s())], &[])),
+            ("network_policies", json!({ "type": "object", "additionalProperties": network_rule })),
+        ],
+        &[],
+    );
+    let account = |key: &str| arr(obj(&[(key, s()), ("why", s())], &[]));
+    obj(
+        &[
+            ("format", en(&["openshell"])),
+            ("program", s()),
+            ("binary", s()),
+            ("runtime_paths", strs()),
+            ("policy", policy),
+            ("document", s()),
+            (
+                "emitted",
+                arr(obj(
+                    &[("grant", s()), ("as", en(&["read_only", "read_write", "network"]))],
+                    &[("path", s()), ("host", s()), ("port", t("integer")), ("method", s())],
+                )),
+            ),
+            ("omitted", account("grant")),
+            ("unrepresented", account("what")),
+            ("narrowed", account("grant")),
+            ("notes", strs()),
+        ],
+        &[],
+    )
+}
+
 /// One named document, complete: the root schema plus every definition it may reference.
 pub fn document(name: &str) -> Option<Value> {
     let root = match name {
@@ -661,6 +717,7 @@ pub fn document(name: &str) -> Option<Value> {
         "toolchain" => toolchain_payload(),
         "edit" => edit_payload(),
         "chain" => chain_payload(),
+        "openshell" => openshell_payload(),
         _ => return None,
     };
     let (_, what) = NAMES.iter().find(|(n, _)| *n == name)?;

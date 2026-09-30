@@ -45,6 +45,7 @@ mod signing;
 mod microvm;
 mod repl;
 mod run_cmd;
+mod openshell;
 mod sandbox;
 mod schema;
 mod toolchain;

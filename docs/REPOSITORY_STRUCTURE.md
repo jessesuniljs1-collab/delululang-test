@@ -285,6 +285,8 @@ DeluluLang/
 │   │                               #   read out of the page, against a real archive
 │   ├── check-other-os.sh           # clippy -D warnings for macOS and Windows from Linux (a stand-in
 │   │                               #   C compiler; compiled, never run) — routine run 3's loop engineering
+│   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
+│   │                               #   against a boundary written by hand; each widening must be caught
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact
 │                                   #   exit code. It was performed by hand every pass before
@@ -310,6 +312,8 @@ DeluluLang/
 │                                   #   macOS/Windows witness read red on a branch before its fix
 │                                   #   + ocsf.yml [PS-E-06]: the audit export checked against OCSF's
 │                                   #   published schema, read at run time (on pushes that change it)
+│                                   #   + openshell.yml [PS-E-05]: the OpenShell export checked by a
+│                                   #   pinned OpenShell release's prover on a runner, by hand; keeps nothing
 │                                   #   + release.yml [P5, D-V2-42]: the archive on four targets, installed
 │                                   #   as INSTALL.md says; publishes nothing without a tag AND the owner's
 │                                   #   `RELEASES` switch, and then only a draft

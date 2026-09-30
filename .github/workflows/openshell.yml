@@ -1,0 +1,67 @@
+# DeluluLang's OpenShell export, checked by OpenShell's own prover (PS-E-05 (a), D-V2-82; routine run 8).
+#
+# `delulu sandbox policy FILE --format openshell` writes the wall an OpenShell sandbox should put around
+# `delulu run`, derived from the program's authority and its grants. `scripts/openshell-prove.sh` asks
+# NVIDIA's independent prover whether that document stays inside a boundary written by hand — and proves
+# the question can be answered no: each widening of the export must come back `exceeds_boundary`, and a
+# field the format does not have must be an error. Two tools, one DeluluLang's and one NVIDIA's, on the
+# same program (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.5).
+#
+# The prover is a pinned OpenShell release, downloaded HERE on the runner and checked against the
+# release's own SHA-256 list; the VM cannot reach release assets of another repository. Nothing of
+# OpenShell enters this repository (D-V2-52): no asset, script, schema or text is committed, cached or
+# uploaded. By hand first, as `container.yml` and `ocsf.yml` were. It gates nothing and publishes nothing.
+name: openshell
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The OpenShell release tag whose prover checks the export (the study read v0.1.2)"
+        type: string
+        default: "v0.1.2"
+
+permissions:
+  contents: read
+
+jobs:
+  prover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build delulu
+        run: cargo build -p delulu --locked
+      - name: Install OpenShell's pinned release, checksums verified
+        shell: bash
+        env:
+          TAG: ${{ inputs.version || 'v0.1.2' }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/NVIDIA/OpenShell/releases/download/$TAG"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o sums.txt "$base/openshell-checksums-sha256.txt"
+          echo "== the release's assets ($TAG)"
+          awk '{ n = $2; sub(/^\*/, "", n); print n }' sums.txt
+          arch="$(dpkg --print-architecture)"
+          # Every Debian package for this architecture: the CLI's, and the prover's if it ships apart.
+          mapfile -t debs < <(awk -v a="$arch" '{ n = $2; sub(/^\*/, "", n); if (n ~ ("^openshell.*[-_]" a "[.]deb$")) print n }' sums.txt)
+          [ "${#debs[@]}" -gt 0 ] || { echo "no Debian package for $arch in $TAG"; exit 1; }
+          pick=()
+          for d in "${debs[@]}"; do
+            case "$d" in *prover*) pick+=("$d") ;; esac
+          done
+          [ "${#pick[@]}" -gt 0 ] || pick=("${debs[0]}")
+          for d in "${pick[@]}"; do
+            curl -fsSL -o "$d" "$base/$d"
+            want="$(awk -v n="$d" '{ m = $2; sub(/^\*/, "", m); if (m == n) { print $1; exit } }' sums.txt)"
+            [ -n "$want" ] || { echo "no checksum for $d"; exit 1; }
+            echo "$want  $d" | sha256sum -c -
+          done
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${pick[@]/#/./}"
+          command -v openshell-prover
+          openshell-prover --version || true
+      - name: The export, checked by the prover
+        run: scripts/openshell-prove.sh target/debug/delulu
