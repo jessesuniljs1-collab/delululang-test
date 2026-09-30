@@ -2065,6 +2065,55 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
+    /// FRAME-DRIP-1 (RW 4.32's per-frame deadline): the serve loop is one connection at a time, and its
+    /// comment promised that a client which "dribbles a partial frame is dropped" after five seconds, so
+    /// it cannot deny every other custody operation — the operator's e-stop revoke among them. The bound
+    /// was on each READ, so a client sending one byte every two seconds was never dropped: red on
+    /// `dcf4fcb`, a `Status` behind the dribbler answered only when the dribbler stopped (~24 s). The
+    /// whole request is now owed within the bound of its connection's acceptance.
+    #[test]
+    fn a_client_that_dribbles_its_request_cannot_hold_the_serve_loop() {
+        use std::io::Write as _;
+        let state = temp_state("dribble");
+        let handle = start_daemon(&state);
+        let (sent, began) = std::sync::mpsc::channel();
+        let dribbler = std::thread::spawn({
+            let state = state.clone();
+            move || {
+                let mut conn = broker_transport::connect(&state).expect("the dribbler connects");
+                // A frame that claims 1,000 bytes, then its body one byte at a time — each well inside
+                // the five-second read bound — for up to 24 s, or until the broker hangs up.
+                let dropped = conn.write_all(&1000u32.to_le_bytes()).and_then(|_| conn.flush()).is_err();
+                sent.send(()).unwrap();
+                let t = std::time::Instant::now();
+                if dropped {
+                    return t.elapsed();
+                }
+                while t.elapsed() < std::time::Duration::from_secs(24) {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    if conn.write_all(&[0xa0]).and_then(|_| conn.flush()).is_err() {
+                        break;
+                    }
+                }
+                t.elapsed()
+            }
+        });
+        began.recv().unwrap();
+        // Let the serve loop accept the dribbler and start reading it before the operator asks.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let t = std::time::Instant::now();
+        let answered = request(&state, ReqBody::Status);
+        let waited = t.elapsed();
+        assert!(matches!(answered, Ok(Response::Status { .. })), "{answered:?}");
+        assert!(
+            waited < std::time::Duration::from_secs(14),
+            "a request behind a dribbling client waited {waited:?}: the dribbler held the serve loop"
+        );
+        let _ = dribbler.join();
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
     /// DISC-1 strict mode over the wire (race-free, in-process daemon): a persisted
     /// `require_anchored_roots` makes the daemon refuse `ReqBody::Issue` with DL1421 — so a same-uid
     /// IPC client, and thus `grants delegate` auto-root and `run --grant` against this daemon, cannot

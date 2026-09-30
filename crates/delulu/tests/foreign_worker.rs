@@ -48,6 +48,29 @@ const FIXTURE_SRC: &str = r##"
 #[no_mangle] pub extern "C" fn dl_hang() -> i64 {
     loop { std::thread::sleep(std::time::Duration::from_secs(3600)); }
 }
+#[cfg(unix)]
+#[no_mangle] pub extern "C" fn dl_drip() -> i64 {
+    use std::io::Write;
+    use std::os::unix::io::FromRawFd;
+    use std::os::unix::net::UnixStream;
+    // Foreign code owns its process, the worker's channel included: find the connected socket among
+    // its descriptors and answer the host one byte at a time, each well inside the read deadline.
+    let mut socks: Vec<std::mem::ManuallyDrop<UnixStream>> = (3..1024)
+        .map(|fd| std::mem::ManuallyDrop::new(unsafe { UnixStream::from_raw_fd(fd) }))
+        .filter(|s| s.peer_addr().is_ok())
+        .collect();
+    for s in socks.iter_mut() {
+        let _ = s.write_all(&100u32.to_le_bytes());
+    }
+    let t = std::time::Instant::now();
+    while t.elapsed() < std::time::Duration::from_secs(40) {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if socks.iter_mut().all(|s| s.write_all(&[0xa0]).is_err()) {
+            break;
+        }
+    }
+    0
+}
 "##;
 
 fn fixture_path() -> &'static str {
@@ -228,6 +251,46 @@ fn a_foreign_call_that_never_returns_is_dl1409_within_the_deadline() {
     }
     let o = child.wait_with_output().unwrap();
     assert_eq!(o.status.code(), Some(1), "a clean diagnostic exit: {}", stderr(&o));
+    let err = stderr(&o);
+    assert!(err.contains("DL1409") && err.contains("no reply from the worker"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FRAME-DRIP-1 (RW 4.32's per-frame deadline, on the channel that exists to contain foreign code): the
+/// call's deadline was on each READ, so foreign code that answers one byte every 300 ms — each byte well
+/// inside the 1.5 s bound — held the host for as long as it liked. Red on `dcf4fcb`: the host was still
+/// waiting when this test's own watchdog ended it. A call's whole reply is now owed within the deadline
+/// of the call.
+#[cfg(unix)]
+#[test]
+fn a_foreign_call_that_drips_its_reply_is_dl1409_within_the_deadline() {
+    let dir = work_dir("drip");
+    let prog = dir.join("drip.delulu");
+    std::fs::write(&prog, program("dl_drip")).unwrap();
+    let grant = format!("foreign.c=crashlib:{}", fixture_path());
+    let t0 = std::time::Instant::now();
+    let mut child = Command::new(delulu())
+        .current_dir(&dir)
+        .args(["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant])
+        .env("DELULU_FOREIGN_CALL_DEADLINE_MS", "1500")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Our own watchdog: well past the deadline, well short of the fixture's 40 s of dripping.
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if t0.elapsed() > std::time::Duration::from_secs(20) {
+            let _ = child.kill();
+            let o = child.wait_with_output().unwrap();
+            panic!("the host was still reading a dripped reply after {:?}: {}", t0.elapsed(), stderr(&o));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let o = child.wait_with_output().unwrap();
+    assert_eq!(o.status.code(), Some(1), "a clean diagnostic exit: {}{}", stdout(&o), stderr(&o));
     let err = stderr(&o);
     assert!(err.contains("DL1409") && err.contains("no reply from the worker"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);
