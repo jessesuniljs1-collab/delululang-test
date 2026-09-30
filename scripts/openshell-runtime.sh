@@ -8,7 +8,9 @@
 # prints what it read; (2) a program asking for more than its grants is refused by DeluluLang (DL0703);
 # (3) `curl` inside the sandbox — a binary the policy never names — to a host the policy never names is
 # denied by OpenShell; (4) the sandbox's EFFECTIVE policy (OpenShell adds its baseline) is printed and
-# checked by the prover against the export, so what OpenShell added is named, not assumed.
+# checked by the prover against the export, so what OpenShell added is named, not assumed; (5) — E-05 (b) —
+# the GUEST inside a second OpenShell sandbox with no network rule, reached as an `external:` launcher through
+# `openshell sandbox exec`, the program run end to end at level 3.
 #
 # Usage: scripts/openshell-runtime.sh DELULU   (needs OpenShell installed — scripts/openshell-install.sh —
 # Docker, and a systemd user session; a CI runner has all three). Exit 0 when every expectation held.
@@ -65,7 +67,7 @@ done
 openshell status || true
 docker version --format 'docker server {{.Server.Version}}' || true
 
-step "the image: Debian, a non-root user, /sandbox, and this build's delulu with the program"
+step "the image: Ubuntu 24.04, a non-root user, /sandbox, and this build's delulu with the program"
 mkdir -p ctx/data
 cp "$DELULU" ctx/delulu
 echo "hello from the granted file" > ctx/data/in.txt
@@ -93,8 +95,9 @@ fn main(root: Root) ! {Read, Write} {
     }
 }
 EOF
+# The base matches the runner that built `delulu` (run 6: Debian bookworm's glibc 2.36 against a build needing 2.39).
 cat > ctx/Dockerfile <<'EOF'
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl iproute2 \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 1500 app && useradd --uid 1500 --gid app --create-home app
@@ -139,8 +142,8 @@ code=$?
 echo "exit $code: $out"
 [ "$code" != 0 ] || fail "(3) curl reached example.org"
 # OpenShell's own account of the refusal (`--tail` streams, so a bounded window is read instead).
-echo "OpenShell's deny lines for this sandbox:"
-timeout 30 openshell logs dl --since 10m 2>&1 | grep -iE 'deny|denied|example\.org' | tail -10 || echo "(none printed)"
+echo "OpenShell's log for this sandbox, the last 30 lines (run 6 matched no deny line; the format is read here):"
+timeout 30 openshell logs dl --since 10m 2>&1 | tail -30 || echo "(no log read)"
 
 step "(4) the effective policy — what OpenShell added — against the export"
 openshell sandbox get dl --policy-only > effective.yaml || fail "(4) no effective policy"
@@ -149,6 +152,57 @@ openshell-prover check policy.yaml --boundary effective.yaml --output json 2>/de
 echo "export within the effective policy: exit $?"
 openshell-prover check effective.yaml --boundary policy.yaml --output json 2>/dev/null
 echo "effective within the export: exit $? (non-zero names what OpenShell added)"
+
+step "(5) E-05 (b): the GUEST inside an OpenShell sandbox, as an external launcher (level 3)"
+# The guest performs no effects — the host sends the program and performs every effect under the grants — so
+# its sandbox needs no network rule at all and only the paths `delulu` itself starts from, read-only. This
+# boundary is written by hand here (this repository's own text): it is the guest's, not the program's.
+cat > guest-policy.yaml <<'EOF'
+version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: [/usr, /lib, /etc]
+  read_write: []
+landlock:
+  compatibility: hard_requirement
+process:
+  run_as_user: "1500"
+  run_as_group: "1500"
+network_policies: {}
+EOF
+openshell sandbox create --name dlg --from delulu-openshell:ci --policy guest-policy.yaml --detach -- sleep 3600 \
+  || fail "(5) the guest's sandbox was not created"
+for _ in $(seq 1 90); do
+  openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu --version >/dev/null 2>&1 && break
+  sleep 2
+done
+# The launcher: the channel on the exec's standard streams; the guest's words from the host (no shell word-splits
+# a token — DELULU_GUEST_ARGS is DeluluLang's own, `__guest --stdio-pipes`).
+cat > openshell-guest <<'EOF'
+#!/bin/sh
+exec openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu $DELULU_GUEST_ARGS
+EOF
+chmod +x openshell-guest
+mkdir -p host/data
+echo "hello through the OpenShell guest" > host/data/in.txt
+cp ctx/p.delulu host/
+(cd host && "$DELULU" run p.delulu --no-prompt --grant console --grant fs.read=./data \
+  --sandbox --sandbox-backend "external:$work/openshell-guest" --report-out "$work/report.json") > guest.out 2>&1
+echo "exit $?"
+cat guest.out
+grep -q "hello through the OpenShell guest" guest.out || fail "(5) the program did not run through the OpenShell guest"
+if [ -s report.json ]; then
+  python3 - <<'PY' || fail "(5) the report does not say level 3, external"
+import json
+r = json.load(open("report.json"))
+s = r["sandbox"]
+print("report:", json.dumps({k: s.get(k) for k in ("level", "backend", "host_guarantees", "properties")}, indent=1)[:1500])
+assert s.get("level") == 3 and s.get("backend") == "external", s
+PY
+else
+  fail "(5) no run report"
+fi
+openshell sandbox delete dlg >/dev/null 2>&1 || true
 
 openshell sandbox delete dl >/dev/null 2>&1 || true
 if [ "$failures" -gt 0 ]; then
