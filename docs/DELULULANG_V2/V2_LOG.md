@@ -3392,3 +3392,58 @@ its reason; RW 7.17 holds the question, and whether an unanswered probe deserves
 **`fa69efb`'s push run, `36606231595` — success on every job (16): `master` green at `fa69efb`**, arm64's
 `estop_cli` among them (RW 7.17 stays open until a failure's journal names its reason, or it is shown not to
 recur). The run's close: `HANDOFF.md` §11.5 gains that a failure message is all the evidence a CI run keeps.
+
+## 2026-09-30 — routine run 6: CI read; RW 4.32 closed — FRAME-DRIP-1, a frame dripped past every channel's deadline (D-V2-73)
+
+**CI on arrival.** `dcf4fcb` (routine run 5's close) push run `36608843586` — success on every job (16).
+macOS: level 1, egress established, filesystem confinement absent (reads not confined), host loss established,
+privilege floor established, resource ceiling absent; ping-pong NOT MEASURED (3 hardware threads). Windows: all
+properties as run 5 read them; ping-pong NOT MEASURED (the runner busy). No nightly since `36548984501` (recorded by
+run 5). `gh`: absent. The VM's first `rustup target add`, started beside the first `cargo` call, raced the pinned
+toolchain's install and broke it (`cargo` "not applicable"); reinstalled — the routine's step 2 now installs the
+toolchain with its targets first.
+
+**RW 4.32's last item, and the same hole twice more.** The sandbox host's channel deadline was on each READ: a
+guest sending one byte just inside it held a frame open for ever. Asking where else a deadline is per read found two
+more channels that read a peer DeluluLang does not trust — and on both the hole was worse:
+
+- **The broker daemon** (`brokerd.rs`): one connection at a time, its read bounded at 5 s, and a comment promising
+  that a client which "dribbles a partial frame" is dropped so it cannot deny "every other custody op, INCLUDING the
+  operator's e-stop revoke". IPC-1's fix (2026-08-08) had recorded the indefinite hang closed; its witness was a client
+  that stalled. **Witnessed on `dcf4fcb`**: a client sending one byte every 2 s held the loop — a `Status` behind it
+  waited 23.7 s, the dribbler's whole life (macOS 24.25 s, `witness.yml` `36651091801`); on Windows the `Status` was
+  refused instead (`connect: win32 error 231`, all pipe instances busy — a busy pipe refuses a second client after 1 s
+  where a Unix socket queues it; `36651089599`).
+- **A foreign call** (`foreign_worker.rs`): foreign code owns its worker's end of the channel; answering one byte
+  every 300 ms, each inside the 1.5 s call deadline, it held the host past the witness's own 20 s watchdog (Linux;
+  macOS 20.04 s, `36651091801`).
+
+**Fixed (D-V2-73):** one reader, `delulu_runtime::channel::Within`, owes a frame WHOLE within a bound — from a
+connection's acceptance for the broker (5 s), from the call for a foreign reply (the call's deadline; DL1409, the
+worker killed), from a frame's first byte for the host reading a guest (`FRAME_DEADLINE`, 60 s, in `serve` and the
+confinement report; a guest may still be quiet between frames). Checked around each read, so a frame is abandoned no
+later than its bound plus one read deadline. A guest's slow frame ends the run in its own words, told apart from a
+silent one. Commits: `626c3c5` (the two witnesses alone, read red on macOS and Windows), `12eeb51` (the fix and five
+more witnesses), `11a152b` (the broker witness asks again, as an operator on Windows must).
+
+**Witnesses:** `brokerd::tests::a_client_that_dribbles_its_request_cannot_hold_the_serve_loop`,
+`foreign_worker::a_foreign_call_that_drips_its_reply_is_dl1409_within_the_deadline` (Unix),
+`channel::tests::{a_frame_dripped_past_the_frame_deadline_is_refused, a_pause_before_a_frame_is_not_a_slow_frame,
+from_now_counts_the_wait_before_the_first_byte}`, `boundary::tests::a_confinement_report_dripped_past_the_frame_deadline_does_not_confirm`,
+`guest::tests::a_slow_frame_and_a_silence_are_told_apart`. **Mutants M21–M27**, each red and restored byte for byte:
+M21 `Within` never refusing (all five witnesses red), M22 `serve` reading per read, M23 the broker reading per read
+(re-run after `11a152b`: red, 23.7 s), M24 the foreign call reading per read, M25 `from_first_byte` counting from its
+making, M26 the confirm read reading per read, M27 a slow frame worded as silence.
+
+**Verified:** clippy `-D warnings` clean; `scripts/check-other-os.sh` clean on five targets (and again for Windows and
+macOS after `11a152b`); the full suite alone (-j 4, the map regenerated first): 2,058 passed, 0 failed, 15 ignored
+(153 binaries), cargo exit 0. **Read on the runners before `master` moved:** red at `626c3c5` — macOS `36651091801`,
+Windows `36651089599`; green — macOS `36651763687` at `12eeb51` (`delulu` bin 138 passed, `foreign_worker` 5) and
+`36651767914` (`delulu-runtime` `channel::` 22), Windows `36651765721` at `12eeb51` (`channel::` 22) and
+`36652035525` at `11a152b` (`delulu` bin 132 passed — the broker dropped the dribbler 6 s after accepting it — and
+`foreign_worker` 4). A Windows read at `12eeb51` (`36651761315`) was cancelled once `36651089599` showed its broker
+witness could not pass there as written.
+
+**Not changed, recorded:** the broker still serves one connection at a time, so clients queued behind one another each
+take their bound; on Windows a client that finds the pipe busy is refused after 1 s rather than queued; the operator's
+`request` still waits without a bound for a broker that accepted and never answered (the dead-man probe's does not).

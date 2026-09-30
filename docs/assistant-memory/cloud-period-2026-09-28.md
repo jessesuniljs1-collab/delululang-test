@@ -84,6 +84,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   death record names the guest's words; RW 4.34 (D-V2-72): a message's continuation lines indented.
   `master` went red on Windows once, for a TEST whose path held `:` — rule: a slice's new tests are read on
   every runner first. A classifier stopped the start of H6 (a macOS escaped-guest harness) — nothing ran.
+- **Routine run 6 (2026-09-30):** RW 4.32's per-frame deadline — and FRAME-DRIP-1 on two more channels: the
+  broker daemon (a dribbling client held its one-connection loop, the e-stop revoke behind it; IPC-1's fix had
+  bounded each read only) and a foreign call (foreign code dripping its reply). `channel::Within` owes each
+  frame whole (D-V2-73). Traps: a per-read deadline is not a per-message one — test the peer answering just
+  inside it; install the pinned toolchain before any concurrent `rustup`/`cargo` (a race broke it).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

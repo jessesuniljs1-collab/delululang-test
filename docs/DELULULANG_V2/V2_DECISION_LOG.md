@@ -1509,6 +1509,34 @@ keeps a message's line breaks and indents every line after the first by two spac
 can then begin where the host's own lines begin. A slight change in layout: the plugin signature mismatch's
 `manifest:`/`code:` lines are indented four spaces instead of two. JSON unchanged.
 
+## D-V2-73 — RW 4.32, FRAME-DRIP-1: a peer DeluluLang does not trust owes each frame WHOLE within a bound — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+Every channel that reads such a peer bounded each READ and none bounded the frame, so a peer sending one byte
+just inside the read deadline held a frame — and its reader — open for as long as it liked. Witnessed on
+`dcf4fcb` twice: on the broker daemon, whose loop serves one connection at a time and whose comment promised a
+dribbling client would be dropped after 5 s (a `Status` behind a client sending one byte every 2 s waited
+23.7 s, its whole life — the operator's e-stop revoke waits the same way); and on a foreign worker's call (foreign
+code answering one byte every 300 ms, each inside the 1.5 s call deadline, held the host past 20 s). IPC-1's fix of
+2026-08-08 had bounded each read and recorded the indefinite hang closed; a dribble was never closed.
+
+Decided: one reader, `delulu_runtime::channel::Within`, and a bound at each place:
+1. **The host reading a guest** (`HostChannel::serve`, and the confinement report in `boundary.rs`): a frame
+   begun is owed whole within `FRAME_DEADLINE`, 60 s, **from its first byte** — a guest may still be quiet
+   between frames for as long as the channel's own read deadline allows (a guest computing).
+2. **The broker daemon**: a client's whole request within 5 s **of its connection's acceptance** — the bound the
+   loop always claimed ("a legit client sends its whole frame immediately after connecting").
+3. **A foreign call**: the worker's whole reply within the call's deadline (60 s, or shorter by
+   `DELULU_FOREIGN_CALL_DEADLINE_MS`) **from the call**; the bind handshake's within its 10 s.
+
+The check is made around each read, so a frame is abandoned no later than its bound plus one read deadline — a
+read in flight is not cut short, because the transports share no way to shorten one; the bound is finite and
+stated rather than exact. No new code: a guest's slow frame ends the run in its own words ("the guest did not send
+one whole frame within 60s"), told apart from a silent guest; a worker's is DL1409's "no reply from the worker
+within N ms" (the worker is killed); the broker's is a dropped connection in its log. **Not changed:** the broker
+still serves one connection at a time, so clients queued one behind another each take their 5 s — a same-user
+process that can do that can also stop the broker (category 7, as IPC-1 recorded); the operator's `request` still
+waits without a bound for a broker that accepted and never answered (the dead-man probe's `request_timed` does not).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

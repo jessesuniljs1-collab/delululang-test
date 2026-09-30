@@ -272,6 +272,12 @@ writes on its standard error, which the host relays escaped and marked as the gu
 A line break in a program's string begins no line of its own at column 0 inside a rendered diagnostic
 (D-V2-72), and a microVM guest's console reaches the operator escaped too (RW 4.32).
 
+A peer that sends its message one byte at a time holds no channel open past a stated bound since FRAME-DRIP-1
+(D-V2-73), with witnesses on the broker daemon, a foreign worker's call, the host's serving loop and the guest's
+confinement report, and seven falsified mutants: the host reading a guest (60 s from a frame's first byte), the
+broker daemon reading a client (5 s from its connection), a host reading its foreign worker's reply (the call's
+deadline) — each checked around every read, so a frame is abandoned no later than its bound plus one read deadline.
+
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
 host watchdog on every engine at a stated 25 ms resolution.

@@ -119,6 +119,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **A sandboxed run's `sandbox-death` audit record names the words its guest confirmed its boundary with**
   (`guest_words`), so the chain — not only a report that can be discarded — says what the guest claimed to
   have applied to itself.
+- **Fixed (security): a peer sending its message one byte at a time could hold a channel open for as long as
+  it liked** (FRAME-DRIP-1). Each channel bounded each read, not each message: a local client dribbling its
+  request to the broker daemon — which serves one connection at a time — held back every other custody
+  operation, the operator's e-stop revoke among them; foreign code in a `--foreign-isolation process` worker
+  held its host's call past the call's deadline; a sandboxed guest held its host. A message is now owed whole:
+  a broker request within 5 s of its connection, a foreign call's reply within the call's deadline (DL1409 past
+  it, as for a silent worker), a sandboxed guest's frame within 60 s of its first byte — the run then ends in
+  words that say so (D-V2-73).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

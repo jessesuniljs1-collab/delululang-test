@@ -749,6 +749,12 @@ wins, and you should update the memory to match.
   operator's terminal through `assert_eq`'s values (title, line erase, a forged `sandbox:` line; OSC 52
   sets a clipboard), and the same bytes came through a refusal's quoted path, a test's name and a quoted
   source line. Found by asking where a guest's standard error goes. Escaped at the printers now.
+  **Routine run 6 (2026-09-30): FRAME-DRIP-1** — every channel reading a peer DeluluLang does not trust
+  bounded each READ and none the frame: a peer sending one byte just inside the read deadline held it open for
+  ever. On the broker daemon (one connection at a time) a `Status` behind a client dribbling one byte every 2 s
+  waited 23.7 s, its whole life — though IPC-1's fix (2026-08-08) had recorded the indefinite hang closed and the
+  serve loop's comment promised a dribbler dropped; on a foreign call, foreign code dripping its reply held the
+  host past 20 s. `delulu_runtime::channel::Within` owes each frame whole (D-V2-73).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -883,6 +889,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Hold a race's window open with work the code must do anyway** (routine run 5): the launcher-swap
   witness made the host's hash slow (a 64 MiB launcher) and swapped the path the moment `/proc/<pid>/fd`
   showed the host holding the file — no hook in the product, no re-running; the mutant failed 3 of 3.
+- **A deadline on each read is not a deadline on the message** (routine run 6, FRAME-DRIP-1): a peer that sends
+  one byte just inside it holds the message open for ever. For every timeout on a channel, ask what a peer
+  answering JUST inside it can hold — and test that peer, not a silent one: IPC-1's witness was a client that
+  stalled, so the dribbling client the same comment named was never tried.
+- **Install the pinned toolchain before anything else runs `cargo` or `rustup`** (routine run 6): the first
+  `cargo` call installs it, and a `rustup target add` started beside it raced the install — the toolchain was left
+  with `cargo` "not applicable" and a component conflict, and had to be reinstalled.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

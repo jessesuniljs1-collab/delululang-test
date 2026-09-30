@@ -41,5 +41,12 @@ bound, blocks 2.0003 s without it. Windows 15/0+144/0+66/66, Linux 16/0+144/0+in
 **Residual (category 7, MATHEMATICS.md item 12):** the INDEFINITE hang is closed; a same-uid attacker
 can still churn/dribble connections or `kill` the daemon (shares the OS user). Full availability against
 a co-resident same-uid process needs a separate OS account. The automatic heartbeat park is now
-fail-closed independent of broker responsiveness — the safety-critical guarantee. Related:
+fail-closed independent of broker responsiveness — the safety-critical guarantee.
+
+**2026-09-30 — the dribble half was never closed (FRAME-DRIP-1, D-V2-73, routine run 6).** The 5 s bound was on
+each READ: a same-uid client sending one byte every 2 s was never dropped, so the "indefinite hang is closed" line
+above did not hold for a dribbler — a `Status` behind one waited its whole 23.7 s life (witnessed on `dcf4fcb`).
+The serve loop now owes a client's whole request within 5 s of acceptance (`delulu_runtime::channel::Within`),
+and the same bound per message went onto the foreign worker's call and the sandbox host. Lesson: the witness was
+a client that STALLED; the dribbling client the comment named was never tried. Related:
 [[delulu-root-issuance-bypass]] (DISC-1, the prior finding), [[delulu-hw-adapter]].

@@ -85,15 +85,18 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 `git log --oneline -15`. If `claude/cloud-dev` exists and is ahead of `master`, work from it (see above).
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
-`cargo run -p delulu -- doctor --check` — start them in the background as soon as the run begins (the
+`cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile
+minimal --component rustfmt,clippy --target aarch64-apple-darwin,x86_64-apple-darwin,x86_64-pc-windows-msvc,
+aarch64-unknown-linux-gnu,x86_64-unknown-linux-musl` (about a minute; the targets are the ones below): run 6 started
+`rustup target add` beside the first `cargo` call, the two raced the toolchain's install, and it had to be
+reinstalled. Then start them in the background as soon as the run begins (the
 first `doctor` builds the whole `delulu` crate) and do step 1's reading while they build. A failure here is the run's first task. Then `cargo fetch
 --locked` once: a fresh VM holds only Linux's crates, and `egress_features` runs `cargo metadata
 --offline`, which needs every platform's (run 1 lost a suite result to it). And, in the background,
 `cargo install cargo-deny --locked` (about four minutes; the VM has none): the supply-chain gate reds a
 push whenever RustSec publishes against the tree, whatever the commit changed (run 4), and the fix is
-witnessed with `cargo deny --all-features check advisories` before and after. And, in the background,
-`rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-unknown-linux-gnu
-x86_64-unknown-linux-musl` — `scripts/check-other-os.sh` needs them for any change to code that runs on
+witnessed with `cargo deny --all-features check advisories` before and after. The cross-OS targets
+(installed with the toolchain above) — `scripts/check-other-os.sh` needs them for any change to code that runs on
 another OS, and then takes about seven minutes itself (run 5).
 
 **3. Verify the previous run — the verification loop.** A run does not trust the one before it:

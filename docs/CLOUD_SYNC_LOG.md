@@ -731,3 +731,45 @@ it on `origin` was made in the cloud and is listed below.
   `HANDOFF.md` §11.7; perhaps one for the laptop), the red-team pass on the filter, `setsid` for the guest, PS-E-01's remainder (`contained`'s set, attesters' claims as properties), E-05, E-06, then P8,
   P9. **For the owner:** D-V2-69, D-V2-70, D-V2-71 and D-V2-72 are this run's decisions; H6 was stopped
   by a safety classifier (§11.7).
+
+### 2026-09-30 — routine run 6: CI read green; RW 4.32 closed — FRAME-DRIP-1 on the broker, a foreign call and the sandbox host (D-V2-73)
+- Session: `https://claude.ai/code/session_01TQhMrCGGMnFjTrcKdQoS9Q`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there; each slice read on the other runners from
+  `claude/friendly-thompson-c0cg57` first, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `dcf4fcb` (routine run 5's last commit)
+- Commits: (1) `626c3c5` FRAME-DRIP-1 witnesses: a dribbled frame holds the broker's serve loop and a foreign call;
+  (2) `12eeb51` FRAME-DRIP-1: a peer's frame is owed whole within a bound - the broker, a foreign call, the sandbox host (D-V2-73);
+  (3) `11a152b` FRAME-DRIP-1's broker witness: on Windows a busy pipe refuses, so the operator asks again;
+  (4) `FRAME-DRIP-1's records: D-V2-73, read red then green on macOS and Windows; routine run 6's entry` — records only
+- Files and folders:
+  M `crates/delulu/src/brokerd.rs` (a witness) — (1); `crates/delulu/tests/foreign_worker.rs` (the `dl_drip` fixture, a witness) — (1)
+  M `crates/delulu-runtime/src/channel.rs` (`Within`, `FrameTooSlow`, `FRAME_DEADLINE`; `HostChannel::with_frame_deadline`,
+    `frame_deadline`; `serve` reads through `Within`; three unit witnesses), `crates/delulu/src/boundary.rs` (the
+    confirmation report read through `Within`; a witness), `crates/delulu/src/brokerd.rs` (the serve loop; its comment
+    made true), `crates/delulu/src/foreign_worker.rs` (the call and the bind), `crates/delulu/src/guest.rs` (`in_words`
+    tells a slow frame from silence; a witness) — (2); `crates/delulu/src/brokerd.rs` (the witness asks again) — (3)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 FRAME-DRIP-1; §11.5 a per-read deadline is not a per-message one; install the
+    pinned toolchain first), `docs/CLOUD_ROUTINE.md` (step 2: the toolchain and its targets installed first, in the
+    foreground), `docs/REMAINING_WORK.md` (4.32 closed; 4.14's note), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-73),
+    `V2_LOG.md`, `V2_PHASE_STATUS.md` (PS-E), `V2_SECURITY_MODEL.md` (§10), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+    `docs/assistant-memory/delulu-ipc-deadman-findings.md` (IPC-1's dribble half) — (4)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4)
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,471 nodes, 12,914 edges); `doctor --check` ok, 26 checks
+  passed. After the last edit: in (4)'s commit message.
+- Verified: **CI on arrival:** `dcf4fcb` `36608843586` — success on every job (16); no nightly since `36548984501`.
+  `gh`: absent. `cargo deny` installed (0.20.2). **(1)–(3):** both end-to-end witnesses red on `dcf4fcb` in the VM (the
+  broker's `Status` waited 23.7 s; the foreign call still read at 20 s) and on the runners at `626c3c5` (macOS
+  `36651091801`: 24.25 s and 20.04 s; Windows `36651089599`: the `Status` refused, `win32 error 231`); M21–M27 red, each
+  restored byte for byte; clippy clean; `check-other-os.sh` clean on five targets; the full suite alone 2,058 passed,
+  0 failed, 15 ignored (153 binaries), cargo exit 0; green on the runners — macOS `36651763687` (bin 138, `foreign_worker`
+  5) and `36651767914` (`delulu-runtime` `channel::` 22) at `12eeb51`, Windows `36651765721` (`channel::` 22) at
+  `12eeb51` and `36652035525` (bin 132, `foreign_worker` 4) at `11a152b`; `36651761315` cancelled (its broker witness
+  could not pass on Windows as first written).
+- Redo on the laptop: the suite on Windows and in WSL (the broker's serve loop and the foreign worker's call changed on
+  every OS).
+- For the laptop's memory: `HANDOFF.md` §11.4 (FRAME-DRIP-1) and §11.5 (a per-read deadline is not a per-message one;
+  install the pinned toolchain before any concurrent `rustup`/`cargo`); `docs/assistant-memory/cloud-period-2026-09-28.md`
+  and `delulu-ipc-deadman-findings.md`.
+- Push runs read: (this run continues — the next lines say).
+- Open / next: (this run continues — the next lines say).
