@@ -1004,6 +1004,9 @@ declassify) re-check every use, so revocation takes effect *before the next use*
 operations (reads, clock) validate against a snapshot refreshed every ≤50ms. "Immediate" is never
 claimed. Every issue, delegate, revoke, and declassify is written to an append-only, hash-chained
 **audit log** — observability, not enforcement, and the header of every log file says exactly that.
+A security team can read it in its own tools: `delulu audit export --format ocsf` writes each record as
+an OCSF 1.8.0 event, and because every event carries its record, `delulu audit verify --ocsf` still
+proves from the export alone that nothing in it was edited or removed.
 
 Above the broker sit the isolation profiles: **foreign workers** (C/Python in a separate minimal-
 privilege subprocess, so a segfault kills the worker, not your program), the **sandbox guest**

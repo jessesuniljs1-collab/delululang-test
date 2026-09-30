@@ -140,7 +140,7 @@ another OS, and then takes about seven minutes itself (run 5).
    E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
    is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
    tested L3 and `sandbox policy --format openshell` (a manual `openshell.yml`, by hand first, as
-   `container.yml` was); E-06 OCSF export.
+   `container.yml` was); E-06 OCSF export (**complete**, run 7: D-V2-78, D-V2-80).
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
    E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays

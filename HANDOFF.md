@@ -68,7 +68,8 @@ the assistant's memory — which now also travels file by file in
   exact now (D-V2-66).
 - **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H6 and a red-team pass on the filter, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
-  pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
+  pinned, E-05 OpenShell as a tested L3 and a policy target (E-06, the OCSF export, is complete — routine run 7,
+  D-V2-78 and D-V2-80). Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
   then **P9**. A real device stays environment-blocked. ADAPTER-SPELL-1 (the subprocess driver verified
   as one file and started as another) was found and fixed while sizing P8.
