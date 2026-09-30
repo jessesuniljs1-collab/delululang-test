@@ -3556,3 +3556,50 @@ the padded frame read as `Status`); refused now in words, as the sandbox channel
 `cc157bc` is the falsification. **Verified:** clippy clean; `broker_ipc` 5, `foreign_worker` 4, `broker_cli` 5 passed;
 the full suite alone 2,067 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; read on the runners first (`delulu` bin, `broker_cli`, `foreign_worker`): macOS
 `36659893368 (bin 141, the witness among them; broker_cli 4, foreign_worker 5)`, Windows `36659895529 (bin 133; broker_cli 3, foreign_worker 4)`.
+
+## 2026-09-30 — routine run 7: CI read green; PS-E-06 — the audit chain exported as OCSF 1.8.0, still verifiable (D-V2-78)
+
+**CI, read first.** Routine run 6's last two push runs, unread when it ended: `cc157bc` `36659209716` and `7940188`
+`36660801170` — success on every job. No nightly since `36548984501` (the 2026-09-30 schedule had not fired by 05:20
+UTC). `gh`: absent. `cargo deny --all-features check advisories`: ok. Survey `check` ok (1,472 nodes, 12,976 edges);
+`doctor --check` ok, 26 checks passed.
+
+**PS-E-06, built.** `delulu_broker::ocsf` maps each audit record to one OCSF 1.8.0 event; `delulu audit export
+--format ocsf [--since SEQ] [--out F] [--device-name NAME]` writes them as JSON Lines, and `delulu audit verify --ocsf F
+[--expect-start HASH]` re-verifies an export from the file alone. Each event carries its **whole** record under
+`unmapped.delulu` — the study's three chain fields would show a removed line but not an edited one — and every OCSF
+field is a pure function of that record and two labels, so the verifier recomputes each event and requires the line to
+be exactly it, then re-verifies the chain with `Bundle::verify`. Class UIDs checked against the published schema
+files, read in the VM: Detection Finding 2004 (a refusal; break-glass and a bypassed Guard, High), User Access
+Management 3005 (grants and revocations), Process Activity 1007 (a guest's launch and end, paired by the run's
+generation), Base Event 0 (the rest). **A capability use is a Base Event**: the chain records a use's argument, not its
+effect (`validate.rs` drops the op), and the export does not guess a class from a spelling. D-V2-78.
+
+**The OCSF schema IS reachable from the VM** — run 6's entry said it was not. `raw.githubusercontent.com` serves
+`github.com/ocsf/ocsf-schema` at `v1.8.0` file by file (the tarball is refused, 403; `schema.ocsf.io` is refused by the
+proxy). `scripts/ocsf-validate.py` reads the class, object, profile and dictionary files at run time — nothing of OCSF is
+committed — and checks every event: the class's uid and category, `type_uid`, required attributes through `extends` and
+`$include`, no undefined attribute (recursively), each object's constraints, types and enums. Its first run failed 69
+times on a correct export — the validator's own three errors (a class's category is named by its category-level parent;
+a profile's attributes are optional unless the event names the profile; an `_id`'s enum is the dictionary's merged with
+the class's) — fixed in the validator, then **falsified**: thirteen mutations of an export (a required uid removed, a
+severity out of its enum, a misspelt attribute, a user with no identity, privileges not an array, a wrong `type_uid`, a
+missing process or device, a device type out of its enum, a class claimed as another, a wrong category, the wrong
+schema version, a time as a string), each caught.
+
+**A fake peer kept the wrong protocol — again (§11.5).** The first fixture wrote each sandbox record's generation as an
+integer; the host writes 64 hex characters. The mapping read an integer, and a real sandboxed run's chain showed every
+guest named by its record's hash, its launch and death unpaired. Fixed to read the host's spelling, and a seventh
+witness runs real sandboxed programs rather than trusting the fixture.
+
+**Witnesses** (`crates/delulu/tests/audit_ocsf_cli.rs`, 7): every record kind to its class, `type_uid`, category and
+the base event's required fields, and the export's head equal to `audit verify`'s; a removed middle event fails
+(DL1405), a removed first one only against `--expect-start`; an edited OCSF field, a consistently forged record, a
+relabelled line — each fails; a secret's bytes appear in no export (its name does); `--since` verifies from the head
+before it and from nothing else; a broken chain is not exported, and every flag is checked; a real run's refused read
+and clean exit, launch and death paired by generation. **Mutants M38–M43, each red:** the export drops the embedded
+record (5 tests red); the verifier never recomputes the event (1); it chains only the first record (3); it ignores the
+labels (1); a refusal is not a finding (3); a refused guest's end is a finding (2).
+
+**Verified:** clippy clean; `check-other-os.sh` clean for macOS (arm64) and Windows (the host-name lookup is per OS);
+the full suite alone 2,074 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; the export of a real sandboxed chain and of the corpus validated against OCSF 1.8.0, 0 problems.

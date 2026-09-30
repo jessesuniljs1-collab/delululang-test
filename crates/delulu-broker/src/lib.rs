@@ -14,6 +14,8 @@
 //! - [`validate`] — phase 5c: the synchronous/epoch validation classes + revocation epochs.
 //! - [`audit`] — phase 5d: the append-only, hash-chained audit log (blake3) + `verify`/`tail`/`query`.
 //! - [`lease`] — phase 5e: MAC-signed portable lease tokens (delegate/redeem/rotate_key).
+//! - [`ocsf`] — PS-E-06: the audit chain exported as OCSF 1.8.0 events, each carrying its record, so
+//!   the export still verifies.
 //! - [`secrets`] — phase 5g: the broker-resident secret store + `expose`/`secret_map`.
 //! - [`diag`] — broker denials and their mapping to `delulu_diag::Diagnostic`.
 //! - [`ids`] / [`time`] — the injectable GrantId source and TTL clock (ruling 3).
@@ -29,6 +31,7 @@ pub mod diag;
 pub mod guard;
 pub mod ids;
 pub mod lease;
+pub mod ocsf;
 pub mod secrets;
 pub mod time;
 pub mod tree;

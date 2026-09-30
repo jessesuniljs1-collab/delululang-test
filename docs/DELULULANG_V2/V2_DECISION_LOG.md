@@ -1601,6 +1601,44 @@ so: the log refuses to open rather than start a chain over a file it cannot read
 Unix-only line adds no crate. Under Miri the flag is left out: Miri's `open` takes a short list of flags and never makes a
 FIFO, so there the open is the blocking one it replaced. `secrets.rs`'s store is read the same way and was not tried.
 
+## D-V2-78 — PS-E-06: the audit chain exported as OCSF 1.8.0, each event carrying its record, so the export still verifies — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+`V2_OPENSHELL_STUDY.md` §4.6 proposed `delulu audit export --format ocsf` with `seq`, `hash` and `prev_hash` under
+`unmapped.delulu`. Built (routine run 7), with three departures, each for a reason found while building it:
+
+1. **The whole record rides in each event, not three of its fields.** `seq`, `hash` and `prev_hash` show a removed
+   line (a broken link) but not an edited one: a hash can be recomputed only from every hashed field. So each event
+   carries its record exactly as the chain holds it (`AuditRecord::to_value`), and every OCSF field is a pure function
+   of that record and two labels stated once for the export (the product's version, the device's name).
+   `delulu audit verify --ocsf FILE [--expect-start HASH]` recomputes each event and requires the line to be exactly
+   it — an edited class, time, severity or message fails — and re-verifies the chain over the records with the same
+   code as a reconciliation bundle (`Bundle::verify`). What it cannot prove it says: a removed LAST event leaves every
+   link intact (P17-C1), so the head is printed for comparison with the source's `audit verify`; and the labels are
+   the exporter's word, checked only to be the same on every line.
+2. **A capability use is a Base Event (0), not File System Activity (1001) or HTTP Activity (4002).** The study
+   mapped effects to those classes; the chain does not record a use's effect — `record_op("use", …)` carries the node,
+   the argument and the decision, and the op is dropped (`validate.rs`). A path and a host are both strings, and
+   choosing a class from the argument's spelling would be the export inventing a fact. The mapping by action, each class
+   checked against the published 1.8.0 files (`class_uid` = category × 1000 + the class's own uid): any `deny`, a
+   `break-glass`, `guard_bypass_on` and `guard_bypassed_use` → Detection Finding 2004 (High for the three special
+   uses, Medium for a refusal); `issue`, `delegate`, `attenuate`, `redeem`, `renew`, `adopt` → User Access Management
+   3005 Assign Privileges, `revoke` and `guard_permit_revoke` → Revoke Privileges (the privileges are the authority's
+   effects, or "every effect held by" the node when the record carries none); `sandbox-launch` and `sandbox-death`
+   (either decision — a failed program is not a detection) → Process Activity 1007, the guest named by its run's
+   generation so the two pair; everything else → Base Event, activity Other, the record's action as its name. **The
+   use's effect in the record is the next step** (its own slice: it changes the hashed shape of new records).
+3. **The schema is checked at run time, never copied.** `scripts/ocsf-validate.py` reads OCSF's own class, object,
+   profile and dictionary files — from a checkout, or file by file from the tag on raw.githubusercontent.com — and
+   checks each event: the class's uid and category, `type_uid`, every required attribute with inheritance, no undefined
+   attribute (recursively), each object's required attributes and `at_least_one`/`just_one` constraints, types and
+   enums. Nothing of OCSF is in the repository (as for OpenShell, D-V2-52).
+
+Also: a chain that does not verify is not exported (exit 1, the DL1405 shown); `--since SEQ` exports from that seq on,
+and verifies with `--expect-start` = the previous export's head; the device label defaults to the machine's name
+(`gethostname`, `COMPUTERNAME`), and `--device-name` names it. No new `DL` code — a broken export is DL1405, as a
+broken chain is. The audit holds no secret bytes and no query string (a network use records the host,
+`interp.rs::custody_op_for`), and the export adds nothing a record does not hold.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

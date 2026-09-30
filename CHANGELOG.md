@@ -151,6 +151,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   (AUDIT-FIFO-1). A day log is now read only if it is a regular file, and anything else is refused in words (D-V2-77).
 - **The broker daemon's wire refuses bytes after a frame's value**, as the sandbox channel has since RW 4.32: one frame,
   one value, so one request has one spelling (RW 4.39).
+- **New (PS-E-06): `delulu audit export --format ocsf`** — the audit chain as OCSF 1.8.0 events for a SIEM, one JSON
+  line per record: a refusal, break-glass or bypassed Guard is a Detection Finding (2004), a grant or revocation User
+  Access Management (3005), a sandboxed guest's launch and end Process Activity (1007) paired by the run's generation,
+  anything else a Base Event (0). `--since SEQ`, `--out F`, `--device-name NAME`. **`delulu audit verify --ocsf F`**
+  re-verifies an export from the file alone: every event carries its whole record and must be exactly the event that
+  record maps to, and the records must chain — an edited or removed event fails (DL1405), and a removed last one is
+  shown by comparing heads. A chain that does not verify is not exported. `scripts/ocsf-validate.py` checks an export
+  against the published schema, fetched at run time (D-V2-78).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

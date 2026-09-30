@@ -317,6 +317,33 @@ delulu audit verify          # proves the chain was not rewritten
 delulu audit tail | grep root-policy-mode
 ```
 
+### Sending the chain to a SIEM — OCSF, still verifiable (PS-E-06)
+
+```bash
+delulu audit export --format ocsf --out chain.jsonl            # the whole chain, one event per record
+delulu audit export --format ocsf --since 1042 --out next.jsonl # from seq 1042 on
+delulu audit verify --ocsf chain.jsonl                          # anyone holding the file can re-check it
+delulu audit verify --ocsf next.jsonl --expect-start <head of the previous export>
+```
+
+Each line is an [OCSF](https://schema.ocsf.io) 1.8.0 event: a refusal, a break-glass use or a bypassed
+Guard is a Detection Finding (2004); a grant, delegation or revocation is User Access Management (3005);
+a sandboxed guest's launch and end are Process Activity (1007), paired by the run's generation; anything
+else is a Base Event (0) naming the record's action. A capability *use* is a Base Event, not File System
+or HTTP Activity, because a use's record names its argument and not its effect — the export does not
+guess one from the other's spelling.
+
+**Why an export can still be trusted.** OCSF events alone cannot show that one was removed. So every
+event carries its whole audit record under `unmapped.delulu`, and every other field is computed from that
+record: `verify --ocsf` recomputes each event and requires the line to be exactly it (an edited class,
+severity, time or message fails), and re-verifies the hash chain across the records (a removed or reordered
+event breaks a `prev_hash`, an edited record its own hash). Two limits, said plainly: a removed **last**
+event leaves every link intact — compare the head `verify --ocsf` prints with the source's `delulu audit
+verify` — and the device name and product version are the exporter's labels, checked only to be the same
+on every line. A chain that does not verify is not exported (exit 1). The export never holds secret bytes:
+the audit holds none. `scripts/ocsf-validate.py chain.jsonl` checks an export against the published schema,
+fetched at run time.
+
 ---
 
 ## 4. Platform status — stated exactly
@@ -393,6 +420,7 @@ version**, at which point the ergonomic break can be paired with the migration i
 delulu doctor                                   # is this deployment sound?
 delulu broker start --require-anchored-roots X  # Tier 1/2
 delulu audit verify                             # has the log been tampered with?
+delulu audit export --format ocsf --out c.jsonl # the chain for a SIEM (OCSF 1.8.0), still verifiable
 delulu audit tail | grep root-policy-mode       # was this broker ever downgraded?
 delulu grants list                              # what authority exists right now?
 delulu guard policy show                        # what is gated, and at which tier?

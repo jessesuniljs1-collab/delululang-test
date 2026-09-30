@@ -831,3 +831,34 @@ it on `origin` was made in the cloud and is listed below.
   (P8-01 first moves the device logic out of the interpreter, `V2_P8_DESIGN.md`), P9; (4) RW 7.17: `estop_cli`'s control
   test passed on arm64 in every push run this run read — keep watching. **For the owner:** D-V2-73 to D-V2-77 are this
   run's decisions; the red-team pass is in `V2_LOG.md`.
+
+### 2026-09-30 — routine run 7: CI read green; PS-E-06 — the audit chain exported as OCSF 1.8.0, still verifiable (D-V2-78)
+- Session: `https://claude.ai/code/session_01FNJXFsa6jKeh9Q9XiZsjFR`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (each slice read on the other runners from `claude/compassionate-pasteur-02il9s` first, then
+  `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `7940188` (routine run 6's last commit)
+- Commits: (1) PS-E-06: the audit chain exported as OCSF 1.8.0, each event carrying its record (D-V2-78)
+- Files and folders:
+  A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
+    witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
+  M `crates/delulu-broker/src/audit.rs` (`AuditRecord::to_value`; `from_value` and `AuditError::corrupt` crate-visible),
+    `crates/delulu-broker/src/lib.rs` (`pub mod ocsf`), `crates/delulu/src/cli.rs` (`audit export`, `audit verify --ocsf`,
+    `host_name`, the help's two lines)
+  M `CHANGELOG.md`, `docs/DEPLOYMENT.md` (§3: sending the chain to a SIEM; §7), `docs/REMAINING_WORK.md` (6.14 closed,
+    its next step), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-78), `V2_IMPLEMENTATION_ROADMAP.md`,
+    `V2_OPENSHELL_STUDY.md` (§4.6 built), `V2_LOG.md`, `V2_PHASE_STATUS.md` (PS-E)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
+  After the last edit: in each commit's message.
+- Verified: **CI on arrival:** routine run 6's last two push runs, `cc157bc` `36659209716` and `7940188` `36660801170` —
+  success on every job; no nightly since `36548984501`. `gh`: absent. `cargo deny` installed (0.20.2); advisories ok.
+  **(1):** seven witnesses; M38–M43 red, each restored byte for byte; clippy clean; `check-other-os.sh` clean for macOS
+  (arm64) and Windows; the full suite alone 2,074 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; a real
+  sandboxed chain's export and the witnesses' corpus validated against OCSF 1.8.0 (0 problems), thirteen mutations of an
+  export caught by the validator.
+- Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
+  `COMPUTERNAME` on Windows).
+- For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and
+  `schema.ocsf.io` are not).
+- Open / next: (to be completed at the run's close)

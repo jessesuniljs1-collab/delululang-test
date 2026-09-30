@@ -120,13 +120,18 @@ impl AuditRecord {
 
     /// The full canonical JSON line (body + `hash`) written to disk.
     pub fn to_line(&self) -> String {
+        canonical_json(&self.to_value())
+    }
+
+    /// The record as a JSON value: the body and its `hash` (PS-E-06 embeds it in each OCSF event).
+    pub fn to_value(&self) -> Value {
         let mut v = self.body_value();
         v.as_object_mut().unwrap().insert("hash".into(), json!(self.hash));
-        canonical_json(&v)
+        v
     }
 
     /// Parse a record from an on-disk JSON value. Returns `None` for a header line (no `seq`).
-    fn from_value(v: &Value) -> Option<AuditRecord> {
+    pub(crate) fn from_value(v: &Value) -> Option<AuditRecord> {
         let obj = v.as_object()?;
         Some(AuditRecord {
             seq: obj.get("seq")?.as_u64()?,
@@ -525,7 +530,7 @@ impl AuditError {
     fn io(e: std::io::Error) -> AuditError {
         AuditError::Io(e.to_string())
     }
-    fn corrupt(seq: u64, detail: impl Into<String>) -> AuditError {
+    pub(crate) fn corrupt(seq: u64, detail: impl Into<String>) -> AuditError {
         AuditError::Corrupt(Denial::AuditChainBroken { seq, detail: detail.into() })
     }
     /// The DL1405 denial, if this is a corruption error.

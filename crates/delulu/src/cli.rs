@@ -1381,6 +1381,8 @@ fn usage() -> &'static str {
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: $DELULU_STATE_DIR/audit, else ~/.delulu/audit)\n\
      \x20 delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]\n\
+     \x20 delulu audit     export --format ocsf [--since SEQ] [--out F] [--device-name NAME]  [--dir DIR] [--json]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (the chain as OCSF 1.8.0 events, each carrying its record) | verify --ocsf F [--expect-start HASH]\n\
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]\n\
      \x20 delulu sandbox   status [--json]   (what this host can actually confine a guest with, from a real launch, and the\n\
@@ -8392,7 +8394,7 @@ fn audit_record_json(r: &delulu_broker::AuditRecord) -> Json {
 
 fn cmd_audit(rest: &[String]) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
-        eprintln!("error: `audit` needs a subcommand: tail [N] | query [--node g_ID] [--action A] [--effect E] | verify | bundle [--out F] | reconcile <FILE> [--expect-start HASH]");
+        eprintln!("error: `audit` needs a subcommand: tail [N] | query [--node g_ID] [--action A] [--effect E] | verify [--ocsf F [--expect-start HASH]] | bundle [--out F] | reconcile <FILE> [--expect-start HASH] | export --format ocsf [--since SEQ] [--out F] [--device-name NAME]");
         return 2;
     };
     let args = &rest[1..];
@@ -8406,10 +8408,33 @@ fn cmd_audit(rest: &[String]) -> i32 {
     let mut bundle_out: Option<String> = None;
     let mut bundle_in: Option<String> = None;
     let mut expect_start: Option<String> = None;
+    // PS-E-06: the OCSF export, and verifying one.
+    let mut format: Option<String> = None;
+    let mut since: Option<String> = None;
+    let mut device_name: Option<String> = None;
+    let mut ocsf_in: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => json = true,
+            flag @ ("--format" | "--since" | "--device-name" | "--ocsf") => {
+                let Some(value) = args.get(i + 1) else {
+                    eprintln!("error: `{flag}` needs a value");
+                    return 2;
+                };
+                let slot = match flag {
+                    "--format" => &mut format,
+                    "--since" => &mut since,
+                    "--device-name" => &mut device_name,
+                    _ => &mut ocsf_in,
+                };
+                *slot = Some(value.clone());
+                i += 1;
+            }
+            s if s.starts_with("--format=") => format = Some(s["--format=".len()..].to_string()),
+            s if s.starts_with("--since=") => since = Some(s["--since=".len()..].to_string()),
+            s if s.starts_with("--device-name=") => device_name = Some(s["--device-name=".len()..].to_string()),
+            s if s.starts_with("--ocsf=") => ocsf_in = Some(s["--ocsf=".len()..].to_string()),
             "--dir" => {
                 if i + 1 < args.len() {
                     dir_flag = Some(args[i + 1].clone());
@@ -8485,13 +8510,26 @@ fn cmd_audit(rest: &[String]) -> i32 {
                 }
                 eprintln!(
                     "note: audit tail [N] | query [--node g_ID] [--action A] [--effect E] | \
-                     verify | bundle [--out F] | reconcile <FILE> [--expect-start HASH] \
-                     [--dir DIR] [--json]"
+                     verify [--ocsf F] | bundle [--out F] | reconcile <FILE> [--expect-start HASH] | \
+                     export --format ocsf [--since SEQ] [--out F] [--device-name NAME] [--dir DIR] [--json]"
                 );
                 return 2;
             }
         }
         i += 1;
+    }
+
+    // PS-E-06: an export is verified from the file alone — no audit directory is read.
+    if let Some(file) = &ocsf_in {
+        if sub != "verify" {
+            eprintln!("error: `--ocsf FILE` belongs to `audit verify` (verifying an export), not `audit {sub}`");
+            return 2;
+        }
+        return audit_verify_ocsf(file, expect_start.as_deref(), json);
+    }
+    if sub != "export" && (format.is_some() || since.is_some() || device_name.is_some()) {
+        eprintln!("error: `--format`, `--since` and `--device-name` belong to `audit export`, not `audit {sub}`");
+        return 2;
     }
 
     let dir = match dir_flag.map(std::path::PathBuf::from).or_else(default_audit_dir) {
@@ -8734,11 +8772,217 @@ fn cmd_audit(rest: &[String]) -> i32 {
                 }
             }
         },
+        "export" => audit_export_ocsf(&dir, format.as_deref(), since.as_deref(), device_name, bundle_out.as_deref(), json),
         other => {
-            eprintln!("error: unknown audit subcommand `{other}` (tail | query | verify | bundle | reconcile)");
+            eprintln!(
+                "error: unknown audit subcommand `{}` (tail | query | verify | bundle | reconcile | export)",
+                delulu_diag::terminal_line(other)
+            );
             2
         }
     }
+}
+
+/// `delulu audit export --format ocsf` (PS-E-06, D-V2-78): the chain as OCSF 1.8.0 events, one JSON line
+/// per record, each carrying its record so the export still verifies (`delulu_broker::ocsf`).
+fn audit_export_ocsf(
+    dir: &std::path::Path,
+    format: Option<&str>,
+    since: Option<&str>,
+    device_name: Option<String>,
+    out: Option<&str>,
+    json: bool,
+) -> i32 {
+    match format {
+        Some("ocsf") => {}
+        Some(other) => {
+            eprintln!("error: `audit export` writes one format, `ocsf` — not `{}`", delulu_diag::terminal_line(other));
+            return 2;
+        }
+        None => {
+            eprintln!("error: `audit export` needs `--format ocsf` (the one format it writes)");
+            return 2;
+        }
+    }
+    let since = match since.map(str::parse::<u64>) {
+        None => None,
+        Some(Ok(n)) => Some(n),
+        Some(Err(_)) => {
+            eprintln!("error: `--since` takes a record's seq, a whole number");
+            return 2;
+        }
+    };
+    // An export is a transcript of the chain: one that does not verify would hand a reader records
+    // nobody can vouch for, dressed as events. `audit tail` still shows such a chain, with its warning.
+    if let Err(e) = delulu_broker::verify(dir) {
+        return match e.denial() {
+            Some(d) => {
+                eprintln!("error: the audit chain does not verify, so nothing was exported");
+                print_diagnostics("audit", &[d.to_diagnostic()], &SourceMap::new(), None, json);
+                1
+            }
+            None => {
+                eprintln!("error: cannot read audit log at `{}`: {e}", dir.display());
+                2
+            }
+        };
+    }
+    let records: Vec<delulu_broker::AuditRecord> = match delulu_broker::audit::bundle(dir) {
+        Ok(b) => b.records.into_iter().filter(|r| since.is_none_or(|s| r.seq >= s)).collect(),
+        Err(e) => {
+            eprintln!("error: cannot read audit log at `{}`: {e}", dir.display());
+            return 2;
+        }
+    };
+    let Some(device) = device_name.filter(|d| !d.trim().is_empty()).or_else(host_name) else {
+        eprintln!("error: this machine's name is not known — pass `--device-name NAME` (each event's `device.hostname`)");
+        return 2;
+    };
+    let labels = delulu_broker::ocsf::Labels { product_version: env!("CARGO_PKG_VERSION").to_string(), device };
+    let text = delulu_broker::ocsf::export(&records, &labels);
+    if let Some(f) = out {
+        if let Err(e) = std::fs::write(f, &text) {
+            eprintln!("error: cannot write {f}: {e}");
+            return 2;
+        }
+    }
+    let start = records.first().map(|r| r.prev_hash.clone());
+    let head = records.last().map(|r| r.hash.clone());
+    if json {
+        let mut report = json!({
+            "command": "audit", "subcommand": "export", "format": "ocsf",
+            "ocsf_version": delulu_broker::ocsf::OCSF_VERSION,
+            "events": records.len(),
+            "first_seq": records.first().map(|r| r.seq),
+            "last_seq": records.last().map(|r| r.seq),
+            "start": start, "head": head,
+            "device": labels.device,
+        });
+        // With no file named, stdout is the one JSON document, so the events travel inside it.
+        if out.is_none() {
+            let events: Vec<Json> = text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
+            report.as_object_mut().expect("json! built an object").insert("lines".into(), json!(events));
+        }
+        print_success_envelope("audit", report);
+    } else {
+        if out.is_none() {
+            print!("{text}");
+        }
+        match (records.first(), records.last()) {
+            (Some(first), Some(last)) => {
+                let from = if first.prev_hash == delulu_broker::GENESIS_HASH {
+                    "the chain's beginning".to_string()
+                } else {
+                    format!("the record before seq {} (start {})", first.seq, first.prev_hash)
+                };
+                eprintln!(
+                    "exported {} OCSF {} event(s), seq {}..{}, from {from}; head {} — `delulu audit verify --ocsf FILE` \
+                     re-verifies the chain from the export alone",
+                    records.len(),
+                    delulu_broker::ocsf::OCSF_VERSION,
+                    first.seq,
+                    last.seq,
+                    &last.hash[..16],
+                );
+            }
+            _ => eprintln!(
+                "(no audit records{} under `{}` — the export is empty)",
+                since.map(|s| format!(" at or after seq {s}")).unwrap_or_default(),
+                dir.display()
+            ),
+        }
+    }
+    0
+}
+
+/// `delulu audit verify --ocsf FILE [--expect-start HASH]` (PS-E-06): every line is the event its
+/// embedded record maps to, and the records chain. The file may come from anywhere, so every string of
+/// it that reaches the terminal is escaped (TERMINAL-TEXT-1).
+fn audit_verify_ocsf(file: &str, expect_start: Option<&str>, json: bool) -> i32 {
+    let text = match std::fs::read_to_string(file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
+            return 2;
+        }
+    };
+    match delulu_broker::ocsf::verify(&text, expect_start) {
+        Ok(v) => {
+            let from_genesis = v.start == delulu_broker::GENESIS_HASH;
+            if json {
+                let classes: serde_json::Map<String, Json> =
+                    v.classes.iter().map(|(uid, n)| (uid.to_string(), json!(n))).collect();
+                let report = json!({
+                    "command": "audit", "subcommand": "verify", "format": "ocsf", "ok": true,
+                    "events": v.chain.records, "first_seq": v.chain.first_seq, "last_seq": v.chain.last_seq,
+                    "start": v.start, "from_genesis": from_genesis, "expected_start": expect_start,
+                    "head": v.chain.head, "classes": classes,
+                    "product_version": v.labels.product_version, "device": v.labels.device,
+                });
+                print_success_envelope("audit", report);
+            } else {
+                let from = match (expect_start, from_genesis) {
+                    (Some(_), _) => "from the start you named".to_string(),
+                    (None, true) => "from the chain's beginning".to_string(),
+                    (None, false) => format!(
+                        "from seq {} (not the chain's beginning, and no `--expect-start` named where it must begin)",
+                        v.chain.first_seq
+                    ),
+                };
+                ok_line!(
+                    "ok: the OCSF export verifies — {} event(s), seq {}..{}, {from}; each event is the one its record \
+                     maps to (device `{}`, delulu {}); head {}",
+                    v.chain.records,
+                    v.chain.first_seq,
+                    v.chain.last_seq,
+                    delulu_diag::terminal_line(&v.labels.device),
+                    delulu_diag::terminal_line(&v.labels.product_version),
+                    delulu_diag::terminal_line(&v.chain.head[..16.min(v.chain.head.len())]),
+                );
+                eprintln!(
+                    "note: a removed LAST event leaves every link intact — compare the head with the source's \
+                     `delulu audit verify`"
+                );
+            }
+            0
+        }
+        Err(e) => match e.denial() {
+            Some(d) => {
+                print_diagnostics("audit", &[d.to_diagnostic()], &SourceMap::new(), None, json);
+                1
+            }
+            None => {
+                eprintln!("error: cannot verify `{file}`: {e}");
+                2
+            }
+        },
+    }
+}
+
+/// This machine's name, for an OCSF export's `device.hostname`; `None` when the OS does not say.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn host_name() -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: `buf` is writable for the length passed, and `gethostname` writes at most that many bytes.
+    let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
+    if rc != 0 {
+        return None;
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    let name = String::from_utf8_lossy(&buf[..end]).trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+/// This machine's name, for an OCSF export's `device.hostname`; `None` when the OS does not say.
+#[cfg(windows)]
+fn host_name() -> Option<String> {
+    std::env::var("COMPUTERNAME").ok().filter(|n| !n.trim().is_empty())
+}
+
+/// This machine's name — not asked of an OS this build has no call for; `--device-name` names it.
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn host_name() -> Option<String> {
+    None
 }
 
 // ----- explain / repl ------------------------------------------------------

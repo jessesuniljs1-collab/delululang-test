@@ -276,7 +276,8 @@ first. Each slice is one routine run and ends with its CI run read green.
   manual `openshell.yml` workflow: the pinned release, a granted/ungranted pair, a denied `curl`, and
   `openshell-prover check` within one boundary and exceeding a narrower one.
 - **PS-E-06** `delulu audit export --format ocsf`: OCSF 1.8.0 JSON Lines, each record's chain fields
-  carried so the export stays verifiable; no secret, no query string.
+  carried so the export stays verifiable; no secret, no query string. **Built 2026-09-30 (routine run 7,
+  D-V2-78)** — each event carries its whole record; `audit verify --ocsf`; a use waits for its effect in the record.
 
 ## P8 — safe autonomy (owner-gated)
 

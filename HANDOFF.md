@@ -593,6 +593,9 @@ wins, and you should update the memory to match.
 - **The cloud VM reads `raw.githubusercontent.com` for any public repository** (routine run 2): an
   action's `action.yml` at a tag is readable there, which is how each action's runtime (`runs.using`)
   was checked before the Node-24 move. Release ASSETS stay reachable only for this repository.
+  **So is a schema, file by file** (routine run 7): `github.com/ocsf/ocsf-schema` at `v1.8.0` — while its
+  tarball (`codeload.github.com`, 403) and `schema.ocsf.io` (refused by the proxy) are not. Read a
+  published schema at run time (`scripts/ocsf-validate.py`); never commit it.
 - **Models (official models page, 2026-09-28):** Fable 5.1 (`claude-fable-5-1`), Opus 5.5
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than

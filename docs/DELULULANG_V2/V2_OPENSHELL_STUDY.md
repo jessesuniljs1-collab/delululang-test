@@ -401,6 +401,16 @@ audit holds none — the export test asserts it for every record kind), never a 
 Witnesses: the export of a corpus run validates against the schema; deleting one line from the export
 is detected by `delulu audit verify --ocsf`. Mutant: an export that drops `prev_hash`.
 
+**Built (2026-09-30, routine run 7, D-V2-78).** `delulu_broker::ocsf`; `delulu audit export --format ocsf [--since
+SEQ] [--out F] [--device-name NAME]` and `delulu audit verify --ocsf F [--expect-start HASH]`. Three departures from
+the text above: each event carries its **whole** record (three fields show a removed line, not an edited one), and every
+OCSF field is recomputed from it by the verifier; a capability **use** is a Base Event (0), because the chain records a
+use's argument and not its effect (naming the effect in the record is the next step); and the schema is read at run
+time by `scripts/ocsf-validate.py`, never copied. The raw files of `github.com/ocsf/ocsf-schema` at `v1.8.0` ARE
+reachable from the cloud VM (raw.githubusercontent.com, file by file; the tarball is refused), so the export was
+validated in the VM: a real sandboxed run's chain and an eleven-record corpus, 0 problems; thirteen mutations of an
+export, each caught. Witnesses `crates/delulu/tests/audit_ocsf_cli.rs` (7); mutants M38–M43 red.
+
 ### 4.7 P8-04 — an out-of-band monitor (the shape of Sentry, in software)
 
 A DPU is out of reach; its *shape* is not. A **monitor** is a separate principal — its own process, a
