@@ -132,6 +132,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   to start the very descriptor hashed, so the host now holds the launcher open, sharing reads only, from the hash
   until the run ends: nobody can write, rename or delete it meanwhile. A launcher another process holds open for
   writing can no longer be hashed, and the run fails in words (D-V2-74).
+- **Fixed: a broker daemon that accepted a connection and never answered hung the command that asked** — every
+  operator command and every custody operation of a `--broker daemon` run, the e-stop's `grants revoke` among them
+  (REQUEST-HANG-1). The answer is now owed within 15 s, and past it the command fails in words ("the broker accepted
+  the request but did not answer within 15s") (D-V2-75).
+- **Fixed (safety): the device dead-man's authority probe could be kept waiting by an answer sent one byte at a time**
+  — its 1 s bound was on each read — so a process on the broker's socket could keep an arm moving after an e-stop
+  that said "revoked" (PROBE-DRIP-1). The whole answer is now owed within the bound (D-V2-75).
+- **Fixed: `delulu broker start` with a relative state directory** (`DELULU_STATE_DIR=st`, `--state-dir st`) started
+  the daemon one level down, at `st/st`, reported "did not come up within 5s", and left it running with nothing to
+  stop it (BROKER-RELDIR-1). The state directory is made absolute before the daemon is started.
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

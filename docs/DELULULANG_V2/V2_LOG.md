@@ -3471,3 +3471,41 @@ its window (no `fexecve`, no share modes), and `DEPLOYMENT.md` says so.
 
 **Verified in the VM:** clippy `-D warnings` clean; `scripts/check-other-os.sh` clean for `x86_64-pc-windows-msvc` and
 `x86_64-apple-darwin`; `sandbox_external_cli` 8 passed on Linux (the change and its witness are Windows-only).
+
+## 2026-09-30 — routine run 6: the red-team pass on FRAME-DRIP-1; REQUEST-HANG-1 and PROBE-DRIP-1 (D-V2-75); BROKER-RELDIR-1
+
+**The pass.** One Sonnet 5.5 sous-chef, against a frozen copy of the binary at `11a152b` in the scratch directory,
+briefed to break D-V2-73 and to list every oddity, with the evidence of any absence (it examined about 300 read sites
+across every crate of the workspace, all 34 non-test `read_frame` callers). It wrote nothing into the repository (`git status`
+empty, re-checked). **The guarantee held** on all three channels (the broker dropped dribblers at 6.0 and 9.0 s and a
+silent client at 5.1 s; a dribbled guest frame ended at 100.3 s — 60 s plus one 50 s gap, as stated; a dribbled
+foreign reply at 5.16 s against a 5 s deadline). **Its findings, each re-run by the head chef before use:**
+
+- **PROBE-DRIP-1 (its F1)** — the dead-man probe's `request_timed` bounded each READ; D-V2-73 had called it bounded.
+  Re-run on `9bf09b9`: an answer dribbled a byte every 250 ms held a 1 s probe 6.0 s. The pass had run it end to end:
+  an e-stop printed "revoked" while the arm, its probe fed that answer through a proxy on the broker's socket, kept
+  moving (a same-user process on the socket — category 7 — but the record was wrong, and the fix is one line).
+- **REQUEST-HANG-1** (the head chef's, from D-V2-73's own "not changed" line) — `request`, which every daemon-mode
+  custody op and every operator command uses, had no bound: 40.2 s against a broker that accepted and never answered.
+  **Fixed together (`68b8888`, D-V2-75):** `request` is `request_timed` with 15 s, and `request_timed` reads the whole
+  answer through `Within::from_now`; past it, "the broker accepted the request but did not answer within 15s".
+  Witnesses `request_fails_closed_in_words_on_a_broker_that_accepts_but_never_answers` and
+  `request_timed_bounds_the_whole_answer_not_each_read`; mutants M28–M30 red.
+- **BROKER-RELDIR-1** (its oddity) — `broker start` with a relative state dir: the daemon, spawned with the state dir as
+  its working directory and the same relative words, served at `st/st`; the caller said "did not come up within 5s" and
+  left it running. Re-run on `68b8888` (the head chef's own experiment met it first: a relative `DELULU_STATE_DIR`).
+  **Fixed (`3ca49e4`):** made absolute at the edge. Witness `broker_start_with_a_relative_state_dir_serves_where_the_caller_looks`,
+  red on `68b8888`, green after.
+- Recorded, not fixed this run (RW 4.35–4.40): the broker's reply write has no bound (F2, re-run: a ~250 KB answer
+  left unread held `broker status` past 8 s); `delulu-registry serve` — one idle TCP connection stalls every client, and
+  a huge `Content-Length` crashes it (F3, re-run on the current registry binary); the host's writes to a guest on a
+  socket channel have no deadline (F5, code reading only); a FIFO in the audit directory hangs `audit verify` and
+  `audit tail` (F6, re-run: killed at 12 s); the broker wire's lax frame reader, the LSP's and MCP's unbounded sizes;
+  the queue of silent clients (F4, 12 of them: 61.5 s).
+
+**Verified:** clippy `-D warnings` clean; `check-other-os.sh` clean for Windows and macOS after each change; the full
+suite alone at `68b8888`: 2,060 passed, 0 failed, 15 ignored (153 binaries); at `3ca49e4`: 2,061 passed, 0 failed,
+15 ignored, cargo exit 0. **Read on the runners before `master` moved:** `68b8888` — macOS `36655171914` (`delulu` bin
+140, both new witnesses among them; `broker_cli` 3, `dead_man_cli` 16, `estop_cli` 5), Windows `36655174168` (bin 132,
+`broker_cli` 2, `dead_man_cli` 16, `estop_cli` 5); `3ca49e4` — `broker_cli` success on Windows `36655636658` and macOS
+`36655638846`.

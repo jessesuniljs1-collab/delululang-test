@@ -757,6 +757,15 @@ wins, and you should update the memory to match.
   host past 20 s. `delulu_runtime::channel::Within` owes each frame whole (D-V2-73). The same run closed
   PS-E-04's Windows window (D-V2-74): the launcher was hashed through a `File::open` that shares deletion, so a
   launcher renamed over while it was hashed was started — now held sharing reads only until the run ends.
+  **REQUEST-HANG-1 and PROBE-DRIP-1** (the same run, D-V2-75): `brokerd::request` — every custody op of a daemon
+  run and every operator command, the e-stop's revoke among them — waited without a bound on a broker that accepted
+  and never answered; and the dead-man probe's 1 s bound was per read, so an answer dribbled onto the broker's socket
+  kept an arm moving after an e-stop that printed "revoked" (found by the red-team pass on FRAME-DRIP-1, whose own
+  record had called the probe bounded). Both owe the whole answer within a bound now. The same pass found
+  **BROKER-RELDIR-1**: `broker start` with a relative state dir spawned the daemon INSIDE it with the same relative
+  words — it served at `st/st`, the caller said "did not come up", and the daemon was left running (fixed: made
+  absolute at the edge). Its other findings — an unbounded reply write, the registry's unbounded connections and
+  crash, a FIFO in the audit directory — are RW 4.35–4.40, each re-run by the head chef or marked code reading.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

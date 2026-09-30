@@ -48,5 +48,11 @@ each READ: a same-uid client sending one byte every 2 s was never dropped, so th
 above did not hold for a dribbler — a `Status` behind one waited its whole 23.7 s life (witnessed on `dcf4fcb`).
 The serve loop now owes a client's whole request within 5 s of acceptance (`delulu_runtime::channel::Within`),
 and the same bound per message went onto the foreign worker's call and the sandbox host. Lesson: the witness was
-a client that STALLED; the dribbling client the comment named was never tried. Related:
+a client that STALLED; the dribbling client the comment named was never tried.
+
+**The same day — the probe side too (PROBE-DRIP-1, REQUEST-HANG-1, D-V2-75).** DEADMAN-1's fix bounded the probe's
+read per READ: an answer dribbled onto the broker's socket, a byte every 250 ms, kept the 1 s probe waiting 6 s — the
+red-team pass on FRAME-DRIP-1 ran an e-stop that printed "revoked" while the arm kept moving. And `request` — every
+custody op and operator command — had no bound at all (40 s against a mute acceptor, the acceptor's whole hold). Both
+now owe the whole answer within a bound (1 s for the probe, 15 s for `request`). Related:
 [[delulu-root-issuance-bypass]] (DISC-1, the prior finding), [[delulu-hw-adapter]].

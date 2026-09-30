@@ -1535,7 +1535,9 @@ one whole frame within 60s"), told apart from a silent guest; a worker's is DL14
 within N ms" (the worker is killed); the broker's is a dropped connection in its log. **Not changed:** the broker
 still serves one connection at a time, so clients queued one behind another each take their 5 s — a same-user
 process that can do that can also stop the broker (category 7, as IPC-1 recorded); the operator's `request` still
-waits without a bound for a broker that accepted and never answered (the dead-man probe's `request_timed` does not).
+waits without a bound for a broker that accepted and never answered (the dead-man probe's `request_timed` does not)
+— **both corrected by D-V2-75**: `request` was unbounded (REQUEST-HANG-1), and the probe's bound was per read
+(PROBE-DRIP-1, found by the red-team pass on this decision).
 
 ## D-V2-74 — PS-E-04 on Windows: the launcher is held open, sharing reads only, from the hash until the run ends — TAKEN (head chef, 2026-09-30, under the owner's delegation)
 
@@ -1550,6 +1552,27 @@ in-place change for the run's length. Starting it is a read, still shared. **Con
 process already holds open for writing cannot be hashed — the run fails in words ("cannot be read to be hashed")
 rather than hash a file in the middle of being written. macOS has no equivalent (no `fexecve`, no share modes): its
 window stays open and `DEPLOYMENT.md` says so.
+
+## D-V2-75 — REQUEST-HANG-1 and PROBE-DRIP-1: every round trip to the broker daemon owes its whole answer within a bound — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+Invariant 27 asks that an unreachable broker fail every effectful op "fast (bounded, never a hang)". Two ways it did
+not, each witnessed on `9bf09b9`: **REQUEST-HANG-1** — `brokerd::request`, which every daemon-mode custody op
+(`BrokerClientCustody`) and every operator command uses, the e-stop's `grants revoke` among them, read the answer
+with no bound at all: against a broker that accepted and never answered it waited the acceptor's whole 40 s hold.
+**PROBE-DRIP-1** (the red-team pass on FRAME-DRIP-1's F1, Sonnet 5.5, re-run by the head chef) — the dead-man
+probe's `request_timed` bounded each READ: an answer dribbled a byte every 250 ms kept it waiting 6 s against its 1 s
+bound, and in the pass's end-to-end run an e-stop printed "revoked" while the arm, its probe fed a dribbled answer by
+a process on the broker's socket, kept moving. D-V2-73 had said the probe "does not" wait without a bound: true only
+of a silent broker.
+
+Decided: `request` is `request_timed` with `REQUEST_DEADLINE`, 15 s — generous, since the daemon answers in
+milliseconds and a client ahead of this one holds its one-connection loop for at most twice its 5 s bound; and
+`request_timed` reads the whole answer through `Within::from_now`, so the bound is on the answer, not on each read
+(abandoned no later than the bound plus one read deadline). A broker that does not answer is an error in the
+operator's words — "the broker accepted the request but did not answer within 15s" — which every caller already
+turns into DL1401 or its refusal; no new code. **Consequence:** a broker whose queue holds three silent clients
+(5 s each) now fails an operator's command after 15 s instead of answering after them — fail closed, and the
+command can be asked again; the dead-man probe parks the devices meanwhile, as it always did.
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

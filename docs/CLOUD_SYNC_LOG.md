@@ -743,7 +743,10 @@ it on `origin` was made in the cloud and is listed below.
   (4) `1997997` FRAME-DRIP-1's records: D-V2-73, read red then green on macOS and Windows; routine run 6's entry — records only;
   (5) `34cfc38` PS-E-04 on Windows, witnessed: a launcher renamed over between the hash and the start is what runs;
   (6) `8aa6249` PS-E-04 on Windows: the launcher held open, sharing reads only, from the hash until the run ends (D-V2-74);
-  (7) `PS-E-04 on Windows, recorded: D-V2-74, red then green on a Windows runner` — records only
+  (7) `9bf09b9` PS-E-04 on Windows, recorded: D-V2-74, red then green on a Windows runner — records only;
+  (8) `68b8888` REQUEST-HANG-1, PROBE-DRIP-1: every round trip to the broker owes its whole answer within a bound (D-V2-75);
+  (9) `3ca49e4` BROKER-RELDIR-1: broker start with a relative state dir served one level down and was left running;
+  (10) `The red-team pass on FRAME-DRIP-1, recorded: D-V2-75, BROKER-RELDIR-1, RW 4.35-4.40` — records only
 - Files and folders:
   M `crates/delulu/src/brokerd.rs` (a witness) — (1); `crates/delulu/tests/foreign_worker.rs` (the `dl_drip` fixture, a witness) — (1)
   M `crates/delulu-runtime/src/channel.rs` (`Within`, `FrameTooSlow`, `FRAME_DEADLINE`; `HostChannel::with_frame_deadline`,
@@ -761,7 +764,13 @@ it on `origin` was made in the cloud and is listed below.
   M `docs/DEPLOYMENT.md` (*Which file runs*: Windows), `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` (§4.4), `CHANGELOG.md`,
     `HANDOFF.md` (§11.4; §11.5 Windows' `/proc/<pid>/fd`), `docs/REMAINING_WORK.md` (4.28), `V2_DECISION_LOG.md`
     (D-V2-74), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_SECURITY_MODEL.md` (§10), `docs/assistant-memory/cloud-period-2026-09-28.md` — (7)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6), (7)
+  M `crates/delulu/src/brokerd.rs` (`REQUEST_DEADLINE`; `request` through `request_timed`; `request_timed` reads through
+    `Within`; two witnesses) — (8); `crates/delulu/src/brokerd.rs` (`start_detached` makes the state dir absolute),
+    `crates/delulu/tests/broker_cli.rs` (a witness) — (9)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md` (4.35–4.40, new), `V2_DECISION_LOG.md` (D-V2-75;
+    D-V2-73's last line corrected), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_SECURITY_MODEL.md` (§10),
+    `docs/assistant-memory/delulu-ipc-deadman-findings.md` — (10)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6), (7), (8), (9), (10)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,471 nodes, 12,914 edges); `doctor --check` ok, 26 checks
   passed. After the last edit: in (4)'s commit message.
@@ -776,6 +785,12 @@ it on `origin` was made in the cloud and is listed below.
   could not pass on Windows as first written). **(5)–(6):** the Windows swap witness red at `34cfc38` (`36652740569`: B
   started under A's name, exit 1), green at `8aa6249` (`36653274720`: `sandbox_external_cli` 5, `sandbox_confirm_cli` 8,
   `sandbox_attest_cli` 4, `sandbox_run_cli` 17); clippy clean; `check-other-os.sh` clean for Windows and macOS.
+  **The red-team pass** (one Sonnet 5.5 sous-chef, a frozen binary at `11a152b`, scratch only — `git status` empty):
+  the guarantee held on all three channels; its findings re-run by the head chef — see `V2_LOG.md`. **(8):** both
+  witnesses red on `9bf09b9` (40.2 s; 6.0 s), M28–M30 red, the full suite alone 2,060 passed, 0 failed, 15 ignored
+  (153 binaries); macOS `36655171914`, Windows `36655174168` green. **(9):** the witness red on `68b8888`, green after;
+  the full suite alone 2,061 passed, 0 failed, 15 ignored, cargo exit 0; `broker_cli` green on Windows `36655636658`
+  and macOS `36655638846`.
 - Redo on the laptop: the suite on Windows and in WSL (the broker's serve loop and the foreign worker's call changed on
   every OS; on Windows the external launcher is now held open sharing reads only for the run).
 - For the laptop's memory: `HANDOFF.md` §11.4 (FRAME-DRIP-1) and §11.5 (a per-read deadline is not a per-message one;

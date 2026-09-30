@@ -279,6 +279,10 @@ A peer that sends its message one byte at a time holds no channel open past a st
 confinement report, and seven falsified mutants: the host reading a guest (60 s from a frame's first byte), the
 broker daemon reading a client (5 s from its connection), a host reading its foreign worker's reply (the call's
 deadline) — each checked around every read, so a frame is abandoned no later than its bound plus one read deadline.
+Every round trip to the broker daemon owes its whole answer within a bound since D-V2-75 — 15 s for an operator's
+command or a custody operation, 1 s for the dead-man's probe — so a broker that accepted and never answered, or
+answered one byte at a time, fails the operation closed in words rather than holding it (REQUEST-HANG-1,
+PROBE-DRIP-1), with witnesses and three falsified mutants.
 
 A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
 mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
