@@ -325,7 +325,17 @@ pub fn read_frame<R: Read, T: for<'de> Deserialize<'de>>(r: &mut R) -> io::Resul
     }
     let mut buf = vec![0u8; len as usize];
     r.read_exact(&mut buf)?;
-    ciborium::from_reader(&buf[..]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
+    let mut rest: &[u8] = &buf[..];
+    let value = ciborium::from_reader(&mut rest).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    // RW 4.39: one frame, one value — as the sandbox channel has since F12. Bytes after it gave one request
+    // many spellings, and a peer that adds them is not speaking this protocol.
+    if !rest.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("the frame carries {} byte(s) after its value", rest.len()),
+        ));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -378,6 +388,22 @@ mod tests {
         write_frame(&mut buf, &resp).unwrap();
         let got: Response = read_frame(&mut &buf[..]).unwrap();
         assert_eq!(got, resp);
+    }
+
+    /// RW 4.39 (the red-team pass on FRAME-DRIP-1): one frame, one value, on the broker's wire as on the
+    /// sandbox channel (F12). Bytes after a frame's value, inside its length, were ignored — a `Status` with
+    /// 70 more bytes was answered — so one request had many spellings: red on `cc157bc`.
+    #[test]
+    fn a_frame_with_bytes_after_its_value_is_refused() {
+        let mut frame = Vec::new();
+        write_frame(&mut frame, &Request::new(ReqBody::Status)).unwrap();
+        assert!(read_frame::<_, Request>(&mut &frame[..]).is_ok(), "the exact frame is read");
+        let len = u32::from_le_bytes(frame[..4].try_into().unwrap()) + 70;
+        frame[..4].copy_from_slice(&len.to_le_bytes());
+        frame.extend([0xAA_u8; 70]);
+        let e = read_frame::<_, Request>(&mut &frame[..]).expect_err("bytes after the value are refused");
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{e}");
+        assert!(e.to_string().contains("after its value"), "{e}");
     }
 
     #[test]
