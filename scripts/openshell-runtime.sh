@@ -37,14 +37,23 @@ if [ -s "$conf" ]; then
   cat "$conf"
   grep -q 'compute_driver *= *"docker"' "$conf" || fail "the existing gateway config does not pin the Docker driver"
 else
-  printf '[openshell.gateway]\ncompute_driver = "docker"\n' > "$conf"
+  # Schema version 2 is required: run 4's file without `[openshell] version` failed the service's
+  # preflight ("missing_version") twenty times over.
+  printf '[openshell]\nversion = 2\n\n[openshell.gateway]\ncompute_driver = "docker"\n' > "$conf"
 fi
+openshell-gateway config preflight --path "$conf" || fail "the gateway config failed its own preflight"
 systemctl --user daemon-reload
 systemctl --user enable openshell-gateway
 systemctl --user restart openshell-gateway || fail "the gateway service did not start"
 systemctl --user --no-pager status openshell-gateway | head -20 || true
 # Run 3: `openshell status` succeeded with NO gateway registered, so readiness is asked of the gateway itself.
-openshell gateway add https://127.0.0.1:17670 --local --name openshell || true
+# Run 4: `gateway add --local` needs the client TLS material the service provisions once it has started.
+added=0
+for _ in $(seq 1 60); do
+  if openshell gateway add https://127.0.0.1:17670 --local --name openshell; then added=1; break; fi
+  sleep 2
+done
+[ "$added" = 1 ] || fail "the local gateway could not be registered"
 openshell gateway select openshell || true
 openshell gateway list || true
 up=0
