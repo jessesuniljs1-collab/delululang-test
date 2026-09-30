@@ -940,7 +940,15 @@ it on `origin` was made in the cloud and is listed below.
   (D-V2-82); (3) `8c7894e` PS-E-05 (a): a Windows spelling is refused by name; the witnesses' inputs are platform rules;
   (4) `b50aa21` PS-E-05 (a): the export's flags belong to sandbox policy alone, refused on every other verb;
   (5) `7dfb566` EXPORT-CASE-1: a host grant DeluluLang would never match is omitted from the OpenShell export, not
-  lowercased; (6) PS-E-05 (a) recorded — this commit
+  lowercased; (6) `804ddc8` PS-E-05 (a) recorded: the OpenShell export, D-V2-81 and D-V2-82; the loop's lessons;
+  (7) `d447b29` openshell-prove.sh: the prover's JSON read from stdout alone; a granted read made writable is the
+  filesystem falsifier; (8) `a3b2c90` openshell.yml: the prover's documented falsifiers; E-05 (b)'s first attempt as a
+  runtime job, by hand; (9) `154310c` openshell-runtime.sh: the gateway pinned to Docker and registered before it is
+  asked anything; (10) `9594e87` … a schema-version-2 gateway config, preflighted; the gateway registered once it has
+  its TLS; (11) `625b6aa` … delulu built without embedded Python, as the Dockerfile builds it; OpenShell's deny lines
+  read; (12) `cc3990f` … the image on the build host's glibc; the guest itself through an OpenShell sandbox (E-05 (b));
+  (13) `cb96c40` … run 7's reading — the witnesses' own mistake fixed, the nested guest's refusal witnessed;
+  (14) OpenShell's deny line asserted; the workflow's runs recorded — this commit
 - Files and folders (`git diff --name-status 381fed8..HEAD`):
   A `crates/delulu/src/openshell.rs` (the export: `export`, `run_as`, the canonical-host and path rules, the YAML written
     from the JSON policy; five unit tests), `crates/delulu/tests/sandbox_openshell_cli.rs` (seven witnesses),
@@ -960,7 +968,16 @@ it on `origin` was made in the cloud and is listed below.
     `docs/REMAINING_WORK.md` (4.30 half built), `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` (the status line — it said
     nothing in §4–§6 was built; §4.5 (a) built), `V2_PHASE_STATUS.md` (PS-E), `V2_IMPLEMENTATION_ROADMAP.md` (PS-E-05),
     `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 8) — (6)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(6)
+  A `scripts/openshell-install.sh` (the pinned release, checksums verified — shared by both jobs), `scripts/openshell-runtime.sh`
+    (the export ENFORCED by a real OpenShell sandbox, and the nested guest's fail-closed refusal) — (8)–(14); M
+    `scripts/openshell-prove.sh` (stdout alone; the prover's documented falsifiers) — (7), (8);
+    M `.github/workflows/openshell.yml` (the shared install; the `runtime` input and job; the tag through `env`; the
+    no-Python build) — (8), (11); M `docs/REPOSITORY_STRUCTURE.md` (the two scripts) — (8)
+  M `docs/DELULULANG_V2/V2_LOG.md` (the workflow's eight runs), `V2_OPENSHELL_STUDY.md` (§4.5: read by the prover;
+    *For (b)* facts), `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.30: the nested guest), `CHANGELOG.md`,
+    `HANDOFF.md` (§11.5: choose a falsifier from the checker's documented cases), `docs/CLOUD_ROUTINE.md` (step 7: wait on
+    a run from the VM with `curl`) — (14)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(14)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,476 nodes, 13,071 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -981,16 +998,32 @@ it on `origin` was made in the cloud and is listed below.
   2,093 passed, 0 failed, cargo exit 0; EXPORT-CASE-1 found by the head chef's adversarial pass and fixed in (5);
   `7dfb566` Windows `36707268456`, macOS `36707271273` success, the full suite alone 2,094 passed, 0 failed, 15 ignored
   (156 binaries), cargo exit 0; `master` fast-forwarded to `7dfb566`; `openshell.yml` dispatched at `master`.
+  **`openshell.yml` (by hand, all at `master`):** run 1 `36708161562` (`7dfb566`) — the prover answered as designed, the
+  SCRIPT red (stderr merged; an `unsupported` falsifier); run 2 `36708633558` (`d447b29`) — one falsifier `unsupported`;
+  **run 3 `36709035019` (`a3b2c90`) — the prover job GREEN, every expectation held** (both exports `within_boundary`, six
+  widenings `exceeds_boundary`, an unknown field an `error`), and the runtime job's first attempt red (no gateway
+  registered; Podman preferred); runs 4 `36709806472`, 5 `36710715856`, 6 `36711475163`, 7 `36712236680` — the prover
+  green each time, the runtime job red, each for the reason the next commit fixed (a schema-v1 config; the TLS order;
+  libpython; glibc 2.39; the witness's own path mistake); **run 8 `36712891798` (`cb96c40`) — both jobs GREEN**: the
+  granted program ran inside an OpenShell sandbox under the exported policy, a narrower grant DL0703, a file the export
+  never names and `curl` to `example.org` refused by OpenShell (`NET:OPEN [MED] DENIED /usr/bin/curl(0) ->
+  example.org:443 [reason:transparent_tcp_policy_denied]` read), the effective policy equal to the export both ways,
+  and the nested guest failing closed (its `seccomp` refused, the program never sent). **Push runs:** `7dfb566`
+  `36708157193`, `804ddc8` `36708404843`, `d447b29` `36708628013`, `a3b2c90` `36709029216`, `154310c` `36709802148` —
+  success; the later ones are in the next entry's inbox.
 - Redo on the laptop: nothing beyond the suite (the export's Windows-spelling refusal is witnessed on the Windows runner).
 - For the laptop's memory: `HANDOFF.md` §11.4 (SCOPE-HIDDEN-1), §11.5 (a mutant loop leaves the last mutant's binary;
   a workflow is dispatchable only once on the default branch); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read `openshell.yml`'s first run (dispatched at `master`, `7dfb566`) — the real prover on the export;
-  if it is red, the script or the export is this run's (or the next run's) first task; the push runs of `7dfb566` and
-  this commit, and the nightly `36694905248`'s end; (2) **PS-E's rest:** E-05 (b) — the guest inside an OpenShell sandbox
-  at L3 (`openshell.yml`, by hand: a gateway with the Docker driver, the repository's image, a denied `curl`, a
-  granted/ungranted pair); E-01's remainder — `contained`'s required set TOGETHER with attesters' claims as properties
-  (the study's design: `contained` requires filesystem, egress and resource, and an unattested L3 run satisfies one only
-  through an attester's claim naming it — a change to the default profile, too large for this run's budget); E-04's
-  attestation binding; E-03 H6; then P8 (P8-01 first), P9 (P9-01 `authority --within` can build on D-V2-81's hidden
-  kinds); (3) the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; (4) RW 7.17 — arm64's `estop_cli`.
+- Open / next: (1) read the push runs of `9594e87`, `625b6aa`, `cc3990f`, `cb96c40` and this commit, `openshell.yml`
+  run 9 (dispatched with this commit, `runtime: true` — the deny line now asserted), and the nightly `36694905248`'s end;
+  (2) **E-05 (b) — the guest inside OpenShell:** run 8 witnessed that the guest cannot run nested — its own `seccomp`
+  filter is refused inside OpenShell's sandbox (EPERM), so it fails closed and the host never sends the program. A
+  DECISION first (D-V2-nn): how the guest locks itself down under an outer wall that forbids adding a filter (e.g. accept
+  an already-installed filter it can read back, or a launcher-declared outer wall that L3 already reports as `unknown`
+  and the guest's words as `guest_reported`) — never a silent skip; then `scripts/openshell-runtime.sh`'s step (5)
+  flips; `docs/DEPLOYMENT.md`'s recipe only after that is green; and whether the export's default `process` identity
+  should come from the image (OpenShell's docs: a non-root `USER`, or numeric ids in the policy); (3) E-01's remainder —
+  `contained`'s required set TOGETHER with attesters' claims as properties (the study's design; a change to the default
+  profile); E-04's attestation binding; E-03 H6; then P8 (P8-01 first), P9 (P9-01 `authority --within` can build on
+  D-V2-81's hidden kinds); (4) the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; (5) RW 7.17 — arm64's `estop_cli`.
   **For the owner:** D-V2-81 and D-V2-82 are this run's decisions.

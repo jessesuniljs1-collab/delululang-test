@@ -951,6 +951,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A mutant loop leaves the binary built from its last mutant** (routine run 8): the loop's `cargo test` rebuilt
   `target/debug/delulu` with each mutation, and restoring the source byte for byte rebuilt nothing — a by-hand check
   after it read mutant M71's unquoted host. `cargo build` after every mutant loop, before any by-hand run.
+- **Choose a falsifier from the checker's own documented cases** (routine run 8): two filesystem mutations of the
+  OpenShell export (an added `/tmp`, a granted read made writable) came back `unsupported` from OpenShell's prover, not
+  `exceeds_boundary` — its documentation says it compares only paths both policies name — so neither could ever have
+  been red. And read a tool's machine channel alone: its solver's warnings on stderr, merged with the JSON on stdout,
+  made every answer "unparsed" on the first run.
 - **A workflow is dispatchable only once it is on the default branch** (routine run 8): `run_workflow` for a file a
   branch alone has answers 404. A new by-hand workflow lands on `master` with its slice, then runs.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the

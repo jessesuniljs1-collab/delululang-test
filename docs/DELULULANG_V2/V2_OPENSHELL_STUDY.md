@@ -406,7 +406,24 @@ is OpenShell's `sandbox` unless `--run-as` says otherwise; OpenShell's baseline 
 prover script checks an exact-host program and a wildcard-host program separately, because the prover declines the two
 on one port. Witnessed by `sandbox_openshell_cli` and the soundness unit test over every shipped example; the prover's
 check is `scripts/openshell-prove.sh` in `openshell.yml` (by hand). **Open:** (b) — the guest inside OpenShell at L3,
-with the runtime witnesses (a granted/ungranted pair, a denied `curl`).
+with the runtime witnesses (a granted/ungranted pair, a denied `curl`). **Read by OpenShell's prover** (`openshell.yml`,
+routine run 8): the export `within_boundary` of a boundary written by hand, and `exceeds_boundary` for each widening — a
+missing host, the `read-only` preset (`OPTIONS`), another binary, a granted read made writable; an unknown field an
+`error` (`V2_LOG.md`).
+
+**For (b) — facts read by routine run 8 (OpenShell's docs at `36b0386`), the first attempt in `scripts/openshell-runtime.sh`.**
+The local gateway is a systemd USER service (`openshell-gateway`) the package installs, registered as
+`https://127.0.0.1:17670` (`openshell gateway add … --local`); the Docker driver needs Docker Engine 28 or later.
+`openshell sandbox create --name N --from IMAGE --policy FILE -- CMD` takes a locally built image tag (it builds nothing);
+the image's entrypoint is replaced by the sandbox supervisor; the image declares a non-root `USER` (or the policy names
+numeric ids — the export's default `sandbox` identity may not exist in an operator's image, so (b) decides whether
+`--run-as` should default from the image), prepares `/sandbox` writable by it, and carries `iproute2` for full network
+isolation. `openshell sandbox exec -n N --no-tty --no-login-shell -- CMD` pipes standard input, closes it at end of file
+and returns the command's exit code — the shape an `external:` launcher needs. `openshell sandbox get N --policy-only`
+prints the effective policy; `openshell policy set` also takes JSON. **An open question (b) must answer:** a `protocol:
+rest` endpoint is inspected by terminating TLS with the sandbox's own CA (its certificates under
+`/run/openshell-supervisor-ca`); `delulu` verifies against the platform store, so a granted `GET` may fail TLS inside the
+wall unless that CA is trusted — to be witnessed, not assumed.
 
 ### 4.6 PS-E-06 — the audit chain, exported as OCSF, still verifiable
 

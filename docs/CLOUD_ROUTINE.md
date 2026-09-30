@@ -227,7 +227,11 @@ Commit with the trailers in `CLAUDE.md`, push.
 takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and
 `list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply; `get_workflow_run_usage`
 names a run's job ids in a few bytes and gains a `run_duration_ms` only once the run is complete, and
-`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run; and
+`get_job_logs` by job id answers 404 until that job is done — the cheapest ways to wait on a run; **and the REST API
+answers `curl` from the VM** (through the session's proxy, 15,000 requests an hour — `curl …/rate_limit`, run 8): wait on
+a run in the BACKGROUND —
+`until [ "$(curl -s https://api.github.com/repos/jessesuniljs1-collab/delululang-test/actions/runs/ID | python3 -c
+'import json,sys; print(json.load(sys.stdin)["status"])')" = completed ]; do sleep 30; done` — and be woken when it ends; and
 `get_job_logs` with `run_id`, `failed_only` and `tail_lines` 2 names a finished run's red jobs in a few lines (run 5); `workflow_runs_filter.status` `in_progress` answered NO runs while two were
 running (run 4) — filter by `event` instead and read each run's `status`) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget

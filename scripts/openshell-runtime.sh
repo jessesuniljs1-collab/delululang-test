@@ -147,9 +147,12 @@ out="$(openshell sandbox exec -n dl --no-tty --no-login-shell -- curl -sS -m 20 
 code=$?
 echo "exit $code: $out"
 [ "$code" != 0 ] || fail "(3) curl reached example.org"
-# OpenShell's own account of the refusal (`--tail` streams, so a bounded window is read instead).
-echo "OpenShell's log for this sandbox, the last 30 lines (run 6 matched no deny line; the format is read here):"
-timeout 30 openshell logs dl --since 10m 2>&1 | tail -30 || echo "(no log read)"
+# OpenShell's own account of the refusal, READ, not assumed (`--tail` streams, so a bounded window): run 8
+# read it as OCSF lines — `NET:REFUSE [MED] DENIED example.org [reason:policy_dns_ineligible]` and
+# `NET:OPEN [MED] DENIED /usr/bin/curl(0) -> example.org:443 [reason:transparent_tcp_policy_denied]`.
+timeout 30 openshell logs dl --since 10m > openshell.log 2>&1 || true
+grep -E 'NET:(OPEN|REFUSE).*DENIED' openshell.log || echo "(no DENIED line)"
+grep -qE 'NET:OPEN.*DENIED.*curl.*example\.org' openshell.log || fail "(3) OpenShell's log holds no NET:OPEN DENIED line for curl to example.org"
 
 step "(4) the effective policy — what OpenShell added — against the export"
 openshell sandbox get dl --policy-only > effective.yaml || fail "(4) no effective policy"

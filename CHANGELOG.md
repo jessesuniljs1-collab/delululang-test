@@ -191,7 +191,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   more than both: a grant the program cannot use is left out and named, one OpenShell cannot state (a special-use
   address, a device, code loading) refuses the export by name, the one HTTP method (`GET`) is written out, and what
   OpenShell does not model (the console, the clock, budgets, secrets — never a secret's value) is listed. `--json`
-  accounts for every grant. OpenShell's own prover checks the export on a runner (`openshell.yml`, D-V2-82).
+  accounts for every grant. OpenShell's own prover checks the export on a runner (`openshell.yml`, D-V2-82), and a
+  real OpenShell sandbox enforces it there: the granted program runs inside it, and a file or host the export does not
+  name is refused by OpenShell. Running the sandboxed GUEST inside OpenShell (an `external:` launcher) does not work
+  yet — the guest's own syscall filter is refused there, and it stops before the program is sent.
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 
