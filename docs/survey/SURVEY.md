@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 289 |
-| Rust lines | 150038 |
-| Rust files outside `src/` (test/bench targets) | 130 |
+| Rust files | 290 |
+| Rust lines | 150289 |
+| Rust files outside `src/` (test/bench targets) | 131 |
 | Markdown documents | 252 |
 | Markdown lines | 67514 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1471 / 12952 |
+| Nodes / edges in this map | 1472 / 12960 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -281,11 +281,11 @@ The DeluluLang package registry (Stage 9): sparse index, publish API, server-sid
 
 - **Depends on:** `delulu-runtime`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 4 files, 1591 lines
+- **Modules:** 4 files, 1697 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/lib.rs` | 610 | The DeluluLang package registry (Stage 9g, spec §5). |
+| `src/lib.rs` | 716 | The DeluluLang package registry (Stage 9g, spec §5). |
 | `src/main.rs` | 259 | `delulu-registry` — run the package registry (Stage 9g, spec §5). |
 | `src/tests.rs` | 588 | The registry's policies, tested (Stage 9g — release criterion 5). |
 | `src/token.rs` | 134 | Scoped, revocable publish tokens (Stage 9g, spec §5). |

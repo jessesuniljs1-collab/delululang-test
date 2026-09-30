@@ -429,38 +429,130 @@ pub fn same_major(a: &str, b: &str) -> bool {
 
 // ===== the HTTP surface =====================================================
 
-/// Serve until `stop` is set. Returns the bound address so a test can talk to it without guessing
-/// a port.
+/// What one connection may take (RW 4.36, the red-team pass on FRAME-DRIP-1). The port is reachable by
+/// anyone who can reach it — no token is needed to be read — and the server used to give each connection
+/// all the time and memory it asked for: one at a time, lines read with no deadline or cap, and a body
+/// buffer allocated at whatever `Content-Length` said. One idle connection held every other client, and
+/// one number (`18446744073709551615`) took the server down.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// The longest one read may wait: a client that goes quiet is dropped after it.
+    pub read: std::time::Duration,
+    /// The whole request — line, headers and body — from the connection's acceptance.
+    pub request: std::time::Duration,
+    /// The longest request line or header line, in bytes.
+    pub line: u64,
+    /// How many headers a request may carry.
+    pub headers: usize,
+    /// The largest body. A `Content-Length` past it is answered 413 before anything is allocated.
+    pub body: usize,
+    /// Connections served at once; one past it is closed at once.
+    pub connections: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Limits {
+            read: std::time::Duration::from_secs(10),
+            request: std::time::Duration::from_secs(60),
+            line: 8 * 1024,
+            headers: 64,
+            // As the sandbox channel's frame bound: a package's artifact, in a JSON string, and room.
+            body: 16 * 1024 * 1024,
+            connections: 64,
+        }
+    }
+}
+
+/// Serve with the default [`Limits`]. Returns the bound address so a test can talk to it without
+/// guessing a port.
 pub fn serve(
     reg: Arc<Registry>,
     addr: &str,
     recompute: Recompute,
 ) -> std::io::Result<(std::net::SocketAddr, std::thread::JoinHandle<()>)> {
+    serve_with(reg, addr, recompute, Limits::default())
+}
+
+/// Serve until the listener fails. Each connection is read on a thread of its own, within `limits`, so a
+/// slow or silent client delays nobody else; the requests themselves are handled one at a time, under
+/// one lock, as they always were — a publish reads and rewrites a package's index, and two at once
+/// would race.
+pub fn serve_with(
+    reg: Arc<Registry>,
+    addr: &str,
+    recompute: Recompute,
+    limits: Limits,
+) -> std::io::Result<(std::net::SocketAddr, std::thread::JoinHandle<()>)> {
     let listener = TcpListener::bind(addr)?;
     let bound = listener.local_addr()?;
+    let handling = Arc::new(Mutex::new(()));
+    let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let handle = std::thread::spawn(move || {
         for stream in listener.incoming() {
-            match stream {
-                Ok(s) => {
-                    if handle_conn(&reg, s, &recompute).is_err() {
-                        continue;
-                    }
-                }
+            let s = match stream {
+                Ok(s) => s,
                 Err(_) => break,
+            };
+            if live.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= limits.connections {
+                live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                drop(s);
+                continue;
+            }
+            let (reg, recompute, handling, done) = (reg.clone(), recompute.clone(), handling.clone(), live.clone());
+            let spawned = std::thread::Builder::new().name("registry-conn".into()).spawn(move || {
+                // A panic stays on its connection's thread; the server goes on.
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = handle_conn(&reg, s, &recompute, &handling, &limits);
+                }));
+                done.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            });
+            if spawned.is_err() {
+                live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
             }
         }
     });
     Ok((bound, handle))
 }
 
+/// A refusal of the request's shape, answered in the protocol's own words before the connection closes.
+fn refuse(stream: &mut TcpStream, status: &str, why: &str) -> std::io::Result<()> {
+    let body = json!({ "code": "DL1706", "error": why }).to_string();
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
+    stream.flush()
+}
+
+/// One line, at most `cap` bytes: `Ok(None)` when it ran past the cap with no end.
+fn bounded_line(reader: &mut impl BufRead, cap: u64) -> std::io::Result<Option<String>> {
+    let mut raw = Vec::new();
+    let n = reader.take(cap).read_until(b'\n', &mut raw)?;
+    if n as u64 == cap && raw.last() != Some(&b'\n') {
+        return Ok(None);
+    }
+    Ok(Some(String::from_utf8_lossy(&raw).into_owned()))
+}
+
 fn handle_conn(
     reg: &Registry,
     mut stream: TcpStream,
     recompute: &Recompute,
+    handling: &Mutex<()>,
+    limits: &Limits,
 ) -> std::io::Result<()> {
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line)? == 0 {
+    stream.set_read_timeout(Some(limits.read))?;
+    stream.set_write_timeout(Some(limits.read))?;
+    let mut raw = stream.try_clone()?;
+    // The whole request within its bound, not each read of it (FRAME-DRIP-1's lesson).
+    let mut within = delulu_runtime::channel::Within::from_now(&mut raw, limits.request);
+    let mut reader = BufReader::new(&mut within);
+    let Some(request_line) = bounded_line(&mut reader, limits.line)? else {
+        return refuse(&mut stream, "431 Request Header Fields Too Large", "the request line is longer than the registry reads");
+    };
+    if request_line.is_empty() {
         return Ok(());
     }
     let mut parts = request_line.split_whitespace();
@@ -468,27 +560,41 @@ fn handle_conn(
     let path = parts.next().unwrap_or("/").to_string();
 
     let mut headers: BTreeMap<String, String> = BTreeMap::new();
+    let mut count = 0usize;
     loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line)? == 0 {
-            break;
-        }
+        let Some(line) = bounded_line(&mut reader, limits.line)? else {
+            return refuse(&mut stream, "431 Request Header Fields Too Large", "a header line is longer than the registry reads");
+        };
         let t = line.trim_end();
         if t.is_empty() {
             break;
+        }
+        count += 1;
+        if count > limits.headers {
+            return refuse(&mut stream, "431 Request Header Fields Too Large", "more headers than the registry reads");
         }
         if let Some((k, v)) = t.split_once(':') {
             headers.insert(k.trim().to_ascii_lowercase(), v.trim().to_string());
         }
     }
-    let len: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let len: usize = match headers.get("content-length") {
+        None => 0,
+        Some(v) => match v.parse::<u64>() {
+            Ok(n) if n <= limits.body as u64 => n as usize,
+            Ok(_) => return refuse(&mut stream, "413 Payload Too Large", "the body is larger than the registry takes"),
+            Err(_) => return refuse(&mut stream, "400 Bad Request", "Content-Length is not a length"),
+        },
+    };
     let mut body = vec![0u8; len];
     if len > 0 {
         reader.read_exact(&mut body)?;
     }
     let token = headers.get("authorization").map(|a| a.trim_start_matches("Bearer ").to_string()).unwrap_or_default();
 
-    let (status, payload) = route(reg, &method, &path, &body, &token, recompute);
+    let (status, payload) = {
+        let _one_at_a_time = handling.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        route(reg, &method, &path, &body, &token, recompute)
+    };
     let body_bytes = payload.to_string().into_bytes();
     write!(
         stream,
