@@ -150,9 +150,16 @@ echo "exit $code: $out"
 # OpenShell's own account of the refusal, READ, not assumed (`--tail` streams, so a bounded window): run 8
 # read it as OCSF lines — `NET:REFUSE [MED] DENIED example.org [reason:policy_dns_ineligible]` and
 # `NET:OPEN [MED] DENIED /usr/bin/curl(0) -> example.org:443 [reason:transparent_tcp_policy_denied]`.
-timeout 30 openshell logs dl --since 10m > openshell.log 2>&1 || true
-grep -E 'NET:(OPEN|REFUSE).*DENIED' openshell.log || echo "(no DENIED line)"
-grep -qE 'NET:OPEN.*DENIED.*curl.*example\.org' openshell.log || fail "(3) OpenShell's log holds no NET:OPEN DENIED line for curl to example.org"
+# The sandbox's log reaches the gateway asynchronously: run 9 read it the instant curl returned and found no
+# line that run 8 had found at the same point — so the line is waited for, with a bound, never assumed.
+seen=0
+for _ in $(seq 1 20); do
+  timeout 30 openshell logs dl --since 10m > openshell.log 2>&1 || true
+  if grep -qE 'NET:OPEN.*DENIED.*curl.*example\.org' openshell.log; then seen=1; break; fi
+  sleep 3
+done
+grep -E 'NET:(OPEN|REFUSE).*DENIED' openshell.log || { echo "(no DENIED line; the log's last lines:)"; tail -15 openshell.log; }
+[ "$seen" = 1 ] || fail "(3) OpenShell's log holds no NET:OPEN DENIED line for curl to example.org within 60 s"
 
 step "(4) the effective policy — what OpenShell added — against the export"
 openshell sandbox get dl --policy-only > effective.yaml || fail "(4) no effective policy"

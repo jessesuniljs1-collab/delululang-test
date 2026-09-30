@@ -956,6 +956,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `exceeds_boundary` — its documentation says it compares only paths both policies name — so neither could ever have
   been red. And read a tool's machine channel alone: its solver's warnings on stderr, merged with the JSON on stdout,
   made every answer "unparsed" on the first run.
+- **A flag documented for a command reaches every verb of it** (routine run 8): the dispatcher refuses a shared flag a
+  command's help does not document, so documenting `--grant` for `sandbox policy --format openshell` let `sandbox
+  status --grant x` through to a verb that ignored it (exit 0) — found by the suite, through a sibling test's changed
+  wording. A verb that does not take a flag its command documents refuses it itself.
 - **A workflow is dispatchable only once it is on the default branch** (routine run 8): `run_workflow` for a file a
   branch alone has answers 404. A new by-hand workflow lands on `master` with its slice, then runs.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the

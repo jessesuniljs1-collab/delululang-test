@@ -100,8 +100,12 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
 - **Routine run 8 (2026-09-30):** SCOPE-HIDDEN-1 (D-V2-81): `authority --grants` under-reported — a `Root` passed to a
   helper as `r` hid its scope (the walk matched `root` by name), and one literal of a kind silenced the placeholder for
   every other site. PS-E-05 (a) (D-V2-82): `sandbox policy --format openshell` — the OpenShell policy written from the
-  program's authority, never wider than it and the grants; OpenShell's prover checks it in `openshell.yml`. Traps: a
-  mutant loop leaves the last mutant's binary; a new workflow is dispatchable only once on `master`.
+  program's authority, never wider than it and the grants; OpenShell 0.1.2's prover checks it (`within_boundary`, six
+  widenings `exceeds`) and a real OpenShell sandbox ENFORCES it on a runner (`openshell.yml` `runtime` job: the program
+  runs inside, `curl` to an unlisted host `NET:OPEN … DENIED`). E-05 (b) open: the guest cannot run nested — its own
+  `seccomp` is refused inside OpenShell, so it fails closed. Traps: a mutant loop leaves the last mutant's binary; a new
+  workflow is dispatchable only once on `master`; pick falsifiers from the checker's documented cases; a flag documented
+  for a command reaches every verb; the REST API answers `curl` from the VM (wait on runs in the background).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
