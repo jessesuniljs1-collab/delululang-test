@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 292 |
-| Rust lines | 151408 |
+| Rust lines | 151537 |
 | Rust files outside `src/` (test/bench targets) | 132 |
 | Markdown documents | 252 |
-| Markdown lines | 67874 |
+| Markdown lines | 67929 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1475 / 13037 |
+| Nodes / edges in this map | 1475 / 13047 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -158,7 +158,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 10779 lines
+- **Modules:** 16 files, 10821 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -172,12 +172,12 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 750 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 63 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
-| `src/ocsf.rs` | 296 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
+| `src/ocsf.rs` | 333 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/secrets.rs` | 679 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1129 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
-| `src/validate.rs` | 597 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
+| `src/validate.rs` | 602 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`
 

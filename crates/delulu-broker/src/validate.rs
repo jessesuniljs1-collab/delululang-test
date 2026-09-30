@@ -223,6 +223,11 @@ impl Broker {
     /// plus an optional agent-side `warn` note.
     pub fn check_use(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> GuardedDecision {
         let now = self.effective_now();
+        // PS-E-06 (D-V2-80): a use's record names its effect, in the payload slot under a self-describing
+        // key — as a revocation's carries its bound (spec §11, chunk-5 deviation 3). Without it a record
+        // said which node used which argument and not HOW: a path read, a path written and a host asked
+        // were the same record, and an export could only guess one from the argument's spelling.
+        let payload = || Some(serde_json::json!({ "op": op.wire_name() }));
         let (eff, authority) = match self.node_view(node_id, now) {
             Some(v) => v,
             None => {
@@ -235,7 +240,7 @@ impl Broker {
                         "use",
                         Some(node_id.as_str().to_string()),
                         arg.map(|a| a.to_string()),
-                        None,
+                        payload(),
                         "deny",
                         None,
                     );
@@ -252,7 +257,7 @@ impl Broker {
                     "use",
                     Some(node_id.as_str().to_string()),
                     arg.map(|a| a.to_string()),
-                    None,
+                    payload(),
                     "deny",
                     None,
                 );
@@ -267,29 +272,29 @@ impl Broker {
             GuardVerdict::Ungated => match op.class() {
                 OpClass::Synchronous => {
                     let seq = self.consume_seq();
-                    self.record_op(seq, "use", actor(), tgt(), None, "allow", None);
+                    self.record_op(seq, "use", actor(), tgt(), payload(), "allow", None);
                     GuardedDecision::allow(Some(seq))
                 }
                 OpClass::Epoch => GuardedDecision::allow(None),
             },
             GuardVerdict::PermitUse => {
                 let seq = self.consume_seq();
-                self.record_op(seq, "guard_permit_use", actor(), tgt(), None, "allow", None);
+                self.record_op(seq, "guard_permit_use", actor(), tgt(), payload(), "allow", None);
                 GuardedDecision::allow(Some(seq))
             }
             GuardVerdict::BypassedUse { note } => {
                 let seq = self.consume_seq();
-                self.record_op(seq, "guard_bypassed_use", actor(), tgt(), None, "allow", None);
+                self.record_op(seq, "guard_bypassed_use", actor(), tgt(), payload(), "allow", None);
                 GuardedDecision { decision: Decision::Allow { audit_seq: Some(seq) }, warn: Some(note) }
             }
             GuardVerdict::Warn { note } => {
                 let seq = self.consume_seq();
-                self.record_op(seq, "guard_warn", actor(), tgt(), None, "allow", None);
+                self.record_op(seq, "guard_warn", actor(), tgt(), payload(), "allow", None);
                 GuardedDecision { decision: Decision::Allow { audit_seq: Some(seq) }, warn: Some(note) }
             }
             GuardVerdict::Block(d) => {
                 let seq = self.consume_seq();
-                self.record_op(seq, "guard_block", actor(), tgt(), None, "deny", None);
+                self.record_op(seq, "guard_block", actor(), tgt(), payload(), "deny", None);
                 GuardedDecision::deny(d)
             }
         }

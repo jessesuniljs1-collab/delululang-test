@@ -409,7 +409,10 @@ use's argument and not its effect (naming the effect in the record is the next s
 time by `scripts/ocsf-validate.py`, never copied. The raw files of `github.com/ocsf/ocsf-schema` at `v1.8.0` ARE
 reachable from the cloud VM (raw.githubusercontent.com, file by file; the tarball is refused), so the export was
 validated in the VM: a real sandboxed run's chain and an eleven-record corpus, 0 problems; thirteen mutations of an
-export, each caught. Witnesses `crates/delulu/tests/audit_ocsf_cli.rs` (7); mutants M38–M43 red.
+export, each caught. Witnesses `crates/delulu/tests/audit_ocsf_cli.rs` (7); mutants M38–M43 red. **The same run
+finished it (D-V2-80):** a use's record now names its effect (`{"op": …}` in the payload slot a revocation's bound
+already uses), and an allowed use exports as File System Activity (1001) or HTTP Activity (4002) — the mapping the text
+above proposed, now from what the record says rather than a guess. **PS-E-06 is complete.**
 
 ### 4.7 P8-04 — an out-of-band monitor (the shape of Sentry, in software)
 

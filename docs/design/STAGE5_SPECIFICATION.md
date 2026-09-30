@@ -760,6 +760,9 @@ Maps every spec §9 criterion to its status and the test(s) that prove it. Crite
    (the `authority` field) under the self-describing key `"revocation_takes_effect"` — the §7
    record shape has no other free-form slot and was not extended. Additive; chains verify across
    old and new logs. Deny-decision revoke records carry no bound (nothing was revoked).
+   **Since 2026-09-30 (D-V2-80) a use's record rides the same slot** — `{"op": <wire name>}`, the effect the
+   use asked for (`FsWrite`, `Net`, …) — on every record `check_use` writes, allowed or refused; before it a
+   use named its argument and not its effect. The same reasoning: additive, hashed, and old records verify.
 4. **Criterion 3's "at redemption → DL0802" happens at delegation time instead**: a widening
    `delegate` is refused when minting, so the token for the widened slice never exists —
    redemption failures are DL1407/DL1402 only. Same guarantee, enforced strictly earlier.

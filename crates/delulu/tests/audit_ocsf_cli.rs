@@ -44,8 +44,9 @@ fn scratch(tag: &str) -> PathBuf {
 }
 
 /// A chain holding every class the export maps to: a root issued, a delegation, an allowed and a refused
-/// use, a secret exposed (its bytes are the canary), a guest's launch and death as the host writes them,
-/// a refused guest, and a revocation — eleven records.
+/// write, an allowed network use, a secret exposed (its bytes are the canary), a revocation, a use recorded
+/// before a use named its effect, a guest's launch and death as the host writes them, and a refused guest —
+/// thirteen records.
 fn seeded(tag: &str) -> PathBuf {
     let root_dir = scratch(tag);
     let dir = root_dir.join("audit");
@@ -57,8 +58,13 @@ fn seeded(tag: &str) -> PathBuf {
             .issue_root(
                 Holder::new("process", "ocsf-test", "pid:0"),
                 Authority::new(
-                    eff(&["Write", "Declassify"]),
-                    Scopes { fs_write: names(&["./out"]), secrets: names(&["API_KEY"]), ..Default::default() },
+                    eff(&["Write", "Declassify", "Net"]),
+                    Scopes {
+                        fs_write: names(&["./out"]),
+                        secrets: names(&["API_KEY"]),
+                        net: names(&["example.com"]),
+                        ..Default::default()
+                    },
                 ),
                 None,
             )
@@ -74,6 +80,7 @@ fn seeded(tag: &str) -> PathBuf {
             .expect("a narrower delegation");
         assert!(b.check(&child, Op::FsWrite, Some("./out/a.txt")).is_allow());
         assert!(!b.check(&child, Op::FsWrite, Some("./elsewhere")).is_allow());
+        assert!(b.check(&root, Op::Net, Some("example.com")).is_allow());
         let store = SecretStore::in_memory();
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
@@ -82,6 +89,19 @@ fn seeded(tag: &str) -> PathBuf {
     // The host's own records, appended the way `guest.rs` appends them: a new writer continuing the seq.
     let mut log = AuditLog::open(&dir).unwrap();
     let mut seq = delulu_broker::tail(&dir, 1).unwrap().last().unwrap().seq;
+    // A use as the broker recorded it before D-V2-80: no payload, so no effect named.
+    seq += 1;
+    log.append(AuditEntry {
+        seq,
+        ts: 1_790_000_050_000,
+        actor_node: Some("g_legacy".into()),
+        action: "use".into(),
+        target: Some("./out/old.txt".into()),
+        authority: None,
+        span: None,
+        decision: "allow".into(),
+    })
+    .unwrap();
     let mut add = |action: &str, decision: &str, target: &str, authority: Value| {
         seq += 1;
         log.append(AuditEntry {
@@ -141,16 +161,18 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
     let class: BTreeMap<String, u64> = events
         .iter()
         .map(|e| {
-            let action = e["unmapped"]["delulu"]["action"].as_str().unwrap().to_string();
-            let decision = e["unmapped"]["delulu"]["decision"].as_str().unwrap();
-            (format!("{action}/{decision}"), e["class_uid"].as_u64().unwrap())
+            let r = &e["unmapped"]["delulu"];
+            let op = r["authority"]["op"].as_str().map(|o| format!("/{o}")).unwrap_or_default();
+            (format!("{}/{}{op}", r["action"].as_str().unwrap(), r["decision"].as_str().unwrap()), e["class_uid"].as_u64().unwrap())
         })
         .collect();
     let want: BTreeMap<String, u64> = [
         ("issue/allow", 3005),
         ("delegate/allow", 3005),
+        ("use/allow/FsWrite", 1001),
+        ("use/deny/FsWrite", 2004),
+        ("use/allow/Net", 4002),
         ("use/allow", 0),
-        ("use/deny", 2004),
         ("expose/allow", 0),
         ("revoke/allow", 3005),
         ("sandbox-launch/allow", 1007),
@@ -177,6 +199,14 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
             assert!(e.get(key).is_some(), "every event carries the base event's required `{key}`: {e}");
         }
     }
+    let write = events.iter().find(|e| e["class_uid"] == 1001).unwrap();
+    assert_eq!((write["activity_id"].as_u64(), write["file"]["path"].as_str()), (Some(3), Some("./out/a.txt")), "a write updates the path it was decided on");
+    assert_eq!(write["file"]["name"], "a.txt");
+    let net = events.iter().find(|e| e["class_uid"] == 4002).unwrap();
+    assert_eq!(net["dst_endpoint"]["hostname"], "example.com", "a network use names its host");
+    assert_eq!(net["http_request"]["http_method"], "GET");
+    let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
+    assert_eq!(refused["finding_info"]["types"], serde_json::json!(["use", "FsWrite"]), "a refused use's finding names its effect");
     let revoke = events.iter().find(|e| e["unmapped"]["delulu"]["action"] == "revoke").unwrap();
     assert_eq!(revoke["activity_id"], 2, "a revocation revokes privileges");
     let delegation = events.iter().find(|e| e["unmapped"]["delulu"]["action"] == "delegate").unwrap();

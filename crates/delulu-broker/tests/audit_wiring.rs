@@ -236,3 +236,60 @@ fn broker_driven_daily_rotation_cross_links_and_verifies() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// PS-E-06 (D-V2-80): a use's record names its effect — `{"op": <wire name>}` in the payload slot — whether
+/// the use was allowed, refused for scope, or asked of a node that does not exist. Before it, a path read, a
+/// path written and a host asked left the same record, and an export could only guess one from the other.
+#[test]
+fn every_use_record_names_its_effect() {
+    let clock = Rc::new(ManualClock::new(1_000));
+    let (mut b, sink) = broker_with_sink(clock);
+    let root = b
+        .issue_root(
+            holder(),
+            Authority::new(
+                eff(&["Write", "Net"]),
+                Scopes { fs_write: names(&["./out"]), net: names(&["example.com"]), ..Default::default() },
+            ),
+            None,
+        )
+        .unwrap();
+    assert!(b.check(&root, Op::FsWrite, Some("./out/a.txt")).is_allow());
+    assert!(!b.check(&root, Op::FsWrite, Some("./elsewhere")).is_allow());
+    assert!(b.check(&root, Op::Net, Some("example.com")).is_allow());
+    assert!(!b.check(&root, Op::Net, Some("evil.example")).is_allow());
+    let ghost = delulu_broker::GrantId::from_trusted("g_ffffffffffffffffffffffffffffffff");
+    assert!(!b.check(&ghost, Op::FsWrite, Some("./out/b.txt")).is_allow());
+
+    let uses: Vec<(String, String, Option<String>)> = sink
+        .records()
+        .into_iter()
+        .filter(|r| r.action == "use")
+        .map(|r| {
+            let op = r.authority.as_ref().and_then(|a| a.get("op")).and_then(|o| o.as_str()).map(str::to_string);
+            (r.target.unwrap_or_default(), r.decision, op)
+        })
+        .collect();
+    let want = [
+        ("./out/a.txt", "allow", "FsWrite"),
+        ("./elsewhere", "deny", "FsWrite"),
+        ("example.com", "allow", "Net"),
+        ("evil.example", "deny", "Net"),
+        ("./out/b.txt", "deny", "FsWrite"),
+    ];
+    assert_eq!(uses.len(), want.len(), "one record per synchronous use: {uses:?}");
+    for ((target, decision, op), (t, d, o)) in uses.iter().zip(want) {
+        assert_eq!((target.as_str(), decision.as_str(), op.as_deref()), (t, d, Some(o)), "{uses:?}");
+    }
+    assert!(verify_chain_of(&sink), "the chain still verifies");
+}
+
+fn verify_chain_of(sink: &MemSink) -> bool {
+    let recs = sink.records();
+    let mut prev = delulu_broker::audit::GENESIS_HASH.to_string();
+    recs.iter().all(|r| {
+        let ok = r.prev_hash == prev;
+        prev = r.hash.clone();
+        ok
+    })
+}

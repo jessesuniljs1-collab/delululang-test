@@ -164,6 +164,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   cleared the screen and could forge whole audit lines; an agent's `guard request --why` could erase its real request's
   line on the owner's screen and print a different request in its place. Every field of both listings is now shown
   escaped on one line; `--json` is unchanged and exact (D-V2-79).
+- **A capability use's audit record names its effect** (`{"op": "FsWrite"}`, `"Net"`, … in the record's payload slot),
+  allowed or refused, and the OCSF export maps it: an allowed file use is File System Activity (1001, Read or Update, with
+  the path), an allowed network use HTTP Activity (4002, Get, with the host). Records written before name no effect and
+  stay Base Events; every chain still verifies (D-V2-80).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

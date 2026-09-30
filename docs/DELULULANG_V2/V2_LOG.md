@@ -3620,3 +3620,20 @@ seen that request, not the real `fs_write:*`). **Fixed (D-V2-79):** every field 
 each red; restored. The leased-program witness re-run on the fixed binary: `\u{1b}]0;PWNED\u{7}…` shown, no raw byte.
 `grants tree`/`list`/`inspect` print broker-rendered text an agent may partly choose — recorded as RW 4.42, a hypothesis to
 witness. **Verified:** clippy clean; the full suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
+
+## 2026-09-30 — routine run 7: PS-E-06 complete — a use's record names its effect, and the export maps it (D-V2-80)
+
+D-V2-78 exported a capability use as a Base Event because its record named its argument and not its effect
+(`check_use` dropped the op). **Witness (the state before, as mutant M47 restores it):** a new broker test,
+`audit_wiring::every_use_record_names_its_effect` — an allowed and a refused write, an allowed and a refused network use,
+a use asked of a node that does not exist — found no effect in any of the five records. **Built:** every record
+`check_use` writes carries `{"op": <wire name>}` in the payload slot a revocation's bound already uses (spec §11, chunk-5
+deviation 3, now noting this) — hashed, optional, so every chain verifies under an older or a newer `delulu`; the export
+maps an allowed `FsRead`/`FsWrite` use to File System Activity 1001 (Read/Update, the path and its name) and `Net` to HTTP
+Activity 4002 (Get, the host as `dst_endpoint.hostname`), and a refused use's finding names the effect in its `types`.
+A record written before names none and stays a Base Event — the corpus now holds one, and the witness holds it so.
+**Mutants:** M47 (no effect recorded) red in both targets; M48 (the export ignores a named effect) and M49 (a refused
+use's finding without it) red in `audit_ocsf_cli`; restored. **The schema:** the new corpus (13 records) validated
+against OCSF 1.8.0 with 0 problems, and five more mutations — a file with no name, no file, a misspelt `http_request`
+field, a numeric host, an activity out of the file class's enum — each caught. **Verified:** clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
+**PS-E-06 is complete.**

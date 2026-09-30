@@ -1653,6 +1653,24 @@ in its place. Decided: every field of both listings is escaped onto one line wit
 decision, actor and target; the request's id, status, node, uses and why). The chain, the queue and `--json` keep the
 bytes exactly — the escaping is only where a person reads. No new code.
 
+## D-V2-80 — PS-E-06's remainder: a use's audit record names its effect, and the export maps it — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+D-V2-78 left a capability use a Base Event: `Broker::check_use` recorded the node, the argument and the decision, and
+dropped the op — so a path read, a path written and a host asked were the same record. Decided: every use record
+`check_use` writes — `use` (allowed or refused, and for a node that does not exist), `guard_permit_use`,
+`guard_bypassed_use`, `guard_warn`, `guard_block` — carries `{"op": <the op's wire name>}` in the record's optional
+payload slot, the field a revocation's bound already rides in under a self-describing key (spec §11, chunk-5 deviation 3).
+**Not a new field:** a new key in the hashed body would make every record written from now on unverifiable by an older
+`delulu`; the payload slot is already hashed and already optional, so old and new records verify under either binary, and
+a record written before this names no effect. The export then maps an allowed use by the effect its record NAMES:
+`FsRead` → File System Activity (1001) Read, `FsWrite` → 1001 Update (the file object carries the path the use was decided
+on, its name, type Unknown), `Net` → HTTP Activity (4002) Get with the host as `dst_endpoint.hostname` — `Get` because the
+language's one network primitive is `http.get` (`custody_op_for` maps nothing else to `Net`); a method the language gains
+must reach the record before the export names it. A refused use stays a Detection Finding, and its finding's `types` now
+name the effect too. Other effects (`Actuate`, `ForeignBind`, `Declassify`) and every record without an effect stay Base
+Events. Only synchronous-class uses are recorded (invariant 26), so an allowed read that no Guard gates leaves no record
+and no event — the export shows what the chain holds.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

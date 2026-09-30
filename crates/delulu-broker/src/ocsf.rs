@@ -30,12 +30,16 @@
 //! | `revoke`, `guard_permit_revoke` (allowed) | User Access Management (3005), Revoke Privileges |
 //! | `sandbox-launch` | Process Activity (1007), Launch |
 //! | `sandbox-death` (either decision) | Process Activity (1007), Terminate |
+//! | an allowed use whose record names `FsRead` / `FsWrite` | File System Activity (1001), Read / Update |
+//! | an allowed use whose record names `Net` | HTTP Activity (4002), Get |
 //! | everything else | Base Event (0), Other — the record's action as the activity's name |
 //!
-//! A capability **use** is a Base Event, not File System Activity (1001) or HTTP Activity (4002),
-//! because a use record names its argument and not its effect — a path and a host name are both
-//! strings, and guessing one from the other's spelling would be the export inventing a fact. The
-//! record must name the effect first; until then the export says only what the record says.
+//! A use's class comes from the effect its record NAMES (`{"op": …}`, D-V2-80), never from its
+//! argument: a path and a host name are both strings, and choosing a class from the spelling would be
+//! the export inventing a fact. A record written before D-V2-80 names none and stays a Base Event.
+//! `Net` is `Get` because the language's one network primitive is `http.get` — `custody_op_for` maps
+//! nothing else to `Net` — so a method added to the language must reach the record before the export
+//! may name it.
 //!
 //! Never secret bytes: the audit holds none (a secret's record names the secret), and the export adds
 //! nothing the record does not hold.
@@ -84,6 +88,10 @@ enum Class {
     UserAccess(u64),
     /// Process Activity (1007): 1 Launch, 2 Terminate.
     Process(u64),
+    /// File System Activity (1001): 2 Read, 3 Update.
+    File(u64),
+    /// HTTP Activity (4002): 3 Get.
+    Http(u64),
     /// Base Event (0), activity Other.
     Base,
 }
@@ -102,8 +110,19 @@ fn class_of(rec: &AuditRecord) -> Class {
         "issue" | "delegate" | "attenuate" | "redeem" | "renew" | "adopt" => Class::UserAccess(1),
         "revoke" | "guard_permit_revoke" => Class::UserAccess(2),
         "sandbox-launch" => Class::Process(1),
+        "use" | "guard_permit_use" | "guard_warn" => match use_op(rec) {
+            Some("FsRead") => Class::File(2),
+            Some("FsWrite") => Class::File(3),
+            Some("Net") => Class::Http(3),
+            _ => Class::Base,
+        },
         _ => Class::Base,
     }
+}
+
+/// The effect a use's record names (D-V2-80), if it names one.
+fn use_op(rec: &AuditRecord) -> Option<&str> {
+    rec.authority.as_ref().and_then(|a| a.get("op")).and_then(Value::as_str)
 }
 
 /// An allowed record that is still a finding: authority exercised past the ordinary checks.
@@ -127,6 +146,8 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
                 if a == 1 { "Assign Privileges" } else { "Revoke Privileges" },
             ),
             Class::Process(a) => (1007, "Process Activity", 1, "System Activity", a, if a == 1 { "Launch" } else { "Terminate" }),
+            Class::File(a) => (1001, "File System Activity", 1, "System Activity", a, if a == 2 { "Read" } else { "Update" }),
+            Class::Http(a) => (4002, "HTTP Activity", 4, "Network Activity", a, "Get"),
             Class::Base => (0, "Base Event", 0, "Uncategorized", 99, rec.action.as_str()),
         };
     let (severity_id, severity) = match class {
@@ -178,9 +199,11 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
     };
     match class {
         Class::Finding => {
+            let mut types = vec![rec.action.clone()];
+            types.extend(use_op(rec).map(str::to_string));
             let mut info = json!({
                 "title": format!("{} {}", rec.action, rec.decision),
-                "types": [rec.action],
+                "types": types,
                 "uid": rec.hash,
             });
             if let Some(t) = &rec.target {
@@ -219,6 +242,20 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
                 .map_or_else(|| rec.hash.clone(), str::to_string);
             obj.insert("process".into(), json!({ "name": "delulu guest", "uid": uid }));
             obj.insert("actor".into(), json!({ "app_name": "delulu" }));
+        }
+        Class::File(_) => {
+            // The path as the record holds it: the one the use was decided on (the pinned spelling).
+            let path = rec.target.clone().unwrap_or_default();
+            let name = path.rsplit(['/', '\\']).next().unwrap_or(&path).to_string();
+            obj.insert("file".into(), json!({ "name": name, "path": path, "type": "Unknown", "type_id": 0 }));
+            obj.insert("actor".into(), actor);
+        }
+        Class::Http(_) => {
+            // A network use's argument is the host (`custody_op_for`): never a path, never a query string.
+            let host = rec.target.clone().unwrap_or_default();
+            obj.insert("dst_endpoint".into(), json!({ "hostname": host }));
+            obj.insert("http_request".into(), json!({ "http_method": "GET" }));
+            obj.insert("actor".into(), actor);
         }
         Class::Base => {
             obj.insert("actor".into(), actor);

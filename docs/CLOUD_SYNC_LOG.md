@@ -839,7 +839,8 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `7940188` (routine run 6's last commit)
 - Commits: (1) `151dd8c` PS-E-06: the audit chain exported as OCSF 1.8.0, each event carrying its record (D-V2-78);
   (2) `b50bb36` PS-E-06's witness names the machine: the export with no --device-name, on every OS;
-  (3) AUDIT-TEXT-1: what a program or an agent wrote is shown escaped in audit tail and guard pending (D-V2-79)
+  (3) `9c58cbb` AUDIT-TEXT-1: what a program or an agent wrote is shown escaped in audit tail and guard pending (D-V2-79);
+  (4) PS-E-06 complete: a use's audit record names its effect, and the export maps it (D-V2-80)
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -854,7 +855,13 @@ it on `origin` was made in the cloud and is listed below.
     `crates/delulu/tests/audit_cli.rs`, `crates/delulu/tests/guard_e2e.rs` (a witness each), `CHANGELOG.md`, `HANDOFF.md`
     (§11.4 AUDIT-TEXT-1; §11.5 a stored string is printed later), `docs/REMAINING_WORK.md` (4.41 closed, 4.42 new),
     `V2_DECISION_LOG.md` (D-V2-79), `V2_LOG.md` — (3)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(3)
+  M `crates/delulu-broker/src/validate.rs` (`check_use`'s records carry the op), `crates/delulu-broker/src/ocsf.rs`
+    (File System and HTTP Activity from a named effect), `crates/delulu-broker/tests/audit_wiring.rs` (a witness),
+    `crates/delulu/tests/audit_ocsf_cli.rs` (a network use and a record from before in the corpus), `CHANGELOG.md`,
+    `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md` (6.14's next step done), `docs/design/STAGE5_SPECIFICATION.md` (§11,
+    chunk-5 deviation 3: the use's op in the same slot), `V2_DECISION_LOG.md` (D-V2-80), `V2_OPENSHELL_STUDY.md` (§4.6
+    complete), `V2_LOG.md`, `V2_PHASE_STATUS.md` — (4)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(4)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -868,7 +875,10 @@ it on `origin` was made in the cloud and is listed below.
   `cli_contract` 19, `json_contract` 14) and Windows `36675489012` (7, 19, 13) — success; `master` fast-forwarded to
   `b50bb36`. **(3):** witnessed end to end in the VM on `b50bb36` (a leased program's file name reached `audit tail` raw:
   `^[]0;PWNED^G^[[2J^[[31m`); both witnesses red on the unfixed binary, M45 and M46 red, restored; clippy clean; the full
-  suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
+  suite alone 2,076 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved (witness.yml,
+  `audit_cli guard_e2e` at `9c58cbb`): macOS `36676784576` (12, 3) and Windows `36676787378` (12, 3) — success; `master`
+  fast-forwarded to `9c58cbb`. **(4):** M47–M49 red, restored; the corpus validated (0 problems), five more export
+  mutations caught; clippy clean; the full suite alone 2,077 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0.
 - Redo on the laptop: nothing beyond the suite (the host-name lookup is per OS: `gethostname` on Linux and macOS,
   `COMPUTERNAME` on Windows).
 - For the laptop's memory: `HANDOFF.md` §11.3 (the OCSF schema's raw files are reachable from the VM; its tarball and

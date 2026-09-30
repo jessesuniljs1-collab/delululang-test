@@ -328,10 +328,10 @@ delulu audit verify --ocsf next.jsonl --expect-start <head of the previous expor
 
 Each line is an [OCSF](https://schema.ocsf.io) 1.8.0 event: a refusal, a break-glass use or a bypassed
 Guard is a Detection Finding (2004); a grant, delegation or revocation is User Access Management (3005);
-a sandboxed guest's launch and end are Process Activity (1007), paired by the run's generation; anything
-else is a Base Event (0) naming the record's action. A capability *use* is a Base Event, not File System
-or HTTP Activity, because a use's record names its argument and not its effect — the export does not
-guess one from the other's spelling.
+a sandboxed guest's launch and end are Process Activity (1007), paired by the run's generation; an allowed
+file use is File System Activity (1001) and an allowed network use HTTP Activity (4002), by the effect the
+use's record names; anything else is a Base Event (0) naming the record's action — including a use
+recorded before uses named their effect, since the export never guesses one from an argument's spelling.
 
 **Why an export can still be trusted.** OCSF events alone cannot show that one was removed. So every
 event carries its whole audit record under `unmapped.delulu`, and every other field is computed from that
