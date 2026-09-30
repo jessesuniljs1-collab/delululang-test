@@ -24,23 +24,36 @@ fail() {
 }
 step() { echo; echo "== $*"; }
 
-step "the gateway (a systemd user service the package installs)"
+step "the gateway (a systemd user service the package installs), pinned to the Docker driver"
 sudo loginctl enable-linger "$(id -un)"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 for _ in $(seq 1 30); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 1; done
+# Unset, the gateway auto-detects Kubernetes, then Podman, then Docker — and a runner has Podman, while the
+# image below is built with Docker (run 3 of this workflow: the service's first act was `podman info`).
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/openshell/gateway.toml"
+mkdir -p "$(dirname "$conf")"
+if [ -s "$conf" ]; then
+  echo "(a gateway config already exists — shown, not changed)"
+  cat "$conf"
+  grep -q 'compute_driver *= *"docker"' "$conf" || fail "the existing gateway config does not pin the Docker driver"
+else
+  printf '[openshell.gateway]\ncompute_driver = "docker"\n' > "$conf"
+fi
 systemctl --user daemon-reload
-systemctl --user enable --now openshell-gateway || fail "the gateway service did not start"
+systemctl --user enable openshell-gateway
+systemctl --user restart openshell-gateway || fail "the gateway service did not start"
 systemctl --user --no-pager status openshell-gateway | head -20 || true
+# Run 3: `openshell status` succeeded with NO gateway registered, so readiness is asked of the gateway itself.
+openshell gateway add https://127.0.0.1:17670 --local --name openshell || true
+openshell gateway select openshell || true
+openshell gateway list || true
 up=0
 for _ in $(seq 1 60); do
-  if openshell status >/dev/null 2>&1; then up=1; break; fi
+  if openshell sandbox list >/dev/null 2>&1; then up=1; break; fi
   sleep 2
 done
-if [ "$up" = 0 ]; then
-  openshell gateway add https://127.0.0.1:17670 --local --name openshell || true
-  openshell status || fail "the CLI cannot reach the gateway"
-fi
-openshell gateway list || true
+[ "$up" = 1 ] || { openshell status; journalctl --user -u openshell-gateway --no-pager | tail -40; fail "the gateway never answered"; }
+openshell status || true
 docker version --format 'docker server {{.Server.Version}}' || true
 
 step "the image: Debian, a non-root user, /sandbox, and this build's delulu with the program"
