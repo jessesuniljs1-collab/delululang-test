@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 294 |
-| Rust lines | 153085 |
-| Rust files outside `src/` (test/bench targets) | 133 |
+| Rust files | 295 |
+| Rust lines | 153468 |
+| Rust files outside `src/` (test/bench targets) | 134 |
 | Markdown documents | 252 |
-| Markdown lines | 68475 |
+| Markdown lines | 68530 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1482 / 13114 |
+| Nodes / edges in this map | 1483 / 13122 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,14 +90,14 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 38030 lines
+- **Modules:** 41 files, 38192 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/advisories.rs` | 219 | The advisory-feed detector (Stage 10 phase 10k, Track C, spec §4). |
 | `src/atlas_chain.rs` | 331 | P4-11: `delulu atlas chain` — the Atlas's V2 chain, one ordered view an auditor can read top to |
 | `src/attest.rs` | 598 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
-| `src/boundary.rs` | 513 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
+| `src/boundary.rs` | 567 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 472 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 417 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
@@ -115,9 +115,9 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 738 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 2499 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 2548 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
-| `src/jail.rs` | 1564 | PS-A-04: the OS jail around a sandbox guest. |
+| `src/jail.rs` | 1623 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/launcher.rs` | 182 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2024 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
@@ -298,7 +298,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 19129 lines
+- **Modules:** 22 files, 19138 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -306,7 +306,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 772 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 726 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 1543 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
+| `src/channel.rs` | 1552 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 266 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |

@@ -10,7 +10,8 @@
 # denied by OpenShell; (4) the sandbox's EFFECTIVE policy (OpenShell adds its baseline) is printed and
 # checked by the prover against the export, so what OpenShell added is named, not assumed; (5) — E-05 (b) —
 # the GUEST inside a second OpenShell sandbox with no network rule, reached as an `external:` launcher through
-# `openshell sandbox exec`, the program run end to end at level 3.
+# `openshell sandbox exec`: undeclared it fails closed (OpenShell refuses its own syscall filter), declared
+# (`--outer-syscall-filter`, D-V2-83) it runs the program end to end at level 3.
 #
 # Usage: scripts/openshell-runtime.sh DELULU   (needs OpenShell installed — scripts/openshell-install.sh —
 # Docker, and a systemd user session; a CI runner has all three). Exit 0 when every expectation held.
@@ -193,39 +194,55 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 # The launcher: the channel on the exec's standard streams; the guest's words from the host (no shell word-splits
-# a token — DELULU_GUEST_ARGS is DeluluLang's own, `__guest --stdio-pipes`).
+# a token — DELULU_GUEST_ARGS is DeluluLang's own, `__guest --stdio-pipes`), then the launcher's own EXTRA words.
+# D-V2-83 (routine run 9): OpenShell's filter refuses the guest's own (`seccomp`: EPERM, run 8's reading), so this
+# launcher DECLARES the outer wall — `--outer-syscall-filter` — and the guest runs under OpenShell's filter,
+# saying so in its words; undeclared, it fails closed as before. Both are read here, in that order.
 cat > openshell-guest <<'EOF'
 #!/bin/sh
-exec openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu $DELULU_GUEST_ARGS
+exec openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu $DELULU_GUEST_ARGS $GUEST_EXTRA
 EOF
 chmod +x openshell-guest
 mkdir -p host/data
 echo "hello through the OpenShell guest" > host/data/in.txt
 cp ctx/p.delulu host/
-(cd host && "$DELULU" run p.delulu --no-prompt --grant console --grant fs.read=./data \
-  --sandbox --sandbox-backend "external:$work/openshell-guest" --report-out "$work/report.json") > guest.out 2>&1
-echo "exit $?"
-cat guest.out
-# Run 7's reading: inside OpenShell's sandbox the guest cannot install its own syscall filter (`seccomp`:
-# EPERM), so it refuses to run ("nothing ran") and the host never sends the program (PS-E-01's rule, holding
-# inside someone else's wall). Until E-05 (b) resolves that, this step witnesses the refusal — fail closed —
-# and says plainly that the guest did NOT run; the day it does run, this expectation is the one to change.
-if grep -q "hello through the OpenShell guest" guest.out; then
-  echo "(5) the guest RAN inside OpenShell — E-05 (b) works now: change this expectation"
+guest_run() { # $1: the launcher's extra words; $2: the output file; $3: the report file
+  local t0=$SECONDS
+  (cd host && GUEST_EXTRA="$1" "$DELULU" run p.delulu --no-prompt --grant console --grant fs.read=./data \
+    --sandbox --sandbox-backend "external:$work/openshell-guest" --report-out "$work/$3") > "$2" 2>&1
+  echo "exit $? after $((SECONDS - t0)) s"
+  cat "$2"
+}
+
+echo "-- (5a) undeclared: the guest must fail closed, as run 8 read it"
+guest_run "" guest-undeclared.out report-undeclared.json
+if grep -q "hello through the OpenShell guest" guest-undeclared.out; then
+  fail "(5a) an UNDECLARED guest ran inside OpenShell without its own filter"
 else
-  grep -q "never confirmed its boundary" guest.out || fail "(5) the guest neither ran nor was refused in words"
-  echo "(5) E-05 (b) NOT YET: the guest inside OpenShell failed closed (the program was never sent)"
+  grep -q "could not lock itself down" guest-undeclared.out || fail "(5a) the guest did not say why it refused"
+  grep -q "never confirmed its boundary" guest-undeclared.out || fail "(5a) the host did not say the program was never sent"
+  echo "(5a) held: undeclared, the guest failed closed and the program was never sent"
 fi
+
+echo "-- (5b) declared (--outer-syscall-filter): the guest runs under OpenShell's filter, at level 3"
+guest_run "--outer-syscall-filter" guest.out report.json
+grep -q "hello through the OpenShell guest" guest.out \
+  || fail "(5b) the declared guest did not run the program inside OpenShell"
+grep -q "refused by a filter already in force" guest.out || fail "(5b) the guest did not say whose filter is in force"
 if [ -s report.json ]; then
-  python3 - <<'PY' || fail "(5) the report does not say level 3, external"
+  python3 - <<'PY' || fail "(5b) the report is not level 3, external, with the guest's outer-filter word"
 import json
 r = json.load(open("report.json"))
 s = r["sandbox"]
-print("report:", json.dumps({k: s.get(k) for k in ("level", "backend", "host_guarantees", "properties")}, indent=1)[:1500])
+print("report:", json.dumps({k: s.get(k) for k in ("level", "backend", "host_guarantees", "guest_reported", "properties")}, indent=1)[:2000])
 assert s.get("level") == 3 and s.get("backend") == "external", s
+words = s.get("guest_reported") or []
+assert "an outer syscall filter, not its own" in words, words
+assert not any(w in words for w in ("no new programs", "no sockets but the channel")), words
+assert all(p["state"] == "unknown" for p in s["properties"].values()), s["properties"]
 PY
 else
-  fail "(5) no run report"
+  fail "(5b) no run report"
 fi
 openshell sandbox delete dlg >/dev/null 2>&1 || true
 

@@ -54,7 +54,16 @@ pub const SELF_APPLIED: &[&str] = &[
     // SANDBOX-STOP-1 at L2: the microVM guest caps its own data below the VM's free memory, so a
     // runaway allocation is refused to the allocator (and named) before the guest kernel runs out.
     "memory refused to the guest before its kernel runs out",
+    OUTER_FILTER,
 ];
+
+/// PS-E-05 (b), D-V2-83: what a Linux guest reports IN PLACE OF its own syscall filter's words when an outer
+/// wall refused that filter — the kernel answered EPERM, a filter already in force on the guest refusing to
+/// let it add another (NVIDIA OpenShell's sandbox does, read on a runner by routine run 8) — and its launcher
+/// declared that wall (`__guest --stdio-pipes --outer-syscall-filter`). It establishes nothing: the outer
+/// filter is the launcher's, measured by nobody here. Only a guest an external launcher started (L3) may say
+/// it; the host refuses it from a guest it started itself (`boundary.rs`).
+pub const OUTER_FILTER: &str = "an outer syscall filter, not its own";
 
 /// Text a GUEST chose — a word in its confinement report, a method name, a decoder's quotation of its
 /// frame — as it may reach the operator: control characters escaped, so it cannot break a line, move the

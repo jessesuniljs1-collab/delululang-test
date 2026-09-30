@@ -25,6 +25,7 @@ use std::io::{self, Read, Write};
 
 use delulu_runtime::channel::{
     read_frame, write_frame, FrameTooSlow, HostChannel, Open, Program, ReqBody, Request, Response, Within, CHANNEL_VERSION,
+    OUTER_FILTER,
 };
 
 /// A guest that has been told its generation and has not confirmed its boundary. It holds the channel
@@ -120,6 +121,17 @@ impl<C: Read + Write> Opened<C> {
         }
         let resp = host.answer(&req);
         match resp {
+            // D-V2-83: a guest standing under an outer wall's syscall filter in place of its own is one an
+            // external launcher started and declared that wall for. A guest the HOST started was given no such
+            // wall and no such word: its own filter is part of the boundary this host measures and claims.
+            Response::Ok(_) if need.measured_by_host && host.self_applied().contains(&OUTER_FILTER) => {
+                let why = format!(
+                    "`{OUTER_FILTER}` is a word only a guest an external launcher started may report (D-V2-83), and \
+                     this guest was started by this host"
+                );
+                let _ = write_frame(&mut self.conn, &Response::Error { code: "DL1401".into(), message: why.clone() });
+                Err(unconfirmed(format!("its confinement report was refused ({why})")))
+            }
             Response::Ok(_) => {
                 // D-V2-59: the report is accepted; does the boundary it completes have what the profile
                 // requires? Answered from the launch's words and the guest's, as the run report answers it.
@@ -297,6 +309,48 @@ mod tests {
         let (generation, p) = rx.recv().unwrap();
         assert_eq!(generation, GEN, "the guest was told this run's generation");
         assert_eq!(p, program());
+    }
+
+    /// D-V2-83: "an outer syscall filter, not its own" is an external launcher's guest's word. A guest this
+    /// host started is refused it — its own filter is part of the boundary the host claims — and is never
+    /// sent the program; at L3 the same report is confirmed, the word kept as the guest's.
+    #[test]
+    fn an_outer_filter_is_an_external_guests_word_alone() {
+        for measured_by_host in [true, false] {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (conn, t) = with_guest(move |g, open| {
+                let sink = ChannelSink::new(g);
+                let taken = sink.confined(&["no file writes", OUTER_FILTER], &open.generation).is_ok();
+                let sent = taken && sink.receive::<Program>().is_ok();
+                tx.send((taken, sent)).unwrap();
+            });
+            let mut host = HostChannel::new(LocalSink).with_generation(GEN);
+            let need = Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host };
+            match open(conn, GEN).unwrap().confirm(&mut host, &need) {
+                Ok(confirmed) => {
+                    assert!(!measured_by_host, "a guest this host started was confirmed with an outer filter");
+                    assert_eq!(confirmed.applied(), ["no file writes", OUTER_FILTER]);
+                    let _conn = confirmed.send_program(&program()).unwrap();
+                }
+                Err(e) => {
+                    assert!(measured_by_host, "an external launcher's guest was refused its word: {e}");
+                    assert!(e.to_string().contains("only a guest an external launcher started may report"), "{e}");
+                }
+            }
+            t.join().unwrap();
+            let (taken, sent) = rx.recv().unwrap();
+            assert_eq!((taken, sent), (!measured_by_host, !measured_by_host), "measured_by_host = {measured_by_host}");
+        }
+    }
+
+    /// D-V2-83: the word establishes nothing — the posture a guest's words answer is the same with it as
+    /// without it, so no future posture needle can be matched inside it by accident.
+    #[test]
+    fn an_outer_filter_establishes_nothing() {
+        let (without, _) = crate::policy::SandboxPolicy::posture(&[]);
+        let (with, _) = crate::policy::SandboxPolicy::posture(&[OUTER_FILTER]);
+        assert_eq!(with, without);
+        assert_eq!(properties(&[OUTER_FILTER], true), properties(&[], true));
     }
 
     /// RW 4.32, FRAME-DRIP-1: the guest's confinement report is a frame like any other — begun, it is

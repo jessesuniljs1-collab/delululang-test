@@ -73,6 +73,14 @@ pub const STDIO_READY: u8 = 0x06;
 /// `DELULU_GUEST_ARGS`.
 pub const STDIO_PIPES_FLAG: &str = "--stdio-pipes";
 
+/// PS-E-05 (b), D-V2-83: an external launcher's declaration, after [`STDIO_PIPES_FLAG`], that it starts the
+/// guest inside an outer wall whose syscall filter forbids the guest adding its own — NVIDIA OpenShell's
+/// sandbox does (routine run 8 read `seccomp` answered with EPERM there). Declared, a guest whose own filter
+/// is refused with EPERM while a filter is in force runs under that one and reports it as such
+/// ([`delulu_runtime::channel::OUTER_FILTER`]); undeclared, it fails closed as always. The launcher's word,
+/// like its wall: the host reports it as the guest's (`guest_reported`) at level 3 and measures none of it.
+pub const OUTER_FILTER_FLAG: &str = "--outer-syscall-filter";
+
 /// The channel of a guest started with [`STDIO_PIPES_FLAG`]: standard input for reading, and a copy of
 /// standard output for writing, with standard output itself pointed at standard error, so a stray
 /// print can never reach the channel. The read watchdog ends a guest whose host fell silent.
@@ -220,10 +228,41 @@ fn launch_external(
 pub fn run_guest(args: &[String]) -> i32 {
     // SANDBOX-STOP-1: from here a refused allocation ends this process with a status the host names.
     crate::ceiling::enter_guest_mode();
+    // D-V2-83: the outer-wall declaration is an external launcher's alone. A guest the HOST starts is
+    // started with fixed words and never needs it; a word a guest does not act on is refused, not ignored.
+    if args.iter().any(|a| a == OUTER_FILTER_FLAG) && args.first().map(String::as_str) != Some(STDIO_PIPES_FLAG) {
+        eprintln!(
+            "error: `{OUTER_FILTER_FLAG}` declares an external launcher's wall — only a guest an external launcher starts \
+             (`__guest {STDIO_PIPES_FLAG}`) takes it"
+        );
+        return 2;
+    }
     // PS-D-01: a guest an external launcher started, its channel two ordinary pipes.
     if args.first().map(String::as_str) == Some(STDIO_PIPES_FLAG) {
+        let outer = match &args[1..] {
+            [] => false,
+            [flag] if flag == OUTER_FILTER_FLAG => true,
+            rest => {
+                let shown: Vec<String> = rest.iter().map(|a| delulu_runtime::channel::shown(a, 64)).collect();
+                eprintln!(
+                    "error: the sandbox guest does not know `{}` — after `{STDIO_PIPES_FLAG}` it takes only \
+                     `{OUTER_FILTER_FLAG}`, once",
+                    shown.join(" ")
+                );
+                return 2;
+            }
+        };
+        // Where the guest applies no syscall filter of its own, an outer one has nothing to stand in for.
+        #[cfg(not(target_os = "linux"))]
+        if outer {
+            eprintln!(
+                "error: `{OUTER_FILTER_FLAG}`: on this operating system the guest applies no syscall filter of its own, \
+                 so there is nothing for an outer one to stand in for"
+            );
+            return 2;
+        }
         return match stdio_pipes_channel() {
-            Ok(conn) => serve_as_guest(conn, None, &[]),
+            Ok(conn) => serve_as_guest(conn, None, &[], outer),
             Err(e) => {
                 eprintln!("error: the sandbox guest cannot open its channel: {e}");
                 2
@@ -254,7 +293,7 @@ pub fn run_guest(args: &[String]) -> i32 {
             eprintln!("error: the sandbox guest cannot reach its host over its channel");
             return 2;
         }
-        return serve_as_guest(conn, None, &[]);
+        return serve_as_guest(conn, None, &[], false);
     }
     // The guest is the server on its own channel, as the foreign worker is: the HOST's wait is then
     // bounded by a connect deadline rather than by an accept that could never return.
@@ -280,7 +319,7 @@ pub fn run_guest(args: &[String]) -> i32 {
         eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
         return 2;
     }
-    serve_as_guest(conn, Some(&dir), &[])
+    serve_as_guest(conn, Some(&dir), &[], false)
 }
 
 /// The channel of a guest started with [`STDIO_FLAG`]: the pipes it inherited as standard input and
@@ -340,6 +379,7 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     mut conn: C,
     dir: Option<&std::path::Path>,
     measured: &[&'static str],
+    outer_filter: bool,
 ) -> i32 {
     // PS-E-01: the host opens with this run's generation and NO program. The program comes only after
     // this guest has locked itself down and the host has accepted its report of what it applied.
@@ -377,8 +417,17 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     #[cfg(not(target_os = "linux"))]
     let _ = dir;
 
-    // Fail closed — a guest that cannot be locked down does not run the program.
-    match crate::jail::lock_down_self() {
+    // Fail closed — a guest that cannot be locked down does not run the program. (D-V2-83: the one
+    // exception is an outer wall's filter its launcher declared, which `lock_down_self` checks is in force.)
+    match crate::jail::lock_down_self(outer_filter) {
+        Ok(applied) if applied == [delulu_runtime::channel::OUTER_FILTER] => {
+            eprintln!(
+                "sandbox: the guest's own syscall filter was refused by a filter already in force on it — the \
+                 outer wall its launcher declared (`{OUTER_FILTER_FLAG}`) stands in for it; the guest's own \
+                 filter is NOT installed"
+            );
+            own.extend(applied);
+        }
         Ok(applied) if !applied.is_empty() => {
             eprintln!("sandbox: the guest locked itself down — {}", applied.join("; "));
             own.extend(applied);

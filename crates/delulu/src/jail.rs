@@ -566,8 +566,16 @@ pub fn confine_filesystem(channel_dir: Option<&std::path::Path>) -> Option<Vec<&
 ///
 /// Fails closed: a host that cannot install the filter refuses the run and says so, because
 /// "the sandbox quietly did not apply" is the failure this phase exists to prevent.
+///
+/// PS-E-05 (b), D-V2-83 — one exception, and only when the guest's launcher declared it (`outer`): a guest
+/// started inside an outer wall that forbids adding a filter (NVIDIA OpenShell's sandbox answers `seccomp`
+/// with EPERM — routine run 8) runs under THAT wall's filter, and says so in its words
+/// ([`OUTER_FILTER`](delulu_runtime::channel::OUTER_FILTER), in place of its own filter's four). Only when the
+/// refusal is EPERM — the answer of a filter, not of this kernel's own checks — and the kernel reports a
+/// filter already in force on this process; anything else still fails closed, declared or not. It never
+/// skips a filter the guest CAN install: the fallback is taken only after installing its own was refused.
 #[cfg(target_os = "linux")]
-pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
+pub fn lock_down_self(outer: bool) -> Result<Vec<&'static str>, String> {
     use seccompiler::{SeccompAction, SeccompFilter};
     use std::collections::BTreeMap;
 
@@ -729,7 +737,22 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
     let program: seccompiler::BpfProgram =
         filter.try_into().map_err(|e| format!("the syscall filter could not be compiled: {e}"))?;
-    seccompiler::apply_filter(&program).map_err(|e| format!("the syscall filter could not be installed: {e}"))?;
+    if let Err(e) = seccompiler::apply_filter(&program) {
+        let why = format!("the syscall filter could not be installed: {e}");
+        // D-V2-83: EPERM from `seccomp` itself is a filter's refusal — `no_new_privs` was set just before, so
+        // the kernel's own permission check passes (without it the kernel answers EACCES, never EPERM).
+        // Declared, and with that filter in force, the outer wall stands in; nothing of the guest's own filter
+        // was installed, so none of its words are reported.
+        let refused_by_a_filter = matches!(&e, seccompiler::Error::Seccomp(io) if io.raw_os_error() == Some(libc::EPERM));
+        if !(outer && refused_by_a_filter) {
+            return Err(why);
+        }
+        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+        if !filter_in_force(&status) {
+            return Err(format!("{why}; and `/proc/self/status` shows no filter in force, so none stands in for it"));
+        }
+        return Ok(vec![delulu_runtime::channel::OUTER_FILTER]);
+    }
     // H1: `clone3` carries its flags in memory, where no filter can read them, so it is answered as if
     // the kernel had no such call — ENOSYS — and the C library makes its threads with `clone`, whose
     // flags the rule above does read. A second filter, because its answer differs from the first's.
@@ -746,10 +769,22 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     Ok(vec!["no new programs", "no debugger", "no namespace or module tricks", "no sockets but the channel"])
 }
 
+/// D-V2-83: does the kernel report a seccomp filter in force on this process? From its `/proc/self/status`
+/// text: `Seccomp:` is 2 (filter mode) and, where the kernel prints it (5.9 and later), `Seccomp_filters:` is
+/// at least one. Anything else — strict mode, no line, a malformed one — is no.
+#[cfg(target_os = "linux")]
+fn filter_in_force(status: &str) -> bool {
+    let field = |name: &str| {
+        status.lines().find_map(|l| l.strip_prefix(name).and_then(|rest| rest.strip_prefix(':')).map(str::trim))
+    };
+    field("Seccomp") == Some("2") && field("Seccomp_filters").is_none_or(|n| n.parse::<u32>().is_ok_and(|n| n >= 1))
+}
+
 /// Elsewhere the guest's confinement is entirely the host's doing (the Job Object, the Seatbelt
-/// profile), so there is nothing for it to apply to itself.
+/// profile), so there is nothing for it to apply to itself — and no filter of its own for an outer one to
+/// stand in for (the guest refuses `--outer-syscall-filter` here, D-V2-83).
 #[cfg(not(target_os = "linux"))]
-pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
+pub fn lock_down_self(_outer: bool) -> Result<Vec<&'static str>, String> {
     Ok(Vec::new())
 }
 
@@ -1214,6 +1249,30 @@ mod linux_tests {
         }
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    /// D-V2-83: an outer filter stands in for the guest's own only where the kernel reports one in force —
+    /// filter mode, and at least one filter where the kernel counts them. The other spellings are no.
+    #[test]
+    fn a_filter_in_force_is_filter_mode_with_a_filter() {
+        for (status, yes) in [
+            ("Name:\tdelulu\nSeccomp:\t2\nSeccomp_filters:\t1\n", true),
+            ("Seccomp:\t2\nSeccomp_filters:\t3\n", true),
+            // A kernel older than 5.9 prints no count; filter mode alone answers.
+            ("Seccomp:\t2\n", true),
+            ("Seccomp:\t0\nSeccomp_filters:\t0\n", false),
+            // Strict mode is not a filter a guest could run under.
+            ("Seccomp:\t1\nSeccomp_filters:\t0\n", false),
+            // Filter mode with no filter counted is a contradiction, not a wall.
+            ("Seccomp:\t2\nSeccomp_filters:\t0\n", false),
+            ("Seccomp:\t2\nSeccomp_filters:\tmany\n", false),
+            ("Seccomp:\t22\n", false),
+            ("NoSeccomp:\t2\n", false),
+            ("Seccomp_filters:\t1\n", false),
+            ("", false),
+        ] {
+            assert_eq!(super::filter_in_force(status), yes, "{status:?}");
+        }
+    }
 }
 
 /// PS-E-03 (`V2_OPENSHELL_STUDY.md` §4.3): the ESCAPED GUEST. A guest whose interpreter an attacker has
@@ -1262,7 +1321,7 @@ mod escaped_tests {
         if mode == "escaped" {
             let fs = super::confine_filesystem(Some(&chan));
             println!("LANDLOCK={}", fs.map(|a| a.join(",")).unwrap_or_else(|| "none".into()));
-            println!("SECCOMP={}", super::lock_down_self().is_ok());
+            println!("SECCOMP={}", super::lock_down_self(false).is_ok());
         }
         let ok = |name: &str, fd: libc::c_long| {
             println!("{name}={}", fd >= 0);

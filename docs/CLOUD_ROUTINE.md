@@ -120,7 +120,12 @@ another OS, and then takes about seven minutes itself (run 5).
   annotation (D-V2-47) — record each OS's verdict; the step before it prints that runner's sandbox
   properties (PS-E-01, D-V2-57) — record those too (a `tail_lines` of about 45 reaches both on a RED run;
   on a green one the cache save follows them, so ask for about 3,000 lines — saved to a file — and grep
-  `##[notice]`, run 4). Ask for a run by id (`get_workflow_run`) once it is
+  `##[notice]`, run 4). **Cheapest of all (run 9): both are ANNOTATIONS, and the REST API answers `curl` from the
+  VM** — `curl -s https://api.github.com/repos/jessesuniljs1-collab/delululang-test/check-runs/JOB_ID/annotations`
+  returns each test job's verdict and properties as JSON, no log at all (a job's id is its check run's); and
+  `curl -s ".../actions/runs?per_page=15"` (add `&event=schedule` for the nightly) and `.../actions/runs/ID/jobs` list
+  runs and jobs piped through `python3 -c` to one line each — without the whole commit messages an MCP listing
+  carries. Ask for a run by id (`get_workflow_run`) once it is
   known: a run listing carries every commit message in full.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
