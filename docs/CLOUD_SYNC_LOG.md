@@ -849,7 +849,8 @@ it on `origin` was made in the cloud and is listed below.
   (10) `dca734a` RW 4.39's rest: delulu lsp and delulu mcp bound what one message may hold;
   (11) `e6913a8` RW 4.39's rest, recorded: the LSP's and MCP's bounds; master green through 634e9f0;
   (12) `5d3e37f` the live documents E-06 overtook: HANDOFF, the routine's step 4, the Book;
-  (13) E-05's install facts, for its workflow
+  (13) `53d96e3` E-05's install facts, for its workflow; master green through eff5367;
+  (14) the run's last reading: master green through e6913a8; the listing quirk, again
 - Files and folders:
   A `crates/delulu-broker/src/ocsf.rs` (the mapping, `export`, `verify`), `crates/delulu/tests/audit_ocsf_cli.rs` (seven
     witnesses), `scripts/ocsf-validate.py` (checks an export against the published OCSF schema, read at run time)
@@ -886,8 +887,9 @@ it on `origin` was made in the cloud and is listed below.
     `CHANGELOG.md`, `docs/REMAINING_WORK.md` (4.39: the log's words left), `V2_LOG.md` — (11)
   M `HANDOFF.md` (*Where things stand*: E-06 complete), `docs/CLOUD_ROUTINE.md` (step 4: the same),
     `docs/book/THE_DELULULANG_BOOK.md` (the audit paragraph: the OCSF export, still verifiable) — (12);
-    `V2_OPENSHELL_STUDY.md` (§4.5: *For the workflow*) — (13)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(13)
+    `V2_OPENSHELL_STUDY.md` (§4.5: *For the workflow*) — (13); `docs/CLOUD_ROUTINE.md` (the listing quirk: a
+    workflow- or branch-filtered listing returned hours-old runs twice more) — (14)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(14)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,472 nodes, 12,976 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
@@ -915,8 +917,9 @@ it on `origin` was made in the cloud and is listed below.
   MEASURED — 3 hardware threads, 2.15x observed; Windows: all five established, ping-pong NOT MEASURED — the runner busy;
   the Linux jobs' notices not read this run). `ocsf.yml` `36678699774` (by hand, `3d84304`) — success, read from its log.
   `3d84304` `36678692933` and `634e9f0` `36680110785` — success; `ocsf.yml` on push: `634e9f0` `36680110806` and `eff5367`
-  `36681499372` — success. `eff5367` `36681499405` — complete, 16 jobs, none failed. Unread when this entry was written: `e6913a8`'s and `5d3e37f`'s
-  push runs and this commit's — the next run reads them first. No nightly since `36548984501` (none had fired by 07:00 UTC).
+  `36681499372` — success. `eff5367` `36681499405` and `e6913a8` `36682783273` (the LSP's and MCP's bounds' first push run) — complete, 16 jobs
+  each, none failed. Unread when this entry was written: `5d3e37f`'s, `53d96e3`'s and this commit's push runs (records
+  only) — the next run reads them first. No nightly since `36548984501` (none had fired by 07:00 UTC).
 - Open / next: (1) read the push runs above, and the next nightly (its `miri-slow` interprets `read_regular` and the
   store's write — both leave out `O_NONBLOCK` under Miri); (2) **PS-E's rest:** E-05 — OpenShell as a tested L3 and
   `sandbox policy --format openshell` (by hand: an `openshell.yml` that downloads the pinned release on a runner, as the

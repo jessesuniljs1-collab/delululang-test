@@ -258,7 +258,9 @@ fool. Keep this file short enough to read at the start of every run.
   `target/debug/deps` older than the last build (`find … -perm -u+x -mmin +N -delete`). A witness job's log: ask `get_job_logs`
   by job id with a large `tail_lines` — a long log comes back as a file to grep, a short one (a quick job, about 450
   lines) inline, so ask about 120 lines for a job that ran one small target. And a run listing filtered by `ci.yml`,
-  `branch` and `event` with `perPage` 1 returned a day-old run first (run 6): list by `event` alone, all workflows.
+  `branch` and `event` with `perPage` 1 returned a day-old run first (run 6): list by `event` alone, all workflows —
+  run 7 got hours-old runs twice more, once filtering `branch` + `event`, once `resource_id` `ci.yml` + `event`; the
+  unfiltered-by-workflow listing was right each time. To reach one run, page it: `perPage` 1, `page` N.
   The harness refuses a bare `sleep N` as a wait (run 4): wait on a background job's file with
   `until grep -q '^EXIT=' FILE; do sleep 5; done` (a timeout of up to ten minutes), or end the turn and
   be woken when a background command finishes.
