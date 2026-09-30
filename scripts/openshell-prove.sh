@@ -5,8 +5,8 @@
 # `delulu run` from the program's authority and its grants. This script asks NVIDIA's independent SMT
 # model the same question: given a boundary the operator wrote BY HAND (below — this repository's own
 # text), does the export stay inside it? And it proves the question can be answered no: every mutation of
-# the export that widens it (a preset that adds HEAD and OPTIONS, a writable /tmp, another binary, a host
-# the boundary lacks) must come back `exceeds_boundary`, and a field the format does not have must be
+# the export that widens it (a preset that adds HEAD and OPTIONS, a granted read made writable, another
+# binary, a host the boundary lacks) must come back `exceeds_boundary`, and a field the format does not have must be
 # refused by the prover's parser — the same fail-closed parser OpenShell's runtime uses — so a
 # `within_boundary` also says the document is OpenShell's format.
 #
@@ -33,11 +33,17 @@ fail() {
 expect() {
   local want="$1" cand="$2" bound="$3" word="${4:-}" out code result
   set +e
-  out="$("$PROVER" check "$cand" --boundary "$bound" --output json 2>&1)"
+  # The JSON is stdout alone: the prover's solver prints warnings on stderr (run 1 on a runner: the two
+  # merged, and every answer read as "unparsed" though each was the expected one).
+  out="$("$PROVER" check "$cand" --boundary "$bound" --output json 2>"$work/stderr")"
   code=$?
   set -e
   echo "-- $cand against $bound: exit $code"
   echo "$out"
+  if [ -s "$work/stderr" ]; then
+    echo "(stderr)"
+    cat "$work/stderr"
+  fi
   result="$(printf '%s' "$out" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("result", "?"))
 except Exception: print("unparsed")')"
@@ -146,11 +152,16 @@ mutate a.yaml a-preset.yaml "$rules_block" '        access: read-only
       - path: "/usr/local/bin/delulu"
   "delulu_https_2":'
 expect exceeds_boundary a-preset.yaml boundary-a.yaml 'HEAD|OPTIONS'
-mutate a.yaml a-tmp.yaml '  read_write:
+# A granted READ made writable. (A path the boundary does not list at all is `unsupported`, not
+# `exceeds_boundary` — the prover compares only paths both policies name, since a link in the image could
+# move one under another; run 1 answered exactly that for an added `/tmp`.)
+mutate a.yaml a-write.yaml '    - "/sandbox/data"
+' ''
+mutate a-write.yaml a-write2.yaml '  read_write:
     - "/sandbox/out"' '  read_write:
-    - "/sandbox/out"
-    - "/tmp"'
-expect exceeds_boundary a-tmp.yaml boundary-a.yaml /tmp
+    - "/sandbox/data"
+    - "/sandbox/out"'
+expect exceeds_boundary a-write2.yaml boundary-a.yaml /sandbox/data
 sed 's#      - path: "/usr/local/bin/delulu"#      - path: "/usr/bin/curl"#' a.yaml > a-curl.yaml
 grep -q '/usr/bin/curl' a-curl.yaml || fail "the binary mutation did not land"
 expect exceeds_boundary a-curl.yaml boundary-a.yaml /usr/bin/curl

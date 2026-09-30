@@ -706,7 +706,7 @@
     {"id":"file:scripts/microvm/redteam/hostile.sh","kind":"other","name":"hostile.sh","path":"scripts/microvm/redteam/hostile.sh","lines":110},
     {"id":"file:scripts/microvm/redteam/probe.sh","kind":"other","name":"probe.sh","path":"scripts/microvm/redteam/probe.sh","lines":42},
     {"id":"file:scripts/ocsf-validate.py","kind":"other","name":"ocsf-validate.py","path":"scripts/ocsf-validate.py","lines":316},
-    {"id":"file:scripts/openshell-prove.sh","kind":"other","name":"openshell-prove.sh","path":"scripts/openshell-prove.sh","lines":208},
+    {"id":"file:scripts/openshell-prove.sh","kind":"other","name":"openshell-prove.sh","path":"scripts/openshell-prove.sh","lines":219},
     {"id":"file:scripts/package-toolchain.sh","kind":"other","name":"package-toolchain.sh","path":"scripts/package-toolchain.sh","lines":156},
     {"id":"file:tests/conformance/witnesses.toml","kind":"other","name":"witnesses.toml","path":"tests/conformance/witnesses.toml","lines":2862,"entrenched":{"owner":"@PENDING-PUBLIC-project-lead","pattern":"/tests/conformance/witnesses.toml","file":".github/CODEOWNERS","line":37}},
     {"id":"file:tests/core-invariance/SNAPSHOT.txt","kind":"other","name":"SNAPSHOT.txt","path":"tests/core-invariance/SNAPSHOT.txt","lines":10912},
