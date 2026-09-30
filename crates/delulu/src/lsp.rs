@@ -13,7 +13,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::rc::Rc;
 
 use serde_json::{json, Value};
@@ -1231,24 +1231,53 @@ impl Server {
 
 // ===== wire helpers ========================================================
 
+/// The largest message the server takes, and the longest header line (RW 4.39's rest, routine run 7). The
+/// server allocated whatever `Content-Length` said before reading a byte — `18446744073709551615` panicked
+/// it, and a large number made it hold that much for a client that sent nothing. Past a bound the session
+/// ends in words: a stream whose framing cannot be trusted cannot be resynchronised.
+const MAX_MESSAGE: u64 = 64 << 20;
+const MAX_HEADER_LINE: u64 = 8 << 10;
+
 fn read_message(reader: &mut impl BufRead) -> Option<String> {
-    let mut content_length: Option<usize> = None;
+    let mut content_length: Option<u64> = None;
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line).ok()? == 0 {
+        if reader.by_ref().take(MAX_HEADER_LINE).read_line(&mut line).ok()? == 0 {
             return None; // EOF
+        }
+        if !line.ends_with('\n') && line.len() as u64 >= MAX_HEADER_LINE {
+            eprintln!("error: a header line exceeds the {} KiB bound — the session ends", MAX_HEADER_LINE >> 10);
+            return None;
         }
         let line = line.trim_end();
         if line.is_empty() {
             break;
         }
         if let Some(v) = line.strip_prefix("Content-Length:") {
-            content_length = v.trim().parse().ok();
+            match v.trim().parse::<u64>() {
+                Ok(n) => content_length = Some(n),
+                Err(_) => {
+                    eprintln!(
+                        "error: a Content-Length that is not a number within the {} MiB bound exceeds what this \
+                         server reads — the session ends",
+                        MAX_MESSAGE >> 20
+                    );
+                    return None;
+                }
+            }
         }
     }
     let n = content_length?;
-    let mut buf = vec![0u8; n];
-    reader.read_exact(&mut buf).ok()?;
+    if n > MAX_MESSAGE {
+        eprintln!("error: a message of {n} bytes exceeds the {} MiB bound — the session ends", MAX_MESSAGE >> 20);
+        return None;
+    }
+    // Read what arrives, never allocate what was merely promised.
+    let mut buf = Vec::new();
+    reader.by_ref().take(n).read_to_end(&mut buf).ok()?;
+    if buf.len() as u64 != n {
+        return None; // the client hung up inside a message
+    }
     String::from_utf8(buf).ok()
 }
 

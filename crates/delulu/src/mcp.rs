@@ -23,7 +23,7 @@
 //! **Stateless.** `tools/list` and `tools/call` answer whether or not `initialize` came first, and
 //! `tools/list` is the same list, in the same order, every time.
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 
 use serde_json::{json, Value};
 
@@ -460,12 +460,34 @@ pub fn run_mcp(args: &[String]) -> i32 {
     let tree = delulu_survey::find_source_tree();
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
+    let mut input = stdin.lock();
+    loop {
+        // RW 4.39's rest (routine run 7): a line was read whole whatever its length — a 300 MiB one took
+        // the server to 333 MB. Read at most the bound; past it, skip to the line's end without holding it,
+        // answer in words, and go on.
+        let mut raw = Vec::new();
+        match input.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut raw) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        if !raw.ends_with(b"\n") && raw.len() as u64 > MAX_LINE {
+            if skip_line(&mut input).is_err() {
+                break;
+            }
+            let r = json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600,
+                "message": format!("a request line exceeds the {} MiB bound, and was not read", MAX_LINE >> 20) } });
+            let mut out = stdout.lock();
+            if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {
+                break;
+            }
+            continue;
+        }
+        let Ok(line) = String::from_utf8(raw) else { break };
+        let line = line.trim_end_matches(['\n', '\r']);
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match serde_json::from_str::<Value>(&line) {
+        let reply = match serde_json::from_str::<Value>(line) {
             Err(e) => Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("not JSON: {e}") } })),
             Ok(msg) => handle(&msg, tree.as_deref()),
         };
@@ -478,6 +500,29 @@ pub fn run_mcp(args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// The longest request line `delulu mcp` reads (RW 4.39's rest).
+const MAX_LINE: u64 = 16 << 20;
+
+/// Discard the rest of a line — to its end or the input's — holding no more than one buffer of it.
+fn skip_line(r: &mut impl std::io::BufRead) -> std::io::Result<()> {
+    loop {
+        let buf = r.fill_buf()?;
+        if buf.is_empty() {
+            return Ok(());
+        }
+        match buf.iter().position(|&b| b == b'\n') {
+            Some(i) => {
+                r.consume(i + 1);
+                return Ok(());
+            }
+            None => {
+                let n = buf.len();
+                r.consume(n);
+            }
+        }
+    }
 }
 
 /// One message in, at most one reply out. A notification (no `id`) is never answered.

@@ -184,3 +184,33 @@ fn inside_the_source_tree_the_survey_and_doctor_are_tools() {
     assert_eq!(opt["isError"], true);
     assert!(opt["content"][0]["text"].as_str().unwrap().contains("may not begin with `-`"), "{opt}");
 }
+
+/// RW 4.39's rest (routine run 7): a request line was read whole whatever its length — the red team's
+/// 300 MiB line took the server to 333 MB. A line is bounded now: one past the bound is answered with an
+/// error naming the bound, what follows it is still served, and the line is never held whole.
+#[test]
+fn a_request_line_past_the_bound_is_refused_and_the_session_goes_on() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("delulu mcp starts");
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        let chunk = vec![b'x'; 1 << 20];
+        for _ in 0..17 {
+            stdin.write_all(&chunk).unwrap();
+        }
+        stdin.write_all(b"\n").unwrap();
+        writeln!(stdin, "{}", json!({ "jsonrpc": "2.0", "id": 7, "method": "ping" })).unwrap();
+    }
+    let out = child.wait_with_output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let replies: Vec<Value> = text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
+    assert_eq!(replies.len(), 2, "one error, then the ping answered: {text}");
+    let msg = replies[0]["error"]["message"].as_str().unwrap_or_default();
+    assert!(msg.contains("exceeds") && msg.contains("MiB"), "the error names the bound: {}", replies[0]);
+    assert_eq!(replies[1]["id"], 7, "the session goes on: {}", replies[1]);
+}

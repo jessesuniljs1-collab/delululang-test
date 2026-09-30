@@ -1614,3 +1614,29 @@ fn a_code_action_with_no_edit_is_never_preferred() {
     }
     c.shutdown();
 }
+
+/// RW 4.39's rest (routine run 7): the server allocated whatever a message's `Content-Length` said BEFORE
+/// reading a byte of it — `18446744073709551615` panicked it (the red-team pass on FRAME-DRIP-1), and any
+/// large number made it allocate that much for a client that sends nothing. A message is bounded now, and
+/// one past the bound ends the session in words, not a panic.
+#[test]
+fn a_content_length_past_the_bound_is_refused_in_words_not_allocated() {
+    for length in ["18446744073709551615", "1073741825"] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .arg("lsp")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("delulu lsp starts");
+        {
+            let mut stdin = child.stdin.take().unwrap();
+            write!(stdin, "Content-Length: {length}\r\n\r\n{{\"jsonrpc\":\"2.0\"}}").unwrap();
+        }
+        let out = child.wait_with_output().unwrap();
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("panicked"), "Content-Length {length}: the server panicked: {err}");
+        assert_ne!(out.status.code(), Some(101), "Content-Length {length}: a panic's exit: {err}");
+        assert!(err.contains("exceeds") && err.contains("bound"), "Content-Length {length}: refused in words: {err}");
+    }
+}
