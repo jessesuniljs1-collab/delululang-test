@@ -365,3 +365,102 @@ fn the_launcher_started_is_the_file_that_was_hashed() {
     assert_eq!(out.status.code(), Some(0), "{}", text(&out));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// Which processes hold `p` open, as Windows answers it (`FileProcessIdsUsingFileInformation`) — the
+/// Windows witness's view of the host, as `/proc/<pid>/fd` is the Linux one's. Asked through a handle
+/// that reads attributes only, which takes part in no sharing check: it cannot stop the host opening
+/// the file, and the host's open cannot stop it.
+#[cfg(windows)]
+fn holders(p: &Path) -> Vec<usize> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    #[repr(C)]
+    struct IoStatus {
+        status: isize,
+        information: usize,
+    }
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationFile(h: *mut std::ffi::c_void, io: *mut IoStatus, info: *mut std::ffi::c_void, len: u32, class: i32) -> i32;
+    }
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    const FILE_PROCESS_IDS_USING_FILE_INFORMATION: i32 = 47;
+    let Ok(f) = std::fs::OpenOptions::new().access_mode(FILE_READ_ATTRIBUTES).share_mode(7).open(p) else {
+        return Vec::new();
+    };
+    // { ULONG count; ULONG_PTR ids[] } — the count in the first word's low half, the ids after it.
+    let mut buf = vec![0usize; 1024];
+    let mut io = IoStatus { status: 0, information: 0 };
+    // SAFETY: a handle this function owns, a buffer of the length given, an out-parameter on the stack.
+    let st = unsafe {
+        NtQueryInformationFile(
+            f.as_raw_handle(),
+            &mut io,
+            buf.as_mut_ptr().cast(),
+            (buf.len() * std::mem::size_of::<usize>()) as u32,
+            FILE_PROCESS_IDS_USING_FILE_INFORMATION,
+        )
+    };
+    if st < 0 {
+        return Vec::new();
+    }
+    let n = (buf[0] as u32 as usize).min(buf.len() - 1);
+    buf[1..=n].to_vec()
+}
+
+/// PS-E-04 on Windows, which has no `fexecve`: the file started is the file that was hashed, because the
+/// host holds the launcher open, sharing reads only, from the hash until the run ends — so it cannot be
+/// written, or renamed or deleted away (a rename over it is a deletion), in between. The window is held
+/// open by a launcher that takes a while to hash (the binary, then 64 MiB its loader never reads), and B
+/// is renamed over it the moment Windows says the host holds it — then tried again for as long as the
+/// host does. B is not a guest at all (it prints a line and exits), so if B is what starts, the run fails.
+#[cfg(windows)]
+#[test]
+fn the_launcher_started_is_the_file_that_was_hashed_on_windows() {
+    let d = lab("swap-win");
+    hello(&d);
+    let exe = env!("CARGO_BIN_EXE_delulu");
+    let lnch = d.join("lnch.exe");
+    let mut a = std::fs::read(exe).unwrap();
+    a.extend(std::iter::repeat_n(0u8, 64 << 20));
+    std::fs::write(&lnch, &a).unwrap();
+    let b = d.join("b.exe");
+    std::fs::copy(r"C:\Windows\System32\hostname.exe", &b).unwrap();
+    let pin = blake3::hash(&a).to_hex().to_string();
+    let words = format!("external:{} __guest --stdio-pipes", lnch.display().to_string().replace('\\', "/"));
+    assert_eq!(words.split_whitespace().count(), 3, "the launcher's words are split on whitespace: {words}");
+    let mut host = Command::new(exe)
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &words, "--launcher-digest", &pin])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let hpid = host.id() as usize;
+    let mut seen = false;
+    let mut swapped = false;
+    while host.try_wait().unwrap().is_none() {
+        if !seen {
+            seen = holders(&lnch).contains(&hpid);
+        }
+        if seen && !swapped {
+            swapped = std::fs::rename(&b, &lnch).is_ok();
+        }
+        std::thread::yield_now();
+    }
+    let out = host.wait_with_output().unwrap();
+    assert!(seen, "the host was never seen holding the launcher open, so nothing was tried: {}", text(&out));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "A was hashed and pinned; B, renamed over it once the host was seen holding it (the rename {}), must not \
+         be what ran: {}",
+        if swapped { "succeeded" } else { "never succeeded" },
+        text(&out)
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("hi"), "{}", text(&out));
+    let _ = std::fs::remove_dir_all(&d);
+}
