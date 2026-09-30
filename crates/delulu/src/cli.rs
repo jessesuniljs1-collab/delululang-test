@@ -3453,8 +3453,16 @@ fn render_required_grants(report: &Json) -> String {
 /// in its text; what it receives is the operator's decision, and only `scopes` — computed from the
 /// manifest and the grant — may be read as the second. A computed argument (`root.fs_read(dir)`)
 /// is simply absent here: this walk reports literals and never guesses.
+///
+/// **What it cannot see, it says it cannot see** (SCOPE-HIDDEN-1, routine run 8). A minting site
+/// whose scope is computed, or whose receiver is a `Root` under another name (a helper's parameter
+/// `r`, a `let` alias), is not a literal this walk can attribute — so its KIND goes into `hidden`,
+/// and [`required_grants`] prints that kind's placeholder beside the literals it did see. Before,
+/// one literal site of a kind silenced the placeholder for every other site of it, and
+/// `authority --grants` named `fs.read=./data` alone for a program that also read `./secret`.
 struct ScopeWalk {
     found: BTreeMap<String, Vec<String>>,
+    hidden: std::collections::BTreeSet<String>,
 }
 
 impl ScopeWalk {
@@ -3463,6 +3471,10 @@ impl ScopeWalk {
         if !slot.iter().any(|s| s == lit) {
             slot.push(lit.to_string());
         }
+    }
+
+    fn hide(&mut self, kind: &str) {
+        self.hidden.insert(kind.to_string());
     }
 
     fn walk_block(&mut self, b: &delulu_syntax::ast::Block) {
@@ -3505,12 +3517,11 @@ impl ScopeWalk {
                 // The receiver is the `Root` slice by NAME, not by type: this walk runs on the
                 // parsed module beside `stamp_plugins`, and the name is what the source shows. A
                 // shadowed binding would over-report rather than under-report, which is the safe
-                // direction for a field labelled *requested*.
+                // direction for a field labelled *requested*. A minting method on ANY other receiver
+                // is a `Root` under another name (only `Root` has these methods, per the primitive
+                // table): its literal is not attributed, and its kind is marked hidden.
                 let is_root = matches!(&**recv, Var { path, .. }
                     if path.segs.len() == 1 && path.segs[0].name == "root");
-                if !is_root {
-                    return;
-                }
                 let kind = match name.name.as_str() {
                     "fs_read" => "FsRead",
                     "fs_write" => "FsWrite",
@@ -3523,20 +3534,24 @@ impl ScopeWalk {
                     "foreign" => "ForeignLoad",
                     _ => return,
                 };
+                if !is_root {
+                    self.hide(kind);
+                    return;
+                }
                 let Some(first) = args.first() else { return };
                 match first {
                     List { items, .. } => {
                         for it in items {
-                            if let Some(s) = literal_str(it) {
-                                self.record(kind, &s);
+                            match literal_str(it) {
+                                Some(s) => self.record(kind, &s),
+                                None => self.hide(kind),
                             }
                         }
                     }
-                    other => {
-                        if let Some(s) = literal_str(other) {
-                            self.record(kind, &s);
-                        }
-                    }
+                    other => match literal_str(other) {
+                        Some(s) => self.record(kind, &s),
+                        None => self.hide(kind),
+                    },
                 }
             }
             List { items, .. } => items.iter().for_each(|it| self.walk_expr(it)),
@@ -3576,8 +3591,12 @@ impl ScopeWalk {
     }
 }
 
-fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> BTreeMap<String, Vec<String>> {
-    let mut w = ScopeWalk { found: BTreeMap::new() };
+/// The literal scopes per kind, and the kinds with a minting site whose scope the source does not
+/// show (SCOPE-HIDDEN-1).
+fn requested_scopes(
+    modules: &[&delulu_syntax::ast::Module],
+) -> (BTreeMap<String, Vec<String>>, std::collections::BTreeSet<String>) {
+    let mut w = ScopeWalk { found: BTreeMap::new(), hidden: Default::default() };
     for m in modules {
         for item in &m.items {
             match item {
@@ -3601,7 +3620,7 @@ fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> BTreeMap<String,
         v.sort();
         v.dedup();
     }
-    w.found
+    (w.found, w.hidden)
 }
 
 /// The exact `--grant` flags this program needs, derived from its own authority report.
@@ -3612,10 +3631,15 @@ fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> BTreeMap<String,
 /// not. This is what makes that sentence true.
 ///
 /// Where a scope is visible in the source the flag is spelled with it; where it is not, the flag
-/// carries its placeholder (`fs.read=PATH`) — a shape to fill in, not a value to copy. The list is
+/// carries its placeholder (`fs.read=PATH`) — a shape to fill in, not a value to copy. A kind with
+/// literals AND a site the source does not show carries both (SCOPE-HIDDEN-1). The list is
 /// what the program **requires**, never what it has been granted: nothing here reports a decision
 /// the operator has not made.
-fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+fn required_grants(
+    report: &Json,
+    requested: &BTreeMap<String, Vec<String>>,
+    hidden: &std::collections::BTreeSet<String>,
+) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     fn push(out: &mut Vec<String>, s: String) {
         if !out.contains(&s) {
@@ -3638,11 +3662,18 @@ fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> 
                 all.push(s);
             }
         }
-        if all.is_empty() {
-            vec![placeholder.to_string()]
-        } else {
-            all
+        if all.is_empty() || hidden.contains(kind) {
+            all.push(placeholder.to_string());
         }
+        all
+    };
+    // The device kinds read the walk alone; a hidden site adds the placeholder the same way.
+    let devices_for = |kind: &str| -> Vec<String> {
+        let mut all = requested.get(kind).cloned().unwrap_or_default();
+        if all.is_empty() || hidden.contains(kind) {
+            all.push("DEVICE".into());
+        }
+        all
     };
 
     let kinds: Vec<String> = report["capabilities"]
@@ -3681,17 +3712,17 @@ fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> 
                 }
             }
             "Actuator" => {
-                for s in requested.get("Actuator").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                for s in devices_for("Actuator") {
                     push(&mut out, format!("actuator={s}:DIM=lo..hi"));
                 }
             }
             "Sensor" => {
-                for s in requested.get("Sensor").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                for s in devices_for("Sensor") {
                     push(&mut out, format!("sensor={s}"));
                 }
             }
             "Compute" => {
-                for s in requested.get("Compute").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                for s in devices_for("Compute") {
                     push(&mut out, format!("compute={s}:memory_bytes=N"));
                 }
             }
@@ -3776,7 +3807,7 @@ pub(crate) fn required_grants_of(file: &str, checked: &delulu_check::Checked) ->
 }
 
 fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
-    let requested = requested_scopes(modules);
+    let (requested, hidden) = requested_scopes(modules);
     if let Some(caps) = report["capabilities"].as_array_mut() {
         for c in caps.iter_mut() {
             let kind = c["kind"].as_str().unwrap_or("").to_string();
@@ -3786,7 +3817,7 @@ fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
             }
         }
     }
-    let grants = required_grants(report, &requested);
+    let grants = required_grants(report, &requested, &hidden);
     if let Some(obj) = report.as_object_mut() {
         obj.insert("requested_scopes".into(), json!(requested));
         obj.insert("required_grants".into(), json!(grants));

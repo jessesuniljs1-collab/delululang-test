@@ -178,6 +178,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   operation of a running broker daemon — and, with a reader attached, `secrets set` would have written the store's
   secrets into it** (RW 4.38's remainder). The store is now read and written only if it is a regular file, and anything
   else is refused in words (D-V2-77's rule, shared with the audit chain).
+- **Fixed: `delulu authority --grants` could under-report what a program reaches for** (SCOPE-HIDDEN-1). One literal
+  scope of a kind silenced the placeholder for every other site of that kind: a second site that computed its scope,
+  or minted through a `Root` under another name (a helper's parameter `r`), was dropped — so the list named
+  `fs.read=./data` alone for a program that also reads `./secret`. The runtime still refused the unnamed path (DL0703);
+  the list an operator reads before running unfamiliar code now carries the kind's placeholder (`fs.read=PATH`,
+  `net=HOST`, `sensor=DEVICE`) beside the literals it can see. `requested_scopes` is unchanged: the literals written at
+  `root`'s own sites (D-V2-81).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

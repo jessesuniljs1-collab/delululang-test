@@ -777,6 +777,10 @@ wins, and you should update the memory to match.
   run 7, RW 4.38's rest): the daemon re-reads the store before every secret operation on its one-connection loop, so a
   FIFO there held the e-stop's revoke; and a FIFO with a READER would have received the store's secrets on `secrets set`.
   One shared reader now (`audit::read_regular`), and a write that judges what it opened before it truncates.
+  **Routine run 8 (2026-09-30): SCOPE-HIDDEN-1** — `authority --grants` named `fs.read=./data` alone for a program that
+  also read `./secret` through a helper's `r: Root`: the scope walk matched the receiver `root` by name and printed a
+  placeholder only for a kind with no literal. The runtime refused the unnamed path; the review list under-reported. A
+  hidden site now leaves its kind's placeholder beside the literals (D-V2-81).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different

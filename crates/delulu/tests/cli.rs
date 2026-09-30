@@ -1386,6 +1386,73 @@ fn main(root: Root) ! {Load} {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// SCOPE-HIDDEN-1 (routine run 8). `required_grants` promises a placeholder wherever a scope is not
+/// visible in the source — and printed none when ONE site of a kind was a literal: a second site that
+/// computed its scope, or minted through a `Root` under another name (a helper's parameter `r`), was
+/// dropped, so `authority --grants` named `fs.read=./data` alone for a program that also reads
+/// `./secret`. The runtime still refused the unnamed path (DL0703), but the list an operator reads
+/// before running unfamiliar code under-reported what it reaches for. Each hidden site now adds the
+/// kind's placeholder, beside the literals that are visible — never a guessed value.
+#[test]
+fn a_scope_the_source_does_not_show_leaves_its_placeholder_beside_the_literals() {
+    let dir = std::env::temp_dir().join(format!("delulu-scope-hidden-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cases: &[(&str, &str, &[&str])] = &[
+        (
+            // A `Root` reached under another name: the literal is not attributed, the kind is flagged.
+            "renamed.delulu",
+            "module renamed\n\nfn helper(r: Root) ! {Read} {\n    let s = r.fs_read(\"./secret\")\n    \
+             let _ = s.read_text(\"./secret/k\")\n}\n\nfn main(root: Root) ! {Read} {\n    \
+             let one = root.fs_read(\"./data\")\n    helper(root)\n}\n",
+            &["fs.read=./data", "fs.read=PATH"],
+        ),
+        (
+            // A computed scope beside a literal one, for a path and for a host list.
+            "computed.delulu",
+            "module computed\n\nfn pick(n: Int) -> Str {\n    if n > 1 { \"./a\" } else { \"b.example.com\" }\n}\n\n\
+             fn main(root: Root) ! {Read, Net} {\n    let one = root.fs_read(\"./data\")\n    \
+             let two = root.fs_read(pick(2))\n    let h = root.http([\"example.com\", pick(1)])\n}\n",
+            &["fs.read=./data", "fs.read=PATH", "net=example.com", "net=HOST"],
+        ),
+        (
+            // The control: every site literal, through `root` — no placeholder may appear.
+            "literal.delulu",
+            "module literal\n\nfn main(root: Root) ! {Read, Net} {\n    let one = root.fs_read(\"./data\")\n    \
+             let h = root.http([\"example.com\"])\n}\n",
+            &["fs.read=./data", "net=example.com"],
+        ),
+    ];
+    for (name, src, want) in cases {
+        let f = dir.join(name);
+        std::fs::write(&f, src).unwrap();
+        let o = delulu(&["authority", f.to_str().unwrap(), "--json"]);
+        assert!(o.status.success(), "{name}: {}", stderr(&o));
+        let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
+        let mut got: Vec<String> = v["authority"]["required_grants"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name}: no required_grants: {v}"))
+            .iter()
+            .filter_map(|g| g.as_str().map(str::to_string))
+            .collect();
+        got.sort();
+        let mut want: Vec<String> = want.iter().map(|s| s.to_string()).collect();
+        want.sort();
+        assert_eq!(got, want, "{name}: the flags must name every literal AND say where a scope is not visible");
+        // The human channel is the one an operator reads, and says the same.
+        let human = delulu(&["authority", f.to_str().unwrap(), "--grants"]);
+        let text = stdout(&human);
+        for flag in &want {
+            assert!(text.contains(&format!("--grant {flag}")), "{name}: `--grants` must print `--grant {flag}`:\n{text}");
+        }
+    }
+    // `requested_scopes` stays what it says: the literals written at `root`'s own sites, and nothing guessed.
+    let o = delulu(&["authority", dir.join("renamed.delulu").to_str().unwrap(), "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(v["authority"]["requested_scopes"]["FsRead"], serde_json::json!(["./data"]), "{v}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// REMAINING_WORK 6.13: under `--trace-effects` a filesystem record carries the path it RESOLVED
 /// to and the capability's scope root, so a miss (a path spelled relative to the working directory
 /// instead of to the capability) is explainable from the trace alone. Additive: a record that is

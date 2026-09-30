@@ -1673,6 +1673,24 @@ name the effect too. Other effects (`Actuate`, `ForeignBind`, `Declassify`) and 
 Events. Only synchronous-class uses are recorded (invariant 26), so an allowed read that no Guard gates leaves no record
 and no event — the export shows what the chain holds.
 
+## D-V2-81 — SCOPE-HIDDEN-1: a minting site the source does not show leaves its kind's placeholder beside the literals — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+`required_grants` promised (NE-10) that where a scope is visible in the source the flag is spelled with it and where it
+is not the flag carries its placeholder — and `authority`'s scope walk printed a placeholder only when it had found NO
+literal of a kind. Found building PS-E-05 (whose export needed to know whether a program's literal scopes are the whole
+of what it asks for): a program with `root.fs_read("./data")` and a helper `fn helper(r: Root)` calling
+`r.fs_read("./secret")` was reported as needing `fs.read=./data` alone; so was one beside `root.fs_read(pick(2))`.
+Decided: the walk marks a KIND hidden when a minting site's scope is computed, or when its receiver is not the bare
+name `root` (only `Root` has the minting methods, per the primitive table, so such a receiver is a `Root` under another
+name); `required_grants` then adds the kind's placeholder beside the literals. **The literal at a renamed receiver is
+not attributed** — the walk runs on the parsed module, not the typed one, and a guessed literal would tell an operator
+to grant a specific scope on inference; a placeholder tells them a scope exists that they must decide. The placeholder
+is added only for a kind the checker's report names (kinds are static and sound, P16), so it never invents a
+capability. `requested_scopes` keeps its meaning: the literals at `root`'s own sites. Witness
+`cli::a_scope_the_source_does_not_show_leaves_its_placeholder_beside_the_literals` (a renamed receiver, a computed path
+and a computed host beside literals, and an all-literal control); mutants M58–M61 red. No program in the repository's
+corpus changes (0 of 251 have a mixed kind).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -929,3 +929,26 @@ it on `origin` was made in the cloud and is listed below.
   — a whole-write bound; Windows `WriteFile` blocks), 4.37 (the host's writes to a guest — needs the escaped-guest
   harness to stop reading), 4.39's last item (the broker log's three wordings of one drop), 4.40 (the broker's queue); (4) RW 7.17 — keep
   watching arm64's `estop_cli`. **For the owner:** D-V2-78 to D-V2-80 are this run's decisions.
+
+### 2026-09-30 — routine run 8: CI read green; SCOPE-HIDDEN-1 (D-V2-81); PS-E-05 (a) — the OpenShell export
+- Session: `https://claude.ai/code/session_014qVST2xeSNjC4MRacqLH8g`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the VM's checkout was the harness branch `claude/stoic-ptolemy-1lso0u`, at `master`'s head;
+  each commit is pushed to both)   Pull request: none   Merged: n/a
+- Base: `381fed8` (routine run 7's last commit)
+- Commits: (1) SCOPE-HIDDEN-1: authority names a scope it cannot see, beside the literals it can (D-V2-81)
+- Files and folders:
+  M `crates/delulu/src/cli.rs` (`ScopeWalk.hidden`, `requested_scopes` returns the hidden kinds, `required_grants`
+    adds a hidden kind's placeholder), `crates/delulu/tests/cli.rs` (the witness) — (1)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 SCOPE-HIDDEN-1), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-81),
+    `docs/DELULULANG_V2/V2_LOG.md` — (1)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,476 nodes, 13,071 edges); `doctor --check` ok, 26 checks passed.
+  After the last edit: in each commit's message.
+- Verified: **CI on arrival:** `5d3e37f` `36683068019`, `53d96e3` `36683327300`, `381fed8` `36684530677` — success; the
+  nightly `36694905248` (`381fed8`) in progress. `gh`: absent. Run 7's witnesses re-run in the VM — all passed. **(1):**
+  the witness red on `381fed8`; M58–M61 red, restored; clippy clean; the full suite alone 2,082 passed, 0 failed,
+  15 ignored (155 binaries), cargo exit 0.
+- Redo on the laptop: nothing beyond the suite.
+- For the laptop's memory: `HANDOFF.md` §11.4 (SCOPE-HIDDEN-1).
+- Open / next: (being written — this entry is updated with each slice of the run).

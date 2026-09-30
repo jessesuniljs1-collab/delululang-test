@@ -3684,3 +3684,29 @@ the rest without holding it, answers -32600 naming the bound, and serves the nex
 bound removed — no panic now, since nothing is pre-allocated, but no refusal in words either) **and M57** (the MCP's),
 each red; restored. **Verified:** clippy clean; the full suite alone 2,081 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master` moved at `dca734a` (`lsp_cli mcp_cli`): macOS `36681858200` and Windows `36681860992` — success. RW 4.39 keeps one item: the broker log's three
 wordings of one class of drop.
+
+## 2026-09-30 — routine run 8: CI read green; SCOPE-HIDDEN-1 — `authority --grants` under-reported a program's scopes (D-V2-81)
+
+**Arrival (routine run 8, 10:09 UTC).** `survey check` ok (1,476 nodes, 13,071 edges); `doctor --check` ok, 26 checks
+passed. `gh`: absent (`command -v gh` printed nothing). **CI:** routine run 7's three unread push runs — `5d3e37f`
+`36683068019`, `53d96e3` `36683327300`, `381fed8` `36684530677` — success; the nightly `36694905248` on `381fed8` was in
+progress at 10:12 (its `miri-slow` runs for hours). Run 7's new witnesses re-run in the VM on `381fed8`: `audit_ocsf_cli`
+7, `audit_cli` 12, `guard_e2e` 3, `grants_cli` 2, `lsp_cli` 38 (1 ignored), `mcp_cli` 3, `delulu-broker` lib — all
+passed. Every claim in run 7's entry that the tree can show holds.
+
+**SCOPE-HIDDEN-1, found building PS-E-05.** The export needs to know whether a program's literal scopes are all it asks
+for, so the head chef asked `authority` of a program whose `main` mints `root.fs_read("./data")` and passes `root` to
+`fn helper(r: Root)`, which mints `r.fs_read("./secret")`. `authority --grants` printed `--grant fs.read=./data` alone;
+`delulu run … --grant fs.read=./data` then faulted DL0703 on `./secret` — the runtime held, the list an operator reads
+before running unfamiliar code did not. The scope walk matched the receiver `root` by NAME and silently skipped every
+other; and a computed scope beside a literal one was likewise dropped, because the placeholder was printed only when a
+kind had NO literal. **Witnessed red** (`cli::a_scope_the_source_does_not_show_leaves_its_placeholder_beside_the_literals`
+on the unfixed binary: `["fs.read=./data"]` where `["fs.read=./data", "fs.read=PATH"]` is owed). **Fixed (D-V2-81):** the
+walk marks a kind hidden at a computed scope or a renamed receiver, and `required_grants` adds the kind's placeholder
+beside the literals — for paths, hosts and devices; the renamed receiver's literal is not attributed. **Mutants M58**
+(the renamed receiver skipped again), **M59** (a computed item in a host list not marked), **M60** (the placeholder only
+when no literal) — each red on its case; **M61** (the placeholder always) red on the all-literal control; restored byte
+for byte. **Verified:** clippy clean (`-p delulu --all-targets`); `cli` 50, `atlas_chain`, `examples_run`, `mcp_cli`,
+`sandbox_modes_cli`, `sandbox_run_cli`, `atlas_cli`, `atlas_e2e`, `core_invariance`, `attributes_cli` green; no program of
+the repository's 251 `.delulu` files has a mixed kind, so none's report changes; the full suite alone 2,082 passed,
+0 failed, 15 ignored (155 binaries), cargo exit 0.
