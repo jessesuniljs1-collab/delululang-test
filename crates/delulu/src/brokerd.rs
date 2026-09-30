@@ -933,16 +933,22 @@ pub(crate) fn serve_inner(
 
 // ----- the `delulu broker` subcommands -----------------------------------------------------------
 
+/// How long [`request`] waits for the daemon's whole answer. Invariant 27 asks that an unreachable
+/// broker fail every effectful op "fast (bounded, never a hang)"; a broker that accepted the connection
+/// and never answered was waited for without end — every daemon-mode custody op and every operator
+/// command, the e-stop's revoke among them. Generous: the daemon answers in milliseconds, and a client
+/// ahead of this one in its one-connection loop holds it at most `SERVE_READ_TIMEOUT` twice over.
+pub const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// One quick request/response round-trip to a running daemon (each op is its own short connection,
-/// so a `run` in progress and a concurrent `revoke` interleave at request granularity).
+/// so a `run` in progress and a concurrent `revoke` interleave at request granularity). Bounded by
+/// [`REQUEST_DEADLINE`]: a daemon that does not answer is an error in words, never a hang.
 pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
-    let mut conn = broker_transport::connect(state_dir)?;
-    write_frame(&mut conn, &Request::new(body))?;
-    read_frame(&mut conn)
+    request_timed(state_dir, body, REQUEST_DEADLINE)
 }
 
-/// Like [`request`], but BOUNDS the read so a hung/slow broker cannot block the caller forever
-/// (DEADMAN-1). Used by the device dead-man watchdog's authority probe: a broker that does not answer
+/// [`request`] with the caller's own bound on the whole answer, so a hung or slow broker cannot block the
+/// caller (DEADMAN-1). Used with 1 s by the device dead-man watchdog's authority probe: a broker that does not answer
 /// within `read_timeout` surfaces as `Err`, which the probe maps to `AuthorityState::Dead` → the device
 /// PARKS (fail closed). Without this the probe's `read_frame` blocks forever on Unix against a broker
 /// that accepted the connection but never replied (e.g. one hung by IPC-1), stalling the watchdog and
@@ -956,7 +962,16 @@ pub fn request_timed(
     let mut conn = broker_transport::connect(state_dir)?;
     conn.set_read_timeout(Some(read_timeout))?;
     write_frame(&mut conn, &Request::new(body))?;
-    read_frame(&mut conn)
+    // The WHOLE answer within the bound, not each read of it (the red-team pass on FRAME-DRIP-1, F1):
+    // whatever answers on the socket, one byte at a time inside the bound, kept the dead-man's probe
+    // waiting — and the arm moving after an e-stop that said "revoked".
+    read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, read_timeout)).map_err(|e| match e.kind() {
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("the broker accepted the request but did not answer within {read_timeout:?}"),
+        ),
+        _ => e,
+    })
 }
 
 fn parse_state_dir(rest: &[String]) -> Option<String> {
@@ -2125,6 +2140,69 @@ mod tests {
         );
         let _ = dribbler.join();
         stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Invariant 27 — an unreachable broker makes every effectful op DL1401, "fast (bounded, never a
+    /// hang)" — for a broker that accepted and never answered. Only the dead-man's probe
+    /// (`request_timed`, DEADMAN-1) bounded its read; `request`, which every daemon-mode custody op and
+    /// every operator command uses, waited for as long as the broker held the connection: red on
+    /// `9bf09b9`, 40 s — the acceptor's whole hold. Now it answers in words within its bound.
+    #[cfg(unix)]
+    #[test]
+    fn request_fails_closed_in_words_on_a_broker_that_accepts_but_never_answers() {
+        use std::os::unix::net::UnixListener;
+        let state = temp_state("mute_broker");
+        let listener = UnixListener::bind(state.join("broker.sock")).unwrap();
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let acceptor = std::thread::spawn(move || {
+            if let Ok((_s, _)) = listener.accept() {
+                let _ = held.recv_timeout(std::time::Duration::from_secs(40));
+            }
+        });
+        let start = std::time::Instant::now();
+        let r = request(&state, ReqBody::Status);
+        let waited = start.elapsed();
+        let _ = release.send(());
+        let _ = acceptor.join();
+        let e = r.expect_err("a broker that never answers is an error, not an answer");
+        assert!(waited < std::time::Duration::from_secs(25), "request waited {waited:?} on a broker that never answered");
+        assert!(e.to_string().contains("did not answer within"), "in words, not the OS's: {e}");
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// The red-team pass on FRAME-DRIP-1 (F1): `request_timed` bounded each READ, so whatever answers on
+    /// the broker's socket, sending its reply one byte at a time inside the dead-man probe's bound, kept
+    /// the probe waiting — the pass's e-stop printed "revoked" while the arm kept moving. Red on
+    /// `9bf09b9`: 6 s of dribble against a 1 s bound. The whole answer is now owed within the bound.
+    #[cfg(unix)]
+    #[test]
+    fn request_timed_bounds_the_whole_answer_not_each_read() {
+        use std::io::Write as _;
+        use std::os::unix::net::UnixListener;
+        let state = temp_state("dribbled_answer");
+        let listener = UnixListener::bind(state.join("broker.sock")).unwrap();
+        let answerer = std::thread::spawn(move || {
+            if let Ok((mut s, _)) = listener.accept() {
+                let _ = read_frame::<_, Request>(&mut s);
+                // An answer that claims 1,000 bytes, then its body a byte every 250 ms, for up to 6 s.
+                let t = std::time::Instant::now();
+                let mut out = 1000u32.to_le_bytes().to_vec();
+                out.extend([0xa0; 996]);
+                for b in out {
+                    if t.elapsed() > std::time::Duration::from_secs(6) || s.write_all(&[b]).and_then(|_| s.flush()).is_err() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+            }
+        });
+        let start = std::time::Instant::now();
+        let r = request_timed(&state, ReqBody::Status, std::time::Duration::from_millis(1000));
+        let waited = start.elapsed();
+        let _ = answerer.join();
+        assert!(r.is_err(), "a dribbled answer is not an answer: {r:?}");
+        assert!(waited < std::time::Duration::from_secs(3), "the probe waited {waited:?} against a 1 s bound");
         let _ = std::fs::remove_dir_all(&state);
     }
 
