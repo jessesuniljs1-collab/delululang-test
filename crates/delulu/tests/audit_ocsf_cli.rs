@@ -370,4 +370,13 @@ fn a_real_sandboxed_runs_records_export_and_verify_its_launch_and_death_paired()
     assert!(violations.iter().all(|v| v["class_uid"] == 2004), "a refusal on the channel is a finding");
     let v = verify_ocsf(&out, &["--expect-start", delulu_broker::GENESIS_HASH]);
     assert_eq!(v.status.code(), Some(0), "{}", text(&v.stderr));
+
+    // With no `--device-name`, the machine names itself — per OS (`gethostname`, `COMPUTERNAME`).
+    let named = d.join("named.jsonl");
+    let e = run(&["audit", "export", "--format", "ocsf", "--out", named.to_str().unwrap()]);
+    assert_eq!(e.status.code(), Some(0), "this machine's name is known: {}", text(&e.stderr));
+    let host = lines(&named)[0]["device"]["hostname"].as_str().unwrap_or_default().to_string();
+    assert!(!host.trim().is_empty(), "the device is named");
+    assert!(lines(&named).iter().all(|e| e["device"]["hostname"] == host.as_str()), "the same name on every line");
+    assert_eq!(verify_ocsf(&named, &[]).status.code(), Some(0));
 }
