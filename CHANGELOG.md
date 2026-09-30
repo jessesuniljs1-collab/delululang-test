@@ -185,6 +185,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   the list an operator reads before running unfamiliar code now carries the kind's placeholder (`fs.read=PATH`,
   `net=HOST`, `sensor=DEVICE`) beside the literals it can see. `requested_scopes` is unchanged: the literals written at
   `root`'s own sites (D-V2-81).
+- **New (PS-E-05): `delulu sandbox policy <file> --format openshell`** — the policy an NVIDIA OpenShell sandbox should
+  enforce around `delulu run`, written from the program's authority and the grants you pass (`--grant`, as `run` takes
+  them; `--workdir` for the directory `delulu run` runs in inside the sandbox; `--binary`, `--run-as`). It never allows
+  more than both: a grant the program cannot use is left out and named, one OpenShell cannot state (a special-use
+  address, a device, code loading) refuses the export by name, the one HTTP method (`GET`) is written out, and what
+  OpenShell does not model (the console, the clock, budgets, secrets — never a secret's value) is listed. `--json`
+  accounts for every grant. OpenShell's own prover checks the export on a runner (`openshell.yml`, D-V2-82).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 

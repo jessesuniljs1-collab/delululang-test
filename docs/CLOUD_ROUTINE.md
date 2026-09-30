@@ -139,8 +139,9 @@ another OS, and then takes about seven minutes itself (run 5).
    construction and a generation per run; E-02 host loss ends the guest (macOS and the external launcher);
    E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
    is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
-   tested L3 and `sandbox policy --format openshell` (a manual `openshell.yml`, by hand first, as
-   `container.yml` was); E-06 OCSF export (**complete**, run 7: D-V2-78, D-V2-80).
+   tested L3 and `sandbox policy --format openshell` (**(a) built**, run 8: D-V2-82, checked by OpenShell's
+   prover in the manual `openshell.yml`; (b) the L3 recipe next); E-06 OCSF export (**complete**, run 7:
+   D-V2-78, D-V2-80).
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
    E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
@@ -201,6 +202,10 @@ two-engine differential by hand, `cargo test -p delulu-wasm --release --test dif
 their export is checked against OCSF's published schema: `scripts/ocsf-validate.py EXPORT --self-test` in the VM (the
 schema's raw files are reachable, run 7), and `ocsf.yml` runs it on the runners for every push that touches them.
 A fixture that fakes what the host writes has a real-run witness beside it (run 7: a faked generation hid a wrong reading).
+**A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
+before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
+workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
+it with its slice once the slice is read green, then dispatch it at `master` or the branch.
 Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported. While the suite runs, a fix may be COMMITTED (a commit
 changes no file) and pushed to the branch for its runner witnesses — `witness.yml` with a warm cache answers in 2–4

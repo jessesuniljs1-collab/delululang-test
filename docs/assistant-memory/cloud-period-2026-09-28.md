@@ -97,6 +97,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   AUDIT-TEXT-1 (D-V2-79): `audit tail`/`query`, `guard pending` and `grants tree`/`list`/`inspect` printed a
   program's or an agent's stored strings raw — a string that is stored is printed later; ask where. The secret store
   had AUDIT-FIFO-1's shape (RW 4.38 closed). Trap, again: a fixture faked the host's generation as an integer.
+- **Routine run 8 (2026-09-30):** SCOPE-HIDDEN-1 (D-V2-81): `authority --grants` under-reported — a `Root` passed to a
+  helper as `r` hid its scope (the walk matched `root` by name), and one literal of a kind silenced the placeholder for
+  every other site. PS-E-05 (a) (D-V2-82): `sandbox policy --format openshell` — the OpenShell policy written from the
+  program's authority, never wider than it and the grants; OpenShell's prover checks it in `openshell.yml`. Traps: a
+  mutant loop leaves the last mutant's binary; a new workflow is dispatchable only once on `master`.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

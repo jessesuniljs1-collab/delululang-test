@@ -1691,6 +1691,42 @@ capability. `requested_scopes` keeps its meaning: the literals at `root`'s own s
 and a computed host beside literals, and an all-literal control); mutants M58–M61 red. No program in the repository's
 corpus changes (0 of 251 have a mixed kind).
 
+## D-V2-82 — PS-E-05 (a): `sandbox policy --format openshell` emits the wall from the program's authority, never wider than it and the grants — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+The study (§4.5 (a), D-V2-53) designed the export; building it settled nine things.
+**(1) The grant's scope, not the source's literal, is what is emitted** — for a capability KIND the authority report
+names (kinds are static and sound, P16); a kind it does not name leaves the grant `omitted`. Emitting the literals the
+source shows would be narrower, but SCOPE-HIDDEN-1 (D-V2-81, found here) showed the literals are not always the whole
+ask, and a wall narrower than DeluluLang's own grant breaks a program that DeluluLang would run. **(2) Exact refusal
+set:** `net.special` (OpenShell never authorizes loopback, link-local or unspecified destinations; a private one is not
+mapped yet), `actuator`/`sensor`/`compute` (no device model), `plugin`/`foreign.*`/`exec.native` (code whose files this
+export does not map yet), `fs.write=/` (OpenShell refuses it), a wildcard under a top-level domain (OpenShell refuses it,
+and `**` would widen it) — exit 1, no document. **(3) Unrepresented, listed:** console, clock, rand, declassify, a
+secret (by name, never its value — P9-04 is endpoint-bound secrets), the budget. **(4) Narrowed, listed:** port 443
+only (DeluluLang fetches `https://` on any port a URL names). **(5) One method, written out:** `GET` on `/` and on
+`/**` (a whole-segment `**` needs one segment, so both are named); the `read-only` preset also allows `HEAD` and
+`OPTIONS`. **(6) Hosts:** DeluluLang's `*.x.y` matches one label or more and never the apex (`prim::host_matches`) —
+OpenShell's `**.x.y`; and a host (or suffix) DeluluLang would never match — not in `egress::parse_target`'s canonical
+form, `EXAMPLE.com`, `example.com.` — grants nothing, so it is omitted, never lowercased for a wall that matches
+case-insensitively (EXPORT-CASE-1, found before `master` moved); an IPv6 host refuses (not mapped yet). **(7) Paths are the sandbox's:** absolute; a relative one is joined to `--workdir` (this machine's
+working directory names a path on the wrong machine) and refused without it; `..` is REFUSED, never collapsed, because
+the kernel resolves it after following a link; the runtime's own read-only paths (`/usr`, `/lib`, `/etc` — three of
+OpenShell's baseline) and the program's file are the only paths no grant names, and both are reported as such;
+`include_workdir: false`; `landlock.compatibility: hard_requirement`. OpenShell's baseline additions for a policy with a
+network rule (`/tmp` read-write among them) are named in a note, not suppressed — suppressing them waits for (b)'s real
+run to show what `delulu` needs. **(8) Identity:** `process` names `sandbox` (OpenShell's own unprivileged identity) or
+`--run-as` numeric ids; root in any spelling is refused. **(9) One source:** the YAML document is written FROM the JSON
+policy the envelope carries, every string double-quoted, so the two cannot differ (a mutant adding a method to the text
+alone passed the unit gate while they were two code paths). The binary is `--binary`, default `/usr/local/bin/delulu`
+(the repository's `Dockerfile`). **(10) Scope of the flags:** `--format`, `--grant`, `--workdir`, `--binary` and `--run-as`
+belong to `sandbox policy` alone and are refused on every other verb (documenting them for `sandbox` let the dispatcher
+pass them to `status` and `probe`, which ignored them — found by the suite); a Windows spelling of a path (a backslash, a
+drive letter) is refused by name, since it names a path on the machine running `delulu`, never one in the sandbox. **The falsifier the study named** — OpenShell's own prover answering `within_boundary`
+against a boundary written by hand and `exceeds_boundary` against one missing a granted host — is
+`scripts/openshell-prove.sh` in `.github/workflows/openshell.yml`, which also requires each widening of the export (a
+preset, a writable `/tmp`, another binary) to be caught and an unknown field to be an error. **Not built here:** (b), the
+guest inside an OpenShell sandbox at L3, and the study's runtime witnesses (a denied `curl`, a granted/ungranted pair).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

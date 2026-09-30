@@ -68,7 +68,8 @@ the assistant's memory — which now also travels file by file in
   exact now (D-V2-66).
 - **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H6 and a red-team pass on the filter, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
-  pinned, E-05 OpenShell as a tested L3 and a policy target (E-06, the OCSF export, is complete — routine run 7,
+  pinned, E-05 OpenShell as a tested L3 and a policy target — its (a), `sandbox policy --format openshell`, built by
+  routine run 8 (D-V2-82), (b) the L3 recipe open (E-06, the OCSF export, is complete — routine run 7,
   D-V2-78 and D-V2-80). Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
   then **P9**. A real device stays environment-blocked. ADAPTER-SPELL-1 (the subprocess driver verified
@@ -947,6 +948,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   live surface, and the audit chain and the Guard's queue kept a program's and an agent's strings to print a day later,
   raw, on the screens where a person investigates and approves. For every string an untrusted party can put into a
   store, find each command that prints the store for a person.
+- **A mutant loop leaves the binary built from its last mutant** (routine run 8): the loop's `cargo test` rebuilt
+  `target/debug/delulu` with each mutation, and restoring the source byte for byte rebuilt nothing — a by-hand check
+  after it read mutant M71's unquoted host. `cargo build` after every mutant loop, before any by-hand run.
+- **A workflow is dispatchable only once it is on the default branch** (routine run 8): `run_workflow` for a file a
+  branch alone has answers 404. A new by-hand workflow lands on `master` with its slice, then runs.
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.

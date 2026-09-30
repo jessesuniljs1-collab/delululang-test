@@ -3710,3 +3710,63 @@ for byte. **Verified:** clippy clean (`-p delulu --all-targets`); `cli` 50, `atl
 `sandbox_modes_cli`, `sandbox_run_cli`, `atlas_cli`, `atlas_e2e`, `core_invariance`, `attributes_cli` green; no program of
 the repository's 251 `.delulu` files has a mixed kind, so none's report changes; the full suite alone 2,082 passed,
 0 failed, 15 ignored (155 binaries), cargo exit 0.
+
+## 2026-09-30 — routine run 8: PS-E-05 (a) — `delulu sandbox policy --format openshell` (D-V2-82)
+
+The study's §4.5 (a): DeluluLang writes the policy an OpenShell sandbox should enforce around `delulu run`, from the
+program's authority and its grants. **Read first, at run time, for facts only** (nothing copied, D-V2-52): OpenShell's
+policy schema, prover and default-policy pages and its `install.sh` at `36b0386` from raw.githubusercontent.com — the
+format is `version: 1` and five sections, unknown fields refused; the prover compares paths only when both policies
+list the SAME path, answers `unsupported` for an exact and a wildcard host on one port, and exits 0/1/2/3; OpenShell adds
+baseline paths (`/tmp` read-write among them) to a policy with a network rule unless the policy lists them; the Debian
+package carries `openshell-prover`, checked against the release's SHA-256 list. **Witnessed absent** on `290a741`:
+`sandbox policy p.delulu --format openshell --grant …` → "does not know this option", exit 2.
+
+**Built (D-V2-82):** `crates/delulu/src/openshell.rs` — `export(program, report, grants, limits, options)`, pure over
+the program's authority report (`cli::authority_of_text`, the pipeline `authority` uses) and the grants (the runtime's
+own `Grants::add` first); `sandbox policy … --format openshell [--grant K[=V]].. [--workdir DIR] [--binary PATH]
+[--run-as ID[:ID]] [--json]`; the `openshell` schema. The nine decisions are D-V2-82's. **Found on the way:**
+SCOPE-HIDDEN-1 (D-V2-81) — which is why the export emits a grant's scope, not the source's literal.
+
+**Witnesses.** `sandbox_openshell_cli` (5): the whole wall for a program that reads, writes and fetches from an exact and
+a wildcard host — the exact filesystem lists, `GET` on `/` and `/**` and nothing else, no preset, `enforce`, one binary,
+`**.cdn.example.org`, every grant accounted for, the YAML stating what the JSON states, valid against the published
+schema through the binary; a grant the program cannot use omitted and named; five grants refusing the export by name
+(exit 1, no document); seven malformed requests (exit 2) and the shaping flags refused without the format; a secret's
+value nowhere in the output and a hostile path quoted whole. Unit (5): **the soundness rule over every shipped
+example** (each with its own required grants plus a grant of each kind it may not use: every path on the wall is a
+runtime path, the program's file, or a grant of a kind the program uses; every endpoint a grant's host; every rule
+`GET`; every grant accounted for), paths, hosts, quoting, `--run-as`. In the VM, PyYAML reads the document as exactly the
+JSON policy, a path holding `"`, `:`, `[`, `#` included. **Mutants M62** (every kind treated as used), **M63**
+(`net.special` emitted), **M64** (a relative path resolved against this machine), **M65** (`..` collapsed), **M66** (a
+quote unescaped), **M67** (a `HEAD` rule in the text), **M68** (a secret's value in the account), **M69** (`fs.write=/`
+allowed), **M70** (`*.` for `**.`) red; **M67** passed the unit gate — the document and the JSON were two code paths — so
+the document is now written from the JSON (D-V2-82 (9)), and **M67b** (a `HEAD` rule in the policy) and **M71** (a host
+unquoted) are red; every mutant restored byte for byte. **The prover script** (`scripts/openshell-prove.sh`) was run in
+the VM against a crude stand-in prover (scratch, not evidence) to debug its control flow: every expectation reached. The
+stand-in's first run found the export's host unquoted — the binary was the one the mutant loop had last built (M71): the
+source was restored, the binary was not (a lesson, HANDOFF §11.5).
+
+**Read on the runners, and what the loop found.** `15f68bf` (witness.yml: `sandbox_openshell_cli schema_cli cli_contract
+bin:delulu`): macOS `36704827508` success; **Windows `36704830856` red on two TESTS, the product holding** — §11.5's
+lesson again: the quoting case's path held `:`, which Windows' grant parser refuses first as an alternate data stream,
+and the absolute-path case used this machine's path, `C:\…` on Windows, which is no path in a (Linux) sandbox — refused,
+but called "relative". Fixed in `8c7894e`: a Windows spelling (a backslash, a drive letter) is refused by name, and the
+witnesses' inputs follow each host's rules; **M72** (the check removed) red; read green on Windows `36705354867`, macOS
+`36705357824`, arm64 `36705360430`. **The full suite alone at `8c7894e`: 2,091 passed, 1 FAILED, 15 ignored (156
+binaries), cargo exit 101** — `sandbox_attest_cli` expected the dispatcher's words for `sandbox attest --grant`; with
+`--grant` now documented for `sandbox`, `attest` refuses it in its own (exit 2 either way). Asking what else the
+dispatcher now let by found a **regression on the branch, never on `master`**: `sandbox status --grant console` and
+`sandbox probe --workdir /w` (and `--format`, `--binary`, `--run-as`) ran and IGNORED the flag, exit 0, where `290a741`
+refused each. Fixed in `b50aa21`: the export's five flags are refused on every verb but `policy`; witness
+`the_exports_flags_belong_to_policy_alone` (two verbs × five flags); **M73** (the check removed) red; read green on Windows
+`36706294573` and macOS `36706297664`; the full suite alone at `b50aa21`: 2,093 passed, 0 failed, 15 ignored (156
+binaries), cargo exit 0. **Then an adversarial pass by the head chef, before `master` moved — EXPORT-CASE-1:** asking of
+every string the export compares what else spells it. DeluluLang compares a granted host exactly with a URL's host and
+accepts a URL's host only in canonical form, so `net=EXAMPLE.com` and `net=example.com.` grant nothing (`delulu run` of
+`root.http(["example.com"])` under the first: DL0703); the export lowercased the first and passed the second through,
+and OpenShell matches hosts case-insensitively — a wall wider than the grant. Witnessed on `b50aa21`
+(`a_host_grant_delulu_would_never_match_is_omitted_not_lowercased`: the wall held `example.com` and `example.org.` beside
+the one effective host); fixed in `7dfb566` — a host `egress::parse_target` would not accept as written is omitted and
+named; an IPv6 host refuses the export; **M74** (the check always true) red. **Verified:** clippy
+clean; the full suite alone at `7dfb566`: 2,094 passed, 0 failed, 15 ignored (156 binaries), cargo exit 0; read before `master` moved at `7dfb566` (`sandbox_openshell_cli sandbox_attest_cli bin:delulu`): Windows `36707268456`, macOS `36707271273` — success; `master` fast-forwarded to `7dfb566`, and `openshell.yml` dispatched at `master` (a workflow is dispatchable only once on the default branch) — its reading is the entry after this one.

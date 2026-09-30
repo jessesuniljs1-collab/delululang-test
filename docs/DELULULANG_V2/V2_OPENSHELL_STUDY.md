@@ -2,8 +2,9 @@
 
 **Status:** study complete and design written 2026-09-28, on the owner's commission of the same day
 (*"I want this to be studied and incorporated not just as copy but as real engineering for the sandbox
-currently we are working on"*). **Nothing in §4–§6 is built yet**; every item there carries the phase
-slice that builds it and the witness that will prove it. The decisions are D-V2-52 to D-V2-55
+currently we are working on"*). **Written before anything in §4–§6 was built; built since, slice by slice** —
+each section's *Built* paragraph says what, where and under which decision (PS-E-01 to PS-E-04 and PS-E-06, and
+PS-E-05 (a), by routine runs 2–8). Every item carries the phase slice that builds it and the witness that proves it. The decisions are D-V2-52 to D-V2-55
 (`V2_DECISION_LOG.md`). Where this file says what OpenShell does, it reports OpenShell's own
 documentation and source at the version named in §0 — it is not a claim DeluluLang has measured.
 
@@ -395,6 +396,17 @@ against the release's `openshell-checksums-sha256.txt`, with the tag chosen by `
 gateway, the VM driver and `openshell-prover` are separate assets; and gateway state from before 0.0.37 is refused by
 later releases. So `openshell.yml` pins a tag (v0.1.2 was studied), downloads that package and the checksum file on the
 runner, verifies, installs — and keeps nothing: no asset, script or text of OpenShell enters this repository.
+
+**(a) built (2026-09-30, routine run 8, D-V2-82).** `delulu sandbox policy <file> --format openshell [--grant K[=V]]..
+[--workdir DIR] [--binary PATH] [--run-as ID[:ID]] [--json]` (`crates/delulu/src/openshell.rs`). Departures from the
+design above, each for a reason D-V2-82 records: a grant's SCOPE is emitted for a kind the program's authority names
+(not the source's literals — SCOPE-HIDDEN-1, D-V2-81, found here, showed they are not always the whole ask); `GET` is
+allowed on `/` and on `/**`; `..` is refused, not resolved; a relative path needs `--workdir`; the `process` identity
+is OpenShell's `sandbox` unless `--run-as` says otherwise; OpenShell's baseline additions are named, not suppressed; the
+prover script checks an exact-host program and a wildcard-host program separately, because the prover declines the two
+on one port. Witnessed by `sandbox_openshell_cli` and the soundness unit test over every shipped example; the prover's
+check is `scripts/openshell-prove.sh` in `openshell.yml` (by hand). **Open:** (b) — the guest inside OpenShell at L3,
+with the runtime witnesses (a granted/ungranted pair, a denied `curl`).
 
 ### 4.6 PS-E-06 — the audit chain, exported as OCSF, still verifiable
 

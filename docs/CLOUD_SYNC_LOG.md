@@ -930,25 +930,67 @@ it on `origin` was made in the cloud and is listed below.
   harness to stop reading), 4.39's last item (the broker log's three wordings of one drop), 4.40 (the broker's queue); (4) RW 7.17 — keep
   watching arm64's `estop_cli`. **For the owner:** D-V2-78 to D-V2-80 are this run's decisions.
 
-### 2026-09-30 — routine run 8: CI read green; SCOPE-HIDDEN-1 (D-V2-81); PS-E-05 (a) — the OpenShell export
+### 2026-09-30 — routine run 8: CI read green; SCOPE-HIDDEN-1 (D-V2-81); PS-E-05 (a) — the OpenShell export (D-V2-82)
 - Session: `https://claude.ai/code/session_014qVST2xeSNjC4MRacqLH8g`   Model: Claude Opus 5.5 (the scheduled routine)
-- Branch: `master` (the VM's checkout was the harness branch `claude/stoic-ptolemy-1lso0u`, at `master`'s head;
-  each commit is pushed to both)   Pull request: none   Merged: n/a
+- Branch: `master` (the VM's checkout was the harness branch `claude/stoic-ptolemy-1lso0u`, at `master`'s head; each
+  slice was pushed there first, read on the other runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
 - Base: `381fed8` (routine run 7's last commit)
-- Commits: (1) SCOPE-HIDDEN-1: authority names a scope it cannot see, beside the literals it can (D-V2-81)
-- Files and folders:
-  M `crates/delulu/src/cli.rs` (`ScopeWalk.hidden`, `requested_scopes` returns the hidden kinds, `required_grants`
-    adds a hidden kind's placeholder), `crates/delulu/tests/cli.rs` (the witness) — (1)
-  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 SCOPE-HIDDEN-1), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-81),
-    `docs/DELULULANG_V2/V2_LOG.md` — (1)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)
+- Commits: (1) `290a741` SCOPE-HIDDEN-1: authority names a scope it cannot see, beside the literals it can (D-V2-81);
+  (2) `15f68bf` PS-E-05 (a): delulu sandbox policy --format openshell writes the wall from the program's authority
+  (D-V2-82); (3) `8c7894e` PS-E-05 (a): a Windows spelling is refused by name; the witnesses' inputs are platform rules;
+  (4) `b50aa21` PS-E-05 (a): the export's flags belong to sandbox policy alone, refused on every other verb;
+  (5) `7dfb566` EXPORT-CASE-1: a host grant DeluluLang would never match is omitted from the OpenShell export, not
+  lowercased; (6) PS-E-05 (a) recorded — this commit
+- Files and folders (`git diff --name-status 381fed8..HEAD`):
+  A `crates/delulu/src/openshell.rs` (the export: `export`, `run_as`, the canonical-host and path rules, the YAML written
+    from the JSON policy; five unit tests), `crates/delulu/tests/sandbox_openshell_cli.rs` (seven witnesses),
+    `scripts/openshell-prove.sh` (the export checked by OpenShell's prover against boundaries written by hand, with
+    each widening required to be caught), `.github/workflows/openshell.yml` (dispatch only: a pinned OpenShell release,
+    checksum-verified on the runner and kept nowhere, runs the script) — (2)–(5)
+  M `crates/delulu/src/cli.rs` (the scope walk's hidden kinds — (1); the `sandbox` help's export line — (2)),
+    `crates/delulu/tests/cli.rs` (SCOPE-HIDDEN-1's witness) — (1)
+  M `crates/delulu/src/main.rs` (`mod openshell`), `crates/delulu/src/sandbox.rs` (`--format`, `--grant`, `--workdir`,
+    `--binary`, `--run-as` on `policy` alone; `Shaping`; `export_openshell`), `crates/delulu/src/schema.rs` (the
+    `openshell` schema), `docs/REPOSITORY_STRUCTURE.md` (the script's and the workflow's rows) — (2)–(4)
+  M `crates/delulu/tests/sandbox_attest_cli.rs` (attest's own refusal of `--grant`, exit 2 as before) — (4)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4 SCOPE-HIDDEN-1; *Where things stand*; §11.5 two lessons),
+    `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-81, D-V2-82), `docs/DELULULANG_V2/V2_LOG.md` — (1), (6)
+  M `docs/CLOUD_ROUTINE.md` (step 4: E-05 (a) built; step 5: rebuild after a mutant loop; a new workflow is dispatchable
+    only on `master`), `docs/DEPLOYMENT.md` (the OpenShell paragraph: the export, how to use it, what is not built),
+    `docs/REMAINING_WORK.md` (4.30 half built), `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` (the status line — it said
+    nothing in §4–§6 was built; §4.5 (a) built), `V2_PHASE_STATUS.md` (PS-E), `V2_IMPLEMENTATION_ROADMAP.md` (PS-E-05),
+    `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 8) — (6)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (1)–(6)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,476 nodes, 13,071 edges); `doctor --check` ok, 26 checks passed.
   After the last edit: in each commit's message.
 - Verified: **CI on arrival:** `5d3e37f` `36683068019`, `53d96e3` `36683327300`, `381fed8` `36684530677` — success; the
-  nightly `36694905248` (`381fed8`) in progress. `gh`: absent. Run 7's witnesses re-run in the VM — all passed. **(1):**
-  the witness red on `381fed8`; M58–M61 red, restored; clippy clean; the full suite alone 2,082 passed, 0 failed,
-  15 ignored (155 binaries), cargo exit 0.
-- Redo on the laptop: nothing beyond the suite.
-- For the laptop's memory: `HANDOFF.md` §11.4 (SCOPE-HIDDEN-1).
-- Open / next: (being written — this entry is updated with each slice of the run).
+  nightly `36694905248` (`381fed8`) running, no job failed by 11:00 UTC (18 jobs; `miri-slow` still going). `gh`: absent.
+  Run 7's witnesses re-run in the VM — all passed. **(1):** the witness red on `381fed8`; M58–M61 red, restored; clippy
+  clean; the full suite alone 2,082 passed, 0 failed, 15 ignored (155 binaries), cargo exit 0; read before `master`
+  moved: macOS `36703478342` (`cli` 50) and Windows `36703480939` (`cli` 51) — success; push run `290a741`
+  `36704402505` — success, 16 jobs (arm64: 2,082 passed, all five properties, ping-pong MEASURED 2.93x against a
+  control of 4.13x, passed; macOS: egress, host loss and privilege floor established, reads and memory not confined,
+  ping-pong NOT MEASURED — 3 hardware threads, 2.18x; Windows: all five, ping-pong NOT MEASURED — the runner busy).
+  **(2)–(5):** absent on `290a741` (unknown option, exit 2); M62–M74 red, each restored (the binary rebuilt after each
+  loop); PyYAML reads the document as the JSON policy; runner reads: `15f68bf` macOS `36704827508` success, Windows
+  `36704830856` RED on two tests (a `:` in a path; this machine's `C:\…` path) — fixed in (3), then Windows
+  `36705354867`, macOS `36705357824`, arm64 `36705360430` success; the full suite alone at `8c7894e`: 2,091 passed,
+  **1 failed**, 15 ignored (156 binaries), cargo exit 101 — which led to (4)'s regression (`sandbox status --grant x`
+  ignored the flag, on the branch only); `b50aa21` Windows `36706294573`, macOS `36706297664` success, the suite alone
+  2,093 passed, 0 failed, cargo exit 0; EXPORT-CASE-1 found by the head chef's adversarial pass and fixed in (5);
+  `7dfb566` Windows `36707268456`, macOS `36707271273` success, the full suite alone 2,094 passed, 0 failed, 15 ignored
+  (156 binaries), cargo exit 0; `master` fast-forwarded to `7dfb566`; `openshell.yml` dispatched at `master`.
+- Redo on the laptop: nothing beyond the suite (the export's Windows-spelling refusal is witnessed on the Windows runner).
+- For the laptop's memory: `HANDOFF.md` §11.4 (SCOPE-HIDDEN-1), §11.5 (a mutant loop leaves the last mutant's binary;
+  a workflow is dispatchable only once on the default branch); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read `openshell.yml`'s first run (dispatched at `master`, `7dfb566`) — the real prover on the export;
+  if it is red, the script or the export is this run's (or the next run's) first task; the push runs of `7dfb566` and
+  this commit, and the nightly `36694905248`'s end; (2) **PS-E's rest:** E-05 (b) — the guest inside an OpenShell sandbox
+  at L3 (`openshell.yml`, by hand: a gateway with the Docker driver, the repository's image, a denied `curl`, a
+  granted/ungranted pair); E-01's remainder — `contained`'s required set TOGETHER with attesters' claims as properties
+  (the study's design: `contained` requires filesystem, egress and resource, and an unattested L3 run satisfies one only
+  through an attester's claim naming it — a change to the default profile, too large for this run's budget); E-04's
+  attestation binding; E-03 H6; then P8 (P8-01 first), P9 (P9-01 `authority --within` can build on D-V2-81's hidden
+  kinds); (3) the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; (4) RW 7.17 — arm64's `estop_cli`.
+  **For the owner:** D-V2-81 and D-V2-82 are this run's decisions.

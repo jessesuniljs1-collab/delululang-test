@@ -257,13 +257,28 @@ exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu
   --guarantee "gVisor runsc" --guarantee "no network" -- /usr/local/bin/delulu-gvisor
 ```
 
-**NVIDIA OpenShell — designed, not yet built or tested (PS-E-05).** OpenShell (NVIDIA's open agent
-runtime, 2026-09) is planned as a second L3 recipe and as a target DeluluLang writes policy for:
-`delulu sandbox policy <file> --format openshell` will emit the OpenShell policy a program's authority
-and grants imply — never wider — for running `delulu run` inside an OpenShell sandbox, and the guest
-will run inside an OpenShell sandbox with no network rule through `external:`, still at level 3 and
-still reported as unmeasured unless attested. Until PS-E-05's workflow has run green, nothing here is
-a recipe to follow. The design: `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.5.
+**NVIDIA OpenShell — the policy is written for you (PS-E-05 (a)); the L3 recipe is not built yet.**
+OpenShell (NVIDIA's open agent runtime, 2026-09) governs programs it cannot read, so its policy is a
+document someone writes. For a DeluluLang program, `delulu` writes it:
+
+```sh
+delulu sandbox policy agent.delulu --format openshell --workdir /sandbox \
+    --grant fs.read=./data --grant net=api.example.com > agent-policy.yaml
+```
+
+The policy is for running `delulu run` inside an OpenShell sandbox, and it never allows more than the
+program's authority and the grants allow: a grant the program cannot use is left out, one OpenShell cannot
+state (a special-use address, a device, code loading) refuses the export by name, and the one method the
+language fetches with (`GET`) is written out rather than a preset that also allows `HEAD` and `OPTIONS`.
+`--workdir` is the directory `delulu run` will run in inside the sandbox; `--binary` is where `delulu` is in
+the image (default `/usr/local/bin/delulu`, the repository's `Dockerfile`). `--json` accounts for every
+grant — emitted, omitted, unrepresented (the console, the clock, budgets, secrets), narrowed (port 443). When
+the policy has a network rule, OpenShell adds baseline paths of its own, `/tmp` read-write among them — check
+the sandbox's EFFECTIVE policy (`openshell sandbox get NAME --policy-only`) against your boundary with
+`openshell-prover`. DeluluLang's own grants still govern every effect inside the wall. **Not yet built:**
+running the GUEST inside an OpenShell sandbox as an `external:` launcher (level 3, unmeasured unless
+attested) — until that has run green, nothing about it is a recipe. The design:
+`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.5.
 
 ---
 
