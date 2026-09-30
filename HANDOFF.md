@@ -768,6 +768,8 @@ wins, and you should update the memory to match.
   crash, a FIFO in the audit directory — are RW 4.35–4.40, each re-run by the head chef or marked code reading.
   The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
   `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
+  And **AUDIT-FIFO-1** (D-V2-77): a FIFO named like a day log hung every reader of the audit chain, `broker start`
+  included — ATTEST-FIFO-1's shape in the audit; read only if regular now.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -912,6 +914,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   a Windows race witness act at the moment the host held the launcher, never by re-running. And the standard
   library's `File::open` on Windows shares reading, writing AND deletion: hold a file against change with
   `share_mode(FILE_SHARE_READ)`.
+- **On Windows a busy broker pipe REFUSES a second client after a second; a Unix socket queues it** (routine run 6):
+  `broker_transport::connect` waits 1 s on `ERROR_PIPE_BUSY`, then fails closed. A test that puts a client behind
+  another must let it ask again on Windows — FRAME-DRIP-1's broker witness went red there for that reason alone.
+- **The VM's 30 GB fills** (routine run 6): cross-target lint builds (3.6 GB) and incremental caches (6.8 GB) ended a
+  suite on ENOSPC — delete `target/<triple>` after `check-other-os.sh`, run suites with `CARGO_INCREMENTAL=0`.
 - **Install the pinned toolchain before anything else runs `cargo` or `rustup`** (routine run 6): the first
   `cargo` call installs it, and a `rustup target add` started beside it raced the install — the toolchain was left
   with `cargo` "not applicable" and a component conflict, and had to be reinstalled.

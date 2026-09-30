@@ -748,7 +748,9 @@ it on `origin` was made in the cloud and is listed below.
   (9) `3ca49e4` BROKER-RELDIR-1: broker start with a relative state dir served one level down and was left running;
   (10) `76aa676` The red-team pass on FRAME-DRIP-1, recorded: D-V2-75, BROKER-RELDIR-1, RW 4.35-4.40 — records only;
   (11) `5db4df1` REGISTRY-BOUNDS-1: delulu-registry serve bounds every connection; one slow client delays no other (D-V2-76);
-  (12) `REGISTRY-BOUNDS-1, recorded: D-V2-76, read on Windows and macOS first` — records only
+  (12) `2734ba9` REGISTRY-BOUNDS-1, recorded: D-V2-76, read on Windows and macOS first — records only;
+  (13) `cc3857b` AUDIT-FIFO-1: an audit day log is read only if it is a regular file (D-V2-77);
+  (14) `Routine run 6 closed: AUDIT-FIFO-1 recorded; the loop's lessons` — records only
 - Files and folders:
   M `crates/delulu/src/brokerd.rs` (a witness) — (1); `crates/delulu/tests/foreign_worker.rs` (the `dl_drip` fixture, a witness) — (1)
   M `crates/delulu-runtime/src/channel.rs` (`Within`, `FrameTooSlow`, `FRAME_DEADLINE`; `HostChannel::with_frame_deadline`,
@@ -776,7 +778,12 @@ it on `origin` was made in the cloud and is listed below.
     A `crates/delulu-registry/tests/serve_bounds.rs` (four witnesses) — (11)
   M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/REMAINING_WORK.md` (4.36 closed), `V2_DECISION_LOG.md` (D-V2-76),
     `V2_LOG.md`, `V2_PHASE_STATUS.md` — (12)
-  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6)–(12)
+  M `Cargo.lock`, `crates/delulu-broker/Cargo.toml` (`libc`, Unix), `crates/delulu-broker/src/audit.rs` (`read_day`;
+    a witness) — (13)
+  M `CHANGELOG.md`, `HANDOFF.md` (§11.4; §11.5 the VM's disk, a Windows busy pipe), `docs/CLOUD_ROUTINE.md` (step 5:
+    the disk; reading a witness job), `docs/REMAINING_WORK.md` (4.38), `V2_DECISION_LOG.md` (D-V2-77), `V2_LOG.md`,
+    `V2_PHASE_STATUS.md` — (14)
+  M `docs/CLOUD_SYNC_LOG.md` — this entry; M `docs/survey/*` — regenerated — (2), (3), (4), (6)–(14)
   Deleted: nothing.
 - Survey and doctor (start of run): `survey check` ok (1,471 nodes, 12,914 edges); `doctor --check` ok, 26 checks
   passed. After the last edit: in (4)'s commit message.
@@ -798,11 +805,24 @@ it on `origin` was made in the cloud and is listed below.
   the full suite alone 2,061 passed, 0 failed, 15 ignored, cargo exit 0; `broker_cli` green on Windows `36655636658`
   and macOS `36655638846`. **(11):** three witnesses red on `76aa676` (3.2 s; the crash; the endless line), M31–M34 red;
   the full suite alone 2,065 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; every `delulu-registry` target
-  green on Windows `36657264839` and macOS `36657267414`.
+  green on Windows `36657264839` and macOS `36657267414`. **(13):** the witness red on `2734ba9` (5 s), M35–M37 red; the
+  full suite alone 2,066 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0; `delulu-broker` lib green on macOS
+  `36658766644 (170 passed, the witness among them)` and Windows `36658768992 (169 passed; the witness is Unix-only)`.
 - Redo on the laptop: the suite on Windows and in WSL (the broker's serve loop and the foreign worker's call changed on
   every OS; on Windows the external launcher is now held open sharing reads only for the run).
 - For the laptop's memory: `HANDOFF.md` §11.4 (FRAME-DRIP-1) and §11.5 (a per-read deadline is not a per-message one;
   install the pinned toolchain before any concurrent `rustup`/`cargo`); `docs/assistant-memory/cloud-period-2026-09-28.md`
   and `delulu-ipc-deadman-findings.md`.
-- Push runs read: (this run continues — the next lines say).
-- Open / next: (this run continues — the next lines say).
+- Push runs read: (4) `1997997` `36652712551` — success on every job (16). (7) `9bf09b9` `36653912917` — success.
+  (10) `76aa676` `36656353251` — success on every job (16). (12) `2734ba9` `36657621780` — complete, no failed job of 16. (14), this entry's last commit:
+  the next run reads it.
+- Open / next: (1) read (14)'s push run, and the nightly after it — its `miri-slow` interprets `read_day` under Miri, the
+  `O_NONBLOCK` flag left out there; (2) the red-team pass's open rows: **RW 4.35** (the broker's reply write — a whole-write
+  bound; on Windows `WriteFile` blocks, so an overlapped write with a deadline), **4.37** (the host's writes to a guest —
+  needs the escaped-guest harness to stop reading), **4.39** (the broker wire's lax frame reader; the LSP's and MCP's
+  sizes), **4.40** (the broker's queue), and `secrets.rs`'s store read the FIFO way (4.38's rest); (3) E-04's remainder —
+  the attestation binding; E-01's remainder; E-05 and E-06 (both need GitHub's runners: OpenShell's pinned release, the
+  OCSF schema — neither is reachable from the VM); H6 (a classifier stopped it twice — perhaps with the owner); then P8
+  (P8-01 first moves the device logic out of the interpreter, `V2_P8_DESIGN.md`), P9; (4) RW 7.17: `estop_cli`'s control
+  test passed on arm64 in every push run this run read — keep watching. **For the owner:** D-V2-73 to D-V2-77 are this
+  run's decisions; the red-team pass is in `V2_LOG.md`.

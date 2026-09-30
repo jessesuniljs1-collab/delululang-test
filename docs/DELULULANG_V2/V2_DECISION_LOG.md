@@ -1588,6 +1588,19 @@ own; the requests are still handled one at a time under one lock**, because a pu
 index. A panic stays on its connection's thread. Past a bound the client is answered in HTTP's own words — 413, 431,
 400 — with the registry's existing code, DL1706; no new code.
 
+## D-V2-77 — AUDIT-FIFO-1: an audit day log is read only if it is a regular file; `delulu-broker` gains `libc` on Unix — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+The audit chain's readers took each `YYYYMMDD.jsonl` by name with `read_to_string`: a FIFO named like a day log hung
+`verify`, `tail`, `query` and the log's own open — so `broker start` — waiting for a writer that never came (the
+red-team pass on FRAME-DRIP-1's F6; re-run by the head chef: `audit verify` and `audit tail` held until killed at 12 s;
+witnessed in-crate on `2734ba9`, `verify` still waiting at 5 s). Decided: one reader, `read_day`, opens non-blocking and
+refuses what it OPENED unless it is a regular file — ATTEST-FIFO-1's rule — in words ("is not a regular file, and an audit
+day log must be one"), and the readers that treat an unreadable day log as empty (the log's open) do not treat this one
+so: the log refuses to open rather than start a chain over a file it cannot read. `O_NONBLOCK` needs `libc`, which
+`delulu-broker` did not depend on (ruling 1 keeps its list short); it is already in the tree through `getrandom`, so the
+Unix-only line adds no crate. Under Miri the flag is left out: Miri's `open` takes a short list of flags and never makes a
+FIFO, so there the open is the blocking one it replaced. `secrets.rs`'s store is read the same way and was not tried.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

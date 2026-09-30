@@ -245,6 +245,12 @@ fool. Keep this file short enough to read at the start of every run.
   fires ended in seconds on `rate_limit: rejected (five_hour)`.
 - **The VM's limits (official docs):** 4 vCPUs, 16 GB, 30 GB; a command waits 2 minutes by default and
   at most 10, then moves to the background — run the suite in the background and poll its output file.
+  **The disk fills** (run 6): `scripts/check-other-os.sh` leaves about 3.6 GB of cross builds in `target/<triple>`, and
+  incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
+  delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A witness job's log: ask `get_job_logs`
+  by job id with a large `tail_lines` — a long log comes back as a file to grep, a short one (a quick job, about 450
+  lines) inline, so ask about 120 lines for a job that ran one small target. And a run listing filtered by `ci.yml`,
+  `branch` and `event` with `perPage` 1 returned a day-old run first (run 6): list by `event` alone, all workflows.
   The harness refuses a bare `sleep N` as a wait (run 4): wait on a background job's file with
   `until grep -q '^EXIT=' FILE; do sleep 5; done` (a timeout of up to ten minutes), or end the turn and
   be woken when a background command finishes.

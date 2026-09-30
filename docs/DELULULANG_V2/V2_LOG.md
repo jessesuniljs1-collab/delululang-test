@@ -3528,3 +3528,23 @@ the client as a reset, which can cut the 431 short — so it accepts the refusal
 **Verified:** clippy `-D warnings` clean; the full suite alone: 2,065 passed, 0 failed, 15 ignored (154 binaries), cargo
 exit 0. Read on the runners before `master` moved (`witness.yml`, `delulu-registry`, every target): Windows
 `36657264839` (`serve_bounds` 4 passed, `criterion5_e2e` 3, lib 20) and macOS `36657267414`, success.
+
+## 2026-09-30 — routine run 6: AUDIT-FIFO-1 — an audit day log is read only if it is a regular file (D-V2-77); the run's close
+
+RW 4.38, the red-team pass's F6, re-run first (`audit verify` and `audit tail` held until killed at 12 s). **Witnessed
+in-crate on `2734ba9`**: with a FIFO named `20260930.jsonl`, `verify` was still waiting at 5 s. **Fixed (`cc3857b`,
+D-V2-77):** `read_day` opens non-blocking, refuses what it opened unless it is a regular file, in words, for every
+reader and the log's open (which no longer reads such a file as empty); `libc` on Unix for `delulu-broker` (already in
+the tree); the flag left out under Miri. Witness `audit::tests::a_day_log_that_is_not_a_regular_file_is_refused_not_waited_on`
+(verify, tail, open); M35–M37 red. **Verified:** clippy clean; `check-other-os.sh` clean for Windows, macOS and musl; the
+full suite alone 2,066 passed, 0 failed, 15 ignored (154 binaries), cargo exit 0 — its first attempt died on ENOSPC (the
+VM's disk full of cross-target builds and incremental caches: 3.6 GB and 6.8 GB, deleted). Read on the runners first
+(`delulu-broker` lib): macOS `36658766644 (170 passed, the witness among them)`, Windows `36658768992 (169 passed; the witness is Unix-only)`.
+
+**Routine run 6, closed.** CI on arrival green (`dcf4fcb`). Built: **RW 4.32's last item and FRAME-DRIP-1** (D-V2-73 — a
+peer's frame owed whole on the broker, a foreign call and the sandbox host); **PS-E-04 on Windows** (D-V2-74 — the
+launcher held sharing reads only; red then green on a Windows runner). A red-team pass (Sonnet 5.5) on FRAME-DRIP-1 held
+its guarantee and found **PROBE-DRIP-1** (closed with **REQUEST-HANG-1**, D-V2-75), **BROKER-RELDIR-1** (closed), the
+registry's unbounded port (**REGISTRY-BOUNDS-1**, D-V2-76) and a FIFO in the audit directory (**AUDIT-FIFO-1**, D-V2-77);
+the rest are RW 4.35, 4.37, 4.39, 4.40. Mutants M21–M37, each red. Every slice read on macOS and Windows before
+`master` moved; every push run of the run read green up to ``2734ba9``.

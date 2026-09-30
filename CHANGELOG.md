@@ -147,6 +147,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   body at whatever `Content-Length` said — `18446744073709551615` took it down. Each connection now has its own thread
   and bounds — 10 s a read, 60 s a request, 8 KiB a line, 64 headers, a 16 MiB body, 64 connections at once — and a
   request past them is answered 413, 431 or 400; requests are still handled one at a time (D-V2-76).
+- **Fixed: a FIFO named like an audit day log hung `delulu audit verify`, `audit tail`, `audit query` and `broker start`**
+  (AUDIT-FIFO-1). A day log is now read only if it is a regular file, and anything else is refused in words (D-V2-77).
 
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 
