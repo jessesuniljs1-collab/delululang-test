@@ -154,18 +154,34 @@ fn absolute(path: &str, workdir: Option<&str>, what: &str) -> Result<String, Ref
     Ok(out)
 }
 
-/// A granted host as an OpenShell endpoint host. DeluluLang's `*.suffix` matches one label or more
-/// before the suffix and never the apex (`prim::host_matches`, C85) — OpenShell's `**.suffix`, which
-/// needs at least one label. OpenShell refuses a wildcard of fewer than three labels.
-fn endpoint_host(grant: &str, host: &str) -> Result<String, Refused> {
-    let h = host.to_ascii_lowercase();
+/// A granted host as an OpenShell endpoint host — `Ok(None)` when the grant can match no URL at all.
+/// DeluluLang's `*.suffix` matches one label or more before the suffix and never the apex
+/// (`prim::host_matches`, C85) — OpenShell's `**.suffix`, which needs at least one label. OpenShell
+/// refuses a wildcard of fewer than three labels.
+///
+/// **EXPORT-CASE-1 (routine run 8):** DeluluLang compares a granted host EXACTLY with a URL's host,
+/// and accepts a URL's host only in canonical form (`egress::parse_target`: lower case, no trailing
+/// dot, a canonical address literal) — so `net=EXAMPLE.com` or `net=example.com.` matches no URL and
+/// grants nothing, while OpenShell, matching case-insensitively, would allow the real host. The export
+/// once lowercased it. Such a grant is now omitted and named, never rewritten.
+fn endpoint_host(grant: &str, host: &str) -> Result<Option<String>, Refused> {
+    let h = host.to_string();
     if h.chars().any(|c| c.is_control() || c.is_whitespace()) {
         return Err(Refused::Usage(format!("`--grant {grant}` names no host")));
     }
+    if h.starts_with('[') {
+        return Err(Refused::Unrepresentable(format!("`--grant {grant}` is an IPv6 address; this export does not map one yet")));
+    }
+    let canonical = |name: &str| {
+        delulu_runtime::egress::parse_target(&format!("https://{name}/")).is_ok_and(|t| t.host == name)
+    };
     match h.strip_prefix("*.") {
         Some(suffix) => {
             if suffix.contains('*') {
                 return Err(Refused::Unrepresentable(format!("`--grant {grant}`: a wildcard is written only as the first label")));
+            }
+            if !canonical(suffix) {
+                return Ok(None);
             }
             if suffix.split('.').filter(|l| !l.is_empty()).count() < 2 {
                 return Err(Refused::Unrepresentable(format!(
@@ -173,12 +189,13 @@ fn endpoint_host(grant: &str, host: &str) -> Result<String, Refused> {
                      and this export will not widen it to `**`"
                 )));
             }
-            Ok(format!("**.{suffix}"))
+            Ok(Some(format!("**.{suffix}")))
         }
         None if h.contains('*') => {
             Err(Refused::Unrepresentable(format!("`--grant {grant}`: a wildcard is written only as the first label")))
         }
-        None => Ok(h),
+        None if !canonical(&h) => Ok(None),
+        None => Ok(Some(h)),
     }
 }
 
@@ -271,7 +288,13 @@ pub(crate) fn export(
                     omitted.push(json!({ "grant": spec, "why": "the program's authority names no Http capability" }));
                     continue;
                 }
-                let h = endpoint_host(spec, value)?;
+                let Some(h) = endpoint_host(spec, value)? else {
+                    omitted.push(json!({
+                        "grant": spec,
+                        "why": "DeluluLang matches a host exactly, in lower case with no trailing dot, so this spelling matches no URL and grants nothing — OpenShell would match it more loosely",
+                    }));
+                    continue;
+                };
                 if !hosts.iter().any(|(e, _)| *e == h) {
                     hosts.push((h.clone(), spec.clone()));
                 }
@@ -603,8 +626,12 @@ mod tests {
 
     #[test]
     fn hosts_map_to_openshell_patterns_or_refuse() {
-        assert_eq!(endpoint_host("g", "API.Example.com").unwrap(), "api.example.com");
-        assert_eq!(endpoint_host("g", "*.cdn.example.org").unwrap(), "**.cdn.example.org");
+        assert_eq!(endpoint_host("g", "api.example.com").unwrap().as_deref(), Some("api.example.com"));
+        assert_eq!(endpoint_host("g", "*.cdn.example.org").unwrap().as_deref(), Some("**.cdn.example.org"));
+        // EXPORT-CASE-1: a spelling DeluluLang can never match is no host at all — never lowercased.
+        for dead in ["API.Example.com", "example.com.", "*.Cdn.example.org", "*.example.org."] {
+            assert_eq!(endpoint_host("g", dead).unwrap(), None, "{dead}");
+        }
         assert!(matches!(endpoint_host("g", "*.com"), Err(Refused::Unrepresentable(_))));
         assert!(matches!(endpoint_host("g", "a.*.com"), Err(Refused::Unrepresentable(_))));
     }

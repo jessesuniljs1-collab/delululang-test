@@ -272,3 +272,35 @@ fn the_exports_flags_belong_to_policy_alone() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// EXPORT-CASE-1 (routine run 8): DeluluLang matches a granted host exactly, in canonical form, so
+/// `net=EXAMPLE.com` grants nothing — `delulu run` refuses `root.http(["example.com"])` under it (DL0703).
+/// The export lowercased it and let OpenShell's wall reach `example.com`. Now it is omitted and named.
+#[test]
+fn a_host_grant_delulu_would_never_match_is_omitted_not_lowercased() {
+    let dir = scratch("case");
+    std::fs::write(dir.join("p.delulu"), PROGRAM).unwrap();
+    let o = export(&dir, "p.delulu", &with_grants(&["net=EXAMPLE.com", "net=example.org.", "net=api.example.com"], &["--workdir", "/s", "--json"]));
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    let e = &v["openshell"];
+    let hosts: Vec<&str> = e["policy"]["network_policies"]
+        .as_object()
+        .unwrap()
+        .values()
+        .flat_map(|r| r["endpoints"].as_array().unwrap().iter().map(|ep| ep["host"].as_str().unwrap()))
+        .collect();
+    assert_eq!(hosts, ["api.example.com"], "only the grant DeluluLang can match reaches the wall: {e:#}");
+    let omitted: Vec<&str> = e["omitted"].as_array().unwrap().iter().map(|m| m["grant"].as_str().unwrap()).collect();
+    assert_eq!(omitted, ["net=EXAMPLE.com", "net=example.org."], "{e:#}");
+    // The premise, witnessed: under `net=EXAMPLE.com` the runtime refuses `example.com`.
+    std::fs::write(
+        dir.join("h.delulu"),
+        "module h\n\nfn main(root: Root) ! {Net} {\n    let h = root.http([\"example.com\"])\n}\n",
+    )
+    .unwrap();
+    let r = delulu(&dir, &["run", "h.delulu", "--no-prompt", "--grant", "net=EXAMPLE.com"]);
+    assert_eq!(r.status.code(), Some(1), "{}", text(&r.stderr));
+    assert!(text(&r.stderr).contains("DL0703"), "{}", text(&r.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
