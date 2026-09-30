@@ -572,7 +572,7 @@ fn verify_unlocked(dir: &Path) -> Result<VerifiedStats, AuditError> {
     let mut records = 0usize;
     for day in &days {
         files += 1;
-        let text = fs::read_to_string(day_path(dir, day)).map_err(AuditError::io)?;
+        let text = read_day(&day_path(dir, day)).map_err(AuditError::io)?;
         for line in text.lines() {
             if line.trim().is_empty() {
                 continue;
@@ -785,7 +785,7 @@ fn read_all_records(dir: &Path) -> Result<Vec<AuditRecord>, AuditError> {
     let days = list_day_files(dir)?;
     let mut out = Vec::new();
     for day in &days {
-        let text = fs::read_to_string(day_path(dir, day)).map_err(AuditError::io)?;
+        let text = read_day(&day_path(dir, day)).map_err(AuditError::io)?;
         for line in text.lines() {
             if line.trim().is_empty() {
                 continue;
@@ -826,12 +826,51 @@ fn day_path(dir: &Path, day: &str) -> PathBuf {
     dir.join(format!("{day}.jsonl"))
 }
 
+/// A day log, read only if it is a regular file (RW 4.38, the red-team pass on FRAME-DRIP-1's F6). It was
+/// `read_to_string` by name: a FIFO named like a day log hung every reader of the chain — `verify`, `tail`,
+/// `query` and the log's own open — waiting for a writer that never came. Opened non-blocking, so opening
+/// a FIFO returns at once, and judged by what was OPENED (ATTEST-FIFO-1's rule).
+fn read_day(path: &Path) -> std::io::Result<String> {
+    use std::io::Read as _;
+    let mut open = fs::OpenOptions::new();
+    open.read(true);
+    // Not under Miri, whose `open` takes a short list of flags and which never makes a FIFO: there the
+    // open is the blocking one this replaced (the nightly's `miri-slow` interprets these reads).
+    #[cfg(all(unix, not(miri)))]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NONBLOCK);
+    let mut f = open.open(path)?;
+    if !f.metadata()?.is_file() {
+        return Err(std::io::Error::other(NotRegular(path.to_path_buf())));
+    }
+    let mut text = String::new();
+    f.read_to_string(&mut text)?;
+    Ok(text)
+}
+
+/// [`read_day`]'s refusal: named, so the readers that treat an unreadable day log as empty do not treat
+/// this one so.
+#[derive(Debug)]
+struct NotRegular(PathBuf);
+
+impl std::fmt::Display for NotRegular {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`{}` is not a regular file, and an audit day log must be one", self.0.display())
+    }
+}
+
+impl std::error::Error for NotRegular {}
+
+fn not_regular(e: &std::io::Error) -> bool {
+    e.get_ref().is_some_and(|inner| inner.is::<NotRegular>())
+}
+
 /// How many CHAIN RECORDS a day file holds. Uses exactly `last_record_hash`'s notion of a record —
 /// a JSON line carrying `seq` — so a header line is not miscounted and the anchor's count means the
 /// same thing `verify` counts.
 fn count_records(path: &Path) -> Result<usize, AuditError> {
-    let text = match fs::read_to_string(path) {
+    let text = match read_day(path) {
         Ok(t) => t,
+        Err(e) if not_regular(&e) => return Err(AuditError::io(e)),
         Err(_) => return Ok(0),
     };
     let mut n = 0usize;
@@ -849,8 +888,9 @@ fn count_records(path: &Path) -> Result<usize, AuditError> {
 }
 
 fn last_record_hash(path: &Path) -> Result<Option<String>, AuditError> {
-    let text = match fs::read_to_string(path) {
+    let text = match read_day(path) {
         Ok(t) => t,
+        Err(e) if not_regular(&e) => return Err(AuditError::io(e)),
         Err(_) => return Ok(None),
     };
     let mut last = None;
@@ -1189,6 +1229,40 @@ mod tests {
         let r2 = log.append(entry(2, 1001, "use", "g_a", "allow")).unwrap();
         assert_eq!(r2.prev_hash, first_hash);
         assert!(verify(&dir).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// RW 4.38 (the red-team pass on FRAME-DRIP-1, F6): a FIFO named like a day log hung every reader of
+    /// the chain — `verify`, `tail`, and the log's own open (so `broker start`) — in `read_to_string`,
+    /// waiting for a writer that never came: red on `2734ba9`, each still waiting at 5 s. Each refuses it
+    /// now, in words, at once. (A FIFO and the wall clock: not under Miri.)
+    #[cfg(unix)]
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn a_day_log_that_is_not_a_regular_file_is_refused_not_waited_on() {
+        let dir = tmp_dir("fifo");
+        fs::create_dir_all(&dir).unwrap();
+        let day = dir.join("20260930.jsonl");
+        let made = std::process::Command::new("mkfifo").arg(&day).status().expect("mkfifo runs");
+        assert!(made.success());
+        type Reader = fn(PathBuf) -> Result<(), AuditError>;
+        let readers: [(&str, Reader); 3] = [
+            ("verify", |d| verify(d).map(|_| ())),
+            ("tail", |d| tail(d, 3).map(|_| ())),
+            ("open", |d| AuditLog::open(d).map(|_| ())),
+        ];
+        for (name, read) in readers {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let d = dir.clone();
+            std::thread::spawn(move || {
+                let _ = tx.send(read(d));
+            });
+            let r = rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap_or_else(|_| panic!("`{name}` was still waiting on the FIFO after 5 s"));
+            let e = r.expect_err("a day log that is not a regular file is refused");
+            assert!(format!("{e:?}").contains("not a regular file"), "`{name}`, in words: {e:?}");
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 

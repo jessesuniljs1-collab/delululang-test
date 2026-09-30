@@ -34,3 +34,8 @@ getrandom = "0.3"
 # (blake3::keyed_hash — head-chef ruling 1: no hmac/sha2 crates). Same "1" req as
 # delulu-check/delulu-wasm, so Cargo unifies on the one workspace blake3 (1.8.x).
 blake3 = "1"
+
+# RW 4.38: a day log is opened non-blocking and refused unless it is a regular file, so a FIFO named like
+# one cannot hang the chain's readers. libc is already in the tree (getrandom's), not a new crate.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
