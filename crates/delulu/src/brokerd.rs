@@ -2071,8 +2071,9 @@ mod tests {
     /// comment promised that a client which "dribbles a partial frame is dropped" after five seconds, so
     /// it cannot deny every other custody operation — the operator's e-stop revoke among them. The bound
     /// was on each READ, so a client sending one byte every two seconds was never dropped: red on
-    /// `dcf4fcb`, a `Status` behind the dribbler answered only when the dribbler stopped (~24 s). The
-    /// whole request is now owed within the bound of its connection's acceptance.
+    /// `dcf4fcb`, a `Status` behind the dribbler answered only when the dribbler stopped (~24 s) — on
+    /// Windows, where a busy pipe refuses a second client, it was refused for as long (`witness.yml`
+    /// `36651089599`). The whole request is now owed within the bound of its connection's acceptance.
     #[test]
     fn a_client_that_dribbles_its_request_cannot_hold_the_serve_loop() {
         use std::io::Write as _;
@@ -2104,9 +2105,20 @@ mod tests {
         // Let the serve loop accept the dribbler and start reading it before the operator asks.
         std::thread::sleep(std::time::Duration::from_millis(300));
         let t = std::time::Instant::now();
-        let answered = request(&state, ReqBody::Status);
+        // On Unix a second client waits in the socket's backlog; on Windows a busy pipe refuses it
+        // after a second (`broker_transport::connect`), so the operator asks again. Either way it is
+        // answered only once the serve loop is free of the dribbler (red on Windows too: refused
+        // until this loop gave up).
+        let answered = loop {
+            match request(&state, ReqBody::Status) {
+                Err(_) if t.elapsed() < std::time::Duration::from_secs(14) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                other => break other,
+            }
+        };
         let waited = t.elapsed();
-        assert!(matches!(answered, Ok(Response::Status { .. })), "{answered:?}");
+        assert!(matches!(answered, Ok(Response::Status { .. })), "{answered:?} after {waited:?}");
         assert!(
             waited < std::time::Duration::from_secs(14),
             "a request behind a dribbling client waited {waited:?}: the dribbler held the serve loop"
