@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 294 |
-| Rust lines | 152966 |
+| Rust lines | 152994 |
 | Rust files outside `src/` (test/bench targets) | 133 |
 | Markdown documents | 252 |
 | Markdown lines | 68149 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 37977 lines
+- **Modules:** 41 files, 37989 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -126,7 +126,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/microvm.rs` | 1461 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/morph_file.rs` | 257 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
-| `src/openshell.rs` | 614 | PS-E-05 (a), D-V2-82: `delulu sandbox policy <file> --format openshell` — the wall an OpenShell |
+| `src/openshell.rs` | 626 | PS-E-05 (a), D-V2-82: `delulu sandbox policy <file> --format openshell` — the wall an OpenShell |
 | `src/pipe_channel.rs` | 573 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
 | `src/policy.rs` | 511 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |

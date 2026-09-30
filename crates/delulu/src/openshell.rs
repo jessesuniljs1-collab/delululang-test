@@ -107,6 +107,15 @@ fn absolute(path: &str, workdir: Option<&str>, what: &str) -> Result<String, Ref
     if path.chars().any(char::is_control) {
         return Err(Refused::Usage(format!("{what} holds a control character, which names no path a policy should carry")));
     }
+    // A Windows spelling names a path on the machine running `delulu`, never one inside an OpenShell
+    // sandbox, which is Linux: `C:\x` is not absolute there, and `.\x` is a file named with a backslash.
+    let b = path.as_bytes();
+    if path.contains('\\') || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') {
+        return Err(Refused::Usage(format!(
+            "{what} is a Windows spelling (a backslash or a drive); an OpenShell sandbox is Linux — name the path \
+             as it is inside the sandbox, with `/`"
+        )));
+    }
     let joined = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -587,6 +596,9 @@ mod tests {
         assert!(matches!(absolute("./data/../out", Some("/w"), "p"), Err(Refused::Usage(_))));
         assert!(matches!(absolute("/../etc", None, "p"), Err(Refused::Usage(_))));
         assert!(matches!(absolute("/a\nb", None, "p"), Err(Refused::Usage(_))));
+        assert!(matches!(absolute("C:\\x\\p.delulu", None, "p"), Err(Refused::Usage(_))));
+        assert!(matches!(absolute(".\\data", Some("/w"), "p"), Err(Refused::Usage(_))));
+        assert!(matches!(absolute("c:/x", Some("/w"), "p"), Err(Refused::Usage(_))));
     }
 
     #[test]

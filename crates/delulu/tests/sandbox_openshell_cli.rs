@@ -210,12 +210,22 @@ fn paths_are_the_sandboxs_and_every_malformed_request_is_refused() {
         let o = delulu(&dir, &args);
         assert_eq!(o.status.code(), Some(2), "{extra:?}: {}", text(&o.stderr));
     }
-    // An absolute program path needs no workdir; the program's own file is on the wall.
+    // An absolute program path needs no workdir; the program's own file is on the wall. On Windows this
+    // machine's absolute path is `C:\…`, which is no path inside a (Linux) sandbox: refused by name.
     let o = export(&dir, abs, &["--grant", "fs.read=/srv/data", "--json"]);
-    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
-    let ro = &v["openshell"]["policy"]["filesystem_policy"]["read_only"];
-    assert!(ro.as_array().unwrap().iter().any(|p| p == abs) && ro.as_array().unwrap().iter().any(|p| p == "/srv/data"), "{ro}");
+    if cfg!(windows) {
+        assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+        assert!(text(&o.stderr).contains("Windows spelling"), "{}", text(&o.stderr));
+    } else {
+        assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+        let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+        let ro = &v["openshell"]["policy"]["filesystem_policy"]["read_only"];
+        assert!(ro.as_array().unwrap().iter().any(|p| p == abs) && ro.as_array().unwrap().iter().any(|p| p == "/srv/data"), "{ro}");
+    }
+    // A Windows spelling in a grant is refused on every host: it names no path in the sandbox.
+    let o = export(&dir, "p.delulu", &["--workdir", "/sandbox", "--grant", "fs.read=.\\data"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("Windows spelling"), "{}", text(&o.stderr));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -224,7 +234,13 @@ fn paths_are_the_sandboxs_and_every_malformed_request_is_refused() {
 fn a_secret_is_named_never_shown_and_every_string_stays_quoted() {
     let dir = scratch("quoted");
     std::fs::write(dir.join("p.delulu"), PROGRAM).unwrap();
-    let weird = "fs.read=./we\"ird: [x] #y";
+    // YAML's indicators in a path; `"` and `:` only where the host's own grant parser allows them (Windows
+    // refuses `:` as an alternate data stream and `"` in a name — a platform rule, routine run 8).
+    let (weird, quoted) = if cfg!(windows) {
+        ("fs.read=./we'ird [x] #y {z}, &!%@", "\n    - \"/sandbox/we'ird [x] #y {z}, &!%@\"\n")
+    } else {
+        ("fs.read=./we\"ird: [x] #y {z}, &!%@'", "\n    - \"/sandbox/we\\\"ird: [x] #y {z}, &!%@'\"\n")
+    };
     let o = export(
         &dir,
         "p.delulu",
@@ -237,6 +253,6 @@ fn a_secret_is_named_never_shown_and_every_string_stays_quoted() {
     let e = &v["openshell"];
     assert!(e["unrepresented"].as_array().unwrap().iter().any(|m| m["what"] == "secret:TOKEN"), "{e:#}");
     let doc = e["document"].as_str().unwrap();
-    assert!(doc.contains("\n    - \"/sandbox/we\\\"ird: [x] #y\"\n"), "the path, escaped and whole:\n{doc}");
+    assert!(doc.contains(quoted), "the path, escaped and whole:\n{doc}");
     let _ = std::fs::remove_dir_all(&dir);
 }
