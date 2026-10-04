@@ -275,7 +275,8 @@ first. Each slice is one routine run and ends with its CI run read green.
   authority; unrepresentable grants refuse by name), the guest-inside-OpenShell recipe at L3, and a
   manual `openshell.yml` workflow: the pinned release, a granted/ungranted pair, a denied `curl`, and
   `openshell-prover check` within one boundary and exceeding a narrower one. **(a), the export and the prover's
-  check, built by routine run 8 (D-V2-82);** (b), the recipe and its runtime witnesses, open.
+  check, built by routine run 8 (D-V2-82);** **(b), the guest inside OpenShell at L3 — its outer-wall declaration (D-V2-83,
+  routine runs 9–10) and its launcher over `ssh` (D-V2-85) — read green on a runner, the recipe in `docs/DEPLOYMENT.md`.**
 - **PS-E-06** `delulu audit export --format ocsf`: OCSF 1.8.0 JSON Lines, each record's chain fields
   carried so the export stays verifiable; no secret, no query string. **Built 2026-09-30 (routine run 7,
   D-V2-78)** — each event carries its whole record; `audit verify --ocsf`; a use waits for its effect in the record.

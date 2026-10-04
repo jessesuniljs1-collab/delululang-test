@@ -3893,3 +3893,16 @@ the input to its end before it runs anything, so no conversation can cross it: i
 host's 60 s deadline closed its input. **Through SSH it streams:** `openshell sandbox ssh-config dlg` prints a `Host
 openshell-dlg.default` entry whose `ProxyCommand` is `openshell ssh-proxy`, and over it the command started at 0.1 s,
 `x` arrived at 0.1 s and `y` at 3.0 s. So (b)'s launcher is `ssh`, not `exec` — the next commit.
+
+**Then the launcher over `ssh` (`fc676d1`, D-V2-85) — read green inside a real OpenShell sandbox:** `openshell.yml`
+`37234907676`, both jobs success. Step (5), line by line: the launcher `exec ssh -T -F …/guest-ssh.cfg -o BatchMode=yes
+openshell-dlg.default /usr/local/bin/delulu $DELULU_GUEST_ARGS $GUEST_EXTRA`; **(5a)** undeclared — "could not lock itself
+down (… `seccomp`: Operation not permitted …) — nothing ran", "the guest never confirmed its boundary, so it was not sent
+the program", exit 1; **(5b)** declared — "the guest's own syscall filter was refused by a filter already in force on it —
+the outer wall its launcher declared (`--outer-syscall-filter`) stands in for it; the guest's own filter is NOT
+installed", then "hello through the OpenShell guest" (a granted `fs.read` the host performed), exit 0; the report level 3,
+`external`, `host_guarantees` empty, `guest_reported` ["no file writes", "reads only from the system paths", "no TCP bind
+or connect", "an outer syscall filter, not its own"], all five properties `unknown`. "openshell-runtime: every
+expectation held." **PS-E-05 is complete:** (a) the export, (b) the guest inside OpenShell — the recipe in
+`docs/DEPLOYMENT.md`. Still open beside it, recorded in the study: whether a `protocol: rest` endpoint's TLS, terminated by
+OpenShell's own CA, verifies inside the wall when `delulu run` itself runs there ((a) with a network grant).

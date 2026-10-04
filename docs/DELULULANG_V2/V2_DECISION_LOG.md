@@ -1825,6 +1825,28 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    the two-engine differential by hand (wasmtime changed). The push run is the cold-cache witness on the runners — the
    cache key is still new, so it starts cold.
 
+## D-V2-85 — PS-E-05 (b): the guest is reached over `ssh` through OpenShell's gateway; `sandbox exec` cannot carry a conversation — TAKEN (head chef, 2026-10-04, under the owner's delegation)
+
+1. **Measured, after a hypothesis was refuted.** With the in-force check fixed (D-V2-83's amendment), the declared guest
+   ran under OpenShell's filter and its confinement report never reached the host (`openshell.yml` `37233187076`). The
+   first guess — the CLI's line-buffered standard output — was refuted by timing each byte (`37233707240`): output crosses
+   `openshell sandbox exec` as it is written, newline or not. The input does not: **the command starts only once its
+   standard input ends** — the first line of a command fed `x`, 3 s, `y`, 3 s came at 6.0 s, with `--tty` too
+   (`37234148291`). v0.1.2's `exec` reads its input to the end before it runs anything: a command, not a conversation.
+2. **Taken:** the external launcher reaches the guest over `ssh`, through the entry `openshell sandbox ssh-config NAME`
+   prints (`ProxyCommand openshell ssh-proxy …`): the same sandbox, its policy and its filter, and the input streams (a
+   byte at 0.1 s, the next at 3.0 s). `ssh -T`: no terminal, so the channel's binary frames pass unchanged. The guest's
+   words are DeluluLang's own (`$DELULU_GUEST_ARGS`), then the launcher's declaration (`--outer-syscall-filter`).
+3. **Not taken:** a line-ended framing of the external channel (a newline after every frame) — built for a cause that
+   was not there; it would change the wire and fix nothing here. Nor a network channel from the sandbox to the host — a
+   network rule the guest's sandbox does not need. Nothing of OpenShell is changed or copied: the CLI's own command is
+   the transport.
+4. **Read green inside a real OpenShell sandbox** (`37234907676`, `fc676d1`): (5a) undeclared — the guest's `seccomp`
+   refused, it failed closed, the host never sent the program (exit 1); (5b) declared — exit 0, the program's granted
+   read performed by the host and its line printed, the report level 3 `external` with the guest's words ["no file
+   writes", "reads only from the system paths", "no TCP bind or connect", "an outer syscall filter, not its own"], none
+   of its own filter's four, every property `unknown`, no host guarantee. The recipe is in `docs/DEPLOYMENT.md`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

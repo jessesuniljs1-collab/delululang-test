@@ -257,7 +257,7 @@ exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu
   --guarantee "gVisor runsc" --guarantee "no network" -- /usr/local/bin/delulu-gvisor
 ```
 
-**NVIDIA OpenShell — the policy is written for you (PS-E-05 (a)); the L3 recipe is not built yet.**
+**NVIDIA OpenShell — the policy is written for you (PS-E-05 (a)), and the guest can run inside it (PS-E-05 (b)).**
 OpenShell (NVIDIA's open agent runtime, 2026-09) governs programs it cannot read, so its policy is a
 document someone writes. For a DeluluLang program, `delulu` writes it:
 
@@ -275,10 +275,55 @@ the image (default `/usr/local/bin/delulu`, the repository's `Dockerfile`). `--j
 grant — emitted, omitted, unrepresented (the console, the clock, budgets, secrets), narrowed (port 443). When
 the policy has a network rule, OpenShell adds baseline paths of its own, `/tmp` read-write among them — check
 the sandbox's EFFECTIVE policy (`openshell sandbox get NAME --policy-only`) against your boundary with
-`openshell-prover`. DeluluLang's own grants still govern every effect inside the wall. **Not yet built:**
-running the GUEST inside an OpenShell sandbox as an `external:` launcher (level 3, unmeasured unless
-attested) — until that has run green, nothing about it is a recipe. The design:
-`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.5.
+`openshell-prover`. DeluluLang's own grants still govern every effect inside the wall.
+
+**The other way round: the GUEST inside OpenShell, the host outside (PS-E-05 (b)).** The host — its grants,
+secrets and audit chain — stays on your machine; only the guest, which performs no effects and holds no
+authority, runs in an OpenShell sandbox, as an `external:` launcher at level 3. Its sandbox needs no network
+rule and only the paths `delulu` starts from, read-only:
+
+```yaml
+# guest-policy.yaml
+version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: [/usr, /lib, /etc]
+  read_write: []
+landlock:
+  compatibility: hard_requirement
+process:
+  run_as_user: "1500"     # a non-root user your image has
+  run_as_group: "1500"
+network_policies: {}
+```
+
+```sh
+openshell sandbox create --name delulu-guest --from IMAGE --policy guest-policy.yaml --detach -- sleep 3600
+openshell sandbox ssh-config delulu-guest > ~/.delulu/openshell-guest.ssh   # its Host: openshell-delulu-guest.default
+```
+
+```sh
+#!/bin/sh
+# /usr/local/bin/delulu-openshell — run with:
+#   delulu run app.delulu --grant … --sandbox --sandbox-backend external:/usr/local/bin/delulu-openshell
+exec ssh -T -F "$HOME/.delulu/openshell-guest.ssh" -o BatchMode=yes openshell-delulu-guest.default \
+  /usr/local/bin/delulu $DELULU_GUEST_ARGS --outer-syscall-filter
+```
+
+Two things here are OpenShell's, and both were measured, not assumed. **The channel goes over `ssh`:**
+`openshell sandbox exec` starts its command only once its standard input has ENDED, so it can carry a
+command but not the guest's conversation (a guest behind it starts after the host has given up); `ssh`
+through the gateway (`ProxyCommand openshell ssh-proxy …`, which `ssh-config` writes) streams both ways —
+`-T`, no terminal, so the channel's frames pass unchanged. **The launcher declares OpenShell's filter:** the
+sandbox's own syscall filter refuses the guest's (`seccomp`: EPERM), and a guest that cannot install its
+filter refuses to run — unless its launcher says it starts it inside such a wall (`--outer-syscall-filter`).
+Then, and only where the kernel reports a filter in force, the guest runs under OpenShell's filter and says
+so: its report carries "an outer syscall filter, not its own" where its filter's four words would be, and the
+screen says the guest's own filter is NOT installed. The level stays 3, every property `unknown` — DeluluLang
+measured none of OpenShell's wall; attest it (above) if you need it vouched for. The image's `delulu` must be
+the host's version (the repository's `Dockerfile` builds one; `/usr/local/bin/delulu`). Read green on a
+runner by `openshell.yml`'s runtime job, step (5): the declared guest runs the program and an undeclared one
+fails closed with the program never sent (`scripts/openshell-runtime.sh`; D-V2-83, D-V2-85).
 
 ---
 

@@ -1046,7 +1046,8 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: (1) `9bc405e` the nightly red four times, fixed (D-V2-84); (2) `83a62ba` merge of routine run 9's `f446bfa`
   (PS-E-05 (b), D-V2-83 — stranded on `claude/stoic-ptolemy-uyw9g4`); (3) `9e75017` PS-E-05 (b): the guest asks the
   kernel whether a filter is in force, the witness's wall hides `/proc`; (4) `0ed045f`, (5) `4cae1f9` `openshell-runtime.sh`:
-  the exec relay measured; (6) the records — this commit
+  the exec relay measured; (6) `95a9789` the records of (2)–(5); (7) `fc676d1` `openshell-runtime.sh`: the guest's launcher
+  over `ssh`; (8) PS-E-05 (b) complete: the recipe, D-V2-85 — this commit
 - Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
   `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
   reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
@@ -1060,7 +1061,10 @@ it on `origin` was made in the cloud and is listed below.
   branch; a simulated wall simulates every layer), `docs/CLOUD_ROUTINE.md` (step 1: every branch; step 6: the author),
   `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` (§4.5: facts for (b)),
   `docs/REMAINING_WORK.md` (4.30), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
-  `docs/survey/*` — (6). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
+  `docs/survey/*` — (6). M `scripts/openshell-runtime.sh` (the launcher over `ssh`) — (7). M `docs/DEPLOYMENT.md` (the guest
+  inside OpenShell: the recipe), `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-85), `V2_LOG.md`,
+  `V2_PHASE_STATUS.md` (E-05 complete), `V2_OPENSHELL_STUDY.md`, `V2_IMPLEMENTATION_ROADMAP.md`, `docs/REMAINING_WORK.md`
+  (4.30 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (8). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
   GitHub no-reply address, Claude as co-author (his routine prompt); runs 1–9 committed as `Claude`.
 - Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
   passed. After the last edit: in each commit's message.
@@ -1078,11 +1082,15 @@ it on `origin` was made in the cloud and is listed below.
   `37233190495`, Windows `37233191959`, Linux x64 `37233193360` success. **`openshell.yml` (by hand, on the branch):**
   `37233187076` (`9e75017`) — prover green; runtime: (1)–(4) and (5a) held, (5b) past the filter, then no channel;
   `37233707240` (`0ed045f`), `37234148291` (`4cae1f9`) — the relay measured: `sandbox exec` starts a command only when
-  its input ends (with `--tty` too); `ssh` through `openshell ssh-proxy` streams.
+  its input ends (with `--tty` too); `ssh` through `openshell ssh-proxy` streams. **(6)'s push runs:** `openshell`
+  `37234832923` and `ocsf` `37234832899` success; CI `37234832894` — success, 16 jobs, none failed (arm64 ping-pong MEASURED 2.94x against a control of 3.61x; the other three NOT MEASURED). **(7) read inside a real OpenShell
+  sandbox: `37234907676` (`fc676d1`) — both jobs GREEN**: (5a) the undeclared guest failed closed, the program never sent;
+  (5b) the declared guest ran the program (exit 0), the report level 3 with "an outer syscall filter, not its own", every
+  property `unknown` — "every expectation held".
 - Redo on the laptop: nothing (lockfile and workflow only).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline; look at every branch;
   a simulated wall simulates every layer of the real one); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run; (2) **E-05 (b): the launcher over `ssh`** (`openshell sandbox ssh-config`,
-  then `ssh -T -F CFG HOST delulu __guest --stdio-pipes --outer-syscall-filter`), read in `openshell.yml`'s runtime job,
-  then `docs/DEPLOYMENT.md`'s recipe; (3) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
+- Open / next: (1) read this commit's push run; (2) **PS-E-05 is complete** ((a) and (b)); left beside it: `protocol:
+  rest` TLS behind OpenShell's CA when `delulu run` itself runs inside with a network grant (the study's §4.5 question);
+  (3) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
   (P8-01 first), P9; the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; RW 7.17.

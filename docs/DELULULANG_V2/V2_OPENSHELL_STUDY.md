@@ -4,7 +4,7 @@
 (*"I want this to be studied and incorporated not just as copy but as real engineering for the sandbox
 currently we are working on"*). **Written before anything in §4–§6 was built; built since, slice by slice** —
 each section's *Built* paragraph says what, where and under which decision (PS-E-01 to PS-E-04 and PS-E-06, and
-PS-E-05 (a), by routine runs 2–8). Every item carries the phase slice that builds it and the witness that proves it. The decisions are D-V2-52 to D-V2-55
+PS-E-05 (a) and (b), by routine runs 2–10). Every item carries the phase slice that builds it and the witness that proves it. The decisions are D-V2-52 to D-V2-55
 (`V2_DECISION_LOG.md`). Where this file says what OpenShell does, it reports OpenShell's own
 documentation and source at the version named in §0 — it is not a claim DeluluLang has measured.
 
@@ -432,6 +432,10 @@ in force from the kernel (`PR_GET_SECCOMP`), never from `/proc/self/status`. `op
 output as it is written but starts the command only when its standard input ends (with `--tty` too): it can carry a
 command, not a conversation. `openshell sandbox ssh-config NAME` prints an SSH entry whose `ProxyCommand` is `openshell
 ssh-proxy …` — through it the input streams (a byte at 0.1 s, the next at 3.0 s), so the guest's launcher is `ssh`.
+**(b) built and read green (routine run 10, D-V2-85, `openshell.yml` `37234907676`):** the declared guest runs the program
+inside OpenShell at level 3, every property `unknown`; an undeclared one fails closed. The recipe is in
+`docs/DEPLOYMENT.md`. The open question above — `protocol: rest` TLS behind OpenShell's own CA — belongs to (a) with a
+network grant, and stays open.
 
 ### 4.6 PS-E-06 — the audit chain, exported as OCSF, still verifiable
 

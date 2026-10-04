@@ -90,6 +90,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   that one and says so in its words ("an outer syscall filter, not its own"), at level 3, every property `unknown`.
   Only where its own filter is refused with EPERM and the kernel reports a filter in force; any other refusal, or no
   declaration, still fails closed; a guest the host starts itself never takes it (D-V2-83).
+- **Docs: running the guest inside NVIDIA OpenShell** (`docs/DEPLOYMENT.md`) — the guest's policy (no network rule),
+  and a launcher that reaches it over `ssh` through OpenShell's gateway: `openshell sandbox exec` starts a command only
+  once its input ends, so it cannot carry the guest's channel (D-V2-85). Read green inside a real OpenShell sandbox.
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).
