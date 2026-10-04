@@ -1727,6 +1727,56 @@ against a boundary written by hand and `exceeds_boundary` against one missing a 
 preset, a writable `/tmp`, another binary) to be caught and an unknown field to be an error. **Not built here:** (b), the
 guest inside an OpenShell sandbox at L3, and the study's runtime witnesses (a denied `curl`, a granted/ungranted pair).
 
+## D-V2-83 — PS-E-05 (b): a guest runs under an outer wall's syscall filter only when its launcher declares that wall, and says so — TAKEN (head chef, 2026-09-30, under the owner's delegation)
+
+**The finding it answers (routine run 8, `openshell.yml`'s runtime job):** inside an NVIDIA OpenShell sandbox the guest's
+own Landlock layer took hold, and its `seccomp` filter was refused — `Error calling seccomp: Operation not permitted`.
+OpenShell's sandbox installs a seccomp user-notification listener and a final filter on every process it runs, and that
+filter answers `seccomp` with EPERM. So the guest failed closed and the host never sent the program: PS-E-01's rule held
+inside someone else's wall, and the study's (b) — the guest inside OpenShell at L3 — could not run at all.
+
+**Options weighed.** (i) Keep failing closed, and run only `delulu run` inside OpenShell (what (a) already does): the
+host, its grants, secrets and audit chain would then live inside the sandbox too, which is (a), not (b). (ii) Install the
+guest's filter another way (`prctl(PR_SET_SECCOMP)`), walking round the outer wall's denial: it would only ever narrow
+the guest (a stacked filter cannot loosen one in force), but it defeats a denial another system made on purpose, and
+stops working the day that system closes it — rejected. (iii) Accept an outer filter AUTOMATICALLY when the guest's own
+is refused: silent in the one place a sandbox must not be — a host running inside a container that forbids nested
+filters would start L1 guests without their filter, while L1's report claims properties that filter is part of —
+rejected. (iv) **Taken:** the LAUNCHER declares the outer wall, and the guest checks what it can.
+
+**The rule.** (1) An external launcher's guest may be started as `delulu __guest --stdio-pipes --outer-syscall-filter`.
+The declaration is the launcher's, like the wall: a guest the host starts (`--stdio`, a channel directory, the microVM's
+vsock) refuses it, and after `--stdio-pipes` the guest takes that word once and nothing else (a word it would not act on
+is refused, not ignored — the lesson of run 8's `--grant`). (2) Declared, the guest still tries its own filter first; it
+never skips one it can install. (3) Only if that is refused with **EPERM** — a filter's answer: `no_new_privs` was set just
+before, so the kernel's own permission check passes, and without it the kernel answers EACCES — **and** the kernel reports
+a filter in force on the guest (`/proc/self/status`: `Seccomp: 2`, and `Seccomp_filters` ≥ 1 where printed), the guest
+runs under that filter; any other answer (ENOSYS, EACCES, EINVAL, a kill) fails closed, declared or not. (4) It says so
+twice: on the operator's screen ("the guest's own syscall filter was refused by a filter already in force on it — the
+outer wall its launcher declared stands in for it; the guest's own filter is NOT installed") and in its confinement report,
+where the checked word **"an outer syscall filter, not its own"** replaces its filter's four ("no new programs", "no
+debugger", "no namespace or module tricks", "no sockets but the channel"). Its Landlock words are unchanged — that layer
+still applies. (5) The word establishes nothing: it matches no posture row, so it moves no property; at L3 every property is
+`unknown` anyway and the word is kept as `guest_reported` and in the death record's `guest_words`. (6) The host refuses the
+word from a guest it started itself (`boundary.rs`, before the program is sent): its own filter is part of the boundary an
+L1 or L2 host measures and claims. (7) On a guest that applies no filter of its own (macOS, Windows) the declaration means
+nothing and is refused.
+
+**Witnesses.** `crates/delulu/tests/sandbox_outer_filter_cli.rs`: the outer wall simulated as it looks from inside — the
+test installs on `delulu run` a filter answering `seccomp` with an errno, which the launcher and the guest inherit. Red on
+`e936ea5` (the declared guest failed closed with OpenShell's exact words; the declaration was not refused); green after:
+undeclared → fails closed, nothing sent; declared → runs, the word in place of the four, level 3, every property `unknown`,
+and an ungranted effect still DL0703; ENOSYS, EACCES, EINVAL → fail closed though declared; declared with no outer wall →
+its own four words; the declaration refused off an external guest and with any other word. Unit: the host refuses the
+word from a host-started guest and confirms it from an external one; the word moves no posture row and no property;
+`filter_in_force` over eleven spellings. **Mutants:** M75 (any errno), M76 (undeclared), M78 (the parser always yes), M79
+(declared skips an installable filter), M80 (the host's check removed), M81 (extra words accepted), M82 (the declaration
+taken off an external guest), M83 (the word a posture needle) red. **M77 survives, and why:** bypassing the in-force check
+changes nothing any kernel we can run produces — EPERM from `seccomp` after `no_new_privs` comes only from a filter in
+force — so the check guards an LSM or a future kernel, and its parser is pinned by the unit test (M78). Recorded, not
+hidden. **Read inside OpenShell** by `scripts/openshell-runtime.sh` step (5): (5a) undeclared fails closed, (5b) declared
+runs the program at level 3 with the word — the run that reads it is in `V2_LOG.md`.
+
 ## D-V2-84 — The nightly red four times: every platform's crates fetched before a suite; Wasmtime 48.0.5 for RUSTSEC-2026-0325 to -0327 — TAKEN (head chef, 2026-10-04, under the owner's delegation)
 
 1. **What was red.** Every nightly since routine run 8 left (`e936ea5`, its push run `36716667440` green): 2026-10-01

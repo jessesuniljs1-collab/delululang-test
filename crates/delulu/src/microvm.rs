@@ -1348,7 +1348,7 @@ fn serve_vm_guest(args: &[String]) -> i32 {
         eprintln!("error: the microVM guest cannot write to its host");
         return 2;
     }
-    crate::guest::serve_as_guest(conn, None, &measured)
+    crate::guest::serve_as_guest(conn, None, &measured, false)
 }
 
 #[cfg(test)]
