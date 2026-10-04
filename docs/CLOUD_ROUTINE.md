@@ -83,6 +83,12 @@ the tree committed and pushed — the VM is discarded when the run ends, and any
 **1. Orient.** Read `HANDOFF.md` §0, the newest entries of `docs/CLOUD_SYNC_LOG.md` (their "Open / next"
 lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE_STATUS.md`.
 `git log --oneline -15`. If `claude/cloud-dev` exists and is ahead of `master`, work from it (see above).
+**Then every branch (run 10):** a run can end after pushing its harness branch and before `master` moves — run 9's
+`f446bfa` sat on `claude/stoic-ptolemy-uyw9g4` for four days with no record, its OpenShell reading red. The clone is
+shallow, so first `git fetch --unshallow origin master` (else every branch looks hundreds of commits ahead); then, for each
+`origin/claude/*`, `git rev-list --count origin/master..BRANCH`. A commit `master` lacks is step 4's first item: read its
+runs (`…/actions/runs?head_sha=HASH`), verify it, and MERGE it (the hash its runs name stays in `master`'s history) — or
+record why it is superseded (a witness branch whose work landed in revised form).
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile
@@ -228,7 +234,10 @@ Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees;
 decision; `V2_PHASE_STATUS.md`; `REMAINING_WORK.md`; `HANDOFF.md` §11 and `docs/assistant-memory/` for a
 durable lesson; and **this run's `docs/CLOUD_SYNC_LOG.md` entry** (the template there — commits, every file
 and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open / next for the next run**).
-Commit with the trailers in `CLAUDE.md`, push.
+Commit with the trailers in `CLAUDE.md`, push. **The author is the owner's account** (his routine prompt: commit as
+`jessesuniljs1-collab`, or as both it and Claude): `git config user.name jessesuniljs1-collab` and `user.email
+227307678+jessesuniljs1-collab@users.noreply.github.com` — GitHub's no-reply address for the account, never a personal
+one (`HANDOFF.md` §1.1 item 2) — with Claude as `Co-Authored-By` (from run 10; runs 1–9 committed as `Claude`).
 
 **7. Watch the push run.** Wait for it (poll `mcp__github__actions_get` `get_workflow_run` — a push run
 takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and

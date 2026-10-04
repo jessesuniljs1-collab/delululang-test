@@ -3855,3 +3855,41 @@ record. Its runner reads: `witness.yml` `36738984491`, `36738988731`, `367389931
 up. The two other branches with a commit `master` lacks (`claude/wonderful-hamilton-bo8k53` `7d6a22b`,
 `claude/friendly-thompson-vz6m23` `d3f0d52`) are witness branches of runs 3 and 6 whose work landed in revised form
 (`a_computing_guest_ends_when_its_host_is_killed`; D-V2-73's `Within` in place of `FrameDeadline`) — nothing stranded.
+
+## 2026-10-04 — routine run 10: routine run 9's PS-E-05 (b) recovered — the kernel answers; OpenShell's `exec` cannot carry a conversation
+
+**What run 9 left.** `f446bfa` (D-V2-83): an external launcher may declare an outer wall (`__guest --stdio-pipes
+--outer-syscall-filter`); declared, a guest whose own `seccomp` filter is refused with EPERM while a filter is in force
+runs under that one and says so ("an outer syscall filter, not its own", in place of its filter's four words); the host
+refuses the word from a guest it started itself. Its witnesses re-run here: 4 of 4 green; its runner reads
+`36738984491`, `36738988731`, `36738993182` success. Its OpenShell reading `36738997626` — never recorded — **red**: (5a)
+held, but the declared guest failed closed too, "`/proc/self/status` shows no filter in force". **Merged** into `master`
+(`83a62ba`, not cherry-picked: the runs above name `f446bfa`).
+
+**Why it was red, read from the same run:** step (4) printed OpenShell's effective policy — `/usr`, `/lib`, `/etc` and the
+program, **no `/proc`**, and OpenShell adds none. Under its Landlock the guest could not read its own status;
+`unwrap_or_default` made the unreadable file "no filter". Safe — it failed closed — and useless where it was built for.
+**Fixed (`9e75017`, D-V2-83 amended):** the in-force check is `prctl(PR_GET_SECCOMP) == 2`, the kernel's own answer, no
+file. **The witness could not see it:** its simulated wall was the filter alone. It now runs every expectation under two
+walls — the filter, and the filter plus a Landlock layer under which nothing in `/proc` can be read (checked first:
+`cat /proc/self/status` refused inside it, a file elsewhere read; `NOT MEASURED` where a kernel has no Landlock). Red on
+`f446bfa`'s code with OpenShell's exact words; green after. Unit: `a_filter_in_force_is_the_kernels_own_answer`.
+Mutants M84–M88 red (M85 — the check always yes, run 9's surviving M77 — now red on the unit test). Clippy clean;
+`scripts/check-other-os.sh` clean on all five targets; the full suite alone **2,102 passed, 0 failed, 15 ignored** (157
+binaries), cargo exit 0; `witness.yml` on `9e75017`: arm64 `37233188734`, macOS `37233190495`, Windows `37233191959`,
+Linux x64 `37233193360` — success (arm64's push-run properties say Landlock is there, so its hidden-`/proc` case measured).
+
+**Read inside OpenShell again** — `openshell.yml` `37233187076` (`9e75017`): the prover job green; the runtime job's
+(1)–(4) green as before, (5a) held, and **(5b) got past the filter** — "the guest's own syscall filter was refused by a
+filter already in force on it — the outer wall its launcher declared stands in" — and then failed on the CHANNEL: the
+host heard nothing for 60 s, and the guest read the end of its input ("failed to fill whole buffer").
+
+**The channel, measured instead of guessed** (my first hypothesis — the CLI's line-buffered standard output — was
+refuted by the first measurement). `37233707240` (`0ed045f`) and `37234148291` (`4cae1f9`) time each byte across the
+relay: through `openshell sandbox exec`, a command's standard output and error arrive **as written** (a byte with no
+newline at 0.0 s), but **the command starts only when its standard input ENDS** — `printf x; sleep 3; printf y; sleep 3`
+piped in, and the command's first line came at 6.0 s, both bytes with it; the same with `--tty`. v0.1.2's `exec` reads
+the input to its end before it runs anything, so no conversation can cross it: in (5b) the guest started only after the
+host's 60 s deadline closed its input. **Through SSH it streams:** `openshell sandbox ssh-config dlg` prints a `Host
+openshell-dlg.default` entry whose `ProxyCommand` is `openshell ssh-proxy`, and over it the command started at 0.1 s,
+`x` arrived at 0.1 s and `y` at 3.0 s. So (b)'s launcher is `ssh`, not `exec` — the next commit.

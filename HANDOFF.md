@@ -971,6 +971,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   every operating system, and a red job saves no cache, so it never recovers alone. A test's precondition belongs in
   the workflow (`cargo fetch --locked`, D-V2-84), never in the cache's luck. A nightly is the only run that sees the
   world change while `master` does not: read every one since the last run, not only the push runs.
+- **A run can end before its records — look at every branch** (routine run 10): routine run 9 pushed `f446bfa` (PS-E-05
+  (b)) to its harness branch, dispatched its runner reads and stopped — nothing on `master`, no entry anywhere, and its
+  reading inside OpenShell red. Found only by listing every branch's commits `master` lacks; the clone is shallow, so
+  unshallow first or every branch looks hundreds of commits ahead. Merge a recovered commit rather than cherry-pick it:
+  the runs that read it name its hash.
+- **A simulated wall simulates every layer of the real one** (routine run 10): run 9's test simulated OpenShell's wall as
+  a seccomp filter and passed; the real wall is also Landlock with no `/proc`, and the guest's check READ `/proc`. And
+  `unwrap_or_default()` on a security read turns "could not look" into "no" — here it failed closed, but it hid the cause
+  behind a plausible message. Ask the kernel where the kernel can answer (`PR_GET_SECCOMP`); where a file must be read,
+  say "unreadable", not "absent". Before trusting a simulation, list the real wall's layers from a real run's evidence.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

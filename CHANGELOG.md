@@ -85,6 +85,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Security: wasmtime 48.0.3 → 48.0.5** (the same long-term-support line) for RUSTSEC-2026-0325, -0326 and -0327 —
   exceptions, GC and the component model, all three off in DeluluLang, so none was reachable — and `yoke-derive`
   0.8.3, yanked, → 0.8.4. No behaviour changes (D-V2-84).
+- **An external launcher may declare an outer wall's syscall filter** (`delulu __guest --stdio-pipes
+  --outer-syscall-filter`): inside a sandbox that forbids adding a filter — NVIDIA OpenShell's — the guest runs under
+  that one and says so in its words ("an outer syscall filter, not its own"), at level 3, every property `unknown`.
+  Only where its own filter is refused with EPERM and the kernel reports a filter in force; any other refusal, or no
+  declaration, still fails closed; a guest the host starts itself never takes it (D-V2-83).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

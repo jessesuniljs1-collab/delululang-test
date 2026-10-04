@@ -425,6 +425,14 @@ rest` endpoint is inspected by terminating TLS with the sandbox's own CA (its ce
 `/run/openshell-supervisor-ca`); `delulu` verifies against the platform store, so a granted `GET` may fail TLS inside the
 wall unless that CA is trusted — to be witnessed, not assumed.
 
+**For (b) — read by routine runs 9 and 10 (OpenShell 0.1.2, `openshell.yml`'s runtime job).** OpenShell's filter answers
+the guest's `seccomp` with EPERM — so a launcher DECLARES the outer wall and the guest runs under it, saying so (D-V2-83).
+The sandbox's effective policy adds nothing to the one it was given — no `/proc` — so the guest learns whether a filter is
+in force from the kernel (`PR_GET_SECCOMP`), never from `/proc/self/status`. `openshell sandbox exec` streams a command's
+output as it is written but starts the command only when its standard input ends (with `--tty` too): it can carry a
+command, not a conversation. `openshell sandbox ssh-config NAME` prints an SSH entry whose `ProxyCommand` is `openshell
+ssh-proxy …` — through it the input streams (a byte at 0.1 s, the next at 3.0 s), so the guest's launcher is `ssh`.
+
 ### 4.6 PS-E-06 — the audit chain, exported as OCSF, still verifiable
 
 `delulu audit export --format ocsf [--since SEQ]` writes JSON Lines, one OCSF v1.8.0 event per audit

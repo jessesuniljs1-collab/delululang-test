@@ -1043,11 +1043,25 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-w805xo`, at `master`'s head; each
   slice is pushed there first, then `master` moved)   Pull request: none   Merged: n/a
 - Base: `e936ea5` (routine run 8's last commit — routine run 9's `f446bfa` never reached `master`)
-- Commits: (1) the CI fix — this commit
+- Commits: (1) `9bc405e` the nightly red four times, fixed (D-V2-84); (2) `83a62ba` merge of routine run 9's `f446bfa`
+  (PS-E-05 (b), D-V2-83 — stranded on `claude/stoic-ptolemy-uyw9g4`); (3) `9e75017` PS-E-05 (b): the guest asks the
+  kernel whether a filter is in force, the witness's wall hides `/proc`; (4) `0ed045f`, (5) `4cae1f9` `openshell-runtime.sh`:
+  the exec relay measured; (6) the records — this commit
 - Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
   `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
   reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
-  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated) — (1). Deleted: nothing.
+  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated) — (1).
+  From run 9's `f446bfa`, merged by (2): A `crates/delulu/tests/sandbox_outer_filter_cli.rs`; M `crates/delulu-runtime/src/channel.rs`
+  (`OUTER_FILTER`), `crates/delulu/src/boundary.rs`, `guest.rs`, `jail.rs`, `microvm.rs`, `scripts/openshell-runtime.sh`,
+  `docs/CLOUD_ROUTINE.md` (CI verdicts from the annotations API), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-83).
+  M `crates/delulu/src/jail.rs` (`PR_GET_SECCOMP`), `crates/delulu/tests/sandbox_outer_filter_cli.rs` (two walls),
+  `scripts/openshell-runtime.sh`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-83 amended) — (3); M
+  `scripts/openshell-runtime.sh` (the relay measured) — (4), (5); M `CHANGELOG.md`, `HANDOFF.md` (§11.5: look at every
+  branch; a simulated wall simulates every layer), `docs/CLOUD_ROUTINE.md` (step 1: every branch; step 6: the author),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` (§4.5: facts for (b)),
+  `docs/REMAINING_WORK.md` (4.30), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*` — (6). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
+  GitHub no-reply address, Claude as co-author (his routine prompt); runs 1–9 committed as `Claude`.
 - Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
   passed. After the last edit: in each commit's message.
 - Verified: **CI on arrival** — `e936ea5`'s push run `36716667440` success; the nightlies `36844480022` (10-01),
@@ -1055,8 +1069,20 @@ it on `origin` was made in the cloud and is listed below.
   `yoke-derive` yanked) and from 10-02 every suite (`egress_features` on a cache Rust 1.99.0's release emptied). Both
   witnessed red in the VM, then green: cargo-deny exit 1 → 0; a cold `CARGO_HOME` red → green after `cargo fetch`. Clippy
   clean; the full suite alone 2,094 passed, 0 failed, 15 ignored (156 binaries), cargo exit 0; the two-engine
-  differential by hand, passed. `gh`: present, its token refused — CI read with `curl` and the MCP tools.
+  differential by hand, passed. `gh`: present, its token refused — CI read with `curl` and the MCP tools. **(1)'s push run
+  `37232688376` — success**, every job, from a cold cache (arm64 ping-pong MEASURED 2.93x against a control of 4.12x,
+  passed; Linux x64 and Windows NOT MEASURED — the runner busy; macOS NOT MEASURED — 3 hardware threads; properties as
+  before). **(2)–(3):** run 9's witnesses 4/4 green in the VM; the new witness red on `f446bfa`'s code (OpenShell's exact
+  words), green after; M84–M88 red; clippy clean; `check-other-os.sh` clean (five targets); the full suite alone 2,102
+  passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; `witness.yml` at `9e75017` — arm64 `37233188734`, macOS
+  `37233190495`, Windows `37233191959`, Linux x64 `37233193360` success. **`openshell.yml` (by hand, on the branch):**
+  `37233187076` (`9e75017`) — prover green; runtime: (1)–(4) and (5a) held, (5b) past the filter, then no channel;
+  `37233707240` (`0ed045f`), `37234148291` (`4cae1f9`) — the relay measured: `sandbox exec` starts a command only when
+  its input ends (with `--tty` too); `ssh` through `openshell ssh-proxy` streams.
 - Redo on the laptop: nothing (lockfile and workflow only).
-- For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline).
-- Open / next: (1) read this commit's push run — it starts on a cold cache, so it is the fix's witness on the runners;
-  (2) routine run 9's `f446bfa` (PS-E-05 (b), D-V2-83) — its OpenShell reading `36738997626` was red.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline; look at every branch;
+  a simulated wall simulates every layer of the real one); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read this commit's push run; (2) **E-05 (b): the launcher over `ssh`** (`openshell sandbox ssh-config`,
+  then `ssh -T -F CFG HOST delulu __guest --stdio-pipes --outer-syscall-filter`), read in `openshell.yml`'s runtime job,
+  then `docs/DEPLOYMENT.md`'s recipe; (3) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
+  (P8-01 first), P9; the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; RW 7.17.

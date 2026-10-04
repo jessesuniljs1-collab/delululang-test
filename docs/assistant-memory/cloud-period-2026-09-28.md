@@ -106,6 +106,12 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   `seccomp` is refused inside OpenShell, so it fails closed. Traps: a mutant loop leaves the last mutant's binary; a new
   workflow is dispatchable only once on `master`; pick falsifiers from the checker's documented cases; a flag documented
   for a command reaches every verb; the REST API answers `curl` from the VM (wait on runs in the background).
+- **Routine runs 9 and 10 (2026-09-30, 2026-10-04):** run 9 built PS-E-05 (b)'s outer-wall declaration (D-V2-83) and
+  ended with it on its harness branch alone, unrecorded; run 10 found it by listing every branch, merged it, and fixed
+  what OpenShell's runner read (the wall hides `/proc`: the in-force check is `PR_GET_SECCOMP`). Run 10 also fixed four
+  red nightlies (a cache Rust 1.99.0 emptied; Wasmtime 48.0.5, D-V2-84) and measured OpenShell's relay: `sandbox exec`
+  runs a command only once its input ends; `ssh` via `openshell ssh-proxy` streams. Commits since run 10 are authored by
+  the owner's account (no-reply address), Claude co-author.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
