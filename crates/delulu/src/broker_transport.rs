@@ -229,7 +229,7 @@ mod imp {
                 }
                 // Peer identity (same-user) verification.
                 match self.verify_peer(h) {
-                    Ok(true) => return Ok(Connection { handle: h, server: true, read_timeout: None }),
+                    Ok(true) => return Ok(Connection { handle: h, server: true, read_timeout: None, write_timeout: None }),
                     Ok(false) => {
                         // A different user slipped past the DACL (should be impossible) — refuse and
                         // wait for the next client. Fail closed.
@@ -278,7 +278,39 @@ mod imp {
         /// so a peer that connects and never sends cannot hang us forever. Still blocking std I/O — no
         /// async runtime, no thread pool — so the head-chef "blocking, single-thread" design holds.
         read_timeout: Option<std::time::Duration>,
+        /// Bound on a single write, and on the flush that ends a reply (RW 4.35). `None` = block as before.
+        /// A blocking pipe's `WriteFile` waits for the reader once the outbound buffer is full, and
+        /// `FlushFileBuffers` waits until the reader has taken everything; so with a bound, `write` waits —
+        /// polling, as `read` does — for room and writes no more than fits, and `flush` waits for the
+        /// buffer to drain. Neither then blocks; past the bound each fails, and `Drop` does not flush.
+        write_timeout: Option<std::time::Duration>,
     }
+
+    /// `FILE_PIPE_LOCAL_INFORMATION`: the pipe's quotas, as `NtQueryInformationFile` reports them.
+    #[repr(C)]
+    #[derive(Default)]
+    struct PipeLocalInfo {
+        named_pipe_type: u32,
+        named_pipe_configuration: u32,
+        maximum_instances: u32,
+        current_instances: u32,
+        inbound_quota: u32,
+        read_data_available: u32,
+        outbound_quota: u32,
+        write_quota_available: u32,
+        named_pipe_state: u32,
+        named_pipe_end: u32,
+    }
+    #[repr(C)]
+    struct IoStatus {
+        status: isize,
+        information: usize,
+    }
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationFile(h: HANDLE, io: *mut IoStatus, info: *mut std::ffi::c_void, len: u32, class: i32) -> i32;
+    }
+    const FILE_PIPE_LOCAL_INFORMATION: i32 = 24;
 
     // The handle is used from a single thread (the blocking serve loop / a single client call).
     unsafe impl Send for Connection {}
@@ -289,6 +321,34 @@ mod imp {
         pub fn set_read_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
             self.read_timeout = dur;
             Ok(())
+        }
+
+        /// Bound each subsequent write, and the flush that ends a reply, to `dur` (RW 4.35). Enforced in
+        /// `write` and `flush`; the WHOLE answer's bound is the caller's (`channel::Within`).
+        pub fn set_write_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
+            self.write_timeout = dur;
+            Ok(())
+        }
+
+        /// How much the outbound buffer can take now, and whether it is empty — the reader has taken
+        /// everything written (the pipe's own accounting, `FilePipeLocalInformation`).
+        fn outbound(&self) -> io::Result<(u32, bool)> {
+            let mut info = PipeLocalInfo::default();
+            let mut io = IoStatus { status: 0, information: 0 };
+            // SAFETY: this connection's own handle, a struct of the size given, an out-parameter on the stack.
+            let st = unsafe {
+                NtQueryInformationFile(
+                    self.handle,
+                    &mut io,
+                    (&mut info as *mut PipeLocalInfo).cast(),
+                    std::mem::size_of::<PipeLocalInfo>() as u32,
+                    FILE_PIPE_LOCAL_INFORMATION,
+                )
+            };
+            if st < 0 {
+                return Err(io::Error::other(format!("NtQueryInformationFile: status {st:#x}")));
+            }
+            Ok((info.write_quota_available, info.write_quota_available >= info.outbound_quota))
         }
     }
 
@@ -332,8 +392,23 @@ mod imp {
 
     impl Write for Connection {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            // RW 4.35: with a bound, write only what the outbound buffer can take now — such a write is
+            // buffered at once — and wait for room, polling, for at most the bound.
+            let mut room = u32::MAX;
+            if let Some(timeout) = self.write_timeout {
+                let deadline = std::time::Instant::now() + timeout;
+                room = loop {
+                    match self.outbound()? {
+                        (free, _) if free > 0 || buf.is_empty() => break free,
+                        _ if std::time::Instant::now() >= deadline => {
+                            return Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe write timed out: the reader took nothing"))
+                        }
+                        _ => std::thread::sleep(std::time::Duration::from_millis(2)),
+                    }
+                };
+            }
             let mut wrote: u32 = 0;
-            let want = buf.len().min(u32::MAX as usize) as u32;
+            let want = buf.len().min(u32::MAX as usize).min(room as usize) as u32;
             let ok = unsafe { WriteFile(self.handle, buf.as_ptr(), want, &mut wrote, ptr::null_mut()) };
             if ok == 0 {
                 let e = unsafe { GetLastError() };
@@ -342,6 +417,17 @@ mod imp {
             Ok(wrote as usize)
         }
         fn flush(&mut self) -> io::Result<()> {
+            // RW 4.35: `FlushFileBuffers` waits until the reader has taken everything — with a bound, wait
+            // for the buffer to drain (then the flush returns at once), for at most the bound.
+            if let Some(timeout) = self.write_timeout {
+                let deadline = std::time::Instant::now() + timeout;
+                while !self.outbound()?.1 {
+                    if std::time::Instant::now() >= deadline {
+                        return Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe flush timed out: the reader did not take its answer"));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            }
             unsafe { FlushFileBuffers(self.handle) };
             Ok(())
         }
@@ -349,8 +435,14 @@ mod imp {
 
     impl Drop for Connection {
         fn drop(&mut self) {
+            // The flush lets a reply reach its reader before the disconnect discards what is unread. A
+            // bounded connection whose reader has not taken its answer by now never will in time (RW 4.35):
+            // it is not flushed, so a reader that never reads cannot hold the one who drops it.
+            let flush = self.write_timeout.is_none() || self.outbound().map(|(_, drained)| drained).unwrap_or(false);
             unsafe {
-                FlushFileBuffers(self.handle);
+                if flush {
+                    FlushFileBuffers(self.handle);
+                }
                 if self.server {
                     DisconnectNamedPipe(self.handle);
                 }
@@ -388,7 +480,7 @@ mod imp {
                 )
             };
             if h != INVALID_HANDLE_VALUE {
-                return Ok(Connection { handle: h, server: false, read_timeout: None });
+                return Ok(Connection { handle: h, server: false, read_timeout: None, write_timeout: None });
             }
             let e = unsafe { GetLastError() };
             let before_deadline = std::time::Instant::now() < deadline;
@@ -507,8 +599,6 @@ mod imp {
         /// Bound each subsequent blocking write to `dur` (`SO_SNDTIMEO`): a peer that does not read its
         /// answer cannot hold a write for ever (RW 4.35). The WHOLE answer's bound is the caller's
         /// (`channel::Within`), because a peer that reads a little at a time lets each write progress.
-        /// Unix only so far: on Windows a blocking pipe's `WriteFile` — and the `FlushFileBuffers` a reply
-        /// ends with, so that disconnecting discards nothing — wait for the reader (RW 4.35's open half).
         pub fn set_write_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
             self.inner.set_write_timeout(dur)
         }
