@@ -193,6 +193,41 @@ for _ in $(seq 1 90); do
   openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu --version >/dev/null 2>&1 && break
   sleep 2
 done
+
+# Routine run 10: the exec relay, MEASURED. Its first reading of (5b) found the guest's confinement report never reached
+# the host, while the guest's standard-error lines did. When does a command's output reach this side — at once, at the
+# next newline, or when the command ends? And its input the other way? Each byte is timed as it arrives.
+echo "-- (5-) the exec relay: when each byte arrives (A at 0 s, a newline at 3 s, C at 6 s, the end at 12 s)"
+openshell sandbox exec -n dlg --no-tty --no-login-shell -- /bin/sh -c \
+  'printf A; sleep 3; printf "B\n"; sleep 3; printf C; sleep 6' 2>/dev/null | python3 -c '
+import os, time
+t0 = time.time()
+while True:
+    b = os.read(0, 1)
+    if not b:
+        print("  %5.1f s  stdout ends" % (time.time() - t0)); break
+    print("  %5.1f s  stdout %r" % (time.time() - t0, b), flush=True)
+'
+echo "-- (5-) standard error: E at 0 s, a newline at 3 s, the end at 6 s"
+openshell sandbox exec -n dlg --no-tty --no-login-shell -- /bin/sh -c \
+  'printf E >&2; sleep 3; printf "F\n" >&2; sleep 3' 2>&1 >/dev/null | python3 -c '
+import os, time
+t0 = time.time()
+while True:
+    b = os.read(0, 1)
+    if not b:
+        print("  %5.1f s  stderr ends" % (time.time() - t0)); break
+    print("  %5.1f s  stderr %r" % (time.time() - t0, b), flush=True)
+'
+echo "-- (5-) standard input: x at 0 s, y at 3 s (no newline), the end at 6 s; each echoed with a newline"
+( printf x; sleep 3; printf y; sleep 3 ) | openshell sandbox exec -n dlg --no-tty --no-login-shell -- /bin/sh -c \
+  'dd bs=1 count=1 2>/dev/null; echo " <- the first byte in"; dd bs=1 count=1 2>/dev/null; echo " <- the second byte in"' \
+  2>&1 | python3 -c '
+import sys, time
+t0 = time.time()
+for line in sys.stdin:
+    print("  %5.1f s  %s" % (time.time() - t0, line.rstrip()), flush=True)
+'
 # The launcher: the channel on the exec's standard streams; the guest's words from the host (no shell word-splits
 # a token — DELULU_GUEST_ARGS is DeluluLang's own, `__guest --stdio-pipes`), then the launcher's own EXTRA words.
 # D-V2-83 (routine run 9): OpenShell's filter refuses the guest's own (`seccomp`: EPERM, run 8's reading), so this
