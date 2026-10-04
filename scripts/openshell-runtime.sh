@@ -256,11 +256,19 @@ fi
 # Routine run 10: run 9's first reading of (5b) was red — the guest looked for the filter in `/proc/self/status`,
 # and this sandbox's policy names no `/proc` (OpenShell adds none), so it could not read it and failed closed under a
 # filter that was there. It now asks the kernel (`PR_GET_SECCOMP`); the test suite's simulated wall hides `/proc` too.
-cat > openshell-guest <<'EOF'
+# Routine run 10, measured above: `sandbox exec` starts its command only once its standard input ENDS, so it can carry a
+# command but not a conversation — the guest started only after the host's deadline had closed its input. SSH through
+# the gateway (`openshell sandbox ssh-config`, a `ProxyCommand` of `openshell ssh-proxy`) streams both ways, so the
+# launcher is `ssh`: `-T`, no terminal, eight-bit clean for the channel's frames; the guest's words as before.
+openshell sandbox ssh-config dlg > guest-ssh.cfg || fail "(5) no ssh configuration for the guest's sandbox"
+guest_host=$(awk '/^Host /{print $2; exit}' guest-ssh.cfg)
+[ -n "$guest_host" ] || fail "(5) the ssh configuration names no host"
+cat > openshell-guest <<EOF
 #!/bin/sh
-exec openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu $DELULU_GUEST_ARGS $GUEST_EXTRA
+exec ssh -T -F "$work/guest-ssh.cfg" -o BatchMode=yes "$guest_host" /usr/local/bin/delulu \$DELULU_GUEST_ARGS \$GUEST_EXTRA
 EOF
 chmod +x openshell-guest
+echo "the launcher:"; sed -e 's/^/  /' openshell-guest
 mkdir -p host/data
 echo "hello through the OpenShell guest" > host/data/in.txt
 cp ctx/p.delulu host/
