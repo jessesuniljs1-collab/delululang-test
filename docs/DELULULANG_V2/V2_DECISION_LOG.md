@@ -1847,7 +1847,7 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    writes", "reads only from the system paths", "no TCP bind or connect", "an outer syscall filter, not its own"], none
    of its own filter's four, every property `unknown`, no host guarantee. The recipe is in `docs/DEPLOYMENT.md`.
 
-## D-V2-86 — RW 4.35, REPLY-HOLD-1: the broker daemon's reply is owed within a bound, as its request is (Linux and macOS; Windows open) — TAKEN (head chef, 2026-10-04, under the owner's delegation)
+## D-V2-86 — RW 4.35, REPLY-HOLD-1: the broker daemon's reply is owed within a bound, as its request is — TAKEN (head chef, 2026-10-04, under the owner's delegation)
 
 1. **The defect** (the red-team pass on FRAME-DRIP-1, F2; re-run by the head chef on `68b8888`): the serve loop serves one
    connection at a time and wrote each reply with no bound, so a same-user client that asked for an answer larger than
@@ -1871,6 +1871,12 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    that design was withdrawn whole; Windows' transport is exactly as before, and the two witnesses are `cfg(unix)`. The
    Windows half needs the write AND the flush bounded — a writer thread cancelled with `CancelSynchronousIo`, or an
    overlapped server pipe — witnessed on the Windows runner first (RW 4.35 stays open for it).
+   **Windows closed the same run (`4d4d033`), with a design that switches no mode and starts no thread:** the pipe's own
+   accounting (`NtQueryInformationFile`, `FilePipeLocalInformation`: `WriteQuotaAvailable` against `OutboundQuota`) says how
+   much the outbound buffer can take and whether it has drained. With a bound, `write` waits for room — polling, as `read`
+   polls `PeekNamedPipe` — and writes no more than fits (buffered at once, so `WriteFile` never blocks); `flush` waits for
+   the buffer to drain (then `FlushFileBuffers` returns at once); each for at most the bound; and `Drop` flushes only a
+   reply its reader has taken. The witnesses run on every OS again: `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1).
 3. **Not taken (yet):** caps on a request's field lengths and on `List`/`GuardPending` answers (the row's other remedy) —
    they would shrink the largest answer, not bound a peer that reads nothing; the bound is what closes the hold. RW 4.40
    (silent connections queue behind one another) is a different shape and stays open.

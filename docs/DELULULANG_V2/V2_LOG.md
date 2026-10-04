@@ -3920,3 +3920,11 @@ write. **Windows, read on its runner (`37236818679`): the first Windows design f
 connection's `Drop` waits for the client to read everything, so no reply is discarded at disconnect). Withdrawn whole:
 Windows' transport is as it was, the witnesses `cfg(unix)`, RW 4.35 open for Windows. Mutants M89, M90, M91 red. Clippy clean;
 `check-other-os.sh` clean on all five targets at `9b6b4a1`, and Windows and macOS again at `2bb26f8`; the full suite alone 2,104 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0, at `9b6b4a1` (`2bb26f8` changes only Windows code and `cfg` attributes); the new tests on the other runners first: macOS `37236820414` green (both witnesses); Windows `37236818679` red — the first Windows design, withdrawn (above).
+
+**Then Windows (`4d4d033`), the same run.** The first design's failure, read: the connected handle refused `PIPE_NOWAIT`
+(win32 error 231), and `Drop`'s `FlushFileBuffers` held the loop for a reader that never reads. The second asks the pipe
+(`NtQueryInformationFile`, `FilePipeLocalInformation`) how much it can take and whether it has drained: a write no
+larger than the room is buffered at once, a flush after the drain returns at once, each waited for at most the bound,
+and `Drop` skips the flush of an answer nobody took. Windows lint clean; the witnesses un-`cfg`'d; read on the runners
+with the broker's unit tests and every broker-facing target (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`,
+`secret_verify_cli`): `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1). **RW 4.35 closed on every OS.**

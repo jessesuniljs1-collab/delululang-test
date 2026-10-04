@@ -774,7 +774,8 @@ wins, and you should update the memory to match.
   crash, a FIFO in the audit directory — are RW 4.35–4.40, each re-run by the head chef or marked code reading.
   **REPLY-HOLD-1** (RW 4.35, closed by routine run 10, D-V2-86): the daemon's REPLY had no bound — a client that asked
   for a large answer and never read it held the one-connection loop, the e-stop's revoke behind it; the whole reply is
-  owed within 5 s now on Linux and macOS; Windows' pipe still waits for the reader (open). The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
+  owed within 5 s now on every OS (Windows by the pipe's own quota accounting, after a first design failed on the
+  runner). The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
   `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
   And **AUDIT-FIFO-1** (D-V2-77): a FIFO named like a day log hung every reader of the audit chain, `broker start`
   included — ATTEST-FIFO-1's shape in the audit; read only if regular now. **The secret store had it too** (routine
