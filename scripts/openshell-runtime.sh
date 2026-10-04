@@ -220,14 +220,34 @@ while True:
     print("  %5.1f s  stderr %r" % (time.time() - t0, b), flush=True)
 '
 echo "-- (5-) standard input: x at 0 s, y at 3 s (no newline), the end at 6 s; each echoed with a newline"
-( printf x; sleep 3; printf y; sleep 3 ) | openshell sandbox exec -n dlg --no-tty --no-login-shell -- /bin/sh -c \
-  'dd bs=1 count=1 2>/dev/null; echo " <- the first byte in"; dd bs=1 count=1 2>/dev/null; echo " <- the second byte in"' \
-  2>&1 | python3 -c '
+timed() { python3 -c '
 import sys, time
 t0 = time.time()
 for line in sys.stdin:
     print("  %5.1f s  %s" % (time.time() - t0, line.rstrip()), flush=True)
-'
+print("  %5.1f s  (the end)" % (time.time() - t0))
+'; }
+echo "   sandbox exec (run 10 read it: the command STARTED only at the input's end):"
+( printf x; sleep 3; printf y; sleep 3 ) | openshell sandbox exec -n dlg --no-tty --no-login-shell -- /bin/sh -c \
+  'echo " <- started"; dd bs=1 count=1 2>&1; echo " <- the first byte in"; dd bs=1 count=1 2>&1; echo " <- the second byte in"' \
+  2>&1 | timed
+echo "-- (5-) what this release offers for a live channel: its CLI's words"
+openshell --version 2>&1 | head -3
+openshell sandbox --help 2>&1 | sed -n '1,60p'
+openshell sandbox exec --help 2>&1 | sed -n '1,60p'
+echo "   sandbox exec --tty:"
+( printf 'x\n'; sleep 3; printf 'y\n'; sleep 3 ) | timeout 30 openshell sandbox exec -n dlg --tty --no-login-shell -- /bin/sh -c \
+  'echo " <- started"; read a; echo " <- $a in"; read b; echo " <- $b in"' 2>&1 | timed
+echo "   ssh, through the gateway (if this release prints an ssh configuration):"
+if openshell sandbox ssh-config dlg > ssh.cfg 2> ssh.err; then
+  sed -e 's/^/    /' ssh.cfg | head -20
+  host=$(awk '/^Host /{print $2; exit}' ssh.cfg)
+  ( printf x; sleep 3; printf y; sleep 3 ) | timeout 40 ssh -F ssh.cfg -o BatchMode=yes -o StrictHostKeyChecking=no "$host" \
+    'echo " <- started"; dd bs=1 count=1 2>&1; echo " <- the first byte in"; dd bs=1 count=1 2>&1; echo " <- the second byte in"' \
+    2>&1 | timed
+else
+  echo "    no ssh-config: $(head -c 300 ssh.err)"
+fi
 # The launcher: the channel on the exec's standard streams; the guest's words from the host (no shell word-splits
 # a token — DELULU_GUEST_ARGS is DeluluLang's own, `__guest --stdio-pipes`), then the launcher's own EXTRA words.
 # D-V2-83 (routine run 9): OpenShell's filter refuses the guest's own (`seccomp`: EPERM, run 8's reading), so this
