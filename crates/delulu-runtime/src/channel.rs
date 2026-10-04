@@ -344,13 +344,17 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
 /// revoke among them. Read a frame through this and it must arrive whole within `within`. The check is
 /// made around each read, so a frame is abandoned no later than `within` plus one read deadline after
 /// its time began; a read already in flight is not cut short.
-pub struct Within<'a, R: Read + ?Sized> {
+///
+/// RW 4.35: the same bound on a whole REPLY — written through this, a frame must be taken whole within
+/// `within`, checked around each write, so a peer that never reads its answer, or reads it a byte at a
+/// time, cannot hold the writer; the transport's own write deadline bounds each write.
+pub struct Within<'a, R: ?Sized> {
     inner: &'a mut R,
     within: std::time::Duration,
     began: Option<std::time::Instant>,
 }
 
-impl<'a, R: Read + ?Sized> Within<'a, R> {
+impl<'a, R: ?Sized> Within<'a, R> {
     /// The frame's time starts now: for a peer that owes its frame at once — a request on a connection
     /// just accepted, the reply to a call just made.
     pub fn from_now(inner: &'a mut R, within: std::time::Duration) -> Self {
@@ -384,6 +388,53 @@ impl<R: Read + ?Sized> Read for Within<'_, R> {
         Ok(n)
     }
 }
+
+/// The most a [`Within`] offers its writer at once (RW 4.35). A write in flight is never cut short, and on
+/// Linux a socket's write deadline applies to each buffer it waits for, not to the call: one 4 MiB write to a
+/// peer that keeps freeing a little room stayed in the kernel for a minute. Offered 64 KiB at a time, the
+/// check between writes comes round within a write deadline or two.
+pub const WRITE_CHUNK: usize = 64 * 1024;
+
+impl<R: Write + ?Sized> Write for Within<'_, R> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.untaken()?;
+        let n = self.inner.write(&buf[..buf.len().min(WRITE_CHUNK)])?;
+        if n > 0 && self.began.is_none() {
+            self.began = Some(std::time::Instant::now());
+        }
+        Ok(n)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.untaken()?;
+        self.inner.flush()
+    }
+}
+
+impl<R: ?Sized> Within<'_, R> {
+    fn untaken(&self) -> io::Result<()> {
+        match self.began {
+            Some(t) if t.elapsed() > self.within => {
+                Err(io::Error::new(io::ErrorKind::TimedOut, FrameNotTaken { within: self.within }))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// The error a [`Within`] gives a WRITER: the peer did not take one whole frame in time (RW 4.35). Its kind
+/// is `TimedOut`, like a write deadline's.
+#[derive(Debug)]
+pub struct FrameNotTaken {
+    pub within: std::time::Duration,
+}
+
+impl std::fmt::Display for FrameNotTaken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "did not take one whole frame within {:?}", self.within)
+    }
+}
+
+impl std::error::Error for FrameNotTaken {}
 
 /// The error a [`Within`] gives: the peer did not send one whole frame in time. Its kind is
 /// `TimedOut`, like a read deadline's; a caller that words the two differently can tell them apart by

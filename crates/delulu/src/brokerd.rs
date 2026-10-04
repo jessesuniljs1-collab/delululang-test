@@ -894,6 +894,11 @@ pub(crate) fn serve_inner(
     // e-stop revoke — indefinitely. It bounds each read AND the whole frame: until RW 4.32 it bounded
     // only each read, and a client sending one byte every two seconds was never dropped (FRAME-DRIP-1).
     const SERVE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    // RW 4.35: and its whole ANSWER is owed to the client within this — a client that asks for a large
+    // answer and never reads it (or reads a byte at a time) held the loop in its reply write. Each write is
+    // bounded by `SERVE_WRITE_EACH`, the whole reply by `Within`; a legitimate client reads at once.
+    const SERVE_WRITE_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
+    const SERVE_WRITE_EACH: std::time::Duration = std::time::Duration::from_secs(1);
     loop {
         let mut conn = match listener.accept() {
             Ok(c) => c,
@@ -908,6 +913,10 @@ pub(crate) fn serve_inner(
             eprintln!("delulu broker: could not bound read (dropping connection): {e}");
             continue;
         }
+        if let Err(e) = conn.set_write_timeout(Some(SERVE_WRITE_EACH)) {
+            eprintln!("delulu broker: could not bound write (dropping connection): {e}");
+            continue;
+        }
         // Read exactly one request; a malformed/short/slow frame closes this connection (fail closed)
         // without taking down the daemon.
         let req: Request = match read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT)) {
@@ -918,8 +927,8 @@ pub(crate) fn serve_inner(
             }
         };
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
-        if let Err(e) = write_frame(&mut conn, &resp) {
-            eprintln!("delulu broker: response write failed: {e}");
+        if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
+            eprintln!("delulu broker: response write failed (dropping connection): {e}");
         }
         drop(conn);
         if stop {
@@ -2153,6 +2162,79 @@ mod tests {
         let _ = dribbler.join();
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.35 (the red-team pass on FRAME-DRIP-1, F2): a client that asks for an answer larger than the
+    /// transport holds and never reads it held the single-connection serve loop in its reply write — the
+    /// e-stop's revoke behind it. `GuardRequest` needs no credential and takes any `why`, so any same-user
+    /// client can make `GuardPending`'s answer large. The reply, like the request, is owed within a bound.
+    #[test]
+    fn a_client_that_never_reads_its_answer_cannot_hold_the_serve_loop() {
+        reply_unread_by(&temp_state("unread"), None);
+    }
+
+    /// The same, for a client that reads its answer slowly — 32 KiB every half second, so every write
+    /// makes progress within its own deadline and the whole answer would take about a minute: a deadline on
+    /// each write alone would let it hold the loop, so the whole reply is bounded.
+    #[test]
+    fn a_client_that_reads_its_answer_slowly_cannot_hold_the_serve_loop() {
+        reply_unread_by(&temp_state("slow"), Some(std::time::Duration::from_millis(500)));
+    }
+
+    /// A pending request whose `why` makes `GuardPending`'s answer far larger than any socket's or pipe's
+    /// buffer; a client asks for it and then reads 32 KiB of it every `pace` (never, if `None`); the
+    /// operator's `Status` behind it must be answered.
+    fn reply_unread_by(state: &Path, pace: Option<std::time::Duration>) {
+        use std::io::Read as _;
+        let handle = start_daemon(state);
+        let (_root, child) = guarded_child(state);
+        let why = "w".repeat(4 * 1024 * 1024);
+        let resp = request(state, ReqBody::GuardRequest { node: child, uses: vec!["declassify:*".into()], why }).unwrap();
+        assert!(matches!(resp, Response::GuardRequested { .. }), "{resp:?}");
+        let (asked, began) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn({
+            let state = state.to_path_buf();
+            move || {
+                let mut conn = broker_transport::connect(&state).expect("the client connects");
+                write_frame(&mut conn, &Request::new(ReqBody::GuardPending)).expect("the client asks");
+                asked.send(()).unwrap();
+                let t = std::time::Instant::now();
+                let mut chunk = vec![0u8; 32 * 1024];
+                while t.elapsed() < std::time::Duration::from_secs(24) {
+                    match pace {
+                        None => std::thread::sleep(std::time::Duration::from_millis(500)),
+                        Some(p) => {
+                            std::thread::sleep(p);
+                            if !matches!(conn.read(&mut chunk), Ok(n) if n > 0) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        began.recv().unwrap();
+        // Let the serve loop take the request and start writing its answer before the operator asks.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let t = std::time::Instant::now();
+        // On Windows a busy pipe refuses a second client after a second, so the operator asks again.
+        let answered = loop {
+            match request(state, ReqBody::Status) {
+                Err(_) if t.elapsed() < std::time::Duration::from_secs(14) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                other => break other,
+            }
+        };
+        let waited = t.elapsed();
+        assert!(matches!(answered, Ok(Response::Status { .. })), "{answered:?} after {waited:?}");
+        assert!(
+            waited < std::time::Duration::from_secs(14),
+            "a request behind a client that does not read its answer waited {waited:?}: it held the serve loop"
+        );
+        let _ = reader.join();
+        stop_daemon(state, handle);
+        let _ = std::fs::remove_dir_all(state);
     }
 
     /// Invariant 27 — an unreachable broker makes every effectful op DL1401, "fast (bounded, never a
