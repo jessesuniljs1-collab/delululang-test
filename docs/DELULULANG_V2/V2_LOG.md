@@ -3928,3 +3928,15 @@ larger than the room is buffered at once, a flush after the drain returns at onc
 and `Drop` skips the flush of an answer nobody took. Windows lint clean; the witnesses un-`cfg`'d; read on the runners
 with the broker's unit tests and every broker-facing target (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`,
 `secret_verify_cli`): `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1). **RW 4.35 closed on every OS.**
+
+## 2026-10-04 — routine run 10, the close
+
+**Built and read:** the nightly's two reds fixed (D-V2-84 — every platform's crates fetched before a suite; Wasmtime
+48.0.5); routine run 9's stranded PS-E-05 (b) merged and made to work inside a real OpenShell sandbox (D-V2-83 amended:
+the kernel's `PR_GET_SECCOMP`; D-V2-85: the launcher over `ssh`, because `sandbox exec` starts its command only once its
+input ends) — **PS-E-05 complete**; REPLY-HOLD-1 (RW 4.35, D-V2-86) closed on every OS, Windows by its second design.
+Mutants M84–M91. **CI, all read:** push runs `37232688376` (`9bc405e`), `37234832894` (`95a9789`), `37236037454`
+(`9b77312`), `37238153709` (`99f0c94`), `37239615098` (`db73893`) — success, 16 jobs each, none failed; `heavy-gates`
+`37236067731` success; `openshell.yml` `37234907676` both jobs green. **Loop engineering:** the routine's step 1 lists every
+branch's commits `master` lacks; step 3 names `gh`'s refused token; step 5 times a stalled channel before a fix and lints
+one target; step 6 names the author; HANDOFF §11.4 REPLY-HOLD-1, §11.5 four lessons.

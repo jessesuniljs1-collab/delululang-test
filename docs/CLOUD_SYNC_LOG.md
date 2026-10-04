@@ -1050,7 +1050,8 @@ it on `origin` was made in the cloud and is listed below.
   over `ssh`; (8) `9b77312` PS-E-05 (b) complete: the recipe, D-V2-85; (9) `9b6b4a1` RW 4.35: the broker daemon's reply
   owed within a bound; (10) `2bb26f8` RW 4.35 on Windows withdrawn — its first design failed on the runner; (11) the
   records of (9)–(10), the sweep's corrections; (12) `4d4d033` RW 4.35 on Windows: written only where the pipe has room,
-  flushed only once drained; (13) `b2bd3f2` its records; (14) the loop's last lessons — this commit
+  flushed only once drained; (13) `b2bd3f2` its records; (14) `db73893` the loop's last lessons; (15) the last reading —
+  this commit
 - Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
   `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
   reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
@@ -1078,7 +1079,7 @@ it on `origin` was made in the cloud and is listed below.
   `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`, `docs/REMAINING_WORK.md` (4.35 closed), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*` — (13). M `docs/CLOUD_ROUTINE.md` (step 3: `gh` present, its token refused; step 5: time a stalled
   channel before designing a fix; `check-other-os.sh TARGET…`), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (14).
-  Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
+  M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*` — (15). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
   GitHub no-reply address, Claude as co-author (his routine prompt); runs 1–9 committed as `Claude`.
 - Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
   passed. After the last edit: in each commit's message.
@@ -1107,12 +1108,17 @@ it on `origin` was made in the cloud and is listed below.
   full suite alone 2,104 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0 at `9b6b4a1`; `witness.yml` macOS
   `37236820414` green, Windows `37236818679` red (its first design — withdrawn in (10)). **(11)'s push run** `37238153709` —
   success, 16 jobs, none failed. **The full suite alone at `b2bd3f2`: 2,104 passed, 0 failed, 15 ignored (157
-  binaries), cargo exit 0.** **(12):** Windows lint clean; clippy clean; `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1).
-- Redo on the laptop: nothing (lockfile and workflow only).
-- For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline; look at every branch;
-  a simulated wall simulates every layer of the real one); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run; (2) RW 4.35 is closed on every OS — RW 4.40 (silent connections queue
+  binaries), cargo exit 0.** **(12):** Windows lint clean; clippy clean; `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1). **The last push run, `db73893` `37239615098` (carrying (12)–(14)) — success, 16 jobs,
+  none failed** (arm64 ping-pong MEASURED 2.85x against a control of 4.03x, passed; Linux x64 and Windows NOT MEASURED —
+  the runner busy; macOS NOT MEASURED — 3 hardware threads; the five properties as on every run since run 8).
+- Redo on the laptop: the suite on Windows and in WSL — the broker's reply bound on Windows (REPLY-HOLD-1) is read on the
+  runner only; the laptop's Windows host is its second witness. OpenShell runs only in `openshell.yml`.
+- For the laptop's memory: `HANDOFF.md` §11.4 (REPLY-HOLD-1), §11.5 (a gate that reads the whole resolved graph offline;
+  look at every branch; a simulated wall simulates every layer of the real one; a socket's write deadline is per buffer);
+  `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read this commit's push run (records only) — every earlier one of this run was read green; (2) RW 4.35 is closed on every OS — RW 4.40 (silent connections queue
   behind one another on the broker) is the same loop's next row; (3) **PS-E-05 is complete**;
   left beside it: `protocol: rest` TLS behind OpenShell's CA when `delulu run` itself runs inside with a network grant;
   (4) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
-  (P8-01 first), P9; the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; RW 7.17.
+  (P8-01 first), P9; the red-team rows RW 4.37, 4.39's last item, 4.40; RW 7.17.
+  **For the owner:** D-V2-84, D-V2-85 and D-V2-86 are this run's decisions, and D-V2-83's amendment; D-V2-83 itself is run 9's.
