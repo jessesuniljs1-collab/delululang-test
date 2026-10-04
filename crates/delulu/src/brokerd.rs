@@ -895,9 +895,12 @@ pub(crate) fn serve_inner(
     // only each read, and a client sending one byte every two seconds was never dropped (FRAME-DRIP-1).
     const SERVE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
     // RW 4.35: and its whole ANSWER is owed to the client within this — a client that asks for a large
-    // answer and never reads it (or reads a byte at a time) held the loop in its reply write. Each write is
-    // bounded by `SERVE_WRITE_EACH`, the whole reply by `Within`; a legitimate client reads at once.
+    // answer and never reads it (or reads it slowly) held the loop in its reply write. Each write is bounded
+    // by `SERVE_WRITE_EACH`, the whole reply by `Within`; a legitimate client reads at once. On Unix; on
+    // Windows the pipe's `WriteFile` and the `FlushFileBuffers` a reply ends with wait for the reader, and
+    // bounding them is RW 4.35's open half.
     const SERVE_WRITE_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
+    #[cfg(unix)]
     const SERVE_WRITE_EACH: std::time::Duration = std::time::Duration::from_secs(1);
     loop {
         let mut conn = match listener.accept() {
@@ -913,6 +916,7 @@ pub(crate) fn serve_inner(
             eprintln!("delulu broker: could not bound read (dropping connection): {e}");
             continue;
         }
+        #[cfg(unix)]
         if let Err(e) = conn.set_write_timeout(Some(SERVE_WRITE_EACH)) {
             eprintln!("delulu broker: could not bound write (dropping connection): {e}");
             continue;
@@ -2168,6 +2172,8 @@ mod tests {
     /// transport holds and never reads it held the single-connection serve loop in its reply write — the
     /// e-stop's revoke behind it. `GuardRequest` needs no credential and takes any `why`, so any same-user
     /// client can make `GuardPending`'s answer large. The reply, like the request, is owed within a bound.
+    /// Unix: on Windows this is red (`witness.yml` `37236818679`) — RW 4.35's open half.
+    #[cfg(unix)]
     #[test]
     fn a_client_that_never_reads_its_answer_cannot_hold_the_serve_loop() {
         reply_unread_by(&temp_state("unread"), None);
@@ -2176,6 +2182,7 @@ mod tests {
     /// The same, for a client that reads its answer slowly — 32 KiB every half second, so every write
     /// makes progress within its own deadline and the whole answer would take about a minute: a deadline on
     /// each write alone would let it hold the loop, so the whole reply is bounded.
+    #[cfg(unix)]
     #[test]
     fn a_client_that_reads_its_answer_slowly_cannot_hold_the_serve_loop() {
         reply_unread_by(&temp_state("slow"), Some(std::time::Duration::from_millis(500)));
@@ -2184,6 +2191,7 @@ mod tests {
     /// A pending request whose `why` makes `GuardPending`'s answer far larger than any socket's or pipe's
     /// buffer; a client asks for it and then reads 32 KiB of it every `pace` (never, if `None`); the
     /// operator's `Status` behind it must be answered.
+    #[cfg(unix)]
     fn reply_unread_by(state: &Path, pace: Option<std::time::Duration>) {
         use std::io::Read as _;
         let handle = start_daemon(state);

@@ -58,8 +58,8 @@ mod imp {
     };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
-        PeekNamedPipe, SetNamedPipeHandleState, WaitNamedPipeW, PIPE_NOWAIT, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE,
-        PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+        PeekNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+        PIPE_WAIT,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -229,7 +229,7 @@ mod imp {
                 }
                 // Peer identity (same-user) verification.
                 match self.verify_peer(h) {
-                    Ok(true) => return Ok(Connection { handle: h, server: true, read_timeout: None, write_timeout: None }),
+                    Ok(true) => return Ok(Connection { handle: h, server: true, read_timeout: None }),
                     Ok(false) => {
                         // A different user slipped past the DACL (should be impossible) — refuse and
                         // wait for the next client. Fail closed.
@@ -278,10 +278,6 @@ mod imp {
         /// so a peer that connects and never sends cannot hang us forever. Still blocking std I/O — no
         /// async runtime, no thread pool — so the head-chef "blocking, single-thread" design holds.
         read_timeout: Option<std::time::Duration>,
-        /// Bound on a single blocking write (RW 4.35). `None` = block as before. When set, `write` puts the
-        /// pipe in non-blocking mode for the write, so `WriteFile` takes what fits and returns, and retries
-        /// until it takes something or the deadline passes — a peer that never reads cannot hold it.
-        write_timeout: Option<std::time::Duration>,
     }
 
     // The handle is used from a single thread (the blocking serve loop / a single client call).
@@ -294,30 +290,7 @@ mod imp {
             self.read_timeout = dur;
             Ok(())
         }
-
-        /// Bound each subsequent blocking write to `dur` (`None` clears it) — RW 4.35. Enforced in
-        /// `write`; the WHOLE answer's bound is the caller's (`channel::Within`).
-        pub fn set_write_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
-            self.write_timeout = dur;
-            Ok(())
-        }
-
-        /// One `WriteFile` in the pipe's non-blocking mode, at most `NOWAIT_CHUNK` bytes, so a write the pipe
-        /// cannot take whole still takes what fits.
-        fn write_nowait(&mut self, buf: &[u8]) -> io::Result<u32> {
-            let mut wrote: u32 = 0;
-            let want = buf.len().min(NOWAIT_CHUNK) as u32;
-            let ok = unsafe { WriteFile(self.handle, buf.as_ptr(), want, &mut wrote, ptr::null_mut()) };
-            if ok == 0 {
-                let e = unsafe { GetLastError() };
-                return Err(io::Error::new(io::ErrorKind::BrokenPipe, format!("WriteFile: win32 error {e}")));
-            }
-            Ok(wrote)
-        }
     }
-
-    /// The most a deadline-bound write offers the pipe at once (RW 4.35): well under its 64 KiB buffer.
-    const NOWAIT_CHUNK: usize = 4096;
 
     impl Read for Connection {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -359,32 +332,6 @@ mod imp {
 
     impl Write for Connection {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            // RW 4.35: with a deadline, a blocking pipe would hold `WriteFile` until the peer reads, for
-            // ever if it never does. So the write is made in non-blocking mode — `WriteFile` takes what
-            // fits and returns — and retried until it takes something or the deadline passes, as `read`
-            // polls `PeekNamedPipe`. The pipe is put back in blocking mode either way.
-            if let Some(timeout) = self.write_timeout {
-                let nowait = PIPE_READMODE_BYTE | PIPE_NOWAIT;
-                if unsafe { SetNamedPipeHandleState(self.handle, &nowait, ptr::null(), ptr::null()) } == 0 {
-                    let e = unsafe { GetLastError() };
-                    return Err(io::Error::other(format!("SetNamedPipeHandleState: win32 error {e}")));
-                }
-                let deadline = std::time::Instant::now() + timeout;
-                let result = loop {
-                    match self.write_nowait(buf) {
-                        Ok(0) if buf.is_empty() => break Ok(0),
-                        Ok(0) if std::time::Instant::now() >= deadline => {
-                            break Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe write timed out"))
-                        }
-                        Ok(0) => std::thread::sleep(std::time::Duration::from_millis(2)),
-                        Ok(n) => break Ok(n as usize),
-                        Err(e) => break Err(e),
-                    }
-                };
-                let wait = PIPE_READMODE_BYTE | PIPE_WAIT;
-                unsafe { SetNamedPipeHandleState(self.handle, &wait, ptr::null(), ptr::null()) };
-                return result;
-            }
             let mut wrote: u32 = 0;
             let want = buf.len().min(u32::MAX as usize) as u32;
             let ok = unsafe { WriteFile(self.handle, buf.as_ptr(), want, &mut wrote, ptr::null_mut()) };
@@ -441,7 +388,7 @@ mod imp {
                 )
             };
             if h != INVALID_HANDLE_VALUE {
-                return Ok(Connection { handle: h, server: false, read_timeout: None, write_timeout: None });
+                return Ok(Connection { handle: h, server: false, read_timeout: None });
             }
             let e = unsafe { GetLastError() };
             let before_deadline = std::time::Instant::now() < deadline;
@@ -559,7 +506,9 @@ mod imp {
 
         /// Bound each subsequent blocking write to `dur` (`SO_SNDTIMEO`): a peer that does not read its
         /// answer cannot hold a write for ever (RW 4.35). The WHOLE answer's bound is the caller's
-        /// (`channel::Within`), because a peer that reads a byte at a time lets each write progress.
+        /// (`channel::Within`), because a peer that reads a little at a time lets each write progress.
+        /// Unix only so far: on Windows a blocking pipe's `WriteFile` — and the `FlushFileBuffers` a reply
+        /// ends with, so that disconnecting discards nothing — wait for the reader (RW 4.35's open half).
         pub fn set_write_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
             self.inner.set_write_timeout(dur)
         }
