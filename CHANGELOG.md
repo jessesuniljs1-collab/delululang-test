@@ -93,6 +93,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Docs: running the guest inside NVIDIA OpenShell** (`docs/DEPLOYMENT.md`) — the guest's policy (no network rule),
   and a launcher that reaches it over `ssh` through OpenShell's gateway: `openshell sandbox exec` starts a command only
   once its input ends, so it cannot carry the guest's channel (D-V2-85). Read green inside a real OpenShell sandbox.
+- **Fixed (security, REPLY-HOLD-1): a client that never read its answer held the broker daemon** — and the e-stop's
+  revoke behind it. The daemon serves one connection at a time; a same-user client could ask for a large answer
+  (`guard pending` after a long `why`) and never read it. The whole reply is now owed within 5 s and each write within
+  1 s on Linux and macOS; past either the connection is dropped. Windows is not yet bounded (D-V2-86).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

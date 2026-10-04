@@ -1847,6 +1847,38 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    writes", "reads only from the system paths", "no TCP bind or connect", "an outer syscall filter, not its own"], none
    of its own filter's four, every property `unknown`, no host guarantee. The recipe is in `docs/DEPLOYMENT.md`.
 
+## D-V2-86 — RW 4.35, REPLY-HOLD-1: the broker daemon's reply is owed within a bound, as its request is (Linux and macOS; Windows open) — TAKEN (head chef, 2026-10-04, under the owner's delegation)
+
+1. **The defect** (the red-team pass on FRAME-DRIP-1, F2; re-run by the head chef on `68b8888`): the serve loop serves one
+   connection at a time and wrote each reply with no bound, so a same-user client that asked for an answer larger than
+   the transport holds and never read it held the loop — every custody operation, the operator's e-stop revoke among
+   them, waited behind it. `GuardRequest` needs no credential and takes any `why`, so `GuardPending`'s answer can be made
+   as large as a frame. **Witnessed red in the VM (Linux):** a 4 MiB `why`; a client that asks for `GuardPending` and
+   never reads, and one that reads 32 KiB every half second (each write progresses; the whole would take a minute) —
+   `broker status` behind either got no answer within its 15 s bound.
+2. **Taken:** the whole reply is owed within 5 s of the request being read (`SERVE_WRITE_WITHIN`, the request's own
+   `SERVE_READ_TIMEOUT`), each write within 1 s (`SERVE_WRITE_EACH`); past either, the connection is dropped in words in
+   the broker's log. `channel::Within` — D-V2-73's whole-frame bound for reads — bounds a whole WRITE too (its error
+   `FrameNotTaken`, "did not take one whole frame within …"), and offers the transport at most 64 KiB at once
+   (`WRITE_CHUNK`): **on Linux a socket's `SO_SNDTIMEO` applies to each buffer a write waits for, not to the call**, so one
+   4 MiB `write` to a peer that kept freeing a little room stayed in the kernel for a minute, out of reach of any check
+   between writes (found by the slow reader: the first fix passed the silent client and failed it). Unix: `SO_SNDTIMEO`
+   on the accepted socket. A legitimate client reads its answer at once, so neither bound is felt.
+   **Windows stays open, and why, from its runner** (`witness.yml` `37236818679`, a first Windows design): putting the
+   connected server handle in `PIPE_NOWAIT` for a bounded write failed (`SetNamedPipeHandleState`: win32 error 231), and
+   even with the reply abandoned the loop stayed held — the connection's `Drop` (and `flush`) call `FlushFileBuffers`,
+   which on a pipe waits until the client has READ everything, there so that `DisconnectNamedPipe` discards no reply. So
+   that design was withdrawn whole; Windows' transport is exactly as before, and the two witnesses are `cfg(unix)`. The
+   Windows half needs the write AND the flush bounded — a writer thread cancelled with `CancelSynchronousIo`, or an
+   overlapped server pipe — witnessed on the Windows runner first (RW 4.35 stays open for it).
+3. **Not taken (yet):** caps on a request's field lengths and on `List`/`GuardPending` answers (the row's other remedy) —
+   they would shrink the largest answer, not bound a peer that reads nothing; the bound is what closes the hold. RW 4.40
+   (silent connections queue behind one another) is a different shape and stays open.
+4. **Witnesses:** `brokerd::tests::a_client_that_never_reads_its_answer_cannot_hold_the_serve_loop` and
+   `…_reads_its_answer_slowly_…`, red before, green after on Linux, green on macOS; **mutants** M89 (the whole-reply bound removed) and
+   M91 (the reply offered in one write) red on the slow reader, M90 (no per-write deadline) red on the silent client.
+   Read on the other runners before `master` moved: macOS `37236820414` green (both witnesses); Windows `37236818679` red — the first Windows design, withdrawn (above).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

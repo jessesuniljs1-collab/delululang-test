@@ -3906,3 +3906,17 @@ or connect", "an outer syscall filter, not its own"], all five properties `unkno
 expectation held." **PS-E-05 is complete:** (a) the export, (b) the guest inside OpenShell — the recipe in
 `docs/DEPLOYMENT.md`. Still open beside it, recorded in the study: whether a `protocol: rest` endpoint's TLS, terminated by
 OpenShell's own CA, verifies inside the wall when `delulu run` itself runs there ((a) with a network grant).
+
+## 2026-10-04 — routine run 10: REPLY-HOLD-1 — the broker daemon's reply owed within a bound (RW 4.35, D-V2-86)
+
+**Chosen** from run 8's "Open / next" (the red-team rows): RW 4.35 was "found, witnessed" and touches the e-stop's path.
+**Witnessed red on the VM** (`brokerd::tests`, two new witnesses): a `GuardRequest` with a 4 MiB `why`, then a client that
+asks for `GuardPending` and never reads — `broker status` behind it: "the broker accepted the request but did not answer
+within 15s"; and a client that reads 32 KiB every half second — the same. **The first fix** (a 1 s `SO_SNDTIMEO` and the
+reply through a whole-write `Within`) turned the silent client green and left the slow one red: Linux's send timeout is
+per buffer waited for, so the single 4 MiB `write` never returned to the check. **Fixed:** `Within` offers 64 KiB per
+write. **Windows, read on its runner (`37236818679`): the first Windows design failed** — `SetNamedPipeHandleState` refused
+`PIPE_NOWAIT` on the connected handle (win32 error 231), and the loop stayed held anyway in `FlushFileBuffers` (the
+connection's `Drop` waits for the client to read everything, so no reply is discarded at disconnect). Withdrawn whole:
+Windows' transport is as it was, the witnesses `cfg(unix)`, RW 4.35 open for Windows. Mutants M89, M90, M91 red. Clippy clean;
+`check-other-os.sh` clean on all five targets at `9b6b4a1`, and Windows and macOS again at `2bb26f8`; the full suite alone 2,104 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0, at `9b6b4a1` (`2bb26f8` changes only Windows code and `cfg` attributes); the new tests on the other runners first: macOS `37236820414` green (both witnesses); Windows `37236818679` red — the first Windows design, withdrawn (above).

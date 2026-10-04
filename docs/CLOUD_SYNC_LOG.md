@@ -1047,7 +1047,9 @@ it on `origin` was made in the cloud and is listed below.
   (PS-E-05 (b), D-V2-83 — stranded on `claude/stoic-ptolemy-uyw9g4`); (3) `9e75017` PS-E-05 (b): the guest asks the
   kernel whether a filter is in force, the witness's wall hides `/proc`; (4) `0ed045f`, (5) `4cae1f9` `openshell-runtime.sh`:
   the exec relay measured; (6) `95a9789` the records of (2)–(5); (7) `fc676d1` `openshell-runtime.sh`: the guest's launcher
-  over `ssh`; (8) PS-E-05 (b) complete: the recipe, D-V2-85 — this commit
+  over `ssh`; (8) `9b77312` PS-E-05 (b) complete: the recipe, D-V2-85; (9) `9b6b4a1` RW 4.35: the broker daemon's reply
+  owed within a bound; (10) `2bb26f8` RW 4.35 on Windows withdrawn — its first design failed on the runner; (11) the
+  records of (9)–(10), the sweep's corrections — this commit
 - Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
   `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
   reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
@@ -1064,7 +1066,13 @@ it on `origin` was made in the cloud and is listed below.
   `docs/survey/*` — (6). M `scripts/openshell-runtime.sh` (the launcher over `ssh`) — (7). M `docs/DEPLOYMENT.md` (the guest
   inside OpenShell: the recipe), `CHANGELOG.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-85), `V2_LOG.md`,
   `V2_PHASE_STATUS.md` (E-05 complete), `V2_OPENSHELL_STUDY.md`, `V2_IMPLEMENTATION_ROADMAP.md`, `docs/REMAINING_WORK.md`
-  (4.30 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (8). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
+  (4.30 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (8). M `crates/delulu-runtime/src/channel.rs` (`Within` bounds a
+  whole write: `FrameNotTaken`, `WRITE_CHUNK`), `crates/delulu/src/brokerd.rs` (the reply's bounds; two witnesses),
+  `crates/delulu/src/broker_transport.rs` (Unix `set_write_timeout`; Windows as before after (10)) — (9), (10). M
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 REPLY-HOLD-1; §11.5 a socket's write deadline is per buffer; *Where things stand*:
+  E-05 complete), `docs/CLOUD_ROUTINE.md` (step 4: E-05 complete), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-86),
+  `V2_LOG.md`, `docs/REMAINING_WORK.md` (4.35: closed on Linux and macOS, open on Windows), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*` — (11). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
   GitHub no-reply address, Claude as co-author (his routine prompt); runs 1–9 committed as `Claude`.
 - Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
   passed. After the last edit: in each commit's message.
@@ -1086,11 +1094,18 @@ it on `origin` was made in the cloud and is listed below.
   `37234832923` and `ocsf` `37234832899` success; CI `37234832894` — success, 16 jobs, none failed (arm64 ping-pong MEASURED 2.94x against a control of 3.61x; the other three NOT MEASURED). **(7) read inside a real OpenShell
   sandbox: `37234907676` (`fc676d1`) — both jobs GREEN**: (5a) the undeclared guest failed closed, the program never sent;
   (5b) the declared guest ran the program (exit 0), the report level 3 with "an outer syscall filter, not its own", every
-  property `unknown` — "every expectation held".
+  property `unknown` — "every expectation held". **(8)'s push runs:** `openshell` `37236037513` success; CI `37236037454` —
+  success, 16 jobs, none failed. **The Sunday sweep:** `heavy-gates` dispatched at `9b77312` — `37236067731` success (9 min: the 100k fmt laws,
+  the LSP latency gate and the two-engine differential, on Wasmtime 48.0.5); two documents' E-05 lines corrected.
+  **(9)–(10):** both witnesses red on Linux before, green after; M89–M91 red; clippy clean; `check-other-os.sh` clean; the
+  full suite alone 2,104 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0 at `9b6b4a1`; `witness.yml` macOS
+  `37236820414` green, Windows `37236818679` red (its first design — withdrawn in (10)).
 - Redo on the laptop: nothing (lockfile and workflow only).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline; look at every branch;
   a simulated wall simulates every layer of the real one); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run; (2) **PS-E-05 is complete** ((a) and (b)); left beside it: `protocol:
-  rest` TLS behind OpenShell's CA when `delulu run` itself runs inside with a network grant (the study's §4.5 question);
-  (3) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
+- Open / next: (1) read this commit's push run; (2) **RW 4.35's Windows half** — bound the pipe's `WriteFile` AND the
+  `FlushFileBuffers` in `flush`/`Drop` (a writer thread cancelled with `CancelSynchronousIo`, or an overlapped server
+  pipe), the two `brokerd` witnesses un-`cfg`'d and read red on the Windows runner first; (3) **PS-E-05 is complete**;
+  left beside it: `protocol: rest` TLS behind OpenShell's CA when `delulu run` itself runs inside with a network grant;
+  (4) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
   (P8-01 first), P9; the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; RW 7.17.

@@ -69,8 +69,9 @@ the assistant's memory — which now also travels file by file in
 - **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H6 and a red-team pass on the filter, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target — its (a), `sandbox policy --format openshell`, built by
-  routine run 8 (D-V2-82), (b) the L3 recipe open (E-06, the OCSF export, is complete — routine run 7,
-  D-V2-78 and D-V2-80). Then **P8** (P8-01 the
+  routine run 8 (D-V2-82), (b) the guest inside OpenShell at L3 by routine runs 9–10 (D-V2-83, D-V2-85: an
+  outer-wall declaration, the kernel's in-force check, a launcher over `ssh`), read green on a runner — **E-05 complete**
+  (E-06, the OCSF export, is complete — routine run 7, D-V2-78 and D-V2-80). Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
   then **P9**. A real device stays environment-blocked. ADAPTER-SPELL-1 (the subprocess driver verified
   as one file and started as another) was found and fixed while sizing P8.
@@ -771,7 +772,9 @@ wins, and you should update the memory to match.
   words — it served at `st/st`, the caller said "did not come up", and the daemon was left running (fixed: made
   absolute at the edge). Its other findings — an unbounded reply write, the registry's unbounded connections and
   crash, a FIFO in the audit directory — are RW 4.35–4.40, each re-run by the head chef or marked code reading.
-  The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
+  **REPLY-HOLD-1** (RW 4.35, closed by routine run 10, D-V2-86): the daemon's REPLY had no bound — a client that asked
+  for a large answer and never read it held the one-connection loop, the e-stop's revoke behind it; the whole reply is
+  owed within 5 s now on Linux and macOS; Windows' pipe still waits for the reader (open). The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
   `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
   And **AUDIT-FIFO-1** (D-V2-77): a FIFO named like a day log hung every reader of the audit chain, `broker start`
   included — ATTEST-FIFO-1's shape in the audit; read only if regular now. **The secret store had it too** (routine
@@ -971,6 +974,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   every operating system, and a red job saves no cache, so it never recovers alone. A test's precondition belongs in
   the workflow (`cargo fetch --locked`, D-V2-84), never in the cache's luck. A nightly is the only run that sees the
   world change while `master` does not: read every one since the last run, not only the push runs.
+- **A socket's write deadline is per buffer, not per call** (routine run 10, REPLY-HOLD-1): Linux applies `SO_SNDTIMEO` to
+  each buffer a `write` waits for, so one 4 MiB `write` to a peer that frees a little room every half second stays in
+  the kernel for a minute — no check between writes ever runs. Bound the WHOLE write as well as each, and offer the
+  transport a bounded amount per call (`channel::Within`, 64 KiB). Witness with a slow reader, not only a silent one:
+  the first fix passed the silent client and failed the slow one.
 - **A run can end before its records — look at every branch** (routine run 10): routine run 9 pushed `f446bfa` (PS-E-05
   (b)) to its harness branch, dispatched its runner reads and stopped — nothing on `master`, no entry anywhere, and its
   reading inside OpenShell red. Found only by listing every branch's commits `master` lacks; the clone is shallow, so

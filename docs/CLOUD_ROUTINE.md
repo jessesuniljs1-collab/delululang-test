@@ -150,9 +150,9 @@ another OS, and then takes about seven minutes itself (run 5).
    construction and a generation per run; E-02 host loss ends the guest (macOS and the external launcher);
    E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
    is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
-   tested L3 and `sandbox policy --format openshell` (**(a) built**, run 8: D-V2-82, checked by OpenShell's
-   prover in the manual `openshell.yml`; (b) the L3 recipe next); E-06 OCSF export (**complete**, run 7:
-   D-V2-78, D-V2-80).
+   tested L3 and `sandbox policy --format openshell` (**complete**, runs 8–10: (a) D-V2-82, checked by OpenShell's
+   prover; (b) D-V2-83 and D-V2-85, the guest inside a real OpenShell sandbox over `ssh`, read in `openshell.yml`'s
+   runtime job — the recipe in `docs/DEPLOYMENT.md`); E-06 OCSF export (**complete**, run 7: D-V2-78, D-V2-80).
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
    E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
