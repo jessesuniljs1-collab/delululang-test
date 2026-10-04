@@ -1727,6 +1727,37 @@ against a boundary written by hand and `exceeds_boundary` against one missing a 
 preset, a writable `/tmp`, another binary) to be caught and an unknown field to be an error. **Not built here:** (b), the
 guest inside an OpenShell sandbox at L3, and the study's runtime witnesses (a denied `curl`, a granted/ungranted pair).
 
+## D-V2-84 — The nightly red four times: every platform's crates fetched before a suite; Wasmtime 48.0.5 for RUSTSEC-2026-0325 to -0327 — TAKEN (head chef, 2026-10-04, under the owner's delegation)
+
+1. **What was red.** Every nightly since routine run 8 left (`e936ea5`, its push run `36716667440` green): 2026-10-01
+   `36844480022` — `supply-chain` alone; 2026-10-02 `36988889261`, 10-03 `37110949841`, 10-04 `37191610614` — `supply-chain`
+   and all four test suites (Linux x64, Linux arm64, macOS, Windows). No push came in those days, so `master`'s own runs
+   stayed green while the next push would have gone red.
+2. **The suites: a test that passed only while the cache did.** `egress_features` asks `cargo metadata --offline
+   --locked` for the RESOLVED graph, which reads every platform's crates; a build downloads only the runner's. A warm
+   `Swatinem/rust-cache` held them — its own save step resolves the whole graph — so the test passed for as long as the
+   cache came back. **Rust 1.99.0 went stable on 2026-10-01**: `dtolnay/rust-toolchain@stable` installs it beside the
+   pinned 1.96.1, both are in rust-cache's key, every nightly from 2026-10-02 started with "No cache found", and
+   `cargo metadata` failed (`failed to download core-foundation v0.10.1 … --offline was specified`). A red job saves no
+   cache, so it could never recover by itself. **Witnessed in the VM:** a fresh `CARGO_HOME` with only what `cargo test -p
+   delulu-runtime` downloads — the same failure (`failed to download addr2line v0.26.1`); after `cargo fetch --locked` in
+   that home, 2 passed. **Taken:** the `test` and `arm64` jobs run `cargo fetch --locked` before the suite — the
+   precondition the VM already writes down (routine run 1), now on the runners too. Not taken: pinning the action to
+   1.96.1 to keep the cache warm — it would hide the cold path again, and the next cold cache (eviction after seven
+   days, a lockfile change) would find the same test; the fetch makes a cold runner correct.
+3. **The supply chain: three Wasmtime advisories and a yanked crate.** RUSTSEC-2026-0325 (mis-typed tag imports —
+   exceptions), -0326 (GC rooting across `try_call` — GC and exceptions), -0327 (the component model's async-lifted
+   callbacks) against wasmtime 48.0.3; and `yoke-derive 0.8.3` yanked. **Reachability, read:** none reaches DeluluLang —
+   `harden_wasm_features` turns the component model, GC and exceptions off (`delulu-wasm/src/host.rs:66-78`, D-V2-67 and
+   D-V2-68's narrowing), so the upgrade is the gate's, not a live hole; never an `ignore` all the same. **Taken:**
+   wasmtime 48.0.3 → **48.0.5** (the 48 long-term-support line's newest; the advisories' fix is 48.0.4 — 49.0.2 is the other
+   range, one major step more), and `yoke-derive` 0.8.3 → 0.8.4. Lockfile only: no manifest or source line changed.
+   Witnessed with cargo-deny 0.20.2: `cargo deny --all-features check advisories` exit 1 naming all four, then exit 0;
+   `check` (advisories, bans, licences, sources) ok.
+4. **Verified:** clippy clean; the full suite alone 2,094 passed, 0 failed, 15 ignored (156 binaries), cargo exit 0;
+   the two-engine differential by hand (wasmtime changed). The push run is the cold-cache witness on the runners — the
+   cache key is still new, so it starts cold.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

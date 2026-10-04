@@ -82,6 +82,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Security: wasmtime 47.0.4 → 48.0.3** (the 48 long-term-support line) for RUSTSEC-2026-0315 — a plugin
   using function references or exceptions could spend more fuel than it was granted — and RUSTSEC-2026-0316
   (the component model, which DeluluLang turns off). No behaviour changes (D-V2-67).
+- **Security: wasmtime 48.0.3 → 48.0.5** (the same long-term-support line) for RUSTSEC-2026-0325, -0326 and -0327 —
+  exceptions, GC and the component model, all three off in DeluluLang, so none was reachable — and `yoke-derive`
+  0.8.3, yanked, → 0.8.4. No behaviour changes (D-V2-84).
+- **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
+  resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
+  nightly went red on every operating system (D-V2-84).
 - **An attestation read before it was whole is refused as `incomplete`, in words that name the protocol.** The
   host reads the document the moment it exists, so an attester writes it whole — a temporary file, then a
   rename, as `delulu sandbox attest` does; one that writes in place was refused with a parser's "EOF while

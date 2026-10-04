@@ -73,6 +73,14 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           echo "DELULU_REQUIRE_SUBORDINATE_UID=1" >> "$GITHUB_ENV"
 
+      # `egress_features` asks `cargo metadata --offline` for the RESOLVED graph, which reads every
+      # platform's crates; a build downloads only this runner's. A warm cache happened to hold them
+      # (rust-cache's own save step resolves the whole graph), so the test passed only while the cache
+      # did: Rust 1.99.0's release changed the cache key on 2026-10-01, every nightly from 2026-10-02
+      # started cold and went red on all four suites, and a red job saves no cache. Fetch them here.
+      - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
+        run: cargo fetch --locked
+
       # `--no-fail-fast`: without it cargo stops at the first failing test BINARY. On the first run
       # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
       # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.
@@ -176,6 +184,8 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Fetch every platform's crates (egress_features resolves the whole graph offline)
+        run: cargo fetch --locked
       - name: Full workspace test suite (aarch64)
         run: cargo test --workspace --no-fail-fast
       # PS-E-01 (D-V2-57): which of the five properties this runner's jailed guest (L1) has, from one run's

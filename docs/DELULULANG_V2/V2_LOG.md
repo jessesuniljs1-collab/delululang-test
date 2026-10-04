@@ -3822,3 +3822,36 @@ before `master` moved. E-05 (b) opened with a real finding: the guest cannot yet
 `seccomp` refused; it fails closed). Mutants M58–M74. Loop engineering: HANDOFF §11.5 (a mutant loop's stale binary; a
 workflow dispatchable only on `master`; falsifiers from the checker's documented cases; a flag documented for a command
 reaches every verb), the routine's steps 5 and 7 (wait on a run from the VM with `curl`).
+
+## 2026-10-04 — routine run 10: the nightly red four times — a cold cache and three Wasmtime advisories (D-V2-84)
+
+**Arrival.** Four days after routine run 8 closed (2026-09-30). `survey check` ok (1,482 nodes, 13,114 edges); `doctor
+--check` ok, all checks passed. `gh` is present in the VM but its `GH_TOKEN` is refused ("invalid") — CI read with
+`curl` against the REST API and the GitHub MCP tools.
+
+**CI since run 8.** Run 8's last commit `e936ea5`: push run `36716667440` — **success** (its "Open / next" (1)). Then
+four nightlies on the same commit, **all red**: 2026-10-01 `36844480022` (`supply-chain` alone), 10-02 `36988889261`,
+10-03 `37110949841`, 10-04 `37191610614` (`supply-chain`, `test` on Linux x64, macOS and Windows, and `arm64` — the
+full suites). Every other job green (18 jobs each). On 10-04 the Linux x64 suite's annotations: ping-pong NOT MEASURED
+(the runner busy: three attempts, 2.01–2.25x against a control of 2.05x), all five properties established; macOS ping-pong NOT MEASURED (3
+hardware threads, 2.21x), egress, host loss and privilege floor established, reads and memory not confined.
+
+**Cause 1, the four suites — `egress_features` on a cold cache.** Its `cargo metadata --offline` reads every
+platform's crates; a build downloads only the runner's; a warm rust-cache held them, and **Rust 1.99.0 (stable,
+2026-10-01) changed the cache key** — `dtolnay/rust-toolchain@stable` installs it beside the pinned 1.96.1 and both are
+hashed — so every nightly from 10-02 restored nothing ("No cache found"), failed `failed to download core-foundation
+v0.10.1 … --offline was specified`, and a red job saves no cache. Witnessed in the VM with a fresh `CARGO_HOME` (red,
+`addr2line v0.26.1`), then green after `cargo fetch --locked` in it. **Cause 2, `supply-chain` —** RUSTSEC-2026-0325,
+-0326, -0327 against wasmtime 48.0.3 and `yoke-derive 0.8.3` yanked; witnessed with cargo-deny 0.20.2 (exit 1 naming
+all four, exit 0 after). **Fixed (D-V2-84):** `ci.yml`'s `test` and `arm64` jobs fetch before the suite; wasmtime 48.0.5
+and yoke-derive 0.8.4, lockfile only. Clippy clean; the full suite alone **2,094 passed, 0 failed, 15 ignored** (156
+binaries), cargo exit 0; the two-engine differential by hand (`--release --test differential -- --ignored`) passed in 110.8 s.
+
+**Also found on arrival — routine run 9 never reached `master`.** Branch `claude/stoic-ptolemy-uyw9g4` holds one commit
+after `e936ea5`: `f446bfa` "PS-E-05 (b): a guest runs under an outer wall's syscall filter only when its launcher declares
+it (D-V2-83)", 2026-09-30 15:43 UTC, session `session_019ymhQRJFgC6Kzb8PjiKtDj` — with no `V2_LOG`, sync-log or status
+record. Its runner reads: `witness.yml` `36738984491`, `36738988731`, `36738993182` — success; `openshell.yml` (runtime)
+`36738997626` — **red**: inside a real OpenShell sandbox the declared guest still failed closed. The next entry takes it
+up. The two other branches with a commit `master` lacks (`claude/wonderful-hamilton-bo8k53` `7d6a22b`,
+`claude/friendly-thompson-vz6m23` `d3f0d52`) are witness branches of runs 3 and 6 whose work landed in revised form
+(`a_computing_guest_ends_when_its_host_is_killed`; D-V2-73's `Within` in place of `FrameDeadline`) — nothing stranded.

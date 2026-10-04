@@ -965,6 +965,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A guarantee a report claims needs a witness of its own** (routine run 3): Linux's "killed with the
   host" had been claimed since PS-A-04 and no test killed a host to see it — the macOS witness, written
   for both, was the first; it also proved the death signal with a mutant.
+- **A gate that reads the whole resolved graph offline passes only while the cache holds it** (routine run 10):
+  `egress_features`' `cargo metadata --offline` needs every platform's crates and a build fetches only the runner's;
+  a warm rust-cache held them, until a new stable Rust (1.99.0, 2026-10-01) changed the cache key — four nightlies red on
+  every operating system, and a red job saves no cache, so it never recovers alone. A test's precondition belongs in
+  the workflow (`cargo fetch --locked`, D-V2-84), never in the cache's luck. A nightly is the only run that sees the
+  world change while `master` does not: read every one since the last run, not only the push runs.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

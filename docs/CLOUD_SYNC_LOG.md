@@ -1037,3 +1037,26 @@ it on `origin` was made in the cloud and is listed below.
   profile); E-04's attestation binding; E-03 H6; then P8 (P8-01 first), P9 (P9-01 `authority --within` can build on
   D-V2-81's hidden kinds); (4) the red-team rows RW 4.35, 4.37, 4.39's last item, 4.40; (5) RW 7.17 — arm64's `estop_cli`.
   **For the owner:** D-V2-81 and D-V2-82 are this run's decisions.
+
+### 2026-10-04 — routine run 10: the nightly red four times, fixed (D-V2-84); routine run 9's stranded PS-E-05 (b) recovered
+- Session: `https://claude.ai/code/session_01H8s9DvSTxuHXSefjLqTeY2`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-w805xo`, at `master`'s head; each
+  slice is pushed there first, then `master` moved)   Pull request: none   Merged: n/a
+- Base: `e936ea5` (routine run 8's last commit — routine run 9's `f446bfa` never reached `master`)
+- Commits: (1) the CI fix — this commit
+- Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
+  `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
+  reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated) — (1). Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
+  passed. After the last edit: in each commit's message.
+- Verified: **CI on arrival** — `e936ea5`'s push run `36716667440` success; the nightlies `36844480022` (10-01),
+  `36988889261` (10-02), `37110949841` (10-03), `37191610614` (10-04) **red** — `supply-chain` (RUSTSEC-2026-0325/0326/0327,
+  `yoke-derive` yanked) and from 10-02 every suite (`egress_features` on a cache Rust 1.99.0's release emptied). Both
+  witnessed red in the VM, then green: cargo-deny exit 1 → 0; a cold `CARGO_HOME` red → green after `cargo fetch`. Clippy
+  clean; the full suite alone 2,094 passed, 0 failed, 15 ignored (156 binaries), cargo exit 0; the two-engine
+  differential by hand, passed. `gh`: present, its token refused — CI read with `curl` and the MCP tools.
+- Redo on the laptop: nothing (lockfile and workflow only).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline).
+- Open / next: (1) read this commit's push run — it starts on a cold cache, so it is the fix's witness on the runners;
+  (2) routine run 9's `f446bfa` (PS-E-05 (b), D-V2-83) — its OpenShell reading `36738997626` was red.
