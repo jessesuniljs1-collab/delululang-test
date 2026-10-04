@@ -1777,6 +1777,23 @@ force — so the check guards an LSM or a future kernel, and its parser is pinne
 hidden. **Read inside OpenShell** by `scripts/openshell-runtime.sh` step (5): (5a) undeclared fails closed, (5b) declared
 runs the program at level 3 with the word — the run that reads it is in `V2_LOG.md`.
 
+**Amended — routine run 10, 2026-10-04 (head chef, under the owner's delegation): the kernel answers rule (3), not
+`/proc`.** Routine run 9 ended with `f446bfa` on its harness branch alone, and its reading inside a real OpenShell sandbox
+(`openshell.yml` `36738997626`) was **red**: (5a) held, but (5b)'s declared guest failed closed too — "`/proc/self/status`
+shows no filter in force, so none stands in for it". The sandbox's effective policy (the same run's step (4)) names no
+`/proc`, and OpenShell adds none, so under its Landlock the guest could not READ its status, and the unreadable file
+(`unwrap_or_default`) read as "no filter". The rule held — it failed closed — but (b) could never run where it was built
+to. **Changed:** rule (3)'s in-force check is the kernel's own answer, `prctl(PR_GET_SECCOMP) == 2`, which needs no path:
+where no filter is in force nothing can answer that call in the kernel's place, so a 2 is never invented; an error is
+no. Everything else in the rule stands. **Witnessed:** the test's simulated wall was the filter alone, so `/proc` stayed
+readable and the test could not see OpenShell's failure; it now runs every expectation under two walls — the filter, and
+the filter with a Landlock layer under which nothing in `/proc` can be read (checked first: `cat /proc/self/status`
+refused inside it, a file elsewhere read). Under the second, `f446bfa`'s code went red with OpenShell's exact words; green
+after. The parser's unit test became `a_filter_in_force_is_the_kernels_own_answer`: `PR_GET_SECCOMP` agrees with this
+process's `/proc/self/status` wherever the suite runs. **Mutants:** M84 (the check always no) and M86 (strict mode taken
+for a filter) red under both walls; M85 (the check always yes — run 9's surviving M77) red now, on the unit test; M87
+(the wall's Landlock layer dropped) and M88 (`/proc` not skipped) red on the hidden-`/proc` witness's own sanity check.
+
 ## D-V2-84 — The nightly red four times: every platform's crates fetched before a suite; Wasmtime 48.0.5 for RUSTSEC-2026-0325 to -0327 — TAKEN (head chef, 2026-10-04, under the owner's delegation)
 
 1. **What was red.** Every nightly since routine run 8 left (`e936ea5`, its push run `36716667440` green): 2026-10-01

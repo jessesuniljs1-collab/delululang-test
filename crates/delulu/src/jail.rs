@@ -747,9 +747,10 @@ pub fn lock_down_self(outer: bool) -> Result<Vec<&'static str>, String> {
         if !(outer && refused_by_a_filter) {
             return Err(why);
         }
-        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
-        if !filter_in_force(&status) {
-            return Err(format!("{why}; and `/proc/self/status` shows no filter in force, so none stands in for it"));
+        if !filter_in_force() {
+            return Err(format!(
+                "{why}; and the kernel reports no filter in force on this process (`PR_GET_SECCOMP`), so none stands in for it"
+            ));
         }
         return Ok(vec![delulu_runtime::channel::OUTER_FILTER]);
     }
@@ -769,15 +770,16 @@ pub fn lock_down_self(outer: bool) -> Result<Vec<&'static str>, String> {
     Ok(vec!["no new programs", "no debugger", "no namespace or module tricks", "no sockets but the channel"])
 }
 
-/// D-V2-83: does the kernel report a seccomp filter in force on this process? From its `/proc/self/status`
-/// text: `Seccomp:` is 2 (filter mode) and, where the kernel prints it (5.9 and later), `Seccomp_filters:` is
-/// at least one. Anything else — strict mode, no line, a malformed one — is no.
+/// D-V2-83: is a seccomp filter in force on this process? The kernel's own answer: `prctl(PR_GET_SECCOMP)` is 2
+/// in filter mode. It reads no file — routine run 9 read `/proc/self/status` for it, and inside NVIDIA OpenShell's
+/// sandbox `/proc` is beyond the wall (the policy names no `/proc` and OpenShell adds none), so the read failed and
+/// every declared guest failed closed under a filter that was there (`openshell.yml`, run `36738997626`). Where no
+/// filter is in force, nothing can answer this call in the kernel's place, so a 2 is never invented; strict mode
+/// would have ended the guest long before; an error — a filter refusing `prctl` — is no.
 #[cfg(target_os = "linux")]
-fn filter_in_force(status: &str) -> bool {
-    let field = |name: &str| {
-        status.lines().find_map(|l| l.strip_prefix(name).and_then(|rest| rest.strip_prefix(':')).map(str::trim))
-    };
-    field("Seccomp") == Some("2") && field("Seccomp_filters").is_none_or(|n| n.parse::<u32>().is_ok_and(|n| n >= 1))
+fn filter_in_force() -> bool {
+    // SAFETY: `PR_GET_SECCOMP` takes no pointer and changes nothing.
+    unsafe { libc::prctl(libc::PR_GET_SECCOMP) == 2 }
 }
 
 /// Elsewhere the guest's confinement is entirely the host's doing (the Job Object, the Seatbelt
@@ -1250,28 +1252,14 @@ mod linux_tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
-    /// D-V2-83: an outer filter stands in for the guest's own only where the kernel reports one in force —
-    /// filter mode, and at least one filter where the kernel counts them. The other spellings are no.
+    /// D-V2-83: the kernel's answer agrees with the one it prints — `PR_GET_SECCOMP` says filter mode exactly
+    /// where this process's `/proc/self/status` says `Seccomp: 2`, wherever the suite runs (inside a container's
+    /// own filter too). The guest's path, where a filter refuses another, is `tests/sandbox_outer_filter_cli.rs`.
     #[test]
-    fn a_filter_in_force_is_filter_mode_with_a_filter() {
-        for (status, yes) in [
-            ("Name:\tdelulu\nSeccomp:\t2\nSeccomp_filters:\t1\n", true),
-            ("Seccomp:\t2\nSeccomp_filters:\t3\n", true),
-            // A kernel older than 5.9 prints no count; filter mode alone answers.
-            ("Seccomp:\t2\n", true),
-            ("Seccomp:\t0\nSeccomp_filters:\t0\n", false),
-            // Strict mode is not a filter a guest could run under.
-            ("Seccomp:\t1\nSeccomp_filters:\t0\n", false),
-            // Filter mode with no filter counted is a contradiction, not a wall.
-            ("Seccomp:\t2\nSeccomp_filters:\t0\n", false),
-            ("Seccomp:\t2\nSeccomp_filters:\tmany\n", false),
-            ("Seccomp:\t22\n", false),
-            ("NoSeccomp:\t2\n", false),
-            ("Seccomp_filters:\t1\n", false),
-            ("", false),
-        ] {
-            assert_eq!(super::filter_in_force(status), yes, "{status:?}");
-        }
+    fn a_filter_in_force_is_the_kernels_own_answer() {
+        let status = std::fs::read_to_string("/proc/self/status").expect("this test reads its own status");
+        let printed = status.lines().any(|l| l.split_once(':').is_some_and(|(k, v)| k == "Seccomp" && v.trim() == "2"));
+        assert_eq!(super::filter_in_force(), printed, "{status}");
     }
 }
 

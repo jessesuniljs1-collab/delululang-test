@@ -198,6 +198,9 @@ done
 # D-V2-83 (routine run 9): OpenShell's filter refuses the guest's own (`seccomp`: EPERM, run 8's reading), so this
 # launcher DECLARES the outer wall — `--outer-syscall-filter` — and the guest runs under OpenShell's filter,
 # saying so in its words; undeclared, it fails closed as before. Both are read here, in that order.
+# Routine run 10: run 9's first reading of (5b) was red — the guest looked for the filter in `/proc/self/status`,
+# and this sandbox's policy names no `/proc` (OpenShell adds none), so it could not read it and failed closed under a
+# filter that was there. It now asks the kernel (`PR_GET_SECCOMP`); the test suite's simulated wall hides `/proc` too.
 cat > openshell-guest <<'EOF'
 #!/bin/sh
 exec openshell sandbox exec -n dlg --no-tty --no-login-shell -- /usr/local/bin/delulu $DELULU_GUEST_ARGS $GUEST_EXTRA
