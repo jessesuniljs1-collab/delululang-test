@@ -1050,7 +1050,7 @@ it on `origin` was made in the cloud and is listed below.
   over `ssh`; (8) `9b77312` PS-E-05 (b) complete: the recipe, D-V2-85; (9) `9b6b4a1` RW 4.35: the broker daemon's reply
   owed within a bound; (10) `2bb26f8` RW 4.35 on Windows withdrawn — its first design failed on the runner; (11) the
   records of (9)–(10), the sweep's corrections; (12) `4d4d033` RW 4.35 on Windows: written only where the pipe has room,
-  flushed only once drained; (13) its records — this commit
+  flushed only once drained; (13) `b2bd3f2` its records; (14) the loop's last lessons — this commit
 - Files and folders: M `.github/workflows/ci.yml` (`cargo fetch --locked` before the `test` and `arm64` suites),
   `Cargo.lock` (wasmtime 48.0.5 and its family; yoke-derive 0.8.4), `CHANGELOG.md`, `HANDOFF.md` (§11.5: a gate that
   reads the whole graph offline), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-84), `docs/DELULULANG_V2/V2_LOG.md`,
@@ -1076,7 +1076,9 @@ it on `origin` was made in the cloud and is listed below.
   `docs/survey/*` — (11). M `crates/delulu/src/broker_transport.rs` (Windows: `set_write_timeout`, the quota-based write,
   flush and drop), `crates/delulu/src/brokerd.rs` (the witnesses on every OS) — (12); M `CHANGELOG.md`, `HANDOFF.md`,
   `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `V2_LOG.md`, `docs/REMAINING_WORK.md` (4.35 closed), `docs/CLOUD_SYNC_LOG.md`,
-  `docs/survey/*` — (13). Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
+  `docs/survey/*` — (13). M `docs/CLOUD_ROUTINE.md` (step 3: `gh` present, its token refused; step 5: time a stalled
+  channel before designing a fix; `check-other-os.sh TARGET…`), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (14).
+  Deleted: nothing. **Authorship:** from (1), commits are authored by the owner's account through its
   GitHub no-reply address, Claude as co-author (his routine prompt); runs 1–9 committed as `Claude`.
 - Survey and doctor (start of run): `survey check` ok (1,482 nodes, 13,114 edges); `doctor --check` ok, all checks
   passed. After the last edit: in each commit's message.
@@ -1104,7 +1106,8 @@ it on `origin` was made in the cloud and is listed below.
   **(9)–(10):** both witnesses red on Linux before, green after; M89–M91 red; clippy clean; `check-other-os.sh` clean; the
   full suite alone 2,104 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0 at `9b6b4a1`; `witness.yml` macOS
   `37236820414` green, Windows `37236818679` red (its first design — withdrawn in (10)). **(11)'s push run** `37238153709` —
-  success, 16 jobs, none failed. **(12):** Windows lint clean; clippy clean; `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1).
+  success, 16 jobs, none failed. **The full suite alone at `b2bd3f2`: 2,104 passed, 0 failed, 15 ignored (157
+  binaries), cargo exit 0.** **(12):** Windows lint clean; clippy clean; `witness.yml` at `4d4d033` — Windows `37238378527` and macOS `37238381140` green (Windows: 140 unit tests, the two witnesses among them, its log naming both drops — "the reader took nothing" and "did not take one whole frame within 5s" — and `broker_cli` 3, `estop_cli` 5, `guard_cli` 2, `guard_e2e` 3, `secret_verify_cli` 1).
 - Redo on the laptop: nothing (lockfile and workflow only).
 - For the laptop's memory: `HANDOFF.md` §11.5 (a gate that reads the whole resolved graph offline; look at every branch;
   a simulated wall simulates every layer of the real one); `docs/assistant-memory/cloud-period-2026-09-28.md`.

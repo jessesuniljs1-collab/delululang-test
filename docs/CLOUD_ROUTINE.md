@@ -106,7 +106,7 @@ witnessed with `cargo deny --all-features check advisories` before and after. Th
 another OS, and then takes about seven minutes itself (run 5).
 
 **3. Verify the previous run — the verification loop.** A run does not trust the one before it:
-- **Read CI with the GitHub MCP tools.** Run 1 found no `gh` in its VM, though the official docs list
+- **Read CI with the GitHub MCP tools.** Run 10 found `gh` installed with its `GH_TOKEN` refused ("invalid"); run 1 found no `gh` in its VM, though the official docs list
   `gh` as pre-installed and authenticated through the GitHub proxy — so check once (`command -v gh`;
   `check-tools` lists the VM's tools) and record what you found; use `gh` for what the MCP tools lack
   (`gh workflow run`) when it is there. Either way the proxy refuses the signed log-download URLs
@@ -215,6 +215,10 @@ schema's raw files are reachable, run 7), and `ocsf.yml` runs it on the runners 
 (`openshell.rs`, the grant parser, egress, the scripts) is checked by OpenShell's own prover in `openshell.yml` on push;
 dispatch it with `runtime: true` to see the export ENFORCED by a real OpenShell sandbox (run 8).
 A fixture that fakes what the host writes has a real-run witness beside it (run 7: a faked generation hid a wrong reading).
+**When a runner shows a channel stalling, time it byte by byte before designing a fix** (run 10: the guess — a relay
+that buffers by line — was refuted by the first timed probe, and the real cause, a command started only once its input
+ended, took one more; a probe step in the workflow's script costs one dispatch). `scripts/check-other-os.sh TARGET…`
+lints only the targets named — about two minutes for one, against seven for all five.
 **A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
