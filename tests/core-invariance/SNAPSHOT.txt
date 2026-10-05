@@ -950,6 +950,156 @@ exit 0
 main (examples/hello_wasm.delulu:7) — Write
 --- stderr ---
 
+===== examples/line_driver :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/line_driver :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: `line_driver` checked clean (1 package(s), 1 module(s); authority within manifest and pins)
+
+===== examples/line_driver :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "modules": [
+      "line_driver"
+    ],
+    "program": "line_driver",
+    "pure_functions": [
+      "line_driver::decode_command",
+      "line_driver::decode_read",
+      "line_driver::dims",
+      "line_driver::encode_command",
+      "line_driver::encode_read",
+      "line_driver::field"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/line_driver :: authority =====
+exit 0
+--- stdout ---
+Authority of `line_driver` — what this program can do to your system:
+  modules:      line_driver
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     line_driver::decode_command, line_driver::decode_read, line_driver::dims, line_driver::encode_command, line_driver::encode_read, line_driver::field
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== examples/line_driver :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `examples/line_driver`
+
+===== examples/line_driver/src/lib.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/line_driver/src/lib.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: examples/line_driver/src/lib.delulu checked clean
+
+===== examples/line_driver/src/lib.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "line_driver",
+    "pure_functions": [
+      "decode_command",
+      "decode_read",
+      "dims",
+      "encode_command",
+      "encode_read",
+      "field"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/line_driver/src/lib.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `line_driver` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     decode_command, decode_read, dims, encode_command, encode_read, field
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== examples/line_driver/src/lib.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `examples/line_driver/src/lib.delulu`
+
 ===== examples/numpy_mean.delulu :: check --json =====
 exit 0
 --- stdout ---

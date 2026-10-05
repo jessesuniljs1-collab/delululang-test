@@ -8,51 +8,53 @@ module line_driver
 //
 // The protocol: `CMD <device> <dim>=<value>[,…]` answered `OK` or `ERR <reason>`; `READ <device>` answered
 // `VAL <float>` or `NODEV`.
-
 fn field(fields: Map[Str, Float], k: Str) -> Str {
-  match fields.get(k) {
-    Some(x) => k + "=" + str(x),
-    None => k + "="
-  }
+    match fields.get(k) {
+        Some(x) => k + "=" + str(x)
+        None => k + "="
+    }
 }
 
 fn dims(fields: Map[Str, Float], keys: List[Str], i: Int, acc: Str) -> Str {
-  if i >= keys.len() {
-    acc
-  } else {
-    let k = match keys.get(i) { Some(s) => s, None => "" }
-    let sep = if i == 0 { "" } else { "," }
-    dims(fields, keys, i + 1, acc + sep + field(fields, k))
-  }
+    if i >= keys.len() {
+        acc
+    } else {
+        let k = match keys.get(i) {
+            Some(s) => s
+            None => ""
+        }
+        let sep = if i == 0 { "" } else { "," }
+        dims(fields, keys, i + 1, acc + sep + field(fields, k))
+    }
 }
 
 pub fn encode_command(device: Str, fields: Map[Str, Float]) -> Result[Str, Str] {
-  Ok("CMD " + device + " " + dims(fields, fields.keys(), 0, ""))
+    Ok("CMD " + device + " " + dims(fields, fields.keys(), 0, ""))
 }
 
 pub fn decode_command(device: Str, reply: Str) -> Option[Str] {
-  if reply == "OK" {
-    None
-  } else if reply.starts_with("ERR ") {
-    Some(reply.slice(4, reply.len()))
-  } else {
-    Some("`" + device + "` answered outside the protocol: " + reply)
-  }
+    if reply == "OK" {
+        None
+    } else if reply.starts_with("ERR ") {
+        Some(reply.slice(4, reply.len()))
+    } else {
+        Some("`" + device + "` answered outside the protocol: " + reply)
+    }
 }
 
 pub fn encode_read(device: Str) -> Result[Str, Str] {
-  Ok("READ " + device)
+    Ok("READ " + device)
 }
 
 pub fn decode_read(device: Str, reply: Str) -> Result[Option[Float], Str] {
-  if reply == "NODEV" {
-    Ok(None)
-  } else if reply.starts_with("VAL ") {
-    match parse_float(reply.slice(4, reply.len())) {
-      Some(x) => Ok(Some(x)),
-      None => Err("`" + device + "` sent an unreadable value: " + reply)
+    if reply == "NODEV" {
+        Ok(None)
+    } else if reply.starts_with("VAL ") {
+        match parse_float(reply.slice(4, reply.len())) {
+            Some(x) => Ok(Some(x))
+            None => Err("`" + device + "` sent an unreadable value: " + reply)
+        }
+    } else {
+        Err("`" + device + "` answered outside the protocol: " + reply)
     }
-  } else {
-    Err("`" + device + "` answered outside the protocol: " + reply)
-  }
 }
