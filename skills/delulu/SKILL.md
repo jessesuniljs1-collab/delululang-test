@@ -99,7 +99,8 @@ delulu sandbox status --json                     # what THIS host can confine, m
 are opaque handles, and the host performs every effect under the same checks an ordinary run makes.
 Profiles are `dev`, `contained` (the default) and `hostile-agent`; they differ in what a guest may
 CONSUME, never in who performs its effects. `--limits mem=N,cpu=S` may narrow a profile and never
-widen it. `hostile-agent` also refuses (DL1408) a boundary missing any of `sandbox.properties`' five.
+widen it. `hostile-agent` also refuses (DL1408) a boundary missing any of `sandbox.properties`' five;
+`contained` refuses one this host measured without egress, resource or host-loss confinement.
 
 **Read the report, not the program's output** — the program writes to stdout and could forge anything
 there. Under `--report-out F` the runtime writes `F`, and three fields in its `sandbox` object matter

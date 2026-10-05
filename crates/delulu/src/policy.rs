@@ -41,18 +41,28 @@ impl Profile {
         }
     }
 
-    /// PS-E-01 (D-V2-59): the properties (`boundary::PROPERTIES`) a run under this profile must have
-    /// ESTABLISHED before its program is sent; one that is not refuses the run (DL1408's rule — never
-    /// silently weaker). `hostile-agent` is for code nobody trusts and requires all five. `contained` (the
-    /// default) and `dev` require none yet: CI measured macOS without read confinement (its death signal is
-    /// a watcher since D-V2-60, its memory ceiling the host's sampler since D-V2-90), and an unattested
-    /// launcher establishes nothing, so a `contained` set waits rather than refusing every macOS and L3
-    /// run by default.
+    /// PS-E-01 (D-V2-59, D-V2-92): the properties (`boundary::PROPERTIES`) a run under this profile must
+    /// have before its program is sent; one it lacks refuses the run (DL1408's rule — never silently
+    /// weaker). `hostile-agent` is for code nobody trusts and requires all five. `contained` (the default)
+    /// requires the three every operating system gives a guest it starts — it reaches nothing but its
+    /// channel, it is held to its budget, and it ends with its host (macOS's memory ceiling is the host's
+    /// sampler since D-V2-90, its death signal a watcher since D-V2-60) — and not `filesystem_confinement`,
+    /// which macOS's reads do not have, nor `privilege_floor`. `dev` requires none.
     pub fn required(self) -> &'static [&'static str] {
         match self {
-            Profile::Dev | Profile::Contained => &[],
+            Profile::Dev => &[],
+            Profile::Contained => &["egress_confinement", "resource_ceiling", "host_loss_ends_guest"],
             Profile::HostileAgent => &crate::boundary::PROPERTIES,
         }
+    }
+
+    /// D-V2-92: does a property nobody measured — `unknown`, an external launcher's wall (level 3) — fail
+    /// this profile's requirement? `hostile-agent` takes nothing on trust: it is met only where this host
+    /// established it or the attester the run pinned vouches for it by name (D-V2-87). `contained` refuses
+    /// what this host KNOWS is missing (`absent`): at level 3 the wall is the one the operator chose for the
+    /// run, and its unknowns are reported as unknown, never refused by default.
+    pub fn requires_proof(self) -> bool {
+        matches!(self, Profile::HostileAgent)
     }
 
     /// What this profile allows a guest to consume. Never unlimited, on any profile.

@@ -142,13 +142,29 @@ impl<C: Read + Write> Opened<C> {
                 let mut words: Vec<&str> = need.launch.to_vec();
                 words.extend(host.self_applied().iter().copied());
                 let props = properties(&words, need.measured_by_host, need.attested);
+                // D-V2-92: `hostile-agent` requires proof — an `unknown` refuses unless an attester vouches for
+                // it by name; `contained` refuses only what this host measured as `absent`.
+                let fails = |p: &serde_json::Value| if need.profile.requires_proof() { !met(p) } else { p["state"] == "absent" };
                 let missing: Vec<String> = need
                     .profile
                     .required()
                     .iter()
-                    .filter(|p| !met(&props[**p]))
+                    .filter(|p| fails(&props[**p]))
                     .map(|p| format!("{p} ({})", props[*p]["why"].as_str().unwrap_or("not established")))
                     .collect();
+                if !missing.is_empty() && !need.profile.requires_proof() {
+                    let why = format!(
+                        "the `{}` profile requires a boundary this host measured to have {} — and this one lacks: {}. \
+                         Nothing was sent to the guest. Ways out: `--isolation microvm` (Linux with KVM), an external \
+                         launcher (its wall is the one you choose, reported as unmeasured), or — a person's choice, never \
+                         made for you — `--sandbox-profile dev` [see `delulu explain DL1408`]",
+                        need.profile.name(),
+                        need.profile.required().join(", "),
+                        missing.join("; ")
+                    );
+                    let _ = write_frame(&mut self.conn, &Response::Error { code: "DL1408".into(), message: why.clone() });
+                    return Err(io::Error::other(Refused(why)));
+                }
                 if !missing.is_empty() {
                     let why = format!(
                         "the `{}` profile requires a boundary with all five properties — each established by this \
@@ -290,8 +306,10 @@ mod tests {
     use std::os::unix::net::UnixStream;
 
     const GEN: &str = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
+    // The channel's own tests, not a profile's: `dev` requires nothing, so the scripted guests' few words
+    // confirm them (`contained`'s three — D-V2-92 — are the test below).
     const NEED: Requirement<'static> =
-        Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host: true, attested: None };
+        Requirement { profile: crate::policy::Profile::Dev, launch: &[], measured_by_host: true, attested: None };
 
     fn program() -> Program {
         let text = "module p\n\nfn main(root: Root) {\n}\n".to_string();
@@ -493,6 +511,49 @@ mod tests {
             }
         }
     }
+    /// D-V2-92: `contained` — the default — refuses a boundary THIS HOST measured without one of the three
+    /// properties every operating system now gives a guest it starts (egress, resource, host loss), before the
+    /// program is sent; a boundary that has them runs, whatever else it lacks; and an external launcher's wall,
+    /// which nobody here measured, is `unknown`, not `absent` — reported, never refused by this profile.
+    #[test]
+    fn contained_refuses_a_measured_boundary_that_lacks_one_of_its_three_and_never_an_unknown_one() {
+        let three: &[&'static str] = &["memory ceiling", "processor-time ceiling", "killed with the host"];
+        let no_memory: &[&'static str] = &["processor-time ceiling", "killed with the host"];
+        let unwatched: &[&'static str] = &["memory ceiling", "processor-time ceiling"];
+        for (name, launch, guest_words, measured_by_host, confirmed, lacks) in [
+            ("all three, filesystem and privilege absent", three, &["no sockets but the channel"][..], true, true, ""),
+            ("no memory ceiling", no_memory, &["no sockets but the channel"][..], true, false, "resource_ceiling"),
+            ("nothing ends it with its host", unwatched, &["no sockets but the channel"][..], true, false, "host_loss_ends_guest"),
+            ("a socket of any kind", three, &["no TCP bind or connect"][..], true, false, "egress_confinement"),
+            ("an external launcher's wall, unknown throughout", &[][..], &["no new programs"][..], false, true, ""),
+        ] {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let words: Vec<&'static str> = guest_words.to_vec();
+            let (conn, t) = with_guest(move |g, open| {
+                let sink = ChannelSink::new(g);
+                let taken = sink.confined(&words, &open.generation).is_ok();
+                tx.send(taken && sink.receive::<Program>().is_ok()).unwrap();
+            });
+            let mut host = HostChannel::new(LocalSink).with_generation(GEN);
+            let need = Requirement { profile: crate::policy::Profile::Contained, launch, measured_by_host, attested: None };
+            match open(conn, GEN).unwrap().confirm(&mut host, &need) {
+                Ok(c) => {
+                    assert!(confirmed, "{name}: confirmed");
+                    let _conn = c.send_program(&program()).unwrap();
+                }
+                Err(e) => {
+                    assert!(!confirmed, "{name}: refused: {e}");
+                    assert!(is_refusal(&e), "{name}: DL1408's refusal, not a channel's failure: {e}");
+                    let said = e.to_string();
+                    assert!(said.contains(lacks) && said.contains("`contained`"), "{name}: {said}");
+                    assert!(said.contains("--sandbox-profile dev"), "{name}: the refusal names its way out: {said}");
+                }
+            }
+            t.join().unwrap();
+            assert_eq!(rx.recv().unwrap(), confirmed, "{name}: the program reached the guest only when confirmed");
+        }
+    }
+
     /// D-V2-87: at level 3, `hostile-agent`'s five properties are met only by the claims of the attester the
     /// run pinned that NAME them; one it leaves out refuses before the program is sent. A guest this host
     /// measured takes no attester's word: the same statement meets nothing there.

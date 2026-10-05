@@ -467,7 +467,10 @@ macOS's jailed guest and with an unattested external launcher, for example (D-V2
 is met instead by a claim of the attester the run pinned that NAMES it — `--guarantee
 egress_confinement:HOW` — and the report keeps that claim beside the state, which stays `unknown`, as
 `sandbox.properties.<name>.attested = {attester, by}` (D-V2-87); a property it does not name still
-refuses. At L3 what the guest says it applied to itself is `sandbox.guest_reported` — the guest's word,
+refuses. `contained` requires three of the five — `egress_confinement`, `resource_ceiling` and
+`host_loss_ends_guest`, which every operating system gives a guest it starts — and refuses (DL1408, exit 2,
+the program never sent) one this host measured as `absent`; an external launcher's wall, `unknown`
+throughout, is reported and not refused by it (D-V2-92). At L3 what the guest says it applied to itself is `sandbox.guest_reported` — the guest's word,
 never a host guarantee.
 
 Read the report, not the program's output. Under `--report-out F` the runtime writes the run report

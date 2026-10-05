@@ -1327,7 +1327,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              the program is sent where one is not established by this host — or, with an external \
              launcher (level 3, which DeluluLang measures none of), vouched for by name by the \
              attester the run pinned: a claim `PROPERTY: how` under `--require-attestation` \
-             (D-V2-87).",
+             (D-V2-87). `contained`, the default, requires three of them — egress_confinement, \
+             resource_ceiling and host_loss_ends_guest, which every operating system gives a guest it \
+             starts — and refuses one this host measured as absent; an external launcher's wall, \
+             unknown throughout, is reported and not refused by it (D-V2-92). `--sandbox-profile dev` \
+             requires none: a person's choice, never made for you.",
         "DL1409" => "Under `--foreign-isolation process` a granted C library runs in an isolated \
              worker subprocess. This worker died mid-call — a segfault, an abort, a hard crash in the \
              native code. That is exactly the blast-radius containment the process-isolation profile \
