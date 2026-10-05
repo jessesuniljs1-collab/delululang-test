@@ -1936,6 +1936,17 @@ fn in_words(e: io::Error) -> io::Error {
         io::ErrorKind::UnexpectedEof => {
             io::Error::new(io::ErrorKind::UnexpectedEof, "the guest closed the channel without saying goodbye")
         }
+        // RW 4.37: not silence either — the guest stopped taking the host's answer.
+        _ if delulu_runtime::channel::FrameNotTaken::is(&e) => {
+            let within = e.get_ref().and_then(|x| x.downcast_ref::<delulu_runtime::channel::FrameNotTaken>()).map(|f| f.within);
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "the guest did not take the host's answer whole within {:?}, and the channel's deadline ended the run",
+                    within.unwrap_or(delulu_runtime::channel::FRAME_DEADLINE)
+                ),
+            )
+        }
         // RW 4.32: not silence — a frame begun and not finished within the frame deadline.
         _ if delulu_runtime::channel::FrameTooSlow::is(&e) => io::Error::new(
             io::ErrorKind::TimedOut,
@@ -1966,25 +1977,45 @@ fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::D
     #[cfg(windows)]
     if let Guest::Contained(g) = child {
         let mut conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
+        // RW 4.37: this pipe's every operation, a write included, is waited for within this deadline.
         conn.set_read_timeout(Some(deadline))?;
         return Ok(Box::new(conn));
     }
     #[cfg(target_os = "linux")]
     if let Guest::Contained(g) = child {
         let conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
-        conn.set_read_timeout(Some(deadline))?;
-        return Ok(Box::new(conn));
+        return Ok(Box::new(bounded(conn, deadline)?));
     }
     // A microVM's guest dialled in during the boot; its stream is the channel.
     #[cfg(target_os = "linux")]
     if let Guest::Vm(vm) = child {
         let conn = vm.channel.take().ok_or_else(|| io::Error::other("the microVM guest's channel was already taken"))?;
-        conn.set_read_timeout(Some(deadline))?;
-        return Ok(Box::new(conn));
+        return Ok(Box::new(bounded(conn, deadline)?));
     }
-    let mut conn = connect_by_name(child, dir)?;
+    Ok(Box::new(bounded_by_name(connect_by_name(child, dir)?, deadline)?))
+}
+
+/// The host's end of a guest's channel reached by name, with `deadline` on every read and every write
+/// (RW 4.37, as [`bounded`]): a Unix socket's `SO_SNDTIMEO`, or a Windows pipe's write that waits for room
+/// within the bound (RW 4.35).
+fn bounded_by_name(
+    mut conn: crate::broker_transport::Connection,
+    deadline: std::time::Duration,
+) -> io::Result<crate::broker_transport::Connection> {
     conn.set_read_timeout(Some(deadline))?;
-    Ok(Box::new(conn))
+    conn.set_write_timeout(Some(deadline))?;
+    Ok(conn)
+}
+
+/// The host's end of a guest's socket, with `deadline` on every read AND every write (RW 4.37): a guest
+/// that stops reading an answer holds the host's write as surely as a silent one holds a read. The whole
+/// answer's bound is `HostChannel::serve`'s (`channel::Within`); this one is each write's, without which a
+/// write to a guest that reads nothing never returns to be checked.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn bounded(conn: std::os::unix::net::UnixStream, deadline: std::time::Duration) -> io::Result<std::os::unix::net::UnixStream> {
+    conn.set_read_timeout(Some(deadline))?;
+    conn.set_write_timeout(Some(deadline))?;
+    Ok(conn)
 }
 
 fn connect_by_name(child: &mut Guest, dir: &std::path::Path) -> io::Result<crate::broker_transport::Connection> {
@@ -2527,6 +2558,103 @@ mod tests {
         assert_eq!(said, "the guest did not send one whole frame within 60s, and the channel's deadline ended the run");
         let quiet = in_words(io::Error::from(io::ErrorKind::TimedOut)).to_string();
         assert!(quiet.contains("said nothing for 60s"), "{quiet}");
+        // RW 4.37: nor is a guest that stopped taking the host's answer.
+        let untaken = io::Error::new(
+            io::ErrorKind::TimedOut,
+            delulu_runtime::channel::FrameNotTaken { within: delulu_runtime::channel::FRAME_DEADLINE },
+        );
+        let said = in_words(untaken).to_string();
+        assert_eq!(said, "the guest did not take the host's answer whole within 60s, and the channel's deadline ended the run");
+    }
+
+    /// RW 4.37: a guest that stops reading cannot hold its host. A guest asks for a large file's text — an
+    /// 8 MiB answer, far more than a socket holds — and then never reads it, or reads it a little at a time.
+    /// The host's end is configured as `open_channel` configures it: a socket pair as a Linux guest's and a
+    /// microVM's channel is (`bounded`), and a connection made by name as a guest's is elsewhere — macOS's,
+    /// and Windows' named pipe (`bounded_by_name`). The whole answer is owed within the frame deadline: past
+    /// it the host ends the conversation in words, rather than waiting on a guest that has stopped. No default
+    /// wall-clock limit would have ended it — a guest that is not reading uses no processor time. Red on
+    /// `5bd76aa`: the host wrote until the guest hung up, 15 s later.
+    #[test]
+    fn a_guest_that_stops_reading_an_answer_cannot_hold_its_host() {
+        use delulu_runtime::channel::{read_frame, write_frame, HostChannel, ReqBody, Request, Response, WireValue, CHANNEL_VERSION};
+        use std::sync::mpsc;
+        let base = std::env::temp_dir().join(format!("dl-hold-{}-{}", std::process::id(), channel_tag()));
+        let dir = base.join("data");
+        std::fs::create_dir_all(&dir).unwrap();
+        #[cfg(unix)]
+        let dir = dir.canonicalize().unwrap();
+        std::fs::write(dir.join("big.txt"), "x".repeat(8 * 1024 * 1024)).unwrap();
+        let within = std::time::Duration::from_millis(800);
+
+        // The guest: it asks for a read capability, then for the big file's text, and then — until it is told
+        // to stop, or for 20 s — reads nothing, or a little at a time.
+        fn guest<C: io::Read + io::Write>(mut g: C, dir: String, sip: Option<usize>, stop: mpsc::Receiver<()>) {
+            let ask = |g: &mut C, seq: u64, body: ReqBody| write_frame(g, &Request { version: CHANNEL_VERSION.into(), seq, body }).unwrap();
+            ask(&mut g, 1, ReqBody::RootMethod { method: "fs_read".into(), args: vec![WireValue::Str(dir)], file: 0, start: 0, end: 1 });
+            let handle = match read_frame::<Response>(&mut g).unwrap() {
+                Response::Ok(WireValue::Cap { handle, .. }) => handle,
+                other => panic!("the host minted no capability: {other:?}"),
+            };
+            let args = vec![WireValue::Str("big.txt".into())];
+            ask(&mut g, 2, ReqBody::CapMethod { cap: handle, method: "read_text".into(), args, file: 0, start: 0, end: 1 });
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            let mut buf = vec![0u8; sip.unwrap_or(1)];
+            while std::time::Instant::now() < until && stop.try_recv().is_err() {
+                if sip.is_some() && matches!(g.read(&mut buf), Ok(0)) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
+        // Serve one such guest on `conn`; the guest runs on its own thread and is stopped once the host is done.
+        let check = |what: &str, mut conn: Box<dyn Channel>, run_guest: Box<dyn FnOnce(mpsc::Receiver<()>) + Send>| {
+            let (stop, stopped) = mpsc::channel();
+            let g = std::thread::spawn(move || run_guest(stopped));
+            let mut grants = delulu_runtime::broker::Grants::default();
+            grants.add(&format!("fs.read={}", dir.display())).unwrap();
+            let mut host = HostChannel::new(delulu_runtime::sink::LocalSink)
+                .with_root(std::rc::Rc::new(crate::cli::build_root(&grants)))
+                .with_frame_deadline(within);
+            let t = std::time::Instant::now();
+            let served = host.serve(&mut conn);
+            let took = t.elapsed();
+            let _ = stop.send(());
+            drop(conn);
+            g.join().unwrap();
+            let said = in_words(served.expect_err("the conversation cannot have ended well")).to_string();
+            assert!(took < std::time::Duration::from_secs(8), "{what}: the guest held its host for {took:?} ({said})");
+            assert!(said.contains("did not take the host's answer whole within 800ms"), "{what}: in words that say what the guest did: {said}");
+        };
+
+        for (name, sip) in [("never reads", None), ("reads a little at a time", Some(4096usize))] {
+            #[cfg(unix)]
+            {
+                let (host_end, guest_end) = std::os::unix::net::UnixStream::pair().unwrap();
+                let shown = dir.display().to_string();
+                check(&format!("{name}, a socket pair"), Box::new(bounded(host_end, within).unwrap()), Box::new(move |stop| guest(guest_end, shown, sip, stop)));
+            }
+            let state = base.join(if sip.is_some() { "s" } else { "n" });
+            std::fs::create_dir_all(&state).unwrap();
+            let (ready, listening) = mpsc::channel();
+            let (shown, at) = (dir.display().to_string(), state.clone());
+            let run_guest: Box<dyn FnOnce(mpsc::Receiver<()>) + Send> = Box::new(move |stop| {
+                let listener = crate::broker_transport::Listener::bind(&at).unwrap();
+                ready.send(()).unwrap();
+                guest(listener.accept().unwrap(), shown, sip, stop)
+            });
+            let (stop_fwd, stop_rx) = mpsc::channel::<()>();
+            let g = std::thread::spawn(move || run_guest(stop_rx));
+            listening.recv().unwrap();
+            let conn = bounded_by_name(crate::broker_transport::connect(&state).unwrap(), within).unwrap();
+            check(&format!("{name}, by name"), Box::new(conn), Box::new(move |stop: mpsc::Receiver<()>| {
+                let _ = stop.recv();
+                let _ = stop_fwd.send(());
+                g.join().unwrap();
+            }));
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// PS-A-05: a guest inherits nothing. The environment is where secrets actually live, so the

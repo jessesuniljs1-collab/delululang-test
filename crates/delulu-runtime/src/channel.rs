@@ -436,6 +436,13 @@ impl std::fmt::Display for FrameNotTaken {
 
 impl std::error::Error for FrameNotTaken {}
 
+impl FrameNotTaken {
+    /// Whether `e` is a [`Within`]'s refusal of a write.
+    pub fn is(e: &io::Error) -> bool {
+        e.get_ref().is_some_and(|inner| inner.is::<FrameNotTaken>())
+    }
+}
+
 /// The error a [`Within`] gives: the peer did not send one whole frame in time. Its kind is
 /// `TimedOut`, like a read deadline's; a caller that words the two differently can tell them apart by
 /// this type (`io::Error::get_ref`).
@@ -799,7 +806,17 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             let done = matches!(req.body, ReqBody::Done { .. });
             let exit = if let ReqBody::Done { exit } = req.body { exit } else { 0 };
             let resp = self.answer(&req);
-            write_frame(io, &resp)?;
+            // RW 4.37: and the host's answer is owed whole within the same deadline. A guest that stops
+            // reading — an 8 MiB answer is far more than a socket holds — otherwise holds the host for ever,
+            // and no default limit ends it: a guest that is not reading uses no processor time. Each write's
+            // own bound is the transport's (`guest.rs`'s `bounded`); a write it stops is said as this too.
+            let within = self.frame_deadline;
+            write_frame(&mut Within::from_now(&mut *io, within), &resp).map_err(|e| match e.kind() {
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut if !FrameNotTaken::is(&e) => {
+                    io::Error::new(io::ErrorKind::TimedOut, FrameNotTaken { within })
+                }
+                _ => e,
+            })?;
             if done {
                 return Ok(exit);
             }
@@ -1302,6 +1319,38 @@ mod tests {
         assert!(drip.at < drip.bytes.len(), "abandoned mid-frame, not read to its end: {} of {}", drip.at, drip.bytes.len());
         assert!(t.elapsed() < std::time::Duration::from_secs(2), "{:?}", t.elapsed());
         assert!(drip.answers.is_empty(), "nothing answered for a frame never finished");
+    }
+
+    /// RW 4.37: a transport's own write deadline that stops the host's answer — a guest that took nothing
+    /// for a whole write deadline — is said as the answer not taken, never as a guest that said nothing.
+    #[test]
+    fn a_write_the_transport_gave_up_on_is_an_answer_not_taken() {
+        struct Untaking {
+            request: Vec<u8>,
+            at: usize,
+        }
+        impl Read for Untaking {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                let n = buf.len().min(self.request.len() - self.at);
+                buf[..n].copy_from_slice(&self.request[self.at..self.at + n]);
+                self.at += n;
+                Ok(n)
+            }
+        }
+        impl Write for Untaking {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::Error::from(io::ErrorKind::WouldBlock))
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let within = std::time::Duration::from_millis(150);
+        let mut guest = Untaking { request: done_frame(), at: 0 };
+        let e = HostChannel::new(crate::sink::LocalSink).with_frame_deadline(within).serve(&mut guest).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::TimedOut, "{e}");
+        assert!(FrameNotTaken::is(&e), "the answer not taken, not a silence: {e}");
+        assert!(e.to_string().contains("did not take one whole frame within 150ms"), "{e}");
     }
 
     /// The deadline is on a frame, not on the quiet before it: a guest may compute between frames for
