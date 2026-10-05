@@ -213,7 +213,7 @@ struct BrokerInner {
     /// The hardware adapter, under `Profile::Hw` only (RFC 0001 dish 3). `None` everywhere else —
     /// and `None` under `Hw` too if the CLI was not told which driver to run, in which case a
     /// command REFUSES rather than pretending to have reached a machine.
-    adapter: Mutex<Option<crate::adapter::ProcessAdapter>>,
+    adapter: Mutex<Option<Box<dyn crate::adapter::Adapter>>>,
 }
 
 impl BrokerInner {
@@ -294,7 +294,7 @@ impl DeviceBroker {
         sensors: &[String],
         authority: Option<AuthorityProbe>,
         clock: ClockMode,
-        adapter: Option<crate::adapter::ProcessAdapter>,
+        adapter: Option<Box<dyn crate::adapter::Adapter>>,
     ) -> DeviceBroker {
         let now = Instant::now();
         let mut leases = BTreeMap::new();

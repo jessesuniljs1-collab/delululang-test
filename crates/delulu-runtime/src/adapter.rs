@@ -124,6 +124,39 @@ impl std::fmt::Display for AdapterError {
     }
 }
 
+/// What a device's driver is to the broker: the one place a command the grant permitted leaves the
+/// host, and a reading comes back. The broker calls it only under `Profile::Hw`, and only AFTER its own
+/// lease, rate and envelope checks (`DeviceBroker::command`) — so a driver can refuse more and never
+/// permit more, whichever driver it is.
+///
+/// Two drivers are meant to fill it (`V2_P8_DESIGN.md`, P8-02): [`ProcessAdapter`], an operator's
+/// subprocess speaking the line protocol above, and a Verified-class plugin whose re-proved code
+/// computes the frames the host's transport writes. `Send`, because the broker that holds it is shared
+/// with its watchdog thread.
+pub trait Adapter: Send {
+    /// Command a device with fields the caller has already checked against the grant.
+    fn command(&mut self, device: &str, fields: &[(String, f64)]) -> Result<(), AdapterError>;
+    /// Read a sensor: `None` is "no such device", never a plausible number.
+    fn read(&mut self, device: &str) -> Result<Option<f64>, AdapterError>;
+}
+
+impl Adapter for ProcessAdapter {
+    fn command(&mut self, device: &str, fields: &[(String, f64)]) -> Result<(), AdapterError> {
+        ProcessAdapter::command(self, device, fields)
+    }
+    fn read(&mut self, device: &str) -> Result<Option<f64>, AdapterError> {
+        ProcessAdapter::read(self, device)
+    }
+}
+
+// P8-02's Verified-class driver moves a re-proved DIR onto a thread of its own and interprets it there,
+// which is sound only while the DIR is plain data (`delulu-syntax`'s AST holds no `Rc`, `RefCell` or
+// `Cell`). Asserted here, so a change that makes it otherwise fails to compile rather than in a design.
+const _: fn() = || {
+    fn send<T: Send>() {}
+    send::<delulu_check::Dir>();
+};
+
 /// A device driver running as a separate process.
 pub struct ProcessAdapter {
     name: String,

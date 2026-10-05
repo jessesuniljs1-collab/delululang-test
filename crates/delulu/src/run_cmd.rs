@@ -1738,7 +1738,7 @@ impl DevicePlan {
             &self.sensors,
             self.probe,
             self.clock,
-            self.adapter,
+            self.adapter.map(|a| Box::new(a) as Box<dyn delulu_runtime::adapter::Adapter>),
         ))
     }
 }
