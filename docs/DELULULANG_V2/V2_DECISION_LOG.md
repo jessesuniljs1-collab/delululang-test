@@ -2193,6 +2193,21 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    sandbox (the stepped clock is the host's, so it can be offered); the device events in the sandbox report. Then P8-02,
    the Verified-class adapter as a `.dpx`.
 
+10. **Amended the same run — P8-01's rest.** *At level 2:* `microvm_cli.rs`'s KVM-gated witness runs the same control
+    program under `--isolation microvm` — commanded, refused out of envelope, the joint read back, level 2, the refusal in
+    `denied` — with a 150 ms heartbeat and a command as its first act: green on the KVM runner (CI dispatched at
+    `07f6cd9`, `37301435891`, its `microvm` job read — 12 passed — then the run cancelled). **Mutant M128** (the broker
+    started when the plan is made, before the launch) SURVIVES every L1 witness — a process guest launches inside every
+    heartbeat they use — and is RED on the KVM runner (`666cb53`, `37301599674`): the VM's boot revoked the lease before
+    the guest's first command ("REVOKED … (missed-heartbeat)"); reverted in `fee5353`. Item 4's design is witnessed only at
+    L2, and says so. *The simulator's parity:* `--sim-step` and `--signoff` are applied under the sandbox now (`5b89f9f`) —
+    the stepped clock is the host broker's, and a sign-off is written only when the guest was sent its program and exited 0
+    (withheld in words otherwise). Witnesses: a sandboxed simulation loses its lease at the same refused attempt as the
+    ordinary run (seven attempts at 1,000 simulated ms outlast a 5,000 ms heartbeat the wall clock never reaches); a clean
+    sandboxed simulation signs off and its sign-off opens DL1905 for a sandboxed hardware run, a faulted one signs nothing.
+    M129 (the flag refused, as before), M130 (the stepped clock dropped), M131 (no sign-off), M132 (a sign-off despite a
+    fault): each red. **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit; read on the runners at `5b89f9f` before `master` moved — macOS `37303092995`, Windows `37303096425`, Linux arm64 `37303099029`: `sandbox_devices_cli` 10 passed and `sandbox_modes_cli` 11 passed on each, both new witnesses named; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries — the new KVM-gated test among the ignored), cargo exit 0, the tree unmoved. **Push runs:** `45e65eb` (carrying `76ba9ca`) — CI `37300708685` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.93x against a control of 4.12x; the other three NOT MEASURED), `ocsf` `37300708671` success; `6796c31` (records) — CI `37301082817` success, 14 jobs (arm64 MEASURED 2.90x/4.11x).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

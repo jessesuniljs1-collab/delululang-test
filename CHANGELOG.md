@@ -17,8 +17,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   rate limit, lease, dead-man, e-stop and fail-state an ordinary run has, and tells the program exactly what an ordinary
   run would (`Envelope`, `LeaseRevoked`, `NoDevice`). Each refusal is also a line in the report's `sandbox.denied`. The
   device flags apply under the sandbox — `--broker-profile`, `--approved` (the DL1905 sign-off gate binds before any
-  guest or driver starts), `--adapter-cmd` and the adapter's provenance flags; `--sim-step` and `--signoff` are refused
-  there for now. A guest that stops commanding its device loses it on the host's watchdog, whatever it says to the host
+  guest or driver starts), `--adapter-cmd` and the adapter's provenance flags, and the simulator's `--sim-step` and `--signoff` (a
+  sign-off is written only for a guest that ran its program and exited 0). The same holds at level 2 (`--isolation
+  microvm`). A guest that stops commanding its device loses it on the host's watchdog, whatever it says to the host
   otherwise (D-V2-95). Accelerators (`Compute`) are still refused under the sandbox.
 - **Changed: a hardware run's own flags are refused without a hardware run.** `--approved`, `--adapter-cmd`,
   `--adapter-artifact`, `--adapter-signer`, `--adapter-record` and `--require-signed-adapter` beside a run that is not

@@ -1297,8 +1297,10 @@ it on `origin` was made in the cloud and is listed below.
   pushed there first, read on the runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
 - Base: `f912084` (routine run 12's last reading)
 - Commits: (1) `76ba9ca` P8-01: a control program runs in a guest — the host performs its device operations; (2) `45e65eb`
-  a hardware run's flags refused without one; the witnesses hold on a slow runner and on macOS; (3) the records,
-  `scripts/suite.sh` and this entry — this commit
+  a hardware run's flags refused without one; the witnesses hold on a slow runner and on macOS; (3) `6796c31` the records,
+  `scripts/suite.sh` and this entry; (4) `07f6cd9` P8-01 at level 2 (a KVM-gated witness); (5) `666cb53` mutant M128,
+  pushed only to be read red on the KVM runner; (6) `fee5353` its revert; (7) `5b89f9f` a sandboxed simulation keeps the
+  stepped clock and signs off; (8) their records — this commit
 - Files and folders: M `crates/delulu-runtime/src/device.rs` (`actuate`, `sense`, `refusal_detail`, `command_check`,
   `command_fields`), `crates/delulu-runtime/src/interp.rs` (`call_actuator`/`call_sensor` call them; a handle goes to the
   sink; the old `envelope_check`/`numeric_fields` removed), `crates/delulu-runtime/src/channel.rs`
@@ -1312,7 +1314,11 @@ it on `origin` was made in the cloud and is listed below.
   P8-01 built; step 5: `scripts/suite.sh`, a witness log's size), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-95),
   `V2_LOG.md`, `V2_PHASE_STATUS.md` (P8 in progress), `V2_P8_DESIGN.md` (P8-01 built, three departures),
   `docs/REPOSITORY_STRUCTURE.md` (`suite.sh`'s row), `docs/assistant-memory/cloud-period-2026-09-28.md`,
-  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`; A `scripts/suite.sh` — (3). Deleted: nothing. **Authorship:** the
+  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`; A `scripts/suite.sh` — (3). M `crates/delulu/tests/microvm_cli.rs`,
+  `docs/survey/*` — (4); M `crates/delulu/src/guest.rs` — (5), (6), (7); M `crates/delulu/tests/sandbox_devices_cli.rs`,
+  `crates/delulu/tests/sandbox_modes_cli.rs`, `docs/survey/*` — (7); M `CHANGELOG.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-95 item 10), `V2_LOG.md`, `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (8). Deleted: nothing. **Authorship:** the
   owner's account through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,484 nodes, 13,281 edges); `doctor --check` ok, all checks passed.
   After the last edit: see the closing reading below.
@@ -1330,14 +1336,20 @@ it on `origin` was made in the cloud and is listed below.
   `37299716481` (47), all eight device witnesses named on each. The full suite alone: first 2,124 passed, 2 failed (the
   Survey's freshness test, a test file edited mid-suite; and `sandbox_modes_cli`, which found the unapplied `--approved` —
   hardened in `45e65eb`); then 2,127 passed, 0 failed, 15 ignored (158 binaries), cargo exit 0. **Push runs:** `45e65eb`
-  (carrying `76ba9ca`) and this commit — read by the run's closing reading, or by the next run first.
+  (carrying `76ba9ca`) CI `37300708685` success, 14 jobs (arm64 MEASURED 2.93x/4.12x), `ocsf` `37300708671` success;
+  `6796c31` CI `37301082817` success, 14 jobs (arm64 MEASURED 2.90x/4.11x). **(4)–(6), level 2:** CI dispatched at
+  `07f6cd9` (`37301435891`) — its `microvm` job green, 12 passed, the new witness named — then cancelled; at `666cb53`
+  (`37301599674`) M128 red on the KVM runner (the VM's boot revoked the 150 ms lease first; it survives every L1 witness),
+  cancelled, reverted. **(7):** M129–M132 red; clippy and `check-other-os.sh` clean; read at `5b89f9f` on macOS
+  `37303092995`, Windows `37303096425`, arm64 `37303099029` (10 + 11 passed each); the full suite alone through
+  `scripts/suite.sh` 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **The last push
+  runs** (`5b89f9f`'s and this commit's): read by the run's closing reading, or by the next run first.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a mutant that survives on a second wall; a flag a path starts to apply asks
   the dropped-flag question again; the tree edited mid-suite a third time — `scripts/suite.sh`; `delulu` has no `--lib`);
   `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read `45e65eb`'s and this commit's push runs, and the 2026-10-05 nightly's three `miri-slow` jobs;
-  (2) **P8-01's rest** — a device run at L2 read on the KVM runner (`microvm_cli`, dispatch `ci.yml` `everything` at a
-  branch), `--sim-step` under the sandbox, the device events in the sandbox report; then **P8-02** (the Verified-class
-  adapter as a `.dpx`, `V2_P8_DESIGN.md`); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
+- Open / next: (1) read `5b89f9f`'s and this commit's push runs, and the 2026-10-05 nightly's three `miri-slow` jobs;
+  (2) **P8-01's last piece** — the device events (the broker's journal) in the sandbox report, where a sandboxed run has
+  no trace; then **P8-02** (the Verified-class adapter as a `.dpx`, `V2_P8_DESIGN.md`); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
   4.28), macOS's reads; (4) RW 7.17. **For the owner:** D-V2-95 (P8-01, and a hardware run's flags refused without one —
   a behaviour change for the ordinary run) is this run's decision.
