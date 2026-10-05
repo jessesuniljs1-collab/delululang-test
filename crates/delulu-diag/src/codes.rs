@@ -1321,7 +1321,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              process`, which confines FOREIGN code only. `delulu sandbox probe` shows what this host \
              can give, attempt by attempt. Honesty (spec §10): Foreign workers bound blast radius, \
              not foreign behavior; the microVM profile is the strong container and it is \
-             Linux-first — the fallback matrix is honest about weaker platforms.",
+             Linux-first — the fallback matrix is honest about weaker platforms. The same rule \
+             holds for a profile's required boundary (D-V2-59): `--sandbox-profile hostile-agent` \
+             requires all five properties a run reports (`sandbox.properties`) and refuses before \
+             the program is sent where one is not established by this host — or, with an external \
+             launcher (level 3, which DeluluLang measures none of), vouched for by name by the \
+             attester the run pinned: a claim `PROPERTY: how` under `--require-attestation` \
+             (D-V2-87).",
         "DL1409" => "Under `--foreign-isolation process` a granted C library runs in an isolated \
              worker subprocess. This worker died mid-call — a segfault, an abort, a hard crash in the \
              native code. That is exactly the blast-radius containment the process-isolation profile \

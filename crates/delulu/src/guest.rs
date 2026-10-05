@@ -1317,7 +1317,8 @@ fn serve_under(
         (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
     };
     let launch_words = applied.clone();
-    let need = crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external };
+    // D-V2-87: the statement checked above, so at level 3 a claim that names a property can meet it.
+    let need = crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external, attested: attested.as_ref() };
     let served = converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, &mut evidence)
         // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
         // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
@@ -1482,8 +1483,9 @@ fn serve_under(
         let mut report = report;
         // PS-E-01: the five properties this boundary has, answered from what was applied — the same words
         // as `host_guarantees` and the posture, so the three cannot disagree. An external launcher's are
-        // `unknown`: DeluluLang measured none of its wall.
-        report["sandbox"]["properties"] = crate::boundary::properties(&applied, !external);
+        // `unknown`: DeluluLang measured none of its wall — and (D-V2-87) one its pinned attester named
+        // carries that claim beside the `unknown`, as the attester's, the same answer the profile was held to.
+        report["sandbox"]["properties"] = crate::boundary::properties(&applied, !external, attested.as_ref());
         if external && !guest_reported.is_empty() {
             report["sandbox"]["guest_reported"] = serde_json::json!(guest_reported);
         }
@@ -2082,6 +2084,7 @@ pub fn attempt_launch() -> Result<String, String> {
                 profile: crate::policy::Profile::Dev,
                 launch: &[],
                 measured_by_host: true,
+                attested: None,
             };
             let mut conn = crate::boundary::open(conn, &generation)?.confirm(&mut host, &need)?.send_program(&Program {
                 program: PROBE_PROGRAM.to_string(),

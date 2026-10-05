@@ -18,8 +18,9 @@
 //!
 //! What a confirmation establishes is the guest's own report, in the checked words of
 //! `channel::SELF_APPLIED`, for this run; with the host's launch words it answers [`PROPERTIES`] — the
-//! five properties a run reports (`sandbox.properties`). What each profile REQUIRES of them, and the
-//! refusal when one is missing, is PS-E-01's next step (§4.1's "required set").
+//! five properties a run reports (`sandbox.properties`). What each profile REQUIRES of them is
+//! `Profile::required` (D-V2-59), refused in [`Opened::confirm`] before the program is sent; at level 3 a
+//! property is met only by the claim of the attester the run pinned that names it (D-V2-87).
 
 use std::io::{self, Read, Write};
 
@@ -68,6 +69,9 @@ pub(crate) struct Requirement<'a> {
     pub profile: crate::policy::Profile,
     pub launch: &'a [&'static str],
     pub measured_by_host: bool,
+    /// D-V2-87: the statement of the attester this run pinned, verified before the guest was opened —
+    /// at level 3 the only thing that can meet a required property (by a claim that names it).
+    pub attested: Option<&'a crate::attest::Attested>,
 }
 
 /// A run refused because its boundary lacks a property its profile requires — DL1408's refusal, carried
@@ -137,20 +141,22 @@ impl<C: Read + Write> Opened<C> {
                 // requires? Answered from the launch's words and the guest's, as the run report answers it.
                 let mut words: Vec<&str> = need.launch.to_vec();
                 words.extend(host.self_applied().iter().copied());
-                let props = properties(&words, need.measured_by_host);
+                let props = properties(&words, need.measured_by_host, need.attested);
                 let missing: Vec<String> = need
                     .profile
                     .required()
                     .iter()
-                    .filter(|p| props[**p]["state"] != "established")
+                    .filter(|p| !met(&props[**p]))
                     .map(|p| format!("{p} ({})", props[*p]["why"].as_str().unwrap_or("not established")))
                     .collect();
                 if !missing.is_empty() {
                     let why = format!(
-                        "the `{}` profile requires a boundary that establishes all five properties, and this one does \
-                         not: {}. Nothing was sent to the guest. Ways out: `--isolation microvm` (Linux with KVM), an \
-                         external launcher whose attester vouches for it, or — a person's choice, never made for \
-                         you — a weaker profile (`--sandbox-profile contained`) [see `delulu explain DL1408`]",
+                        "the `{}` profile requires a boundary with all five properties — each established by this \
+                         host or, at level 3, vouched for by name by the attester the run pinned — and this one \
+                         lacks: {}. Nothing was sent to the guest. Ways out: `--isolation microvm` (Linux with KVM), \
+                         an external launcher whose attester vouches for each property by name (`--require-attestation \
+                         KEY`, and a claim `PROPERTY: how` for each), or — a person's choice, never made for you — a \
+                         weaker profile (`--sandbox-profile contained`) [see `delulu explain DL1408`]",
                         need.profile.name(),
                         missing.join("; ")
                     );
@@ -196,20 +202,42 @@ impl<C: Read + Write> Confirmed<C> {
 pub(crate) const PROPERTIES: [&str; 5] =
     ["filesystem_confinement", "egress_confinement", "privilege_floor", "host_loss_ends_guest", "resource_ceiling"];
 
+/// Does this answer meet a profile's requirement? Established by the host — or, at level 3 only (where
+/// [`properties`] alone writes it), vouched for by name by the attester the run pinned (D-V2-87).
+fn met(property: &serde_json::Value) -> bool {
+    property["state"] == "established" || property.get("attested").is_some()
+}
+
 /// `measured_by_host` is false for an external launcher (L3): its wall is the operator's, and what its
-/// guest says of itself is the word of a binary the launcher chose — every property is `unknown`.
-pub(crate) fn properties(guarantees: &[&str], measured_by_host: bool) -> serde_json::Value {
+/// guest says of itself is the word of a binary the launcher chose — every property is `unknown`. Where
+/// the run's pinned attester names a property (`PROPERTY: how`, D-V2-87), its claim is kept beside that
+/// `unknown` as `attested` — the attester's word, never the host's measurement. A run the host measured
+/// takes no attester's word for anything: `attested` is read only at level 3.
+pub(crate) fn properties(
+    guarantees: &[&str],
+    measured_by_host: bool,
+    attested: Option<&crate::attest::Attested>,
+) -> serde_json::Value {
     let mut out = serde_json::Map::new();
     if !measured_by_host {
         for p in PROPERTIES {
-            out.insert(
-                p.to_string(),
-                serde_json::json!({
-                    "state": "unknown",
-                    "why": "an external launcher's wall: DeluluLang measured none of it, and its guest's report is \
-                            the word of a binary the launcher chose",
-                }),
-            );
+            let mut answer = serde_json::json!({
+                "state": "unknown",
+                "why": "an external launcher's wall: DeluluLang measured none of it, and its guest's report is the \
+                        word of a binary the launcher chose",
+            });
+            match attested.map(|a| (a, a.vouches_for(p))) {
+                Some((a, Some(how))) => answer["attested"] = serde_json::json!({ "attester": a.attester, "by": how }),
+                Some((a, None)) => {
+                    answer["why"] = serde_json::json!(format!(
+                        "an external launcher's wall: DeluluLang measured none of it, and the attester `{}` did not \
+                         vouch for it by name (a claim `{p}: how`)",
+                        a.attester
+                    ))
+                }
+                None => {}
+            }
+            out.insert(p.to_string(), answer);
         }
         return serde_json::Value::Object(out);
     }
@@ -263,7 +291,7 @@ mod tests {
 
     const GEN: &str = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
     const NEED: Requirement<'static> =
-        Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host: true };
+        Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host: true, attested: None };
 
     fn program() -> Program {
         let text = "module p\n\nfn main(root: Root) {\n}\n".to_string();
@@ -325,7 +353,7 @@ mod tests {
                 tx.send((taken, sent)).unwrap();
             });
             let mut host = HostChannel::new(LocalSink).with_generation(GEN);
-            let need = Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host };
+            let need = Requirement { profile: crate::policy::Profile::Contained, launch: &[], measured_by_host, attested: None };
             match open(conn, GEN).unwrap().confirm(&mut host, &need) {
                 Ok(confirmed) => {
                     assert!(!measured_by_host, "a guest this host started was confirmed with an outer filter");
@@ -350,7 +378,7 @@ mod tests {
         let (without, _) = crate::policy::SandboxPolicy::posture(&[]);
         let (with, _) = crate::policy::SandboxPolicy::posture(&[OUTER_FILTER]);
         assert_eq!(with, without);
-        assert_eq!(properties(&[OUTER_FILTER], true), properties(&[], true));
+        assert_eq!(properties(&[OUTER_FILTER], true, None), properties(&[], true, None));
     }
 
     /// RW 4.32, FRAME-DRIP-1: the guest's confinement report is a frame like any other — begun, it is
@@ -465,6 +493,48 @@ mod tests {
             }
         }
     }
+    /// D-V2-87: at level 3, `hostile-agent`'s five properties are met only by the claims of the attester the
+    /// run pinned that NAME them; one it leaves out refuses before the program is sent. A guest this host
+    /// measured takes no attester's word: the same statement meets nothing there.
+    #[test]
+    fn at_level_3_only_an_attesters_named_claims_meet_a_required_property() {
+        let all: Vec<String> = PROPERTIES.iter().map(|p| format!("{p}: by the image")).collect();
+        let attested = |claims: &[String]| crate::attest::Attested {
+            key: "00".repeat(32),
+            attester: "ci".into(),
+            guarantees: claims.to_vec(),
+        };
+        let four = all[..4].to_vec();
+        for (name, claims, measured_by_host, confirmed) in [
+            ("all five named, level 3", all.clone(), false, true),
+            ("four named, level 3", four, false, false),
+            ("all five named, a guest this host measured", all.clone(), true, false),
+        ] {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (conn, t) = with_guest(move |g, open| {
+                let sink = ChannelSink::new(g);
+                let taken = sink.confined(&["no new programs"], &open.generation).is_ok();
+                tx.send(taken && sink.receive::<Program>().is_ok()).unwrap();
+            });
+            let mut host = HostChannel::new(LocalSink).with_generation(GEN);
+            let a = attested(&claims);
+            let need =
+                Requirement { profile: crate::policy::Profile::HostileAgent, launch: &[], measured_by_host, attested: Some(&a) };
+            match open(conn, GEN).unwrap().confirm(&mut host, &need) {
+                Ok(c) => {
+                    assert!(confirmed, "{name}: confirmed");
+                    let _conn = c.send_program(&program()).unwrap();
+                }
+                Err(e) => {
+                    assert!(!confirmed, "{name}: refused: {e}");
+                    assert!(is_refusal(&e), "{name}: DL1408's refusal, not a channel's failure: {e}");
+                    assert!(e.to_string().contains("resource_ceiling"), "{name}: {e}");
+                }
+            }
+            t.join().unwrap();
+            assert_eq!(rx.recv().unwrap(), confirmed, "{name}: the program reached the guest only when confirmed");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -490,7 +560,7 @@ mod property_tests {
             "no file writes", "reads only from the system paths", "no TCP bind or connect", "no new programs",
             "no debugger", "no namespace or module tricks", "no sockets but the channel",
         ];
-        let v = properties(&linux, true);
+        let v = properties(&linux, true, None);
         assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
         assert!(v["filesystem_confinement"]["by"].as_str().unwrap().contains("confined to the system paths"), "{v}");
 
@@ -500,7 +570,7 @@ mod property_tests {
             "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
             "no new programs", "no sockets but the channel",
         ];
-        let v = properties(&old_kernel, true);
+        let v = properties(&old_kernel, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
         assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
@@ -511,14 +581,14 @@ mod property_tests {
             "no file writes but truncation", "reads only from the system paths", "no new programs", "no sockets but the channel",
             "memory ceiling", "processor-time ceiling", "no privilege escalation", "killed with the host",
         ];
-        let v = properties(&before_abi3, true);
+        let v = properties(&before_abi3, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert!(v["filesystem_confinement"]["why"].as_str().unwrap().contains("filesystem_writes: not confined"), "{v}");
         assert!(crate::policy::Profile::HostileAgent.required().contains(&"filesystem_confinement"));
         // Landlock's TCP rule alone is NOT the channel alone: UDP, netlink and Unix sockets stayed open
         // under it (GUEST-SOCKET-1), so without the filter's word the network is not confined.
         let tcp_only = ["no file writes", "reads only from the system paths", "no TCP bind or connect"];
-        let v = properties(&tcp_only, true);
+        let v = properties(&tcp_only, true, None);
         assert_eq!(state_of(&v, "egress_confinement"), "absent", "{v}");
         assert!(v["egress_confinement"]["why"].as_str().unwrap().contains("network: not confined"), "{v}");
 
@@ -529,7 +599,7 @@ mod property_tests {
             "deny by default", "no file writes", "no network but the channel", "no new programs", "no Mach services",
             "no signals or process info beyond itself", "processor-time ceiling", "no core dump", "killed with the host",
         ];
-        let v = properties(&macos, true);
+        let v = properties(&macos, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
         assert_eq!(state_of(&v, "privilege_floor"), "established", "{v}");
@@ -537,13 +607,13 @@ mod property_tests {
         assert_eq!(state_of(&v, "resource_ceiling"), "absent", "{v}");
         assert!(v["resource_ceiling"]["why"].as_str().unwrap().contains("memory: not confined"), "{v}");
         let unwatched: Vec<&str> = macos.iter().copied().filter(|w| *w != "killed with the host").collect();
-        let v = properties(&unwatched, true);
+        let v = properties(&unwatched, true, None);
         assert_eq!(state_of(&v, "host_loss_ends_guest"), "absent", "{v}");
         assert!(v["host_loss_ends_guest"]["why"].as_str().unwrap().contains("PS-E-02"), "{v}");
 
         // Windows L1: the Job Object and a per-run AppContainer — the identity is the privilege floor.
         let windows = ["one process only", "memory ceiling", "processor-time ceiling", "killed with the host", crate::identity::WINDOWS_GUARANTEE];
-        let v = properties(&windows, true);
+        let v = properties(&windows, true, None);
         assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
         assert!(v["privilege_floor"]["by"].as_str().unwrap().contains("AppContainer"), "{v}");
 
@@ -552,16 +622,49 @@ mod property_tests {
         {
             let mut vm: Vec<&str> = crate::microvm::GUARANTEES.to_vec();
             vm.extend(["no new programs", "no network stack in its kernel"]);
-            let v = properties(&vm, true);
+            let v = properties(&vm, true, None);
             assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
         }
 
         // Nothing applied at all: nothing established.
-        let v = properties(&[], true);
+        let v = properties(&[], true, None);
         assert!(states(&v).iter().all(|(_, s)| s == "absent"), "{v}");
 
         // L3: whatever words arrive, nothing is established by them.
-        let v = properties(&linux, false);
+        let v = properties(&linux, false, None);
         assert!(states(&v).iter().all(|(_, s)| s == "unknown"), "{v}");
+    }
+
+    /// D-V2-87: an L3 property the run's pinned attester names carries its claim beside the `unknown` — the
+    /// attester's name and how it says the property holds — and one it does not name says so in `why`. The
+    /// state never moves: DeluluLang measured none of an external wall. A measured run takes no attester's
+    /// word, so the same statement changes nothing there.
+    #[test]
+    fn an_attesters_named_claim_is_kept_beside_the_unknown_at_level_3_and_nowhere_else() {
+        let a = crate::attest::Attested {
+            key: "00".repeat(32),
+            attester: "ci-image".into(),
+            guarantees: vec![
+                "egress_confinement: runsc --network=none".into(),
+                "egress_confinement:no NIC".into(),
+                "privilege_floor".into(),
+                "gVisor".into(),
+                "Resource_Ceiling: cgroup".into(),
+            ],
+        };
+        let v = properties(&[], false, Some(&a));
+        assert!(states(&v).iter().all(|(_, s)| s == "unknown"), "{v}");
+        assert_eq!(v["egress_confinement"]["attested"], serde_json::json!({ "attester": "ci-image", "by": "runsc --network=none; no NIC" }));
+        assert_eq!(v["privilege_floor"]["attested"]["by"], "the attester did not say how", "{v}");
+        for p in ["filesystem_confinement", "host_loss_ends_guest", "resource_ceiling"] {
+            assert!(v[p].get("attested").is_none(), "{p}: {v}");
+            let why = v[p]["why"].as_str().unwrap();
+            assert!(why.contains("`ci-image` did not vouch for it") && why.contains(&format!("`{p}: how`")), "{p}: {why}");
+        }
+        assert!(met(&v["egress_confinement"]) && met(&v["privilege_floor"]) && !met(&v["resource_ceiling"]), "{v}");
+        // The host's own measurement stands alone where the host measured.
+        let measured = properties(&[], true, Some(&a));
+        assert_eq!(measured, properties(&[], true, None));
+        assert!(PROPERTIES.iter().all(|p| !met(&measured[*p])), "{measured}");
     }
 }

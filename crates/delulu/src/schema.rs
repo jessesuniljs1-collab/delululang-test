@@ -394,8 +394,14 @@ fn defs() -> Value {
         ), "PS-E-01: the five properties a sandboxed run's boundary has, answered from what was applied"),
         "property": described(obj(
             &[("state", en(&["established", "absent", "unknown"]))],
-            &[("by", t("string")), ("why", t("string"))],
+            // D-V2-87: at level 3, the claim of the attester the run pinned that names this property.
+            &[("by", t("string")), ("why", t("string")), ("attested", r("attested_property"))],
         ), "`established` says `by` what; `absent` and `unknown` say `why` not"),
+        "attested_property": described(obj(
+            &[("attester", t("string")), ("by", t("string"))],
+            &[],
+        ), "D-V2-87: an external launcher's attester vouched for this property by name (`PROPERTY: how`) — its word, \
+            beside a state that stays `unknown`, never the host's measurement"),
         "posture": obj(
             &[
                 ("filesystem_writes", t("string")),

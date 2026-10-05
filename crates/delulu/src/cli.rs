@@ -1402,7 +1402,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (mint a break-glass ticket, wherever the private key is — not on the host it is for)\n\
      \x20 delulu sandbox   attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-D-02: a SOFTWARE attester, run as an external launcher: signs the statement over the run's\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 nonce, writes it where the host asked, then becomes COMMAND — it says what its key's holder says)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 nonce, writes it where the host asked, then becomes COMMAND — it says what its key's holder says;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a `--guarantee PROPERTY:HOW` vouches for one of the five boundary properties, as hostile-agent needs)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\

@@ -10,7 +10,9 @@
 //! - every attestation that does not hold (another key, no attester, a launcher that ends, a document
 //!   replayed from another run) is refused in words, and the program's effect NEVER happens;
 //! - the flag is refused where it cannot apply (no sandbox, L1, L2, not a key), before anything runs;
-//! - the words after `--` belong to the attester's command, never to `delulu`.
+//! - the words after `--` belong to the attester's command, never to `delulu`;
+//! - (D-V2-87) a claim that names a property — `PROPERTY: how` — answers that property's requirement, as
+//!   the attester's word beside a state that stays `unknown`; one it does not name still refuses.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -365,6 +367,94 @@ fn a_launcher_cannot_make_the_host_open_a_pipe_or_follow_a_link() {
         assert_eq!(st.code(), Some(1), "{tag}: {}", text(&o));
         assert!(text(&o).contains("not a regular file"), "{tag}: {}", text(&o));
         assert!(!d.join("out").join("made.txt").exists(), "{tag}: the program ran");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The five properties a run reports, as `boundary::PROPERTIES` names them.
+const PROPERTIES: [&str; 5] =
+    ["filesystem_confinement", "egress_confinement", "privilege_floor", "host_loss_ends_guest", "resource_ceiling"];
+
+/// PS-E-01's remainder (D-V2-87): an attester's claim that NAMES a property — `PROPERTY: how` — answers that
+/// property's requirement at L3, as the attester's word. `hostile-agent`'s refusal (DL1408) named "an
+/// external launcher whose attester vouches for it" as a way out, and no attestation could be one: every
+/// L3 property stayed `unknown` whatever the pinned key signed. Red on `2cb3f87`: refused with all five
+/// vouched for. The property's state stays `unknown` — DeluluLang measured none of it — and the claim is
+/// kept beside it, with the attester's name; a property the attester did not name still refuses, and so
+/// does a claim that only resembles a property's name.
+#[test]
+fn an_attester_that_vouches_for_each_property_by_name_meets_hostile_agent_and_the_report_says_whose_word_it_is() {
+    let d = lab("vouch");
+    let out = program(&d);
+    let (seed, public) = keygen(&d, "attester");
+    let exe = exe();
+    let made = d.join("out").join("made.txt");
+    let launcher = |claims: &[String]| {
+        let flags: Vec<String> = claims.iter().map(|c| format!("--guarantee {c}")).collect();
+        format!(
+            "external:{exe} sandbox attest --key {seed} --attester test-attester {} -- {exe} __guest --stdio-pipes",
+            flags.join(" ")
+        )
+    };
+    let run = |launcher: &str, report: &Path| {
+        delulu(
+            &d,
+            &[
+                "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
+                "--sandbox-backend", launcher, "--sandbox-profile", "hostile-agent", "--require-attestation", &public,
+                "--report-out", report.to_str().unwrap(),
+            ],
+        )
+    };
+    let all: Vec<String> = PROPERTIES.iter().map(|p| format!("{p}:by-the-image-{p}")).collect();
+
+    // Every property vouched for by name: the run is served, and the program's effect happens.
+    let report = d.join("all.json");
+    let r = run(&launcher(&all), &report);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(String::from_utf8_lossy(&r.stdout).contains("wrote"), "{}", text(&r));
+    assert!(made.exists(), "the program's effect did not happen");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let s = &v["sandbox"];
+    assert_eq!(s["requested"], "hostile-agent", "{s}");
+    assert_eq!(s["level"], 3, "{s}");
+    assert_eq!(s["fully_enforced"], false, "{s}");
+    assert_eq!(s["host_guarantees"].as_array().unwrap().len(), 0, "the attester's claims are not the host's: {s}");
+    for p in PROPERTIES {
+        let prop = &s["properties"][p];
+        assert_eq!(prop["state"], "unknown", "{p}: DeluluLang measured none of an external wall: {s}");
+        assert_eq!(prop["attested"]["attester"], "test-attester", "{p}: whose word it is: {s}");
+        assert_eq!(prop["attested"]["by"], format!("by-the-image-{p}"), "{p}: how the attester says it holds: {s}");
+    }
+    let f = d.join("sandbox.json");
+    std::fs::write(&f, s.to_string()).unwrap();
+    let val = delulu(&d, &["schema", "validate", "sandbox", f.to_str().unwrap(), "--json"]);
+    let val: serde_json::Value = serde_json::from_slice(&val.stdout).unwrap();
+    assert_eq!(val["validate"]["valid"], true, "{:#}", val["validate"]["errors"]);
+    std::fs::remove_file(&made).unwrap();
+
+    // Each way of NOT vouching for one property: refused before the program is sent, naming it.
+    let mut cases: Vec<(String, Vec<String>)> = Vec::new();
+    for (i, p) in PROPERTIES.iter().enumerate() {
+        let mut fewer = all.clone();
+        fewer.remove(i);
+        cases.push((format!("{p} left out"), fewer));
+    }
+    // Claims that only resemble a property's name are free text, and vouch for nothing.
+    for near in ["Resource_Ceiling:cgroup", "resource-ceiling:cgroup", "resource_ceilings:cgroup", "no-resource_ceiling:cgroup"] {
+        let mut claims = all.clone();
+        claims[4] = near.to_string();
+        cases.push((format!("`{near}` in its place"), claims));
+    }
+    for (i, (name, claims)) in cases.iter().enumerate() {
+        let missing = PROPERTIES.iter().find(|p| !claims.iter().any(|c| c.starts_with(&format!("{p}:")))).unwrap();
+        let r = run(&launcher(claims), &d.join(format!("r{i}.json")));
+        assert_eq!(r.status.code(), Some(2), "{name}: {}", text(&r));
+        assert!(text(&r).contains("DL1408"), "{name}: {}", text(&r));
+        assert!(text(&r).contains(missing), "{name}: it names what is missing: {}", text(&r));
+        assert!(text(&r).contains("did not vouch for"), "{name}: it says the attester left it out: {}", text(&r));
+        assert!(!String::from_utf8_lossy(&r.stdout).contains("wrote"), "{name}: the program ran: {}", text(&r));
+        assert!(!made.exists(), "{name}: the program's effect happened on a boundary nobody vouched for");
     }
     let _ = std::fs::remove_dir_all(&d);
 }

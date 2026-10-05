@@ -242,6 +242,18 @@ report carries `sandbox.attestation = {key, attester, guarantees, verified: true
 beside `host_guarantees` and never merged into them. The level stays 3 — DeluluLang still measured none
 of the wall; it checked who said what about it.
 
+**An attester can vouch for a boundary property by name (D-V2-87).** A claim whose text is one of the five
+properties a run reports, then a colon and how it holds — `filesystem_confinement: runsc, no host mounts`,
+`egress_confinement: --network=none`, `privilege_floor: rootless`, `host_loss_ends_guest: the launcher
+reaps the container`, `resource_ceiling: cgroup v2, 256 MiB` (or the name alone) — answers that property
+at L3. That is what `--sandbox-profile hostile-agent` needs from an external launcher: it requires all
+five, and refuses (DL1408) before the program is sent where one is neither established by the host nor
+named by the attester you pinned. The report keeps the claim beside the property, whose state stays
+`unknown` — `sandbox.properties.egress_confinement = {"state": "unknown", "why": …, "attested":
+{"attester": …, "by": "--network=none"}}` — so nothing reads an attester's word as DeluluLang's
+measurement. The name is matched exactly: `Egress_Confinement`, `egress-confinement` or `no
+egress_confinement` vouch for nothing.
+
 Who the attester is decides what that is worth: a verifier service that checked a hardware quote, a CI
 system that built the image, or you. `delulu sandbox attest --key SEED --attester NAME --guarantee TEXT..
 -- COMMAND..` is a **software** attester — it signs whatever its key's holder tells it to, then becomes
@@ -255,6 +267,16 @@ pipeline signed, and as a test double; it is not evidence about hardware. With t
 #     --sandbox-backend external:/usr/local/bin/delulu-gvisor-attested
 exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu-guest:1.0.0" \
   --guarantee "gVisor runsc" --guarantee "no network" -- /usr/local/bin/delulu-gvisor
+```
+
+For `hostile-agent`, the same attester names each property it stands behind (the launcher's own words
+are split on whitespace, so a claim inside `external:` has none — this script's words do not):
+
+```sh
+exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu-guest:1.0.0" \
+  --guarantee "filesystem_confinement: gVisor, no host mounts" --guarantee "egress_confinement: --network=none" \
+  --guarantee "privilege_floor: rootless runsc" --guarantee "host_loss_ends_guest: the container dies with this script" \
+  --guarantee "resource_ceiling: --memory=256m --cpus=1" -- /usr/local/bin/delulu-gvisor
 ```
 
 **NVIDIA OpenShell — the policy is written for you (PS-E-05 (a)), and the guest can run inside it (PS-E-05 (b)).**

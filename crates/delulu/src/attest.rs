@@ -24,6 +24,11 @@
 //! themselves are the attester's: the report carries them under `sandbox.attestation`, beside the
 //! host's own guarantees and never merged into them, and the level stays 3.
 //!
+//! A claim may NAME one of the five boundary properties a run reports — `egress_confinement: runsc
+//! --network=none` — and then (D-V2-87) it answers that property's requirement under a profile that
+//! requires it (`hostile-agent`): the property's state stays `unknown`, because DeluluLang measured none
+//! of the wall, and the claim is reported beside it as the attester's (`properties.<name>.attested`).
+//!
 //! The host gives the launcher the nonce in [`ENV_NONCE`] and a path in its own per-run directory in
 //! [`ENV_OUT`]; the launcher writes the document there, whole (a temporary file, then a rename), and
 //! the host reads it after the launcher starts and BEFORE it sends the program — so on a refusal the
@@ -140,7 +145,30 @@ pub struct Attested {
     pub guarantees: Vec<String>,
 }
 
+/// D-V2-87: the boundary property a claim NAMES, and how the attester says it holds — a claim of the form
+/// `PROPERTY: HOW` (or `PROPERTY` alone), where `PROPERTY` is exactly one of the five names a run reports
+/// (`boundary::PROPERTIES`). Anything else — another case, a hyphen, a word around the name — is free text
+/// and vouches for no property: a near-miss fails closed, as an unnamed property does.
+pub fn named_property(claim: &str) -> Option<(&'static str, &str)> {
+    let (name, how) = claim.split_once(':').unwrap_or((claim, ""));
+    let name = name.trim();
+    crate::boundary::PROPERTIES.iter().find(|p| **p == name).map(|p| (*p, how.trim()))
+}
+
 impl Attested {
+    /// D-V2-87: what this attester says of `property`, if a claim names it — every such claim's `HOW`, in
+    /// the order signed (a claim that names it and says no `HOW` is said as that).
+    pub fn vouches_for(&self, property: &str) -> Option<String> {
+        let hows: Vec<&str> = self
+            .guarantees
+            .iter()
+            .filter_map(|g| named_property(g))
+            .filter(|(p, _)| *p == property)
+            .map(|(_, how)| if how.is_empty() { "the attester did not say how" } else { how })
+            .collect();
+        (!hows.is_empty()).then(|| hows.join("; "))
+    }
+
     /// `sandbox.attestation` in a run report.
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
@@ -565,6 +593,33 @@ mod tests {
             let d = Document { format: FORMAT.to_string(), statement: bad.clone(), signature: sig };
             assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce()), Err(Refusal::BadStatement(_))), "{bad:?}");
         }
+    }
+
+    /// D-V2-87: a claim names a property only by its exact name, before a `:` or alone; anything that only
+    /// resembles one is free text. Every claim naming the same property is kept, in the order signed.
+    #[test]
+    fn a_claim_names_a_property_only_by_its_exact_name() {
+        assert_eq!(named_property("egress_confinement: runsc --network=none"), Some(("egress_confinement", "runsc --network=none")));
+        assert_eq!(named_property("  privilege_floor  "), Some(("privilege_floor", "")));
+        assert_eq!(named_property("resource_ceiling:cgroup v2: 256 MiB"), Some(("resource_ceiling", "cgroup v2: 256 MiB")));
+        for p in crate::boundary::PROPERTIES {
+            assert_eq!(named_property(p).map(|(n, _)| n), Some(p));
+        }
+        for free in [
+            "Egress_Confinement: x", "egress-confinement: x", "egress_confinements: x", "no egress_confinement: x",
+            "egress_confinement x", "gVisor runsc", "", ":egress_confinement",
+        ] {
+            assert_eq!(named_property(free), None, "{free:?} names no property");
+        }
+        let a = Attested {
+            key: "00".repeat(32),
+            attester: "a".into(),
+            guarantees: vec!["egress_confinement: one".into(), "gVisor".into(), "egress_confinement:two".into(), "privilege_floor".into()],
+        };
+        assert_eq!(a.vouches_for("egress_confinement").as_deref(), Some("one; two"));
+        assert_eq!(a.vouches_for("privilege_floor").as_deref(), Some("the attester did not say how"));
+        assert_eq!(a.vouches_for("resource_ceiling"), None);
+        assert_eq!(a.vouches_for("gVisor"), None);
     }
 
     #[test]
