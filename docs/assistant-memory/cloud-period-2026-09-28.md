@@ -120,6 +120,9 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   within the frame deadline; a bound on one direction of a channel asks the question of the other. And PS-E-04's
   attestation binding (D-V2-89): a `delulu-attestation-v2` statement names the launcher its attester measured, refused
   for any other.
+- **Routine run 12 (2026-10-05):** a macOS guest's memory ceiling is the host's sampler of its peak footprint (every
+  5 ms — 25 ms let a guest reach 247 MB against 64 MiB), so `resource_ceiling` holds on every OS and macOS's reads are
+  `contained`'s one gap (D-V2-90); RUNDIR-PERM-1, a false permissions alarm on every macOS run, closed (D-V2-91).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

@@ -67,7 +67,8 @@ the assistant's memory — which now also travels file by file in
   priority, CPUs and scheduling — refused (D-V2-65). H5: below ABI 3 the report claimed writes denied —
   exact now (D-V2-66).
 - **Next:** **PS-E**, what is left of it — E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
-  pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87); E-04's
+  pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
+  macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
   macOS `fexecve` (its attestation binding — a v2 statement naming the launcher its attester measured — routine run 11,
   D-V2-89). E-02, E-05 ((a) routine run
   8, D-V2-82; (b) routine runs 9–10, D-V2-83, D-V2-85 — the guest inside a real OpenShell sandbox) and E-06 (routine run
@@ -789,6 +790,11 @@ wins, and you should update the memory to match.
   also read `./secret` through a helper's `r: Root`: the scope walk matched the receiver `root` by name and printed a
   placeholder only for a kind with no literal. The runtime refused the unnamed path; the review list under-reported. A
   hidden site now leaves its kind's placeholder beside the literals (D-V2-81).
+  **Routine run 12 (2026-10-05):** a macOS guest had **no memory ceiling** — macOS refuses `RLIMIT_DATA` — so one
+  allocating without end ran until another ceiling ended it (red on a runner); the host samples its peak footprint every
+  5 ms now and ends it (D-V2-90). And **RUNDIR-PERM-1**: every macOS sandboxed run printed a false "not owner-only …
+  this filesystem does not enforce POSIX permissions" — the host made the run's directory 0755 and the guest could not
+  narrow it; made 0700 by the host now, never adopted (D-V2-91).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -1005,6 +1011,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A mutant must change the ANSWER, not only the source** (routine run 11): M93's first form wrote the attester's claim
   into the measured branch's map before the loop that fills it — the loop overwrote it, the binary behaved as before, and
   the mutant "survived". A survivor is first a question about the mutant: read what the mutated code returns.
+- **A sampler's interval IS its ceiling's resolution — measure the overshoot before claiming the ceiling** (routine run
+  12): the macOS memory sampler at the ordinary run's 25 ms let a guest reach 247 MB against a 64 MiB budget on a runner;
+  at 5 ms, 69–93 MB on two reads. Print the observed value in the witness, so the first green read is also the measurement.
+- **A false alarm is a defect — read the WHOLE log of a green witness** (routine run 12, RUNDIR-PERM-1): every macOS
+  sandboxed run had printed a permissions warning blaming the filesystem; it sat in the stderr of a witness written for
+  something else. And **lint the other OSes after the LAST code edit**: a function added after `check-other-os.sh` ran
+  compiled on Windows with `unused_mut` — seen only in the Windows read's build output.
+- **`git revert` takes no `-q`** (routine run 12): the revert failed, the next `git commit --amend` re-labelled the
+  MUTANT commit as its own revert, and the push was refused as a non-fast-forward. Nothing was lost (reset to the pushed
+  branch, revert again — never a force-push); read `git log -1` after every revert before amending anything.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

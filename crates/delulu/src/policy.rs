@@ -44,9 +44,10 @@ impl Profile {
     /// PS-E-01 (D-V2-59): the properties (`boundary::PROPERTIES`) a run under this profile must have
     /// ESTABLISHED before its program is sent; one that is not refuses the run (DL1408's rule — never
     /// silently weaker). `hostile-agent` is for code nobody trusts and requires all five. `contained` (the
-    /// default) and `dev` require none yet: CI measured macOS without read confinement, a memory ceiling
-    /// or a death signal (and an unattested launcher establishes nothing), so a `contained` set waits for
-    /// those gaps (PS-E-02 and after) rather than refusing every macOS and L3 run by default.
+    /// default) and `dev` require none yet: CI measured macOS without read confinement (its death signal is
+    /// a watcher since D-V2-60, its memory ceiling the host's sampler since D-V2-90), and an unattested
+    /// launcher establishes nothing, so a `contained` set waits rather than refusing every macOS and L3
+    /// run by default.
     pub fn required(self) -> &'static [&'static str] {
         match self {
             Profile::Dev | Profile::Contained => &[],

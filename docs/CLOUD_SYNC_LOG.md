@@ -1190,3 +1190,50 @@ it on `origin` was made in the cloud and is listed below.
   P8-01 can start — a decision for a `D-V2-nn`, taken with P8-01's readiness read; (3) the red-team rows RW 4.39's log
   words, 4.40 (silent connections queue on the broker); RW 7.17.
   **For the owner:** D-V2-87, D-V2-88 and D-V2-89 are this run's decisions.
+
+### 2026-10-05 — routine run 12: CI read green; PS-E-01 — a macOS guest's memory ceiling is the host's sampler (D-V2-90); RUNDIR-PERM-1 (D-V2-91)
+- Session: `https://claude.ai/code/session_017EaoWq1fAD7PwrTrfFTaL3`   Model: Claude Opus 5.5 (the scheduled routine; no
+  fallback notice)
+- Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-vwdips`, at `master`'s head; each
+  slice pushed there first, read on the runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `ed95f0d` (routine run 11's last reading)
+- Commits: (1) `d9d4803` the witness alone (a macOS guest past its memory budget, red on a runner); (2) `8e85b94` PS-E-01:
+  a macOS guest's memory ceiling is the host's sampler (D-V2-90); (3) `2b37c23` mutant M108, pushed only to be read red on
+  macOS; (4) `09a113f` its revert; (5) `550ba38` RUNDIR-PERM-1's witness alone; (6) `3c6e67b` RUNDIR-PERM-1's fix, the
+  sampler at 5 ms, the map; (7) `07045d5` `make_run_dir` split by OS (Windows `unused_mut`); (8) the records — this commit
+- Files and folders: M `crates/delulu/src/jail.rs` (`SAMPLED_MEMORY_CEILING`, `peak_footprint`, a macOS unit test, the
+  RLIMIT_DATA comment), `crates/delulu/src/guest.rs` (`Fired::Memory`, `MemReader`, the watchdog's memory reading at
+  `MEMORY_TICK`, the claim, the named stop; `make_run_dir` and its unit test), `crates/delulu/src/boundary.rs` (the macOS
+  properties fixture; the `PROPERTIES` comment), `crates/delulu/src/policy.rs` (a comment),
+  `crates/delulu/tests/sandbox_run_cli.rs` (two witnesses; macOS's memory now enforced), `crates/delulu/tests/guest_cli.rs`
+  (the macOS claim) — (1)–(7). M `CHANGELOG.md`, `HANDOFF.md` (*Where things stand*: Next; §11.4 run 12; §11.5 three
+  lessons), `docs/CLOUD_ROUTINE.md` (step 5: mutants on a runner, lint after the last edit, read a green witness whole, a
+  short Windows log), `docs/DEPLOYMENT.md` (the macOS row), `docs/MATHEMATICS.md` (the claim table),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-90, D-V2-91), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md`
+  (§4.1), `docs/REMAINING_WORK.md` (4.25), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`
+  (this entry), `docs/survey/*` (regenerated) — (8). Added: nothing. Deleted: nothing. **Authorship:** the owner's account
+  through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,229 edges); `doctor --check` ok, all checks passed.
+  After the last edit: `survey check` ok (1,483 nodes, 13,229 edges), `findings` 0 errors, 14 warnings; `doctor --check`
+  ok, all checks passed.
+- Verified: **CI on arrival** — `ed95f0d`'s push run `37253089773` success, 14 jobs (arm64 ping-pong MEASURED 2.93x against
+  a control of 4.10x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED — 3 threads; the properties as on every
+  run since run 8); no nightly since run 10's reading. Every `claude/*` branch listed after unshallowing — none carries a
+  commit `master` lacks beyond run 10's two recorded witness branches. Run 11's tests re-run in the VM: `sandbox_attest_cli`
+  9, the attest/boundary/guest unit tests 20, `delulu-runtime`'s channel tests 23 — all passed. **The slice:** red on macOS
+  first (`witness.yml` `37267847333` — stopped by `wall=`, `memory: not confined`); M108 red on macOS (`37268731314`, three
+  tests); RUNDIR-PERM-1 red on macOS (`37268778120`); M109, M110 red in the VM; clippy clean; `check-other-os.sh` clean for
+  Windows and macOS (twice — after the last code edit too); the full suite alone 2,115 passed, 0 failed, 15 ignored (157
+  binaries), cargo exit 0; read green before `master` moved: at `8e85b94` Windows `37268385858`, arm64 `37268387716`, macOS
+  `37268383827` (the whole package green but `doctor_cli`'s stale map); at `3c6e67b` macOS `37269100267` (the whole `delulu`
+  package, 877 passed, 0 failed), Windows `37269102715`, arm64 `37269105326`; at `07045d5` Windows `37269926751` (43 passed,
+  no warning), macOS `37269929073` (193 passed). The memory stop observed 247 MB against 64 MiB at 25 ms, then 68.8 MB and
+  92.8 MB at 5 ms.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a sampler's interval is its ceiling's resolution; a false alarm is a defect
+  — read a green witness whole, lint after the last edit; `git revert` takes no `-q`); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read this commit's push run and `07045d5`'s; (2) PS-E's rest — `contained`'s required set (every OS now
+  establishes egress, resource and host-loss for a guest it starts; macOS's reads its one absent property; an unattested L3
+  is `unknown` — the set's rule for `unknown` is the decision), H6 (perhaps with the owner), macOS's `fexecve`; then P8-01;
+  (3) RW 4.39's log words, 4.40, RW 7.17.
+  **For the owner:** D-V2-90 and D-V2-91 are this run's decisions.

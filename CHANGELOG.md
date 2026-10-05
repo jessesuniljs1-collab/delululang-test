@@ -112,6 +112,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `delulu-attestation-v2` statement; `delulu sandbox attest --measure-launcher FILE`). The host refuses such a statement,
   before the program is sent, unless the launcher it started has that BLAKE3 — and reports it as
   `sandbox.attestation.launcher_blake3`. A statement without it is v1, exactly as before (D-V2-89).
+- **Fixed: a sandboxed guest on macOS had no memory ceiling.** macOS refuses the limit (`RLIMIT_DATA`) that gives one on
+  Linux, so a guest allocating without end ran on until another ceiling stopped it. The host now reads the guest's peak
+  memory every 5 ms, from outside it, and ends it at its budget (`--limits mem=`, 1 GiB by default): the run exits 1,
+  `outcome.stopped_by` names `memory` with `observed_bytes`, and the report claims `memory ceiling (the host's sampler)`
+  — so `resource_ceiling` is established on macOS too (D-V2-90).
+- **Fixed: every sandboxed run on macOS printed a false alarm** — the guest's "not owner-only (mode 0755); this
+  filesystem does not enforce POSIX permissions". The run's own directory was made with the default mode and the guest,
+  which may write nothing but its socket, could not narrow it. The host now makes that directory its user's alone
+  (0700), and refuses one already under its name rather than using it (RUNDIR-PERM-1, D-V2-91).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

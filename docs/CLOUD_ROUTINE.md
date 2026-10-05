@@ -225,6 +225,14 @@ ended, took one more; a probe step in the workflow's script costs one dispatch).
 lints only the targets named — about two minutes for one, against seven for all five.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
+**A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
+`git revert` it in a commit of its own — a dispatch records its SHA when it is created, so the next commit may follow at once
+(M108 and the next witness ran side by side). `git revert` takes no `-q`; read `git log -1` after a revert before any amend.
+**Run `check-other-os.sh` again after the LAST code edit** (run 12: a function added after the lint compiled on Windows with
+`unused_mut`, seen only in the runner's build output), **and read a green witness's whole output**: run 12's RUNDIR-PERM-1 was
+a false warning in the stderr of a passing test. A witness log of a few targets on Windows is about 500 lines — ask
+`tail_lines` ≈ 120 (thousands return it whole, into the context); a macOS `all` read takes about ten minutes and runs
+`doctor_cli`, so commit the regenerated map with the branch commit it reads.
 **A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land

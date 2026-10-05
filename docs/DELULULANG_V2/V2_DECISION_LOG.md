@@ -2005,6 +2005,61 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    under v1's line), M105 (the format check gone), M106 (the attester measures nothing), M107 (an upper-case digest
    accepted): all red. Read on the runners before `master` moved: `witness.yml` at `3c74e97` — macOS `37251102472`, Windows `37251104259`, Linux arm64 `37251106129`, all green, `sandbox_attest_cli`'s five attestation tests and the binary's attestation unit tests named in each log.
 
+## D-V2-90 — PS-E-01: a macOS guest's memory ceiling is the host's sampler of its peak footprint — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The gap** (`V2_OPENSHELL_STUDY.md` §4.1, "the `contained` set above would refuse every macOS run (reads open, no memory
+   ceiling)"; `jail.rs` since PS-A2): macOS refuses `setrlimit(RLIMIT_DATA)` (EINVAL, run `35480762820`) and has no job object
+   or cgroup, so a macOS guest had no memory ceiling at all — `resource_ceiling` absent on every macOS run, and one of the two
+   gaps `contained`'s required set waited on. **Witnessed red on a macOS runner** (`witness.yml` `37267847333` at `d9d4803`): a
+   guest allocating without end under `mem=64 MiB` was stopped by `wall=` at 8 s, its report saying `memory: not confined`.
+2. **Taken:**
+   - **The host is the ceiling.** `jail::peak_footprint(pid)` reads the guest's `ri_lifetime_max_phys_footprint`
+     (`proc_pid_rusage`, `RUSAGE_INFO_V4` — the kernel's own memory accounting, compressed pages included). The process
+     guest's watchdog (`guest.rs`, the one that already ends it at `wall=` and, on Windows, at `cpu=`) reads it every 5 ms
+     (`Watchdog::MEMORY_TICK`) and ends the guest with SIGKILL at its budget. The PEAK, so a burst freed between two readings
+     is still seen at the next. It runs outside the guest: an escaped guest cannot stop it (its Seatbelt profile denies every
+     signal and all process information beyond itself), and the pid cannot have been reused (the watchdog is joined before
+     the guest is reaped).
+   - **Claimed in its own words:** `memory ceiling (the host's sampler)` — never spelled as the kernel's ceilings on Linux
+     and Windows; the posture's `memory: capped` and `resource_ceiling` follow from it. Claimed only where the kernel
+     answered the first reading, and never for an external launcher (L3), whose wall is the operator's.
+   - **The stop is named:** `outcome.stopped_by = {dimension: memory, budget_bytes, observed_bytes, source: "the host's
+     memory sampler, reading the guest's peak footprint every 5 ms"}`, exit 1, and the operator's sentence says this host
+     ended it (the kernel's stops still say the operating system refused it more).
+   - **The interval is the ceiling's resolution, measured:** at the ordinary run's 25 ms the first green read observed
+     247 MB against a 64 MiB budget (`37268383827`); 5 ms costs a `proc_pid_rusage` call — microseconds — 200 times a
+     second, and the read after it observed 68.8 MB and 92.8 MB on two reads (`37269100267`, `37269929073`).
+3. **Not taken:** a kernel ceiling by a private interface (`memorystatus_control`'s per-process limit — undocumented, and a
+   privileged call); `RLIMIT_AS` (it caps reservations, and the WebAssembly engine reserves by the gigabyte — the Linux scar
+   in `jail.rs`); a guest-side cap (the guest's own word, which an escaped guest is not bound by). **Not changed:** what
+   `contained` requires (the next step; macOS's reads remain its one absent property).
+4. **Witnesses:** `sandbox_run_cli::a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs` (every OS:
+   the control under the budget runs; past it, `stopped_by: memory`, exit 1, the claim and `memory: capped` in the report;
+   `observed_bytes` printed); `jail::macos_tests::the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched`
+   (the reading answers, moves by what is touched, and never falls); `guest_cli` (the claim on macOS, in the host's words);
+   `the_report_names_what_is_not_confined_as_well_as_what_is` (memory enforced on every platform again); the boundary unit
+   test (macOS's words with the sampler establish `resource_ceiling`; without it, absent). **Mutant M108** — the reader
+   answering a constant, the ceiling claimed and never firing — red on a macOS runner (`37268731314`). Read green before
+   `master` moved: macOS, the whole `delulu` package, `37269100267`; Windows `37269926751`; Linux arm64 `37269105326`.
+
+## D-V2-91 — RUNDIR-PERM-1: a run's own directory is made its user's alone by the host, and never adopted — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The finding** (read in the D-V2-90 witness's own log on a macOS runner): every macOS sandboxed run printed the guest's
+   `warning: broker state directory … is not owner-only (mode 0755); this filesystem does not enforce POSIX permissions …
+   Other local users may read delulu secrets stored here` — on the operator's screen, every run. The host made the run's
+   directory (`delulu-guest-…` under the temporary directory: the guest's channel socket, a macOS guest's Seatbelt profile,
+   an attester's document) with the process's default mode and left the guest's transport to narrow it to 0700; a macOS
+   guest's profile refuses it every write but its socket, so the `chmod` failed and the warning blamed the filesystem. A
+   false alarm trains an operator to read past the real one. **Witnessed red on a macOS runner** (`37268778120`).
+2. **Taken:** the host makes the directory itself, 0700 on Unix (`guest::make_run_dir`, a `DirBuilder` with the mode), and
+   only if nothing is there yet: a directory already under the run's name — someone else's — is refused, never adopted
+   (`create_dir_all` adopted it). The same for `sandbox probe`'s directory.
+3. **Not taken:** quieting the transport's warning for guests (the warning is right wherever it fires for a real state
+   directory); a guest-side `chmod` allowance in the Seatbelt profile (a write the guest does not need).
+4. **Witnesses:** `sandbox_run_cli::a_sandboxed_runs_own_directory_is_its_users_alone_and_no_false_alarm_reaches_the_operator`
+   (red on macOS before, green after); `guest::tests::a_runs_own_directory_is_made_owner_only_and_never_adopted` (Unix: 0700;
+   a second make refused). **Mutants** M109 (mode 0755) and M110 (an existing directory adopted) red in the VM.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

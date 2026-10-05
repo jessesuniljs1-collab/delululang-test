@@ -244,9 +244,10 @@ pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static 
 /// - `RLIMIT_CPU` **is** enforced: a spinning C program with a one-second limit was killed by SIGXCPU
 ///   after one second, against a control that ran unlimited for sixteen. So the processor-time ceiling
 ///   is a real bound on a spinning orphan, which is what it is here for.
-/// - `RLIMIT_DATA` is **refused**: `setrlimit` returns EINVAL on macOS. So there is no memory ceiling
-///   to claim, and no call left in the code pretending to ask for one — a call the OS rejects is worse
-///   than an absent call, because the next reader assumes it worked.
+/// - `RLIMIT_DATA` is **refused**: `setrlimit` returns EINVAL on macOS. So there is no KERNEL memory
+///   ceiling to claim, and no call left in the code pretending to ask for one — a call the OS rejects is
+///   worse than an absent call, because the next reader assumes it worked. Since D-V2-90 the ceiling is
+///   the host's: [`peak_footprint`], read by the guest's watchdog.
 ///
 /// The Linux half of this file carries the matching scar: `RLIMIT_AS` capped the wasm engine's
 /// RESERVATIONS rather than its use and killed the guest before `main` (CI run 35391962354).

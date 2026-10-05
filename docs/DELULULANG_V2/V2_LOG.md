@@ -3999,3 +3999,34 @@ lessons. **PS-E left:** H6 (macOS and Windows under the escaped-guest harness), 
 **The last reading (routine run 11):** `52f1d8e`'s push runs — CI `37251922235` success, 14 jobs, none failed (arm64
 ping-pong MEASURED 2.93x against a control of 4.13x; the other three NOT MEASURED); `ocsf` `37251922186` and `openshell`
 `37251922219` success. `master` green through `52f1d8e`.
+
+## 2026-10-05 — routine run 12: CI read green; PS-E-01 — a macOS guest's memory ceiling is the host's sampler (D-V2-90); RUNDIR-PERM-1 (D-V2-91)
+
+**On arrival:** `ed95f0d`'s push run (run 11's last commit, unread by it) — CI `37253089773` success, 14 jobs, none failed
+(arm64 ping-pong MEASURED 2.93x against a control of 4.10x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED —
+3 threads; the properties as on every run since run 8). No nightly since run 10's reading (the four reds of 10-01..10-04 were
+run 10's, fixed by D-V2-84). Every `claude/*` branch listed after unshallowing: none carries a commit `master` lacks beyond
+run 10's two recorded witness branches. `gh` is installed in this VM (`/usr/local/bin/gh`), not used — the MCP tools and the
+REST API answered. Run 11's tests re-run in the VM: `sandbox_attest_cli` 9 passed; the binary's `attest`, `boundary` and
+`guest::tests` unit tests 20 passed; `delulu-runtime`'s `channel` tests 23 passed.
+
+**Chosen:** PS-E-01's open item, `contained`'s required set, waits on macOS's two gaps — reads and memory. The memory gap is
+buildable and witnessable: **witnessed red on a macOS runner** (`witness.yml` `37267847333` at `d9d4803`) — a guest
+allocating without end under `mem=64 MiB` was stopped by `wall=` at 8 s, `memory: not confined`. **Built (D-V2-90):** the
+host's watchdog reads the guest's peak footprint (`proc_pid_rusage`) and ends it at its budget; claimed as `memory ceiling
+(the host's sampler)`, the stop named with `observed_bytes`. The first green read (`37268383827`, the whole `delulu`
+package — red only in `doctor_cli`'s three stale-map tests, the map not regenerated on that branch commit) observed **247 MB
+against 64 MiB at the 25 ms interval**; at 5 ms, 68.8 MB and 92.8 MB on two reads (`37269100267`, `37269929073`). Mutant M108 (the reader answering a constant: claimed, never
+firing) red on macOS (`37268731314`: the new witness, the existing ceiling test — now run there because macOS claims the ceiling
+— and the unit reading test).
+
+**Found in that witness's log, fixed (RUNDIR-PERM-1, D-V2-91):** every macOS sandboxed run printed the guest's "not
+owner-only (mode 0755); this filesystem does not enforce POSIX permissions" — the host made the run's directory with the
+default mode, and a macOS guest, which may write nothing but its socket, could not narrow it. Witnessed red on macOS
+(`37268778120`); the host now makes it 0700 and never adopts one already there. M109 (0755) and M110 (adopted) red in the VM.
+**Then the Windows read** (`37269102715`, green) **showed `unused_mut`** in the new function — linted for Windows before the
+function existed; split by OS in `07045d5`, `check-other-os.sh` clean for both.
+
+**Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS; the full suite alone 2,115 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the
+runners before `master` moved: at `3c6e67b` — macOS `37269100267` (the whole `delulu` package, 877 passed, 0 failed, 12 ignored, 94 binaries), Windows
+`37269102715`, Linux arm64 `37269105326` (216 passed); at `07045d5` — Windows `37269926751`, macOS `37269929073`.

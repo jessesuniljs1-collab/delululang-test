@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 295 |
-| Rust lines | 154631 |
+| Rust lines | 154633 |
 | Rust files outside `src/` (test/bench targets) | 134 |
 | Markdown documents | 252 |
-| Markdown lines | 69297 |
+| Markdown lines | 69466 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1483 / 13229 |
+| Nodes / edges in this map | 1483 / 13243 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 38943 lines
+- **Modules:** 41 files, 38945 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -117,7 +117,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/foreign_worker.rs` | 738 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/guest.rs` | 2771 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/identity.rs` | 1216 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
-| `src/jail.rs` | 1657 | PS-A-04: the OS jail around a sandbox guest. |
+| `src/jail.rs` | 1658 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/launcher.rs` | 182 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2024 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
@@ -128,7 +128,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
 | `src/openshell.rs` | 653 | PS-E-05 (a), D-V2-82: `delulu sandbox policy <file> --format openshell` — the wall an OpenShell |
 | `src/pipe_channel.rs` | 573 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
-| `src/policy.rs` | 511 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
+| `src/policy.rs` | 512 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1732 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 688 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |

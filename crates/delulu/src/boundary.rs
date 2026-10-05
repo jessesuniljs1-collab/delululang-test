@@ -196,9 +196,9 @@ impl<C: Read + Write> Confirmed<C> {
 /// from the posture the host already derives from what was APPLIED (the host's launch words and the
 /// guest's accepted report), so the properties and the posture cannot disagree: there is one source.
 ///
-/// Reported, not yet required: which of them each profile requires, and the refusal when one is
-/// absent, follow once every operating system's answers have been read from CI (a required set that no
-/// macOS host can meet would refuse every macOS run — `jail.rs` claims no memory ceiling there).
+/// Which of them each profile requires is `Profile::required` (D-V2-59): `hostile-agent` all five. A
+/// `contained` set that no macOS host can meet would refuse every macOS run — macOS's reads stay open
+/// (its memory ceiling is the host's sampler since D-V2-90).
 pub(crate) const PROPERTIES: [&str; 5] =
     ["filesystem_confinement", "egress_confinement", "privilege_floor", "host_loss_ends_guest", "resource_ceiling"];
 
