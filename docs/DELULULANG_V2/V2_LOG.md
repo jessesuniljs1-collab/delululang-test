@@ -4106,3 +4106,12 @@ revoked the lease first), reverted. **The simulator's parity (`5b89f9f`):** `--s
 **Push runs read first:** `fee5353` — CI `37302336639` success, 14 jobs, `microvm` among them (the L2 witness green on `master` too); `5b89f9f` — CI `37304139892` success, 14 jobs (arm64 MEASURED 2.97x), `ocsf` `37304139836` success; `521d688` — CI `37304345347` success, 14 jobs (arm64 MEASURED 2.92x). **Built (`bc8bd91`):** the run report's `devices`, the host watchdog's journal (a sandboxed
 run has no trace), declared in `delulu schema run-report`; M133, M134 red. **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit; read on the runners at `bc8bd91` before `master` moved — macOS `37305292797` (28 passed: `sandbox_devices_cli` 10, `json_contract` 14, `schema_cli` 4), Windows `37305296588` and Linux arm64 `37305299628` green on the same three targets; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **P8-01 is
 complete** — every item of its design built and read at L1 and L2. **Next: P8-02**, the Verified-class adapter as a `.dpx`.
+
+## 2026-10-05 — routine run 13: P8-02's build order, read against the code
+
+With P8-01 complete and too little of the run left to build P8-02 whole, its build order was read from the code and written
+into `V2_P8_DESIGN.md` (as run 12 did for P8-01): a Verified `.dpx` already runs by interpreting its re-proved DIR, and
+`load_verified`'s DL1504 (a verified type matched exactly to an empty-row manifest signature) is the purity rule; the
+broker already calls its adapter after the lease, rate and envelope checks, so the slot becomes an `Adapter` trait; the DIR
+is plain AST data (no `Rc`), so a `VerifiedAdapter` owns one thread that interprets it per call; the PIN on the embedded
+signature key and `--adapter-dpx` are the new surface. Nothing built — the next run starts at step 1.

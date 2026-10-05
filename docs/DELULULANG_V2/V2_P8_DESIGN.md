@@ -104,6 +104,37 @@ Witnesses against the simulator: a signed adapter drives the simulated arm; a ta
 a stranger, and one that fails its proof at load are each refused before a frame is written; the envelope
 still refuses before the plugin is called; a plugin that tries to name a capability does not check.
 
+**The build order, read against the code by routine run 13 (2026-10-05, after P8-01 completed — D-V2-95):**
+1. *A Verified plugin already runs as a pure function the host can call.* "The DIR is what runs, not the WASM"
+   (`plugin.rs`, `LoadedHandle`): `Interp::call_plugin_export` builds `Interp::new(&verified.dir.module)` and calls the export
+   by name (`call_exported`, DL1508 for a missing one). `load_verified` is the gate, in its normative order: container and
+   API (DL1507), class (never inferred), ceiling `grant ⊑ plugin.authority` (DL1502), holder (DL0802), the DIR replayed and
+   each export's verified type matched EXACTLY to its manifest signature (`step5_verified`, DL1504: "the verified type …
+   does not match the manifest signature"), then the signature policy (DL1510 bad, DL1511 unsigned under `require_signed`).
+   So purity needs no new rule: an adapter's grant is empty, and an export whose manifest signature has an empty row cannot
+   be matched by a body that performs an effect — "a plugin that tries to name a capability does not check" is that DL1504.
+2. *The interface the plugin plugs into.* `DeviceBroker` keeps `Mutex<Option<ProcessAdapter>>` and calls the adapter only
+   under `Profile::Hw`, AFTER its lease, rate and envelope checks (`DeviceBroker::command`, `read`) — the ordering P8-02
+   needs, already. Make the slot an `Adapter` trait (`command(device, fields)`, `read(device)`, `Send`), implemented by
+   `ProcessAdapter` unchanged and by a new `VerifiedAdapter`; the broker's code does not otherwise change.
+3. *Threads.* The broker is an `Arc` whose watchdog runs on its own thread; an `Interp` and its values are `Rc`. The DIR
+   (`delulu_check::Dir`, an AST `Module`) is plain data — `delulu-syntax/src/ast.rs` holds no `Rc`, `RefCell` or `Cell`
+   (assert `Dir: Send` at compile time as the first step). So the `VerifiedAdapter` owns ONE thread that owns the module and
+   builds an `Interp` per call, and the broker holds only its `Send` side (two channels). The exchange keeps `adapter.rs`'s
+   three laws: a bounded reply, a deadline, poisoned after the first failure.
+4. *The exports.* `encode` (a command → the frame line the device speaks) and `decode` (the device's reply → a reading),
+   with empty rows and value types `lower_export_signature` accepts — choose them from `step5_verified`'s own tests. The
+   frames' reference is `adapter.rs`'s `CMD`/`READ` line protocol, so P8-03's transport can speak to the in-tree simulator
+   run as a process and a `.dpx` can be witnessed against it.
+5. *Provenance, read once.* `verify_signature(manifest, dir, sig)` checks the artifact's embedded signature (a 32-byte key
+   ‖ a 64-byte signature); P8-02 adds the PIN — the key must be `--adapter-signer`, required for the Verified class
+   (DL1510 for another key, DL1511 unsigned) — and interprets the very bytes it verified, so D-V2-50's check-then-start
+   residual is gone. `record_adapter_provenance` records it, as for a driver.
+6. *The flag.* `--adapter-dpx FILE`, refused beside `--adapter-cmd`; it joins `device_terms`'s hardware-only list (refused
+   without `--broker-profile hw:`) and the sandbox's allowlist; DL1905 is unchanged.
+7. *Witnesses,* the list above — first against an in-process transport that logs the frames it is handed (so "refused
+   before a frame is written" is read from that log), then against P8-03's.
+
 ### P8-03 — the reference transport and the sim as a device
 
 A transport the tests and a lab can both use: a line or byte stream to the in-tree simulator run as a

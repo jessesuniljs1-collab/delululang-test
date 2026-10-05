@@ -1301,7 +1301,7 @@ it on `origin` was made in the cloud and is listed below.
   `scripts/suite.sh` and this entry; (4) `07f6cd9` P8-01 at level 2 (a KVM-gated witness); (5) `666cb53` mutant M128,
   pushed only to be read red on the KVM runner; (6) `fee5353` its revert; (7) `5b89f9f` a sandboxed simulation keeps the
   stepped clock and signs off; (8) `521d688` their records; (9) `bc8bd91` a sandboxed run reports its devices' journal;
-  (10) its records, P8-01 complete — this commit
+  (10) `ac31cf2` its records, P8-01 complete; (11) P8-02's build order — this commit
 - Files and folders: M `crates/delulu-runtime/src/device.rs` (`actuate`, `sense`, `refusal_detail`, `command_check`,
   `command_fields`), `crates/delulu-runtime/src/interp.rs` (`call_actuator`/`call_sensor` call them; a handle goes to the
   sink; the old `envelope_check`/`numeric_fields` removed), `crates/delulu-runtime/src/channel.rs`
@@ -1323,7 +1323,8 @@ it on `origin` was made in the cloud and is listed below.
   `crates/delulu/src/schema.rs` (`device_event`), `crates/delulu/tests/sandbox_devices_cli.rs`, `docs/for-agents.md`,
   `docs/survey/*` — (9); M `CHANGELOG.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`
   (D-V2-95 item 11), `V2_LOG.md`, `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/assistant-memory/cloud-period-2026-09-28.md`,
-  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (10). Deleted: nothing. **Authorship:** the
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (10); M `docs/DELULULANG_V2/V2_P8_DESIGN.md` (P8-02's build order),
+  `V2_LOG.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (11). Deleted: nothing. **Authorship:** the
   owner's account through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,484 nodes, 13,281 edges); `doctor --check` ok, all checks passed.
   After the last edit: see the closing reading below.
@@ -1359,6 +1360,7 @@ it on `origin` was made in the cloud and is listed below.
   the dropped-flag question again; the tree edited mid-suite a third time — `scripts/suite.sh`; `delulu` has no `--lib`);
   `docs/assistant-memory/cloud-period-2026-09-28.md`.
 - Open / next: (1) read `5b89f9f`'s and this commit's push runs, and the 2026-10-05 nightly's three `miri-slow` jobs;
-  (2) **P8-02** — the Verified-class adapter as a `.dpx` (`V2_P8_DESIGN.md`; P8-01 is complete, D-V2-95); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
+  (2) **P8-02** — the Verified-class adapter as a `.dpx`: start at step 1 of its build order in `V2_P8_DESIGN.md`
+  (written by this run from the code; P8-01 is complete, D-V2-95); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
   4.28), macOS's reads; (4) RW 7.17. **For the owner:** D-V2-95 (P8-01, and a hardware run's flags refused without one —
   a behaviour change for the ordinary run) is this run's decision.
