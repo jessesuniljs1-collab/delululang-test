@@ -906,8 +906,8 @@ pub(crate) fn serve_inner(
     // Until then the loop read one connection at a time, so N clients that connected and said nothing
     // delayed every client behind them — the e-stop's revoke among them — by about 5·N s (red: six held a
     // `Status` 30.6 s). Each reader still owes its request within `SERVE_READ_TIMEOUT`; at most
-    // `MAX_READERS` are reading at once, and a connection past that is dropped at once, so a flood costs
-    // threads it cannot grow without bound.
+    // `MAX_READERS` are reading or waiting to hand a request over at once, and a connection past that is
+    // dropped at once, so a flood costs threads it cannot grow without bound.
     const MAX_READERS: usize = 64;
     let (whole, requests) = std::sync::mpsc::sync_channel::<(Connection, Request)>(MAX_READERS);
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -945,12 +945,15 @@ pub(crate) fn serve_inner(
                     read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT))
                         .map_err(|e| format!("bad frame: {e}"))
                 })();
-                reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
                 match read {
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
                     Ok(req) => drop(whole.send((conn, req))),
                     Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
                 }
+                // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
+                // handler is a thread too, and a flood of whole requests grew one per connection (240 threads
+                // for 300 requests behind an answer being written, until this line moved here).
+                reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
             });
         });
     }
@@ -2229,6 +2232,63 @@ mod tests {
             "a request behind six silent connections waited {waited:?}: they queued it"
         );
         drop(silent);
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.40's own bound (the head chef's re-read of `7c55af9`): a reader counted only while it READ, not
+    /// while it waited to hand its whole request to a busy handler — so a flood of complete requests behind
+    /// one the handler is still answering grew a thread per connection, without bound. Every reader is
+    /// counted until its request is handed over, and a connection past the bound is dropped at once.
+    /// Measured on Linux, by the process's own thread count.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_flood_of_whole_requests_behind_a_busy_handler_grows_no_thread_past_the_bound() {
+        let threads = || {
+            std::fs::read_to_string("/proc/self/status")
+                .ok()
+                .and_then(|s| s.lines().find_map(|l| l.strip_prefix("Threads:").map(|n| n.trim().parse::<usize>().ok())))
+                .flatten()
+                .expect("the kernel says how many threads this process has")
+        };
+        let state = temp_state("flood");
+        let handle = start_daemon(&state);
+        // Hold the one handler: a large answer its client never reads, written within REPLY-HOLD-1's bound.
+        let (_root, child) = guarded_child(&state);
+        let why = "w".repeat(4 * 1024 * 1024);
+        let resp = request(&state, ReqBody::GuardRequest { node: child, uses: vec!["declassify:*".into()], why }).unwrap();
+        assert!(matches!(resp, Response::GuardRequested { .. }), "{resp:?}");
+        let mut holder = broker_transport::connect(&state).expect("the holder connects");
+        write_frame(&mut holder, &Request::new(ReqBody::GuardPending)).expect("the holder asks");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let before = threads();
+        // Three hundred clients, each a whole `Status`, none reading its answer.
+        let mut flood = Vec::new();
+        for _ in 0..300 {
+            if let Ok(mut c) = broker_transport::connect(&state) {
+                if write_frame(&mut c, &Request::new(ReqBody::Status)).is_ok() {
+                    flood.push(c);
+                }
+            }
+        }
+        let mut peak = before;
+        for _ in 0..20 {
+            peak = peak.max(threads());
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(
+            peak <= before + 64 + 4,
+            "{} whole requests behind a busy handler grew this process from {before} to {peak} threads",
+            flood.len()
+        );
+        drop(flood);
+        drop(holder);
+        // The flood's readers hand their requests over and end; until they have, a new connection past the
+        // bound is dropped (fail closed) — so the daemon is asked until it answers, then stopped.
+        let t = std::time::Instant::now();
+        while request(&state, ReqBody::Status).is_err() && t.elapsed() < std::time::Duration::from_secs(30) {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }
