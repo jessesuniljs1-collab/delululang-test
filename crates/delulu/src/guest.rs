@@ -1255,14 +1255,20 @@ fn serve_under(
     let attested = match &attest_plan {
         None => None,
         Some((key, nonce, path)) => {
-            let checked = crate::attest::await_and_verify(path, key, nonce, CONNECT_DEADLINE, || {
+            // D-V2-89: a statement that binds a launcher is checked against the one this host started.
+            let started = resolved.as_ref().map(|l| l.blake3.as_str());
+            let checked = crate::attest::await_and_verify(path, key, nonce, started, CONNECT_DEADLINE, || {
                 child.try_wait().ok().flatten().map(|st| st.to_string())
             });
             match checked {
                 Ok(a) => {
+                    let bound = match &a.launcher_blake3 {
+                        Some(d) => format!(", for the launcher it measured ({}…, the one started)", &d[..16]),
+                        None => String::new(),
+                    };
                     eprintln!(
-                        "sandbox: attested by `{}`, signed with the pinned key {}… for this run: {} — the attester's \
-                         word, not a measurement; the host's own guarantees are unchanged",
+                        "sandbox: attested by `{}`, signed with the pinned key {}… for this run{bound}: {} — the \
+                         attester's word, not a measurement; the host's own guarantees are unchanged",
                         a.attester,
                         &a.key[..16],
                         a.guarantees.join("; ")

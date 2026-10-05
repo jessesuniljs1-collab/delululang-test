@@ -12,7 +12,9 @@
 //! - the flag is refused where it cannot apply (no sandbox, L1, L2, not a key), before anything runs;
 //! - the words after `--` belong to the attester's command, never to `delulu`;
 //! - (D-V2-87) a claim that names a property — `PROPERTY: how` — answers that property's requirement, as
-//!   the attester's word beside a state that stays `unknown`; one it does not name still refuses.
+//!   the attester's word beside a state that stays `unknown`; one it does not name still refuses;
+//! - (D-V2-89) a statement that names the launcher its attester measured is checked against the launcher
+//!   the host started, and one for another file is refused before the program is sent.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -456,5 +458,54 @@ fn an_attester_that_vouches_for_each_property_by_name_meets_hostile_agent_and_th
         assert!(!String::from_utf8_lossy(&r.stdout).contains("wrote"), "{name}: the program ran: {}", text(&r));
         assert!(!made.exists(), "{name}: the program's effect happened on a boundary nobody vouched for");
     }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// PS-E-04's attestation binding (D-V2-89): an attester may name the launcher it MEASURED — the BLAKE3 of
+/// the file, computed by the attester itself, never the host's digest echoed back — and the host checks it
+/// against the launcher it started (`launcher_blake3`, PS-E-04) before the program is sent. Absent on
+/// `3ee18ac`: a statement could not say which launcher it vouched for (RW 4.28's open item), and the
+/// reference attester had no way to measure one. A statement for another file is refused, naming both
+/// digests, and the program never runs.
+#[test]
+fn an_attester_that_measured_the_launcher_binds_it_and_a_statement_for_another_file_is_refused() {
+    let d = lab("bind");
+    program(&d);
+    let (seed, public) = keygen(&d, "attester");
+    let exe = exe();
+    let made = d.join("out").join("made.txt");
+    // The host starts `exe` (the command's first word); the attester measures the file it is told to.
+    let launcher = |measured: &str| {
+        format!(
+            "external:{exe} sandbox attest --key {seed} --attester test-attester --guarantee g --measure-launcher {measured} \
+             -- {exe} __guest --stdio-pipes"
+        )
+    };
+    let report = d.join("bound.json");
+    let r = run_attested(&d, &launcher(&exe), &public, &report);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r));
+    assert!(made.exists(), "the program's effect did not happen");
+    assert!(text(&r).contains("for the launcher it measured"), "the run says the statement binds the launcher: {}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let s = &v["sandbox"];
+    let started = s["launcher_blake3"].as_str().unwrap_or_else(|| panic!("the host hashed its launcher: {s}"));
+    assert_eq!(s["attestation"]["launcher_blake3"], started, "the attester's measurement is the launcher started: {s}");
+    assert_eq!(s["attestation"]["verified"], true, "{s}");
+    let f = d.join("sandbox.json");
+    std::fs::write(&f, s.to_string()).unwrap();
+    let val = delulu(&d, &["schema", "validate", "sandbox", f.to_str().unwrap(), "--json"]);
+    let val: serde_json::Value = serde_json::from_slice(&val.stdout).unwrap();
+    assert_eq!(val["validate"]["valid"], true, "{:#}", val["validate"]["errors"]);
+    std::fs::remove_file(&made).unwrap();
+
+    // The same attester, the same key, measuring another file: the statement is not for this launcher.
+    let other = d.join("w.delulu").display().to_string().replace('\\', "/");
+    let r = run_attested(&d, &launcher(&other), &public, &d.join("other.json"));
+    assert_eq!(r.status.code(), Some(1), "{}", text(&r));
+    assert!(text(&r).contains("not the launcher it measured"), "{}", text(&r));
+    assert!(text(&r).contains(started), "it names the launcher the host started: {}", text(&r));
+    assert!(text(&r).contains("the program was never sent"), "{}", text(&r));
+    assert!(!String::from_utf8_lossy(&r.stdout).contains("wrote"), "the program ran: {}", text(&r));
+    assert!(!made.exists(), "the program's effect happened under a statement for another launcher");
     let _ = std::fs::remove_dir_all(&d);
 }

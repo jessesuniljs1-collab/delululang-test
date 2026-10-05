@@ -503,6 +503,7 @@ mod tests {
             key: "00".repeat(32),
             attester: "ci".into(),
             guarantees: claims.to_vec(),
+            launcher_blake3: None,
         };
         let four = all[..4].to_vec();
         for (name, claims, measured_by_host, confirmed) in [
@@ -651,6 +652,7 @@ mod property_tests {
                 "gVisor".into(),
                 "Resource_Ceiling: cgroup".into(),
             ],
+            launcher_blake3: None,
         };
         let v = properties(&[], false, Some(&a));
         assert!(states(&v).iter().all(|(_, s)| s == "unknown"), "{v}");

@@ -451,7 +451,9 @@ directories only); `--launcher-digest HEX` pins it, and any other file is never 
 `--require-attestation HEX` and the program is sent only after the
 launcher's attester has signed a statement over this run's nonce with that ed25519 key; its claims come
 back as `sandbox.attestation` — the attester's word, never counted as a host guarantee (PS-D-02;
-`delulu sandbox attest` is a software attester, `DEPLOYMENT.md` has the format). At every level the host
+`delulu sandbox attest` is a software attester, `DEPLOYMENT.md` has the format). A statement that names
+the launcher its attester measured (`launcher_blake3`, `--measure-launcher FILE`) is refused for any
+other launcher than the one started (D-V2-89). At every level the host
 decides and performs every effect, and the guest is sent the program only after it has confirmed its
 boundary for this run's `sandbox.generation` (PS-E-01). `sandbox.properties` says which of five
 properties that boundary has — filesystem and egress confinement, a privilege floor, host loss ending

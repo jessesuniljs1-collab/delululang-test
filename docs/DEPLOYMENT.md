@@ -242,6 +242,18 @@ report carries `sandbox.attestation = {key, attester, guarantees, verified: true
 beside `host_guarantees` and never merged into them. The level stays 3 — DeluluLang still measured none
 of the wall; it checked who said what about it.
 
+**An attester can bind its statement to the launcher it measured (D-V2-89, PS-E-04).** The run report's
+`sandbox.launcher_blake3` is the BLAKE3 of the launcher file the host started. An attester that measured that
+file ITSELF — a CI system that built it, a verifier that read it — may put the digest in its statement as
+`launcher_blake3` (64 lowercase hex characters); such a statement is `delulu-attestation-v2`, and that is the
+first line of what is signed (`"launcher_blake3"` sits between `"guarantees"` and `"nonce"` in the canonical
+JSON). The host refuses it, before the program is sent, unless the launcher it started has that digest:
+"not the launcher it measured". The host never tells the launcher its digest — an attester that echoed the
+host's own number back would bind nothing. A statement without the field stays v1, byte for byte as before.
+`delulu sandbox attest … --measure-launcher FILE` hashes `FILE` and binds it; the report then carries
+`sandbox.attestation.launcher_blake3`, equal to `sandbox.launcher_blake3`. It complements `--launcher-digest`:
+that pins a digest the operator knows; this one checks a digest the attester vouches for.
+
 **An attester can vouch for a boundary property by name (D-V2-87).** A claim whose text is one of the five
 properties a run reports, then a colon and how it holds — `filesystem_confinement: runsc, no host mounts`,
 `egress_confinement: --network=none`, `privilege_floor: rootless`, `host_loss_ends_guest: the launcher
@@ -274,6 +286,7 @@ are split on whitespace, so a claim inside `external:` has none — this script'
 
 ```sh
 exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu-guest:1.0.0" \
+  --measure-launcher /usr/local/bin/delulu-gvisor-attested \
   --guarantee "filesystem_confinement: gVisor, no host mounts" --guarantee "egress_confinement: --network=none" \
   --guarantee "privilege_floor: rootless runsc" --guarantee "host_loss_ends_guest: the container dies with this script" \
   --guarantee "resource_ceiling: --memory=256m --cpus=1" -- /usr/local/bin/delulu-gvisor

@@ -24,6 +24,11 @@
 //! themselves are the attester's: the report carries them under `sandbox.attestation`, beside the
 //! host's own guarantees and never merged into them, and the level stays 3.
 //!
+//! A statement may also bind the LAUNCHER (D-V2-89, PS-E-04): `launcher_blake3`, the BLAKE3 of the launcher
+//! file the attester measured itself, makes it a `delulu-attestation-v2` statement — the format line that is
+//! signed says which — and the host refuses it unless the launcher it started (`launcher_blake3` in the
+//! report) is that file. `delulu sandbox attest --measure-launcher FILE` measures one.
+//!
 //! A claim may NAME one of the five boundary properties a run reports — `egress_confinement: runsc
 //! --network=none` — and then (D-V2-87) it answers that property's requirement under a profile that
 //! requires it (`hostile-agent`): the property's state stays `unknown`, because DeluluLang measured none
@@ -42,6 +47,9 @@ use serde::{Deserialize, Serialize};
 
 /// The document's format, and the first line of what is signed.
 pub const FORMAT: &str = "delulu-attestation-v1";
+/// D-V2-89: the format of a statement that binds the launcher its attester measured
+/// (`launcher_blake3`). Each format is for its own kind of statement: v1 binds no launcher, v2 one.
+pub const FORMAT_BOUND: &str = "delulu-attestation-v2";
 /// The environment variable that carries this run's nonce to the launcher, as 64 lowercase hex digits.
 pub const ENV_NONCE: &str = "DELULU_ATTEST_NONCE";
 /// The environment variable that names where the launcher writes the document.
@@ -63,7 +71,23 @@ const MAX_TEXT_CHARS: usize = 256;
 pub struct Statement {
     pub attester: String,
     pub guarantees: Vec<String>,
+    /// D-V2-89: the BLAKE3 of the launcher the attester MEASURED itself, in lowercase hex — never the
+    /// host's digest echoed back (the host gives the launcher none). Absent, the statement binds no launcher
+    /// and is v1, byte for byte as before; present, it is v2, and the host refuses it for any other launcher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher_blake3: Option<String>,
     pub nonce: String,
+}
+
+impl Statement {
+    /// The format this statement is signed under: v2 exactly when it binds a launcher.
+    pub fn format(&self) -> &'static str {
+        if self.launcher_blake3.is_some() {
+            FORMAT_BOUND
+        } else {
+            FORMAT
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,9 +98,9 @@ pub struct Document {
     pub signature: String,
 }
 
-/// The bytes the signature covers.
+/// The bytes the signature covers: the statement's own format, a newline, its canonical JSON.
 pub fn signed_bytes(statement: &Statement) -> Vec<u8> {
-    let mut msg = format!("{FORMAT}\n").into_bytes();
+    let mut msg = format!("{}\n", statement.format()).into_bytes();
     msg.extend(serde_json::to_vec(statement).expect("a statement serializes"));
     msg
 }
@@ -126,6 +150,11 @@ fn check_statement(s: &Statement) -> Result<(), String> {
     for g in &s.guarantees {
         check_text("a guarantee", g)?;
     }
+    if let Some(d) = &s.launcher_blake3 {
+        if d.len() != 64 || !d.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err("its `launcher_blake3` is not a BLAKE3 digest in lowercase hex (64 characters)".to_string());
+        }
+    }
     Ok(())
 }
 
@@ -133,7 +162,7 @@ fn check_statement(s: &Statement) -> Result<(), String> {
 pub fn sign(seed: &[u8; 32], statement: Statement) -> Result<Document, String> {
     check_statement(&statement)?;
     let signature = crate::breakglass::encode_hex(&delulu_runtime::plugin::sign_detached(seed, &signed_bytes(&statement)));
-    Ok(Document { format: FORMAT.to_string(), statement, signature })
+    Ok(Document { format: statement.format().to_string(), statement, signature })
 }
 
 /// A statement that verified: the attester's claims, labelled as the attester's.
@@ -143,6 +172,8 @@ pub struct Attested {
     pub key: String,
     pub attester: String,
     pub guarantees: Vec<String>,
+    /// D-V2-89: the launcher the attester measured — checked equal to the one the host started.
+    pub launcher_blake3: Option<String>,
 }
 
 /// D-V2-87: the boundary property a claim NAMES, and how the attester says it holds — a claim of the form
@@ -171,12 +202,16 @@ impl Attested {
 
     /// `sandbox.attestation` in a run report.
     pub fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut v = serde_json::json!({
             "key": self.key,
             "attester": self.attester,
             "guarantees": self.guarantees,
             "verified": true,
-        })
+        });
+        if let Some(d) = &self.launcher_blake3 {
+            v["launcher_blake3"] = serde_json::json!(d);
+        }
+        v
     }
 }
 
@@ -206,6 +241,8 @@ pub enum Refusal {
     WrongNonce,
     BadSignature(String),
     WrongKey { pinned: String, signer: String },
+    /// D-V2-89: the attester measured one launcher, and the host started another.
+    WrongLauncher { measured: String, started: String },
 }
 
 impl Refusal {
@@ -223,6 +260,7 @@ impl Refusal {
             Refusal::WrongNonce => "wrong-nonce",
             Refusal::BadSignature(_) => "bad-signature",
             Refusal::WrongKey { .. } => "wrong-key",
+            Refusal::WrongLauncher { .. } => "wrong-launcher",
         }
     }
 
@@ -246,7 +284,10 @@ impl Refusal {
                  sandbox attest` does)"
             ),
             Refusal::NotADocument(e) => format!("the attestation is not a `{FORMAT}` document ({e})"),
-            Refusal::WrongFormat(f) => format!("the attestation's format is `{f}`, and this build reads `{FORMAT}`"),
+            Refusal::WrongFormat(f) => format!(
+                "the attestation's format is `{f}`, and this build reads `{FORMAT}` for a statement that binds no launcher \
+                 and `{FORMAT_BOUND}` for one that binds the launcher its attester measured — each for its own kind"
+            ),
             Refusal::BadStatement(e) => format!("the attestation's statement is refused: {e}"),
             Refusal::WrongNonce => {
                 "the attestation was not made for this run: it carries another nonce (a replayed or stale document)"
@@ -256,13 +297,18 @@ impl Refusal {
             Refusal::WrongKey { pinned, signer } => format!(
                 "the attestation is signed by {signer}, and the key this run pinned is {pinned}"
             ),
+            Refusal::WrongLauncher { measured, started } => format!(
+                "the attester vouched for the launcher whose BLAKE3 is {measured}, and the host started {started} — not \
+                 the launcher it measured"
+            ),
         };
         format!("{why}. Nothing ran: the program was never sent to the guest")
     }
 }
 
-/// Check a document's bytes against the pinned key and this run's nonce.
-pub fn verify(bytes: &[u8], pinned: &str, nonce: &str) -> Result<Attested, Refusal> {
+/// Check a document's bytes against the pinned key and this run's nonce — and (D-V2-89), where the statement
+/// binds a launcher, against `started`, the BLAKE3 of the launcher the host started.
+pub fn verify(bytes: &[u8], pinned: &str, nonce: &str, started: Option<&str>) -> Result<Attested, Refusal> {
     if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
         return Err(Refusal::TooLarge);
     }
@@ -275,7 +321,8 @@ pub fn verify(bytes: &[u8], pinned: &str, nonce: &str) -> Result<Attested, Refus
     })?;
     let doc: Document =
         serde_json::from_str(text).map_err(|e| if e.is_eof() { Refusal::Incomplete } else { Refusal::NotADocument(e.to_string()) })?;
-    if doc.format != FORMAT {
+    // Each format for its own kind of statement: v1 binds no launcher, v2 one (D-V2-89).
+    if doc.format != doc.statement.format() {
         return Err(Refusal::WrongFormat(doc.format.chars().take(64).collect()));
     }
     check_statement(&doc.statement).map_err(Refusal::BadStatement)?;
@@ -292,7 +339,20 @@ pub fn verify(bytes: &[u8], pinned: &str, nonce: &str) -> Result<Attested, Refus
     if doc.statement.nonce != nonce {
         return Err(Refusal::WrongNonce);
     }
-    Ok(Attested { key: pinned.to_string(), attester: doc.statement.attester, guarantees: doc.statement.guarantees })
+    if let Some(measured) = &doc.statement.launcher_blake3 {
+        if Some(measured.as_str()) != started {
+            return Err(Refusal::WrongLauncher {
+                measured: measured.clone(),
+                started: started.unwrap_or("no launcher").to_string(),
+            });
+        }
+    }
+    Ok(Attested {
+        key: pinned.to_string(),
+        attester: doc.statement.attester,
+        guarantees: doc.statement.guarantees,
+        launcher_blake3: doc.statement.launcher_blake3,
+    })
 }
 
 /// Wait for the launcher's document at `path`, then check it. `ended` answers whether the launcher has
@@ -301,6 +361,7 @@ pub fn await_and_verify(
     path: &std::path::Path,
     pinned: &str,
     nonce: &str,
+    started: Option<&str>,
     deadline: std::time::Duration,
     mut ended: impl FnMut() -> Option<String>,
 ) -> Result<Attested, Refusal> {
@@ -327,7 +388,7 @@ pub fn await_and_verify(
                 }
                 // Bounded whatever the file does between the size check and the read.
                 f.take(MAX_DOCUMENT_BYTES + 1).read_to_end(&mut bytes).map_err(|e| Refusal::Unreadable(e.to_string()))?;
-                return verify(&bytes, pinned, nonce);
+                return verify(&bytes, pinned, nonce, started);
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(Refusal::Unreadable(e.to_string())),
@@ -387,6 +448,7 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
     let mut key = None;
     let mut attester = None;
     let mut guarantees = Vec::new();
+    let mut measure = None;
     let mut i = 0;
     while i < flags.len() {
         let a = flags[i].as_str();
@@ -398,7 +460,7 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
             Some((n, v)) if n.starts_with("--") => (n, Some(v.to_string())),
             _ => (a, None),
         };
-        if !matches!(name, "--key" | "--attester" | "--guarantee") {
+        if !matches!(name, "--key" | "--attester" | "--guarantee" | "--measure-launcher") {
             return Err(usage(if a == "--json" {
                 "`sandbox attest` has no `--json`: its standard output is the guest's channel, and an envelope there \
                  would be read as a frame"
@@ -418,6 +480,7 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
             "--key" if key.is_none() => key = Some(value),
             "--attester" if attester.is_none() => attester = Some(value),
             "--guarantee" => guarantees.push(value),
+            "--measure-launcher" if measure.is_none() => measure = Some(value),
             _ => return Err(usage(format!("`{name}` is given more than once"))),
         }
         i += 1;
@@ -440,12 +503,20 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
     if nonce.len() != 64 || crate::breakglass::decode_hex(&nonce).is_none() {
         return Err(usage(format!("`${ENV_NONCE}` is not a 32-byte nonce in hex")));
     }
+    // D-V2-89: the launcher's digest is MEASURED here, from the file — the host tells the launcher none.
+    let launcher_blake3 = match &measure {
+        None => None,
+        Some(f) => match std::fs::read(f) {
+            Ok(bytes) => Some(blake3::hash(&bytes).to_hex().to_string()),
+            Err(e) => return Err((1, crate::cli::unreadable(f, &e))),
+        },
+    };
     let seed: [u8; 32] = match std::fs::read(&key) {
         Ok(b) if b.len() == 32 => b.try_into().expect("32 bytes"),
         Ok(b) => return Err(usage(format!("`{key}` is {} bytes, not a 32-byte ed25519 seed", b.len()))),
         Err(e) => return Err(usage(crate::cli::unreadable(&key, &e))),
     };
-    let doc = sign(&seed, Statement { attester, guarantees, nonce }).map_err(usage)?;
+    let doc = sign(&seed, Statement { attester, guarantees, launcher_blake3, nonce }).map_err(usage)?;
     let text = serde_json::to_string_pretty(&doc).expect("a document serializes");
     // Whole or not at all: the host reads the file the moment it exists.
     let out = std::path::PathBuf::from(out);
@@ -482,6 +553,7 @@ mod tests {
         Statement {
             attester: "ci-image-builder".to_string(),
             guarantees: vec!["gVisor runsc".to_string(), "no network".to_string()],
+            launcher_blake3: None,
             nonce: nonce.to_string(),
         }
     }
@@ -498,7 +570,7 @@ mod tests {
     fn a_statement_signed_by_the_pinned_key_for_this_run_verifies_and_is_the_attesters_word() {
         let pinned = delulu_runtime::plugin::public_key_hex(&SEED);
         let d = sign(&SEED, statement(&nonce())).unwrap();
-        let a = verify(&doc_bytes(&d), &pinned, &nonce()).unwrap();
+        let a = verify(&doc_bytes(&d), &pinned, &nonce(), None).unwrap();
         assert_eq!(a.attester, "ci-image-builder");
         assert_eq!(a.guarantees, vec!["gVisor runsc", "no network"]);
         assert_eq!(a.to_json()["verified"], true);
@@ -509,12 +581,17 @@ mod tests {
             "format": FORMAT,
         }))
         .unwrap();
-        assert!(verify(pretty.as_bytes(), &pinned, &nonce()).is_ok());
+        assert!(verify(pretty.as_bytes(), &pinned, &nonce(), None).is_ok());
     }
 
     #[test]
     fn the_canonical_form_is_the_one_the_module_documents() {
-        let s = Statement { attester: "a \"q\" \\ é".to_string(), guarantees: vec!["g".to_string()], nonce: "00".to_string() };
+        let s = Statement {
+            attester: "a \"q\" \\ é".to_string(),
+            guarantees: vec!["g".to_string()],
+            launcher_blake3: None,
+            nonce: "00".to_string(),
+        };
         assert_eq!(
             String::from_utf8(signed_bytes(&s)).unwrap(),
             "delulu-attestation-v1\n{\"attester\":\"a \\\"q\\\" \\\\ é\",\"guarantees\":[\"g\"],\"nonce\":\"00\"}"
@@ -528,39 +605,39 @@ mod tests {
 
         // Another run's document: replay.
         let other_run = sign(&SEED, statement(&"cd".repeat(32))).unwrap();
-        assert_eq!(verify(&doc_bytes(&other_run), &pinned, &nonce()), Err(Refusal::WrongNonce));
+        assert_eq!(verify(&doc_bytes(&other_run), &pinned, &nonce(), None), Err(Refusal::WrongNonce));
 
         // A valid signature by a key nobody pinned.
         let stranger = sign(&OTHER, statement(&nonce())).unwrap();
-        assert!(matches!(verify(&doc_bytes(&stranger), &pinned, &nonce()), Err(Refusal::WrongKey { .. })));
+        assert!(matches!(verify(&doc_bytes(&stranger), &pinned, &nonce(), None), Err(Refusal::WrongKey { .. })));
 
         // A claim added after signing.
         let mut widened = good.clone();
         widened.statement.guarantees.push("hardware-attested".to_string());
-        assert!(matches!(verify(&doc_bytes(&widened), &pinned, &nonce()), Err(Refusal::BadSignature(_))));
+        assert!(matches!(verify(&doc_bytes(&widened), &pinned, &nonce(), None), Err(Refusal::BadSignature(_))));
 
         // The pinned key's own bytes swapped in front of a stranger's signature.
         let mut spliced = stranger.clone();
         spliced.signature = format!("{pinned}{}", &stranger.signature[64..]);
-        assert!(matches!(verify(&doc_bytes(&spliced), &pinned, &nonce()), Err(Refusal::BadSignature(_))));
+        assert!(matches!(verify(&doc_bytes(&spliced), &pinned, &nonce(), None), Err(Refusal::BadSignature(_))));
 
         let mut wrong_format = good.clone();
         wrong_format.format = "delulu-attestation-v2".to_string();
-        assert!(matches!(verify(&doc_bytes(&wrong_format), &pinned, &nonce()), Err(Refusal::WrongFormat(_))));
+        assert!(matches!(verify(&doc_bytes(&wrong_format), &pinned, &nonce(), None), Err(Refusal::WrongFormat(_))));
 
         // An unknown field is refused, never dropped: in the statement and in the document.
         let mut v: serde_json::Value = serde_json::to_value(&good).unwrap();
         v["statement"]["level"] = serde_json::json!(4);
-        assert!(matches!(verify(&serde_json::to_vec(&v).unwrap(), &pinned, &nonce()), Err(Refusal::NotADocument(_))));
+        assert!(matches!(verify(&serde_json::to_vec(&v).unwrap(), &pinned, &nonce(), None), Err(Refusal::NotADocument(_))));
         let mut v: serde_json::Value = serde_json::to_value(&good).unwrap();
         v["verified"] = serde_json::json!(true);
-        assert!(matches!(verify(&serde_json::to_vec(&v).unwrap(), &pinned, &nonce()), Err(Refusal::NotADocument(_))));
+        assert!(matches!(verify(&serde_json::to_vec(&v).unwrap(), &pinned, &nonce(), None), Err(Refusal::NotADocument(_))));
 
-        assert!(matches!(verify(b"not json", &pinned, &nonce()), Err(Refusal::NotADocument(_))));
+        assert!(matches!(verify(b"not json", &pinned, &nonce(), None), Err(Refusal::NotADocument(_))));
         // Read mid-write: nothing yet, or a prefix of a good document. Never a document, and said so.
         let whole = doc_bytes(&good);
         for cut in [0, 1, whole.len() / 2, whole.len() - 2] {
-            assert_eq!(verify(&whole[..cut], &pinned, &nonce()), Err(Refusal::Incomplete), "cut at {cut}");
+            assert_eq!(verify(&whole[..cut], &pinned, &nonce(), None), Err(Refusal::Incomplete), "cut at {cut}");
         }
         // ... cut inside a character: a claim in another script, stopped after the first of its bytes.
         let mut accented = statement(&nonce());
@@ -568,13 +645,13 @@ mod tests {
         let whole = doc_bytes(&sign(&SEED, accented).unwrap());
         let inside = whole.iter().position(|&b| b >= 0x80).expect("a multi-byte character") + 1;
         assert!(std::str::from_utf8(&whole[..inside]).is_err(), "the cut is inside the character");
-        assert_eq!(verify(&whole[..inside], &pinned, &nonce()), Err(Refusal::Incomplete));
-        assert!(matches!(verify(&[0xff, 0xfe], &pinned, &nonce()), Err(Refusal::NotADocument(_))));
-        assert_eq!(verify(&vec![b' '; 70_000], &pinned, &nonce()), Err(Refusal::TooLarge));
+        assert_eq!(verify(&whole[..inside], &pinned, &nonce(), None), Err(Refusal::Incomplete));
+        assert!(matches!(verify(&[0xff, 0xfe], &pinned, &nonce(), None), Err(Refusal::NotADocument(_))));
+        assert_eq!(verify(&vec![b' '; 70_000], &pinned, &nonce(), None), Err(Refusal::TooLarge));
 
         let mut not_hex = good.clone();
         not_hex.signature = "zz".repeat(96);
-        assert!(matches!(verify(&doc_bytes(&not_hex), &pinned, &nonce()), Err(Refusal::BadSignature(_))));
+        assert!(matches!(verify(&doc_bytes(&not_hex), &pinned, &nonce(), None), Err(Refusal::BadSignature(_))));
     }
 
     #[test]
@@ -591,7 +668,65 @@ mod tests {
             // Signed anyway, by an attester that does not check: the host refuses it too.
             let sig = crate::breakglass::encode_hex(&delulu_runtime::plugin::sign_detached(&SEED, &signed_bytes(&bad)));
             let d = Document { format: FORMAT.to_string(), statement: bad.clone(), signature: sig };
-            assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce()), Err(Refusal::BadStatement(_))), "{bad:?}");
+            assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce(), None), Err(Refusal::BadStatement(_))), "{bad:?}");
+        }
+    }
+
+    /// D-V2-89: a statement that binds a launcher is v2 — its format line and its canonical JSON both say
+    /// so — and is served only for the launcher it names; every way of getting that wrong is refused.
+    #[test]
+    fn a_statement_that_binds_a_launcher_is_v2_and_holds_only_for_that_launcher() {
+        let pinned = delulu_runtime::plugin::public_key_hex(&SEED);
+        let launcher = blake3::hash(b"the launcher").to_hex().to_string();
+        let other = blake3::hash(b"another launcher").to_hex().to_string();
+        let bound = Statement { launcher_blake3: Some(launcher.clone()), ..statement(&nonce()) };
+        assert_eq!(
+            String::from_utf8(signed_bytes(&bound)).unwrap(),
+            format!(
+                "delulu-attestation-v2\n{{\"attester\":\"ci-image-builder\",\"guarantees\":[\"gVisor runsc\",\"no network\"],\
+                 \"launcher_blake3\":\"{launcher}\",\"nonce\":\"{}\"}}",
+                nonce()
+            )
+        );
+        let d = sign(&SEED, bound.clone()).unwrap();
+        assert_eq!(d.format, FORMAT_BOUND);
+        // The launcher it names, started: served, and the binding carried into the report.
+        let a = verify(&doc_bytes(&d), &pinned, &nonce(), Some(&launcher)).unwrap();
+        assert_eq!(a.launcher_blake3.as_deref(), Some(launcher.as_str()));
+        assert_eq!(a.to_json()["launcher_blake3"], launcher.as_str());
+        // Another launcher, or none: refused, naming both.
+        match verify(&doc_bytes(&d), &pinned, &nonce(), Some(&other)) {
+            Err(Refusal::WrongLauncher { measured, started }) => assert_eq!((measured, started), (launcher.clone(), other.clone())),
+            r => panic!("served for another launcher: {r:?}"),
+        }
+        assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce(), None), Err(Refusal::WrongLauncher { .. })));
+        // An unbound statement is v1 exactly as before, and says nothing of the launcher.
+        let unbound = sign(&SEED, statement(&nonce())).unwrap();
+        assert_eq!(unbound.format, FORMAT);
+        let a = verify(&doc_bytes(&unbound), &pinned, &nonce(), Some(&other)).unwrap();
+        assert!(a.launcher_blake3.is_none() && a.to_json().get("launcher_blake3").is_none());
+        // Each format for its own kind: a bound statement under v1's line, an unbound one under v2's.
+        let mut v1_line = d.clone();
+        v1_line.format = FORMAT.to_string();
+        assert!(matches!(verify(&doc_bytes(&v1_line), &pinned, &nonce(), Some(&launcher)), Err(Refusal::WrongFormat(_))));
+        let mut v2_line = unbound.clone();
+        v2_line.format = FORMAT_BOUND.to_string();
+        assert!(matches!(verify(&doc_bytes(&v2_line), &pinned, &nonce(), None), Err(Refusal::WrongFormat(_))));
+        // The launcher changed after signing, or the binding dropped to pass as v1: the signature says no.
+        let mut swapped = d.clone();
+        swapped.statement.launcher_blake3 = Some(other.clone());
+        assert!(matches!(verify(&doc_bytes(&swapped), &pinned, &nonce(), Some(&other)), Err(Refusal::BadSignature(_))));
+        let mut dropped = d.clone();
+        dropped.statement.launcher_blake3 = None;
+        dropped.format = FORMAT.to_string();
+        assert!(matches!(verify(&doc_bytes(&dropped), &pinned, &nonce(), None), Err(Refusal::BadSignature(_))));
+        // A digest that is not one, in any spelling but the canonical: refused by both sides.
+        for bad in [launcher.to_ascii_uppercase(), launcher[..63].to_string(), format!("{launcher}0"), "zz".repeat(32)] {
+            let s = Statement { launcher_blake3: Some(bad.clone()), ..statement(&nonce()) };
+            assert!(sign(&SEED, s.clone()).is_err(), "the attester refuses to sign {bad}");
+            let sig = crate::breakglass::encode_hex(&delulu_runtime::plugin::sign_detached(&SEED, &signed_bytes(&s)));
+            let d = Document { format: FORMAT_BOUND.to_string(), statement: s, signature: sig };
+            assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce(), Some(&bad)), Err(Refusal::BadStatement(_))), "{bad}");
         }
     }
 
@@ -615,6 +750,7 @@ mod tests {
             key: "00".repeat(32),
             attester: "a".into(),
             guarantees: vec!["egress_confinement: one".into(), "gVisor".into(), "egress_confinement:two".into(), "privilege_floor".into()],
+            launcher_blake3: None,
         };
         assert_eq!(a.vouches_for("egress_confinement").as_deref(), Some("one; two"));
         assert_eq!(a.vouches_for("privilege_floor").as_deref(), Some("the attester did not say how"));
@@ -640,14 +776,14 @@ mod tests {
         let path = dir.join(FILE_NAME);
         let pinned = delulu_runtime::plugin::public_key_hex(&SEED);
         let t = std::time::Instant::now();
-        let r = await_and_verify(&path, &pinned, &nonce(), std::time::Duration::from_secs(30), || Some("exit 0".to_string()));
+        let r = await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(30), || Some("exit 0".to_string()));
         assert_eq!(r, Err(Refusal::LauncherEnded("exit 0".to_string())));
         assert!(t.elapsed() < std::time::Duration::from_secs(5));
-        let r = await_and_verify(&path, &pinned, &nonce(), std::time::Duration::from_millis(200), || None);
+        let r = await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_millis(200), || None);
         assert_eq!(r, Err(Refusal::Absent(std::time::Duration::from_millis(200))));
         // Written and then the launcher ended at once: the document still counts.
         std::fs::write(&path, doc_bytes(&sign(&SEED, statement(&nonce())).unwrap())).unwrap();
-        assert!(await_and_verify(&path, &pinned, &nonce(), std::time::Duration::from_secs(5), || Some("exit 0".to_string())).is_ok());
+        assert!(await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(5), || Some("exit 0".to_string())).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

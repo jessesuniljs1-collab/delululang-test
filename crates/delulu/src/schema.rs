@@ -497,7 +497,8 @@ fn defs() -> Value {
                 ("guarantees", str_list.clone()),
                 ("verified", t("boolean")),
             ],
-            &[],
+            // D-V2-89: the launcher the attester measured, where its statement binds one (the one started).
+            &[("launcher_blake3", t("string"))],
         ), "PS-D-02: an external launcher's attester's statement — its claims, as its own; `verified` is true only \
             where the signature, the pinned key and this run's nonce all checked (a dry run verifies nothing)"),
         "microvm_image": described(obj(
