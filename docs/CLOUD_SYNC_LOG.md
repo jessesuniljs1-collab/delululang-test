@@ -1468,8 +1468,29 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 — a new subcommand is five gates; a server is classified by what it hands
   out, not by what it writes.
-- Open / next: (1) read this run's push runs (`e92870a`, `cb79333` and the records commit); (2) **P8-04** — the
-  out-of-band monitor (`V2_P8_DESIGN.md`: a separate principal holding one authority, revoke over one run's grant node,
-  reading only what the host recorded); then **P9**. PS-E's three residuals stay open. **For the owner:** D-V2-98
-  (P8-03) is this run's third decision.
+- Open / next: (1) read `1a022c9`'s CI run and this closing commit's (the run's `openshell` job read green already);
+  (2) **P8-04** — its build order is now in `V2_P8_DESIGN.md`, read against the code by this run, and the next run starts
+  at **step 3, option (b)**: a monitor node minted between the operator and the run, which can revoke its own subtree and
+  nothing else. **Option (c) — a revoke-only principal in the tree — is for the OWNER**, because it changes who may
+  revoke; the argument that it hardens rather than redefines (revocation is monotone, so a principal that can only
+  revoke cannot widen anything) is written out in the design. (3) Then **P9**. PS-E's three residuals stay open.
+  **For the owner:** D-V2-96, D-V2-97 (P8-02, RW 4.7 closed after D23) and D-V2-98 (P8-03) are this run's decisions, and
+  P8-04's option (c) is the one question it leaves him.
 
+### 2026-10-05 — routine run 14 (closing): P8-04's build order and its design question; the loop's new rule
+- Session: `https://claude.ai/code/session_015GbcmhgsYDQj97EaKh65ea`   Model: Claude Opus 5 (1M context)
+- Branch: `master`   Base: `1a022c9`
+- Commits: this one — `docs/DELULULANG_V2/V2_P8_DESIGN.md` (P8-04's build order, seven steps, with the
+  ancestor-must-bound-its-child tension and three ways out), `V2_LOG.md` (the reading, and option (c) left to the owner),
+  `docs/CLOUD_ROUTINE.md` (step 4's P8 line brought up to date; **new step 7a — a new surface is never one edit**: the
+  four gates an example passes and the five a subcommand does, none reachable from a witness target),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`
+- Survey and doctor: `survey check` ok (1,495 nodes, 13,511 edges), `survey findings` 0 errors, `doctor --check` all
+  checks passed; the document gates re-run green after the records
+- Verified: nothing built in this commit — a reading and the records. `master` green through `963328d` (CI
+  `37339300025`, 16 jobs, arm64 ping-pong MEASURED 2.96x/4.11x; `openshell` and `ocsf` success); `1a022c9`'s CI was in
+  progress at the close, its `openshell` job already green.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 and `docs/CLOUD_ROUTINE.md` step 7a (a new surface is never one edit).
+- Open / next: **P8-04 from step 3, option (b)** (`V2_P8_DESIGN.md`); read `1a022c9`'s and this commit's CI runs first.
+  **For the owner:** P8-04's option (c), a revoke-only principal in the grant tree.

@@ -4244,3 +4244,25 @@ writes no file and performs no effect, but it SERVES, as `lsp` and `mcp` do, and
 acts on. Only the local suite sees the last two; read on the runners at `e92870a` before `master` moved — macOS `37341164996` (56 passed), Windows `37341170246` (55), arm64 `37341173453` (the 6 `sim::` tests), every new witness named; the full suite alone through
 `scripts/suite.sh`, 2,154 passed, 0 failed, 16 ignored (160 binaries), cargo exit 0, the tree unmoved. **P8-03 is complete; next: P8-04**, the out-of-band monitor.
 
+## 2026-10-05 — routine run 14: P8-04's build order, read against the code (its design question named)
+
+With P8-03 complete and too little of the run left to build P8-04, its build order was read from the code and written
+into `V2_P8_DESIGN.md` (as run 12 did for P8-01 and run 13 for P8-02). Everything the monitor READS exists
+(`audit::query` over the hash-chained log, where a device command's refusal is a `deny` record on the device's own node
+because `Op::Actuate` round-trips to the broker per command; PS-E-06's OCSF export is the same records), and everything
+it DOES exists (`tree::revoke`, transitive, idempotent, and the fail-state and the guest's death already follow from it).
+
+**The slice's real design question, found by the reading:** `revoke` is allowed only when the target is the caller's own
+node or a DESCENDANT of it, so a monitor must be an ANCESTOR of the run — and a parent bounds its child (R-7), so an
+ancestor of a device run necessarily holds `Actuate`. "A separate principal holding exactly revoke" (D-V2-54) is not
+expressible in today's tree. Three ways are written out: (a) the monitor as an automated operator, buildable today and
+as strong as the operator — refused; (b) a monitor node minted between the operator and the run, which can revoke its
+own subtree and nothing else, with the residual named (its node holds the run's authority because a parent must; what
+keeps it unused is that the monitor performs no effect, plus the same-uid boundary) — recommended, and what the next run
+builds; (c) a revoke-only principal in the tree, the only form that makes the claim exact. (c) is put in front of the
+OWNER rather than taken under the delegation: the argument that it hardens rather than redefines is that revocation is
+monotone — a principal that can only revoke cannot widen what any program may do — but it still changes who may revoke,
+and that is the Authority model's own rule (`HANDOFF.md` §1, "harden, never redefine").
+
+Nothing built. **The next run starts at step 3, option (b).**
+

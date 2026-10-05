@@ -181,6 +181,59 @@ broker; the monitor's own death is recorded and then handled as the operator's r
 `quarantine` (the default for a run that holds a device: a watchdog that has gone quiet is treated as
 one that fired, as OpenShell treats the loss of its fence's controller) or `continue`.
 
+**The build order, read against the code by routine run 14 (2026-10-05, after P8-03 — D-V2-98):**
+
+1. *Everything the monitor READS exists.* `delulu_broker::audit::query(dir, &QueryFilter { node, action, effect })`
+   reads the hash-chained log a run writes (one shared reader, `audit::read_regular` — AUDIT-FIFO-1), and every record
+   carries `seq`, `ts`, `actor_node`, `action`, `target`, `authority`, `decision` and its hash. A device command
+   round-trips to the broker per command (`validate::Op::Actuate`, 10g — "what makes an operator e-stop reach a running
+   arm at all"), so a refused command is a `deny` record on the device's own node. PS-E-06's OCSF export (D-V2-78) is
+   the same records in another spelling, so a monitor reading either sees the same thing. Nothing new to build for
+   reading — the rules read `query` at a `--since SEQ` and never anything the host did not record.
+2. *Everything the monitor DOES exists too.* `tree::revoke(caller, target)` is transitive over the subtree, idempotent,
+   consumes one audit seq and stamps `revoked_by_seq` on every node; the device's fail-state and the guest's death
+   follow from it already (`AuthorityProbe` → `AuthorityState::Dead` → the declared fail-state, and `close_devices`).
+   `brokerd::request(state_dir, ReqBody::Revoke { caller, target })` is the whole action, one line.
+3. **The tension to resolve first, and it is the slice's real design question.** `revoke` is allowed only when the
+   target is the caller's own node or a DESCENDANT of it (`tree.rs`: `is_self_or_descendant`, else
+   `Denial::NotRevocable` — no upward or lateral reach). So a monitor that can revoke a run must be an ANCESTOR of the
+   run's node. But a parent bounds its child (R-7: no grantee exceeds its grantor), so an ancestor of a device run
+   necessarily holds at least `Actuate`. "A separate principal holding exactly revoke" is therefore not expressible in
+   today's tree. Three ways, and the choice belongs in a `D-V2-nn`:
+   - **(a) The monitor is an automated operator** — it holds the operator's own root node id. Buildable today with no
+     model change, and honest only if stated plainly: it is as strong as the operator, which is what the design wanted
+     to avoid.
+   - **(b) A monitor node between the operator and the run** (recommended): the operator mints a monitor node holding
+     exactly the run's authority, and the run attenuates under IT (`watch_devices`/`mint_device_nodes` already mint the
+     run's device nodes under whatever node the client holds, so this is a parameter, not a new path). The monitor can
+     then revoke its own subtree — the run — and nothing else: not laterally, not upward. The residual to name: its node
+     *holds* the run's authority because a parent must, and what keeps it from using that authority is that the monitor
+     program performs no effect, plus the same-uid boundary (§11.4, category 7).
+   - **(c) A revoke-only principal in the tree** — a watcher registered on a node, allowed to revoke that subtree and
+     nothing else. This is the only form that makes "exactly revoke" true. The argument that it is HARDENING rather than
+     redefining: revocation is monotone — it only ever removes authority, so a principal that can only revoke cannot
+     widen what any program may do. It still changes who may revoke, which is the Authority model's own rule, so it is
+     put in front of the owner rather than taken under the delegation.
+   Build (b) now, name (c) as what would make the claim exact, and record (a) as refused.
+4. *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
+   envelope refusal on an actuator; any break-glass use (`breakglass.rs` records one); any special-use reach. Each is a
+   predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count
+   printed in the quarantine's own record — a monitor that fires without saying what it saw is a monitor nobody can
+   audit.
+5. *The monitor's own death.* `quarantine` is the default for a run holding a device (a watchdog gone quiet is treated
+   as one that fired, as OpenShell treats the loss of its fence's controller) and `continue` is the operator's explicit
+   opt-out; the choice is recorded. The run's own dead-man is unaffected and remains the real-time guarantee — the
+   monitor is a second, slower line, never a replacement for it.
+6. *The surface.* `delulu monitor watch --state-dir DIR --node g_ID [--rule ...]... [--poll MS] [--on-monitor-death
+   quarantine|continue] [--json]`. **A new subcommand is FIVE gates** (routine run 14): the help line, the dispatcher's
+   arm and `cli::SUBCOMMANDS`; `json_contract`'s failing sweep AND its success table; and `mcp.rs`'s door rule — and
+   `monitor watch` is an EFFECTOR (it revokes), so no tool may start it.
+7. *Witnesses, against the simulator and `delulu device sim`* (P8-03): a guest that keeps probing refused operations
+   loses its actuator within a measured bound after the Nth refusal (the bound printed, as D-V2-90's sampler is); a
+   monitor that tries to grant is refused by the broker (a mutant that asks for `Issue` gets DL1421/`NotRevocable`); a
+   monitor given a node it is not an ancestor of revokes nothing (`Denial::NotRevocable`, the step-3 rule as a test);
+   and the monitor's death handled both ways.
+
 ## What stays out, and why
 
 - **A real device, and certification** — environment-blocked (no hardware in a cloud VM), and D23 and

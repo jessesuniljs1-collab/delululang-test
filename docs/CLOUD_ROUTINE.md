@@ -151,10 +151,13 @@ another OS, and then takes about seven minutes itself (run 5).
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
    step, `contained`'s set, D-V2-92), with three residuals kept open where they are recorded: E-03's H6 (RW 4.27 — twice
    stopped by a classifier; perhaps with the owner), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
-   **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (**built**, run 13,
-   D-V2-95, **complete** — L1 and L2, the simulator's clock and sign-off, the devices' journal in the report), P8-02 (its build order read against the code by run 13; steps 2–3 done, `418dcca` — start at step 3's thread) the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
-   P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
-   environment-blocked and says so.
+   **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (**complete**, run 13,
+   D-V2-95), P8-02 the Verified-class adapter as a `.dpx` (**complete**, run 14, D-V2-96 and D-V2-97 — RW 4.7 closed),
+   P8-03 the reference transport and the sim as a device (**complete**, run 14, D-V2-98 — `delulu device sim`),
+   **P8-04 the out-of-band monitor is next**: its build order is in `V2_P8_DESIGN.md`, read against the code by run 14,
+   and the next run starts at its step 3, option (b) — a monitor node minted between the operator and the run, which can
+   revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
+   against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
    P9-02 `grants diff`, P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
@@ -269,6 +272,17 @@ a run in the BACKGROUND —
 running (run 4) — filter by `event` instead and read each run's `status`) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
+
+**7a. A NEW SURFACE IS NEVER ONE EDIT** (run 14, twice in one run). A new **example** under `examples/` is a case in four
+gates — `cli_contract`'s `delulu fmt --check examples`, `edit_cli`'s Atlas round-trip (`edit` re-prints what it inserts,
+so an item's own text round-trips only in a canonically formatted file), `atlas_chain`'s snapshot corpus (asserted to BE
+the corpus) and `core_invariance` (a new example is a new recorded answer: read the bless — lines ADDED and none removed
+is a new case, one removed is the core's answer moving). A new **subcommand** is five — the help line, the dispatcher's
+arm and `cli::SUBCOMMANDS` (`completions_cli` proves the three name one set), `json_contract`'s failing sweep AND its
+success table (a `--json` form a blind sweep can drive), and `mcp.rs`'s door rule (every command in exactly one of
+`READ_ONLY` and `EFFECTORS`, so one added later cannot reach an agent's tool unreviewed — and a server is classified by
+what it HANDS OUT, not by what it writes). **No witness target reaches these**, so they appear only in the slice's own
+full suite: run it before `master` moves, and put the rows in the slice's commit.
 
 **8. Improve the loop — loop engineering.** Before ending, ask what this run lost time to: an ambiguous
 step here, a check that could not fail, a trap not yet written down, a slow command, a flaky test. Fix
