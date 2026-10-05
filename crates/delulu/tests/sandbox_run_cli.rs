@@ -329,6 +329,67 @@ fn big() -> Str {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-E-01, toward `contained`'s required set (D-V2-90): on EVERY operating system a process guest that
+/// allocates past its memory budget is stopped, by name, and one that stays under the same budget runs to
+/// its end. macOS refuses `RLIMIT_DATA`, so until D-V2-90 a macOS guest had no memory ceiling at all — the
+/// test above skipped its memory half there, and a guest allocating without end ran on until some other
+/// ceiling ended it (witnessed red on a macOS runner). `wall=` bounds that red; it never fires where the
+/// memory ceiling holds.
+#[test]
+fn a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs() {
+    let dir = tmp("memstop");
+    let mem = dir.join("mem.delulu");
+    std::fs::write(
+        &mem,
+        "module mem\n\nfn big() -> Str {\n    var s = \"X\"\n    var i = 0\n    while i < 20 {\n        s = s + s\n        \
+         i = i + 1\n    }\n    s\n}\n\nfn main(root: Root) {\n    let xs = []\n    while true {\n        xs.push(big())\n    }\n}\n",
+    )
+    .unwrap();
+    let small = dir.join("small.delulu");
+    std::fs::write(&small, "module small\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"under\")\n}\n").unwrap();
+    let report = dir.join("rep.json");
+    let run = |prog: &std::path::Path, limits: &str| {
+        let _ = std::fs::remove_file(&report);
+        let o = delulu(&[
+            "run",
+            prog.to_str().unwrap(),
+            "--sandbox",
+            "--grant",
+            "console",
+            "--limits",
+            limits,
+            "--report-out",
+            report.to_str().unwrap(),
+        ]);
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
+        (o, v)
+    };
+    let budget = 64 * 1024 * 1024_u64;
+    // The control: the same budget does not end a guest that stays under it.
+    let (o, v) = run(&small, &format!("mem={budget},cpu=30,wall=20"));
+    assert_eq!(o.status.code(), Some(0), "a guest under its memory budget was stopped: {} / {v}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("under"), "{}", out(&o));
+    assert!(v["outcome"]["stopped_by"].is_null(), "{v}");
+    // The witness.
+    let (o, v) = run(&mem, &format!("mem={budget},cpu=30,wall=8"));
+    assert_eq!(
+        v["outcome"]["stopped_by"]["dimension"], "memory",
+        "a guest that allocated without end was not stopped by its memory ceiling: {v} / {}",
+        out(&o)
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert_eq!(v["outcome"]["exit"], 1, "the report and the exit agree: {v}");
+    assert!(out(&o).contains("memory ceiling"), "{}", out(&o));
+    assert!(v["sandbox"]["host_guarantees"].to_string().contains("memory ceiling"), "the ceiling that stopped it is claimed: {v}");
+    assert_eq!(v["sandbox"]["posture"]["memory"], "capped", "{v}");
+    if let Some(seen) = v["outcome"]["stopped_by"]["observed_bytes"].as_u64() {
+        assert!(seen >= budget, "a stop at {seen} bytes, under its own budget of {budget}: {v}");
+        // The host samples; what the guest reached past the budget is that sampling's cost, and is printed.
+        eprintln!("memory stop: observed {seen} bytes against a budget of {budget} ({})", v["outcome"]["stopped_by"]["source"]);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Every refusal: nothing runs, and the reason says what to do instead.
 #[test]
 fn a_sandbox_that_cannot_apply_refuses_instead_of_running_unconfined() {
