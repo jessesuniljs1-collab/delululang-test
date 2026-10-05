@@ -587,9 +587,11 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--launcher-digest",
     // P8-01: a control program's devices, decided by the ordinary run's own code (`run_cmd::device_terms`,
     // `plan_devices`): the profile, the DL1905 sign-off gate, and under `hw:` the driver and its
-    // provenance. Not `--sim-step` or `--signoff` yet: a sandboxed device run's dead-man is the wall
-    // clock's, and a sign-off is written by the ordinary run.
+    // provenance; the simulator's stepped clock (the host's — the guest's own clock is never consulted)
+    // and the sign-off a clean simulation writes, as the ordinary run writes it.
     "--broker-profile",
+    "--sim-step",
+    "--signoff",
     "--approved",
     "--adapter-cmd",
     "--adapter-artifact",
@@ -988,6 +990,18 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         crate::run_cmd::print_egress_notes(&egress);
+    }
+    // Stage 10 (10f, invariant 48), as the ordinary run: the sign-off is written only for a run that
+    // finished clean under the simulator — here, a guest that was sent its program and exited 0.
+    if let Some(path) = &opts.signoff {
+        if matches!(served, Ok(0)) {
+            if let Err(e) = crate::cli::write_signoff(file, path, &device_profile) {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        } else {
+            eprintln!("sign-off withheld: the run did not complete cleanly, so `{path}` was not written");
+        }
     }
     match served {
         Ok(exit) => exit,

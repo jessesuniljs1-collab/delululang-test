@@ -443,3 +443,101 @@ fn a_hardware_flag_without_a_hardware_profile_is_refused_sandboxed_or_not() {
         }
     }
 }
+
+/// One command, seven out-of-envelope attempts — each an interaction that advances a stepped clock and
+/// beats nothing (C39) — then one more command.
+fn refused_in_between() -> String {
+    format!(
+        "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n\
+         fn miss(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {{Write, Actuate}} {{\n\
+         \x20 if n <= 0 {{ 0 }} else {{ c.println(say(a.command(Elbow {{ angle_deg: 999.0 }})))\n  miss(c, a, n - 1) }}\n}}\n\n\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20 let c = root.console()\n\
+         \x20 let a = root.actuator(\"arm0/elbow\")\n\
+         \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
+         \x20 let n = miss(c, a, 7)\n\
+         \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
+         }}\n"
+    )
+}
+
+/// The simulator's stepped clock is the HOST's, so a sandboxed simulation keeps it (D20): with each
+/// interaction worth 1,000 simulated ms and a 5,000 ms heartbeat that the wall clock never reaches in this
+/// run, the refused attempts outlast the heartbeat and the lease dies at the same attempt in a guest as in
+/// the ordinary run — a function of the command sequence, not of how fast either ran. On the wall clock
+/// every attempt would be an envelope refusal and the last command would be commanded.
+#[test]
+fn a_sandboxed_simulation_keeps_the_stepped_clock_and_loses_the_lease_on_the_same_command() {
+    let (cwd, state) = scratch("stepped");
+    std::fs::write(cwd.join("arm.delulu"), refused_in_between()).unwrap();
+    let base = [
+        "run", "arm.delulu", "--grant", "console", "--grant",
+        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=5000,ttl_ms=600000,fail=hold", "--broker-profile", "sim",
+        "--sim-step", "1000", "--no-prompt",
+    ];
+    let plain = delulu_in(&cwd, &state, &base);
+    assert!(plain.status.success(), "{}", stderr(&plain));
+    let mut args = base.to_vec();
+    args.push("--sandbox");
+    let guest = delulu_in(&cwd, &state, &args);
+    assert!(guest.status.success(), "{}", stderr(&guest));
+    assert_eq!(stdout(&guest), stdout(&plain), "the same command loses the lease, sandboxed or not");
+    let lines: Vec<String> = stdout(&guest).lines().map(str::to_string).collect();
+    assert_eq!(lines[0], "COMMANDED", "{lines:?}");
+    assert!(
+        lines.last().is_some_and(|l| l.starts_with("REVOKED") && l.contains("missed-heartbeat")),
+        "eight simulated seconds outlast a five-second heartbeat that the wall clock never reached: {lines:?}"
+    );
+    assert!(
+        lines[1].starts_with("REFUSED") && lines.iter().filter(|l| l.starts_with("REVOKED")).count() >= 2,
+        "refused while the lease lived, then revoked, at a point set by the sequence: {lines:?}"
+    );
+}
+
+/// A clean sandboxed simulation signs the artifact off, as the ordinary one does — and that sign-off opens
+/// the DL1905 gate for a sandboxed hardware run of the same bytes. A simulation whose guest faulted signs
+/// nothing.
+#[test]
+fn a_clean_sandboxed_simulation_signs_off_and_a_faulted_one_does_not() {
+    let (cwd, state) = scratch("signoff");
+    std::fs::write(cwd.join("arm.delulu"), arm_program()).unwrap();
+    let sim = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
+            "--broker-profile", "sim", "--signoff", "signoff.json", "--no-prompt",
+        ],
+    );
+    assert!(sim.status.success(), "{}", stderr(&sim));
+    assert!(cwd.join("signoff.json").is_file(), "a clean sandboxed simulation signs off:\n{}", stderr(&sim));
+    let driver = logging_driver(&cwd);
+    let hw = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
+            "--broker-profile", "hw:demo-adapter", "--approved", "signoff.json", "--adapter-cmd", &driver, "--no-prompt",
+        ],
+    );
+    assert!(hw.status.success(), "the sandboxed sign-off opens the gate:\n{}", stderr(&hw));
+    assert!(stdout(&hw).starts_with("COMMANDED"), "{}", stdout(&hw));
+
+    // A guest that faults: its simulation approves nothing.
+    std::fs::write(
+        cwd.join("bad.delulu"),
+        "module m\n\nfn main(root: Root) ! {Write, Actuate} {\n  let a = root.actuator(\"arm0/elbow\")\n  assert_eq(1, 2)\n}\n",
+    )
+    .unwrap();
+    let faulted = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "run", "bad.delulu", "--sandbox", "--grant", GRANT, "--broker-profile", "sim", "--signoff", "bad.json",
+            "--no-prompt",
+        ],
+    );
+    assert!(!faulted.status.success(), "the guest faulted: {}", stderr(&faulted));
+    assert!(!cwd.join("bad.json").exists(), "a faulted simulation signs nothing off:\n{}", stderr(&faulted));
+    assert!(stderr(&faulted).contains("sign-off withheld"), "{}", stderr(&faulted));
+}

@@ -310,13 +310,11 @@ fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
         vec!["--grant-manifest"],
         vec!["--seed", "7"],
         vec!["--clock", "5"],
-        // P8-01 (D-V2-95): a sandboxed run applies the device flags now. `--broker-profile` left this list;
-        // a hardware run's own flags stay on it, refused because this run is not a hardware run — in the
-        // ordinary run too, which had always dropped them in silence.
+        // P8-01 (D-V2-95): a sandboxed run applies the device flags now. `--broker-profile`, `--sim-step`
+        // and `--signoff` left this list; a hardware run's own flags stay on it, refused because this run
+        // is not a hardware run — in the ordinary run too, which had always dropped them in silence.
         vec!["--approved", "signoff.json"],
         vec!["--adapter-cmd", "x"],
-        vec!["--sim-step", "5"],
-        vec!["--signoff", "s.json"],
         vec!["--actors-threads", "2"],
     ] {
         let _ = std::fs::remove_file(&made);
