@@ -103,6 +103,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   property's state stays `unknown` (DeluluLang measured none of the wall) and the claim is reported beside it,
   `sandbox.properties.<name>.attested = {attester, by}`; a property the attester does not name still refuses, and says
   so; a near-miss (another case, a hyphen) vouches for nothing. Nothing changes for a run the host measured (D-V2-87).
+- **Fixed (security, ANSWER-HOLD-1): a sandboxed guest that stopped reading could hold its host for ever** — a jailed
+  guest or a microVM on Linux, and a guest on macOS. One that asked for a large answer (a file's text) and then read
+  nothing, or a little at a time, held the host with no limit to end it: a guest that is not reading spends no
+  processor time. Every guest channel now has a write deadline, and each answer is owed whole within the channel's frame
+  deadline (60 s); past it the run ends, saying the guest did not take the host's answer (D-V2-88).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

@@ -1934,6 +1934,41 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    M97 (the state moved to `established`): all red. Read on the other runners before `master` moved: macOS ``37247548752` green (153 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 13)`,
    Windows ``37247550461` green (142 unit tests — the `cfg(unix)` typestate test not among them — `sandbox_attest_cli` 5, `sandbox_confirm_cli` 8)`, Linux arm64 ``37247552077` green (172 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 14)`.
 
+## D-V2-88 — RW 4.37, ANSWER-HOLD-1: the host's answer to a guest is owed whole within the frame deadline, and every guest socket has a write deadline — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The defect** (the red-team pass on FRAME-DRIP-1, F5, recorded as code reading only): `guest.rs`'s `open_channel` gave
+   a Linux guest's socket, a microVM's and a guest's reached by name (macOS's) a read deadline and no write deadline, and
+   `HostChannel::serve` wrote each answer with no bound. A guest that asks for a large answer — a file's text, up to the
+   channel's 16 MiB frame, far more than a socket buffers — and then reads nothing, or a little at a time, holds its host
+   for as long as it likes, and no default limit ends it: a guest that is not reading spends no processor time, and the
+   wall-clock limit is off by default. An escaped interpreter is exactly such a guest. **Witnessed red on `5bd76aa`**
+   (`guest::tests::a_guest_that_stops_reading_an_answer_cannot_hold_its_host`, the host's end configured by the same helper
+   `open_channel` uses): the host wrote until the guest hung up, 20 s later. Named **ANSWER-HOLD-1** — REPLY-HOLD-1's shape
+   (D-V2-86) on the sandbox's own channel.
+2. **Taken:**
+   - **Each write is bounded by the transport:** `open_channel` configures every guest socket through one helper —
+     `bounded` (a Linux guest's and a microVM's `UnixStream`) and `bounded_by_name` (`broker_transport::Connection`: a Unix
+     socket's `SO_SNDTIMEO`, a Windows pipe's write that waits for room within the bound, RW 4.35) — with the channel's
+     deadline on every read AND every write. Windows' contained guest's pipe (`HostPipe`) already waited for each write
+     within the deadline.
+   - **The whole answer is bounded by `serve`:** written through `channel::Within::from_now(…, frame_deadline)` — 64 KiB per
+     write, and the frame deadline (60 s) between them — because a guest that reads a little at a time lets every single
+     write progress. A write the transport gave up on is said the same way (`FrameNotTaken`).
+   - **In words:** "the guest did not take the host's answer whole within 60s, and the channel's deadline ended the run" —
+     never "said nothing", which is a silent guest's.
+3. **Not taken:** a separate, shorter answer deadline (the frame deadline is the channel's one number for "a frame owed
+   whole", for either direction); bounding the program's own frame (`Confirmed::send_program`) beyond the transport's write
+   deadline, which now bounds it against a guest that never reads (a guest that sips its own program is not a hold anyone
+   but itself pays for — it never runs).
+4. **Witnesses:** the guest test above — four cases: a socket pair and a by-name listener (the macOS and Windows path),
+   each with a guest that never reads and one that takes 4 KiB every 100 ms of an 8 MiB answer — each ended within
+   about a second of the 800 ms bound; `channel::tests::a_write_the_transport_gave_up_on_is_an_answer_not_taken`; the
+   words test. **Mutants:** M98 (no write deadline on the socket pair) and M99 (none by name) red on the never-reading
+   guest; M100 (`serve` writes unbounded) red on the sipping one; M101 (a transport's give-up not said as the answer not
+   taken) red on the unit test — it survived the guest test, because with equal deadlines `Within`'s own check comes
+   first, so the path got its own witness; M102 (the words) red. Read on the runners before `master` moved: CI
+   `37249221745` dispatched at `608c5c4` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

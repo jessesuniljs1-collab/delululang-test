@@ -3961,3 +3961,15 @@ optional field; `DEPLOYMENT.md` and `for-agents.md` show it. Six mutants M92–M
 code after it overwrote — rewritten and red). Clippy clean; `check-other-os.sh` clean for Windows and macOS (aarch64);
 the full suite alone 2,108 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; the new tests on the other runners before `master` moved — `witness.yml` at `3ec6abe`:
 macOS ``37247548752` green (153 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 13)`, Windows ``37247550461` green (142 unit tests — the `cfg(unix)` typestate test not among them — `sandbox_attest_cli` 5, `sandbox_confirm_cli` 8)`, Linux arm64 ``37247552077` green (172 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 14)` (`sandbox_attest_cli`, `sandbox_confirm_cli`, the binary's unit tests).
+
+## 2026-10-05 — routine run 11: ANSWER-HOLD-1 — a guest that stops reading cannot hold its host (RW 4.37, D-V2-88)
+
+**Chosen** from run 10's "Open / next" (the red-team rows): RW 4.37 was "plausible, not witnessed" and, unlike RW 4.40,
+leaves a host held with nothing to end it. **Slice 1's push runs read first:** `5bd76aa` — CI `37248188675` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.84x against a control of 4.13x; the other three NOT MEASURED),
+`openshell` `37248188760` and `ocsf` `37248188651` success. **Witnessed red on `5bd76aa`** (the host's end configured by a
+helper factored out of `open_channel` with no change in behaviour): a guest that asked for an 8 MiB file's text and read
+nothing held the host 20 s, until it hung up. **Fixed (D-V2-88):** every guest socket gets a write deadline as well as a
+read one, and `serve` owes each answer whole within the frame deadline (`Within`); the operator reads "did not take the
+host's answer whole". Mutants M98–M102 red (M101 first survived the guest test — `Within`'s check fires before the
+transport's with equal deadlines — and got a unit witness). Clippy clean; `check-other-os.sh` clean on all five targets;
+the full suite alone 2,110 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at the branch, `37249221745` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s).

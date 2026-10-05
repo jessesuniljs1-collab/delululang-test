@@ -774,7 +774,10 @@ wins, and you should update the memory to match.
   **REPLY-HOLD-1** (RW 4.35, closed by routine run 10, D-V2-86): the daemon's REPLY had no bound — a client that asked
   for a large answer and never read it held the one-connection loop, the e-stop's revoke behind it; the whole reply is
   owed within 5 s now on every OS (Windows by the pipe's own quota accounting, after a first design failed on the
-  runner). The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
+  runner). **ANSWER-HOLD-1** (RW 4.37, routine run 11, D-V2-88): the same hole on the sandbox's own channel — the host's
+  answer to a guest had no bound, so a guest that asked for a file's text and read nothing held its host with nothing to
+  end it (a guest that is not reading spends no processor time); every guest socket has a write deadline now and each
+  answer is owed whole within the frame deadline. The registry's was closed the same run (**REGISTRY-BOUNDS-1**, D-V2-76): one idle connection stalled every client and
   `Content-Length: 18446744073709551615` crashed `delulu-registry serve` — a thread per connection and `Limits` now.
   And **AUDIT-FIFO-1** (D-V2-77): a FIFO named like a day log hung every reader of the audit chain, `broker start`
   included — ATTEST-FIFO-1's shape in the audit; read only if regular now. **The secret store had it too** (routine
@@ -994,6 +997,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the operator "an external launcher whose attester vouches for it", and no attestation could ever meet a property — the
   level-3 answer was `unknown` whatever was signed. A refusal's advice is a claim about the code, like a comment that
   names a test (run 4): for each way out a message offers, a witness that takes it.
+- **A bound on one direction of a channel asks the question of the other** (routine run 11): FRAME-DRIP-1 bounded what the
+  host READS from a guest (run 6), REPLY-HOLD-1 what the broker WRITES (run 10); what the host writes to a guest stayed
+  unbounded until ANSWER-HOLD-1 — recorded as "code reading" by the very pass that found the broker's. When a fix bounds
+  one direction, look at the other direction of every channel the same code serves.
 - **A mutant must change the ANSWER, not only the source** (routine run 11): M93's first form wrote the attester's claim
   into the measured branch's map before the loop that fills it — the loop overwrote it, the binary behaved as before, and
   the mutant "survived". A survivor is first a question about the mutant: read what the mutated code returns.
