@@ -131,7 +131,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed (SILENT-QUEUE-1): clients that connected to the broker daemon and said nothing delayed every client behind
   them** — about five seconds each, the e-stop's revoke included. The daemon now reads each connection's request on a
   thread of its own and hands only whole requests to its one handler, so a silent connection costs the clients behind
-  it nothing (at most 64 connections are read at once; past that a connection is dropped at once) (D-V2-94).
+  it nothing (at most 64 connections are being read, or waiting to hand a request over, at once; past that a connection
+  is dropped at once, and its client fails closed) (D-V2-94).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

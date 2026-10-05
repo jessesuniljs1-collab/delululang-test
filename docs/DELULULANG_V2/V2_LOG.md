@@ -4050,3 +4050,16 @@ connections held a `Status` 30.6 s. **Built (D-V2-94):** an accept thread, a rea
 still owed whole within 5 s), one handler for whole requests; at most 64 reading. M118 (one reader at a time) red, 4.8 s.
 **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS; the 26 daemon unit tests; the full suite alone
 2,117 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0 — on its second run: the first lost `doctor_cli`'s three tests to a script written into the tree mid-suite, and found the runtime's thread-stack gate refusing the daemon's two new threads, unclassified (fixed in `101cb1e`); read on the runners before `master` moved: `witness.yml` at `7c55af9` — Windows `37273275501` (160 passed), macOS `37273278082` (175 passed), Linux arm64 `37273280678` (193 passed): the daemon's unit tests and six daemon-facing targets (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`, `sandbox_guard_e2e`, `secret_verify_cli`), the witness named in each.
+
+## 2026-10-05 — routine run 12: RW 4.40's own bound (D-V2-94, amended); the run's close
+
+**Slice 3's push runs read first:** `101cb1e` — CI `37274536930` success; `633437e` (records) — CI `37274733834` success. **Found re-reading `7c55af9` (on `master`):** a reader counted against the 64
+only while it read, not while it waited on a busy handler — 300 whole requests behind an unread answer grew the process
+from 4 to 240 threads (red on `101cb1e`). Counted until the handover now (`77d436e`); M119 red; the flood witness's own
+teardown asks until the daemon answers (a full pool drops a connection — the `Shutdown` included — so the first version of
+the test hung its stop). **Verified:** the 27 daemon unit tests; clippy and `check-other-os.sh` clean; the full suite alone
+2,118 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the runners: `witness.yml` at `77d436e` — Windows `37275973144` (158 passed), macOS `37275975885` (173 passed), Linux arm64 `37275979053` (187 passed, the flood witness among them), the daemon's unit tests, `broker_cli` and `estop_cli` (and `guard_cli`, `guard_e2e` on Windows and macOS).
+
+**The run, closed:** PS-E's last E-01 steps (D-V2-90 macOS's memory ceiling; D-V2-92 `contained`'s set) and PS-E complete
+with three residuals (D-V2-93); RUNDIR-PERM-1 (D-V2-91); SILENT-QUEUE-1 (RW 4.40, D-V2-94). Mutants M108–M119. Loop
+engineering: `scripts/ci-log-summary.py`; CLOUD_ROUTINE steps 3 and 5; HANDOFF §11.5 five lessons. **Next: P8-01.**

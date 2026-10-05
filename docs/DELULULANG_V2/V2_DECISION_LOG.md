@@ -2135,6 +2135,12 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    handler on purpose — AUDIT-WRITERS-1's lesson).
 4. **Witness** red before (30.6 s), green after (well under its 3 s bound). **Mutant** M118 — one reader at a time — red
    (4.8 s). Read on the runners before `master` moved: `witness.yml` at `7c55af9` — Windows `37273275501` (160 passed), macOS `37273278082` (175 passed), Linux arm64 `37273280678` (193 passed): the daemon's unit tests and six daemon-facing targets (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`, `sandbox_guard_e2e`, `secret_verify_cli`), the witness named in each.
+5. **Amended the same run (the head chef's re-read of `7c55af9`, already on `master`):** a reader was counted only while
+   it READ, not while it waited to hand its whole request to a busy handler, so a flood of complete requests behind an
+   answer still being written grew a thread per connection — witnessed red on `101cb1e`, 300 requests grew the process
+   from 4 to 240 threads (`brokerd::tests::a_flood_of_whole_requests_behind_a_busy_handler_grows_no_thread_past_the_bound`,
+   Linux). A reader now counts until its request is handed over (`77d436e`); past the 64 a connection is dropped at once.
+   Mutant M119 (released before the handover) red, 240 threads. Read on the runners: `witness.yml` at `77d436e` — Windows `37275973144` (158 passed), macOS `37275975885` (173 passed), Linux arm64 `37275979053` (187 passed, the flood witness among them), the daemon's unit tests, `broker_cli` and `estop_cli` (and `guard_cli`, `guard_e2e` on Windows and macOS).
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

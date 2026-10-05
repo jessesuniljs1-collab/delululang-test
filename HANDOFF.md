@@ -1026,6 +1026,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A deadline per connection on a loop that serves one at a time is that deadline times N** (routine run 12,
   SILENT-QUEUE-1): FRAME-DRIP-1 bounded each request at 5 s, and six silent connections still held the next client 30 s.
   Ask of every bound on a serial loop what N peers at the bound cost the one behind them.
+- **A bound you add is a resource you count — count it until it is released** (routine run 12): RW 4.40's fix capped
+  readers at 64 but released a reader's count when it finished READING, not when it handed its request over, so 300
+  whole requests behind a busy handler grew 240 threads. Found by re-reading the fix after it was on `master`, against
+  the question: what does a peer that does everything RIGHT, many times over, cost?
 - **`git revert` takes no `-q`** (routine run 12): the revert failed, the next `git commit --amend` re-labelled the
   MUTANT commit as its own revert, and the push was refused as a non-fast-forward. Nothing was lost (reset to the pushed
   branch, revert again — never a force-push); read `git log -1` after every revert before amending anything.
