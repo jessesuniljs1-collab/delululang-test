@@ -152,8 +152,7 @@ another OS, and then takes about seven minutes itself (run 5).
    step, `contained`'s set, D-V2-92), with three residuals kept open where they are recorded: E-03's H6 (RW 4.27 — twice
    stopped by a classifier; perhaps with the owner), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (**built**, run 13,
-   D-V2-95 — L2 read on the KVM runner, the simulator's clock and sign-off under the sandbox; open: the device
-   events in the sandbox report), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
+   D-V2-95, **complete** — L1 and L2, the simulator's clock and sign-off, the devices' journal in the report), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
    environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,

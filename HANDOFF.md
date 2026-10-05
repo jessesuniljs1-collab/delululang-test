@@ -68,7 +68,7 @@ the assistant's memory — which now also travels file by file in
   exact now (D-V2-66).
 - **PS-E complete (routine run 12, D-V2-93)** — `contained` requires egress, resource and host-loss confinement (D-V2-92),
   with three residuals kept open: E-03's H6, macOS's launcher window, macOS's reads. **Next: P8** (P8-01 first), then P9.
-- **P8-01 built (routine run 13, D-V2-95)** — a control program runs in a guest: the host performs its actuator commands and
+- **P8-01 complete (routine run 13, D-V2-95)** — a control program runs in a guest, at L1 and L2: the host performs its actuator commands and
   sensor reads by the interpreter's own body against the run's device broker; the broker starts when the guest is sent its
   program. **Next: P8-02** (the Verified-class adapter as a `.dpx`), then P8-03, P8-04, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team

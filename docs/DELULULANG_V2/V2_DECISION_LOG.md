@@ -2208,6 +2208,14 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
     M129 (the flag refused, as before), M130 (the stepped clock dropped), M131 (no sign-off), M132 (a sign-off despite a
     fault): each red. **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit; read on the runners at `5b89f9f` before `master` moved — macOS `37303092995`, Windows `37303096425`, Linux arm64 `37303099029`: `sandbox_devices_cli` 10 passed and `sandbox_modes_cli` 11 passed on each, both new witnesses named; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries — the new KVM-gated test among the ignored), cargo exit 0, the tree unmoved. **Push runs:** `45e65eb` (carrying `76ba9ca`) — CI `37300708685` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.93x against a control of 4.12x; the other three NOT MEASURED), `ocsf` `37300708671` success; `6796c31` (records) — CI `37301082817` success, 14 jobs (arm64 MEASURED 2.90x/4.11x).
 
+11. **P8-01 complete (the same run).** A sandboxed run has no trace, so its report gains a top-level `devices` — the host
+    watchdog's journal, each `lease.revoked` and `failstate.engaged` with its device, `at_ms` and reason — beside `egress`,
+    the other effects the host performed for the guest; the watchdog is stopped first so the journal is whole, and
+    `delulu schema run-report` declares it (`device_event`; the schema stays closed). `bc8bd91`. The stops-beating witness
+    reads the journal and validates the report against the schema; M133 (no journal) and M134 (the schema not told) red.
+    **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit; read on the runners at `bc8bd91` before `master` moved — macOS `37305292797` (28 passed: `sandbox_devices_cli` 10, `json_contract` 14, `schema_cli` 4), Windows `37305296588` and Linux arm64 `37305299628` green on the same three targets; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **Push runs:** `fee5353` — CI `37302336639` success, 14 jobs, `microvm` among them (the L2 witness green on `master` too); `5b89f9f` — CI `37304139892` success, 14 jobs (arm64 MEASURED 2.97x), `ocsf` `37304139836` success; `521d688` — CI `37304345347` success, 14 jobs (arm64 MEASURED 2.92x). With it every item of `V2_P8_DESIGN.md`'s P8-01 is built and
+    read — L1 and L2, witnesses 1–5 and their falsifiers — and **P8-02 is next.**
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

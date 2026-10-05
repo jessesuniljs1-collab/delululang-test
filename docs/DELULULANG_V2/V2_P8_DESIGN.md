@@ -2,8 +2,8 @@
 
 **Status:** designed 2026-09-28 by the first cloud routine run (D-V2-51), under the owner's mandate of
 the same day (*"finish all the phases and verify"* — `docs/CLOUD_ROUTINE.md` names P8 "as far as software
-reaches"). **P8-01 is built** (routine run 13, 2026-10-05, D-V2-95 — `tests/sandbox_devices_cli.rs`); P8-02 to P8-04
-are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
+reaches"). **P8-01 is complete** (routine run 13, 2026-10-05, D-V2-95 — `tests/sandbox_devices_cli.rs`, and at L2
+`tests/microvm_cli.rs`); P8-02 to P8-04 are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
 
 ## What exists, measured on 2026-09-28
 
