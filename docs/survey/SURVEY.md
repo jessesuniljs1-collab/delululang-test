@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 296 |
-| Rust lines | 155613 |
+| Rust lines | 155653 |
 | Rust files outside `src/` (test/bench targets) | 135 |
 | Markdown documents | 252 |
 | Markdown lines | 69867 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1486 / 13343 |
+| Nodes / edges in this map | 1486 / 13344 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests

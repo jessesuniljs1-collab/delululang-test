@@ -511,3 +511,43 @@ fn an_uncarried_surface_is_refused_before_boot() {
     assert_eq!(o.status.code(), Some(2), "{}", out(&o));
     assert!(out(&o).contains("cannot carry this program yet") && out(&o).contains("actors"), "{}", out(&o));
 }
+
+/// P8-01 (D-V2-95) at level 2: a control program runs in the microVM exactly as it does in a process
+/// guest — the host performs each command against the run's device broker, the out-of-envelope one is
+/// refused, the simulated joint reads back. Its heartbeat is 150 ms and its first command is its first
+/// act, so the VM's boot — far longer than that — must not be charged against it: the broker starts when
+/// the guest is sent its program, not when the VM is launched.
+#[test]
+#[cfg_attr(not(delulu_kvm), ignore = "boots microVMs; see GATE")]
+fn a_control_program_runs_in_the_microvm_and_its_boot_is_not_charged_to_its_heartbeat() {
+    let dir = tmp("devices");
+    write(
+        &dir,
+        "arm.delulu",
+        "module arm\n\ntype Cmd { angle_deg: Float }\n\n\
+         fn say(r: Result[Unit, ActuateErr]) -> Str {\n  match r {\n    Ok(u) => \"COMMANDED\",\n    Err(e) => match e {\n      \
+         Envelope(reason) => \"REFUSED: \" + reason,\n      LeaseRevoked(reason) => \"REVOKED: \" + reason,\n      NoDevice => \"NODEVICE\"\n    }\n  }\n}\n\n\
+         fn main(root: Root) ! {Write, Actuate, Read} {\n  let a = root.actuator(\"arm0/elbow\")\n  let first = say(a.command(Cmd { angle_deg: 12.0 }))\n  \
+         let c = root.console()\n  c.println(first)\n  c.println(say(a.command(Cmd { angle_deg: 999.0 })))\n  \
+         let s = root.sensor(\"arm0/elbow#angle_deg\")\n  match s.read() {\n    Ok(v) => c.println(\"READ \" + str(v)),\n    Err(e) => c.println(\"NO READING\")\n  }\n}\n",
+    );
+    let started = Instant::now();
+    let o = delulu(
+        &dir,
+        &[
+            "run", "arm.delulu", "--isolation", "microvm", "--grant", "console", "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=150,ttl_ms=600000,fail=safe-park", "--grant",
+            "sensor=arm0/elbow#angle_deg", "--broker-profile", "sim", "--report-out", "rep.json",
+        ],
+    );
+    let took = started.elapsed();
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.first().copied(), Some("COMMANDED"), "the first command, after a {took:?} run, was not charged the VM's boot:\n{}", out(&o));
+    assert!(lines.get(1).is_some_and(|l| l.starts_with("REFUSED: ") && l.contains("outside the envelope")), "{}", out(&o));
+    assert_eq!(lines.get(2).copied(), Some("READ 12.0"), "{}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+    assert_eq!(v["sandbox"]["level"], 2, "{v}");
+    assert!(v["sandbox"]["denied"].to_string().contains("DL1904 arm0/elbow"), "{v}");
+}
