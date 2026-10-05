@@ -2601,10 +2601,16 @@ fn append_audit(
 /// its profile refusing it every write but its socket, so every macOS run printed the guest's "not
 /// owner-only … this filesystem does not enforce POSIX permissions": a false alarm, blaming the filesystem.
 fn make_run_dir(dir: &std::path::Path) -> io::Result<()> {
-    let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
-    b.create(dir)
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        std::fs::DirBuilder::new().mode(0o700).create(dir)
+    }
+    // Windows: the directory inherits the temporary directory's ACL — under the user's profile, their own by default.
+    #[cfg(not(unix))]
+    {
+        std::fs::DirBuilder::new().create(dir)
+    }
 }
 
 pub(crate) fn channel_tag() -> String {
