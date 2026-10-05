@@ -391,6 +391,24 @@ fn a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs()
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// RUNDIR-PERM-1: the run's own directory — the guest's channel socket, its Seatbelt profile, an
+/// attester's document — is its user's alone, made so by the host that creates it. Before, the host
+/// made it with the process's default mode (0755) and left the guest to narrow it; a macOS guest cannot
+/// (its profile refuses it every write but its socket), so every macOS sandboxed run printed the guest's
+/// "is not owner-only (mode 0755); this filesystem does not enforce POSIX permissions" — a false alarm
+/// that blamed the filesystem, on the operator's screen, every run (read on a macOS runner).
+#[test]
+fn a_sandboxed_runs_own_directory_is_its_users_alone_and_no_false_alarm_reaches_the_operator() {
+    let dir = tmp("rundir");
+    let src = dir.join("p.delulu");
+    std::fs::write(&src, "module p\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"ran\")\n}\n").unwrap();
+    let o = delulu(&["run", src.to_str().unwrap(), "--sandbox", "--grant", "console"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("ran"), "the witness ran its program: {}", out(&o));
+    assert!(!out(&o).contains("not owner-only"), "the run's own directory was not its user's alone: {}", out(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Every refusal: nothing runs, and the reason says what to do instead.
 #[test]
 fn a_sandbox_that_cannot_apply_refuses_instead_of_running_unconfined() {
