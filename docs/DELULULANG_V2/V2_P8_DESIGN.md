@@ -135,6 +135,10 @@ still refuses before the plugin is called; a plugin that tries to name a capabil
 7. *Witnesses,* the list above — first against an in-process transport that logs the frames it is handed (so "refused
    before a frame is written" is read from that log), then against P8-03's.
 
+**Done by routine run 13 (`418dcca`):** step 2 (`adapter::Adapter`, the broker's slot `Option<Box<dyn Adapter>>`) and step
+3's precondition (`Dir: Send`, asserted at compile time). **The next run starts at step 3 proper:** the `VerifiedAdapter`'s
+thread.
+
 ### P8-03 — the reference transport and the sim as a device
 
 A transport the tests and a lab can both use: a line or byte stream to the in-tree simulator run as a

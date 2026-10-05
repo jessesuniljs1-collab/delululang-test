@@ -4115,3 +4115,12 @@ into `V2_P8_DESIGN.md` (as run 12 did for P8-01): a Verified `.dpx` already runs
 broker already calls its adapter after the lease, rate and envelope checks, so the slot becomes an `Adapter` trait; the DIR
 is plain AST data (no `Rc`), so a `VerifiedAdapter` owns one thread that interprets it per call; the PIN on the embedded
 signature key and `--adapter-dpx` are the new surface. Nothing built — the next run starts at step 1.
+
+## 2026-10-05 — routine run 13: P8-02 begun — the driver slot is a trait; the DIR is asserted `Send`
+
+**Push runs read first:** `bc8bd91` — CI `37306161197` success, 14 jobs (arm64 MEASURED 2.88x), `ocsf` `37306161210` success; `ac31cf2` — CI `37306380748` success, 14 jobs (arm64 MEASURED 2.92x); `5c98e65`'s, `418dcca`'s and this commit's push runs were in progress at the close — the next run reads them first, with the 2026-10-05 nightly's last `miri-slow` job (`delulu-broker`; `delulu-syntax` and `delulu-check` read green). **Built (`418dcca`, P8-02 build-order steps 2–3, behaviour-preserving):**
+`adapter::Adapter` (`command`, `read`, `Send`) — the one place a permitted command leaves the host — implemented by
+`ProcessAdapter` unchanged; the broker holds `Option<Box<dyn Adapter>>`; and a compile-time assertion that
+`delulu_check::Dir` is `Send` (falsified: an `Rc` in its place is E0277). Mutant M135 (the trait's `command` answering
+without the driver) red on `hw_adapter_cli`. **Verified:** read on the runners at `418dcca` before `master` moved — Windows `37307415352` and macOS `37307419324`, `hw_adapter_cli`, `dead_man_cli` and `sandbox_devices_cli`, green; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **Next:** P8-02's step 3 proper — the
+`VerifiedAdapter` thread — then steps 4–7.

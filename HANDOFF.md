@@ -1043,6 +1043,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **The tree was edited mid-suite a third time** (routine run 13): a test file reworked while the suite ran made the
   Survey's freshness test red for that reason alone. `scripts/suite.sh` now runs the suite the routine's way and says
   `TREE-MOVED` when the tree changed under it.
+- **A mutant that survives every witness at one level may be one only another level can see** (routine run 13, M128):
+  starting a guest's device broker before its launch charged the launch against the first heartbeat — invisible at L1,
+  where a process guest starts inside every heartbeat the witnesses use, and red at L2, where a VM's boot revoked a 150 ms
+  lease first. When a design choice is about time, witness it where the time is largest.
 - **`delulu` has no library target** (routine run 13): its unit tests are `cargo test -p delulu --bin delulu FILTER`;
   `--lib` answers "no library targets found" with exit 101, which reads like a red suite. In `witness.yml` it is `bin:delulu`.
 - **`git revert` takes no `-q`** (routine run 12): the revert failed, the next `git commit --amend` re-labelled the
