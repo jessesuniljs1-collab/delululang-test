@@ -1132,8 +1132,8 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: (1) `3ec6abe` PS-E-01: an attester's claim that names a boundary property meets it at level 3 (D-V2-87);
   (2) `5bd76aa` its records; (3) `3ee18ac` RW 4.37: a guest that stops reading an answer cannot hold its host;
   (4) `608c5c4` the Survey regenerated for it (so the branch's CI run checks a fresh map); (5) `396653b` their records;
-  (6) `3c74e97` PS-E-04: an attestation can bind the launcher its attester measured (D-V2-89); (7) its records — this
-  commit
+  (6) `3c74e97` PS-E-04: an attestation can bind the launcher its attester measured (D-V2-89); (7) `52f1d8e` its records
+  and the run's close; (8) the last reading — this commit
 - Files and folders: M `crates/delulu/src/attest.rs` (`named_property`, `Attested::vouches_for`),
   `crates/delulu/src/boundary.rs` (`Requirement.attested`, `met`, `properties(…, attested)`, the refusal's words; two
   tests), `crates/delulu/src/guest.rs` (the attestation passed to the requirement and the report),
@@ -1157,7 +1157,8 @@ it on `origin` was made in the cloud and is listed below.
   `docs/survey/*` — (6); M `CHANGELOG.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md` (step 4: E-04's state; step 5: a branch CI run never names a unit test — `witness.yml` with a filter does),
   `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-89), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` (§4.4),
   `docs/REMAINING_WORK.md` (4.28), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
-  `docs/survey/*` — (7). Deleted: nothing. **Authorship:** the owner's
+  `docs/survey/*` — (7). M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*` — (8). Deleted:
+  nothing. **Authorship:** the owner's
   account through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,168 edges); `doctor --check` ok, all checks
   passed. After the last edit: in (2)'s message.
@@ -1179,8 +1180,13 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a refusal's way out is a promise — run it; a mutant must change the
   answer); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run — every earlier push run of this run was read green; (2) PS-E's rest — E-03 H6 (macOS and Windows under the escaped-guest harness;
+- Open / next: (1) read this commit's push run (records only) — every earlier push run of this run was read green,
+  `52f1d8e`'s last: CI `37251922235` success, 14 jobs (arm64 ping-pong MEASURED 2.93x against a control of 4.13x),
+  `ocsf` `37251922186` and `openshell` `37251922219` success; (2) PS-E's rest — E-03 H6 (macOS and Windows under the escaped-guest harness;
   twice stopped by a classifier — perhaps with the owner), `contained`'s required set (macOS's gaps), E-04's
   macOS `fexecve`; then P8 (P8-01 first),
-  P9; (3) the red-team rows RW 4.39's log words, 4.40 (silent connections queue on the broker); RW 7.17.
+  P9 — **worth weighing first:** whether PS-E closes with those three named as residuals (H6 needs a session the classifier
+  lets run, perhaps the owner's; `contained`'s set waits on macOS's reads and memory ceiling; macOS has no `fexecve`), so
+  P8-01 can start — a decision for a `D-V2-nn`, taken with P8-01's readiness read; (3) the red-team rows RW 4.39's log
+  words, 4.40 (silent connections queue on the broker); RW 7.17.
   **For the owner:** D-V2-87, D-V2-88 and D-V2-89 are this run's decisions.

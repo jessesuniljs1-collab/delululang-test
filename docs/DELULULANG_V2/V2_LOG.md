@@ -3995,3 +3995,7 @@ eight runs, all green. **Loop engineering:** step 5 — a surviving mutant is fi
 CI run's suite logs never name a unit test, so a new one is read by `witness.yml` with its filter; HANDOFF §11.5 three
 lessons. **PS-E left:** H6 (macOS and Windows under the escaped-guest harness), `contained`'s required set, macOS's
 `fexecve`.
+
+**The last reading (routine run 11):** `52f1d8e`'s push runs — CI `37251922235` success, 14 jobs, none failed (arm64
+ping-pong MEASURED 2.93x against a control of 4.13x; the other three NOT MEASURED); `ocsf` `37251922186` and `openshell`
+`37251922219` success. `master` green through `52f1d8e`.
