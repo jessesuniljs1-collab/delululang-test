@@ -66,7 +66,9 @@ the assistant's memory — which now also travels file by file in
   could signal the operator's processes — now only itself (D-V2-64); H10, new: or change their limits,
   priority, CPUs and scheduling — refused (D-V2-65). H5: below ABI 3 the report claimed writes denied —
   exact now (D-V2-66).
-- **Next:** **PS-E**, what is left of it — E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
+- **PS-E complete (routine run 12, D-V2-93)** — `contained` requires egress, resource and host-loss confinement (D-V2-92),
+  with three residuals kept open: E-03's H6, macOS's launcher window, macOS's reads. **Next: P8** (P8-01 first), then P9.
+- **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
   macOS `fexecve` (its attestation binding — a v2 statement naming the launcher its attester measured — routine run 11,

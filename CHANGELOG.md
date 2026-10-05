@@ -121,6 +121,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   filesystem does not enforce POSIX permissions". The run's own directory was made with the default mode and the guest,
   which may write nothing but its socket, could not narrow it. The host now makes that directory its user's alone
   (0700), and refuses one already under its name rather than using it (RUNDIR-PERM-1, D-V2-91).
+- **Changed: the default sandbox profile, `contained`, now requires egress, resource and host-loss confinement.** A
+  sandboxed run whose boundary this host measured without one — a guest that could reach the network, had no memory or
+  processor ceiling, or would outlive its host — is refused before the program is sent (DL1408, exit 2), naming what is
+  missing. Every supported host gives a guest all three, so ordinary runs are unchanged; a Windows host that cannot
+  make the guest's AppContainer, or a macOS host whose watcher cannot start, now refuses instead of running a weaker
+  boundary. An external launcher's wall, which DeluluLang does not measure, is reported and not refused by it;
+  `--sandbox-profile dev` requires nothing (D-V2-92).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

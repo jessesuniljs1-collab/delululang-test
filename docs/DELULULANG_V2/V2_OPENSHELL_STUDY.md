@@ -228,7 +228,7 @@ L3 guest's own words are `guest_reported`, never host guarantees. **Attesters' c
 D-V2-87):** a claim of the pinned attester that names a property — `PROPERTY: how`, the exact name — meets it at L3; the
 state stays `unknown` and the claim is reported beside it (`attested`), so the "satisfies a requirement only through an
 attester's claim that names it" above is built (witnessed red first: `hostile-agent` refused a statement naming all
-five). **macOS's memory ceiling (routine run 12, D-V2-90):** the host samples a macOS guest's peak footprint every 5 ms and ends it at its budget — `resource_ceiling` is established on every OS now (witnessed red on a macOS runner first), and macOS's one absent property is `filesystem_confinement` (its reads). Open: `contained`'s set.
+five). **macOS's memory ceiling (routine run 12, D-V2-90):** the host samples a macOS guest's peak footprint every 5 ms and ends it at its budget — `resource_ceiling` is established on every OS now (witnessed red on a macOS runner first), and macOS's one absent property is `filesystem_confinement` (its reads). **`contained`'s set (the same run, D-V2-92):** egress, resource and host loss — refused, before the program is sent, where this host measured one `absent`; an unattested L3's `unknown` is reported, not refused (only `hostile-agent` demands proof of an unknown). Filesystem confinement is not in the set while macOS's reads are open. **E-01 is complete** (D-V2-93).
 
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 

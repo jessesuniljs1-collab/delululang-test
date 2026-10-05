@@ -4030,3 +4030,14 @@ function existed; split by OS in `07045d5`, `check-other-os.sh` clean for both.
 **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS; the full suite alone 2,115 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the
 runners before `master` moved: at `3c6e67b` — macOS `37269100267` (the whole `delulu` package, 877 passed, 0 failed, 12 ignored, 94 binaries), Windows
 `37269102715`, Linux arm64 `37269105326` (216 passed); at `07045d5` — Windows `37269926751`, macOS `37269929073`.
+
+## 2026-10-05 — routine run 12: PS-E-01's `contained` set (D-V2-92); PS-E complete with three residuals (D-V2-93)
+
+**Slice 1's push runs read first:** `07045d5` — CI `37270189858` success, 14 jobs (arm64 ping-pong MEASURED 2.80x against a control of 4.12x; the other three NOT MEASURED; `resource_ceiling` established on all four, macOS's included — the first push run to say so); `ocsf` `37270189893` success; `4471d6f`'s (records) read with the close. **Chosen:** `contained`'s set — its wait on macOS's gaps ended with D-V2-90
+for memory, and reads alone remain absent there. **Witnessed red on `4471d6f`:** a boundary this host measured without a
+memory ceiling was confirmed under `contained` and sent the program. **Built (D-V2-92):** `contained` requires egress,
+resource and host loss; refuses what this host measured `absent`; an external launcher's `unknown` is reported, not refused
+(`Profile::requires_proof` — `hostile-agent` alone). M112–M116 red. **Verified:** clippy clean; the full suite alone
+2,116 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at `0560898` (`37271099512`): every job green — `test` on Linux, macOS and Windows (the whole workspace each), arm64, `microvm` (the KVM runner: a microVM run under `contained`), `microvm-reproducible`, `heavy-gates`, lints, formal, fuzz, Miri (diag, atlas, ffi), supply-chain, editor; the three long `miri-slow` jobs cancelled once the rest were read. Each OS's properties: Linux x64, arm64 and Windows all five established; macOS four, `filesystem_confinement` absent (reads not confined), `resource_ceiling` established — read before `master` moved, then the long jobs cancelled.
+**Decided (D-V2-93):** PS-E closes; H6, macOS's launcher window and macOS's reads stay open where they are recorded; P8 is
+next.

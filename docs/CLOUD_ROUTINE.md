@@ -146,15 +146,9 @@ another OS, and then takes about seven minutes itself (run 5).
 2. `Open / next` items from the newest sync-log entries.
 3. **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
-   **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): E-01 confirmation by
-   construction and a generation per run (attesters' claims as properties built, run 11, D-V2-87 — open: `contained`'s
-   set); E-02 host loss ends the guest (macOS and the external launcher);
-   E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
-   is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable (the attestation binding built, run 11, D-V2-89 — open: macOS's
-   `fexecve`); E-05 OpenShell as a
-   tested L3 and `sandbox policy --format openshell` (**complete**, runs 8–10: (a) D-V2-82, checked by OpenShell's
-   prover; (b) D-V2-83 and D-V2-85, the guest inside a real OpenShell sandbox over `ssh`, read in `openshell.yml`'s
-   runtime job — the recipe in `docs/DEPLOYMENT.md`); E-06 OCSF export (**complete**, run 7: D-V2-78, D-V2-80).
+   **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
+   step, `contained`'s set, D-V2-92), with three residuals kept open where they are recorded: E-03's H6 (RW 4.27 — twice
+   stopped by a classifier; perhaps with the owner), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
    E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays

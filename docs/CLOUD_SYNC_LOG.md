@@ -1200,7 +1200,9 @@ it on `origin` was made in the cloud and is listed below.
 - Commits: (1) `d9d4803` the witness alone (a macOS guest past its memory budget, red on a runner); (2) `8e85b94` PS-E-01:
   a macOS guest's memory ceiling is the host's sampler (D-V2-90); (3) `2b37c23` mutant M108, pushed only to be read red on
   macOS; (4) `09a113f` its revert; (5) `550ba38` RUNDIR-PERM-1's witness alone; (6) `3c6e67b` RUNDIR-PERM-1's fix, the
-  sampler at 5 ms, the map; (7) `07045d5` `make_run_dir` split by OS (Windows `unused_mut`); (8) the records — this commit
+  sampler at 5 ms, the map; (7) `07045d5` `make_run_dir` split by OS (Windows `unused_mut`); (8) `4471d6f` the records;
+  (9) `0560898` PS-E-01: `contained` requires egress, resource and host-loss confinement of a boundary this host measured
+  (D-V2-92); (10) its records, PS-E closed (D-V2-93) — this commit
 - Files and folders: M `crates/delulu/src/jail.rs` (`SAMPLED_MEMORY_CEILING`, `peak_footprint`, a macOS unit test, the
   RLIMIT_DATA comment), `crates/delulu/src/guest.rs` (`Fired::Memory`, `MemReader`, the watchdog's memory reading at
   `MEMORY_TICK`, the claim, the named stop; `make_run_dir` and its unit test), `crates/delulu/src/boundary.rs` (the macOS
@@ -1211,7 +1213,13 @@ it on `origin` was made in the cloud and is listed below.
   short Windows log), `docs/DEPLOYMENT.md` (the macOS row), `docs/MATHEMATICS.md` (the claim table),
   `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-90, D-V2-91), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md`
   (§4.1), `docs/REMAINING_WORK.md` (4.25), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`
-  (this entry), `docs/survey/*` (regenerated) — (8). Added: nothing. Deleted: nothing. **Authorship:** the owner's account
+  (this entry), `docs/survey/*` (regenerated) — (8). M `crates/delulu/src/policy.rs` (`contained`'s three,
+  `requires_proof`), `crates/delulu/src/boundary.rs` (the rule and its refusal; the witness; the channel tests on `dev`),
+  `crates/delulu-diag/src/codes.rs` (DL1408's explanation), `docs/for-agents.md`, `skills/delulu/SKILL.md`, `docs/survey/*`
+  — (9). M `CHANGELOG.md`, `HANDOFF.md` (*Where things stand*), `docs/CLOUD_ROUTINE.md` (step 4: PS-E complete, P8 next),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-92, D-V2-93), `V2_LOG.md`, `V2_PHASE_STATUS.md` (PS-E complete),
+  `V2_OPENSHELL_STUDY.md` (§4.1), `docs/REMAINING_WORK.md` (4.25 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (10).
+  Added: nothing. Deleted: nothing. **Authorship:** the owner's account
   through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,229 edges); `doctor --check` ok, all checks passed.
   After the last edit: `survey check` ok (1,483 nodes, 13,229 edges), `findings` 0 errors, 14 warnings; `doctor --check`
@@ -1228,12 +1236,22 @@ it on `origin` was made in the cloud and is listed below.
   `37268383827` (the whole package green but `doctor_cli`'s stale map); at `3c6e67b` macOS `37269100267` (the whole `delulu`
   package, 877 passed, 0 failed), Windows `37269102715`, arm64 `37269105326`; at `07045d5` Windows `37269926751` (43 passed,
   no warning), macOS `37269929073` (193 passed). The memory stop observed 247 MB against 64 MiB at 25 ms, then 68.8 MB and
-  92.8 MB at 5 ms.
+  92.8 MB at 5 ms. **(8)'s and (7)'s push runs:** CI `37270189858` (`07045d5`) success, 14 jobs (arm64 ping-pong
+  MEASURED 2.80x against a control of 4.12x; the other three NOT MEASURED; `resource_ceiling` established on all four
+  runners, macOS's included — the first push run to say so), `ocsf` `37270189893` success; CI `37270454522` (`4471d6f`)
+  success. **(9):** red first (`boundary`'s unit witness on `4471d6f`: "no memory ceiling: confirmed"); M112–M116 red;
+  clippy clean; the full suite alone 2,116 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at
+  `0560898`, `37271099512` — every job green (`test` on all three OSes, arm64, `microvm` under `contained`,
+  `microvm-reproducible`, `heavy-gates`, lints and the rest) but the three long `miri-slow` jobs, cancelled once the rest
+  were read; macOS's properties: four established, `filesystem_confinement` absent.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a sampler's interval is its ceiling's resolution; a false alarm is a defect
   — read a green witness whole, lint after the last edit; `git revert` takes no `-q`); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run and `07045d5`'s; (2) PS-E's rest — `contained`'s required set (every OS now
-  establishes egress, resource and host-loss for a guest it starts; macOS's reads its one absent property; an unattested L3
-  is `unknown` — the set's rule for `unknown` is the decision), H6 (perhaps with the owner), macOS's `fexecve`; then P8-01;
-  (3) RW 4.39's log words, 4.40, RW 7.17.
-  **For the owner:** D-V2-90 and D-V2-91 are this run's decisions.
+- Open / next: (1) read this commit's push run; (2) **P8-01** — PS-E is complete (D-V2-93): first move the device
+  operations (`Interp::call_actuator`/`call_sensor`, the envelope check, C39's refused-attempt sweep, the DL1904 records)
+  behind one function the interpreter and `HostChannel` both call, the `DeviceBroker` handed to the host channel as custody
+  is — `V2_P8_DESIGN.md` "Where the work is"; (3) PS-E's residuals, kept open: H6 (RW 4.27, perhaps with the owner), macOS's
+  launcher window (RW 4.28), macOS's reads; (4) RW 4.39's log words, 4.40, RW 7.17.
+  **For the owner:** D-V2-90, D-V2-91, D-V2-92 (`contained`'s set — a Windows host that cannot make the AppContainer, or a
+  macOS host whose watcher or sampler cannot start, now refuses the default profile) and D-V2-93 (PS-E closed with three
+  residuals) are this run's decisions.

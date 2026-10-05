@@ -2060,6 +2060,62 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    (red on macOS before, green after); `guest::tests::a_runs_own_directory_is_made_owner_only_and_never_adopted` (Unix: 0700;
    a second make refused). **Mutants** M109 (mode 0755) and M110 (an existing directory adopted) red in the VM.
 
+## D-V2-92 — PS-E-01: `contained` requires egress, resource and host-loss confinement of a boundary this host measured; an unknown wall is reported, not refused — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The gap** (`V2_OPENSHELL_STUDY.md` §4.1: "`contained` (the default) requires filesystem, egress and resource"; D-V2-59
+   deferred it — "`contained` requires none until macOS's gaps close"; RW 4.25 "a missing layer never refuses"): the default
+   profile required nothing, so a run whose MEASURED boundary lacked a memory ceiling, a death signal or egress confinement
+   was sent its program all the same. **Witnessed red on `4471d6f`:** `boundary::tests::contained_refuses_…` — a boundary
+   this host measured without a memory ceiling was confirmed and sent the program.
+2. **Taken:**
+   - **`contained` requires three:** `egress_confinement`, `resource_ceiling`, `host_loss_ends_guest` — the three every
+     operating system now gives a guest it starts (Linux: the guest's socket filter, `RLIMIT_DATA`/`RLIMIT_CPU`,
+     `PR_SET_PDEATHSIG`; Windows: the AppContainer, the job's ceilings and kill-on-close; macOS: Seatbelt, the host's
+     sampler (D-V2-90) and `RLIMIT_CPU`, the watcher (D-V2-60); the microVM: no network device, the VM's memory and the
+     VMM's ceilings, its death signal).
+   - **Not required by `contained`:** `filesystem_confinement` — macOS's reads are open (the study's set named it; requiring
+     it would refuse every macOS run) — and `privilege_floor`.
+   - **The rule for `unknown`** (`Profile::requires_proof`): `contained` refuses only what this host MEASURED as `absent`.
+     An external launcher's wall (L3) is `unknown` throughout — the wall the operator chose for the run, reported as
+     unmeasured — and `contained` does not refuse it; `hostile-agent` alone demands proof of an unknown (an attester's
+     named claim, D-V2-87). The study's "satisfies a requirement only through an attester's claim" is kept for the profile
+     that requires proof; a default that refused every unattested launcher would refuse PS-D-01's whole purpose.
+   - **The refusal** is DL1408's, before the program is sent: "the `contained` profile requires a boundary this host
+     measured to have egress_confinement, resource_ceiling, host_loss_ends_guest — and this one lacks: … Ways out:
+     `--isolation microvm`, an external launcher, or — a person's choice, never made for you — `--sandbox-profile dev`".
+   - **A consequence named now:** a Windows host that cannot make the guest's AppContainer falls back to the operator's
+     identity under the job — no egress confinement — and `contained` now refuses there instead of running a guest that could
+     reach the network as the operator; a macOS host whose watcher or sampler cannot start refuses likewise.
+3. **Witnesses:** `boundary::tests::contained_refuses_a_measured_boundary_that_lacks_one_of_its_three_and_never_an_unknown_one`
+   (all three with filesystem and privilege absent: confirmed and sent; no memory ceiling, no death signal, a TCP-only
+   network rule: each refused naming what it lacks and the way out, the program never sent; an external launcher's unknown
+   wall: confirmed). The channel's own unit tests moved to `dev`. **Mutants** M112 (`contained` refuses an unknown), M113
+   (`hostile-agent` takes an unknown on trust), M114–M116 (each of the three dropped from the set): all red. Every OS's
+   default run read green with the set in force — CI dispatched at `0560898`, `37271099512`: every job green — `test` on Linux, macOS and Windows (the whole workspace each), arm64, `microvm` (the KVM runner: a microVM run under `contained`), `microvm-reproducible`, `heavy-gates`, lints, formal, fuzz, Miri (diag, atlas, ffi), supply-chain, editor; the three long `miri-slow` jobs cancelled once the rest were read. Each OS's properties: Linux x64, arm64 and Windows all five established; macOS four, `filesystem_confinement` absent (reads not confined), `resource_ceiling` established.
+
+## D-V2-93 — PS-E is complete, with three residuals named and kept open as rows — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **Where PS-E stands** (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **E-01** complete (the typestate and the generation, D-V2-56;
+   the five properties, D-V2-57; `hostile-agent`'s five, D-V2-59; attesters' named claims, D-V2-87; macOS's memory
+   ceiling, D-V2-90; `contained`'s three, D-V2-92); **E-02** complete (D-V2-60, every backend); **E-03** complete on Linux —
+   H1–H5 and H7–H10, each witnessed red and closed (D-V2-61 to D-V2-66); **E-04** complete on Linux and Windows (D-V2-69,
+   D-V2-74) with the attestation binding (D-V2-89); **E-05** complete (D-V2-82, D-V2-83, D-V2-85); **E-06** complete
+   (D-V2-78, D-V2-80).
+2. **Taken: PS-E closes**, so P8 (P8-01 first: the control program in a guest, on E-01's confirmation) is next, with three
+   residuals that stay OPEN where they are recorded — none is restated as closed:
+   - **H6** (RW 4.27) — macOS's Seatbelt `mach-lookup` and Windows' reachable named objects under the escaped-guest
+     harness. Twice the start of that work in a routine run was stopped by a safety classifier before anything ran
+     (`HANDOFF.md` §11.7); it is for a session that can run it — perhaps the owner's.
+   - **macOS's launcher window** (RW 4.28) — macOS has no `fexecve`, so between the hash and the start a rename over the
+     path is not refused there. Not built: starting a private COPY of the hashed bytes would break every launcher that finds
+     its siblings by its own path (a Homebrew binary's `@executable_path`, a script's `$0`).
+   - **macOS's reads** (`filesystem_confinement` absent on macOS; `MATHEMATICS.md` "NOT CLAIMED, except the state
+     directory") — every allow-list of readable roots aborted the guest (PS-A2); so `contained` does not require it and
+     `hostile-agent` refuses macOS's jailed guest.
+3. **Why now:** each residual waits on something no routine run can supply this period (a session the classifier lets run;
+   a kernel interface macOS lacks; a profile of readable roots macOS's loader accepts), and P8 and P9 — the owner's next
+   phases — wait behind them. The phase's CI: `37271099512` at `0560898` and `master`'s push run (V2_PHASE_STATUS).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
