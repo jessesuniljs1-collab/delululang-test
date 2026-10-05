@@ -4063,3 +4063,11 @@ the test hung its stop). **Verified:** the 27 daemon unit tests; clippy and `che
 **The run, closed:** PS-E's last E-01 steps (D-V2-90 macOS's memory ceiling; D-V2-92 `contained`'s set) and PS-E complete
 with three residuals (D-V2-93); RUNDIR-PERM-1 (D-V2-91); SILENT-QUEUE-1 (RW 4.40, D-V2-94). Mutants M108–M119. Loop
 engineering: `scripts/ci-log-summary.py`; CLOUD_ROUTINE steps 3 and 5; HANDOFF §11.5 five lessons. **Next: P8-01.**
+
+## 2026-10-05 — routine run 12: RW 4.39 — the broker log's drops in words
+
+**Witnessed red on `89f69c8`** (the wording first extracted unchanged into `brokerd::dropped_because`): one class of drop had
+three wordings — the frame deadline's, the OS's "Resource temporarily unavailable (os error 11)", the library's "failed to
+fill whole buffer". **Now** each way a request fails to arrive is said once, in its own words; what a client sent is quoted
+escaped and bounded. M120, M121 red. **Verified:** clippy and `check-other-os.sh` clean; the full suite alone 2,119 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0;
+read on the runners: `witness.yml` at `f76eafd` — Windows `37277293552` (149 passed), macOS `37277296503` (164 passed), the daemon's unit tests and `broker_cli`, the witness named in each. RW 4.39 closed.
