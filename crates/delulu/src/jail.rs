@@ -282,10 +282,11 @@ pub const SAMPLED_MEMORY_CEILING: &str = "memory ceiling (the host's sampler)";
 /// none to be handed — `setrlimit(RLIMIT_DATA)` is refused (above), and there is no job object or cgroup.
 /// The host reads the guest's PEAK physical footprint — `proc_pid_rusage`'s
 /// `ri_lifetime_max_phys_footprint`, the figure the kernel's own memory accounting uses, compressed pages
-/// included — every [`crate::budget::INTERVAL`] and ends the guest at its budget (`guest.rs`'s watchdog).
-/// The peak and not the current value, so a burst freed between two readings is still seen at the next.
-/// Its cost is the sampler's, as the ordinary run's budget states it (`budget.rs`): a guest can pass its
-/// budget by what it allocates in one interval before the host sees it. It runs outside the guest, so a
+/// included — every 5 ms (`guest.rs`'s `Watchdog::MEMORY_TICK`) and ends the guest at its budget. The
+/// peak and not the current value, so a burst freed between two readings is still seen at the next. Its
+/// cost is the sampler's, as the ordinary run's budget states it (`budget.rs`): a guest can pass its
+/// budget by what it allocates in one interval before the host sees it, and the report's `observed_bytes`
+/// says by how much. It runs outside the guest, so a
 /// guest that escapes its interpreter cannot stop it — its Seatbelt profile denies every signal and all
 /// process information beyond itself. `None` when the kernel will not say, and the ceiling is then not
 /// claimed.

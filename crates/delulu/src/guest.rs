@@ -1091,7 +1091,7 @@ fn serve_under(
     // — the guest's own use is the difference after it is reaped.
     let children_before = children_cpu();
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
-    std::fs::create_dir_all(&dir)?;
+    make_run_dir(&dir)?;
     // PS-E-01: every run has a generation — 32 bytes of the OS's randomness — at every level. The guest
     // must echo it to confirm its boundary, the launch record and the report name it, and (PS-D-02) an
     // attester signs over it: an attested run's nonce IS its generation.
@@ -2087,7 +2087,7 @@ fn connect_by_name(child: &mut Guest, dir: &std::path::Path) -> io::Result<crate
 pub fn attempt_launch() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| format!("this executable cannot be located: {e}"))?;
     let dir = std::env::temp_dir().join(format!("delulu-probe-{}-{}", std::process::id(), channel_tag()));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("no channel directory: {e}"))?;
+    make_run_dir(&dir).map_err(|e| format!("no channel directory: {e}"))?;
     use std::io::Read as _;
     let finish = |r: Result<String, String>, child: Option<&mut Guest>| {
         if let Some(c) = child {
@@ -2234,6 +2234,12 @@ impl Watchdog {
     /// How often processor time is read: about the most a guest can spend past its budget.
     const TICK: std::time::Duration = std::time::Duration::from_millis(100);
 
+    /// How often a guest's peak memory is read where the host is its ceiling (macOS, D-V2-90). What a guest
+    /// allocates in one interval is what it can pass its budget by: at the ordinary run's 25 ms a guest
+    /// doubling strings reached 247 MB against a 64 MiB budget on a macOS runner (`witness.yml`
+    /// `37268383827`), so the host reads five times as often — a `proc_pid_rusage` call, a few microseconds.
+    const MEMORY_TICK: std::time::Duration = std::time::Duration::from_millis(5);
+
     fn start(
         k: Killer,
         wall: Option<std::time::Duration>,
@@ -2242,9 +2248,9 @@ impl Watchdog {
     ) -> Watchdog {
         let (cancel, rx) = std::sync::mpsc::channel::<()>();
         let started = std::time::Instant::now();
-        // Memory is read at the ordinary run's sampling interval (`budget.rs`): what a guest allocates in
-        // one interval is what it can pass its budget by, so the interval is the ceiling's resolution.
-        let tick = if memory.is_some() { crate::budget::INTERVAL } else { Self::TICK };
+        // What a guest allocates in one interval is what it can pass its budget by, so the memory interval
+        // is the ceiling's resolution ([`Self::MEMORY_TICK`]).
+        let tick = if memory.is_some() { Self::MEMORY_TICK } else { Self::TICK };
         let sampling = cpu.is_some() || memory.is_some();
         let handle = std::thread::spawn(move || loop {
             let left = wall.map(|w| w.saturating_sub(started.elapsed()));
@@ -2365,7 +2371,7 @@ fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: S
         }
     };
     if let Some(peak) = ev.memory_fired {
-        return Some(memory(Some(peak), "the host's memory sampler, reading the guest's peak footprint"));
+        return Some(memory(Some(peak), "the host's memory sampler, reading the guest's peak footprint every 5 ms"));
     }
     if st.code() == Some(crate::ceiling::GUEST_MEMORY_EXIT) {
         return Some(memory(None, "the guest's allocator, refused at the ceiling"));
@@ -2588,6 +2594,19 @@ fn append_audit(
 }
 
 /// A per-call channel name: the clock alone collides when runs start together.
+/// RUNDIR-PERM-1: a run's own directory — the guest's channel socket, a macOS guest's Seatbelt profile, an
+/// attester's document — is made by the host as its user's alone (0700 on Unix), and only if nothing is
+/// there yet: a directory someone else made under this name is not this run's. Before, it was made with
+/// the process's default mode (0755) and the guest was left to narrow it — which a macOS guest cannot do,
+/// its profile refusing it every write but its socket, so every macOS run printed the guest's "not
+/// owner-only … this filesystem does not enforce POSIX permissions": a false alarm, blaming the filesystem.
+fn make_run_dir(dir: &std::path::Path) -> io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(dir)
+}
+
 pub(crate) fn channel_tag() -> String {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -2598,6 +2617,20 @@ pub(crate) fn channel_tag() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RUNDIR-PERM-1: the run's own directory is made its user's alone by the host, and a directory already
+    /// under its name — someone else's — is refused rather than used.
+    #[cfg(unix)]
+    #[test]
+    fn a_runs_own_directory_is_made_owner_only_and_never_adopted() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!("delulu-rundir-{}-{}", std::process::id(), channel_tag()));
+        make_run_dir(&dir).expect("a fresh run directory");
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "the run's directory is {mode:04o}");
+        assert!(make_run_dir(&dir).is_err(), "a directory already there was adopted as this run's");
+        let _ = std::fs::remove_dir(&dir);
+    }
 
     /// RW 4.32: a guest that dripped a frame past the frame deadline is not told of as a SILENT one —
     /// the operator reads what it did, and a silence keeps its own words.
