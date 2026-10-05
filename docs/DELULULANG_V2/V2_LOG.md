@@ -4071,3 +4071,7 @@ three wordings — the frame deadline's, the OS's "Resource temporarily unavaila
 fill whole buffer". **Now** each way a request fails to arrive is said once, in its own words; what a client sent is quoted
 escaped and bounded. M120, M121 red. **Verified:** clippy and `check-other-os.sh` clean; the full suite alone 2,119 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0;
 read on the runners: `witness.yml` at `f76eafd` — Windows `37277293552` (149 passed), macOS `37277296503` (164 passed), the daemon's unit tests and `broker_cli`, the witness named in each. RW 4.39 closed.
+
+**The last reading (routine run 12):** every push run of the run read green — CI `37276656840` (`77d436e`), `37276819686` (`89f69c8`), `37277912297` (`f76eafd`), `37278057068` (`11ef757`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.87x/4.07x, 2.90x/4.12x, 2.96x/4.06x, 2.92x/4.04x; the other three NOT MEASURED); `master` green through `11ef757`. The 2026-10-05 nightly (cron 03:00, fired about 09:15 on recent days) had not fired by 07:46. P8-01's build order written into `V2_P8_DESIGN.md` from the code as it
+stands (minting already crosses the channel; using a device does not — the interpreter's device calls move behind a
+function `HostChannel` shares).

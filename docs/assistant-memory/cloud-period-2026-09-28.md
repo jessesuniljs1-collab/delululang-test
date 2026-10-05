@@ -122,7 +122,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   for any other.
 - **Routine run 12 (2026-10-05):** a macOS guest's memory ceiling is the host's sampler of its peak footprint (every
   5 ms — 25 ms let a guest reach 247 MB against 64 MiB), so `resource_ceiling` holds on every OS and macOS's reads are
-  `contained`'s one gap (D-V2-90); RUNDIR-PERM-1, a false permissions alarm on every macOS run, closed (D-V2-91).
+  `contained`'s one gap (D-V2-90); RUNDIR-PERM-1, a false permissions alarm on every macOS run, closed (D-V2-91);
+  `contained` requires egress, resource and host-loss confinement of a boundary the host measured (D-V2-92); **PS-E
+  complete** with three residuals — H6, macOS's launcher window, macOS's reads (D-V2-93); SILENT-QUEUE-1 (RW 4.40,
+  D-V2-94: silent connections queued the broker's clients, the e-stop's among them) and RW 4.39 closed. **Next: P8-01**
+  — its build order is in `V2_P8_DESIGN.md`.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

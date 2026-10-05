@@ -1206,7 +1206,8 @@ it on `origin` was made in the cloud and is listed below.
   queue the broker's clients (D-V2-94); (12) `101cb1e` the daemon's new threads classified in the stack gate, and
   `scripts/ci-log-summary.py`; (13) `633437e` their records; (14) `77d436e` RW 4.40's own bound — a reader counts until
   its request is handed over; (15) `89f69c8` its records and the run's close; (16) `f76eafd` RW 4.39: a dropped request
-  is logged in words that say what the client did; (17) its records — this commit
+  is logged in words that say what the client did; (17) `11ef757` its records; (18) the last reading, and P8-01's build
+  order — this commit
 - Files and folders: M `crates/delulu/src/jail.rs` (`SAMPLED_MEMORY_CEILING`, `peak_footprint`, a macOS unit test, the
   RLIMIT_DATA comment), `crates/delulu/src/guest.rs` (`Fired::Memory`, `MemReader`, the watchdog's memory reading at
   `MEMORY_TICK`, the claim, the named stop; `make_run_dir` and its unit test), `crates/delulu/src/boundary.rs` (the macOS
@@ -1234,7 +1235,9 @@ it on `origin` was made in the cloud and is listed below.
   M `CHANGELOG.md`, `HANDOFF.md` (§11.5 a bound you add is a resource you count), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
   (D-V2-94 amended), `V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (15). M `crates/delulu/src/brokerd.rs`
   (`dropped_because`; the witness), `docs/survey/*` — (16). M `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
-  `docs/REMAINING_WORK.md` (4.39 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (17).
+  `docs/REMAINING_WORK.md` (4.39 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (17). M
+  `docs/DELULULANG_V2/V2_P8_DESIGN.md` (P8-01's build order, read against the code),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `V2_LOG.md`, `docs/survey/*` — (18).
   Added: `scripts/ci-log-summary.py`. Deleted: nothing. **Authorship:** the owner's account
   through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,229 edges); `doctor --check` ok, all checks passed.
@@ -1274,16 +1277,15 @@ it on `origin` was made in the cloud and is listed below.
   red; the 27 daemon unit tests; clippy and `check-other-os.sh` clean; the full suite alone 2,118 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the
   runners: `witness.yml` at `77d436e` — Windows `37275973144` (158 passed), macOS `37275975885` (173 passed), Linux arm64 `37275979053` (187 passed, the flood witness among them), the daemon's unit tests, `broker_cli` and `estop_cli` (and `guard_cli`, `guard_e2e` on Windows and macOS). **(16):** red first on `89f69c8`; M120, M121 red; clippy and `check-other-os.sh` clean; the full
   suite alone 2,119 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the runners: `witness.yml` at `f76eafd` — Windows `37277293552` (149 passed), macOS `37277296503` (164 passed), the daemon's unit tests and `broker_cli`, the witness named in each. **Push runs read:** `101cb1e` CI `37274536930` and `633437e` CI `37274733834` success; `77d436e` CI `37276656840` and `89f69c8` CI `37276819686` in progress at the close of (17). **The last push runs** (`f76eafd`'s
-  and this commit's): read by the run's last reading, or by the next run first.
+  and this commit's): read by the run's last reading, or by the next run first. **The last reading:** every push run of the run read green — CI `37276656840` (`77d436e`), `37276819686` (`89f69c8`), `37277912297` (`f76eafd`), `37278057068` (`11ef757`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.87x/4.07x, 2.90x/4.12x, 2.96x/4.06x, 2.92x/4.04x; the other three NOT MEASURED); `master` green through `11ef757`. The 2026-10-05 nightly (cron 03:00, fired about 09:15 on recent days) had not fired by 07:46.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a sampler's interval is its ceiling's resolution; a false alarm is a defect
   — read a green witness whole, lint after the last edit; `git revert` takes no `-q`); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run and `f76eafd`'s; (2) **P8-01** — PS-E is complete (D-V2-93): first move the device
+- Open / next: (1) read this commit's push run (records only) and the 2026-10-05 nightly; (2) **P8-01** — PS-E is complete (D-V2-93): first move the device
   operations (`Interp::call_actuator`/`call_sensor`, the envelope check, C39's refused-attempt sweep, the DL1904 records)
   behind one function the interpreter and `HostChannel` both call, the `DeviceBroker` handed to the host channel as custody
   is — `V2_P8_DESIGN.md` "Where the work is"; (3) PS-E's residuals, kept open: H6 (RW 4.27, perhaps with the owner), macOS's
-  launcher window (RW 4.28), macOS's reads; (4) RW 7.17. (5) The 2026-10-05 nightly (about
-  09:15 UTC) is unread — read it first.
+  launcher window (RW 4.28), macOS's reads; (4) RW 7.17.
   **For the owner:** D-V2-90, D-V2-91, D-V2-92 (`contained`'s set — a Windows host that cannot make the AppContainer, or a
   macOS host whose watcher or sampler cannot start, now refuses the default profile) and D-V2-93 (PS-E closed with three
   residuals) and D-V2-94 (SILENT-QUEUE-1) are this run's decisions.

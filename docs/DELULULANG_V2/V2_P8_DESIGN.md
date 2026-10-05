@@ -63,6 +63,24 @@ host channel the way custody is (`HostChannel::with_custody`); and the sandboxed
 the DL1905 sign-off gate, the adapter's provenance check and `resolve_driver`, the clock mode — by
 sharing that code, not copying it.
 
+**The build order, read against the code by routine run 12 (2026-10-05, after PS-E closed — D-V2-93):**
+1. *Minting already crosses.* `root.actuator(d)` / `root.sensor(d)` are `RootMethod`s the host answers through
+   `LocalSink::root_method` → `prim::call_root_method` (`prim.rs`, the "actuator"/"sensor" arms): the handle carries the
+   granted envelope, deny-by-default. Nothing to build there but `CARRIED` (`guest.rs`) gaining the two kinds.
+2. *Using does not.* A guest's `command`/`read` arrive as `CapMethod`s and reach `prim::call_cap_method_pinned`, which
+   knows no device. Move the bodies of `Interp::call_actuator` and `Interp::call_sensor` (`interp.rs`, about 100 lines:
+   the envelope check, C39's `note_refused_attempt` sweep, `DeviceBroker::command`/`read`, the `Envelope`/`LeaseRevoked`/
+   `NoDevice` values) into `device.rs` as two functions taking `Option<&DeviceBroker>`, the capability's scope, the
+   arguments and a sink for the DL1904 trace records — the interpreter passes `trace_actuate_refusal`; the host channel
+   records the same refusals in its denied list. Behaviour-preserving first: the existing device tests are the witness.
+3. `HostChannel::with_devices(Arc<DeviceBroker>)`, consulted in `CapMethod` for an `Actuator`/`Sensor` capability after
+   the custody gate, exactly where the interpreter consults it.
+4. `run_cmd.rs`'s broker construction (lines ~1375–1445: the hw adapter's `resolve_driver`, `check_adapter_signature`,
+   `record_adapter_provenance`, `ProcessAdapter::spawn`, `DeviceBroker::with_adapter`) becomes one shared function the
+   sandboxed path in `guest.rs` calls too; the device clock is the wall's for a guest (its own clock is never consulted).
+5. The witnesses (1–5 above), then the falsifiers. `contained` already requires `host_loss_ends_guest` (D-V2-92): a
+   control program never outlives the host that holds its watchdog.
+
 ### P8-02 — the Verified-class adapter as a `.dpx`
 
 The driver's LOGIC becomes a DeluluLang plugin of the Verified class: re-proved at load like every
