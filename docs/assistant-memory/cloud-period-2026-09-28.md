@@ -149,4 +149,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   corpus, `core_invariance`) and no witness target reaches them: the slice's local suite is what finds them.
 - **The session's model changed mid-run** (Opus 5.5 → Opus 5, 1M context) with no classifier notice; commits from
   `a8040fd` on name Opus 5, as `CLAUDE.md` requires.
+- **P8-03 the same run:** `delulu device sim` runs the in-tree simulator as a device process on the `CMD`/`READ` line
+  protocol, so the whole stack is witnessed across a real process boundary, with parity against an in-process `sim` run
+  (D-V2-98). **A new subcommand is five gates** (help, dispatcher, `SUBCOMMANDS`, both `json_contract` sweeps, the MCP
+  door rule) — and a server is classified by what it hands out, not by what it writes.
 

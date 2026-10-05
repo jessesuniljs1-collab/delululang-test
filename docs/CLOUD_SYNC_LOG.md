@@ -1442,3 +1442,34 @@ it on `origin` was made in the cloud and is listed below.
   three residuals stay open (H6/RW 4.27, macOS's launcher window/RW 4.28, macOS's reads). **For the owner:** D-V2-96 and
   D-V2-97 (P8-02 — a hardware driver may be a signed Verified plugin; RW 4.7, open since D23, is closed) are this run's
   decisions.
+
+### 2026-10-05 — routine run 14 (continued): P8-03 complete — the simulator as a device process (D-V2-98)
+- Session: `https://claude.ai/code/session_015GbcmhgsYDQj97EaKh65ea`   Model: Claude Opus 5 (1M context) — the runtime
+  switched the session from Opus 5.5 mid-run, with no classifier notice
+- Branch: `master` (through `claude/jolly-hamilton-7fd30a`, fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `963328d`
+- Commits: (1) `e92870a` P8-03: the in-tree simulator as a device process, and the whole stack across a real boundary;
+  (2) `cb79333` `device` declared acting (the MCP door rule); (3) the records and this entry
+- Files and folders: A `crates/delulu-runtime/src/sim.rs`, `crates/delulu/src/device_cmd.rs`,
+  `crates/delulu/tests/sim_device_cli.rs`; M `crates/delulu-runtime/src/device.rs` (the simulator moved out),
+  `crates/delulu-runtime/src/lib.rs`, `crates/delulu/src/cli.rs` (the dispatcher, `SUBCOMMANDS`, the help),
+  `crates/delulu/src/main.rs`, `crates/delulu/tests/json_contract.rs` (both sweeps), `docs/survey/*` — (1). M
+  `crates/delulu/src/mcp.rs` (`EFFECTORS`), `docs/survey/*` — (2). M `CHANGELOG.md`, `HANDOFF.md` (§11.5, two lessons),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-98), `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`,
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (3). Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: three end-to-end witnesses and six unit ones; M154–M158 each red; clippy clean; `check-other-os.sh` clean
+  for Windows and macOS after the last code edit; read on the runners at `e92870a` — macOS `37341164996` (56 passed),
+  Windows `37341170246` (55), arm64 `37341173453` (6 `sim::` tests), every new witness named; the full suite alone
+  2,154 passed, 0 failed, 16 ignored (160 binaries), cargo exit 0, the tree unmoved. The first suite of the slice found the MCP door rule red (`cb79333`) — the fifth gate a new subcommand
+  must pass, and one no witness target reaches.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a new subcommand is five gates; a server is classified by what it hands
+  out, not by what it writes.
+- Open / next: (1) read this run's push runs (`e92870a`, `cb79333` and the records commit); (2) **P8-04** — the
+  out-of-band monitor (`V2_P8_DESIGN.md`: a separate principal holding one authority, revoke over one run's grant node,
+  reading only what the host recorded); then **P9**. PS-E's three residuals stay open. **For the owner:** D-V2-98
+  (P8-03) is this run's third decision.
+

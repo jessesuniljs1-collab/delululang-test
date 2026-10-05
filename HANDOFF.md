@@ -1067,6 +1067,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   match without the arm the compiler needed and the test run died at build time, which reads like a red witness but
   proves nothing. A mutant that does not compile is not a falsification — it is a typo. Read the mutant's own build.
 
+- **A new SUBCOMMAND is five gates, and two of them only the local suite sees** (routine run 14): the help line, the
+  dispatcher's arm and `cli::SUBCOMMANDS` (`completions_cli` proves the three name one set), `json_contract`'s failing
+  sweep AND its success table, and `mcp.rs`'s door rule — every command in exactly one of `READ_ONLY` and `EFFECTORS`,
+  which exists so a command added later cannot reach an agent's tool unreviewed. Add the rows with the command, in one
+  commit. The same run learned the same shape for a new EXAMPLE (four gates, above): in this repository a new SURFACE is
+  never one edit.
+- **Classify a server by what it hands out, not by what it writes** (routine run 14): `device sim` creates no file and
+  performs no effect, and it is still an EFFECTOR — it serves a conversation whose answers a control loop acts on, as
+  `lsp` and `mcp` do.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

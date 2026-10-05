@@ -2265,6 +2265,28 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
 7. **Witnesses and falsifiers:** `hw_dpx_cli.rs` (five), `adapter.rs`'s three transport tests, `verified_adapter.rs`'s
    eight (D-V2-96); mutants M145–M153 each red.
 
+## D-V2-98 — P8-03: the reference simulator is a module with two callers, and a device process of its own; its bounds are the bench's, not the grant's — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **One simulator, two callers.** `delulu_runtime::sim` holds the state, the park pose, the synthetic signal and the
+   line protocol; `DeviceBroker` drives it in-process under `Profile::Sim`, and `delulu device sim` drives the same code
+   from a pipe. Two implementations of a simulator would eventually disagree, and the parity witness could then only
+   measure which one was newer.
+2. **A documented verb, not an internal one.** `V2_P8_DESIGN.md` asks for a transport "the tests and a lab can both
+   use", so the verb is in `--help`, in `SUBCOMMANDS`, in the completion script and in both `json_contract` sweeps. Its
+   `--json` form describes the bench and serves nothing, which is also the only form a blind argument sweep can drive.
+3. **The bench's bounds are the DEVICE's limits.** `--actuator` here is not a grant: it is what the machine can do. A
+   narrower bench than the grant is how a hard stop is simulated — a real machine's limit switches — and the two
+   refusals stay distinguishable, because the host's envelope refusal never reaches the device.
+4. **The dead-man terms are ignored by the bench.** The grant form carries `heartbeat_ms`, `ttl_ms` and `fail`; a device
+   process is given them (the form is one parser) and acts on none of them. A lease belongs to the host that granted it,
+   and a device enforcing its own would be a second dead-man nobody declared.
+5. **A device's answer is one bounded, escaped line.** TERMINAL-TEXT-1 and AUDIT-TEXT-1 from the other side: this
+   process's words reach an operator's terminal and a host's diagnostics, and a second line would be read as the answer
+   to the next frame. A request past 64 KiB is answered with nothing, as `adapter.rs` bounds a reply.
+6. **Nothing physical.** It is a simulator, it models no physics, and `--json` says `"simulated": true`. A real device
+   stays environment-blocked (D23).
+7. **Witnesses and falsifiers:** `sim_device_cli.rs` (three, parity among them), `sim.rs`'s six; M154–M158 each red.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

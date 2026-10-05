@@ -4211,3 +4211,36 @@ transport, across a real process boundary) and P8-04 (the out-of-band monitor).
 **Model:** the session was switched from Opus 5.5 to **Opus 5 (1M context)** by the runtime partway through this run
 (after `fe6eb18`); commits from `a8040fd` on name Opus 5, as `CLAUDE.md` requires.
 
+## 2026-10-05 — routine run 14: P8-03 — the simulator as a device process, the whole stack across a real boundary (D-V2-98)
+
+**Built (`e92870a`):** the reference simulator moved out of `device.rs` into `delulu_runtime::sim` — `Sim` (the state and
+what passes for its physics), `serve`/`answer` (the `CMD`/`READ` line protocol), `park_point` and `synthetic_signal` —
+and `delulu device sim [--seed N] [--actuator DEVICE:dim=lo..hi,…] [--sensor NAME] [--json]` runs it as a DEVICE on
+standard input and output. **One simulator, two callers:** the broker drives it in-process under `--broker-profile sim`,
+and the verb drives the same code from the wire; the move is behaviour-preserving (the runtime's 260 unit tests and the
+device suites unchanged, `cargo test -p delulu-runtime --lib` green before the verb existed).
+**The bounds the bench is given are the DEVICE's, not the grant's.** `--actuator` here says what the bench can do;
+the run's `--grant` says what the program may ask for. A narrower bench is a hard stop, and a run can tell the two
+refusals apart: the host's envelope refusal never reaches the device at all, while the bench's comes back as `ERR` and is
+reported as the hardware's ("the hardware refused the command: the bench refuses it: …"). The dead-man terms in the
+spec's grant form are ignored by the bench on purpose — a lease is the host's, and a device enforcing one would be a
+second dead-man nobody declared. Every answer is ONE bounded line with its control bytes escaped (TERMINAL-TEXT-1's
+shape from the device's side: a device that could forge a second line would have it read as the answer to the next frame),
+and a request line past 64 KiB is answered with nothing at all.
+**Witnesses:** `crates/delulu/tests/sim_device_cli.rs` (three) — the same program, seed and command sequence read the
+same numbers in-process and across the device process (seed 7: `-0.19014357968088236` then `0.15388365616105615`, both
+ways, read by hand as well as asserted), a command outside the GRANT never reaches a bench that would have accepted it
+(the bench deliberately WIDER than the grant, so a refusal can only be the host's), and the verb refuses every bench it
+cannot be while `--json` describes one without serving it. Six more in `sim.rs` for the protocol itself.
+**Falsified:** M154 (the bench's own bounds ignored — red on the parity witness and two unit ones), M155 (an unknown
+device reads a number), M156 (the request line unbounded), M157 (the read index does not advance — the seed's promise),
+M158 (the device serves nothing — red on the parity witness, which is what proves the device process is really in the
+loop). **Verified:** clippy clean for the workspace; `check-other-os.sh` clean for Windows and macOS after the last code
+edit; **a new SUBCOMMAND is five gates** (the run's second lesson of this shape): the help line, the dispatcher's arm and
+`SUBCOMMANDS` (`completions_cli` proves the three name one set), `json_contract`'s failing sweep AND its success table
+(the `--json` form is what a blind sweep can drive), and the MCP server's door rule — every command in exactly one of
+`READ_ONLY` and `EFFECTORS`, so one added later cannot reach a tool unreviewed. `device` is acting (`cb79333`): it
+writes no file and performs no effect, but it SERVES, as `lsp` and `mcp` do, and what it answers is what a control loop
+acts on. Only the local suite sees the last two; read on the runners at `e92870a` before `master` moved — macOS `37341164996` (56 passed), Windows `37341170246` (55), arm64 `37341173453` (the 6 `sim::` tests), every new witness named; the full suite alone through
+`scripts/suite.sh`, 2,154 passed, 0 failed, 16 ignored (160 binaries), cargo exit 0, the tree unmoved. **P8-03 is complete; next: P8-04**, the out-of-band monitor.
+

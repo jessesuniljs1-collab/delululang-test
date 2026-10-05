@@ -10,6 +10,19 @@ Every entry names the ruling that authorized it. Rulings live in
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
+
+## Unreleased — V2 P8-03: the reference simulator can be run as a device, 2026-10-05
+
+- **New: `delulu device sim [--seed N] [--actuator DEVICE:dim=lo..hi,...] [--sensor NAME] [--json]`** runs the in-tree
+  simulator as a *device* on its standard input and output, speaking the `CMD`/`READ` line protocol a driver's transport
+  writes. Point a hardware run's `--adapter-transport` at it and the whole chain works end to end with no hardware: your
+  program, the host's envelope and lease, a signed Verified driver computing frames, and a device that answers them.
+- The bounds you give the bench are the **device's own limits**, not the run's grant: give it a narrower range than the
+  grant and you have simulated a hard stop. The host's envelope refusal never reaches the device at all, so a refusal
+  that comes back from the bench is the hardware's — and the run says which it was.
+- `--json` describes the bench instead of serving it. It models no physics, nothing physical moves, and it says so.
+- The simulator is now `delulu_runtime::sim`, shared by the broker and the device process, so an in-process `sim` run and
+  a run through the device process read the same numbers from the same seed — asserted by a test.
 ## Unreleased — V2 P8-02: a hardware driver may be a signed Verified plugin, 2026-10-05
 
 - `delulu run --broker-profile hw:NAME --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX` runs a driver

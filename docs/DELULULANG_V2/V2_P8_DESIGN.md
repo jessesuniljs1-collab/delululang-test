@@ -4,7 +4,9 @@
 the same day (*"finish all the phases and verify"* — `docs/CLOUD_ROUTINE.md` names P8 "as far as software
 reaches"). **P8-01 is complete** (routine run 13, 2026-10-05, D-V2-95 — `tests/sandbox_devices_cli.rs`, and at L2
 `tests/microvm_cli.rs`) and **P8-02 is complete** (routine run 14, 2026-10-05, D-V2-96 and D-V2-97 —
-`crates/delulu-runtime/src/verified_adapter.rs`, `tests/hw_dpx_cli.rs`, `examples/line_driver`); P8-03 and P8-04 are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
+`crates/delulu-runtime/src/verified_adapter.rs`, `tests/hw_dpx_cli.rs`, `examples/line_driver`) and **P8-03 is
+complete** (routine run 14, D-V2-98 — `crates/delulu-runtime/src/sim.rs`, `delulu device sim`,
+`tests/sim_device_cli.rs`); P8-04 is not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
 
 ## What exists, measured on 2026-09-28
 
@@ -150,11 +152,17 @@ checked before `--adapter-transport` is looked up; every dropped-flag combinatio
 witnesses and M145–M153 red. **Next: P8-03**, the simulator as a device behind this transport across a real process
 boundary, then P8-04.
 
-### P8-03 — the reference transport and the sim as a device
+### P8-03 — the reference transport and the sim as a device — **complete** (routine run 14, `e92870a`, D-V2-98)
 
 A transport the tests and a lab can both use: a line or byte stream to the in-tree simulator run as a
 separate process, so P8-02 is witnessed across a real process boundary. A serial port or a CAN socket is
 a transport of the same shape, and is the operator's to wire — a real device stays out of reach here.
+
+**Built:** the transport is `adapter::LineTransport` (P8-02, `a8040fd`); the device is `delulu device sim`, running
+`delulu_runtime::sim` — the simulator moved out of `device.rs`, so the broker and the device process drive ONE
+simulator. The bench's `--actuator` bounds are the device's own limits, not the grant's, so a hard stop is simulated by
+giving it a narrower range; the host's envelope refusal never reaches it. Witnessed by parity: the same program, seed and
+command sequence read the same numbers in-process and across the boundary (`sim_device_cli.rs`); M154–M158 red.
 
 ### P8-04 — an out-of-band monitor (D-V2-54)
 
