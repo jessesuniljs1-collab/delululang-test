@@ -943,7 +943,7 @@ pub(crate) fn serve_inner(
                     // Exactly one request; a malformed, short or slow frame closes this connection
                     // (fail closed) without taking down the daemon.
                     read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT))
-                        .map_err(|e| format!("bad frame: {e}"))
+                        .map_err(|e| dropped_because(&e))
                 })();
                 match read {
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
@@ -977,6 +977,31 @@ pub(crate) fn serve_inner(
 
     let _ = std::fs::remove_file(pid_path(state_dir));
     Ok(())
+}
+
+/// Why a connection's request was not taken, in the broker log's words (RW 4.39): one class of drop had been
+/// logged three ways — the frame deadline's words, the OS's "Resource temporarily unavailable (os error 11)"
+/// and the standard library's "failed to fill whole buffer". What a client sent is quoted escaped and bounded:
+/// the log is read by a person.
+fn dropped_because(e: &io::Error) -> String {
+    use delulu_runtime::channel::{shown, FrameTooSlow};
+    if FrameTooSlow::is(e) {
+        let within = e.get_ref().and_then(|x| x.downcast_ref::<FrameTooSlow>()).map(|f| f.within);
+        return match within {
+            Some(w) => format!("the client did not send its whole request within {} s", w.as_secs_f64()),
+            None => "the client did not send its whole request within the frame deadline".to_string(),
+        };
+    }
+    match e.kind() {
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {
+            "the client sent nothing for a read deadline, its request not whole".to_string()
+        }
+        io::ErrorKind::UnexpectedEof => "the client closed the connection before its request was whole".to_string(),
+        io::ErrorKind::InvalidData => {
+            format!("what the client sent was not a request this broker reads ({})", shown(&e.to_string(), 200))
+        }
+        _ => format!("the client's connection failed ({})", shown(&e.to_string(), 200)),
+    }
 }
 
 // ----- the `delulu broker` subcommands -----------------------------------------------------------
@@ -2234,6 +2259,34 @@ mod tests {
         drop(silent);
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.39: one class of drop — a client whose request never arrived whole — was logged three ways: the
+    /// frame deadline's words, the OS's "Resource temporarily unavailable (os error 11)" for a read deadline,
+    /// and the standard library's "failed to fill whole buffer" for a client that hung up mid-request. The log
+    /// is read by a person after the fact: each way a request fails to arrive is said once, in its own words.
+    #[test]
+    fn a_dropped_request_is_logged_in_words_that_say_what_the_client_did() {
+        let slow = io::Error::new(
+            io::ErrorKind::TimedOut,
+            delulu_runtime::channel::FrameTooSlow { within: std::time::Duration::from_secs(5) },
+        );
+        #[cfg(unix)]
+        let silent = io::Error::from_raw_os_error(libc::EAGAIN);
+        #[cfg(not(unix))]
+        let silent = io::Error::from(io::ErrorKind::TimedOut);
+        let gone = io::Error::from(io::ErrorKind::UnexpectedEof);
+        let bad = io::Error::new(io::ErrorKind::InvalidData, "the frame carries 70 byte(s) after its value");
+        let said: Vec<String> = [&slow, &silent, &gone, &bad].iter().map(|e| dropped_because(e)).collect();
+        for (s, words) in said.iter().zip([
+            "did not send its whole request within",
+            "sent nothing for",
+            "closed the connection before its request was whole",
+            "was not a request this broker reads",
+        ]) {
+            assert!(s.contains(words), "`{s}` should say `{words}`");
+            assert!(!s.contains("os error") && !s.contains("failed to fill"), "the OS's or the library's words: `{s}`");
+        }
     }
 
     /// RW 4.40's own bound (the head chef's re-read of `7c55af9`): a reader counted only while it READ, not
