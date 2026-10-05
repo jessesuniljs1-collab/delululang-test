@@ -273,6 +273,34 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
     vec!["processor-time ceiling", "no core dump"]
 }
 
+/// The word a run claims when a macOS guest's memory ceiling is the host's sampler (D-V2-90) — beside the
+/// kernel's ceilings on Linux and Windows, never spelled as one of them.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub const SAMPLED_MEMORY_CEILING: &str = "memory ceiling (the host's sampler)";
+
+/// D-V2-90 (PS-E-01): a macOS guest's memory ceiling is the HOST's, because the kernel gives a process
+/// none to be handed — `setrlimit(RLIMIT_DATA)` is refused (above), and there is no job object or cgroup.
+/// The host reads the guest's PEAK physical footprint — `proc_pid_rusage`'s
+/// `ri_lifetime_max_phys_footprint`, the figure the kernel's own memory accounting uses, compressed pages
+/// included — every [`crate::budget::INTERVAL`] and ends the guest at its budget (`guest.rs`'s watchdog).
+/// The peak and not the current value, so a burst freed between two readings is still seen at the next.
+/// Its cost is the sampler's, as the ordinary run's budget states it (`budget.rs`): a guest can pass its
+/// budget by what it allocates in one interval before the host sees it. It runs outside the guest, so a
+/// guest that escapes its interpreter cannot stop it — its Seatbelt profile denies every signal and all
+/// process information beyond itself. `None` when the kernel will not say, and the ceiling is then not
+/// claimed.
+#[cfg(target_os = "macos")]
+pub fn peak_footprint(pid: u32) -> Option<u64> {
+    // SAFETY: an all-zero `rusage_info_v4` is a valid value of a struct of integers.
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    // SAFETY: the kernel writes one `rusage_info_v4` — the flavor named — into a buffer of that size; the
+    // header types the buffer `rusage_info_t *`, which is why the pointer is cast so.
+    let rc = unsafe {
+        libc::proc_pid_rusage(pid as libc::c_int, libc::RUSAGE_INFO_V4, (&mut info as *mut libc::rusage_info_v4).cast())
+    };
+    (rc == 0).then_some(info.ri_lifetime_max_phys_footprint)
+}
+
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2, D-V2-60): on macOS nothing in the kernel ends a guest when its
 /// host dies — there is no `PR_SET_PDEATHSIG` and no job object — so a guest that computes and asks for
 /// nothing outlived a killed host until its processor-time ceiling (witnessed red on a macOS runner,
@@ -1607,5 +1635,22 @@ mod macos_tests {
         assert!(text.contains("ELSEWHERE=true"), "the profiled child ran and could read what it may:\n{text}\n{}", String::from_utf8_lossy(&out.stderr));
         assert!(text.contains("STATE=false"), "T14: the profiled child read the state directory:\n{text}");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// D-V2-90: the reading the host's memory ceiling rests on answers, and MOVES with what a process
+    /// touches — a reader that said a constant would let every guest past its budget.
+    #[test]
+    fn the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched() {
+        let me = std::process::id();
+        let before = super::peak_footprint(me).expect("macOS answers proc_pid_rusage for a process of this user");
+        let mut v = vec![0u8; 64 * 1024 * 1024];
+        for i in (0..v.len()).step_by(4096) {
+            v[i] = 1;
+        }
+        std::hint::black_box(&v);
+        let after = super::peak_footprint(me).expect("a second reading");
+        assert!(after >= before + 48 * 1024 * 1024, "64 MiB touched moved the peak footprint only from {before} to {after}");
+        drop(v);
+        assert!(super::peak_footprint(me).expect("a third reading") >= after, "a PEAK never falls");
     }
 }

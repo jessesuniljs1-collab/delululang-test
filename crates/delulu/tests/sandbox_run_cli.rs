@@ -181,8 +181,9 @@ fn a_profile_chooses_the_limits_and_the_report_names_it() {
 }
 
 /// D-V2-59: `hostile-agent` requires all five boundary properties. CI measured macOS's jailed guest
-/// without read confinement, a memory ceiling or a death signal, so there it is REFUSED (DL1408, exit 2)
-/// before the program is sent — and the report still names the profile and its limits; elsewhere it runs.
+/// without read confinement (its death signal is a watcher since D-V2-60, its memory ceiling the host's
+/// sampler since D-V2-90), so there it is REFUSED (DL1408, exit 2) before the program is sent — and the
+/// report still names the profile and its limits; elsewhere it runs.
 fn hostile_agent_exit() -> i32 {
     if cfg!(target_os = "macos") {
         2
@@ -851,13 +852,10 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     // At least one question must be answered by something that was applied, or the test would pass
     // for a report that called everything a limitation. Which ones is PER PLATFORM, and asserting
     // otherwise is how this test first went red on macOS: it said "every platform caps memory and
-    // processor time", and macOS caps neither by rlimit — it gets a processor-time ceiling (PS-A2
-    // round three) and deliberately no memory ceiling, because macOS does not meaningfully enforce
-    // the rlimit that would give one.
-    let mut enforced: Vec<&str> = vec!["processor_time"];
-    if cfg!(windows) || cfg!(target_os = "linux") {
-        enforced.push("memory");
-    }
+    // processor time", when macOS then capped only processor time (PS-A2 round three) — it refuses the
+    // rlimit that would cap memory. Since D-V2-90 the host's sampler caps it there, so memory is
+    // enforced on every platform again, by the host on macOS.
+    let mut enforced: Vec<&str> = vec!["processor_time", "memory"];
     // RW 4.23: a Linux guest's own seccomp filter is mandatory (a guest that cannot install it does
     // not run), and since the guest reports it the report counts it — before, this row read "not
     // confined" on every Linux run that confined it.
@@ -870,9 +868,6 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     for q in enforced {
         assert!(!lim.contains(&q), "`{q}` is enforced here but was listed as a limitation: {r}");
         assert_ne!(sb["posture"][q], "not confined", "{r}");
-    }
-    if cfg!(target_os = "macos") {
-        assert!(lim.contains(&"memory"), "macOS must name the memory ceiling it does not enforce: {r}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

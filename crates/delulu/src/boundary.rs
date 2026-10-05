@@ -593,18 +593,24 @@ mod property_tests {
         assert_eq!(state_of(&v, "egress_confinement"), "absent", "{v}");
         assert!(v["egress_confinement"]["why"].as_str().unwrap().contains("network: not confined"), "{v}");
 
-        // macOS L1: Seatbelt denies writes and the network, but reads stay open and no memory ceiling is
-        // claimed (RLIMIT_DATA is refused there). Since PS-E-02 (D-V2-60) a watcher outside the guest ends
-        // it with its host, claimed once the watcher is armed; a run whose watcher did not arm says so.
+        // macOS L1: Seatbelt denies writes and the network, but reads stay open. RLIMIT_DATA is refused
+        // there, so since D-V2-90 the memory ceiling is the host's sampler, claimed once the kernel answered
+        // its first reading; a run whose sampler had no answer claims none and says so. Since PS-E-02
+        // (D-V2-60) a watcher outside the guest ends it with its host, claimed once the watcher is armed; a
+        // run whose watcher did not arm says so.
         let macos = [
             "deny by default", "no file writes", "no network but the channel", "no new programs", "no Mach services",
             "no signals or process info beyond itself", "processor-time ceiling", "no core dump", "killed with the host",
+            crate::jail::SAMPLED_MEMORY_CEILING,
         ];
         let v = properties(&macos, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
         assert_eq!(state_of(&v, "egress_confinement"), "established", "{v}");
         assert_eq!(state_of(&v, "privilege_floor"), "established", "{v}");
         assert_eq!(state_of(&v, "host_loss_ends_guest"), "established", "{v}");
+        assert_eq!(state_of(&v, "resource_ceiling"), "established", "{v}");
+        let unsampled: Vec<&str> = macos.iter().copied().filter(|w| *w != crate::jail::SAMPLED_MEMORY_CEILING).collect();
+        let v = properties(&unsampled, true, None);
         assert_eq!(state_of(&v, "resource_ceiling"), "absent", "{v}");
         assert!(v["resource_ceiling"]["why"].as_str().unwrap().contains("memory: not confined"), "{v}");
         let unwatched: Vec<&str> = macos.iter().copied().filter(|w| *w != "killed with the host").collect();

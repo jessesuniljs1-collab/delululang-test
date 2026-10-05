@@ -1188,6 +1188,20 @@ fn serve_under(
     if limits.wall_seconds.is_some() && child.killer().is_some() && !external && !applied.contains(&"wall-clock ceiling") {
         applied.push("wall-clock ceiling");
     }
+    // D-V2-90 (PS-E-01): macOS gives a process no memory ceiling to be handed (`RLIMIT_DATA` is refused,
+    // there is no job object), so a process guest's ceiling there is the host's sampler of its peak
+    // footprint (`jail::peak_footprint`), started below with the watchdog — claimed only where the kernel
+    // answered the first reading, and never for an external launcher, whose wall is the operator's.
+    #[cfg(target_os = "macos")]
+    let memory_watch: Option<(MemReader, u64)> = match child.killer() {
+        Some(Killer(pid)) if !external && crate::jail::peak_footprint(pid as u32).is_some() => {
+            applied.push(crate::jail::SAMPLED_MEMORY_CEILING);
+            Some((Box::new(move || crate::jail::peak_footprint(pid as u32)) as MemReader, limits.memory_bytes))
+        }
+        _ => None,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let memory_watch: Option<(MemReader, u64)> = None;
     if let Some(program) = &launcher {
         eprintln!(
             "sandbox: an external launcher (`{program}`) runs the guest — the boundary is the operator's, and \
@@ -1318,9 +1332,9 @@ fn serve_under(
         .map(|p| (Box::new(move || p.used()) as CpuReader, std::time::Duration::from_secs(limits.cpu_seconds)));
     #[cfg(not(windows))]
     let cpu_watch: Option<(CpuReader, std::time::Duration)> = None;
-    let watch = match (limits.wall_seconds, cpu_watch, child.killer()) {
-        (None, None, _) | (_, _, None) => None,
-        (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
+    let watch = match (limits.wall_seconds, cpu_watch, memory_watch, child.killer()) {
+        (None, None, None, _) | (_, _, _, None) => None,
+        (w, c, m, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c, m)),
     };
     let launch_words = applied.clone();
     // D-V2-87: the statement checked above, so at level 3 a claim that names a property can meet it.
@@ -1385,6 +1399,10 @@ fn serve_under(
     let evidence_of_stop = StopEvidence {
         wall_fired,
         cpu_fired: fired == Some(Fired::Cpu),
+        memory_fired: match fired {
+            Some(Fired::Memory(peak)) => Some(peak),
+            _ => None,
+        },
         guest_cpu: children_cpu().zip(children_before).map(|(after, before)| after.saturating_sub(before)),
         vm_memory: child.vm_memory_ceiling(),
     };
@@ -2193,14 +2211,20 @@ impl Killer {
 enum Fired {
     Wall,
     Cpu,
+    /// The host's memory sampler (macOS, D-V2-90), with the peak it read.
+    Memory(u64),
 }
 
 /// Reads a running guest's processor time, where the host can (Windows: the job's accounting).
 type CpuReader = Box<dyn Fn() -> Option<std::time::Duration> + Send>;
 
+/// Reads a running guest's peak memory, where the host is its memory ceiling (macOS, D-V2-90).
+type MemReader = Box<dyn Fn() -> Option<u64> + Send>;
+
 /// The host's watchdog for a process guest (SANDBOX-STOP-1): ends the guest when the operator's
 /// `--limits wall=` passes or, where the host can read the guest's processor time while it runs, when
-/// `cpu=` is spent — unless stopped first. `stop` says which fired, if one did.
+/// `cpu=` is spent — or, where the host is the guest's memory ceiling (macOS, D-V2-90), when its peak
+/// memory reaches `mem=` — unless stopped first. `stop` says which fired, if one did.
 struct Watchdog {
     cancel: std::sync::mpsc::Sender<()>,
     handle: std::thread::JoinHandle<Option<Fired>>,
@@ -2210,15 +2234,24 @@ impl Watchdog {
     /// How often processor time is read: about the most a guest can spend past its budget.
     const TICK: std::time::Duration = std::time::Duration::from_millis(100);
 
-    fn start(k: Killer, wall: Option<std::time::Duration>, cpu: Option<(CpuReader, std::time::Duration)>) -> Watchdog {
+    fn start(
+        k: Killer,
+        wall: Option<std::time::Duration>,
+        cpu: Option<(CpuReader, std::time::Duration)>,
+        memory: Option<(MemReader, u64)>,
+    ) -> Watchdog {
         let (cancel, rx) = std::sync::mpsc::channel::<()>();
         let started = std::time::Instant::now();
+        // Memory is read at the ordinary run's sampling interval (`budget.rs`): what a guest allocates in
+        // one interval is what it can pass its budget by, so the interval is the ceiling's resolution.
+        let tick = if memory.is_some() { crate::budget::INTERVAL } else { Self::TICK };
+        let sampling = cpu.is_some() || memory.is_some();
         let handle = std::thread::spawn(move || loop {
             let left = wall.map(|w| w.saturating_sub(started.elapsed()));
-            let wait = match (left, &cpu) {
-                (Some(l), None) => l,
-                (Some(l), Some(_)) => l.min(Self::TICK),
-                (None, _) => Self::TICK,
+            let wait = match (left, sampling) {
+                (Some(l), false) => l,
+                (Some(l), true) => l.min(tick),
+                (None, _) => tick,
             };
             match rx.recv_timeout(wait) {
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
@@ -2230,6 +2263,12 @@ impl Watchdog {
                         if read().is_some_and(|used| used >= *budget) {
                             k.kill();
                             return Some(Fired::Cpu);
+                        }
+                    }
+                    if let Some((read, budget)) = &memory {
+                        if let Some(peak) = read().filter(|peak| peak >= budget) {
+                            k.kill();
+                            return Some(Fired::Memory(peak));
                         }
                     }
                 }
@@ -2273,6 +2312,8 @@ struct StopEvidence {
     /// The host's processor-time watchdog ended it (Windows).
     #[cfg_attr(not(windows), allow(dead_code))]
     cpu_fired: bool,
+    /// The host's memory sampler ended it, at this peak (macOS, D-V2-90).
+    memory_fired: Option<u64>,
     /// Its processor time, measured by the OS once it was reaped (Unix).
     #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
     guest_cpu: Option<std::time::Duration>,
@@ -2311,15 +2352,21 @@ fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: S
         if let Some(o) = observed {
             json["observed_bytes"] = serde_json::json!(o);
         }
+        // Who refused it more: the operating system at its own ceiling, or this host, which read the guest
+        // past its budget and ended it (macOS, D-V2-90).
+        let by = if source.starts_with("the host's") { "this host ended it" } else { "the operating system refused it more" };
         Stop {
             message: format!(
-                "the run was stopped: the guest reached its memory ceiling of {} (D-V2-25), and the operating \
-                 system refused it more. {budgets} mem=BYTES`",
+                "the run was stopped: the guest reached its memory ceiling of {} (D-V2-25), and {by}. {budgets} \
+                 mem=BYTES`",
                 crate::budget::human_bytes(limits.memory_bytes)
             ),
             json,
         }
     };
+    if let Some(peak) = ev.memory_fired {
+        return Some(memory(Some(peak), "the host's memory sampler, reading the guest's peak footprint"));
+    }
     if st.code() == Some(crate::ceiling::GUEST_MEMORY_EXIT) {
         return Some(memory(None, "the guest's allocator, refused at the ceiling"));
     }

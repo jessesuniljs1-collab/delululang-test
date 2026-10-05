@@ -116,17 +116,17 @@ fn the_run_reports_what_the_jail_enforced() {
             "the run said nothing at all about the guest's view of the filesystem: {err}"
         );
     }
-    if cfg!(windows) || cfg!(target_os = "linux") {
-        assert!(err.contains("memory ceiling"), "{err}");
+    // A memory ceiling on every platform: the kernel's on Linux and Windows; on macOS, which refuses the
+    // rlimit that would give one, the host's sampler of the guest's peak footprint (D-V2-90) — named as
+    // the host's, never as the kernel's.
+    assert!(err.contains("memory ceiling"), "{err}");
+    if cfg!(target_os = "macos") {
+        assert!(err.contains("memory ceiling (the host's sampler)"), "{err}");
     }
     // A processor-time ceiling on every platform, macOS included since PS-A2 round three. It matters
     // most there: macOS has no `PDEATHSIG`, so a guest that is computing and asking for nothing would
-    // not notice its host had died, and this is the only bound on that. A MEMORY ceiling is still not
-    // claimed on macOS, because macOS does not meaningfully enforce the rlimit that would give one.
+    // not notice its host had died, and this is the only bound on that.
     assert!(err.contains("processor-time ceiling"), "{err}");
-    if cfg!(target_os = "macos") {
-        assert!(!err.contains("memory ceiling"), "macOS must not claim a ceiling it does not enforce: {err}");
-    }
     if cfg!(target_os = "macos") {
         // The profile is DENY-DEFAULT since PS-A2 round two (experiment 35479148216): everything is
         // refused but reads, the guest's own exec, `sysctl-read` and the channel socket. Each of
