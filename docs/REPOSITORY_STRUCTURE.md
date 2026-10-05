@@ -285,6 +285,8 @@ DeluluLang/
 │   │                               #   read out of the page, against a real archive
 │   ├── check-other-os.sh           # clippy -D warnings for macOS and Windows from Linux (a stand-in
 │   │                               #   C compiler; compiled, never run) — routine run 3's loop engineering
+│   ├── ci-log-summary.py           # a CI job's saved log in a few lines: totals, failures, compiler
+│   │                               #   warnings, named lines — routine run 12's loop engineering
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught
