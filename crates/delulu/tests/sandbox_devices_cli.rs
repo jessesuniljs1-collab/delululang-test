@@ -38,12 +38,15 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).to_string()
 }
 
-/// A scratch directory with a working directory and a state directory of its own.
+/// A scratch directory with a working directory and a state directory of its own. Short, and under `/tmp`
+/// off Windows: the broker's socket lives in the state directory, and macOS allows a socket path 104 bytes —
+/// its own temporary directory (`/var/folders/…/T/`) spends half of them (`HANDOFF.md` §11.5; this file's
+/// e-stop witness went red on a macOS runner at 113).
 fn scratch(tag: &str) -> (PathBuf, PathBuf) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-    let base = std::env::temp_dir().join(format!("delulu-sbxdev-{tag}-{}-{t}-{n}", std::process::id()));
+    let root = if cfg!(windows) { std::env::temp_dir() } else { PathBuf::from("/tmp") };
+    let base = root.join(format!("dsd-{tag}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (cwd, state) = (base.join("work"), base.join("state"));
     std::fs::create_dir_all(&cwd).unwrap();
@@ -191,8 +194,9 @@ fn burner(burn: u32, tail: &str) -> String {
     format!(
         "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n\
          fn fib(n: Int) -> Int {{\n  if n < 2 {{ n }} else {{ fib(n - 1) + fib(n - 2) }}\n}}\n\n\
-         fn chat(c: Cap[Console], n: Int) -> Int ! {{Write}} {{\n  if n <= 0 {{ 0 }} else {{ c.println(\".\")\n  chat(c, n - 1) }}\n}}\n\n\
-         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         fn burst(c: Cap[Console], n: Int) -> Int ! {{Write}} {{\n  if n <= 0 {{ 0 }} else {{ c.println(\".\")\n  burst(c, n - 1) }}\n}}\n\n\
+         fn chat(c: Cap[Console], k: Cap[Clock], until: Int) -> Int ! {{Write, Clock}} {{\n  if k.now_ms() >= until {{ 0 }} else {{ let b = burst(c, 50)\n  chat(c, k, until) }}\n}}\n\n\
+         fn main(root: Root) ! {{Write, Actuate, Clock}} {{\n\
          \x20 let c = root.console()\n\
          \x20 let a = root.actuator(\"arm0/elbow\")\n\
          \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
@@ -202,7 +206,9 @@ fn burner(burn: u32, tail: &str) -> String {
     )
 }
 
-const SHORT_BEAT: &str = "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=25,ttl_ms=600000,fail=safe-park";
+/// 150 ms: far more than a slow runner's guest needs between being sent its program and its first command (the
+/// broker starts at the send, so the guest's own check of the program counts), far less than each burn below.
+const SHORT_BEAT: &str = "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=150,ttl_ms=600000,fail=safe-park";
 
 /// The beat overdue figure the host journaled — measured on the host's clock, never the guest's.
 fn overdue_us(err: &str) -> u64 {
@@ -210,13 +216,13 @@ fn overdue_us(err: &str) -> u64 {
     err[at + "beat overdue by ".len()..].split(' ').next().unwrap().parse().expect("a number of µs")
 }
 
-/// Witness 2: the guest commands, then burns far past its 25 ms heartbeat without beating; the host's
+/// Witness 2: the guest commands, then burns far past its 150 ms heartbeat without beating; the host's
 /// watchdog revokes the lease on its own tick, the guest's next command is told `LeaseRevoked` with the
 /// cause and the fail-state, and the host says which device it lost and how late the beat was.
 #[test]
 fn a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock() {
     let (cwd, state) = scratch("beat");
-    std::fs::write(cwd.join("arm.delulu"), burner(27, "  c.println(say(a.command(Elbow { angle_deg: 10.0 })))\n")).unwrap();
+    std::fs::write(cwd.join("arm.delulu"), burner(31, "  c.println(say(a.command(Elbow { angle_deg: 10.0 })))\n")).unwrap();
     let o = delulu_in(
         &cwd,
         &state,
@@ -265,25 +271,29 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
     assert!(took < Duration::from_secs(60), "the wall ceiling ended the wedged guest: {took:?}");
 }
 
-/// Witness 2's other half: a guest that keeps its host busy — a stream of console requests — but never
-/// touches the device is NOT beating it. The beat rides device activity, not channel activity, so a
-/// guest cannot keep a machine by chatting.
+/// Witness 2's other half: a guest that keeps its host busy — console and clock requests, 50 at a time, for
+/// a second of its own clock (several heartbeats) — but never touches the device is NOT beating it. The beat
+/// rides device activity, not channel activity, so a guest cannot keep a machine by chatting.
 #[test]
 fn a_guest_that_talks_to_its_host_without_touching_the_device_is_not_beating_it() {
     let (cwd, state) = scratch("chat");
-    let tail = "  let n = chat(c, 3000)\n  c.println(say(a.command(Elbow { angle_deg: 10.0 })))\n";
+    let tail = "  let k = root.clock()\n  let n = chat(c, k, k.now_ms() + 1000)\n  c.println(say(a.command(Elbow { angle_deg: 10.0 })))\n";
     std::fs::write(cwd.join("arm.delulu"), burner(2, tail)).unwrap();
     let o = delulu_in(
         &cwd,
         &state,
-        &["run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim", "--no-prompt"],
+        &[
+            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", "clock", "--grant", SHORT_BEAT,
+            "--broker-profile", "sim", "--no-prompt",
+        ],
     );
     assert!(o.status.success(), "{}", stderr(&o));
     let out = stdout(&o);
+    assert!(out.lines().filter(|l| *l == ".").count() >= 50, "the guest talked to its host: {}", out.len());
     let last = out.lines().last().unwrap_or_default();
     assert!(
         last.starts_with("REVOKED") && last.contains("missed-heartbeat"),
-        "3,000 console requests over the channel did not beat the lease: {last}\n{}",
+        "a second of console and clock requests over the channel did not beat the lease: {last}\n{}",
         stderr(&o)
     );
 }
@@ -407,4 +417,29 @@ fn the_sign_off_gate_binds_a_sandboxed_hardware_run_and_starts_no_driver_and_no_
     assert!(!err.contains("sandbox: the guest"), "no guest was launched for unapproved bytes:\n{err}");
     assert!(stdout(&o).is_empty(), "nothing ran: {}", stdout(&o));
     assert_eq!(std::fs::read_to_string(cwd.join("adapter-saw.txt")).unwrap_or_default(), "", "and no driver started");
+}
+
+/// A hardware run's own flags without a hardware profile are refused, sandboxed or not (found by this
+/// slice's suite: once the sandboxed run applied the device flags, `--approved` beside a simulator run was
+/// accepted there and did nothing — as the ordinary run had always done). An operator who passed them
+/// believes a sign-off or a driver is in force.
+#[test]
+fn a_hardware_flag_without_a_hardware_profile_is_refused_sandboxed_or_not() {
+    let (cwd, state) = scratch("hwflag");
+    std::fs::write(cwd.join("arm.delulu"), arm_program()).unwrap();
+    for sandbox in [false, true] {
+        for flag in [vec!["--approved", "signoff.json"], vec!["--adapter-cmd", "drv"], vec!["--require-signed-adapter"]] {
+            let mut args = vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--grant", SENSOR, "--broker-profile", "sim"];
+            if sandbox {
+                args.push("--sandbox");
+            }
+            args.extend(flag.iter().copied());
+            args.push("--no-prompt");
+            let o = delulu_in(&cwd, &state, &args);
+            let err = stderr(&o);
+            assert_eq!(o.status.code(), Some(2), "sandbox={sandbox} {flag:?} was accepted and not applied:\n{err}");
+            assert!(err.contains(&format!("`{}`", flag[0])) && err.contains("Nothing ran"), "{err}");
+            assert!(stdout(&o).is_empty(), "nothing ran: {}", stdout(&o));
+        }
+    }
 }

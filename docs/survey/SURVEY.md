@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 296 |
-| Rust lines | 155550 |
+| Rust lines | 155613 |
 | Rust files outside `src/` (test/bench targets) | 135 |
 | Markdown documents | 252 |
 | Markdown lines | 69701 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1485 / 13313 |
+| Nodes / edges in this map | 1485 / 13314 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 39362 lines
+- **Modules:** 41 files, 39386 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -130,7 +130,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/pipe_channel.rs` | 573 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
 | `src/policy.rs` | 522 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
-| `src/run_cmd.rs` | 1816 | `delulu run` — the command that actually executes a program. |
+| `src/run_cmd.rs` | 1840 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 688 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/schema.rs` | 1008 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |

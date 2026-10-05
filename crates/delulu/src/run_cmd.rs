@@ -1629,6 +1629,30 @@ pub(crate) fn device_terms(
     opts: &Opts,
 ) -> Result<(delulu_runtime::Profile, delulu_runtime::ClockMode), i32> {
     let device_profile = resolve_device_profile(file, opts)?;
+    // A hardware run's own flags mean nothing without one, and a flag that is silently ignored reads exactly
+    // like a flag that was applied: an operator who passed `--approved` or `--adapter-cmd` believes a sign-off
+    // or a driver is in force (found by routine run 13, when the sandboxed run began to apply them — the
+    // ordinary run had always dropped them in silence).
+    if !matches!(device_profile, delulu_runtime::Profile::Hw { .. }) {
+        let hw_only = [
+            ("--approved", opts.approved.is_some()),
+            ("--adapter-cmd", opts.adapter_cmd.is_some()),
+            ("--adapter-artifact", opts.adapter_artifact.is_some()),
+            ("--adapter-signer", opts.adapter_signer.is_some()),
+            ("--adapter-record", opts.adapter_record.is_some()),
+            ("--require-signed-adapter", opts.require_signed_adapter),
+        ];
+        let given: Vec<String> = hw_only.iter().filter(|(_, on)| *on).map(|(f, _)| format!("`{f}`")).collect();
+        if !given.is_empty() {
+            eprintln!(
+                "error: {} describe{} a hardware run, and this run is not one (`--broker-profile hw:ADAPTER`). \
+                 Nothing ran: a hardware flag that is not applied reads exactly like one that was.",
+                given.join(", "),
+                if given.len() == 1 { "s" } else { "" }
+            );
+            return Err(2);
+        }
+    }
     // D20: the deterministic simulator clock. Only meaningful under `sim`, where it replaces the
     // wall-clock dead-man with a step-per-interaction clock so a demonstration's timing is a
     // function of the command sequence, not of interpreter speed. Refused loudly elsewhere: a
