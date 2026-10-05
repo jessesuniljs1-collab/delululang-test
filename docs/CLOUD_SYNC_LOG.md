@@ -1377,3 +1377,28 @@ it on `origin` was made in the cloud and is listed below.
   (P8-01 is complete, D-V2-95); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
   4.28), macOS's reads; (4) RW 7.17. **For the owner:** D-V2-95 (P8-01, and a hardware run's flags refused without one —
   a behaviour change for the ordinary run) is this run's decision.
+
+### 2026-10-05 — routine run 14: CI read green; P8-02 steps 3–4 — a Verified driver's logic (D-V2-96)
+- Session: `https://claude.ai/code/session_015GbcmhgsYDQj97EaKh65ea`   Model: Claude Opus 5.5 (the scheduled routine; no
+  fallback notice)
+- Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-7fd30a`, at `master`'s head; each slice
+  pushed there first, read on the runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `7a895f0` (routine run 13's last reading)
+- Commits: (1) `45d1181` P8-02 steps 3–4: a Verified driver's logic on a thread of its own, the host's transport; (2) this
+  entry and the records
+- Files and folders: A `crates/delulu-runtime/src/verified_adapter.rs`; M `crates/delulu-runtime/src/lib.rs`,
+  `crates/delulu-runtime/src/plugin.rs` (`effective_interp_limits` crate-visible), `docs/survey/*` — (1). M
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-96), `V2_P8_DESIGN.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*` — (2). Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address,
+  Claude as co-author.
+- Survey and doctor (start of run): `survey check` ok (1,486 nodes, 13,391 edges); `doctor --check` ok, all checks passed.
+- Verified: **CI on arrival** — `7a895f0`'s push run `37310919853` success, 14 jobs (arm64 MEASURED 2.87x/4.11x); the
+  2026-10-05 nightly `37293332206` success on every job, `miri-slow (delulu-broker)` included. **The slice:** eight
+  witnesses; M136–M144 red but M143 (survives on a second wall; M143b red); clippy clean; read on the runners at `45d1181`
+  — arm64 `37333709607`, Windows `37333705883`, macOS `37333701001`, 8 passed each; the full suite alone 2,137 passed, 0 failed, 16 ignored (158 binaries), cargo
+  exit 0, the tree unmoved.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing yet.
+- Open / next: P8-02 steps 5–7 (`--adapter-dpx`, the pin, `--adapter-transport`, the end-to-end witnesses) — this run
+  continues with them.
+

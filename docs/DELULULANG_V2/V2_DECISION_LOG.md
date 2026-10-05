@@ -2216,6 +2216,30 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
     **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit; read on the runners at `bc8bd91` before `master` moved — macOS `37305292797` (28 passed: `sandbox_devices_cli` 10, `json_contract` 14, `schema_cli` 4), Windows `37305296588` and Linux arm64 `37305299628` green on the same three targets; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **Push runs:** `fee5353` — CI `37302336639` success, 14 jobs, `microvm` among them (the L2 witness green on `master` too); `5b89f9f` — CI `37304139892` success, 14 jobs (arm64 MEASURED 2.97x), `ocsf` `37304139836` success; `521d688` — CI `37304345347` success, 14 jobs (arm64 MEASURED 2.92x). With it every item of `V2_P8_DESIGN.md`'s P8-01 is built and
     read — L1 and L2, witnesses 1–5 and their falsifiers — and **P8-02 is next.**
 
+## D-V2-96 — P8-02: a Verified driver is four pure exports R-Get-checked before it exists, its logic on a thread of its own under one deadline — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **Four exports, not an `encode`/`decode` pair** (a departure from `V2_P8_DESIGN.md`'s step 4): `encode_command`,
+   `decode_command`, `encode_read`, `decode_read`, so a reply's meaning never depends on the plugin guessing which
+   question it answers — an `OK` that accepts a command and a `NODEV` that answers a read are different types, not one
+   value read two ways. `decode_command` returns `Option[Str]` (the device's refusal, if any) because the language has no
+   unit literal to write `Ok(())` with.
+2. **The interface is R-Get**, exactly as `p.get` applies it: each export must exist (DL1502 when missing) with exactly the
+   interface's parameter and return types and a row inside the EMPTY row (DL1504) — so a driver that names an effect, or
+   asks for a capability, is not a driver, whatever its manifest says. No new code.
+3. **One thread owns the DIR**, with a 16 MiB stack and the depth bound `max_depth_for_stack` gives it (the stack/depth
+   pair is the invariant, D51); **a fresh interpreter per call**, so nothing one call computes reaches the next — the
+   plugin is a function of its arguments.
+4. **One deadline for the whole exchange** (FRAME-DRIP-1's lesson): the two logic calls and the transport share one
+   `EXCHANGE_TIMEOUT`; the transport is handed only the time left, and an answer after it is a timeout.
+5. **A frame is one line** (no `\n` or `\r`, non-empty, at most 64 KiB): a transport frames by line, so a frame holding
+   a line break would put a second request on the wire that no grant check saw. Checked before the transport is called.
+6. **What poisons:** a fault in the plugin's code (its own bug, a spent budget, the depth bound), a value outside its
+   type, a frame that is not one line, a non-finite reading (the language's arithmetic can compute one), any transport
+   failure — and a transport's `Refused`, which is not a transport's to say. A device's refusal, read by the plugin, does
+   not poison: a device saying no is working.
+7. **Witnesses and falsifiers:** `verified_adapter.rs`'s eight tests; M136–M144 red but M143, which survives on a second
+   wall (the decode's share of the same expired deadline), and M143b — both walls removed — red.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

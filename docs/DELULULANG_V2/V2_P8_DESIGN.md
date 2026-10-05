@@ -139,6 +139,12 @@ still refuses before the plugin is called; a plugin that tries to name a capabil
 3's precondition (`Dir: Send`, asserted at compile time). **The next run starts at step 3 proper:** the `VerifiedAdapter`'s
 thread.
 
+**Done by routine run 14 (`45d1181`, D-V2-96):** steps 3 and 4 — `delulu_runtime::verified_adapter`: the logic's thread, a
+fresh interpreter per call, one deadline over the exchange, the poison laws, and the interface as FOUR exports (a departure:
+`encode_command`, `decode_command`, `encode_read`, `decode_read`, each R-Get-checked to an empty row before the adapter
+exists), witnessed against an in-process device. **Next:** steps 5–7 — the pin, `--adapter-dpx` with
+`--adapter-transport`, the witnesses end to end.
+
 ### P8-03 — the reference transport and the sim as a device
 
 A transport the tests and a lab can both use: a line or byte stream to the in-tree simulator run as a

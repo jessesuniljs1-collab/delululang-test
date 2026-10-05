@@ -4129,3 +4129,35 @@ without the driver) red on `hw_adapter_cli`. **Verified:** read on the runners a
 (`418dcca`), `37308742427` (`e561983`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.93x/4.11x,
 2.86x/4.12x, 2.97x/4.12x); `master` green through `e561983`. The 2026-10-05 nightly `37293332206` green on every job read —
 its `miri-slow (delulu-broker)` was still running at 12:36.
+
+## 2026-10-05 — routine run 14: CI read green; P8-02 steps 3–4 — a Verified driver's logic on a thread of its own (D-V2-96)
+
+**Read first (step 3):** `master`'s last push run, `7a895f0` — CI `37310919853` success, 14 jobs (arm64 ping-pong MEASURED
+2.87x against a control of 4.11x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED — 3 threads; the sandbox
+properties as on every run since run 8, macOS `filesystem_confinement` absent); the 2026-10-05 nightly `37293332206` on
+`f912084` — success, every job, `miri-slow (delulu-broker)` included (finished 12:45). `release` (schedule) `37304777289`
+success. No `claude/*` branch carries a commit `master` lacks beyond run 10's two recorded witness branches. Survey `ok`
+(1,486 nodes, 13,391 edges), `doctor --check` all checks passed. `gh` is installed in this VM (`/usr/local/bin/gh`); the
+MCP tools and the REST API through `curl` were used.
+
+**Built (`45d1181`):** `delulu_runtime::verified_adapter` — `VerifiedAdapter`, an `adapter::Adapter` whose logic is a
+re-proved Verified DIR and whose transport is the host's (`Transport`: write one frame, read one line, within the time
+left). The driver interface is four pure exports, each held by R-Get (`r_get_verified`, the check `p.get` applies) to
+exactly its type and an EMPTY row before the adapter exists — `encode_command(Str, Map[Str, Float]) -> Result[Str, Str]`,
+`decode_command(Str, Str) -> Option[Str]`, `encode_read(Str) -> Result[Str, Str]`, `decode_read(Str, Str) ->
+Result[Option[Float], Str]`. The logic runs on one thread that owns the DIR (16 MiB of stack and the depth bound that
+fits it, so deep recursion is DL0905, never the host's stack), a fresh interpreter per call under the best-effort budget;
+one deadline (`EXCHANGE_TIMEOUT`) covers the two logic calls and the transport; a frame that is not one line of at most
+64 KiB, a fault in the plugin, a value outside its type, a non-finite reading, or any transport failure poisons the
+adapter before anything more is written. **Eight witnesses** against an in-process device that logs every frame written.
+**Falsified:** M136 (no line check), M137 (a logic fault does not poison), M138 (no interface check), M139 (a fresh
+deadline for the transport), M140 (a non-finite reading accepted), M142 (a transport's refusal passed through), M144 (a
+device's refusal poisons) — each red; M141 (no depth bound on the logic's thread) aborts the test process (SIGABRT, the
+host's stack overflowed); **M143** (a late transport answer accepted) SURVIVES on a second wall — the decode's share of
+the same deadline has no time left — and **M143b**, both walls removed, is red. Found while writing the witness: the
+language's `parse_float` refuses `NaN` and `inf`, but its arithmetic computes them (`0.0 / 0.0` prints `NaN`), so the
+host checks what the plugin RETURNS, not what the device sent. **Verified:** clippy clean; read on the runners at
+`45d1181` before `master` moved — arm64 `37333709607`, Windows `37333705883`, macOS `37333701001`: 8 passed each, every
+witness named; the full suite alone through `scripts/suite.sh`, 2,137 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved.
+**Next:** steps 5–7 — `--adapter-dpx`, its signer pin and its transport, end to end.
+
