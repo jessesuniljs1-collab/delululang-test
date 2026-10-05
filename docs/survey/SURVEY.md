@@ -23,8 +23,8 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 296 |
-| Rust lines | 155829 |
+| Rust files | 297 |
+| Rust lines | 156518 |
 | Rust files outside `src/` (test/bench targets) | 135 |
 | Markdown documents | 252 |
 | Markdown lines | 70007 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1486 / 13391 |
+| Nodes / edges in this map | 1487 / 13410 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -298,7 +298,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 19356 lines
+- **Modules:** 23 files, 20045 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -315,7 +315,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/egress/tests.rs` | 790 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 458 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
 | `src/interp.rs` | 2583 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
-| `src/lib.rs` | 444 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
+| `src/lib.rs` | 445 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 273 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2282 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
@@ -324,6 +324,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/sink.rs` | 100 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 537 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
 | `src/value.rs` | 970 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/verified_adapter.rs` | 688 | P8-02: a device driver whose **logic is a Verified-class plugin** (`V2_P8_DESIGN.md`). |
 
 ### `delulu-survey`
 

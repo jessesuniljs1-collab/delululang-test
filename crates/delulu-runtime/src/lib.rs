@@ -22,6 +22,7 @@ pub mod sink;
 pub mod python;
 pub mod trace;
 pub mod value;
+pub mod verified_adapter;
 
 pub use broker::{parse_manifest, Grants, Manifest};
 pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Liveness, Op};

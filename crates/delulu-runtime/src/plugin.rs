@@ -1003,7 +1003,7 @@ pub fn verify_plugin(art: &PluginArtifact) -> Result<VerifyReport, LoadRefusal> 
 
 /// The effective best-effort interpreter limits for a load (§5.4): `0` → profile default, **never
 /// "unlimited"**. `fuel` → a step budget; `mem_mb` → an allocation-accounting byte budget.
-fn effective_interp_limits(limits: &Limits) -> (u64, u64) {
+pub(crate) fn effective_interp_limits(limits: &Limits) -> (u64, u64) {
     let steps = if limits.fuel > 0 { limits.fuel as u64 } else { DEFAULT_INTERP_STEPS };
     let mem_bytes = if limits.mem_mb > 0 {
         (limits.mem_mb as u64).saturating_mul(1024 * 1024)
