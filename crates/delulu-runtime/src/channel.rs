@@ -502,6 +502,12 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// is decided by the broker — revocation, expiry, the Guard's `guarded` and `sealed` tiers and
     /// its permits — exactly as for a program the host interprets itself (REMAINING_WORK 4.20).
     custody: Option<Box<dyn crate::custody::Custody>>,
+    /// P8-01: the run's device broker — the same leases, envelope, rate, dead-man and e-stop an
+    /// ordinary run's interpreter holds (`Interp::with_devices`). A guest's actuator command and sensor
+    /// read are performed against it, by the interpreter's own body (`device::actuate`/`sense`); the
+    /// guest holds a handle and nothing else, so a guest that stops talking is a program that stopped
+    /// beating, and the broker's watchdog — on its own thread here — owes it nothing.
+    devices: Option<std::sync::Arc<crate::device::DeviceBroker>>,
     /// How long the guest has to send one whole frame, from its first byte ([`FRAME_DEADLINE`]).
     frame_deadline: std::time::Duration,
 }
@@ -521,6 +527,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             self_applied: Vec::new(),
             generation: None,
             custody: None,
+            devices: None,
             frame_deadline: FRAME_DEADLINE,
         }
     }
@@ -548,6 +555,12 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// Authorize every capability operation through `custody` before performing it (see the field).
     pub fn with_custody(mut self, custody: Box<dyn crate::custody::Custody>) -> Self {
         self.custody = Some(custody);
+        self
+    }
+
+    /// Perform the guest's device operations against `broker` (see the field).
+    pub fn with_devices(mut self, broker: std::sync::Arc<crate::device::DeviceBroker>) -> Self {
+        self.devices = Some(broker);
         self
     }
 
@@ -738,6 +751,27 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                             return Response::Fault { code: d.code.to_string(), message: d.message };
                         }
                     }
+                }
+                // P8-01: a device operation, where the interpreter performs it — after the custody
+                // gate (an actuator command round-trips to the grant tree, the e-stop's way in), by
+                // the interpreter's own body, against the run's broker. Its refusals are values the
+                // program is told, and the report's `denied` list records each, as the trace does.
+                match (&capv.scope, method.as_str()) {
+                    (crate::value::CapScope::Actuator(env), "command") => {
+                        let mut refusals: Vec<String> = Vec::new();
+                        let v = crate::device::actuate(self.devices.as_deref(), env, decoded.first(), &mut |op, why| {
+                            refusals.push(format!("actuator {op}: {}", crate::device::refusal_detail(&env.device, op, why)))
+                        });
+                        for r in &refusals {
+                            self.note_denied(r);
+                        }
+                        return self.encode_result(v);
+                    }
+                    (crate::value::CapScope::Sensor { device }, "read") => {
+                        let v = crate::device::sense(self.devices.as_deref(), device);
+                        return self.encode_result(v);
+                    }
+                    _ => {}
                 }
                 match self.sink.cap_method_pinned(&capv, method, &decoded, span, fs_pin.as_deref()) {
                     Ok(v) => self.encode_result(v),

@@ -620,7 +620,8 @@ user, `limitations` says `identity_separation`, and this is a second wall under 
 not instead of it. Reads are
 confined on Linux only; on Windows and macOS a guest can still read the filesystem, and what stops it
 acting on what it read is the other layers. And it does not carry every program yet: actors, foreign C,
-Python, plugins, devices and secrets are **refused** rather than run unconfined, because a sandbox that
+Python, plugins, accelerators and secrets are **refused** rather than run unconfined (a control program's
+actuators and sensors are carried: the host performs each command against the run's device broker), because a sandbox that
 quietly did not apply is the one failure this design exists to prevent. That is also why `--sandbox` is
 still something you ask for rather than the default it is meant to become.
 

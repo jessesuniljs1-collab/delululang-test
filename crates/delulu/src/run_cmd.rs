@@ -908,30 +908,9 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // ----- device profile + the sim-to-hardware gate (Stage 10 phase 10f, spec §5.4) ------------
     // Decided BEFORE anything runs, for the same reason the isolation profile is: a hardware
     // grant for an artifact nobody approved must never reach the point of moving something.
-    let device_profile = match resolve_device_profile(&file, &opts) {
-        Ok(p) => p,
+    let (device_profile, device_clock) = match device_terms(&file, &opts) {
+        Ok(t) => t,
         Err(code) => return code,
-    };
-    // D20: the deterministic simulator clock. Only meaningful under `sim`, where it replaces the
-    // wall-clock dead-man with a step-per-interaction clock so a demonstration's timing is a
-    // function of the command sequence, not of interpreter speed. Refused loudly elsewhere: a
-    // hardware run's dead-man is a real-time promise and must never be quietly stepped.
-    let device_clock = match opts.sim_step {
-        None => delulu_runtime::ClockMode::Wall,
-        Some(0) => {
-            eprintln!("error: --sim-step needs a positive number of simulated milliseconds");
-            return 2;
-        }
-        Some(ms) => {
-            if !matches!(device_profile, delulu_runtime::Profile::Sim { .. }) {
-                eprintln!(
-                    "error: --sim-step is only meaningful with --broker-profile sim; the wall-clock \
-                     dead-man is a real-time guarantee and is not stepped"
-                );
-                return 2;
-            }
-            delulu_runtime::ClockMode::Stepped { step_us: ms.saturating_mul(1000) }
-        }
     };
 
 
@@ -1323,34 +1302,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             }
         }
     }
-    // 10g: give each actuator its own child node under this run's, then build the e-stop probe
-    // from them BEFORE custody moves into the interpreter. Two reasons for the child nodes rather
-    // than watching the run's own node: `grants revoke` on a device stops that device and leaves
-    // the program its console to report the loss with (spec §5.2's *subtree*), and revoking the
-    // parent still reaches every device transitively — the tree already does that.
-    // The device nodes' ids travel separately from the probe so the run can revoke them on the way
-    // out; the probe itself has moved into the watchdog thread by then.
-    let mut device_nodes: Vec<String> = Vec::new();
-    let device_state_dir: Option<std::path::PathBuf> =
-        daemon_custody.as_ref().map(|c| c.state_dir().to_path_buf());
-    let authority_probe: Option<delulu_runtime::AuthorityProbe> = if grants.actuators.is_empty() {
-        None
-    } else {
-        match daemon_custody.as_mut().map(|c| mint_device_nodes(c, &grants.actuators)) {
-            None => None,
-            Some(Ok((probe, ids))) => {
-                device_nodes = ids;
-                Some(probe)
-            }
-            Some(Err(d)) => {
-                // Fail closed: if a device's own node cannot be minted, the e-stop has nothing to
-                // aim at, and a run holding a machine with no way to stop it must not start.
-                let diag = Diagnostic::error(d.code, d.message);
-                print_diagnostics("run", &[diag], &map, None, opts.json);
-                return 1;
-            }
-        }
-    };
+    // 10g: each actuator's own grant node and the e-stop probe on them, minted BEFORE custody moves
+    // into the interpreter (`watch_devices`, shared with the sandboxed run since P8-01).
+    let DeviceWatch { probe: authority_probe, nodes: device_nodes, state_dir: device_state_dir } =
+        match watch_devices(daemon_custody.as_mut(), &grants.actuators, &map, opts.json) {
+            Ok(w) => w,
+            Err(code) => return code,
+        };
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
         interp = interp.with_custody(Box::new(c));
@@ -1373,74 +1331,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // Stage 10 (10f): the device broker starts its dead-man the moment the leases exist, which is
     // BEFORE `main` runs. A program that never reaches its first command still holds a lease it
     // is not beating, and the watchdog treats that exactly like any other silence.
-    let devices = if grants.actuators.is_empty() && grants.sensors.is_empty() {
-        None
-    } else {
-        // RFC 0001 dish 3: under `hw:` the driver is a separate process. It is spawned HERE,
-        // after the DL1905 approval gate above has already refused an unapproved artifact — so a
-        // hardware driver is never started for bytes a human did not sign off on.
-        let hw_adapter = match (&device_profile, &opts.adapter_cmd) {
-            (delulu_runtime::Profile::Hw { adapter }, Some(cmd)) => {
-                let mut parts = cmd.split_whitespace();
-                let Some(prog) = parts.next() else {
-                    eprintln!("error: --adapter-cmd is empty");
-                    return 2;
-                };
-                let args: Vec<String> = parts.map(str::to_string).collect();
-                // ADAPTER-SPELL-1: the file the name means, resolved ONCE, is the file verified and
-                // the file started. Unresolved, the bare name is never handed to the OS's own search,
-                // which could find a file the check never saw.
-                let resolved = crate::cli::resolve_driver(prog);
-                let prog: String = match &resolved {
-                    Some(p) => p.display().to_string(),
-                    None => {
-                        eprintln!(
-                            "error: adapter could not be started: `{prog}` is neither a file on PATH nor a path \
-                             to one — the driver started must be the file whose provenance is checked, so it is \
-                             not looked up anywhere else"
-                        );
-                        return 1;
-                    }
-                };
-                let prog = prog.as_str();
-                // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
-                let (prov, gate) = check_adapter_signature(
-                    prog,
-                    opts.adapter_artifact.as_deref(),
-                    opts.require_signed_adapter,
-                    opts.adapter_signer.as_deref(),
-                );
-                // Recorded BEFORE the refusal is acted on, so a run stopped because the driver was
-                // signed by the wrong key leaves the evidence that it happened (C60).
-                if let Err(code) = record_adapter_provenance(&prov, opts.adapter_record.as_deref()) {
-                    return code;
-                }
-                if let Some(code) = gate {
-                    return code;
-                }
-                match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
-                    Ok(a) => Some(a),
-                    Err(e) => {
-                        // Fail closed and BEFORE `main`: a run that could not start its driver must
-                        // not begin, or the program would discover the machine is unreachable
-                        // partway through a motion.
-                        eprintln!("error: {e}");
-                        return 1;
-                    }
-                }
-            }
-            _ => None,
-        };
-        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_adapter(
-            device_profile.clone(),
-            &grants.actuators,
-            &grants.sensors,
-            authority_probe,
-            device_clock,
-            hw_adapter,
-        ));
-        interp = interp.with_devices(b.clone());
-        Some(b)
+    let devices = match plan_devices(&grants, &device_profile, device_clock, authority_probe, &opts) {
+        Ok(None) => None,
+        Ok(Some(plan)) => {
+            let b = plan.start();
+            interp = interp.with_devices(b.clone());
+            Some(b)
+        }
+        Err(code) => return code,
     };
     // Stage 10 (10h): the compute broker, on the same gate — no compute grants, no adapter bound,
     // and a dispatch would answer `NoAdapter` rather than a number nobody computed.
@@ -1593,13 +1491,12 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     }
 
     // Stage 10 (10f): stop the watchdog before any verdict is reported, so a run never leaves a
-    // thread deciding things about physical devices after the program is over. Then merge its
-    // journal into the trace — the watchdog runs on its own thread and `TraceSink` is an `Rc`, so
-    // device events arrive here the same way Stage 7's worker records do. They carry `at_ms`
+    // thread deciding things about physical devices after the program is over (`close_devices`). Then
+    // merge its journal into the trace — the watchdog runs on its own thread and `TraceSink` is an
+    // `Rc`, so device events arrive here the same way Stage 7's worker records do. They carry `at_ms`
     // because appending them last would otherwise misrepresent when they happened.
     if let Some(b) = &devices {
-        b.shutdown();
-        let events = b.events();
+        let events = close_devices(b, device_state_dir.as_deref(), &device_nodes);
         if let Some(s) = &sink {
             let base = s.len() as u64;
             for (i, e) in events.iter().enumerate() {
@@ -1613,16 +1510,6 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                     ..Default::default()
                 });
             }
-        }
-        // A lost device is never silent, trace or no trace: losing an actuator mid-run is the
-        // single most consequential thing that can happen to a program in this language.
-        for e in events.iter().filter(|e| e.op == "lease.revoked") {
-            eprintln!("devices: {}", e.detail);
-        }
-        // 10g: and the device's grant node dies with the run that minted it, so `grants list`
-        // never offers an operator an arm that nobody holds (see `revoke_device_nodes`).
-        if let Some(dir) = &device_state_dir {
-            revoke_device_nodes(dir, &device_nodes);
         }
     }
 
@@ -1729,4 +1616,201 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     }
 
     code
+}
+
+// ----- a run's devices, shared by the ordinary run and the sandboxed one (P8-01) ----------------
+
+/// The device profile and clock this command line asks for (Stage 10 phase 10f, spec §5.4),
+/// decided BEFORE anything runs, for the same reason the isolation profile is: a hardware grant for
+/// an artifact nobody approved must never reach the point of moving something — `resolve_device_profile`
+/// is the DL1905 sign-off gate.
+pub(crate) fn device_terms(
+    file: &str,
+    opts: &Opts,
+) -> Result<(delulu_runtime::Profile, delulu_runtime::ClockMode), i32> {
+    let device_profile = resolve_device_profile(file, opts)?;
+    // D20: the deterministic simulator clock. Only meaningful under `sim`, where it replaces the
+    // wall-clock dead-man with a step-per-interaction clock so a demonstration's timing is a
+    // function of the command sequence, not of interpreter speed. Refused loudly elsewhere: a
+    // hardware run's dead-man is a real-time promise and must never be quietly stepped.
+    let device_clock = match opts.sim_step {
+        None => delulu_runtime::ClockMode::Wall,
+        Some(0) => {
+            eprintln!("error: --sim-step needs a positive number of simulated milliseconds");
+            return Err(2);
+        }
+        Some(ms) => {
+            if !matches!(device_profile, delulu_runtime::Profile::Sim { .. }) {
+                eprintln!(
+                    "error: --sim-step is only meaningful with --broker-profile sim; the wall-clock \
+                     dead-man is a real-time guarantee and is not stepped"
+                );
+                return Err(2);
+            }
+            delulu_runtime::ClockMode::Stepped { step_us: ms.saturating_mul(1000) }
+        }
+    };
+    Ok((device_profile, device_clock))
+}
+
+/// 10g: give each actuator its own child node under this run's, and build the e-stop probe from them.
+/// Two reasons for the child nodes rather than watching the run's own node: `grants revoke` on a
+/// device stops that device and leaves the program its console to report the loss with (spec §5.2's
+/// *subtree*), and revoking the parent still reaches every device transitively — the tree already
+/// does that. The device nodes' ids and the state directory travel separately from the probe so the
+/// run can revoke them on the way out ([`close_devices`]); the probe itself moves into the watchdog
+/// thread. Without broker custody there is no tree to watch, and nothing is minted.
+pub(crate) fn watch_devices(
+    custody: Option<&mut crate::broker_client::BrokerClientCustody>,
+    actuators: &[delulu_runtime::value::ActuatorEnvelope],
+    map: &SourceMap,
+    json: bool,
+) -> Result<DeviceWatch, i32> {
+    let Some(c) = custody else { return Ok(DeviceWatch { probe: None, nodes: Vec::new(), state_dir: None }) };
+    let state_dir = Some(c.state_dir().to_path_buf());
+    if actuators.is_empty() {
+        return Ok(DeviceWatch { probe: None, nodes: Vec::new(), state_dir });
+    }
+    match mint_device_nodes(c, actuators) {
+        Ok((probe, nodes)) => Ok(DeviceWatch { probe: Some(probe), nodes, state_dir }),
+        Err(d) => {
+            // Fail closed: if a device's own node cannot be minted, the e-stop has nothing to
+            // aim at, and a run holding a machine with no way to stop it must not start.
+            let diag = Diagnostic::error(d.code, d.message);
+            print_diagnostics("run", &[diag], map, None, json);
+            Err(1)
+        }
+    }
+}
+
+/// What [`watch_devices`] minted: the e-stop probe (for the broker's watchdog), and the devices' own nodes
+/// with the state directory they live in (for [`close_devices`]).
+pub(crate) struct DeviceWatch {
+    pub(crate) probe: Option<delulu_runtime::AuthorityProbe>,
+    pub(crate) nodes: Vec<String>,
+    pub(crate) state_dir: Option<std::path::PathBuf>,
+}
+
+/// Everything a run's device broker is made of, checked before the program runs: the profile, the
+/// granted envelopes and sensors, the e-stop probe, the clock, and — under `hw:` — the driver, its
+/// provenance checked and the process started. [`DevicePlan::start`] builds the broker, and its
+/// dead-man starts then: an ordinary run starts it before `main`, a sandboxed one when its guest is
+/// sent the program (`guest.rs`), so the guest's launch is not counted against its first heartbeat.
+pub(crate) struct DevicePlan {
+    profile: delulu_runtime::Profile,
+    actuators: Vec<delulu_runtime::value::ActuatorEnvelope>,
+    sensors: Vec<String>,
+    probe: Option<delulu_runtime::AuthorityProbe>,
+    clock: delulu_runtime::ClockMode,
+    adapter: Option<delulu_runtime::adapter::ProcessAdapter>,
+}
+
+impl DevicePlan {
+    /// The run's device broker, its watchdog started.
+    pub(crate) fn start(self) -> std::sync::Arc<delulu_runtime::DeviceBroker> {
+        std::sync::Arc::new(delulu_runtime::DeviceBroker::with_adapter(
+            self.profile,
+            &self.actuators,
+            &self.sensors,
+            self.probe,
+            self.clock,
+            self.adapter,
+        ))
+    }
+}
+
+/// The run's [`DevicePlan`], or `None` when it holds no device grant.
+pub(crate) fn plan_devices(
+    grants: &Grants,
+    device_profile: &delulu_runtime::Profile,
+    device_clock: delulu_runtime::ClockMode,
+    authority_probe: Option<delulu_runtime::AuthorityProbe>,
+    opts: &Opts,
+) -> Result<Option<DevicePlan>, i32> {
+    if grants.actuators.is_empty() && grants.sensors.is_empty() {
+        return Ok(None);
+    }
+    // RFC 0001 dish 3: under `hw:` the driver is a separate process. It is spawned HERE, after the
+    // DL1905 approval gate (`device_terms`) has already refused an unapproved artifact — so a
+    // hardware driver is never started for bytes a human did not sign off on.
+    let adapter = match (device_profile, &opts.adapter_cmd) {
+        (delulu_runtime::Profile::Hw { adapter }, Some(cmd)) => {
+            let mut parts = cmd.split_whitespace();
+            let Some(prog) = parts.next() else {
+                eprintln!("error: --adapter-cmd is empty");
+                return Err(2);
+            };
+            let args: Vec<String> = parts.map(str::to_string).collect();
+            // ADAPTER-SPELL-1: the file the name means, resolved ONCE, is the file verified and
+            // the file started. Unresolved, the bare name is never handed to the OS's own search,
+            // which could find a file the check never saw.
+            let resolved = crate::cli::resolve_driver(prog);
+            let prog: String = match &resolved {
+                Some(p) => p.display().to_string(),
+                None => {
+                    eprintln!(
+                        "error: adapter could not be started: `{prog}` is neither a file on PATH nor a path \
+                         to one — the driver started must be the file whose provenance is checked, so it is \
+                         not looked up anywhere else"
+                    );
+                    return Err(1);
+                }
+            };
+            let prog = prog.as_str();
+            // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
+            let (prov, gate) = check_adapter_signature(
+                prog,
+                opts.adapter_artifact.as_deref(),
+                opts.require_signed_adapter,
+                opts.adapter_signer.as_deref(),
+            );
+            // Recorded BEFORE the refusal is acted on, so a run stopped because the driver was
+            // signed by the wrong key leaves the evidence that it happened (C60).
+            record_adapter_provenance(&prov, opts.adapter_record.as_deref())?;
+            if let Some(code) = gate {
+                return Err(code);
+            }
+            match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    // Fail closed and BEFORE `main`: a run that could not start its driver must
+                    // not begin, or the program would discover the machine is unreachable
+                    // partway through a motion.
+                    eprintln!("error: {e}");
+                    return Err(1);
+                }
+            }
+        }
+        _ => None,
+    };
+    Ok(Some(DevicePlan {
+        profile: device_profile.clone(),
+        actuators: grants.actuators.clone(),
+        sensors: grants.sensors.clone(),
+        probe: authority_probe,
+        clock: device_clock,
+        adapter,
+    }))
+}
+
+/// Stop a run's device broker before any verdict is reported, so a run never leaves a thread deciding
+/// things about physical devices after the program is over; say every device the run lost; revoke the
+/// devices' own grant nodes (10g), so `grants list` never offers an operator an arm that nobody holds
+/// (see `revoke_device_nodes`). Returns the broker's journal, for a trace.
+pub(crate) fn close_devices(
+    b: &delulu_runtime::DeviceBroker,
+    state_dir: Option<&std::path::Path>,
+    nodes: &[String],
+) -> Vec<delulu_runtime::DeviceEvent> {
+    b.shutdown();
+    let events = b.events();
+    // A lost device is never silent, trace or no trace: losing an actuator mid-run is the single
+    // most consequential thing that can happen to a program in this language.
+    for e in events.iter().filter(|e| e.op == "lease.revoked") {
+        eprintln!("devices: {}", e.detail);
+    }
+    if let Some(dir) = state_dir {
+        revoke_device_nodes(dir, nodes);
+    }
+    events
 }

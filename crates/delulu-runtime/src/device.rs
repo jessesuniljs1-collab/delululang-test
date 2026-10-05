@@ -823,6 +823,133 @@ pub fn envelope_check(env: &ActuatorEnvelope, fields: &[(String, f64)]) -> Resul
     Ok(())
 }
 
+// ----- the device operations, one body for every caller (P8-01) -----------------------------
+//
+// `Cap[Actuator].command` and `Cap[Sensor].read` are performed HERE, for a program the interpreter
+// runs itself and for a sandboxed guest's request that the host channel answers — so the envelope,
+// C39's refused-attempt sweep, the broker's lease and rate checks and the values a program is told
+// cannot differ between the two. They lived in the interpreter until P8-01 (`interp.rs`'s
+// `call_actuator`/`call_sensor`), where the host channel could not reach them.
+
+/// `Cap[Actuator].command(cmd)` against the capability's envelope `env`, then the run's broker.
+///
+/// The envelope is enforced here, on every command, fail-closed (10e); a refusal is a VALUE —
+/// `Err(Envelope(reason))` or `Err(LeaseRevoked(reason))` — so the COMMAND dies, never the process.
+/// Each refusal is also handed to `refused(op, reason)` (`op` is `command.refused` or
+/// `command.revoked`), which the interpreter turns into its DL1904 trace record and the host channel
+/// into its report's `denied` list — evidence, not a silent swallow. With no broker (the null device
+/// profile) an in-envelope command answers `Ok(())`.
+pub fn actuate(
+    broker: Option<&DeviceBroker>,
+    env: &ActuatorEnvelope,
+    cmd: Option<&crate::value::Value>,
+    refused: &mut dyn FnMut(&str, &str),
+) -> crate::value::Value {
+    use crate::value::Value;
+    // The runtime half of the check (10e), against the capability's own scope.
+    if let Err(reason) = command_check(env, cmd) {
+        // A refused command is still an INTERACTION with the device, and the broker has to be
+        // told so even though nothing is being dispatched (C39). Under a stepped clock the
+        // simulated time a real controller would have burned here is burned here too, so a
+        // program whose every command is refused loses its device on the same schedule the wall
+        // clock would enforce — instead of freezing simulated time and holding the machine
+        // forever. If that sweep is what killed the lease, the lease is the more important fact:
+        // "you no longer hold this device" outranks "your setpoint was out of range", the same
+        // ordering `DeviceBroker::command` documents for the accepted path.
+        if let Some(broker) = broker {
+            if let Some(revoked) = broker.note_refused_attempt(&env.device) {
+                refused("command.revoked", &revoked);
+                return Value::err(Value::variant("LeaseRevoked", vec![Value::str(revoked)]));
+            }
+        }
+        refused("command.refused", &reason);
+        return Value::err(Value::variant("Envelope", vec![Value::str(reason)]));
+    }
+    // The broker half (10f): the lease, the rate, and the envelope as the GRANT recorded it.
+    // A command that passed the check above can still die here, and that ordering is the
+    // point — the capability value is a copy of the authority, never the authority itself.
+    let Some(broker) = broker else { return Value::ok(Value::Unit) };
+    match broker.command(&env.device, &command_fields(cmd)) {
+        Ok(()) => Value::ok(Value::Unit),
+        Err(CommandRefusal::Envelope(reason)) => {
+            refused("command.refused", &reason);
+            Value::err(Value::variant("Envelope", vec![Value::str(reason)]))
+        }
+        Err(CommandRefusal::Revoked(reason)) => {
+            refused("command.revoked", &reason);
+            Value::err(Value::variant("LeaseRevoked", vec![Value::str(reason)]))
+        }
+    }
+}
+
+/// `Cap[Sensor].read()` of `device` through the run's broker. Absence still reads as absence — the
+/// simulator answers only for devices it actually models, and everything else is `NoDevice`.
+pub fn sense(broker: Option<&DeviceBroker>, device: &str) -> crate::value::Value {
+    use crate::value::Value;
+    match broker.and_then(|b| b.read(device)) {
+        Some(x) => Value::ok(Value::Float(x)),
+        None => Value::err(Value::variant("NoDevice", vec![])),
+    }
+}
+
+/// The words a refusal from [`actuate`] is recorded in, wherever it is recorded. DL1904 is the
+/// ENVELOPE refusal's code. A dead lease is a different event and must not borrow it: an auditor
+/// counting DL1904s is counting commands the envelope caught, not devices the operator lost.
+pub fn refusal_detail(device: &str, op: &str, reason: &str) -> String {
+    match op {
+        "command.refused" => format!("DL1904 {device}: {reason}"),
+        _ => format!("{device}: {reason}"),
+    }
+}
+
+/// The envelope law (Stage 10 phase 10e, spec §5.1) on a command VALUE, fail-closed on every branch:
+/// a command must be a record; every field must be numeric (`Int` or `Float`), must name a dimension
+/// the envelope bounds, and must sit inside the inclusive `lo..hi`. The skip branch — "the checker
+/// couldn't tell what this field means" (non-record command, non-numeric field, unlisted
+/// dimension) — REFUSES: the envelope cannot vouch for what it never bounded. A `NaN` fails both
+/// range comparisons, so it is refused too, not waved through. `rate_hz` is carried by the
+/// envelope but deliberately NOT enforced here: rate limiting needs a clock, and actuation time
+/// belongs to the broker's lease machinery ([`DeviceBroker::command`]).
+pub fn command_check(env: &ActuatorEnvelope, cmd: Option<&crate::value::Value>) -> Result<(), String> {
+    use crate::value::Value;
+    let Some(Value::Record { fields, .. }) = cmd else {
+        return Err("command must be a record of named dimensions".into());
+    };
+    for (fname, fval) in fields.borrow().iter() {
+        let x = match fval {
+            Value::Int(i) => *i as f64,
+            Value::Float(f) => *f,
+            _ => return Err(format!("field `{fname}` is not numeric — the envelope cannot bound it")),
+        };
+        let Some((_, lo, hi)) = env.dims.iter().find(|(d, _, _)| d == fname) else {
+            return Err(format!("dimension `{fname}` is not bounded by the envelope for `{}`", env.device));
+        };
+        if !(x >= *lo && x <= *hi) {
+            return Err(format!("`{fname}` = {x} is outside the envelope [{lo}, {hi}]"));
+        }
+    }
+    Ok(())
+}
+
+/// Flatten a command record to `(dimension, magnitude)` pairs for the broker. Only reached once
+/// [`command_check`] has already established that the command IS a record of numbers, so a
+/// non-numeric field here is impossible rather than dropped — but the `_ => {}` arm still refuses
+/// to invent a value for one, because a silently-omitted dimension is a dimension the broker
+/// would never check.
+fn command_fields(cmd: Option<&crate::value::Value>) -> Vec<(String, f64)> {
+    use crate::value::Value;
+    let Some(Value::Record { fields, .. }) = cmd else { return Vec::new() };
+    let mut out = Vec::new();
+    for (fname, fval) in fields.borrow().iter() {
+        match fval {
+            Value::Int(i) => out.push((fname.clone(), *i as f64)),
+            Value::Float(f) => out.push((fname.clone(), *f)),
+            _ => {}
+        }
+    }
+    out
+}
+
 // ----- the sim-to-hardware artifact gate (spec §5.4, invariant 48, DL1905) -------------------
 
 /// A sim sign-off: the content hash of the artifact that was exercised in simulation. Deliberately

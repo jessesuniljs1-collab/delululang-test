@@ -13,7 +13,7 @@ use crate::custody::{Custody, CustodyDecision, EmbeddedCustody, Op as CustodyOp}
 use crate::foreign::{self, FKind, FVal, ForeignBinder, ForeignHandle, ForeignSig, InProcBinder};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
-use crate::value::{ActuatorEnvelope, CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
+use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
 
 /// The default logical call-depth bound, and the native stack it assumes.
 ///
@@ -1896,53 +1896,26 @@ impl Interp {
     }
 
     /// `Cap[Actuator].command(shape)` — the physical boundary (Stage 10 phase 10e, spec §5.1).
-    /// The envelope is enforced HERE, on every command, fail-closed; a refusal is
-    /// `Err(Envelope(reason))` — the COMMAND dies, never the process — and appends a DL1904
-    /// telemetry record so the refusal is visible evidence, not a silent swallow (the DL1305
-    /// denied-attempt pattern). An in-envelope command reaches the null adapter (`Ok(Unit)`)
-    /// until the 10f reference simulator gives it somewhere real to go.
+    /// Performed by `device::actuate` (P8-01: the one body the sandbox's host channel calls too):
+    /// the envelope is enforced on every command, fail-closed; a refusal is `Err(Envelope(reason))`
+    /// — the COMMAND dies, never the process — and appends a DL1904 telemetry record so the refusal
+    /// is visible evidence, not a silent swallow (the DL1305 denied-attempt pattern).
+    ///
+    /// A HOST-held actuator (a sandboxed guest's, `CapScope::Handle`) is not performed here at all:
+    /// the guest holds no envelope and no broker, so the command goes to its host, which performs it
+    /// through the same function against the run's broker.
     fn call_actuator(&self, cap: &Rc<CapVal>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
         if method != "command" {
             return Err(Fault::at("DL0907", format!("unknown Actuator method `{method}` (checker bug)"), span));
         }
+        if let CapScope::Handle(_) = cap.scope {
+            return self.effects.cap_method_pinned(cap, method, args, span, None);
+        }
         let CapScope::Actuator(env) = &cap.scope else {
             return Err(Fault::at("DL0907", "Actuator capability without an envelope scope (wiring bug)", span));
         };
-        // The runtime half of the check (10e), against the capability's own scope.
-        if let Err(reason) = envelope_check(env, args.first()) {
-            // A refused command is still an INTERACTION with the device, and the broker has to be
-            // told so even though nothing is being dispatched (C39). Under a stepped clock the
-            // simulated time a real controller would have burned here is burned here too, so a
-            // program whose every command is refused loses its device on the same schedule the wall
-            // clock would enforce — instead of freezing simulated time and holding the machine
-            // forever. If that sweep is what killed the lease, the lease is the more important fact:
-            // "you no longer hold this device" outranks "your setpoint was out of range", the same
-            // ordering `DeviceBroker::command` documents for the accepted path.
-            if let Some(broker) = &self.devices {
-                if let Some(revoked) = broker.note_refused_attempt(&env.device) {
-                    self.trace_actuate_refusal(&env.device, "command.revoked", &revoked, span);
-                    return Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(revoked)])));
-                }
-            }
-            self.trace_actuate_refusal(&env.device, "command.refused", &reason, span);
-            return Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])));
-        }
-        // The broker half (10f): the lease, the rate, and the envelope as the GRANT recorded it.
-        // A command that passed the check above can still die here, and that ordering is the
-        // point — the capability value is a copy of the authority, never the authority itself.
-        let Some(broker) = &self.devices else { return Ok(Value::ok(Value::Unit)) };
-        let fields = numeric_fields(args.first());
-        match broker.command(&env.device, &fields) {
-            Ok(()) => Ok(Value::ok(Value::Unit)),
-            Err(crate::device::CommandRefusal::Envelope(reason)) => {
-                self.trace_actuate_refusal(&env.device, "command.refused", &reason, span);
-                Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])))
-            }
-            Err(crate::device::CommandRefusal::Revoked(reason)) => {
-                self.trace_actuate_refusal(&env.device, "command.revoked", &reason, span);
-                Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(reason)])))
-            }
-        }
+        let mut refused = |op: &str, reason: &str| self.trace_actuate_refusal(&env.device, op, reason, span);
+        Ok(crate::device::actuate(self.devices.as_deref(), env, args.first(), &mut refused))
     }
 
     /// `Cap[Compute].dispatch(kernel, buffer)` (10h, spec §7.1). The refusal channel is a VALUE,
@@ -2007,19 +1980,20 @@ impl Interp {
         });
     }
 
-    /// `Cap[Sensor].read()` (10e's shape, 10f's adapter). Absence still reads as absence — the
-    /// simulator answers only for devices it actually models, and everything else is `NoDevice`.
+    /// `Cap[Sensor].read()` (10e's shape, 10f's adapter), performed by `device::sense`. Absence
+    /// still reads as absence — the simulator answers only for devices it actually models, and
+    /// everything else is `NoDevice`. A host-held sensor goes to its host, as an actuator does.
     fn call_sensor(&self, cap: &Rc<CapVal>, method: &str, span: delulu_diag::Span) -> Result<Value, Fault> {
         if method != "read" {
             return Err(Fault::at("DL0907", format!("unknown Sensor method `{method}` (checker bug)"), span));
         }
+        if let CapScope::Handle(_) = cap.scope {
+            return self.effects.cap_method_pinned(cap, method, &[], span, None);
+        }
         let CapScope::Sensor { device } = &cap.scope else {
             return Err(Fault::at("DL0907", "Sensor capability without a device scope (wiring bug)", span));
         };
-        match self.devices.as_ref().and_then(|b| b.read(device)) {
-            Some(x) => Ok(Value::ok(Value::Float(x))),
-            None => Ok(Value::err(Value::variant("NoDevice", vec![]))),
-        }
+        Ok(crate::device::sense(self.devices.as_deref(), device))
     }
 
     /// Append the DL1904 refusal record. Separate from the ordinary `Actuate` dispatch record
@@ -2032,13 +2006,8 @@ impl Interp {
             effect: "Actuate".to_string(),
             op: op.to_string(),
             cap_kind: "Actuator".to_string(),
-            // DL1904 is the ENVELOPE refusal's code. A dead lease is a different event and must
-            // not borrow it: an auditor counting DL1904s is counting commands the envelope caught,
-            // not devices the operator lost.
-            detail: Some(match op {
-                "command.refused" => format!("DL1904 {device}: {reason}"),
-                _ => format!("{device}: {reason}"),
-            }),
+            // DL1904 for the envelope's refusal only, in the words every recorder of it uses.
+            detail: Some(crate::device::refusal_detail(device, op, reason)),
             span: Some((span.file, span.start, span.end)),
             ..self.trace_attrib_record()
         });
@@ -2260,52 +2229,6 @@ impl Interp {
 /// (spec §6.1: "the path for `read_text`, host for `get`"). Only ever called once the caller
 /// (`Interp::trace_dispatch`) has established that no secret is involved — this function trusts
 /// that and never itself redacts.
-/// The envelope law (Stage 10 phase 10e, spec §5.1), fail-closed on every branch: a command must
-/// be a record; every field must be numeric (`Int` or `Float`), must name a dimension the
-/// envelope bounds, and must sit inside the inclusive `lo..hi`. The skip branch — "the checker
-/// couldn't tell what this field means" (non-record command, non-numeric field, unlisted
-/// dimension) — REFUSES: the envelope cannot vouch for what it never bounded. A `NaN` fails both
-/// range comparisons, so it is refused too, not waved through. `rate_hz` is carried by the
-/// envelope but deliberately NOT enforced here: rate limiting needs a clock, and actuation time
-/// belongs to the 10f dead-man lease machinery — an honest, documented gap, not a silent one.
-fn envelope_check(env: &ActuatorEnvelope, cmd: Option<&Value>) -> Result<(), String> {
-    let Some(Value::Record { fields, .. }) = cmd else {
-        return Err("command must be a record of named dimensions".into());
-    };
-    for (fname, fval) in fields.borrow().iter() {
-        let x = match fval {
-            Value::Int(i) => *i as f64,
-            Value::Float(f) => *f,
-            _ => return Err(format!("field `{fname}` is not numeric — the envelope cannot bound it")),
-        };
-        let Some((_, lo, hi)) = env.dims.iter().find(|(d, _, _)| d == fname) else {
-            return Err(format!("dimension `{fname}` is not bounded by the envelope for `{}`", env.device));
-        };
-        if !(x >= *lo && x <= *hi) {
-            return Err(format!("`{fname}` = {x} is outside the envelope [{lo}, {hi}]"));
-        }
-    }
-    Ok(())
-}
-
-/// Flatten a command record to `(dimension, magnitude)` pairs for the broker. Only reached once
-/// `envelope_check` has already established that the command IS a record of numbers, so a
-/// non-numeric field here is impossible rather than dropped — but the `_ => {}` arm still refuses
-/// to invent a value for one, because a silently-omitted dimension is a dimension the broker
-/// would never check.
-fn numeric_fields(cmd: Option<&Value>) -> Vec<(String, f64)> {
-    let Some(Value::Record { fields, .. }) = cmd else { return Vec::new() };
-    let mut out = Vec::new();
-    for (fname, fval) in fields.borrow().iter() {
-        match fval {
-            Value::Int(i) => out.push((fname.clone(), *i as f64)),
-            Value::Float(f) => out.push((fname.clone(), *f)),
-            _ => {}
-        }
-    }
-    out
-}
-
 fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> Option<String> {
     match (cap_kind, method) {
         ("Console", "println") | ("Console", "print") => args.first().map(|v| v.display()),

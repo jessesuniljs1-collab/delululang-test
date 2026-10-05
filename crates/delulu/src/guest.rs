@@ -493,9 +493,8 @@ pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
 /// than run unconfined, because "the sandbox quietly did not apply" is the failure this whole phase
 /// exists to prevent (D-V2-25: refuse, never silently downgrade).
 ///
-/// Actors, foreign C, Python, plugins, devices and secrets are not here yet: each needs its own
-/// request kind on `delulu-sandbox-channel/3`, and a handle cannot stand in for a thread or a
-/// library. They arrive with the rest of PS-A.
+/// Actors, foreign C, Python, plugins and secrets are not here yet: each needs its own request kind
+/// on `delulu-sandbox-channel/3`, and a handle cannot stand in for a thread or a library.
 ///
 /// `Http` joined at PS-B-02, and needed no new request kind to do it: `get` is an ordinary
 /// capability method, the host performs it with the egress client every L0 run uses, and what
@@ -510,6 +509,12 @@ const CARRIED: &[delulu_check::ResourceKind] = &[
     delulu_check::ResourceKind::Clock,
     delulu_check::ResourceKind::Rand,
     delulu_check::ResourceKind::Http,
+    // P8-01: a control program in a guest. `root.actuator`/`root.sensor` were already minted by the host
+    // (a handle carrying nothing); `command` and `read` are now performed by the host too, through the
+    // interpreter's own body against the run's device broker — envelope, rate, lease, dead-man and e-stop
+    // as an ordinary run has them (`HostChannel::with_devices`).
+    delulu_check::ResourceKind::Actuator,
+    delulu_check::ResourceKind::Sensor,
 ];
 
 /// What this program needs that a guest cannot be given yet, in the words a caller can act on.
@@ -580,6 +585,17 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--require-attestation",
     // PS-E-04: the external launcher's file must have this BLAKE3 digest, or nothing starts.
     "--launcher-digest",
+    // P8-01: a control program's devices, decided by the ordinary run's own code (`run_cmd::device_terms`,
+    // `plan_devices`): the profile, the DL1905 sign-off gate, and under `hw:` the driver and its
+    // provenance. Not `--sim-step` or `--signoff` yet: a sandboxed device run's dead-man is the wall
+    // clock's, and a sign-off is written by the ordinary run.
+    "--broker-profile",
+    "--approved",
+    "--adapter-cmd",
+    "--adapter-artifact",
+    "--require-signed-adapter",
+    "--adapter-signer",
+    "--adapter-record",
 ];
 
 /// The largest program a sandboxed run sends: the channel's frame bound, less room for the frame's other
@@ -848,6 +864,12 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         );
         return 2;
     }
+    // P8-01: the device profile and its DL1905 sign-off gate, by the ordinary run's own code and before
+    // a guest exists — a hardware grant for bytes nobody approved never reaches a driver.
+    let (device_profile, device_clock) = match crate::run_cmd::device_terms(file, opts) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
     // Checked here, as the ordinary run checks it, before a guest exists: a program that does not
     // check is refused with its diagnostics, where the guest could only say "the host sent a program
     // that does not check" and hang up — the reader got no line, no code, no fix. The guest still
@@ -934,6 +956,18 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         }
     }
     let custody_record = custody.as_ref().map(|c| serde_json::json!({ "mode": "daemon", "node": c.node().to_string() }));
+    // P8-01: the devices, as the ordinary run builds them — each actuator's own grant node and the e-stop
+    // probe under broker custody, then the broker's plan (under `hw:`, the driver checked and started) —
+    // all before a guest exists. The broker itself starts when the guest is sent its program.
+    let crate::run_cmd::DeviceWatch { probe, nodes: device_nodes, state_dir: device_state_dir } =
+        match crate::run_cmd::watch_devices(custody.as_mut(), &grants.actuators, &map, opts.json) {
+            Ok(w) => w,
+            Err(code) => return code,
+        };
+    let devices = match crate::run_cmd::plan_devices(&grants, &device_profile, device_clock, probe, opts) {
+        Ok(plan) => plan.map(GuestDevices::new),
+        Err(code) => return code,
+    };
     let root = Rc::new(crate::cli::build_root(&grants));
     let served = spawn_and_serve_custody(
         &program,
@@ -944,7 +978,13 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         isolation,
         custody.map(|c| Box::new(c) as Box<dyn delulu_runtime::Custody>),
         custody_record,
+        devices.as_ref(),
     );
+    // The watchdog stopped, every lost device said, the devices' nodes revoked — as the ordinary run
+    // closes them, before any verdict.
+    if let Some(b) = devices.as_ref().and_then(GuestDevices::started) {
+        crate::run_cmd::close_devices(b, device_state_dir.as_deref(), &device_nodes);
+    }
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         crate::run_cmd::print_egress_notes(&egress);
@@ -1054,7 +1094,36 @@ pub fn spawn_and_serve_with(
     report_out: Option<&str>,
     isolation: Isolation,
 ) -> io::Result<i32> {
-    serve_under(program, root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None)
+    serve_under(program, root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None, None)
+}
+
+/// P8-01: a sandboxed run's devices — the plan checked before the guest exists, and the broker it
+/// becomes when the guest is sent its program. Started then, not before: the leases' dead-man counts
+/// from the program's first instant, so a guest's launch (a microVM's boot) is not charged against its
+/// first heartbeat — while a guest that never beats after that loses its devices on the host's
+/// watchdog, which owes the guest nothing.
+pub(crate) struct GuestDevices {
+    plan: std::cell::Cell<Option<crate::run_cmd::DevicePlan>>,
+    started: std::cell::OnceCell<std::sync::Arc<delulu_runtime::DeviceBroker>>,
+}
+
+impl GuestDevices {
+    fn new(plan: crate::run_cmd::DevicePlan) -> Self {
+        GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new() }
+    }
+
+    /// Start the broker, once.
+    fn start(&self) -> Option<std::sync::Arc<delulu_runtime::DeviceBroker>> {
+        let plan = self.plan.take()?;
+        let b = plan.start();
+        let _ = self.started.set(b.clone());
+        Some(b)
+    }
+
+    /// The broker, if the guest was ever sent its program.
+    fn started(&self) -> Option<&std::sync::Arc<delulu_runtime::DeviceBroker>> {
+        self.started.get()
+    }
 }
 
 /// `run --sandbox` itself: the same, under the custody the run chose — the broker's, when there is
@@ -1069,8 +1138,9 @@ fn spawn_and_serve_custody(
     isolation: Isolation,
     custody: Option<Box<dyn delulu_runtime::Custody>>,
     custody_record: Option<serde_json::Value>,
+    devices: Option<&GuestDevices>,
 ) -> io::Result<i32> {
-    serve_under(program, root, 0xDE1, None, limits, profile, report_out, isolation, custody, custody_record)
+    serve_under(program, root, 0xDE1, None, limits, profile, report_out, isolation, custody, custody_record, devices)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1085,6 +1155,7 @@ fn serve_under(
     isolation: Isolation,
     custody: Option<Box<dyn delulu_runtime::Custody>>,
     custody_record: Option<serde_json::Value>,
+    devices: Option<&GuestDevices>,
 ) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
     // SANDBOX-STOP-1: the processor time of this process's reaped children, before the guest exists
@@ -1339,7 +1410,7 @@ fn serve_under(
     let launch_words = applied.clone();
     // D-V2-87: the statement checked above, so at level 3 a claim that names a property can meet it.
     let need = crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external, attested: attested.as_ref() };
-    let served = converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, &mut evidence)
+    let served = converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, devices, &mut evidence)
         // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
         // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
         // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
@@ -1909,6 +1980,7 @@ fn converse(
     seed: u64,
     fixed_clock_ms: Option<i64>,
     custody: Option<Box<dyn delulu_runtime::Custody>>,
+    devices: Option<&GuestDevices>,
     // Filled in on EVERY path, including the failing ones: this phase has already lost a diagnosis
     // three CI runs in a row to a value that was only reported in the success branch.
     evidence: &mut Evidence,
@@ -1931,6 +2003,10 @@ fn converse(
     evidence.confirmed = true;
     // RW 4.23: what the guest applied to itself, as the host accepted it.
     evidence.own = confirmed.applied().to_vec();
+    // P8-01: the run's devices exist from the moment the program is sent — confirmed, never before.
+    if let Some(b) = devices.and_then(GuestDevices::start) {
+        host = host.with_devices(b);
+    }
     let mut conn = confirmed.send_program(&Program {
         program: program.to_string(),
         hash: blake3::hash(program.as_bytes()).to_hex().to_string(),

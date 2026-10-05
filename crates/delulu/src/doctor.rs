@@ -273,7 +273,8 @@ fn sandbox_section(r: &mut Report) {
          launches a jailed guest instead and the host performs every effect. The sandbox is NOT yet the default \
          (D-V2-26: opt-in until PS-B/PS-C widen the channel, with D-V2-25's default-on as the \
          destination), because the channel cannot carry \
-         actors, foreign code, Python, plugins, devices or secrets and those runs would be refused",
+         actors, foreign code, Python, plugins, accelerators or secrets and those runs would be refused \
+         (actuators and sensors it carries since P8-01)",
     );
     let next = levels.iter().find(|l| !l.available()).and_then(|l| l.first_missing().map(|a| (l.level, a)));
     r.push(

@@ -756,8 +756,9 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  read stays readable; where the host forbids them (Ubuntu's default) it is the SAME OS \
                  user and the report says so. The broker, the CLI and every run without `--sandbox` are \
                  still the operator, so the account boundary is still the one that covers them.\n\
-                 - It does not carry every program yet. Actors, foreign C, Python, plugins, devices and \
-                 secrets are REFUSED rather than run unconfined, because a sandbox that quietly did not \
+                 - It does not carry every program yet. Actors, foreign C, Python, plugins, accelerators \
+                 (`Compute`) and secrets are REFUSED rather than run unconfined (actuators and sensors are \
+                 carried: the host performs each command against the run's device broker), because a sandbox that quietly did not \
                  apply is the failure this design exists to prevent. That is also why `--sandbox` is \
                  not yet the default it is meant to become.\n\
                  - Reads are confined on Linux (Landlock, to the system paths) and on Windows (the \

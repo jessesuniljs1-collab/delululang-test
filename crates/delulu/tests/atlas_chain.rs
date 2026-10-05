@@ -198,7 +198,7 @@ fn devices_plugins_and_actors_are_on_the_chain_with_the_scopes_the_code_names() 
     assert_eq!(c["devices"]["actuate_performed_by"], json!(["fn:rig/rig.main"]));
     assert_eq!(c["plugins"]["hosts"][0]["id"], "res:plugin_host:*");
     assert_eq!(c["sandbox_policy"]["carried"], false);
-    assert_eq!(c["sandbox_policy"]["unsupported_surface"], "Actuator, Compute, PluginHost, Sensor");
+    assert_eq!(c["sandbox_policy"]["unsupported_surface"], "Compute, PluginHost");
     // The Atlas itself now holds them — additive: new ids, and an attribute only where there are scopes.
     let atlas = json_of(&["atlas", &f, "--json"])["atlas"].clone();
     let arm = atlas["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "res:actuator:*").expect("an actuator resource");
