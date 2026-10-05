@@ -9,6 +9,22 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P8-01: a control program runs in a sandboxed guest, 2026-10-05
+
+- **New: `delulu run --sandbox` carries actuators and sensors.** A program that commands an actuator or reads a sensor
+  used to be refused under the sandbox ("it uses Actuator. Nothing ran."). It now runs as a jailed guest holding a handle
+  and nothing else; the host performs every `command` and `read` against the run's device broker with the same envelope,
+  rate limit, lease, dead-man, e-stop and fail-state an ordinary run has, and tells the program exactly what an ordinary
+  run would (`Envelope`, `LeaseRevoked`, `NoDevice`). Each refusal is also a line in the report's `sandbox.denied`. The
+  device flags apply under the sandbox — `--broker-profile`, `--approved` (the DL1905 sign-off gate binds before any
+  guest or driver starts), `--adapter-cmd` and the adapter's provenance flags; `--sim-step` and `--signoff` are refused
+  there for now. A guest that stops commanding its device loses it on the host's watchdog, whatever it says to the host
+  otherwise (D-V2-95). Accelerators (`Compute`) are still refused under the sandbox.
+- **Changed: a hardware run's own flags are refused without a hardware run.** `--approved`, `--adapter-cmd`,
+  `--adapter-artifact`, `--adapter-signer`, `--adapter-record` and `--require-signed-adapter` beside a run that is not
+  `--broker-profile hw:ADAPTER` used to be accepted and ignored; they now refuse the run (exit 2, naming each), with or
+  without `--sandbox` (D-V2-95).
+
 ## Unreleased — V2 PS-E-01 (first step): a sandbox guest confirms its boundary before it is sent the program, 2026-09-28
 
 - **Fixed: a sandboxed guest was handed the program before it had confined itself.** The host's first

@@ -4075,3 +4075,20 @@ read on the runners: `witness.yml` at `f76eafd` — Windows `37277293552` (149 p
 **The last reading (routine run 12):** every push run of the run read green — CI `37276656840` (`77d436e`), `37276819686` (`89f69c8`), `37277912297` (`f76eafd`), `37278057068` (`11ef757`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.87x/4.07x, 2.90x/4.12x, 2.96x/4.06x, 2.92x/4.04x; the other three NOT MEASURED); `master` green through `11ef757`. The 2026-10-05 nightly (cron 03:00, fired about 09:15 on recent days) had not fired by 07:46. P8-01's build order written into `V2_P8_DESIGN.md` from the code as it
 stands (minting already crosses the channel; using a device does not — the interpreter's device calls move behind a
 function `HostChannel` shares).
+
+## 2026-10-05 — routine run 13: CI read green; P8-01 — a control program runs in a guest (D-V2-95)
+
+**CI on arrival:** routine run 12's last push run, `f912084` — CI `37279799389` success, 14 jobs, none failed (arm64
+ping-pong MEASURED 2.91x against a control of 4.12x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED — 3
+threads; the properties as on every run since run 8: macOS `filesystem_confinement` absent, the rest established). The
+2026-10-05 nightly, `37293332206` on `f912084` (fired 09:56): every job green — `test` on three OSes, arm64 (MEASURED
+2.86x/4.11x), `heavy-gates`, `microvm`, `microvm-reproducible`, Miri (diag, atlas, ffi), fuzz, formal, lints, editor,
+supply-chain — with the three `miri-slow` jobs still running at the close of this slice. No branch carries a commit
+`master` lacks beyond run 10's two recorded witness branches. Run 12's daemon tests re-run in the VM: 28 passed
+(`--bin delulu brokerd`; `delulu` has no library target, so `--lib` answers "no library targets").
+**Chosen:** P8-01 (the routine's order; PS-E complete). **Witnessed red:** on `f912084` a control program under
+`--sandbox` is refused "it uses Actuator. Nothing ran." — reproduced as mutant M122, which turns all seven new witnesses
+red. **Built (D-V2-95):** the interpreter's device bodies moved behind `device::actuate`/`sense`; `HostChannel::with_devices`
+performs a guest's `command` and `read` after its custody gate; `run_cmd.rs`'s device code shared with the sandboxed path
+(`device_terms`, `watch_devices`, `plan_devices`, `close_devices`); `CARRIED` gains Actuator and Sensor; the broker starts
+when the guest is sent its program. **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS (twice — the second after the last code edit); read on the runners before `master` moved — at `76ba9ca` Windows `37298032325` (73 passed) and Linux arm64 `37298039715` (74 passed) green, macOS `37298035733` red on the e-stop witness alone (the test's broker socket path, 113 bytes, past macOS's 104 — the test's scratch name, fixed in `45e65eb`); at `45e65eb` macOS `37299710143` (47 passed), Windows `37299713468` (46 passed), Linux arm64 `37299716481` (47 passed): `sandbox_devices_cli`'s eight witnesses named on each, with `sandbox_modes_cli`, `hw_adapter_cli` and `dead_man_cli` (and at `76ba9ca` `estop_cli`, `actuate_cli`, `atlas_chain`, `sandbox_run_cli`); the full suite alone 2,127 passed, 0 failed, 15 ignored (158 binaries), cargo exit 0 — its second run: the first (2,124 passed, 2 failed) lost the Survey's freshness test to a test file edited while it ran, and found `sandbox_modes_cli`'s unapplied `--approved` (item 7).

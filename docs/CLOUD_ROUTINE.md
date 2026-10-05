@@ -141,7 +141,7 @@ another OS, and then takes about seven minutes itself (run 5).
   entry also says it left CI red, this run is in SAFE MODE:** revert to the last green commit's behaviour,
   record the failure in full, and do no new work until `master` is green again.
 - Re-run, in the VM, the tests the previous run's entry says it added, and check each claim in that entry
-  against the tree. Record anything that does not hold, as a finding.
+  against the tree (`delulu`'s own unit tests: `cargo test -p delulu --bin delulu FILTER` — it has no `--lib`, run 13). Record anything that does not hold, as a finding.
 
 **4. Choose one piece of work** — the first of these that is not done:
 1. Anything steps 2–3 found.
@@ -151,8 +151,8 @@ another OS, and then takes about seven minutes itself (run 5).
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
    step, `contained`'s set, D-V2-92), with three residuals kept open where they are recorded: E-03's H6 (RW 4.27 — twice
    stopped by a classifier; perhaps with the owner), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
-   **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (on
-   E-01's confirmation), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
+   **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (**built**, run 13,
+   D-V2-95 — its rest: an L2 device run read on the KVM runner, `--sim-step` under the sandbox), P8-02 the Verified-class adapter as a `.dpx`, P8-03 the reference transport,
    P8-04 the out-of-band monitor — witnessed against the simulator; a real device stays
    environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
@@ -227,13 +227,15 @@ the binary's answers never changed); read what the mutated code returns before r
 **Run `check-other-os.sh` again after the LAST code edit** (run 12: a function added after the lint compiled on Windows with
 `unused_mut`, seen only in the runner's build output), **and read a green witness's whole output**: run 12's RUNDIR-PERM-1 was
 a false warning in the stderr of a passing test. A witness log of a few targets on Windows is about 500 lines — ask
-`tail_lines` ≈ 120 (thousands return it whole, into the context); a macOS `all` read takes about ten minutes and runs
+`tail_lines` ≈ 120 (thousands return it whole, into the context — run 13 pulled two 500-line logs in whole that way; a
+summary needs only `test result` lines and the witness's names); a macOS `all` read takes about ten minutes and runs
 `doctor_cli`, so commit the regenerated map with the branch commit it reads.
 **A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
-Freeze the tree while it runs — a NEW file counts (run 12: a script written into `scripts/` mid-suite made the map
+**`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
+`TREE-MOVED:`. Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
 stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported. While the suite runs, a fix may be COMMITTED (a commit
 changes no file) and pushed to the branch for its runner witnesses — `witness.yml` with a warm cache answers in 2–4

@@ -1289,3 +1289,55 @@ it on `origin` was made in the cloud and is listed below.
   **For the owner:** D-V2-90, D-V2-91, D-V2-92 (`contained`'s set — a Windows host that cannot make the AppContainer, or a
   macOS host whose watcher or sampler cannot start, now refuses the default profile) and D-V2-93 (PS-E closed with three
   residuals) and D-V2-94 (SILENT-QUEUE-1) are this run's decisions.
+
+### 2026-10-05 — routine run 13: CI read green; P8-01 — a control program runs in a guest (D-V2-95)
+- Session: `https://claude.ai/code/session_018jd8mvrdzcUzN8vj2bcFgY`   Model: Claude Opus 5.5 (the scheduled routine; no
+  fallback notice)
+- Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-mcawx1`, at `master`'s head; each slice
+  pushed there first, read on the runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `f912084` (routine run 12's last reading)
+- Commits: (1) `76ba9ca` P8-01: a control program runs in a guest — the host performs its device operations; (2) `45e65eb`
+  a hardware run's flags refused without one; the witnesses hold on a slow runner and on macOS; (3) the records,
+  `scripts/suite.sh` and this entry — this commit
+- Files and folders: M `crates/delulu-runtime/src/device.rs` (`actuate`, `sense`, `refusal_detail`, `command_check`,
+  `command_fields`), `crates/delulu-runtime/src/interp.rs` (`call_actuator`/`call_sensor` call them; a handle goes to the
+  sink; the old `envelope_check`/`numeric_fields` removed), `crates/delulu-runtime/src/channel.rs`
+  (`HostChannel::with_devices`; the device arm after the custody gate), `crates/delulu/src/run_cmd.rs` (`device_terms`,
+  `watch_devices`/`DeviceWatch`, `DevicePlan`/`plan_devices`, `close_devices`; the hardware-flag refusal),
+  `crates/delulu/src/guest.rs` (`CARRIED`, the allowlist, `GuestDevices`, the broker started at the send),
+  `crates/delulu/src/doctor.rs`, `crates/delulu-diag/src/codes.rs` (DL1408's explanation), `crates/delulu/tests/atlas_chain.rs`,
+  `crates/delulu/tests/sandbox_modes_cli.rs`, `docs/MATHEMATICS.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/for-agents.md`, `docs/survey/*`; A `crates/delulu/tests/sandbox_devices_cli.rs` — (1)–(2). M `CHANGELOG.md`,
+  `HANDOFF.md` (*Where things stand*: P8-01; §11.5 four lessons), `docs/CLOUD_ROUTINE.md` (step 3: `--bin delulu`; step 4:
+  P8-01 built; step 5: `scripts/suite.sh`, a witness log's size), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-95),
+  `V2_LOG.md`, `V2_PHASE_STATUS.md` (P8 in progress), `V2_P8_DESIGN.md` (P8-01 built, three departures),
+  `docs/REPOSITORY_STRUCTURE.md` (`suite.sh`'s row), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`; A `scripts/suite.sh` — (3). Deleted: nothing. **Authorship:** the
+  owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (start of run): `survey check` ok (1,484 nodes, 13,281 edges); `doctor --check` ok, all checks passed.
+  After the last edit: see the closing reading below.
+- Verified: **CI on arrival** — `f912084`'s push run `37279799389` success, 14 jobs (arm64 ping-pong MEASURED 2.91x against a
+  control of 4.12x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED — 3 threads; macOS
+  `filesystem_confinement` absent, the rest established, as on every run since run 8); the 2026-10-05 nightly
+  `37293332206` on `f912084` — every job green but the three `miri-slow` jobs, still running when last read. No `claude/*`
+  branch carries a commit `master` lacks beyond run 10's two recorded witness branches. Run 12's daemon tests re-run: 28
+  passed. **The slice:** red first — mutant M122 restores `master`'s "it uses Actuator. Nothing ran." and turns all seven new
+  witnesses red; M123b, M124, M125, M126, M127 red; M123 survives on the broker's own envelope check (recorded, D-V2-95);
+  the 46 device tests of the ordinary run and the runtime's 243 unit tests green after the move; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS twice; read on the runners before `master` moved — at `76ba9ca` Windows
+  `37298032325` (73 passed) and arm64 `37298039715` (74) green, macOS `37298035733` red on the e-stop witness's own
+  socket path (113 bytes; fixed in `45e65eb`); at `45e65eb` macOS `37299710143` (47), Windows `37299713468` (46), arm64
+  `37299716481` (47), all eight device witnesses named on each. The full suite alone: first 2,124 passed, 2 failed (the
+  Survey's freshness test, a test file edited mid-suite; and `sandbox_modes_cli`, which found the unapplied `--approved` —
+  hardened in `45e65eb`); then 2,127 passed, 0 failed, 15 ignored (158 binaries), cargo exit 0. **Push runs:** `45e65eb`
+  (carrying `76ba9ca`) and this commit — read by the run's closing reading, or by the next run first.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a mutant that survives on a second wall; a flag a path starts to apply asks
+  the dropped-flag question again; the tree edited mid-suite a third time — `scripts/suite.sh`; `delulu` has no `--lib`);
+  `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read `45e65eb`'s and this commit's push runs, and the 2026-10-05 nightly's three `miri-slow` jobs;
+  (2) **P8-01's rest** — a device run at L2 read on the KVM runner (`microvm_cli`, dispatch `ci.yml` `everything` at a
+  branch), `--sim-step` under the sandbox, the device events in the sandbox report; then **P8-02** (the Verified-class
+  adapter as a `.dpx`, `V2_P8_DESIGN.md`); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW
+  4.28), macOS's reads; (4) RW 7.17. **For the owner:** D-V2-95 (P8-01, and a hardware run's flags refused without one —
+  a behaviour change for the ordinary run) is this run's decision.

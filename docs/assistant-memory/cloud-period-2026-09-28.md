@@ -127,6 +127,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   complete** with three residuals — H6, macOS's launcher window, macOS's reads (D-V2-93); SILENT-QUEUE-1 (RW 4.40,
   D-V2-94: silent connections queued the broker's clients, the e-stop's among them) and RW 4.39 closed. **Next: P8-01**
   — its build order is in `V2_P8_DESIGN.md`.
+- **Routine run 13 (2026-10-05): P8-01 built** (D-V2-95) — a control program runs in a sandboxed guest; the host performs
+  each actuator command and sensor read by the interpreter's own body (`device::actuate`/`sense`) against the run's device
+  broker, which starts when the guest is sent its program; `run_cmd.rs`'s device code is shared with the sandboxed path. A
+  hardware run's flags without `--broker-profile hw:` are now refused on both paths (they were silently ignored).
+  `scripts/suite.sh` reports `TREE-MOVED`. **Next: P8-02** (the Verified-class adapter as a `.dpx`).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

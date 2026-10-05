@@ -68,6 +68,9 @@ the assistant's memory — which now also travels file by file in
   exact now (D-V2-66).
 - **PS-E complete (routine run 12, D-V2-93)** — `contained` requires egress, resource and host-loss confinement (D-V2-92),
   with three residuals kept open: E-03's H6, macOS's launcher window, macOS's reads. **Next: P8** (P8-01 first), then P9.
+- **P8-01 built (routine run 13, D-V2-95)** — a control program runs in a guest: the host performs its actuator commands and
+  sensor reads by the interpreter's own body against the run's device broker; the broker starts when the guest is sent its
+  program. **Next: P8-02** (the Verified-class adapter as a `.dpx`), then P8-03, P8-04, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1030,6 +1033,18 @@ Added in V2 (2026-09-17 → 2026-09-28):
   readers at 64 but released a reader's count when it finished READING, not when it handed its request over, so 300
   whole requests behind a busy handler grew 240 threads. Found by re-reading the fix after it was on `master`, against
   the question: what does a peer that does everything RIGHT, many times over, cost?
+- **A mutant that survives on a second wall is a finding about the walls, not a gap** (routine run 13, M123): removing the
+  capability's own envelope check left the broker's, which caught the command — so the witness stayed green. Name the
+  second wall, then remove both (M123b, red) to show the witness can fail at all.
+- **A flag a path starts to apply asks the dropped-flag question again** (routine run 13): moving `--approved` onto the
+  sandbox's allowlist turned the sandbox's "refused, not dropped" test red — rightly: beside a non-hardware run the flag
+  did nothing, and the ORDINARY run had dropped it in silence all along. When a path gains a flag, ask what the flag does
+  when its precondition is absent, on every path that takes it.
+- **The tree was edited mid-suite a third time** (routine run 13): a test file reworked while the suite ran made the
+  Survey's freshness test red for that reason alone. `scripts/suite.sh` now runs the suite the routine's way and says
+  `TREE-MOVED` when the tree changed under it.
+- **`delulu` has no library target** (routine run 13): its unit tests are `cargo test -p delulu --bin delulu FILTER`;
+  `--lib` answers "no library targets found" with exit 101, which reads like a red suite. In `witness.yml` it is `bin:delulu`.
 - **`git revert` takes no `-q`** (routine run 12): the revert failed, the next `git commit --amend` re-labelled the
   MUTANT commit as its own revert, and the push was refused as a non-fast-forward. Nothing was lost (reset to the pushed
   branch, revert again — never a force-push); read `git log -1` after every revert before amending anything.

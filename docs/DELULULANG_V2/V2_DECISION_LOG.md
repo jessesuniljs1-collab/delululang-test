@@ -2142,6 +2142,57 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    Linux). A reader now counts until its request is handed over (`77d436e`); past the 64 a connection is dropped at once.
    Mutant M119 (released before the handover) red, 240 threads. Read on the runners: `witness.yml` at `77d436e` — Windows `37275973144` (158 passed), macOS `37275975885` (173 passed), Linux arm64 `37275979053` (187 passed, the flood witness among them), the daemon's unit tests, `broker_cli` and `estop_cli` (and `guard_cli`, `guard_e2e` on Windows and macOS).
 
+## D-V2-95 — P8-01: a control program runs in a guest; the host performs its device operations by the interpreter's own body, and its devices start when the program is sent — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **What was missing** (read against the code by routine run 12, `V2_P8_DESIGN.md` "build order"): minting already
+   crossed the channel — `root.actuator`/`root.sensor` are root methods the host answers with a handle — but a guest's
+   `command` and `read` reached a host channel that knew no device, and `guest::CARRIED` refused the program first
+   ("`--sandbox` cannot carry this program yet: it uses Actuator. Nothing ran.", exit 2 — mutant M122 restores exactly
+   that and turns all seven new witnesses red).
+2. **One body, two callers.** The interpreter's `call_actuator`/`call_sensor` bodies — the envelope check on the command
+   value, C39's refused-attempt sweep, `DeviceBroker::command`/`read`, the `Envelope`/`LeaseRevoked`/`NoDevice` values —
+   moved into `device.rs` (`actuate`, `sense`, `command_check`, `refusal_detail`). The interpreter calls them and turns
+   each refusal into its DL1904 trace record; `HostChannel::with_devices` calls them after its custody gate (so an
+   actuator command still round-trips to the grant tree, the e-stop's way in) and records each refusal in the report's
+   `denied`, in the same words. A host-held (handle) actuator or sensor in a guest's interpreter goes to its effect sink.
+   Behaviour-preserving for the ordinary run: the 46 tests of `actuate_cli`, `dead_man_cli`, `device_delegation_cli`,
+   `estop_cli` and `hw_adapter_cli`, and the runtime's 243 unit tests, unchanged and green.
+3. **Shared, not copied.** `run_cmd.rs`'s device code became four functions the sandboxed path calls too:
+   `device_terms` (the profile, the DL1905 sign-off gate, the clock), `watch_devices` (each actuator's own grant node
+   and the e-stop probe, under broker custody), `plan_devices` (under `hw:`, the driver resolved once, its provenance
+   checked and recorded, the process started — all before a guest exists) and `close_devices` (the watchdog stopped,
+   every lost device said on stderr, the devices' nodes revoked).
+4. **The broker starts when the guest is sent its program** (`guest::GuestDevices`), not before the launch: the leases'
+   dead-man counts from the program's first instant, so a guest's launch — a microVM's boot above all — is not charged
+   against its first heartbeat. Everything that can refuse (DL1905, the driver's signature, its start) still refuses
+   before any guest exists. A guest that never beats after that loses its device on the host's watchdog: the beat rides
+   DEVICE activity only, so a guest cannot keep a machine by talking to its host (witnessed: 3,000 console requests
+   did not beat the lease; mutant M124, a beat on every request, red).
+5. **Applied under `--sandbox`:** `--broker-profile`, `--approved`, `--adapter-cmd`, `--adapter-artifact`,
+   `--require-signed-adapter`, `--adapter-signer`, `--adapter-record`. **Not yet:** `--sim-step` (a sandboxed device
+   run's dead-man is the wall clock's) and `--signoff` (a sign-off is written by the ordinary run's simulation) — both
+   refused by the allowlist, in words, as every unapplied flag is. `Compute` (accelerators) stays uncarried.
+6. **Witnesses** (`crates/delulu/tests/sandbox_devices_cli.rs`, seven): the same program says the same thing in a guest
+   as unsandboxed, its refusal a DL1904 on the report's record; a guest's out-of-envelope command never reaches the
+   driver process (its own log); a guest that stops beating is told `LeaseRevoked (missed-heartbeat)` with its
+   fail-state; a guest wedged for ever, ended by its wall ceiling, loses the arm all the same within a bound of the
+   heartbeat (the host's journal: how late the beat was); a guest that only chats is not beating; `grants revoke` of the
+   device's node stops a guest's arm mid-motion (`operator-revoke`, the supervisor survives); the DL1905 gate starts no
+   driver and no guest. **Mutants:** M122 (master's refusal) red on all seven; M123b (both envelope checks removed) red
+   — 999 reached the driver; M123 (the capability's own check removed) SURVIVES on the broker's own envelope check, the
+   second wall `device.rs` documents — recorded, not a gap; M124 (a beat on every request) red; M125 (the broker on a
+   stepped clock) red; M126 (the host channel given no devices) red.
+7. **Found by the suite, and hardened in both paths:** once the sandboxed run applied the device flags,
+   `sandbox_modes_cli` saw `--approved` beside a non-hardware run accepted there and doing nothing — as the ORDINARY
+   run had always done, in silence. `device_terms` now refuses `--approved`, `--adapter-cmd`, `--adapter-artifact`,
+   `--adapter-signer`, `--adapter-record` and `--require-signed-adapter` without `--broker-profile hw:` (exit 2,
+   naming each, "Nothing ran") — an operator who passed one believes a sign-off or a driver is in force. Witness
+   `a_hardware_flag_without_a_hardware_profile_is_refused_sandboxed_or_not`; mutant M127 red.
+8. **Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS (twice — the second after the last code edit); read on the runners before `master` moved — at `76ba9ca` Windows `37298032325` (73 passed) and Linux arm64 `37298039715` (74 passed) green, macOS `37298035733` red on the e-stop witness alone (the test's broker socket path, 113 bytes, past macOS's 104 — the test's scratch name, fixed in `45e65eb`); at `45e65eb` macOS `37299710143` (47 passed), Windows `37299713468` (46 passed), Linux arm64 `37299716481` (47 passed): `sandbox_devices_cli`'s eight witnesses named on each, with `sandbox_modes_cli`, `hw_adapter_cli` and `dead_man_cli` (and at `76ba9ca` `estop_cli`, `actuate_cli`, `atlas_chain`, `sandbox_run_cli`); the full suite alone 2,127 passed, 0 failed, 15 ignored (158 binaries), cargo exit 0 — its second run: the first (2,124 passed, 2 failed) lost the Survey's freshness test to a test file edited while it ran, and found `sandbox_modes_cli`'s unapplied `--approved` (item 7).
+9. **Next (P8-01's rest, then P8-02):** a device run at L2 read on the KVM runner (`microvm_cli`); `--sim-step` under the
+   sandbox (the stepped clock is the host's, so it can be offered); the device events in the sandbox report. Then P8-02,
+   the Verified-class adapter as a `.dpx`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

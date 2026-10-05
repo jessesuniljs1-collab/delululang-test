@@ -2,8 +2,8 @@
 
 **Status:** designed 2026-09-28 by the first cloud routine run (D-V2-51), under the owner's mandate of
 the same day (*"finish all the phases and verify"* — `docs/CLOUD_ROUTINE.md` names P8 "as far as software
-reaches"). Nothing here is built yet. Each slice below is sized for one routine run and ends with its CI
-run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
+reaches"). **P8-01 is built** (routine run 13, 2026-10-05, D-V2-95 — `tests/sandbox_devices_cli.rs`); P8-02 to P8-04
+are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
 
 ## What exists, measured on 2026-09-28
 
@@ -80,6 +80,12 @@ sharing that code, not copying it.
    sandboxed path in `guest.rs` calls too; the device clock is the wall's for a guest (its own clock is never consulted).
 5. The witnesses (1–5 above), then the falsifiers. `contained` already requires `host_loss_ends_guest` (D-V2-92): a
    control program never outlives the host that holds its watchdog.
+
+**Built as written (D-V2-95), with three departures:** the broker starts when the guest is SENT its program, not before
+its launch (a microVM's boot is not charged against the first heartbeat); `--sim-step` and `--signoff` stay refused
+under `--sandbox` for now; and witness 2 has two more forms — a guest wedged for ever loses the arm all the same, and a
+guest that only talks to its host is not beating it. M123 (the capability's own envelope check removed) survives on the
+broker's own check, the second wall; M123b (both removed) is red.
 
 ### P8-02 — the Verified-class adapter as a `.dpx`
 
