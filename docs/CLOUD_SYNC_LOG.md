@@ -1131,7 +1131,9 @@ it on `origin` was made in the cloud and is listed below.
 - Base: `2cb3f87` (routine run 10's last reading)
 - Commits: (1) `3ec6abe` PS-E-01: an attester's claim that names a boundary property meets it at level 3 (D-V2-87);
   (2) `5bd76aa` its records; (3) `3ee18ac` RW 4.37: a guest that stops reading an answer cannot hold its host;
-  (4) `608c5c4` the Survey regenerated for it (so the branch's CI run checks a fresh map); (5) their records — this commit
+  (4) `608c5c4` the Survey regenerated for it (so the branch's CI run checks a fresh map); (5) `396653b` their records;
+  (6) `3c74e97` PS-E-04: an attestation can bind the launcher its attester measured (D-V2-89); (7) its records — this
+  commit
 - Files and folders: M `crates/delulu/src/attest.rs` (`named_property`, `Attested::vouches_for`),
   `crates/delulu/src/boundary.rs` (`Requirement.attested`, `met`, `properties(…, attested)`, the refusal's words; two
   tests), `crates/delulu/src/guest.rs` (the attestation passed to the requirement and the report),
@@ -1148,7 +1150,14 @@ it on `origin` was made in the cloud and is listed below.
   witness) — (3); M `docs/survey/*` — (4); M `CHANGELOG.md`, `HANDOFF.md` (§11.4 ANSWER-HOLD-1; §11.5 a bound on one
   direction asks the question of the other), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-88), `V2_LOG.md`,
   `docs/REMAINING_WORK.md` (4.37 closed), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
-  `docs/survey/*` — (5). Deleted: nothing. **Authorship:** the owner's
+  `docs/survey/*` — (5). M `crates/delulu/src/attest.rs` (`launcher_blake3`, `FORMAT_BOUND`, `WrongLauncher`,
+  `--measure-launcher`; unit tests), `crates/delulu/src/boundary.rs` (test fixtures), `crates/delulu/src/guest.rs` (the
+  started launcher's digest to the check; the stderr line), `crates/delulu/src/schema.rs`, `crates/delulu/src/cli.rs`
+  (help), `crates/delulu/tests/sandbox_attest_cli.rs` (the witness), `docs/DEPLOYMENT.md`, `docs/for-agents.md`,
+  `docs/survey/*` — (6); M `CHANGELOG.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md` (step 4: E-04's state; step 5: a branch CI run never names a unit test — `witness.yml` with a filter does),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-89), `V2_LOG.md`, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` (§4.4),
+  `docs/REMAINING_WORK.md` (4.28), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*` — (7). Deleted: nothing. **Authorship:** the owner's
   account through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,168 edges); `doctor --check` ok, all checks
   passed. After the last edit: in (2)'s message.
@@ -1163,12 +1172,15 @@ it on `origin` was made in the cloud and is listed below.
   **(2)'s push runs:** CI `37248188675` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.84x against a control of 4.13x; the other three NOT MEASURED); `openshell` `37248188760`, `ocsf` `37248188651` success. **(3):** the
   witness red on `5bd76aa` (the host held 20 s by a guest that read nothing), green after; M98–M102 red (M101 by its
   unit witness); clippy clean; `check-other-os.sh` clean on all five targets; the full suite alone 2,110 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI
-  dispatched at `608c5c4`, `37249221745` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s).
+  dispatched at `608c5c4`, `37249221745` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s). **(5)'s push runs:** CI `37250662612` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.90x against a control of 4.10x; the other three NOT MEASURED); `ocsf` `37250662608`
+  success. **(6):** absent on `396653b` (the reference attester refused `--measure-launcher`), the witness green after;
+  M103–M107 red; clippy clean; `check-other-os.sh` clean for Windows and macOS; the full suite alone 2,112 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the
+  runners before `master` moved: `witness.yml` at `3c74e97` — macOS `37251102472`, Windows `37251104259`, Linux arm64 `37251106129`, all green, `sandbox_attest_cli`'s five attestation tests and the binary's attestation unit tests named in each log.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a refusal's way out is a promise — run it; a mutant must change the
   answer); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read (2)'s push run; (2) PS-E's rest — E-03 H6 (macOS and Windows under the escaped-guest harness;
-  twice stopped by a classifier — perhaps with the owner), `contained`'s required set (macOS's gaps), E-04's attestation
-  binding (a launcher digest the attester measured — a new statement version) and macOS's `fexecve`; then P8 (P8-01 first),
+- Open / next: (1) read this commit's push run — every earlier push run of this run was read green; (2) PS-E's rest — E-03 H6 (macOS and Windows under the escaped-guest harness;
+  twice stopped by a classifier — perhaps with the owner), `contained`'s required set (macOS's gaps), E-04's
+  macOS `fexecve`; then P8 (P8-01 first),
   P9; (3) the red-team rows RW 4.39's log words, 4.40 (silent connections queue on the broker); RW 7.17.
-  **For the owner:** D-V2-87 and D-V2-88 are this run's decisions.
+  **For the owner:** D-V2-87, D-V2-88 and D-V2-89 are this run's decisions.

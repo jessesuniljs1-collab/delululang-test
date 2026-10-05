@@ -347,8 +347,9 @@ two flat fields beside the existing `launcher` string rather than the object abo
 promises `launcher` is a string; `--launcher-digest HEX` refuses any other file (exit 1, recorded). The
 swap witness holds the window open with a 64 MiB launcher and swaps the path the moment the host is seen
 holding it; the mutant that hashes one file and starts another ran B three times in three. Windows held deny-write
-was built by routine run 6 (D-V2-74, witnessed red on Windows first). Open: macOS (no `fexecve`), and the attestation binding — which needs a digest the attester
-measured itself, not the host's echoed back.
+was built by routine run 6 (D-V2-74, witnessed red on Windows first). **The attestation binding (routine run 11, D-V2-89):** a
+statement may carry `launcher_blake3`, a digest the attester measured itself — the host gives it none to echo — which makes it
+`delulu-attestation-v2`, and the host refuses it unless the launcher it started has that digest. Open: macOS (no `fexecve`).
 
 ### 4.5 PS-E-05 — OpenShell as a tested L3 backend, and DeluluLang as its policy author
 

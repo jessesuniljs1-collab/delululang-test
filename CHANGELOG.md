@@ -108,6 +108,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   nothing, or a little at a time, held the host with no limit to end it: a guest that is not reading spends no
   processor time. Every guest channel now has a write deadline, and each answer is owed whole within the channel's frame
   deadline (60 s); past it the run ends, saying the guest did not take the host's answer (D-V2-88).
+- **New: an attestation can name the launcher its attester measured** (`launcher_blake3`, a
+  `delulu-attestation-v2` statement; `delulu sandbox attest --measure-launcher FILE`). The host refuses such a statement,
+  before the program is sent, unless the launcher it started has that BLAKE3 — and reports it as
+  `sandbox.attestation.launcher_blake3`. A statement without it is v1, exactly as before (D-V2-89).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).

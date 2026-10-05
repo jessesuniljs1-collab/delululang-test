@@ -3973,3 +3973,25 @@ read one, and `serve` owes each answer whole within the frame deadline (`Within`
 host's answer whole". Mutants M98–M102 red (M101 first survived the guest test — `Within`'s check fires before the
 transport's with equal deadlines — and got a unit witness). Clippy clean; `check-other-os.sh` clean on all five targets;
 the full suite alone 2,110 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at the branch, `37249221745` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s).
+
+## 2026-10-05 — routine run 11: PS-E-04's attestation binding — a statement for the launcher its attester measured (D-V2-89)
+
+**Slice 2's push runs read first:** `396653b` — CI `37250662612` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.90x against a control of 4.10x; the other three NOT MEASURED); `ocsf` `37250662608` success. **Chosen:** PS-E's next
+buildable item (E-04's attestation binding; H6 and `contained`'s set wait — the first on a harness twice stopped by a
+classifier, the second on macOS's gaps). **Witnessed absent on `396653b`:** `sandbox attest` refused `--measure-launcher`,
+and a statement had no field for a launcher. **Built (D-V2-89):** `launcher_blake3` in the statement, measured by the
+attester; a bound statement is `delulu-attestation-v2` (its signed first line too), refused unless the launcher started has
+that digest; v1 unchanged. Mutants M103–M107 red. Clippy clean; `check-other-os.sh` clean for Windows and macOS; the full
+suite alone 2,112 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; read on the runners before `master` moved: `witness.yml` at `3c74e97` — macOS `37251102472`, Windows `37251104259`, Linux arm64 `37251106129`, all green, `sandbox_attest_cli`'s five attestation tests and the binary's attestation unit tests named in each log.
+
+## 2026-10-05 — routine run 11, the close
+
+**Built and read:** PS-E-01's attesters' claims as properties (D-V2-87 — `hostile-agent`'s advertised way out at L3 had
+never worked); ANSWER-HOLD-1 (RW 4.37, D-V2-88 — a guest that stopped reading held its host for ever); PS-E-04's
+attestation binding (D-V2-89 — a v2 statement naming the launcher its attester measured). Mutants M92–M107. **CI, all
+read:** push runs `37248188675` (`5bd76aa`) and `37250662612` (`396653b`) — success, 14 jobs each; `openshell`, `ocsf`
+success; CI dispatched at the branch `37249221745` (every job but two long `miri-slow` jobs, cancelled); `witness.yml`
+eight runs, all green. **Loop engineering:** step 5 — a surviving mutant is first a question about the mutant; a branch
+CI run's suite logs never name a unit test, so a new one is read by `witness.yml` with its filter; HANDOFF §11.5 three
+lessons. **PS-E left:** H6 (macOS and Windows under the escaped-guest harness), `contained`'s required set, macOS's
+`fexecve`.

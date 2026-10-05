@@ -117,7 +117,9 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   state still `unknown`, the claim beside it as `attested`. Traps: a refusal's way out is a promise — run it; a mutant
   that the code after it overwrites is a no-op, not a survivor. Then ANSWER-HOLD-1 (RW 4.37, D-V2-88): a guest that read
   nothing of a large answer held its host for ever — every guest socket has a write deadline now, each answer owed whole
-  within the frame deadline; a bound on one direction of a channel asks the question of the other.
+  within the frame deadline; a bound on one direction of a channel asks the question of the other. And PS-E-04's
+  attestation binding (D-V2-89): a `delulu-attestation-v2` statement names the launcher its attester measured, refused
+  for any other.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

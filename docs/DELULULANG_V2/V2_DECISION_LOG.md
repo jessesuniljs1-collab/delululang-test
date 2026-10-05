@@ -1969,6 +1969,42 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    first, so the path got its own witness; M102 (the words) red. Read on the runners before `master` moved: CI
    `37249221745` dispatched at `608c5c4` — every job read green but the two long `miri-slow` jobs (check, broker), cancelled once the rest were read: `test` on Linux, macOS and Windows, arm64, `microvm` (the KVM runner — a microVM guest's channel goes through `bounded` now), `microvm-reproducible`, `heavy-gates`, `miri-slow` (syntax), lints and the rest; and `witness.yml` naming the witness green on macOS `37250364770` (all four cases, 5.8 s) and Windows `37250366783` (the two by-name cases, over a named pipe, 1.8 s).
 
+## D-V2-89 — PS-E-04: an attestation can bind the launcher its attester measured — a v2 statement, refused for any other launcher — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The gap** (`V2_OPENSHELL_STUDY.md` §4.4: "an attestation statement binds the launcher's digest with the nonce (the
+   statement's version bumps)"; RW 4.28's open item, "the attestation statement binding a digest the ATTESTER measured"):
+   since PS-E-04 the host hashes the launcher it starts (`launcher_blake3`), and since PS-D-02 an attester signs a
+   statement for the run — and nothing joined the two: a statement could not say which launcher its attester vouched
+   for, so one written for the operator's image held for whatever file the launcher's word resolved to. **Witnessed
+   absent on `396653b`:** the reference attester refused `--measure-launcher` (and a statement carrying any such field was
+   refused as not a document).
+2. **Taken:**
+   - **`Statement.launcher_blake3`** (optional): the BLAKE3 of the launcher file the attester MEASURED itself, 64
+     lowercase hex characters (any other spelling is refused by both sides). **The host gives the launcher no digest** —
+     an attester that echoed the host's number back would bind nothing (§4.4's condition).
+   - **A format for each kind of statement:** with the field, the document is `delulu-attestation-v2` and so is the first
+     line of what is signed; without it, `-v1`, byte for byte as before (the field is skipped, so every v1 signature still
+     verifies). A document whose `format` is not its statement's kind is refused (`WrongFormat`); dropping or changing the
+     binding after signing fails the signature, so a v2 statement cannot be passed off as v1.
+   - **The check:** after the signature, the pinned key and the nonce, a bound statement must name the launcher the host
+     started (`Refusal::WrongLauncher`, "not the launcher it measured", naming both digests) — before the program is sent,
+     recorded as every refusal is (`sandbox-attestation` deny, `sandbox-death`).
+   - **The report:** `sandbox.attestation.launcher_blake3` (optional in the schema), equal to `sandbox.launcher_blake3`;
+     the stderr line says the statement is "for the launcher it measured".
+   - **The reference attester:** `delulu sandbox attest … --measure-launcher FILE` hashes `FILE` and binds it.
+3. **Not taken:** the host requiring a bound statement (a flag beside `--require-attestation`) — `--launcher-digest`
+   already lets an operator pin a digest it knows; this checks one the attester vouches for, and an operator who wants
+   both passes both. A digest algorithm other than BLAKE3 (the host's `launcher_blake3` is BLAKE3, D-V2-69). **Still open
+   in E-04:** macOS starts the resolved path (no `fexecve`).
+4. **Witnesses:** `sandbox_attest_cli::an_attester_that_measured_the_launcher_binds_it_and_a_statement_for_another_file_is_
+   refused` (the launcher started, measured: served, the report's two digests equal and valid against the schema; another
+   file measured: refused naming the started digest, the program never sent);
+   `attest::tests::a_statement_that_binds_a_launcher_is_v2_and_holds_only_for_that_launcher` (v2's canonical bytes; another
+   launcher or none refused; each format for its own kind; a changed binding, and one dropped to pass as v1, fail the
+   signature; four bad spellings refused on both sides). **Mutants** M103 (no comparison), M104 (a bound statement signed
+   under v1's line), M105 (the format check gone), M106 (the attester measures nothing), M107 (an upper-case digest
+   accepted): all red. Read on the runners before `master` moved: `witness.yml` at `3c74e97` — macOS `37251102472`, Windows `37251104259`, Linux arm64 `37251106129`, all green, `sandbox_attest_cli`'s five attestation tests and the binary's attestation unit tests named in each log.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

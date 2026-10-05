@@ -68,7 +68,8 @@ the assistant's memory — which now also travels file by file in
   exact now (D-V2-66).
 - **Next:** **PS-E**, what is left of it — E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87); E-04's
-  attestation binding (a launcher digest the attester measured) and macOS's missing `fexecve`. E-02, E-05 ((a) routine run
+  macOS `fexecve` (its attestation binding — a v2 statement naming the launcher its attester measured — routine run 11,
+  D-V2-89). E-02, E-05 ((a) routine run
   8, D-V2-82; (b) routine runs 9–10, D-V2-83, D-V2-85 — the guest inside a real OpenShell sandbox) and E-06 (routine run
   7, D-V2-78, D-V2-80) are complete. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),

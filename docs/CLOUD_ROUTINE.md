@@ -150,7 +150,8 @@ another OS, and then takes about seven minutes itself (run 5).
    construction and a generation per run (attesters' claims as properties built, run 11, D-V2-87 — open: `contained`'s
    set); E-02 host loss ends the guest (macOS and the external launcher);
    E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
-   is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
+   is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable (the attestation binding built, run 11, D-V2-89 — open: macOS's
+   `fexecve`); E-05 OpenShell as a
    tested L3 and `sandbox policy --format openshell` (**complete**, runs 8–10: (a) D-V2-82, checked by OpenShell's
    prover; (b) D-V2-83 and D-V2-85, the guest inside a real OpenShell sandbox over `ssh`, read in `openshell.yml`'s
    runtime job — the recipe in `docs/DEPLOYMENT.md`); E-06 OCSF export (**complete**, run 7: D-V2-78, D-V2-80).
@@ -200,7 +201,9 @@ cache save and git's cleanup (about 70 lines): ask for about 70 lines plus 15 pe
 read** (`microvm.rs`) is read on the branch by dispatching `ci.yml` with `jobs` `everything` at it — commit the
 regenerated map WITH the branch commit, or `doctor_cli` and the freshness test fail there for that reason alone
 (run 5) — then cancel the run once the `microvm` job is read (`actions_run_trigger` `cancel_workflow_run`): its
-Miri jobs run for hours. Lint macOS and
+Miri jobs run for hours. Such a run's test jobs say green for the whole suite, but their logs' last 5,000 lines (all
+`get_job_logs` returns) end in the sweep and the fuzz campaign, never a unit test's name (run 11): to have a NEW test
+named on a runner, dispatch `witness.yml` with its filter beside it — 2–4 minutes on a warm cache. Lint macOS and
 Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
 x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
 (clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
