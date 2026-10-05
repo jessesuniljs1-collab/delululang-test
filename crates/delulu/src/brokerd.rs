@@ -27,7 +27,7 @@ use delulu_check::Effect;
 use crate::broker_ipc::{
     read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION,
 };
-use crate::broker_transport::{self, Listener};
+use crate::broker_transport::{self, Connection, Listener};
 
 // ----- state-dir + file paths (the only place ~/.delulu is resolved) -----------------------------
 
@@ -901,33 +901,62 @@ pub(crate) fn serve_inner(
     // (`broker_transport`: written only where the buffer has room, flushed only once it has drained).
     const SERVE_WRITE_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
     const SERVE_WRITE_EACH: std::time::Duration = std::time::Duration::from_secs(1);
-    loop {
-        let mut conn = match listener.accept() {
-            Ok(c) => c,
-            Err(e) => {
-                // A transient accept error (e.g. a peer that vanished) should not kill the daemon.
-                eprintln!("delulu broker: accept error (continuing): {e}");
+    // RW 4.40: connections are accepted, and their requests read, on threads of their own; only WHOLE
+    // requests reach the one handler below, which alone touches custody, in the order they arrive whole.
+    // Until then the loop read one connection at a time, so N clients that connected and said nothing
+    // delayed every client behind them — the e-stop's revoke among them — by about 5·N s (red: six held a
+    // `Status` 30.6 s). Each reader still owes its request within `SERVE_READ_TIMEOUT`; at most
+    // `MAX_READERS` are reading at once, and a connection past that is dropped at once, so a flood costs
+    // threads it cannot grow without bound.
+    const MAX_READERS: usize = 64;
+    let (whole, requests) = std::sync::mpsc::sync_channel::<(Connection, Request)>(MAX_READERS);
+    let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let stopping = stopping.clone();
+        let reading = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        std::thread::spawn(move || loop {
+            let mut conn = match listener.accept() {
+                Ok(c) => c,
+                Err(e) => {
+                    if stopping.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+                    // A transient accept error (e.g. a peer that vanished) should not kill the daemon.
+                    eprintln!("delulu broker: accept error (continuing): {e}");
+                    continue;
+                }
+            };
+            if stopping.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            if reading.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= MAX_READERS {
+                reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                eprintln!("delulu broker: {MAX_READERS} connections already reading (dropping this one)");
                 continue;
             }
-        };
-        if let Err(e) = conn.set_read_timeout(Some(SERVE_READ_TIMEOUT)) {
-            // If the bound cannot be set, drop the connection rather than risk an unbounded read.
-            eprintln!("delulu broker: could not bound read (dropping connection): {e}");
-            continue;
-        }
-        if let Err(e) = conn.set_write_timeout(Some(SERVE_WRITE_EACH)) {
-            eprintln!("delulu broker: could not bound write (dropping connection): {e}");
-            continue;
-        }
-        // Read exactly one request; a malformed/short/slow frame closes this connection (fail closed)
-        // without taking down the daemon.
-        let req: Request = match read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT)) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("delulu broker: bad frame (dropping connection): {e}");
-                continue;
-            }
-        };
+            let (whole, reading) = (whole.clone(), reading.clone());
+            std::thread::spawn(move || {
+                let read = (|| {
+                    // If a bound cannot be set, drop the connection rather than risk an unbounded read.
+                    conn.set_read_timeout(Some(SERVE_READ_TIMEOUT)).map_err(|e| format!("could not bound read: {e}"))?;
+                    conn.set_write_timeout(Some(SERVE_WRITE_EACH)).map_err(|e| format!("could not bound write: {e}"))?;
+                    // Exactly one request; a malformed, short or slow frame closes this connection
+                    // (fail closed) without taking down the daemon.
+                    read_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_READ_TIMEOUT))
+                        .map_err(|e| format!("bad frame: {e}"))
+                })();
+                reading.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                match read {
+                    // The handler gone (the daemon stopping) drops the connection: the client fails closed.
+                    Ok(req) => drop(whole.send((conn, req))),
+                    Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
+                }
+            });
+        });
+    }
+    // The receiving end is never closed while this loop runs: the accept thread holds a sender for as long
+    // as it lives, so `recv` waits for the next whole request rather than ending.
+    while let Ok((mut conn, req)) = requests.recv() {
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
         if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
             eprintln!("delulu broker: response write failed (dropping connection): {e}");
@@ -937,6 +966,11 @@ pub(crate) fn serve_inner(
             break;
         }
     }
+    // Wake the accept thread so it ends rather than serving a daemon that has stopped: it sees the flag on
+    // the next connection, this one.
+    stopping.store(true, std::sync::atomic::Ordering::SeqCst);
+    drop(requests);
+    let _ = broker_transport::connect(state_dir);
 
     let _ = std::fs::remove_file(pid_path(state_dir));
     Ok(())
@@ -2162,6 +2196,39 @@ mod tests {
             "a request behind a dribbling client waited {waited:?}: the dribbler held the serve loop"
         );
         let _ = dribbler.join();
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.40 (the red-team pass on FRAME-DRIP-1, F4): the serve loop read one connection at a time, each
+    /// owed its request within five seconds — so N clients that connected and said nothing delayed every
+    /// client behind them by about 5·N s (twelve held `broker status` 61.5 s; the e-stop's revoke waits
+    /// behind them the same way). A silent connection must cost the clients behind it nothing.
+    #[test]
+    fn silent_connections_do_not_queue_the_clients_behind_them() {
+        let state = temp_state("silent_queue");
+        let handle = start_daemon(&state);
+        // Six silent clients: connected, never a byte. Held open until the end of the test.
+        let silent: Vec<_> = (0..6).filter_map(|_| broker_transport::connect(&state).ok()).collect();
+        assert_eq!(silent.len(), 6, "every silent client connected");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let t = std::time::Instant::now();
+        // On Windows a busy pipe refuses a client after a second (`broker_transport::connect`): ask again.
+        let answered = loop {
+            match request(&state, ReqBody::Status) {
+                Err(_) if t.elapsed() < std::time::Duration::from_secs(40) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                other => break other,
+            }
+        };
+        let waited = t.elapsed();
+        assert!(matches!(answered, Ok(Response::Status { .. })), "{answered:?} after {waited:?}");
+        assert!(
+            waited < std::time::Duration::from_secs(3),
+            "a request behind six silent connections waited {waited:?}: they queued it"
+        );
+        drop(silent);
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }

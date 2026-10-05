@@ -178,6 +178,11 @@ mod imp {
         sd: OwnerOnlySd,
     }
 
+    // SAFETY: the only pointer a `Listener` holds is its security descriptor — memory this value owns,
+    // read (never written) by `CreateNamedPipeW` and freed on drop — which has no thread affinity, so the
+    // listener may be moved to the thread that accepts (RW 4.40). `Connection` is `Send` for the same reason.
+    unsafe impl Send for Listener {}
+
     impl Listener {
         pub fn bind(state_dir: &Path) -> io::Result<Listener> {
             let address = address_for(state_dir);
