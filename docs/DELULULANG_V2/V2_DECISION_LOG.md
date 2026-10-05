@@ -2116,6 +2116,26 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    a kernel interface macOS lacks; a profile of readable roots macOS's loader accepts), and P8 and P9 — the owner's next
    phases — wait behind them. The phase's CI: `37271099512` at `0560898` and `master`'s push run (V2_PHASE_STATUS).
 
+## D-V2-94 — RW 4.40, SILENT-QUEUE-1: the broker daemon accepts and reads on threads of its own; one handler takes whole requests — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The finding** (the red-team pass on FRAME-DRIP-1, F4; D-V2-73 recorded it "not changed", RW 4.40 "open — recorded"):
+   the daemon's serve loop read one connection at a time, each owed its request within 5 s, so N clients that connected
+   and said nothing delayed every client behind them by about 5·N s — the e-stop's revoke among them (the red team's twelve
+   held `broker status` 61.5 s; since D-V2-75 a command behind them fails in words after 15 s and the dead-man probe parks
+   devices, so the failure was safe and the service was not). **Witnessed red in the VM on `8cbd1e0`:** six silent
+   connections held a `Status` 30.6 s (`brokerd::tests::silent_connections_do_not_queue_the_clients_behind_them`).
+2. **Taken:** an accept thread takes each connection and a reader thread per connection reads its one request (still owed
+   whole within 5 s — FRAME-DRIP-1's bound — with its write bounds set); only a WHOLE request is handed, with its
+   connection, to the one handler, which alone touches custody and answers in the order requests arrive whole. At most 64
+   connections read at once; one past that is dropped at once, so a flood costs threads it cannot grow without bound. A
+   stopping daemon sets a flag and connects to itself, so its accept thread ends. The Windows `Listener` is `Send` — its one
+   pointer is a security descriptor it owns, with no thread affinity.
+3. **Not taken:** a shorter first-byte deadline alone (it divides the delay, never removes it: twelve silent connections
+   would still hold a client 12 s); handling requests concurrently (custody and the audit chain are written by one
+   handler on purpose — AUDIT-WRITERS-1's lesson).
+4. **Witness** red before (30.6 s), green after (well under its 3 s bound). **Mutant** M118 — one reader at a time — red
+   (4.8 s). Read on the runners before `master` moved: `witness.yml` at `7c55af9` — Windows `37273275501` (160 passed), macOS `37273278082` (175 passed), Linux arm64 `37273280678` (193 passed): the daemon's unit tests and six daemon-facing targets (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`, `sandbox_guard_e2e`, `secret_verify_cli`), the witness named in each.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

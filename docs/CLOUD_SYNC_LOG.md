@@ -1202,7 +1202,9 @@ it on `origin` was made in the cloud and is listed below.
   macOS; (4) `09a113f` its revert; (5) `550ba38` RUNDIR-PERM-1's witness alone; (6) `3c6e67b` RUNDIR-PERM-1's fix, the
   sampler at 5 ms, the map; (7) `07045d5` `make_run_dir` split by OS (Windows `unused_mut`); (8) `4471d6f` the records;
   (9) `0560898` PS-E-01: `contained` requires egress, resource and host-loss confinement of a boundary this host measured
-  (D-V2-92); (10) its records, PS-E closed (D-V2-93) — this commit
+  (D-V2-92); (10) `8cbd1e0` its records, PS-E closed (D-V2-93); (11) `7c55af9` RW 4.40: silent connections no longer
+  queue the broker's clients (D-V2-94); (12) `101cb1e` the daemon's new threads classified in the stack gate, and
+  `scripts/ci-log-summary.py`; (13) their records — this commit
 - Files and folders: M `crates/delulu/src/jail.rs` (`SAMPLED_MEMORY_CEILING`, `peak_footprint`, a macOS unit test, the
   RLIMIT_DATA comment), `crates/delulu/src/guest.rs` (`Fired::Memory`, `MemReader`, the watchdog's memory reading at
   `MEMORY_TICK`, the claim, the named stop; `make_run_dir` and its unit test), `crates/delulu/src/boundary.rs` (the macOS
@@ -1219,7 +1221,14 @@ it on `origin` was made in the cloud and is listed below.
   — (9). M `CHANGELOG.md`, `HANDOFF.md` (*Where things stand*), `docs/CLOUD_ROUTINE.md` (step 4: PS-E complete, P8 next),
   `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-92, D-V2-93), `V2_LOG.md`, `V2_PHASE_STATUS.md` (PS-E complete),
   `V2_OPENSHELL_STUDY.md` (§4.1), `docs/REMAINING_WORK.md` (4.25 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (10).
-  Added: nothing. Deleted: nothing. **Authorship:** the owner's account
+  M `crates/delulu/src/brokerd.rs` (the accept thread, the readers, the one handler; the witness),
+  `crates/delulu/src/broker_transport.rs` (the Windows `Listener` is `Send`), `docs/survey/*` — (11). M
+  `crates/delulu-runtime/src/actors.rs` (the stack gate's list: `brokerd.rs`; `guest.rs`'s reason), A
+  `scripts/ci-log-summary.py`, M `docs/REPOSITORY_STRUCTURE.md` (its row), `docs/survey/*` — (12). M `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 SILENT-QUEUE-1; §11.5 a deadline per connection on a serial loop), `docs/CLOUD_ROUTINE.md` (step 3:
+  the log summary; step 5: freeze the tree — a script added mid-suite), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-94), `V2_LOG.md`, `docs/REMAINING_WORK.md` (4.40 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (13).
+  Added: `scripts/ci-log-summary.py`. Deleted: nothing. **Authorship:** the owner's account
   through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,229 edges); `doctor --check` ok, all checks passed.
   After the last edit: `survey check` ok (1,483 nodes, 13,229 edges), `findings` 0 errors, 14 warnings; `doctor --check`
@@ -1243,15 +1252,25 @@ it on `origin` was made in the cloud and is listed below.
   clippy clean; the full suite alone 2,116 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at
   `0560898`, `37271099512` — every job green (`test` on all three OSes, arm64, `microvm` under `contained`,
   `microvm-reproducible`, `heavy-gates`, lints and the rest) but the three long `miri-slow` jobs, cancelled once the rest
-  were read; macOS's properties: four established, `filesystem_confinement` absent.
+  were read; macOS's properties: four established, `filesystem_confinement` absent. **(10)'s push run:** CI
+  `37272692095` (`8cbd1e0`, carrying (9)) success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.86x against a
+  control of 4.07x; the other three NOT MEASURED). **(11):** red first in the VM on `8cbd1e0` (six silent connections
+  held a `Status` 30.6 s); M118 red (4.8 s); clippy clean; `check-other-os.sh` clean for Windows and macOS; read on the
+  runners at `7c55af9` — Windows `37273275501` (160 passed), macOS `37273278082` (175 passed), Linux arm64 `37273280678`
+  (193 passed), the daemon's unit tests and six daemon-facing targets, the witness named in each. **The full suite
+  caught what the runners did not read:** the runtime's thread-stack gate refused the daemon's two new threads,
+  unclassified (`actors.rs`, red in the VM's suite — the reads ran `delulu`'s targets, not `delulu-runtime`'s); classified
+  in (12), the gate falsified by removing the entry. That suite also lost `doctor_cli`'s three tests to a script written
+  into the tree while it ran (the map went stale) — the tree was frozen and the suite re-run: 2,117 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: `HANDOFF.md` §11.5 (a sampler's interval is its ceiling's resolution; a false alarm is a defect
   — read a green witness whole, lint after the last edit; `git revert` takes no `-q`); `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read this commit's push run; (2) **P8-01** — PS-E is complete (D-V2-93): first move the device
+- Open / next: (1) read this commit's push run, and `101cb1e`'s; (2) **P8-01** — PS-E is complete (D-V2-93): first move the device
   operations (`Interp::call_actuator`/`call_sensor`, the envelope check, C39's refused-attempt sweep, the DL1904 records)
   behind one function the interpreter and `HostChannel` both call, the `DeviceBroker` handed to the host channel as custody
   is — `V2_P8_DESIGN.md` "Where the work is"; (3) PS-E's residuals, kept open: H6 (RW 4.27, perhaps with the owner), macOS's
-  launcher window (RW 4.28), macOS's reads; (4) RW 4.39's log words, 4.40, RW 7.17.
+  launcher window (RW 4.28), macOS's reads; (4) RW 4.39's log words, RW 7.17. (5) The 2026-10-05 nightly (about
+  09:15 UTC) is unread — read it first.
   **For the owner:** D-V2-90, D-V2-91, D-V2-92 (`contained`'s set — a Windows host that cannot make the AppContainer, or a
   macOS host whose watcher or sampler cannot start, now refuses the default profile) and D-V2-93 (PS-E closed with three
-  residuals) are this run's decisions.
+  residuals) and D-V2-94 (SILENT-QUEUE-1) are this run's decisions.

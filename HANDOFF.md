@@ -796,7 +796,10 @@ wins, and you should update the memory to match.
   allocating without end ran until another ceiling ended it (red on a runner); the host samples its peak footprint every
   5 ms now and ends it (D-V2-90). And **RUNDIR-PERM-1**: every macOS sandboxed run printed a false "not owner-only …
   this filesystem does not enforce POSIX permissions" — the host made the run's directory 0755 and the guest could not
-  narrow it; made 0700 by the host now, never adopted (D-V2-91).
+  narrow it; made 0700 by the host now, never adopted (D-V2-91). And **SILENT-QUEUE-1** (RW 4.40, D-V2-94): N clients
+  that connected to the broker and said nothing delayed every client behind them — the e-stop's revoke included — by
+  about 5·N s (six held a `Status` 30.6 s); each connection is read on a thread of its own now, and only whole requests
+  reach the one handler.
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -1020,6 +1023,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   sandboxed run had printed a permissions warning blaming the filesystem; it sat in the stderr of a witness written for
   something else. And **lint the other OSes after the LAST code edit**: a function added after `check-other-os.sh` ran
   compiled on Windows with `unused_mut` — seen only in the Windows read's build output.
+- **A deadline per connection on a loop that serves one at a time is that deadline times N** (routine run 12,
+  SILENT-QUEUE-1): FRAME-DRIP-1 bounded each request at 5 s, and six silent connections still held the next client 30 s.
+  Ask of every bound on a serial loop what N peers at the bound cost the one behind them.
 - **`git revert` takes no `-q`** (routine run 12): the revert failed, the next `git commit --amend` re-labelled the
   MUTANT commit as its own revert, and the push was refused as a non-fast-forward. Nothing was lost (reset to the pushed
   branch, revert again — never a force-push); read `git log -1` after every revert before amending anything.

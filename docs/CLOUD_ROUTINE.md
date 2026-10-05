@@ -119,7 +119,9 @@ another OS, and then takes about seven minutes itself (run 5).
   `get_job_logs` for that job by `job_id` with `tail_lines` at least the log's length (a first, small call
   reports `original_length`); the harness saves an over-long result to a file and names it — JSON whose
   `logs_content` is the log — and `grep` finds the failure there without the log entering the context
-  (run 4: a 3,423-line macOS log, the failure at line 1,556; no sous-chef needed). `list_workflow_jobs` returns every step of every job — ask it only for a red run. **Read** every completed run
+  (run 4: a 3,423-line macOS log, the failure at line 1,556; no sous-chef needed). **Run 12:** `scripts/ci-log-summary.py
+  FILE [PATTERN…]` reads that saved file — or a plain log — and prints only the totals, each failure with its message,
+  each compiler warning, and the lines naming PATTERNs (a new test's name, `memory stop`): a whole read in a few lines. `list_workflow_jobs` returns every step of every job — ask it only for a red run. **Read** every completed run
   since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
   passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
   verdict that matters for timing, `actors_pingpong`'s, as each test job's LAST step and as a `notice`
@@ -231,7 +233,8 @@ a false warning in the stderr of a passing test. A witness log of a few targets 
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
-Freeze the tree while it runs: draft the records (step 6) as a patch script in the
+Freeze the tree while it runs — a NEW file counts (run 12: a script written into `scripts/` mid-suite made the map
+stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported. While the suite runs, a fix may be COMMITTED (a commit
 changes no file) and pushed to the branch for its runner witnesses — `witness.yml` with a warm cache answers in 2–4
 minutes (run 7), so a slice's runner read and its local suite overlap.

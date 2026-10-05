@@ -4041,3 +4041,12 @@ resource and host loss; refuses what this host measured `absent`; an external la
 2,116 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; CI dispatched at `0560898` (`37271099512`): every job green — `test` on Linux, macOS and Windows (the whole workspace each), arm64, `microvm` (the KVM runner: a microVM run under `contained`), `microvm-reproducible`, `heavy-gates`, lints, formal, fuzz, Miri (diag, atlas, ffi), supply-chain, editor; the three long `miri-slow` jobs cancelled once the rest were read. Each OS's properties: Linux x64, arm64 and Windows all five established; macOS four, `filesystem_confinement` absent (reads not confined), `resource_ceiling` established — read before `master` moved, then the long jobs cancelled.
 **Decided (D-V2-93):** PS-E closes; H6, macOS's launcher window and macOS's reads stay open where they are recorded; P8 is
 next.
+
+## 2026-10-05 — routine run 12: SILENT-QUEUE-1 — silent connections no longer queue the broker (RW 4.40, D-V2-94)
+
+**Slice 2's push run read first:** `8cbd1e0` (carrying `0560898`) — CI `37272692095` success, 14 jobs, none failed (arm64 ping-pong MEASURED 2.86x against a control of 4.07x; the other three NOT MEASURED). **Chosen:** the `Open / next` list's red-team rows; RW 4.40 is the one on the
+e-stop's path (P8 is next, and a robot's stop goes through this daemon). **Witnessed red on `8cbd1e0`:** six silent
+connections held a `Status` 30.6 s. **Built (D-V2-94):** an accept thread, a reader thread per connection (each request
+still owed whole within 5 s), one handler for whole requests; at most 64 reading. M118 (one reader at a time) red, 4.8 s.
+**Verified:** clippy clean; `check-other-os.sh` clean for Windows and macOS; the 26 daemon unit tests; the full suite alone
+2,117 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0 — on its second run: the first lost `doctor_cli`'s three tests to a script written into the tree mid-suite, and found the runtime's thread-stack gate refusing the daemon's two new threads, unclassified (fixed in `101cb1e`); read on the runners before `master` moved: `witness.yml` at `7c55af9` — Windows `37273275501` (160 passed), macOS `37273278082` (175 passed), Linux arm64 `37273280678` (193 passed): the daemon's unit tests and six daemon-facing targets (`broker_cli`, `estop_cli`, `guard_cli`, `guard_e2e`, `sandbox_guard_e2e`, `secret_verify_cli`), the witness named in each.
