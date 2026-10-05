@@ -9,6 +9,22 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+
+## Unreleased — V2 P8-02: a hardware driver may be a signed Verified plugin, 2026-10-05
+
+- `delulu run --broker-profile hw:NAME --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX` runs a driver
+  whose LOGIC is a Verified-class plugin: its bytes are read once, its embedded signature must verify under the key you
+  pinned, its code is re-proved by the checker, and the code interpreted is the code those checks were made on — so
+  nothing is started by name. The plugin holds no authority and its four exports are pure (`encode_command`,
+  `decode_command`, `encode_read`, `decode_read`): it computes the frames your device speaks, and the host's transport —
+  the process you name — is the only part that touches the machine. The envelope is still checked against the grant
+  before the driver is called at all, so a driver can refuse more and never permit more.
+- A driver that is not signed by the pinned key (`DL1510`), not signed at all (`DL1511`), not a Verified plugin of this
+  API (`DL1507`), or whose code does not re-prove (`DL1504`) is refused before its transport is even started, and the
+  decision is recorded with `--adapter-record`. A plugin missing an export, or one whose exports name an effect, is not
+  a driver and is refused the same way.
+- `examples/line_driver` is the reference driver — the `CMD`/`READ` line protocol as a Verified plugin — and
+  `--adapter-dpx` works under `--sandbox` too, so a sandboxed control program drives a device through the host's driver.
 ## Unreleased — V2 P8-01: a control program runs in a sandboxed guest, 2026-10-05
 
 - **New: `delulu run --sandbox` carries actuators and sensors.** A program that commands an actuator or reads a sensor

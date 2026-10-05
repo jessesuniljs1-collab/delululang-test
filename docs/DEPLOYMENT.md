@@ -470,8 +470,16 @@ These are known, documented, and not fixable by configuration:
   containment, not a quota.
 - **Foreign code.** `foreign.c` / Python bound through a grant is outside the effect guarantee: the
   language bounds *reachability*, not behaviour.
-- **The hardware adapter.** `--adapter-cmd` runs an operator-supplied subprocess. The envelope is
-  enforced host-side before dispatch, but the driver itself is not sandboxed and is not signature-checked.
+- **The hardware adapter.** `--adapter-cmd` runs an operator-supplied subprocess: the envelope is enforced host-side
+  before dispatch, and the driver's provenance is checked before it is started (a detached signature, refusable,
+  pinnable with `--adapter-signer`, recorded with `--adapter-record`) — but the driver itself is not sandboxed, and
+  between the check and the start its file could be replaced by anyone who can write its directory.
+  **`--adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX` (V2 P8-02) has neither residual for the driver's
+  LOGIC**: the `.dpx` is read once, its embedded signature must verify under the key you pinned, its code is re-proved
+  by the checker, and the code interpreted is the code those checks were made on — nothing is started by name. The
+  plugin holds no authority and its exports are pure, so it computes frames and can reach nothing; the transport you
+  name is the only part that touches the machine, and it is an ordinary process of yours, not sandboxed either. Run the
+  transport as a separate OS account if it must be contained (§5).
 - **The microVM, beyond Linux x86_64 + KVM.** `--isolation microvm` exists since V2 PS-C (see the
   sandbox section above) on Linux x86_64 with KVM and an image you built; there is no Windows or macOS
   microVM, no snapshot or warm pool, and no distributed image (D-NE-27 is the owner's). Everywhere else

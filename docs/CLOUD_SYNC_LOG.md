@@ -1399,6 +1399,46 @@ it on `origin` was made in the cloud and is listed below.
   exit 0, the tree unmoved.
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
 - For the laptop's memory: nothing yet.
-- Open / next: P8-02 steps 5–7 (`--adapter-dpx`, the pin, `--adapter-transport`, the end-to-end witnesses) — this run
-  continues with them.
+- Open / next: **P8-03** (the simulator as a device behind the new transport, across a real process boundary) and
+  **P8-04** (the out-of-band monitor); then P9. PS-E's three residuals stay open (H6/RW 4.27, macOS's launcher window/RW
+  4.28, macOS's reads).
 
+### 2026-10-05 — routine run 14 (continued): P8-02 complete — a signed Verified driver (D-V2-97); RW 4.7 closed
+- Session: `https://claude.ai/code/session_015GbcmhgsYDQj97EaKh65ea`   Model: **Opus 5.5 until `fe6eb18`, then Opus 5
+  (1M context)** — the runtime switched the session mid-run, with no classifier notice; commits from `a8040fd` on name
+  Opus 5, as `CLAUDE.md` requires
+- Branch: `master` (pushed through the harness branch `claude/jolly-hamilton-7fd30a` and fast-forwarded)   Pull request:
+  none   Merged: n/a
+- Base: `fe6eb18`
+- Commits: (1) `a8040fd` P8-02 steps 5–7: `--adapter-dpx` — a driver read once, pinned, re-proved and interpreted;
+  (2) `681b6f6` the new example through every gate it is part of (canonical form, both snapshot corpora); (3) the records
+  and this entry
+- Files and folders: M `crates/delulu-runtime/src/adapter.rs` (`line_reader` factored out, `LineTransport`),
+  `crates/delulu-runtime/src/verified_adapter.rs` (`check_interface`; the unit tests read the shipped example),
+  `crates/delulu/src/cli.rs` (`--adapter-dpx`, `--adapter-transport`, `load_dpx_driver`, the help),
+  `crates/delulu/src/run_cmd.rs` (`verified_driver`, `verified_driver_flags`, the plan's boxed adapter),
+  `crates/delulu/src/guest.rs` (the sandbox allowlist), `docs/survey/*`; A `crates/delulu/tests/hw_dpx_cli.rs`,
+  `examples/line_driver/delulu.toml`, `examples/line_driver/src/lib.delulu` — (1). M `examples/line_driver/src/lib.delulu`
+  (canonical form), `tests/core-invariance/SNAPSHOT.txt` (150 lines added, none removed), `docs/survey/*`; A
+  `crates/delulu/tests/snapshots/atlas_chain/line_driver.json`, `…/line_driver__src__lib.json` — (2). M `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5, three lessons), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-97),
+  `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/DEPLOYMENT.md`, `docs/REMAINING_WORK.md` (4.7 closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (3). Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors / 14 warnings, `doctor --check`
+  all checks passed
+- Verified: eight unit witnesses for the driver and three for the transport, five end to end; mutants M136–M153 each red
+  (M143 survives on a second wall, M143b red); clippy clean; `check-other-os.sh` clean for Windows and macOS after the
+  last code edit; runner reads at `a8040fd` (macOS `37336594722`, Windows `37336599645`, arm64 `37336603458`) and at
+  `681b6f6` (macOS `37337864832`, Windows `37337869032`, 35 passed each — the four gates the new example changed); the
+  full suite alone 2,145 passed, 0 failed, 16 ignored (159 binaries), cargo exit 0, the tree unmoved. The first suite of
+  the slice found four gates red that no witness target reaches (`fmt --check examples`, the Atlas round-trip, the
+  `atlas_chain` corpus, `core_invariance`) — fixed in `681b6f6`.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a new example is a new case in four gates; a model switch mid-session is
+  a fact for the commit trailer; a mutant must be able to compile. `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read this run's push runs; (2) **P8-03** — the simulator as a device behind `LineTransport`, across a
+  real process boundary (the shape is in `V2_P8_DESIGN.md`); (3) **P8-04**, the out-of-band monitor; then **P9**. PS-E's
+  three residuals stay open (H6/RW 4.27, macOS's launcher window/RW 4.28, macOS's reads). **For the owner:** D-V2-96 and
+  D-V2-97 (P8-02 — a hardware driver may be a signed Verified plugin; RW 4.7, open since D23, is closed) are this run's
+  decisions.

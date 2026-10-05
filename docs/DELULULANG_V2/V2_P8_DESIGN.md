@@ -3,7 +3,8 @@
 **Status:** designed 2026-09-28 by the first cloud routine run (D-V2-51), under the owner's mandate of
 the same day (*"finish all the phases and verify"* — `docs/CLOUD_ROUTINE.md` names P8 "as far as software
 reaches"). **P8-01 is complete** (routine run 13, 2026-10-05, D-V2-95 — `tests/sandbox_devices_cli.rs`, and at L2
-`tests/microvm_cli.rs`); P8-02 to P8-04 are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
+`tests/microvm_cli.rs`) and **P8-02 is complete** (routine run 14, 2026-10-05, D-V2-96 and D-V2-97 —
+`crates/delulu-runtime/src/verified_adapter.rs`, `tests/hw_dpx_cli.rs`, `examples/line_driver`); P8-03 and P8-04 are not. Each slice below is sized for one routine run and ends with its CI run read green. A real device stays environment-blocked, and every surface that mentions P8 says so.
 
 ## What exists, measured on 2026-09-28
 
@@ -142,8 +143,12 @@ thread.
 **Done by routine run 14 (`45d1181`, D-V2-96):** steps 3 and 4 — `delulu_runtime::verified_adapter`: the logic's thread, a
 fresh interpreter per call, one deadline over the exchange, the poison laws, and the interface as FOUR exports (a departure:
 `encode_command`, `decode_command`, `encode_read`, `decode_read`, each R-Get-checked to an empty row before the adapter
-exists), witnessed against an in-process device. **Next:** steps 5–7 — the pin, `--adapter-dpx` with
-`--adapter-transport`, the witnesses end to end.
+exists), witnessed against an in-process device. **Steps 5–7 the same run (`a8040fd`, D-V2-97): P8-02 is complete** —
+`--adapter-dpx` read once and pinned to `--adapter-signer`, re-proved and interpreted from those bytes; the interface
+checked before `--adapter-transport` is looked up; every dropped-flag combination refused; both flags carried under
+`--sandbox`; `adapter::LineTransport` and `examples/line_driver` as the reference transport and driver; five end-to-end
+witnesses and M145–M153 red. **Next: P8-03**, the simulator as a device behind this transport across a real process
+boundary, then P8-04.
 
 ### P8-03 — the reference transport and the sim as a device
 

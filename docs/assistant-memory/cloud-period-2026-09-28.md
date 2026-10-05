@@ -140,3 +140,13 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
 HANDOFF §0/§1/§11 → docs/assistant-memory/MEMORY.md; on the laptop after the 16th, sync first.
 Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo-gate]],
 [[agent-usage-rule-2026-09-17]].
+
+## Routine run 14 (2026-10-05) — P8-02 complete
+
+- A hardware driver may now be a signed Verified plugin: `--adapter-dpx` read once and pinned to `--adapter-signer`,
+  re-proved, and interpreted from those same bytes; `--adapter-transport` carries its frames. D-V2-96 and D-V2-97.
+- **A new example is a new case in four gates** (`fmt --check examples`, the Atlas round-trip, `atlas_chain`'s snapshot
+  corpus, `core_invariance`) and no witness target reaches them: the slice's local suite is what finds them.
+- **The session's model changed mid-run** (Opus 5.5 → Opus 5, 1M context) with no classifier notice; commits from
+  `a8040fd` on name Opus 5, as `CLAUDE.md` requires.
+

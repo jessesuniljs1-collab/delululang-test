@@ -2240,6 +2240,31 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
 7. **Witnesses and falsifiers:** `verified_adapter.rs`'s eight tests; M136–M144 red but M143, which survives on a second
    wall (the decode's share of the same expired deadline), and M143b — both walls removed — red.
 
+## D-V2-97 — P8-02: a Verified driver is pinned, re-proved and interpreted from one read of its bytes; its transport is the host's — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **One read, one artifact.** `--adapter-dpx FILE` is read once; the signature embedded in it (over the manifest and the
+   DIR) must verify under `--adapter-signer` — which is REQUIRED for a Verified driver, because an unpinned signature on
+   an artifact an operator can replace proves only that somebody signed something (DL1510 for another key or a signature
+   that does not verify, DL1511 for none) — and the DIR that is interpreted is the one the signature covered and the
+   checker replayed. Nothing is started by name, so D-V2-50's check-then-start window does not exist for it. This is what
+   RW 4.7 asked for: specification §5.4's signed-plugin form of the hardware adapter.
+2. **The transport is the host's, and only the host's.** `--adapter-transport CMD` names the process that carries the
+   driver's frames to the device and its replies back (`adapter::LineTransport`, P8-03's shape, sharing `ProcessAdapter`'s
+   bounded line reader). The plugin computes frames and can write nothing: it holds no capability and its exports are
+   pure. A transport is resolved once, as a driver is.
+3. **The interface before the transport.** `verified_adapter::check_interface` runs before the transport is looked up, so
+   a plugin that is not a driver causes no process to be resolved or started — witnessed deterministically with a
+   transport that does not exist.
+4. **A flag that would be dropped is refused** (run 13's lesson again, `verified_driver_flags`): `--adapter-dpx` beside
+   `--adapter-cmd` (each names the driver) or `--adapter-artifact` (which names a process driver's signed bytes), either
+   new flag without the other, `--adapter-dpx` without its signer, and either on a run that is not `--broker-profile hw:`
+   — exit 2, naming the problem, "Nothing ran".
+5. **The sandbox carries both flags**, so a sandboxed control program drives a device through the host's Verified driver
+   (P8-01's shape: the guest holds a handle and the host performs every operation).
+6. **No new codes.** DL1510, DL1511, DL1507, DL1504 and DL1905 cover every refusal, as `V2_P8_DESIGN.md` said they would.
+7. **Witnesses and falsifiers:** `hw_dpx_cli.rs` (five), `adapter.rs`'s three transport tests, `verified_adapter.rs`'s
+   eight (D-V2-96); mutants M145–M153 each red.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

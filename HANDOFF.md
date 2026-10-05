@@ -1053,6 +1053,20 @@ Added in V2 (2026-09-17 → 2026-09-28):
   MUTANT commit as its own revert, and the push was refused as a non-fast-forward. Nothing was lost (reset to the pushed
   branch, revert again — never a force-push); read `git log -1` after every revert before amending anything.
 
+- **A new EXAMPLE is a new case in four gates, and no witness target reaches them** (routine run 14): adding
+  `examples/line_driver` turned `cli_contract` (`delulu fmt --check examples`), `edit_cli` (the Atlas round-trip —
+  `delulu edit` re-prints what it inserts, so an item's own text round-trips only in a canonically formatted file),
+  `atlas_chain` (its snapshot corpus is asserted to BE the corpus) and `core_invariance` (a new example is a new
+  recorded answer) red at once, while the runner reads of the slice's own tests were all green. Run `delulu fmt` on a new
+  example and bless both corpora in the same commit — and read a bless: 150 lines ADDED and none removed is a new case,
+  while one removed line is the core's answer moving.
+- **A model switch mid-session is a fact for the commit trailer** (routine run 14): the runtime moved the session from
+  Opus 5.5 to Opus 5 (1M context) partway through, with no classifier notice. `CLAUDE.md`'s rule is about what is
+  ACTUALLY running, not only about a fallback: check before every commit message, and say so in the records.
+- **A mutant must be able to compile** (routine run 14): M146's first form (`Unsigned if false => Some((…))`) left the
+  match without the arm the compiler needed and the test run died at build time, which reads like a red witness but
+  proves nothing. A mutant that does not compile is not a falsification — it is a typo. Read the mutant's own build.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

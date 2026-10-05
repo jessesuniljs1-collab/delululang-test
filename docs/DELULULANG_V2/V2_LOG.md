@@ -4161,3 +4161,53 @@ host checks what the plugin RETURNS, not what the device sent. **Verified:** cli
 witness named; the full suite alone through `scripts/suite.sh`, 2,137 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved.
 **Next:** steps 5–7 — `--adapter-dpx`, its signer pin and its transport, end to end.
 
+## 2026-10-05 — routine run 14: P8-02 complete — `--adapter-dpx`, a driver read once, pinned, re-proved and interpreted (D-V2-97)
+
+**Built (`a8040fd`):** a hardware run's driver may be a signed Verified plugin. `--adapter-dpx FILE` names its logic,
+`--adapter-transport CMD` the process that carries its frames to the device, `--adapter-signer HEX` the key it is pinned
+to; `cli::load_dpx_driver` reads the bytes ONCE, verifies the embedded signature against that key (DL1510 another key or
+a signature that does not verify, DL1511 none), checks the container and API (DL1507) and the class (never inferred),
+replays the DIR through the checker (DL1504) — and the DIR interpreted is the one every check was made on, so nothing is
+started by name and D-V2-50's check-then-start window does not exist for a Verified driver. The driver interface is
+checked before the transport is even looked up, so a plugin that is not a driver resolves and starts no process; the
+provenance decision is recorded before a refusal is acted on (C60), as a process driver's is. `verified_driver_flags`
+refuses every combination that would drop a flag in silence: `--adapter-dpx` beside `--adapter-cmd` or
+`--adapter-artifact`, either new flag without the other, `--adapter-dpx` without its signer, and both on a run that is
+not `hw:` (exit 2, "Nothing ran"). Both flags join the sandbox's allowlist, so a sandboxed control program drives a
+device through the host's Verified driver.
+**`adapter::LineTransport`** is the reference transport (P8-03's shape): a process whose standard input and output carry
+the device's line, sharing `ProcessAdapter`'s reader (`line_reader`, one factored function) and keeping its three laws —
+a bounded reply line, the deadline it is GIVEN (never one of its own), and a line nobody asked for as a misframing.
+**`examples/line_driver`** is the reference driver: `adapter.rs`'s `CMD`/`READ` protocol as a Verified plugin of four
+pure exports, holding no authority — and `verified_adapter`'s unit tests read it from the shipped example, so the
+example cannot drift from what the tests prove.
+**Witnesses:** five end to end (`crates/delulu/tests/hw_dpx_cli.rs`) — a pinned driver drives the device (the frames its
+logic computed are the frames the device logged; the device's own hard stop comes back as a refusal; a command outside
+the envelope never reaches it), the same under `--sandbox`, a stranger's/unsigned/tampered driver each refused with its
+code and the transport never started, a plugin that is not a driver refused before the transport is looked up, and each
+flag combination refused — and three for the transport. Read by hand as well: the pinned run prints the signer and the
+three verdicts, and the device's log holds exactly the two in-envelope frames.
+**Falsified:** M145 (the pin not compared), M146 (an unsigned driver accepted), M147 (the interface checked only after
+the transport starts), M148 (no combination check), M149 (the new flags not hardware-only), M150 (the sandbox does not
+carry them), M151 (the transport's reply unbounded), M152 (the transport takes a deadline of its own), M153 (an unasked
+line read as the answer) — each red. **A witness of an ORDER is made deterministic by a transport that does not exist**
+(`hw_through`): a driver refused before its transport is looked up says why, while one whose transport came first says
+"could not be started" — watching a started process die first would be a race.
+**A new example is a new case in four gates, and only the whole suite sees them** (`681b6f6`): `cli_contract`'s
+`delulu fmt --check examples`, `edit_cli`'s Atlas round-trip (`edit` re-prints what it inserts, so an item's own text
+round-trips only in a canonically formatted file — the formatting fix closed this one too), `atlas_chain`'s snapshot
+corpus (two snapshots, blessed) and `core_invariance` (150 lines added, NONE removed — no existing answer of the core
+moved; the new example's own `authority` report reads "effects: (none — provably pure), capabilities: (none)", the
+driver's purity seen from outside). None was reachable from the witness targets the runners read, which is why a slice's
+local suite runs whole before `master` moves.
+**Verified:** clippy clean for the workspace; `check-other-os.sh` clean for Windows and macOS after the last code edit;
+read on the runners before `master` moved — at `a8040fd` macOS `37336594722` (27 passed), Windows `37336599645` (26) on
+`hw_dpx_cli`, `hw_adapter_cli` and `sandbox_devices_cli`, every new witness named, and arm64 `37336603458` (26) on
+`delulu-runtime`'s adapter tests, the three new transport ones among them; at `681b6f6` macOS `37337864832` and Windows
+`37337869032` (35 each) on the four gates the example changed, every one green there too. The full suite alone through
+`scripts/suite.sh`: 2,145 passed, 0 failed, 16 ignored (159 binaries), cargo exit 0, the tree unmoved. **P8-02 is complete; next: P8-03** (the simulator as a device behind this
+transport, across a real process boundary) and P8-04 (the out-of-band monitor).
+
+**Model:** the session was switched from Opus 5.5 to **Opus 5 (1M context)** by the runtime partway through this run
+(after `fe6eb18`); commits from `a8040fd` on name Opus 5, as `CLAUDE.md` requires.
+
