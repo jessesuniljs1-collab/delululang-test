@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 301 |
-| Rust lines | 157824 |
+| Rust lines | 157829 |
 | Rust files outside `src/` (test/bench targets) | 137 |
 | Markdown documents | 252 |
 | Markdown lines | 70262 |
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 42 files, 39783 lines
+- **Modules:** 42 files, 39788 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -123,7 +123,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2024 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 102 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
-| `src/mcp.rs` | 664 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
+| `src/mcp.rs` | 669 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1461 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/morph_file.rs` | 257 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |

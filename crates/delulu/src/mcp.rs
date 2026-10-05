@@ -567,12 +567,17 @@ mod tests {
     /// The commands that act: run or test a program, grant, start or stop a broker, touch the Guard,
     /// store a secret, make a key, sign, publish, log in, deploy, command a fleet, fix, format,
     /// scaffold, add, lock, build, build a plugin, install a locale, EDIT a file, write an audit
-    /// bundle, or serve a language or MCP. `sandbox` and `doctor` act too, outside the read-only
-    /// forms `every_tool_is_read_only` holds them to.
+    /// bundle, or serve a language, an MCP or a DEVICE. `sandbox` and `doctor` act too, outside the
+    /// read-only forms `every_tool_is_read_only` holds them to.
+    ///
+    /// `device` is here, and the reason is worth stating: `device sim` writes no file and performs no
+    /// effect, but it SERVES — it holds a conversation on its standard input and answers until that
+    /// input ends, as `lsp` and `mcp` do, and what it answers is what a control loop acts on. A tool
+    /// that could start one would hand an agent a device to talk to, which is not reading.
     const EFFECTORS: &[&str] = &[
         "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish",
         "login", "deploy", "fleet", "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp",
-        "mcp", "edit", "audit",
+        "mcp", "edit", "audit", "device",
     ];
     /// The commands that only read and answer. A tool may run one of these and nothing else.
     const READ_ONLY: &[&str] = &[
