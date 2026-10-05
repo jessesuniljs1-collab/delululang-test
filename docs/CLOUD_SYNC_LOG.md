@@ -1122,3 +1122,42 @@ it on `origin` was made in the cloud and is listed below.
   (4) run 8's list: E-01's remainder, E-04's attestation binding, E-03 H6, then P8
   (P8-01 first), P9; the red-team rows RW 4.37, 4.39's last item, 4.40; RW 7.17.
   **For the owner:** D-V2-84, D-V2-85 and D-V2-86 are this run's decisions, and D-V2-83's amendment; D-V2-83 itself is run 9's.
+
+### 2026-10-05 — routine run 11: CI read green; PS-E-01 — an attester's claim that names a property meets it at level 3 (D-V2-87)
+- Session: `https://claude.ai/code/session_01XsQvK7btrw8VtZ3z5bZRVJ`   Model: Claude Opus 5.5 (the scheduled routine; no
+  fallback notice)
+- Branch: `master` (the VM's checkout was the harness branch `claude/jolly-hamilton-dcf4b2`, at `master`'s head; each
+  slice is pushed there first, read on the runners, then `master` fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `2cb3f87` (routine run 10's last reading)
+- Commits: (1) `3ec6abe` PS-E-01: an attester's claim that names a boundary property meets it at level 3 (D-V2-87);
+  (2) its records — this commit
+- Files and folders: M `crates/delulu/src/attest.rs` (`named_property`, `Attested::vouches_for`),
+  `crates/delulu/src/boundary.rs` (`Requirement.attested`, `met`, `properties(…, attested)`, the refusal's words; two
+  tests), `crates/delulu/src/guest.rs` (the attestation passed to the requirement and the report),
+  `crates/delulu/src/schema.rs` (`property.attested`, `attested_property`), `crates/delulu/src/cli.rs` (`sandbox attest`'s
+  help), `crates/delulu-diag/src/codes.rs` (DL1408's explanation), `crates/delulu/tests/sandbox_attest_cli.rs` (the
+  witness), `docs/DEPLOYMENT.md` (an attester vouching by name; the `hostile-agent` launcher), `docs/for-agents.md` — (1).
+  M `CHANGELOG.md`, `HANDOFF.md` (*Where things stand*: Next rewritten; §11.5: a refusal's way out is a promise; a mutant
+  must change the answer), `docs/CLOUD_ROUTINE.md` (step 4: E-01's state; step 5: a surviving mutant is first a question
+  about the mutant), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-87), `V2_LOG.md`, `V2_PHASE_STATUS.md`,
+  `V2_OPENSHELL_STUDY.md` (§4.1), `docs/REMAINING_WORK.md` (4.25), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*` (regenerated) — (2). Deleted: nothing. **Authorship:** the owner's
+  account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (start of run): `survey check` ok (1,483 nodes, 13,168 edges); `doctor --check` ok, all checks
+  passed. After the last edit: in (2)'s message.
+- Verified: **CI on arrival** — `2cb3f87`'s push run `37240818377` success, 14 jobs (arm64 ping-pong MEASURED 2.89x
+  against a control of 4.06x; Linux x64 and Windows NOT MEASURED — busy; macOS NOT MEASURED — 3 threads; the properties as
+  on every run since run 8); no nightly since run 10's reading. Every `claude/*` branch listed after unshallowing — none
+  carries a commit `master` lacks beyond run 10's two recorded witness branches. **(1):** the witness red on `2cb3f87`
+  (DL1408 with all five vouched for, the refusal naming the way out it refused), green after; M92–M97 red; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS; the full suite alone 2,108 passed, 0 failed, 15 ignored (157 binaries),
+  cargo exit 0; `witness.yml` at `3ec6abe` — macOS `37247548752`, Windows `37247550461`, Linux arm64 `37247552077`, all
+  success, the new tests named in each log. cargo-deny installed (not needed: supply-chain green on arrival).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a refusal's way out is a promise — run it; a mutant must change the
+  answer); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next: (1) read (2)'s push run; (2) PS-E's rest — E-03 H6 (macOS and Windows under the escaped-guest harness;
+  twice stopped by a classifier — perhaps with the owner), `contained`'s required set (macOS's gaps), E-04's attestation
+  binding (a launcher digest the attester measured — a new statement version) and macOS's `fexecve`; then P8 (P8-01 first),
+  P9; (3) the red-team rows RW 4.37 (the host's writes to a socket guest have no deadline), 4.39's log words, 4.40; RW 7.17.
+  **For the owner:** D-V2-87 is this run's decision.

@@ -147,7 +147,8 @@ another OS, and then takes about seven minutes itself (run 5).
 3. **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): E-01 confirmation by
-   construction and a generation per run; E-02 host loss ends the guest (macOS and the external launcher);
+   construction and a generation per run (attesters' claims as properties built, run 11, D-V2-87 — open: `contained`'s
+   set); E-02 host loss ends the guest (macOS and the external launcher);
    E-03 the guest's kernel surface (hypotheses H1–H6, each witnessed first — an escaped-guest test mode
    is the first thing E-03 builds); E-04 the launcher resolved, hashed, pinnable; E-05 OpenShell as a
    tested L3 and `sandbox policy --format openshell` (**complete**, runs 8–10: (a) D-V2-82, checked by OpenShell's
@@ -219,6 +220,8 @@ A fixture that fakes what the host writes has a real-run witness beside it (run 
 that buffers by line — was refuted by the first timed probe, and the real cause, a command started only once its input
 ended, took one more; a probe step in the workflow's script costs one dispatch). `scripts/check-other-os.sh TARGET…`
 lints only the targets named — about two minutes for one, against seven for all five.
+**A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
+the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A mutant loop leaves the binary built from its LAST mutant** — restoring the source rebuilds nothing — so `cargo build`
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land

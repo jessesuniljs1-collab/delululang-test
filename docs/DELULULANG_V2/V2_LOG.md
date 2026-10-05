@@ -3940,3 +3940,24 @@ Mutants M84–M91. **CI, all read:** push runs `37232688376` (`9bc405e`), `37234
 `37236067731` success; `openshell.yml` `37234907676` both jobs green. **Loop engineering:** the routine's step 1 lists every
 branch's commits `master` lacks; step 3 names `gh`'s refused token; step 5 times a stalled channel before a fix and lints
 one target; step 6 names the author; HANDOFF §11.4 REPLY-HOLD-1, §11.5 four lessons.
+
+## 2026-10-05 — routine run 11: CI read green; PS-E-01 — an attester's claim that names a property meets it at L3 (D-V2-87)
+
+**On arrival (CI):** `master` at `2cb3f87` (routine run 10's last reading); its push run `37240818377` — **success**, 14
+jobs, none failed (`miri-slow`, `heavy-gates` skipped as on every push). Ping-pong: arm64 MEASURED 2.89x against a control
+of 4.06x, passed; Linux x64 and Windows NOT MEASURED (the runner busy); macOS NOT MEASURED (3 hardware threads). The five
+properties as on every run since run 8 (macOS: filesystem confinement absent, reads not confined). No nightly since run
+10's reading (10-04's red one, `37191610614`, was fixed by D-V2-84 and its push runs read green). Every `claude/*` branch
+listed after unshallowing: none carries a commit `master` lacks but the two run 10 recorded as superseded witnesses
+(`7d6a22b`, `d3f0d52`). Survey `ok` (1,483 nodes), `doctor --check` all checks passed. `gh`: not used (the MCP tools and
+`curl`).
+
+**Chosen:** PS-E's next item in run 10's list — E-01's remainder, "attesters' claims as properties". **Witnessed red on
+`2cb3f87`:** `hostile-agent` at L3 with a verified attester claiming all five properties by name — refused DL1408 with
+every property `unknown`, while the refusal named "an external launcher whose attester vouches for it" as the way out.
+**Built (D-V2-87):** a claim `PROPERTY: how` (exact name) answers that property at L3 only; the state stays `unknown`, the
+claim kept beside it as `attested = {attester, by}`; DL1408's refusal and `explain` say how to vouch; the schema gains the
+optional field; `DEPLOYMENT.md` and `for-agents.md` show it. Six mutants M92–M97 red (M93's first form was a no-op the
+code after it overwrote — rewritten and red). Clippy clean; `check-other-os.sh` clean for Windows and macOS (aarch64);
+the full suite alone 2,108 passed, 0 failed, 15 ignored (157 binaries), cargo exit 0; the new tests on the other runners before `master` moved — `witness.yml` at `3ec6abe`:
+macOS ``37247548752` green (153 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 13)`, Windows ``37247550461` green (142 unit tests — the `cfg(unix)` typestate test not among them — `sandbox_attest_cli` 5, `sandbox_confirm_cli` 8)`, Linux arm64 ``37247552077` green (172 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 14)` (`sandbox_attest_cli`, `sandbox_confirm_cli`, the binary's unit tests).

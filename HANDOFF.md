@@ -66,12 +66,11 @@ the assistant's memory — which now also travels file by file in
   could signal the operator's processes — now only itself (D-V2-64); H10, new: or change their limits,
   priority, CPUs and scheduling — refused (D-V2-65). H5: below ABI 3 the report claimed writes denied —
   exact now (D-V2-66).
-- **Next:** **PS-E** — E-02 is complete (routine run 3: the Windows launcher joins a kill-on-close job); E-03's H6 and a red-team pass on the filter, E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
-  the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
-  pinned, E-05 OpenShell as a tested L3 and a policy target — its (a), `sandbox policy --format openshell`, built by
-  routine run 8 (D-V2-82), (b) the guest inside OpenShell at L3 by routine runs 9–10 (D-V2-83, D-V2-85: an
-  outer-wall declaration, the kernel's in-force check, a launcher over `ssh`), read green on a runner — **E-05 complete**
-  (E-06, the OCSF export, is complete — routine run 7, D-V2-78 and D-V2-80). Then **P8** (P8-01 the
+- **Next:** **PS-E**, what is left of it — E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
+  pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87); E-04's
+  attestation binding (a launcher digest the attester measured) and macOS's missing `fexecve`. E-02, E-05 ((a) routine run
+  8, D-V2-82; (b) routine runs 9–10, D-V2-83, D-V2-85 — the guest inside a real OpenShell sandbox) and E-06 (routine run
+  7, D-V2-78, D-V2-80) are complete. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
   then **P9**. A real device stays environment-blocked. ADAPTER-SPELL-1 (the subprocess driver verified
   as one file and started as another) was found and fixed while sizing P8.
@@ -990,6 +989,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `unwrap_or_default()` on a security read turns "could not look" into "no" — here it failed closed, but it hid the cause
   behind a plausible message. Ask the kernel where the kernel can answer (`PR_GET_SECCOMP`); where a file must be read,
   say "unreadable", not "absent". Before trusting a simulation, list the real wall's layers from a real run's evidence.
+
+- **A way out that a refusal names is a promise — run it** (routine run 11): since D-V2-59, `hostile-agent`'s DL1408 told
+  the operator "an external launcher whose attester vouches for it", and no attestation could ever meet a property — the
+  level-3 answer was `unknown` whatever was signed. A refusal's advice is a claim about the code, like a comment that
+  names a test (run 4): for each way out a message offers, a witness that takes it.
+- **A mutant must change the ANSWER, not only the source** (routine run 11): M93's first form wrote the attester's claim
+  into the measured branch's map before the loop that fills it — the loop overwrote it, the binary behaved as before, and
+  the mutant "survived". A survivor is first a question about the mutant: read what the mutated code returns.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

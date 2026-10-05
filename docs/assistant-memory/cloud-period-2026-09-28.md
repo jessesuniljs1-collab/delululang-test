@@ -112,6 +112,10 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   red nightlies (a cache Rust 1.99.0 emptied; Wasmtime 48.0.5, D-V2-84) and measured OpenShell's relay: `sandbox exec`
   runs a command only once its input ends; `ssh` via `openshell ssh-proxy` streams. Commits since run 10 are authored by
   the owner's account (no-reply address), Claude co-author.
+- **Routine run 11 (2026-10-05):** PS-E-01's "attesters' claims as properties" (D-V2-87): `hostile-agent` at L3 had no way
+  out though DL1408 named one — a claim `PROPERTY: how` (exact name) of the pinned attester now meets the property, its
+  state still `unknown`, the claim beside it as `attested`. Traps: a refusal's way out is a promise — run it; a mutant
+  that the code after it overwrites is a no-op, not a survivor.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

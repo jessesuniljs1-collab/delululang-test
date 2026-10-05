@@ -224,8 +224,11 @@ code, the `contained` set above would refuse every macOS run (reads open, no mem
 sets wait for each OS's reported answers. **Third step (D-V2-59):** CI's answers read — Linux x86-64,
 arm64 and Windows all five, macOS two — `hostile-agent` requires all five and is refused in
 `Opened::confirm`; `contained` requires none until macOS's gaps close. RW 4.31 closed the same run: an
-L3 guest's own words are `guest_reported`, never host guarantees. Open: `contained`'s set, attesters'
-claims as properties.
+L3 guest's own words are `guest_reported`, never host guarantees. **Attesters' claims as properties (routine run 11,
+D-V2-87):** a claim of the pinned attester that names a property — `PROPERTY: how`, the exact name — meets it at L3; the
+state stays `unknown` and the claim is reported beside it (`attested`), so the "satisfies a requirement only through an
+attester's claim that names it" above is built (witnessed red first: `hostile-agent` refused a statement naming all
+five). Open: `contained`'s set.
 
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 

@@ -1885,6 +1885,55 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    M91 (the reply offered in one write) red on the slow reader, M90 (no per-write deadline) red on the silent client.
    Read on the other runners before `master` moved: macOS `37236820414` green (both witnesses); Windows `37236818679` red — the first Windows design, withdrawn (above).
 
+## D-V2-87 — PS-E-01: at level 3 a required property is met only by a claim of the pinned attester that names it; the state stays `unknown` — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+1. **The gap** (`V2_OPENSHELL_STUDY.md` §4.1, "Open: … attesters' claims as properties"): §4.1 says an unattested
+   external launcher is `unknown` throughout "and satisfies a requirement only through an attester's claim that names
+   it", and since D-V2-59 `hostile-agent`'s refusal (DL1408) has told the operator "Ways out: … an external launcher
+   whose attester vouches for it". No attestation could be that way out: `boundary::properties` answered every level-3
+   property `unknown` whatever the pinned key had signed. **Witnessed red on `2cb3f87`** (`sandbox_attest_cli`, the new
+   witness): `--sandbox-profile hostile-agent`, `external:` the reference attester in front of the guest,
+   `--require-attestation` its key, the statement verified and claiming all five properties by name — refused DL1408,
+   every property "an external launcher's wall: DeluluLang measured none of it", the refusal naming the way out it had
+   just refused.
+2. **Taken:**
+   - **A claim names a property** when its text before a `:` — or the whole text, with no `:` — is, trimmed, exactly one
+     of the five names a run reports (`boundary::PROPERTIES`); the rest, trimmed, is how the attester says it holds
+     (`attest::named_property`). Exact and case-sensitive: `Egress_Confinement`, `egress-confinement`,
+     `egress_confinements`, `no egress_confinement` are free text and vouch for nothing — a near-miss fails closed, as an
+     unnamed property does. Several claims naming one property are kept in the order signed (`; `); a bare name says
+     "the attester did not say how".
+   - **The statement does not change** (`delulu-attestation-v1`): naming is a reading of the `guarantees` it already
+     signs, so every document an attester signed before still verifies, and only a profile that requires a property
+     (`hostile-agent`) reads it. The reference attester needs nothing new (`--guarantee PROPERTY:HOW`); its help says so.
+   - **The report:** the property's `state` stays `unknown` — DeluluLang measured none of an external wall — and the
+     claim is kept beside it, `properties.<name>.attested = {attester, by}`; a property the attester did not name says
+     so in its `why` (the attester, and the claim that would name it). Not a fourth state: schema 1 keeps `state`'s three
+     values (`STABILITY.md`: fields are added, never changed in meaning), so a consumer that reads only `state` reads the
+     conservative answer. The schema's `property` gains the optional `attested` (`attested_property`).
+   - **What meets a requirement** (`boundary::met`): `established`, or an `attested` claim — which `properties` writes at
+     level 3 only. A run the host measured takes no attester's word (and `--require-attestation` is refused below L3
+     before anything runs). The refusal is computed once, in `Opened::confirm`, from the same answer the report carries.
+   - **DL1408's words:** the refusal says what meets a property ("established by this host or, at level 3, vouched for by
+     name by the attester the run pinned") and how to vouch (`--require-attestation KEY`, a claim `PROPERTY: how` for
+     each); `delulu explain DL1408` says the same.
+3. **Not taken:** a fourth state (above); a structured statement field (`properties: {name: how}`) — a new format
+   version for what a convention over signed text already says, and a second place for the same claim; case-insensitive
+   or fuzzy matching (a security decision on an unnormalized spelling is the trap §11.4 names — here the exact spelling is
+   the only one, and every other fails closed). **Still open in E-01:** `contained`'s required set (macOS's gaps); in
+   E-04, a launcher digest the attester measured itself, bound into the statement — that one does need a new version.
+4. **Witnesses:** `sandbox_attest_cli::an_attester_that_vouches_for_each_property_by_name_meets_hostile_agent_…` (all
+   five vouched: served, the program's effect happens, each property `unknown` with the claim beside it, the report
+   valid against `delulu schema sandbox`; each of the five left out, and four near-misses, refused DL1408 naming the
+   missing property, "did not vouch for", the program never sent); `boundary::tests::at_level_3_only_an_attesters_named_
+   claims_meet_a_required_property` (the typestate: all five at L3 confirmed, four refused, all five at a measured run
+   refused); `boundary::property_tests::an_attesters_named_claim_is_kept_beside_the_unknown_at_level_3_and_nowhere_else`;
+   `attest::tests::a_claim_names_a_property_only_by_its_exact_name`. **Mutants** M92 (`met` ignores `attested` — the
+   defect), M93 (a measured run takes the attester's claim — first written as a no-op the code after it overwrote, and
+   rewritten), M94 (case-insensitive names), M95 (a name found inside the text), M96 (a claim answers every property),
+   M97 (the state moved to `established`): all red. Read on the other runners before `master` moved: macOS ``37247548752` green (153 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 13)`,
+   Windows ``37247550461` green (142 unit tests — the `cfg(unix)` typestate test not among them — `sandbox_attest_cli` 5, `sandbox_confirm_cli` 8)`, Linux arm64 ``37247552077` green (172 unit tests, `sandbox_attest_cli` 8, `sandbox_confirm_cli` 14)`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -97,6 +97,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   revoke behind it. The daemon serves one connection at a time; a same-user client could ask for a large answer
   (`guard pending` after a long `why`) and never read it. The whole reply is now owed within 5 s and each write within
   1 s, on Linux, macOS and Windows; past either the connection is dropped (D-V2-86).
+- **Fixed: `hostile-agent` could never run with an external launcher, attested or not** — though its refusal (DL1408)
+  named "an external launcher whose attester vouches for it" as a way out. A claim of the attester the run pinned that
+  NAMES a property — `--guarantee egress_confinement:HOW`, or the name alone — now meets that property at level 3. The
+  property's state stays `unknown` (DeluluLang measured none of the wall) and the claim is reported beside it,
+  `sandbox.properties.<name>.attested = {attester, by}`; a property the attester does not name still refuses, and says
+  so; a near-miss (another case, a hyphen) vouches for nothing. Nothing changes for a run the host measured (D-V2-87).
 - **CI: a runner fetches every platform's crates before the suite.** The feature-accounting gate reads the whole
   resolved graph offline and had passed only while a warm cache held it; a new stable Rust emptied the cache and the
   nightly went red on every operating system (D-V2-84).
