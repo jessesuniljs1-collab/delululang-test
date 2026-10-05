@@ -1109,11 +1109,19 @@ pub(crate) struct GuestDevices {
 
 impl GuestDevices {
     fn new(plan: crate::run_cmd::DevicePlan) -> Self {
-        GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new() }
+        let g = GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new() };
+        let b = g.plan.take().map(crate::run_cmd::DevicePlan::start);
+        if let Some(b) = b {
+            let _ = g.started.set(b);
+        }
+        g
     }
 
     /// Start the broker, once.
     fn start(&self) -> Option<std::sync::Arc<delulu_runtime::DeviceBroker>> {
+        if let Some(b) = self.started.get() {
+            return Some(b.clone());
+        }
         let plan = self.plan.take()?;
         let b = plan.start();
         let _ = self.started.set(b.clone());
