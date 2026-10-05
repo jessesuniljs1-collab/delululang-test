@@ -109,6 +109,19 @@ fn interface() -> [(&'static str, Type); 4] {
     ]
 }
 
+/// Is this re-proved DIR a device driver? Each of the four exports must exist with exactly the
+/// interface's type and an empty row — R-Get, as `p.get` applies it. A caller checks this before it starts
+/// anything a driver would use (`VerifiedAdapter::new` checks it again).
+pub fn check_interface(name: &str, dir: &delulu_check::Dir) -> Result<(), InterfaceRefusal> {
+    for (export, ty) in interface() {
+        r_get_verified(dir.fn_types.get(export), &ty, export).map_err(|e| InterfaceRefusal {
+            code: plugin_err_code(&e),
+            message: format!("`{name}` is not a device driver: {}", plugin_err_text(&e)),
+        })?;
+    }
+    Ok(())
+}
+
 /// One call into the driver's logic. Plain data: the logic's thread builds the interpreter's values.
 enum Call {
     EncodeCommand { device: String, fields: Vec<(String, f64)> },
@@ -148,12 +161,7 @@ impl VerifiedAdapter {
         limits: Limits,
         transport: Box<dyn Transport>,
     ) -> Result<VerifiedAdapter, InterfaceRefusal> {
-        for (export, ty) in interface() {
-            r_get_verified(dir.fn_types.get(export), &ty, export).map_err(|e| InterfaceRefusal {
-                code: plugin_err_code(&e),
-                message: format!("`{name}` is not a device driver: {}", plugin_err_text(&e)),
-            })?;
-        }
+        check_interface(name, &dir)?;
         let (calls, inbox) = mpsc::channel::<Call>();
         let (outbox, answers) = mpsc::channel::<Answer>();
         std::thread::Builder::new()
@@ -385,57 +393,8 @@ mod tests {
     use crate::value::ActuatorEnvelope;
     use std::sync::{Arc, Mutex};
 
-    /// The reference driver: `adapter.rs`'s line protocol, written as a Verified plugin.
-    const LINE_DRIVER: &str = r#"module line_driver
-
-fn field(fields: Map[Str, Float], k: Str) -> Str {
-  match fields.get(k) {
-    Some(x) => k + "=" + str(x),
-    None => k + "="
-  }
-}
-
-fn dims(fields: Map[Str, Float], keys: List[Str], i: Int, acc: Str) -> Str {
-  if i >= keys.len() {
-    acc
-  } else {
-    let k = match keys.get(i) { Some(s) => s, None => "" }
-    let sep = if i == 0 { "" } else { "," }
-    dims(fields, keys, i + 1, acc + sep + field(fields, k))
-  }
-}
-
-pub fn encode_command(device: Str, fields: Map[Str, Float]) -> Result[Str, Str] {
-  Ok("CMD " + device + " " + dims(fields, fields.keys(), 0, ""))
-}
-
-pub fn decode_command(device: Str, reply: Str) -> Option[Str] {
-  if reply == "OK" {
-    None
-  } else if reply.starts_with("ERR ") {
-    Some(reply.slice(4, reply.len()))
-  } else {
-    Some("`" + device + "` answered outside the protocol: " + reply)
-  }
-}
-
-pub fn encode_read(device: Str) -> Result[Str, Str] {
-  Ok("READ " + device)
-}
-
-pub fn decode_read(device: Str, reply: Str) -> Result[Option[Float], Str] {
-  if reply == "NODEV" {
-    Ok(None)
-  } else if reply.starts_with("VAL ") {
-    match parse_float(reply.slice(4, reply.len())) {
-      Some(x) => Ok(Some(x)),
-      None => Err("`" + device + "` sent an unreadable value: " + reply)
-    }
-  } else {
-    Err("`" + device + "` answered outside the protocol: " + reply)
-  }
-}
-"#;
+    /// The reference driver as it ships (`examples/line_driver`): `adapter.rs`'s line protocol as a Verified plugin.
+    const LINE_DRIVER: &str = include_str!("../../../examples/line_driver/src/lib.delulu");
 
     /// The rest of the reference driver, for a test that replaces one export.
     fn driver_with(encode_command: &str) -> String {

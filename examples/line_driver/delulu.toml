@@ -1,0 +1,21 @@
+[package]
+name = "line_driver"
+version = "0.1.0"
+kind = "plugin"
+
+[plugin]
+api = 1
+class = "verified"
+
+# A driver holds no authority at all: it computes frames and the host writes them.
+[plugin.authority]
+effects  = []
+requires = []
+
+# The driver interface (`delulu_runtime::verified_adapter`): four pure exports, each checked by R-Get
+# against exactly these types before the transport is started.
+[plugin.exports]
+encode_command = "fn(Str, Map[Str, Float]) -> Result[Str, Str]"
+decode_command = "fn(Str, Str) -> Option[Str]"
+encode_read    = "fn(Str) -> Result[Str, Str]"
+decode_read    = "fn(Str, Str) -> Result[Option[Float], Str]"

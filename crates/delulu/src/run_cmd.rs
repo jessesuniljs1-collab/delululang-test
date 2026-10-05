@@ -1641,6 +1641,8 @@ pub(crate) fn device_terms(
             ("--adapter-signer", opts.adapter_signer.is_some()),
             ("--adapter-record", opts.adapter_record.is_some()),
             ("--require-signed-adapter", opts.require_signed_adapter),
+            ("--adapter-dpx", opts.adapter_dpx.is_some()),
+            ("--adapter-transport", opts.adapter_transport.is_some()),
         ];
         let given: Vec<String> = hw_only.iter().filter(|(_, on)| *on).map(|(f, _)| format!("`{f}`")).collect();
         if !given.is_empty() {
@@ -1652,6 +1654,9 @@ pub(crate) fn device_terms(
             );
             return Err(2);
         }
+    } else if let Some(problem) = verified_driver_flags(opts) {
+        eprintln!("error: {problem}. Nothing ran.");
+        return Err(2);
     }
     // D20: the deterministic simulator clock. Only meaningful under `sim`, where it replaces the
     // wall-clock dead-man with a step-per-interaction clock so a demonstration's timing is a
@@ -1675,6 +1680,39 @@ pub(crate) fn device_terms(
         }
     };
     Ok((device_profile, device_clock))
+}
+
+/// P8-02: what is wrong with a hardware run's driver flags, if anything. A driver is EITHER a process
+/// (`--adapter-cmd`, whose provenance flags are `--adapter-artifact` and `--require-signed-adapter`) OR a
+/// Verified plugin (`--adapter-dpx`, which needs the transport that carries its frames and the signer it is
+/// pinned to). A flag of the one beside the other would be dropped in silence — and a dropped flag reads
+/// exactly like an applied one.
+fn verified_driver_flags(opts: &Opts) -> Option<String> {
+    let dpx = opts.adapter_dpx.is_some();
+    if dpx && opts.adapter_cmd.is_some() {
+        return Some("`--adapter-dpx` and `--adapter-cmd` each name the driver; give one".into());
+    }
+    if dpx && opts.adapter_artifact.is_some() {
+        return Some(
+            "`--adapter-artifact` names the signed bytes of a PROCESS driver; a `.dpx` carries its own signature".into(),
+        );
+    }
+    if dpx && opts.adapter_transport.is_none() {
+        return Some(
+            "`--adapter-dpx` needs `--adapter-transport <command>`: the process that carries the driver's frames to the \
+             device (the plugin computes them and can write nothing itself)"
+                .into(),
+        );
+    }
+    if dpx && opts.adapter_signer.is_none() {
+        return Some(
+            "`--adapter-dpx` needs `--adapter-signer <hex>`: a Verified driver is always pinned to the key that signed it".into(),
+        );
+    }
+    if !dpx && opts.adapter_transport.is_some() {
+        return Some("`--adapter-transport` carries a Verified driver's frames; it needs `--adapter-dpx`".into());
+    }
+    None
 }
 
 /// 10g: give each actuator its own child node under this run's, and build the e-stop probe from them.
@@ -1726,7 +1764,7 @@ pub(crate) struct DevicePlan {
     sensors: Vec<String>,
     probe: Option<delulu_runtime::AuthorityProbe>,
     clock: delulu_runtime::ClockMode,
-    adapter: Option<delulu_runtime::adapter::ProcessAdapter>,
+    adapter: Option<Box<dyn delulu_runtime::adapter::Adapter>>,
 }
 
 impl DevicePlan {
@@ -1738,7 +1776,7 @@ impl DevicePlan {
             &self.sensors,
             self.probe,
             self.clock,
-            self.adapter.map(|a| Box::new(a) as Box<dyn delulu_runtime::adapter::Adapter>),
+            self.adapter,
         ))
     }
 }
@@ -1795,7 +1833,7 @@ pub(crate) fn plan_devices(
                 return Err(code);
             }
             match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
-                Ok(a) => Some(a),
+                Ok(a) => Some(Box::new(a) as Box<dyn delulu_runtime::adapter::Adapter>),
                 Err(e) => {
                     // Fail closed and BEFORE `main`: a run that could not start its driver must
                     // not begin, or the program would discover the machine is unreachable
@@ -1805,6 +1843,10 @@ pub(crate) fn plan_devices(
                 }
             }
         }
+        (delulu_runtime::Profile::Hw { adapter }, None) => match &opts.adapter_dpx {
+            Some(dpx) => Some(verified_driver(adapter, dpx, opts)?),
+            None => None,
+        },
         _ => None,
     };
     Ok(Some(DevicePlan {
@@ -1815,6 +1857,62 @@ pub(crate) fn plan_devices(
         clock: device_clock,
         adapter,
     }))
+}
+
+/// P8-02: a hardware driver whose logic is a signed Verified plugin. Its bytes are read once, pinned,
+/// re-proved ([`load_dpx_driver`]) and checked against the driver interface before the transport is looked
+/// up — so a refused driver has started nothing and written nothing — and only then is the transport, the
+/// one part that touches the machine, resolved once (as a driver is) and started.
+fn verified_driver(
+    adapter: &str,
+    dpx: &str,
+    opts: &Opts,
+) -> Result<Box<dyn delulu_runtime::adapter::Adapter>, i32> {
+    // `verified_driver_flags` refused the run before anything if either were absent.
+    let (Some(pin), Some(transport)) = (opts.adapter_signer.as_deref(), opts.adapter_transport.as_deref()) else {
+        return Err(2);
+    };
+    let dir = load_dpx_driver(dpx, pin, opts.adapter_record.as_deref())?;
+    // The interface is checked before the transport is even looked up: a plugin that is not a driver never
+    // causes a process to be resolved or started.
+    if let Err(r) = delulu_runtime::verified_adapter::check_interface(adapter, &dir) {
+        let d = Diagnostic::error(r.code, r.message);
+        eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+        return Err(1);
+    }
+    let mut parts = transport.split_whitespace();
+    let Some(prog) = parts.next() else {
+        eprintln!("error: --adapter-transport is empty");
+        return Err(2);
+    };
+    let args: Vec<String> = parts.map(str::to_string).collect();
+    let Some(resolved) = crate::cli::resolve_driver(prog) else {
+        eprintln!(
+            "error: the transport could not be started: `{prog}` is neither a file on PATH nor a path to one — \
+             it is resolved once, and not looked up anywhere else"
+        );
+        return Err(1);
+    };
+    let line = match delulu_runtime::adapter::LineTransport::spawn(&resolved.display().to_string(), &args) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return Err(1);
+        }
+    };
+    match delulu_runtime::verified_adapter::VerifiedAdapter::new(
+        adapter,
+        dir,
+        delulu_runtime::Limits::default(),
+        Box::new(line),
+    ) {
+        Ok(a) => Ok(Box::new(a)),
+        Err(r) => {
+            let d = Diagnostic::error(r.code, r.message);
+            eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+            Err(1)
+        }
+    }
 }
 
 /// Stop a run's device broker before any verdict is reported, so a run never leaves a thread deciding

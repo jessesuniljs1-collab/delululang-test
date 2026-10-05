@@ -67,7 +67,7 @@
 //! noticing the process is gone.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
 
@@ -182,46 +182,7 @@ impl ProcessAdapter {
             .map_err(|e| AdapterError::Spawn(format!("{program}: {e}")))?;
         let stdin = child.stdin.take().ok_or_else(|| AdapterError::Spawn("no stdin pipe".into()))?;
         let stdout = child.stdout.take().ok_or_else(|| AdapterError::Spawn("no stdout pipe".into()))?;
-        // The reader thread exists solely so an exchange can have a deadline: blocking stdio reads
-        // have no portable timeout. It ends when the pipe closes, which happens when the child dies
-        // or when `Drop` closes our handle.
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stdout);
-            loop {
-                // ADAPTER-LINE-1: bound each line. `BufRead::lines()`/`read_line` grows without limit,
-                // so an untrusted adapter streaming a reply with no newline could exhaust memory here —
-                // the exchange timeout (rule 2) bounds latency, not buffering. `take` caps one line's
-                // read; a line that reaches the cap without a newline is a broken/hostile adapter, so we
-                // tear the reader down and the exchange fails closed (Disconnected → Closed → poison).
-                let mut buf: Vec<u8> = Vec::new();
-                let n = match (&mut reader).take(MAX_LINE_BYTES).read_until(b'\n', &mut buf) {
-                    Ok(n) => n,
-                    Err(_) => return, // a read error, including the pipe closing under us
-                };
-                if n == 0 {
-                    return; // EOF: the child closed its stdout
-                }
-                if n as u64 == MAX_LINE_BYTES && buf.last() != Some(&b'\n') {
-                    return; // over-cap with no line end in sight — fail closed, never keep buffering
-                }
-                // Match `lines()`: strip a trailing \n (and a preceding \r), and reject non-UTF-8 by
-                // tearing down exactly as the old `Err(_) => return` arm did.
-                if buf.last() == Some(&b'\n') {
-                    buf.pop();
-                    if buf.last() == Some(&b'\r') {
-                        buf.pop();
-                    }
-                }
-                let line = match String::from_utf8(buf) {
-                    Ok(s) => s,
-                    Err(_) => return,
-                };
-                if tx.send(line).is_err() {
-                    return; // the adapter was dropped; nothing left to feed
-                }
-            }
-        });
+        let rx = line_reader(stdout);
         Ok(ProcessAdapter { name: name.to_string(), child, stdin, rx, poisoned: false })
     }
 
@@ -318,6 +279,107 @@ impl Drop for ProcessAdapter {
         // Kill rather than wait: a driver that has stopped answering will not start now, and a run
         // that hangs on exit is a run an operator has to kill by hand. The dead-man has already
         // engaged the declared fail-state by this point if anything was still held.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// The reader thread for a peer that answers in lines: it exists solely so an exchange can have a
+/// deadline, because blocking stdio has no portable timeout. It ends when the pipe closes — the peer
+/// died, or its owner dropped the handle.
+fn line_reader(stdout: ChildStdout) -> Receiver<String> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            // ADAPTER-LINE-1: bound each line. `BufRead::lines()`/`read_line` grows without limit,
+            // so an untrusted adapter streaming a reply with no newline could exhaust memory here —
+            // the exchange timeout (rule 2) bounds latency, not buffering. `take` caps one line's
+            // read; a line that reaches the cap without a newline is a broken/hostile adapter, so we
+            // tear the reader down and the exchange fails closed (Disconnected → Closed → poison).
+            let mut buf: Vec<u8> = Vec::new();
+            let n = match (&mut reader).take(MAX_LINE_BYTES).read_until(b'\n', &mut buf) {
+                Ok(n) => n,
+                Err(_) => return, // a read error, including the pipe closing under us
+            };
+            if n == 0 {
+                return; // EOF: the child closed its stdout
+            }
+            if n as u64 == MAX_LINE_BYTES && buf.last() != Some(&b'\n') {
+                return; // over-cap with no line end in sight — fail closed, never keep buffering
+            }
+            // Match `lines()`: strip a trailing \n (and a preceding \r), and reject non-UTF-8 by
+            // tearing down exactly as the old `Err(_) => return` arm did.
+            if buf.last() == Some(&b'\n') {
+                buf.pop();
+                if buf.last() == Some(&b'\r') {
+                    buf.pop();
+                }
+            }
+            let line = match String::from_utf8(buf) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            if tx.send(line).is_err() {
+                return; // the adapter was dropped; nothing left to feed
+            }
+        }
+    });
+    rx
+}
+
+/// The reference transport for a Verified driver (P8-03): a process whose standard input and output
+/// carry a device's line — a serial bridge, a CAN gateway, a simulated device. It computes nothing: the
+/// driver's re-proved logic hands it each frame ([`crate::verified_adapter`]), and it writes that frame
+/// and reads one line back, within the time the exchange has left.
+///
+/// The laws of [`ProcessAdapter`] hold for it: a reply line is bounded ([`MAX_LINE_BYTES`]); a line
+/// waiting before a frame is written is output no exchange asked for, and the stream's framing is in
+/// doubt (`Protocol`); silence past the deadline is `Timeout`. Each failure poisons the adapter that
+/// owns the transport, so a transport is never spoken to again after one.
+pub struct LineTransport {
+    child: Child,
+    stdin: ChildStdin,
+    rx: Receiver<String>,
+}
+
+impl LineTransport {
+    /// Start `program` (already resolved to the file to run) with `args`; its standard error is the
+    /// operator's, as a driver's is.
+    pub fn spawn(program: &str, args: &[String]) -> Result<LineTransport, AdapterError> {
+        let mut child = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| AdapterError::Spawn(format!("{program}: {e}")))?;
+        let stdin = child.stdin.take().ok_or_else(|| AdapterError::Spawn("no stdin pipe".into()))?;
+        let stdout = child.stdout.take().ok_or_else(|| AdapterError::Spawn("no stdout pipe".into()))?;
+        Ok(LineTransport { child, stdin, rx: line_reader(stdout) })
+    }
+}
+
+impl crate::verified_adapter::Transport for LineTransport {
+    fn exchange(&mut self, frame: &str, within: Duration) -> Result<String, AdapterError> {
+        if self.rx.try_recv().is_ok() {
+            return Err(AdapterError::Protocol(
+                "unsolicited output before a frame — the line is misframed".to_string(),
+            ));
+        }
+        if writeln!(self.stdin, "{frame}").is_err() || self.stdin.flush().is_err() {
+            return Err(AdapterError::Closed);
+        }
+        match self.rx.recv_timeout(within) {
+            Ok(line) => Ok(line),
+            Err(RecvTimeoutError::Timeout) => Err(AdapterError::Timeout),
+            Err(RecvTimeoutError::Disconnected) => Err(AdapterError::Closed),
+        }
+    }
+}
+
+impl Drop for LineTransport {
+    fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -571,5 +633,49 @@ mod tests {
             "an adapter that emits extra lines must fail closed; first={first:?} second={second:?} poisoned={}",
             a.is_poisoned()
         );
+    }
+
+    // ----- P8-02/P8-03: the line transport a Verified driver's frames travel over --------------------
+
+    fn line(script: &str) -> LineTransport {
+        #[cfg(windows)]
+        let (prog, args) = ("python", vec!["-c".to_string(), script.to_string()]);
+        #[cfg(not(windows))]
+        let (prog, args) = ("sh", vec!["-c".to_string(), script.to_string()]);
+        LineTransport::spawn(prog, &args).expect("spawn")
+    }
+
+    #[test]
+    fn a_line_transport_writes_the_frame_and_returns_the_line_it_got_back() {
+        use crate::verified_adapter::Transport as _;
+        let mut t = line(&echoer());
+        let reply = t.exchange("CMD arm0/elbow angle_deg=12.0", EXCHANGE_TIMEOUT).expect("an answer");
+        assert_eq!(reply, "ERR saw CMD arm0/elbow angle_deg=12.0", "the frame crossed byte for byte");
+    }
+
+    #[test]
+    fn a_line_transport_answers_within_the_time_it_is_given_or_times_out() {
+        use crate::verified_adapter::Transport as _;
+        let mut t = line(&silent());
+        let started = std::time::Instant::now();
+        assert_eq!(t.exchange("READ arm0/strain", Duration::from_millis(300)), Err(AdapterError::Timeout));
+        let took = started.elapsed();
+        assert!(took < EXCHANGE_TIMEOUT, "it waited {took:?}: the time left, not a deadline of its own");
+    }
+
+    /// The transport's half of rule 3: a line waiting before a frame is written is output no frame asked
+    /// for, so the stream's framing is in doubt. Deterministic by the same means as
+    /// `unsolicited_extra_output_poisons_rather_than_desyncing_the_framing`: a device that answers twice,
+    /// then time for the reader to deliver the leftover.
+    #[test]
+    fn a_line_transport_refuses_to_write_while_an_unasked_line_is_waiting() {
+        use crate::verified_adapter::Transport as _;
+        let mut t = line(&two_line_responder("OK"));
+        assert_eq!(t.exchange("READ arm0/strain", EXCHANGE_TIMEOUT), Ok("OK".to_string()));
+        std::thread::sleep(Duration::from_millis(150));
+        match t.exchange("READ arm0/strain", EXCHANGE_TIMEOUT) {
+            Err(AdapterError::Protocol(m)) => assert!(m.contains("unsolicited"), "{m}"),
+            other => panic!("a misframed line must fail closed, got {other:?}"),
+        }
     }
 }

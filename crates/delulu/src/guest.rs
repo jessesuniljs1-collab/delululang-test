@@ -598,6 +598,9 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--require-signed-adapter",
     "--adapter-signer",
     "--adapter-record",
+    // P8-02: a Verified driver and the transport that carries its frames — the host's, as every driver is.
+    "--adapter-dpx",
+    "--adapter-transport",
 ];
 
 /// The largest program a sandboxed run sends: the channel's frame bound, less room for the frame's other

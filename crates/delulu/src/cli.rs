@@ -352,6 +352,12 @@ pub(crate) struct Opts {
     pub(crate) adapter_signer: Option<String>,
     /// Directory for the hash-chained record of the driver-provenance decision (C60).
     pub(crate) adapter_record: Option<String>,
+    /// `--adapter-dpx <file>` (P8-02): the hardware driver's LOGIC as a signed Verified plugin — read once,
+    /// its signature pinned to `--adapter-signer`, re-proved, and interpreted from those same bytes.
+    pub(crate) adapter_dpx: Option<String>,
+    /// `--adapter-transport <command>` (P8-02): the process that carries a Verified driver's frames to the
+    /// device and its replies back — the only part of such a driver that touches the machine.
+    pub(crate) adapter_transport: Option<String>,
     pub(crate) sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -419,6 +425,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         adapter_artifact: None,
         adapter_signer: None,
         adapter_record: None,
+        adapter_dpx: None,
+        adapter_transport: None,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -597,6 +605,22 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     i += 1;
                 } else {
                     opts.missing_values.push("--adapter-record".to_string());
+                }
+            }
+            "--adapter-dpx" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_dpx = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-dpx".to_string());
+                }
+            }
+            "--adapter-transport" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_transport = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-transport".to_string());
                 }
             }
             "--sim-step" => {
@@ -1361,7 +1385,10 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and --require-signed-adapter refuses an unsigned one — D52;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-artifact PATH names WHICH bytes were signed (an interpreter-hosted driver\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 names the interpreter in --adapter-cmd, not the driver), and --adapter-signer HEX pins\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX: the driver's LOGIC as a signed\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Verified plugin, read once, pinned, re-proved and interpreted by the host; CMD only carries its\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 frames to the device and the replies back — P8-02)\n\
      \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
@@ -7978,11 +8005,11 @@ pub(crate) fn resolve_device_profile(file: &str, opts: &Opts) -> Result<delulu_r
     // a driver can refuse more and can never permit more. What the driver then does with a
     // permitted command is below the boundary, exactly as invariant 52 says the hardware safety
     // chain must be — it has to work with DeluluLang absent.
-    if opts.adapter_cmd.is_none() {
+    if opts.adapter_cmd.is_none() && opts.adapter_dpx.is_none() {
         eprintln!(
             "error: `--broker-profile hw:{adapter}` needs a driver — pass `--adapter-cmd <command>` \
              naming the process that speaks the device protocol (CMD/READ over stdio; see \
-             `delulu_runtime::adapter`). No driver ships in-tree for any hardware, and none is \
+             `delulu_runtime::adapter`), or `--adapter-dpx <file>` naming a signed Verified driver. No driver ships in-tree for any hardware, and none is \
              invented here: a `hw:` run that commanded nothing while reporting success would be a \
              lie. To exercise the program without hardware, use `--broker-profile sim`."
         );
@@ -9973,6 +10000,95 @@ pub(crate) fn check_adapter_signature(
             let d = Diagnostic::error(code, format!("hardware adapter `{prog}`: {reason}"));
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
             (rec("refused-policy", None), Some(1))
+        }
+    }
+}
+
+/// P8-02: a Verified driver's provenance and proof, from ONE read of its bytes. The `.dpx` is read once;
+/// its embedded signature (over the manifest and the DIR) must verify under the key the operator pinned
+/// (`--adapter-signer`: DL1510 for another key or a signature that does not verify, DL1511 for none);
+/// it must be a Verified plugin of the supported API (DL1507, and a Contained one is refused — a driver
+/// is code the host can read); and its DIR is replayed through the checker (`step5_verified`, DL1504).
+/// The DIR returned is the one those checks were made on — interpreted from the bytes verified, so no
+/// file is started by name and D-V2-50's check-then-start window does not exist for it. The decision
+/// is recorded (C60) before a refusal is acted on, as a process driver's is.
+pub(crate) fn load_dpx_driver(file: &str, pin: &str, record: Option<&str>) -> Result<delulu_check::Dir, i32> {
+    let refuse = |code: &'static str, message: String| {
+        let d = Diagnostic::error(code, message);
+        eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+    };
+    let rec = |decision: &'static str, signer: Option<String>| AdapterProvenance {
+        artifact: file.to_string(),
+        decision,
+        signer,
+        pinned: Some(pin.to_string()),
+    };
+    let bytes = match std::fs::read(file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {}", unreadable(&file, &e));
+            record_adapter_provenance(&rec("refused-unreadable", None), record)?;
+            return Err(2);
+        }
+    };
+    use delulu_runtime::PluginEngine as _;
+    let art = match delulu_wasm::WasmPluginEngine::new().read_artifact(&bytes) {
+        Ok(a) => a,
+        Err(e) => {
+            record_adapter_provenance(&rec("refused-container", None), record)?;
+            refuse(e.code, format!("hardware driver `{file}`: {}", e.message));
+            return Err(1);
+        }
+    };
+    // Provenance first: a driver nobody the operator named vouched for is not replayed at all.
+    let status = delulu_runtime::verify_signature(&art.manifest, art.dir.as_deref(), art.sig.as_deref());
+    let refusal = match &status {
+        delulu_runtime::SignatureStatus::Valid { signer } if signer.eq_ignore_ascii_case(pin) => None,
+        delulu_runtime::SignatureStatus::Valid { signer } => Some((
+            "refused-wrong-signer",
+            Some(signer.clone()),
+            "DL1510",
+            format!(
+                "hardware driver `{file}` is signed by `{signer}`, and this run accepts only `{pin}` — the \
+                 signature verifies, which means somebody vouched for these bytes; it does not mean anybody you named did"
+            ),
+        )),
+        delulu_runtime::SignatureStatus::Invalid { reason } => Some((
+            "refused-bad-signature",
+            None,
+            "DL1510",
+            format!("hardware driver `{file}` carries a signature that does not verify: {reason} — it is not interpreted"),
+        )),
+        delulu_runtime::SignatureStatus::Unsigned => Some((
+            "refused-unsigned",
+            None,
+            "DL1511",
+            format!(
+                "hardware driver `{file}` carries no signature, and a Verified driver is always pinned to its signer — \
+                 sign it (`delulu plugin build --sign KEY`)"
+            ),
+        )),
+    };
+    if let Some((decision, signer, code, message)) = refusal {
+        record_adapter_provenance(&rec(decision, signer), record)?;
+        refuse(code, message);
+        return Err(1);
+    }
+    let proved = delulu_runtime::plugin::step1_container_api(&art, delulu_runtime::PLUGIN_API_SUPPORTED)
+        .and_then(|class| {
+            delulu_runtime::plugin::step2_class(class, delulu_runtime::PluginClass::Verified)?;
+            delulu_runtime::step5_verified(&art)
+        });
+    match proved {
+        Ok(v) => {
+            record_adapter_provenance(&rec("verified-pinned", Some(pin.to_ascii_lowercase())), record)?;
+            eprintln!("adapter: `{file}` is signed by the pinned key {pin} and re-proves as a Verified driver");
+            Ok(v.dir)
+        }
+        Err(e) => {
+            record_adapter_provenance(&rec("refused-proof", Some(pin.to_ascii_lowercase())), record)?;
+            refuse(e.code, format!("hardware driver `{file}`: {}", e.message));
+            Err(1)
         }
     }
 }
