@@ -1302,7 +1302,8 @@ it on `origin` was made in the cloud and is listed below.
   pushed only to be read red on the KVM runner; (6) `fee5353` its revert; (7) `5b89f9f` a sandboxed simulation keeps the
   stepped clock and signs off; (8) `521d688` their records; (9) `bc8bd91` a sandboxed run reports its devices' journal;
   (10) `ac31cf2` its records, P8-01 complete; (11) `5c98e65` P8-02's build order; (12) `418dcca` P8-02 steps 2–3: the
-  driver slot is an `Adapter` trait, the DIR asserted `Send`; (13) its records and the closing reading — this commit
+  driver slot is an `Adapter` trait, the DIR asserted `Send`; (13) `e561983` its records and the closing reading; (14) the
+  last reading and RW 4.7's pointer to P8-02 — this commit
 - Files and folders: M `crates/delulu-runtime/src/device.rs` (`actuate`, `sense`, `refusal_detail`, `command_check`,
   `command_fields`), `crates/delulu-runtime/src/interp.rs` (`call_actuator`/`call_sensor` call them; a handle goes to the
   sink; the old `envelope_check`/`numeric_fields` removed), `crates/delulu-runtime/src/channel.rs`
@@ -1328,7 +1329,9 @@ it on `origin` was made in the cloud and is listed below.
   `V2_LOG.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (11); M
   `crates/delulu-runtime/src/adapter.rs` (`Adapter`, the `Send` assertion), `crates/delulu-runtime/src/device.rs`,
   `crates/delulu/src/run_cmd.rs`, `docs/survey/*` — (12); M `docs/DELULULANG_V2/V2_LOG.md`, `V2_P8_DESIGN.md`,
-  `V2_PHASE_STATUS.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (13). Deleted: nothing. **Authorship:** the
+  `V2_PHASE_STATUS.md`, `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `HANDOFF.md` (§11.5), `docs/survey/*` — (13); M
+  `docs/REMAINING_WORK.md` (4.7), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*` — (14). Deleted:
+  nothing. **Authorship:** the
   owner's account through its GitHub no-reply address, Claude as co-author.
 - Survey and doctor (start of run): `survey check` ok (1,484 nodes, 13,281 edges); `doctor --check` ok, all checks passed.
   After the last edit: see the closing reading below.
@@ -1360,11 +1363,15 @@ it on `origin` was made in the cloud and is listed below.
   `37304345347` success (arm64 2.92x) — 14 jobs each, none failed. **The last push runs** (`bc8bd91`'s and this commit's):
   read by the run's closing reading, or by the next run first. **(12):** M135 red; the `Send` assertion falsified (E0277);
   clippy and `check-other-os.sh` clean; read on the runners at `418dcca` before `master` moved — Windows `37307415352` and macOS `37307419324`, `hw_adapter_cli`, `dead_man_cli` and `sandbox_devices_cli`, green; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **The closing reading:** `bc8bd91` — CI `37306161197` success, 14 jobs (arm64 MEASURED 2.88x), `ocsf` `37306161210` success; `ac31cf2` — CI `37306380748` success, 14 jobs (arm64 MEASURED 2.92x); `5c98e65`'s, `418dcca`'s and this commit's push runs were in progress at the close — the next run reads them first, with the 2026-10-05 nightly's last `miri-slow` job (`delulu-broker`; `delulu-syntax` and `delulu-check` read green).
+  **The last reading:** every push run of the run read green — CI `37306707736` (`5c98e65`), `37308525902` (`418dcca`),
+  `37308742427` (`e561983`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.93x/4.11x, 2.86x/4.12x,
+  2.97x/4.12x); `master` green through `e561983`. The 2026-10-05 nightly `37293332206`: every job green but
+  `miri-slow (delulu-broker)`, still running at 12:36 (`delulu-syntax` and `delulu-check` green).
 - Redo on the laptop: nothing beyond the suite on Windows and in WSL.
-- For the laptop's memory: `HANDOFF.md` §11.5 (a mutant that survives on a second wall; a flag a path starts to apply asks
+- For the laptop's memory: `HANDOFF.md` §11.5 (a mutant that survives on a second wall; a mutant only another level can see; a flag a path starts to apply asks
   the dropped-flag question again; the tree edited mid-suite a third time — `scripts/suite.sh`; `delulu` has no `--lib`);
   `docs/assistant-memory/cloud-period-2026-09-28.md`.
-- Open / next: (1) read `5b89f9f`'s and this commit's push runs, and the 2026-10-05 nightly's three `miri-slow` jobs;
+- Open / next: (1) read this commit's push run (records only) and the 2026-10-05 nightly's `miri-slow (delulu-broker)`;
   (2) **P8-02** — the Verified-class adapter as a `.dpx`: its build order is in `V2_P8_DESIGN.md` (written by this run
   from the code); steps 2–3's groundwork is done (`418dcca`) — start at step 3 proper, the `VerifiedAdapter`'s thread
   (P8-01 is complete, D-V2-95); (3) PS-E's residuals, kept open: H6 (RW 4.27), macOS's launcher window (RW

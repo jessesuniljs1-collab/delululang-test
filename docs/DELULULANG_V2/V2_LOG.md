@@ -4124,3 +4124,8 @@ signature key and `--adapter-dpx` are the new surface. Nothing built — the nex
 `delulu_check::Dir` is `Send` (falsified: an `Rc` in its place is E0277). Mutant M135 (the trait's `command` answering
 without the driver) red on `hw_adapter_cli`. **Verified:** read on the runners at `418dcca` before `master` moved — Windows `37307415352` and macOS `37307419324`, `hw_adapter_cli`, `dead_man_cli` and `sandbox_devices_cli`, green; the full suite alone through `scripts/suite.sh`, 2,129 passed, 0 failed, 16 ignored (158 binaries), cargo exit 0, the tree unmoved. **Next:** P8-02's step 3 proper — the
 `VerifiedAdapter` thread — then steps 4–7.
+
+**The last reading (routine run 13):** every push run of the run read green — CI `37306707736` (`5c98e65`), `37308525902`
+(`418dcca`), `37308742427` (`e561983`): success, 14 jobs each, none failed (arm64 ping-pong MEASURED 2.93x/4.11x,
+2.86x/4.12x, 2.97x/4.12x); `master` green through `e561983`. The 2026-10-05 nightly `37293332206` green on every job read —
+its `miri-slow (delulu-broker)` was still running at 12:36.
