@@ -2287,6 +2287,25 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    stays environment-blocked (D23).
 7. **Witnesses and falsifiers:** `sim_device_cli.rs` (three, parity among them), `sim.rs`'s six; M154–M158 each red.
 
+## D-V2-99 — RW 7.17: an unanswered probe gets no cause of its own; the journal's detail is the record, and now a gate — TAKEN (head chef, 2026-10-05, under the owner's delegation)
+
+RW 7.17 left a question beside its unreproduced flake: does a probe the broker never answered deserve its own
+`RevokeCause`, beside `operator-revoke`? **No**, and the reading that settles it:
+
+1. **A program must behave identically in all three cases** — a revoked node, an answer that is not one, and no answer —
+   and it does: it loses the device, the declared fail-state engages, it stops. A fourth cause would be a distinction
+   with no action behind it, in the vocabulary a program, a report and the audit all share.
+2. **The difference IS already recorded**, where a person investigating reads: the probe's own words
+   (`cli.rs`'s `mint_device_nodes` — "grant node `g_...` is revoked (by audit seq N)", "... answered ... which is not an
+   answer", "the broker did not answer for `g_...`: ...") travel verbatim into the `lease.revoked` detail in the
+   broker's journal, which `close_devices` prints on standard error and the sandbox report carries (P8-01).
+3. **That was a comment until now.** `device.rs`'s
+   `the_journal_tells_the_three_dead_probes_apart_even_though_the_cause_cannot` asserts each of the three reasons
+   verbatim in the journal while asserting that the cause still collapses — mutants M159 (the probe's reason dropped)
+   and M160 (the detail reduced to the cause's name) are red, and two older witnesses go red with them.
+4. **What stays open in RW 7.17** is the half that needs a recurrence: the arm64 flake was found, not root-caused. The
+   next occurrence is now readable from the journal — which is what the row asked for.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

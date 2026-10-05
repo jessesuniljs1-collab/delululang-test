@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 301 |
-| Rust lines | 157829 |
+| Rust lines | 157869 |
 | Rust files outside `src/` (test/bench targets) | 137 |
 | Markdown documents | 252 |
-| Markdown lines | 70472 |
+| Markdown lines | 70524 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1495 / 13511 |
+| Nodes / edges in this map | 1495 / 13516 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -299,7 +299,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 20391 lines
+- **Modules:** 24 files, 20431 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -311,7 +311,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 266 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
-| `src/device.rs` | 1416 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
+| `src/device.rs` | 1456 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/egress.rs` | 937 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 790 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 458 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
