@@ -1183,6 +1183,7 @@ fn run_inner(args: &[String]) -> i32 {
         "toolchain" => crate::toolchain::cmd_toolchain(rest),
         "schema" => crate::schema::cmd_schema(rest),
         "examples" => crate::examples::cmd_examples(rest),
+        "device" => crate::device_cmd::cmd_device(rest),
         // PS-A-03: the sandbox guest, spawned by the host with a hello frame on standard input and
         // never typed by a caller. Dispatched by constant through a guard arm, the shape the foreign
         // worker already uses for an internal subcommand: out of `--help`, out of completions, and
@@ -1327,7 +1328,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit",
+    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit", "device",
 ];
 
 fn usage() -> &'static str {
@@ -1389,6 +1390,11 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX: the driver's LOGIC as a signed\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Verified plugin, read once, pinned, re-proved and interpreted by the host; CMD only carries its\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 frames to the device and the replies back — P8-02)\n\
+     \x20 delulu device    sim [--seed N] [--actuator DEVICE:dim=lo..hi,heartbeat_ms=N,ttl_ms=N,fail=F]... [--sensor NAME]... [--json]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (P8-03: the reference SIMULATOR as a device on standard input/output, speaking the CMD/READ line\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 protocol a driver's transport writes — `--adapter-transport \'delulu device sim …\'`. The bounds given\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 here are the BENCH\'s own limits, not the run\'s grant: narrower ones simulate a hard stop. It models\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 no physics and nothing physical moves; --json describes the bench instead of serving it)\n\
      \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\

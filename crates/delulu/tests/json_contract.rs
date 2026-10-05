@@ -19,7 +19,7 @@ use std::process::{Command, Output};
 /// Every run-once subcommand. Kept explicit so that adding a subcommand and forgetting the contract
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "edit", "examples", "explain",
+    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "device", "edit", "examples", "explain",
     "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
     "plugin", "publish", "run", "sandbox", "schema", "secrets", "sign", "skill", "test", "toolchain", "verify-sig",
     "why",
@@ -458,6 +458,15 @@ effects = [\"Write\"]
     let cases: Vec<(&str, Vec<&str>, Cwd, &str)> = vec![
         ("check", vec!["check", ".", "--json"], Cwd::Pkg, "check"),
         ("authority", vec!["authority", ".", "--json"], Cwd::Pkg, "authority"),
+        // P8-03: `--json` DESCRIBES the bench rather than serving it, which is the only form of this
+        // verb a sweep can drive: `device sim` without it reads standard input until it ends.
+        (
+            "device-sim",
+            vec!["device", "sim", "--seed", "1", "--actuator",
+                 "arm0/elbow:angle_deg=-1..1,heartbeat_ms=1000,ttl_ms=1000,fail=hold", "--json"],
+            Cwd::Pkg,
+            "device",
+        ),
         ("authority-artifact", vec!["authority", &dwx_s, "--json"], Cwd::Pkg, "authority"),
         ("authority-diff", vec!["authority", "--diff", "delulu.lock", ".", "--json"], Cwd::Pkg, "authority"),
         ("build", vec!["build", ".", "--json"], Cwd::Pkg, "build"),

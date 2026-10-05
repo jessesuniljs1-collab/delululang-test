@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 298 |
-| Rust lines | 157121 |
-| Rust files outside `src/` (test/bench targets) | 136 |
+| Rust files | 301 |
+| Rust lines | 157824 |
+| Rust files outside `src/` (test/bench targets) | 137 |
 | Markdown documents | 252 |
 | Markdown lines | 70262 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1492 / 13488 |
+| Nodes / edges in this map | 1495 / 13494 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 41 files, 39635 lines
+- **Modules:** 42 files, 39783 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,9 +106,10 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 10255 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 10261 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
+| `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
 | `src/doctor.rs` | 910 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/edit.rs` | 532 | P4-04 and P4-05: `delulu edit` — checked edits for an agent that is not the only writer. |
 | `src/examples.rs` | 172 | P4-10: `delulu examples [--json]` — the shipped example programs, each with its authority and the |
@@ -121,7 +122,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/launcher.rs` | 182 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2024 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
-| `src/main.rs` | 101 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
+| `src/main.rs` | 102 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 664 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1461 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/morph_file.rs` | 257 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
@@ -298,7 +299,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 23 files, 20110 lines
+- **Modules:** 24 files, 20391 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -310,17 +311,18 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 266 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
-| `src/device.rs` | 1531 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
+| `src/device.rs` | 1416 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/egress.rs` | 937 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 790 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 458 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
 | `src/interp.rs` | 2583 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
-| `src/lib.rs` | 445 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
+| `src/lib.rs` | 446 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 273 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2282 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
 | `src/prim.rs` | 1488 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 332 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
+| `src/sim.rs` | 395 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 100 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 537 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
 | `src/value.rs` | 970 | Runtime values, environments, and capability values (spec §7.1). |

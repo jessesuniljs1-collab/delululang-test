@@ -20,6 +20,7 @@ mod completions;
 mod deploy;
 mod doctor;
 mod edit;
+mod device_cmd;
 mod examples;
 mod fix;
 mod guest;

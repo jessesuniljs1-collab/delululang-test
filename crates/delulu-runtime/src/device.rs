@@ -184,30 +184,13 @@ struct LeaseState {
     revoked: Option<Revocation>,
 }
 
-/// One simulated device: a position per bounded dimension, and whether the drive is engaged.
-#[derive(Default)]
-struct SimDevice {
-    pos: BTreeMap<String, f64>,
-    drive: bool,
-}
-
-/// The reference simulator's whole state. Deterministic: identical seed plus identical command
-/// sequence yields identical readings, on every platform, forever.
-struct Sim {
-    seed: u64,
-    devices: BTreeMap<String, SimDevice>,
-    /// Per-sensor read counters — the synthetic signal is a pure function of
-    /// (seed, device name, read index), so replaying a run replays its measurements.
-    reads: BTreeMap<String, u64>,
-}
-
 struct BrokerInner {
     profile: Profile,
     clock: ClockMode,
     /// Simulated microseconds, advanced per device interaction in `Stepped` mode; unread in `Wall`.
     virtual_us: AtomicU64,
     leases: Mutex<BTreeMap<String, LeaseState>>,
-    sim: Mutex<Sim>,
+    sim: Mutex<crate::sim::Sim>,
     journal: Mutex<Vec<DeviceEvent>>,
     t0: Instant,
     /// The hardware adapter, under `Profile::Hw` only (RFC 0001 dish 3). `None` everywhere else —
@@ -298,15 +281,7 @@ impl DeviceBroker {
     ) -> DeviceBroker {
         let now = Instant::now();
         let mut leases = BTreeMap::new();
-        let mut devices = BTreeMap::new();
         for env in envelopes {
-            // The simulated device starts at its park pose: the in-envelope value nearest zero.
-            // Starting anywhere else would be inventing a position nobody commanded.
-            let mut dev = SimDevice { drive: false, ..SimDevice::default() };
-            for (dim, lo, hi) in &env.dims {
-                dev.pos.insert(dim.clone(), park_point(*lo, *hi));
-            }
-            devices.insert(env.device.clone(), dev);
             // Both clocks read 0 at construction (t0 == now; the simulated counter starts at 0), so
             // the lease is born beaten and its TTL begins counting from this instant on either.
             leases.insert(
@@ -329,14 +304,11 @@ impl DeviceBroker {
             clock,
             virtual_us: AtomicU64::new(0),
             leases: Mutex::new(leases),
-            sim: Mutex::new(Sim { seed, devices, reads: BTreeMap::new() }),
+            sim: Mutex::new(crate::sim::Sim::new(seed, envelopes, sensors)),
             journal: Mutex::new(Vec::new()),
             t0: now,
             adapter: Mutex::new(adapter),
         });
-        for s in sensors {
-            inner.sim.lock().unwrap().reads.insert(s.clone(), 0);
-        }
         let stop = Arc::new(AtomicBool::new(false));
         let watchdog = spawn_watchdog(inner.clone(), stop.clone(), envelopes, authority);
         DeviceBroker { inner, stop, watchdog: Mutex::new(watchdog) }
@@ -414,13 +386,7 @@ impl DeviceBroker {
             }
         }
         if matches!(self.inner.profile, Profile::Sim { .. }) {
-            let mut sim = self.inner.sim.lock().unwrap();
-            if let Some(dev) = sim.devices.get_mut(device) {
-                dev.drive = true;
-                for (dim, x) in fields {
-                    dev.pos.insert(dim.clone(), *x);
-                }
-            }
+            self.inner.sim.lock().unwrap().drive(device, fields);
         }
         lease.last_command_us = Some(now);
         lease.last_beat_us = now;
@@ -485,30 +451,7 @@ impl DeviceBroker {
                     Some(ad) => ad.read(device).unwrap_or(None),
                 }
             }
-            Profile::Sim { .. } => {
-                let mut sim = self.inner.sim.lock().unwrap();
-                // A sensor named `ACTUATOR#DIM` mirrors that actuator's simulated position — the
-                // only reading in this simulator with a physical meaning, and the one that lets a
-                // control loop actually close. Everything else is a reproducible synthetic signal
-                // and is described as exactly that.
-                if let Some((dev, dim)) = device.split_once('#') {
-                    // THE SKIP BRANCH. A `#` name is a claim about a specific dimension of a
-                    // specific device. If the simulator cannot resolve it — no such actuator, no
-                    // such dimension — the answer is absence, NOT a fall-through to the synthetic
-                    // source. Handing back a plausible number for a mirror that mirrors nothing is
-                    // the precise failure invariant 50 exists to forbid, and it would look
-                    // completely normal in the output.
-                    return sim.devices.get(dev).and_then(|d| d.pos.get(dim)).copied();
-                }
-                if !sim.reads.contains_key(device) {
-                    return None;
-                }
-                let n = sim.reads.entry(device.to_string()).or_insert(0);
-                let ix = *n;
-                *n += 1;
-                let seed = sim.seed;
-                Some(synthetic_signal(seed, device, ix))
-            }
+            Profile::Sim { .. } => self.inner.sim.lock().unwrap().read(device),
         }
     }
 
@@ -695,25 +638,7 @@ fn revoke_lease(
     let detected = Instant::now();
     let fail = lease.env.fail_state;
     if matches!(inner.profile, Profile::Sim { .. }) {
-        let mut sim = inner.sim.lock().unwrap();
-        if let Some(dev) = sim.devices.get_mut(device) {
-            match fail {
-                // The drive stays engaged on the last setpoint.
-                FailState::Hold => dev.drive = true,
-                // The drive lets go. This simulator models no gravity and no friction, so the
-                // position simply stops changing — the sim is not claiming the mechanism holds
-                // its pose, only that nothing further is commanded.
-                FailState::Coast => dev.drive = false,
-                // Driven to the park pose: the in-envelope value nearest zero on each dimension.
-                // That interpretation belongs to THIS adapter; a real device declares its own.
-                FailState::SafePark => {
-                    dev.drive = true;
-                    for (dim, lo, hi) in &lease.env.dims {
-                        dev.pos.insert(dim.clone(), park_point(*lo, *hi));
-                    }
-                }
-            }
-        }
+        inner.sim.lock().unwrap().engage(device, fail, &lease.env);
     }
     // Engage latency is a real measurement in `Wall`; in `Stepped` no simulated time passes during
     // a synchronous sweep, so the fail-state engages at the same simulated instant it is detected —
@@ -762,47 +687,6 @@ fn revoke_lease(
         ),
         at_ms,
     });
-}
-
-/// The in-envelope value nearest zero: zero itself when the range straddles it, otherwise the
-/// nearer bound. A park pose has to be somewhere the envelope already permits — parking outside
-/// the envelope to reach "safety" would be the envelope granting what it refused.
-fn park_point(lo: f64, hi: f64) -> f64 {
-    if lo <= 0.0 && 0.0 <= hi {
-        0.0
-    } else if lo > 0.0 {
-        lo
-    } else {
-        hi
-    }
-}
-
-/// A reproducible synthetic sensor signal: a pure function of (seed, device, read index), in
-/// `[-1, 1]`. It is not a model of anything physical and is never described as one — it exists so
-/// a sim run replays identically, which is what `--seed` promises.
-fn synthetic_signal(seed: u64, device: &str, index: u64) -> f64 {
-    let mut x = seed ^ fnv1a(device.as_bytes()) ^ index.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    let v = splitmix64(&mut x);
-    // 53 bits into [0, 1), then into [-1, 1]. Deterministic on every platform.
-    let unit = (v >> 11) as f64 / (1u64 << 53) as f64;
-    unit * 2.0 - 1.0
-}
-
-fn splitmix64(x: &mut u64) -> u64 {
-    *x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    let mut z = *x;
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
-}
-
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= *b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
 }
 
 /// The envelope law, broker-side. Identical in intent to the interpreter's (10e, build-order
@@ -1013,6 +897,7 @@ fn json_str(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sim::park_point;
 
     fn env(device: &str, hb: u64, ttl: u64) -> ActuatorEnvelope {
         ActuatorEnvelope {
