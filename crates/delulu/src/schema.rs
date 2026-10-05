@@ -530,6 +530,10 @@ fn defs() -> Value {
             ],
             &[],
         ),
+        "device_event": obj(
+            &[("op", t("string")), ("device", t("string")), ("at_ms", t("integer")), ("detail", t("string"))],
+            &[],
+        ),
         "stopped_by": obj(
             &[("dimension", t("string"))],
             &[
@@ -709,6 +713,8 @@ pub fn document(name: &str) -> Option<Value> {
                 &req,
                 &[
                     ("egress", r("egress")),
+                    // P8-01: a sandboxed run's devices' journal (it has no trace) — the host's watchdog's events.
+                    ("devices", arr(r("device_event"))),
                     // A sandboxed run's custody: the broker's node when one decided every use.
                     ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
                     (

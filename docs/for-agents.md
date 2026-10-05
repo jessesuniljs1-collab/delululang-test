@@ -497,7 +497,9 @@ any program whose surface the channel cannot carry yet — today that means acto
 plugins and accelerators (`Compute`). A refusal names the surface and exits 2, having run nothing. A control
 program's actuators and sensors ARE carried (P8-01): the host performs each `command` and `read` against the
 run's device broker — envelope, rate, lease, dead-man, e-stop and the DL1905 sign-off gate as an ordinary run
-has them — and each refusal is a value the program is told and a line in the report's `denied`. A secret is refused at
+has them — and each refusal is a value the program is told and a line in the report's `denied`. A sandboxed run has
+no trace, so its report's top-level `devices` is the host watchdog's journal: each `lease.revoked` and
+`failstate.engaged`, with the device, `at_ms` and the reason (`delulu schema run-report`). A secret is refused at
 its first use instead, because a secret's bytes never cross the channel.
 `sandbox policy --json` reports the same thing in advance, in `unsupported_surface`.
 

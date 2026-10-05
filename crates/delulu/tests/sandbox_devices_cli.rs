@@ -226,7 +226,10 @@ fn a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock() {
     let o = delulu_in(
         &cwd,
         &state,
-        &["run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim", "--no-prompt"],
+        &[
+            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim",
+            "--report-out", "rep.json", "--no-prompt",
+        ],
     );
     assert!(o.status.success(), "losing a device kills the command, never the run:\n{}", stderr(&o));
     let out = stdout(&o);
@@ -239,6 +242,18 @@ fn a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock() {
     );
     let err = stderr(&o);
     assert!(err.contains("devices: arm0/elbow: lease revoked (missed-heartbeat)"), "{err}");
+    // A sandboxed run has no trace: the report carries the devices' journal, as the host measured it.
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(cwd.join("rep.json")).expect("the report")).unwrap();
+    let journal = report["devices"].as_array().unwrap_or_else(|| panic!("no `devices` journal in the report: {report}"));
+    let ops: Vec<&str> = journal.iter().filter_map(|e| e["op"].as_str()).collect();
+    assert!(ops.contains(&"lease.revoked") && ops.contains(&"failstate.engaged"), "{journal:?}");
+    let revoked = journal.iter().find(|e| e["op"] == "lease.revoked").unwrap();
+    assert_eq!(revoked["device"], "arm0/elbow", "{revoked}");
+    assert!(revoked["detail"].as_str().is_some_and(|d| d.contains("missed-heartbeat")) && revoked["at_ms"].is_u64(), "{revoked}");
+    // And the report, journal and all, is what the published run-report schema says it is.
+    let v = delulu_in(&cwd, &state, &["schema", "validate", "run-report", "rep.json"]);
+    assert!(v.status.success(), "the report must validate against `delulu schema run-report`:\n{}{}", stdout(&v), stderr(&v));
 }
 
 /// Witness 2, with no cooperation at all: the guest commands once and then never asks its host for

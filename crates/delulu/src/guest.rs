@@ -1601,6 +1601,18 @@ fn serve_under(
         if let Some(a) = &attested {
             report["sandbox"]["attestation"] = a.to_json();
         }
+        // P8-01: a sandboxed run has no trace, so its devices' journal — each lease revoked and each
+        // fail-state engaged, by the host's watchdog, when — is reported beside `egress`, the other effects
+        // the host performed for the guest. The watchdog is stopped first, so the journal is whole.
+        if let Some(b) = devices.and_then(GuestDevices::started) {
+            b.shutdown();
+            let journal: Vec<serde_json::Value> = b
+                .events()
+                .iter()
+                .map(|e| serde_json::json!({ "op": e.op, "device": e.device, "at_ms": e.at_ms, "detail": e.detail }))
+                .collect();
+            report["devices"] = serde_json::json!(journal);
+        }
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
         if let Err(e) = std::fs::write(path, format!("{text}\n")) {
             eprintln!("error: cannot write the run report to `{path}`: {e}");
