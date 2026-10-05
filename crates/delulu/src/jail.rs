@@ -298,8 +298,7 @@ pub fn peak_footprint(pid: u32) -> Option<u64> {
     let rc = unsafe {
         libc::proc_pid_rusage(pid as libc::c_int, libc::RUSAGE_INFO_V4, (&mut info as *mut libc::rusage_info_v4).cast())
     };
-    let _ = info.ri_lifetime_max_phys_footprint;
-    (rc == 0).then_some(0)
+    (rc == 0).then_some(info.ri_lifetime_max_phys_footprint)
 }
 
 /// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2, D-V2-60): on macOS nothing in the kernel ends a guest when its
