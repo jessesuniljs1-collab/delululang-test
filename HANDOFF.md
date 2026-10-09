@@ -70,7 +70,13 @@ the assistant's memory — which now also travels file by file in
   with three residuals kept open: E-03's H6, macOS's launcher window, macOS's reads. **Next: P8** (P8-01 first), then P9.
 - **P8-01 complete (routine run 13, D-V2-95)** — a control program runs in a guest, at L1 and L2: the host performs its actuator commands and
   sensor reads by the interpreter's own body against the run's device broker; the broker starts when the guest is sent its
-  program. **Next: P8-02** (the Verified-class adapter as a `.dpx`), then P8-03, P8-04, then P9.
+  program. P8-02 (a signed Verified driver, D-V2-96/97 — RW 4.7 closed) and P8-03 (the simulator as a device process,
+  D-V2-98) complete (routine run 14).
+- **P8-04 in progress (routine run 15, 2026-10-09):** step 1 MEASURED before building on it — an envelope's refusal was
+  not in the audit chain (AUDIT-REFUSAL-1, fixed, D-V2-100) and the chain's seq was not unique (AUDIT-SEQ-1, fixed,
+  D-V2-102); step 3 (b) built — `delulu monitor watch` quarantines a run under its node and the revocation's record says
+  why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Next: P8-04 step 5** (option (c), a broker dead-man for the monitor's
+  node), RW 4.46 (the egress client's refusals), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
