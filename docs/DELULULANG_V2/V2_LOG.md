@@ -4414,3 +4414,39 @@ warning that had been in every Windows test build: `secrets.rs`'s `in_memory_at`
 was dead code there — and the script that lints the other operating systems named three packages, not the broker.
 Witnessed: with the broker added, the lint was RED on the unfixed source (``associated function `in_memory_at` is never
 used``), and green once the helper is `cfg(all(test, unix))`, for Windows and macOS. The broker's 172 unit tests pass.
+
+## 2026-10-09 — routine run 15: AUDIT-SEQ-1 closed — the audit chain has one numbering (D-V2-102, RW 4.44)
+
+**Wider than first recorded.** Reading where the daemon's count starts (`tree.rs`: `audit_seq: 1`) showed the defect
+needs no sandbox at all: a daemon started, stopped and started again on one state directory wrote `1, 2, 3, 1, 2, 3`,
+the chain still verified, and `audit export --format ocsf --since 3` returned both `delegate` records and dropped the
+second daemon's first two. With a sandboxed run beside the second daemon (its host numbered "last + 1", read outside the
+append lock) the witness chain read `1, 2, 3, 1, 2, 3 (attenuate), 4 (sandbox-launch), 4 (use) … 11 (channel-violation),
+12 (sandbox-death), 11 (revoke), 12, 13`.
+
+**The fix (`2546425`, D-V2-102).** The number is settled where the lock is: `AuditLog` keeps the highest seq the chain
+holds (recovered with the head whenever another writer moved the chain) and `append` gives each record `max(its seq,
+highest + 1)` under the append lock — a writer that asks for none (the sandbox host now passes 0; an adapter's provenance
+record always did, and said seq 0) is given the next, one whose count is behind is moved past. And so the daemon's own
+references stay true, `AuditSink::next_seq` (default `None`; `AuditLog` answers under its lock) is a floor `Broker::take_seq`
+takes before each seq: a restarted daemon resumes after the chain's highest seq, and a revoked node's `revoked_by_seq` —
+what DL1403 tells a program — is the seq of its revocation's record.
+
+**Witnesses.** `audit.rs`: two handles and a reopened log — `1, 2`, a writer asking for none gets `3`, the stale daemon's
+`3` becomes `4`, the reopened log resumes at `5`, the chain verifies. `monitor_cli.rs`: two daemons on one chain and a
+sandboxed run beside the second — seqs strictly increasing along the whole chain, `--since` from the middle returns
+exactly the records from there on (compared by hash), and the revoked node's `by_seq` equals its revocation's seq. Red
+before the fix with the chain above. Mutants, run through `scripts/mutants.py` (control green): M175 (append keeps the
+caller's seq — both witnesses), M176 (the daemon's floor dropped — red only through the reference check: uniqueness alone
+would have let it live), M177 (catch-up forgets the highest seq), M178 (recovery does not compute it) — each red. clippy
+clean; `check-other-os.sh` (now with `delulu-broker`) clean for Windows and macOS.
+**Read on the runners at `2546425`** over the fourteen targets that read a seq (`monitor_cli`, `audit_cli`,
+`audit_ocsf_cli`, `break_glass_cli`, `broker_cli`, `federation_cli`, `grants_cli`, `guard_e2e`, `sandbox_confirm_cli`,
+`sandbox_external_cli`, `sandbox_guard_e2e`, `sandbox_run_cli`, `secret_verify_cli`, `estop_cli`): macOS `37959503886`
+90 passed, Windows `37959508618` 83, arm64 `37959514499` 93 — the new witness named on each; `delulu-broker`'s unit tests
+on macOS `37959518422`, 173 passed, the new unit witness named.
+**The full suite alone:** 2,164 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**What it leaves.** A chain written BEFORE this fix may hold repeated seqs; it still verifies, and the next record
+continues after its highest. The P8-04 monitor keeps its hash cursor (D-V2-100) — it also detects a chain rewritten under
+it, which a seq cannot.

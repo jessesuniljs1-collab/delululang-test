@@ -165,3 +165,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   D-V2-100); the chain's seq is not a cursor while a sandboxed run's host writes beside the daemon (AUDIT-SEQ-1, RW 4.44,
   open). Step 3 (b) built: `delulu monitor watch` quarantines a run under its node by revoking it, and the revocation's
   record says why (D-V2-101). Next: step 5, the monitor's own death.
+- **AUDIT-SEQ-1 closed the same run** (D-V2-102): the daemon counted from 1 on every start and a sandboxed run's host
+  numbered "last + 1" outside the lock; the log now settles every seq under its append lock and the daemon takes the
+  chain's next seq as a floor, so `revoked_by_seq` names the record that is there.

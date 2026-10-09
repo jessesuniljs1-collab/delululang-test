@@ -193,9 +193,10 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    **Measured by routine run 15 (2026-10-09): two of those claims were false.** (i) A refused command was NOT a `deny`:
    the broker records `use allow` on the RUN's node for the device's identity, and the envelope's refusal reached only
    standard error — fixed (AUDIT-REFUSAL-1, `5cd4474`, D-V2-100): each envelope refusal is now a `use` `deny` citing the
-   `allow` it overrides. (ii) `--since SEQ` is not a cursor: a sandboxed run's host and the daemon number the chain
-   independently, and `--since` dropped a later revocation (AUDIT-SEQ-1, RW 4.44, open) — the monitor resumes after the
-   last record HASH it read. Still journaled only on the run's stderr: a dead lease's revocation (missed heartbeat, TTL),
+   `allow` it overrides. (ii) `--since SEQ` was not a cursor: the daemon counted from 1 on every start and a sandboxed run's host
+   numbered its own records, and `--since` dropped a later revocation (AUDIT-SEQ-1 — closed the same run, `2546425`,
+   D-V2-102). The monitor resumes after the last record HASH it read all the same: a hash also shows a chain rewritten
+   under it. Still journaled only on the run's stderr: a dead lease's revocation (missed heartbeat, TTL),
    which a rule on "the device was lost" would need.
 2. *Everything the monitor DOES exists too.* `tree::revoke(caller, target)` is transitive over the subtree, idempotent,
    consumes one audit seq and stamps `revoked_by_seq` on every node; the device's fail-state and the guest's death

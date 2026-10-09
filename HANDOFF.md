@@ -812,9 +812,10 @@ spells the same thing?**
 
 - **2026-10-09 — AUDIT-REFUSAL-1: the chain said a refused command was allowed** (routine run 15). The broker records
   `use allow` for a device's identity; the run's envelope refused the command afterwards, on stderr only — three refused
-  commands read as three allowed uses. Fixed: a `deny` citing the `allow` it overrides (D-V2-100). **AUDIT-SEQ-1, open
-  (RW 4.44):** a sandboxed run and the daemon number one chain independently, and `audit export --since` dropped a later
-  revocation — a seq is not a cursor; a record's hash is.
+  commands read as three allowed uses. Fixed: a `deny` citing the `allow` it overrides (D-V2-100). **AUDIT-SEQ-1** (the same
+  run, RW 4.44): the daemon counted from 1 on every START and a sandboxed run's host numbered "last + 1" outside the lock —
+  one verified chain read `1, 2, 3, 1, 2, 3`, and `audit export --since` dropped a revocation. Closed the same run
+  (D-V2-102): the log settles each seq under its lock, and the daemon takes the chain's next seq as a floor.
 
 - **2026-09-30 — AUDIT-TEXT-1: the investigator's and the approver's screens printed an adversary's text raw.**
   TERMINAL-TEXT-1 escaped a program's strings where they are printed live; `audit tail`/`query` (a use's target is a

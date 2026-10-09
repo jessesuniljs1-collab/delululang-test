@@ -13,8 +13,8 @@
 //!   (§11.4, category 7). A revoke-only principal would make "exactly revoke" true; that is the
 //!   owner's (option (c)).
 //! * **It reads only what the host recorded** — the hash-chained audit, as it is appended — and
-//!   trusts nothing a guest says. It resumes after the last record HASH it read, never a seq: two
-//!   writers number the chain independently (AUDIT-SEQ-1, RW 4.44).
+//!   trusts nothing a guest says. It resumes after the last record HASH it read, never a seq: a hash
+//!   also shows a chain rewritten under it (and until D-V2-102 two writers numbered the chain apart).
 //! * **Its rules are declarative and few:** `envelope` (any envelope refusal — a `use` `deny` with
 //!   `refused_by: envelope`, D-V2-100) and `denies=N/MS` (N `deny` records within MS milliseconds).
 //! * **A quarantine stops one run, not the fleet:** the target is the child of `g_M` on the path to

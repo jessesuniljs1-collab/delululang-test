@@ -2360,6 +2360,21 @@ refused and (c) stays the owner's.
 7. **Not built here — step 5, the monitor's own death:** a run whose monitor goes quiet is not yet treated as one whose
    monitor fired. Each run's own dead-man (10f) remains the real-time guarantee; the monitor is a second, slower line.
 
+## D-V2-102 — AUDIT-SEQ-1: the audit chain's seq is settled by the log under its append lock, and the daemon's count takes the chain's next seq as a floor — TAKEN (head chef, 2026-10-09, under the owner's delegation)
+
+1. **One numbering authority: the lock.** `AuditLog::append` assigns `max(entry.seq, highest seq in the chain + 1)` under
+   the append lock it already takes (AUDIT-WRITERS-1). Every writer — the daemon, a sandboxed run's host, `audit
+   reconcile`, an adapter's provenance record — therefore writes a seq the chain has never held, in increasing order.
+2. **The daemon keeps its references true.** It stamps a seq into nodes (`revoked_by_seq`) and answers (`audit_seq`)
+   before the record is written, so it takes `AuditSink::next_seq` as a floor before each seq; a record is renumbered at
+   the lock only in a true race between that floor and the append (microseconds), never on a restart or after a record
+   another writer appended.
+3. **Not chosen:** routing every host record through the daemon (a second path for the same record, and still racy for
+   two hosts with no daemon); renumbering only at the lock (uniqueness, but the daemon's references would name other
+   records — mutant M176 shows the difference).
+4. **Old chains** keep their repeated seqs — rewriting a hash chain is what an audit log must never do — and continue after
+   their highest seq. `DEPLOYMENT.md`'s caution on `--since` now says exactly that.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -421,10 +421,10 @@ delulu audit verify --ocsf chain.jsonl                          # anyone holding
 delulu audit verify --ocsf next.jsonl --expect-start <head of the previous export>
 ```
 
-**Until RW 4.44 is closed, export the whole chain rather than `--since SEQ`** when sandboxed runs write beside the
-broker daemon: the two number the chain independently, so a seq can repeat and `--since` can skip a record written after
-a higher-numbered one (AUDIT-SEQ-1 — witnessed dropping a revocation). `--expect-start` on the NEXT export detects the
-gap; it does not prevent it.
+**A chain written before 2026-10-09 may repeat seqs** (AUDIT-SEQ-1, closed by D-V2-102): the daemon counted from 1 on
+every start, and a sandboxed run's host numbered its own records, so `--since SEQ` could return a record twice or skip
+one. Since then every writer's seq is settled under the log's append lock and is unique and increasing; an older chain
+keeps its repeats (a hash chain is never rewritten), so export it whole once, and use `--since` from there on.
 
 Each line is an [OCSF](https://schema.ocsf.io) 1.8.0 event: a refusal, a break-glass use or a bypassed
 Guard is a Detection Finding (2004); a grant, delegation or revocation is User Access Management (3005);

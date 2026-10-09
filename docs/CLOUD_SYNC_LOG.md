@@ -1614,3 +1614,34 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing.
 - For the laptop's memory: `HANDOFF.md` §11.5 — the cross-OS lint covers only the packages it names.
 - Open / next: as the previous entry.
+
+### 2026-10-09 — routine run 15 (continued): AUDIT-SEQ-1 closed — the audit chain has one numbering (D-V2-102, RW 4.44)
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-a1e0hm`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `2d3741d`
+- Commits: (1) `2546425` AUDIT-SEQ-1 closed: the audit chain has one numbering, whoever writes and across a daemon
+  restart; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-broker/src/audit.rs` (`max_seq`, the seq settled in `append`,
+  `AuditSink::next_seq`, the unit witness), `crates/delulu-broker/src/tree.rs` (`take_seq` takes the floor),
+  `crates/delulu/src/brokerd.rs` (`TrackingSink` forwards it), `crates/delulu/src/guest.rs` (the host asks for no seq),
+  `crates/delulu/tests/monitor_cli.rs` (the end-to-end witness), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4), `crates/delulu/src/monitor_cmd.rs` (a doc comment), `docs/CLOUD_ROUTINE.md`, `docs/DEPLOYMENT.md` (the
+  caution on `--since` rewritten for old chains), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-102),
+  `V2_P8_DESIGN.md`, `docs/REMAINING_WORK.md` (4.44 closed), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: red first on the binary (`1, 2, 3, 1, 2, 3, … 11, 12, 11, …`); one unit and one end-to-end witness; mutants
+  M175–M178 red through `scripts/mutants.py`, control green; clippy clean; `check-other-os.sh` (with `delulu-broker`)
+  clean for Windows and macOS; runner reads at `2546425` — macOS `37959503886` (90 passed), Windows `37959508618` (83),
+  arm64 `37959514499` (93), `delulu-broker` lib on macOS `37959518422` (173), the new witnesses named; the full suite
+  alone 2,164 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved. Push runs read: `0ffaac2`
+  `37955746780` success on every job (arm64 MEASURED 2.88x/4.11x).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL. The laptop's own `~/.delulu/audit` may hold repeated
+  seqs from before the fix — it still verifies; nothing to repair.
+- For the laptop's memory: `HANDOFF.md` §11.4 — AUDIT-SEQ-1, closed.
+- Open / next: (1) read `7a192c9`'s, `2d3741d`'s and this commit's push runs; (2) **P8-04 step 5** — the monitor's own
+  death; (3) the study's other two monitor rules once their records are measured. **For the owner:** D-V2-100, D-V2-101,
+  D-V2-102.

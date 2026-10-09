@@ -33,9 +33,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   command as an allowed use. Each refusal is now a `use` record with decision `deny`, carrying `refused_by: envelope`,
   `DL1904`, the reason your program was told, and `overrides_seq` — the `allow` it overrides. Ordinary and `--sandbox`
   runs alike. If the broker cannot record it, the run says so once and carries on (the command is refused either way).
-- **Known, not yet fixed:** when a sandboxed run writes audit records beside the broker daemon, the two number the chain
-  independently, so `seq` can repeat and `audit export --since SEQ` can skip a later record (RW 4.44). The chain still
-  verifies; resume an incremental read from a record's hash.
+- **Fixed the same day: the audit chain's `seq` could repeat.** The broker daemon counted from 1 every time it started,
+  and a sandboxed run numbered its own records beside it, so `audit export --since SEQ` could return a record twice or
+  skip one — a revocation among them. Every record's seq is now settled under the log's append lock, unique and
+  increasing; a daemon that restarts continues the chain's numbering; and a revoked node's "revoked by audit seq N" names
+  the record that is there. A chain written before this keeps its repeated seqs (export it whole once).
 
 ## Unreleased — V2 P8-03: the reference simulator can be run as a device, 2026-10-05
 
