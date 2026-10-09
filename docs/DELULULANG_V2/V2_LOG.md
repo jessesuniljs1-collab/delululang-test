@@ -4398,3 +4398,19 @@ The Windows broker read also showed a PRE-EXISTING compiler warning in every Win
 fired; and the study's other two rules (break-glass use, special-use reach) wait until their records are measured the way
 step 1's were. **Residual, named (D-V2-101):** `g_M` holds the runs' authority because a parent bounds its child; the
 monitor performs nothing but a revoke, and the same-uid boundary is what keeps it so. Option (c) stays the owner's.
+
+## 2026-10-09 — routine run 15: loop engineering — `scripts/mutants.py`; the cross-OS lint reaches `delulu-broker`
+
+**`scripts/mutants.py SPEC.json [NAME…]`.** This run wrote two mutant loops by hand and paid the restore-mtime trap once
+(the green re-run went red on the last mutant's binary). The script takes the mutants as data — file, exact anchor,
+replacement, an optional per-mutant command — refuses an anchor that is not unique, tells a mutant that does not compile
+(BUILD-ERROR, not a falsification) from a red witness, restores each file byte for byte with a NEW mtime, and ends with a
+CONTROL run of the same command on the restored tree, which must be green. Exercised on M163 and M172 (both RED, the
+failing tests named), a non-unique anchor (refused, not run), a non-compiling mutant (BUILD-ERROR) and the control
+(green, 4 passed) — 28 s.
+
+**`check-other-os.sh` now lints `delulu-broker`.** The Windows read of the broker's unit tests (`37957012378`) showed a
+warning that had been in every Windows test build: `secrets.rs`'s `in_memory_at`, used only by a Unix-only FIFO test,
+was dead code there — and the script that lints the other operating systems named three packages, not the broker.
+Witnessed: with the broker added, the lint was RED on the unfixed source (``associated function `in_memory_at` is never
+used``), and green once the helper is `cfg(all(test, unix))`, for Windows and macOS. The broker's 172 unit tests pass.

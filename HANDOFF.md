@@ -1092,7 +1092,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   and a four-line program showed four `allow`s and no `deny`. A design step that builds nothing still gets a witness.
 - **A restore by `move` keeps the old mtime** (routine run 15): a mutant loop restored each file from a backup with
   `shutil.move`, cargo saw a source older than its binary and kept the LAST mutant — the green re-run went red. Copy, or
-  touch the restored file, then rebuild (§11.5's mutant-binary trap, a second way in).
+  touch the restored file, then rebuild (§11.5's mutant-binary trap, a second way in). `scripts/mutants.py` does both,
+  and ends with a control run that must be green.
+- **The cross-OS lint covers only the packages it names** (routine run 15): `check-other-os.sh` linted `delulu`,
+  `delulu-runtime` and `delulu-wasm`, and a Unix-only test helper in `delulu-broker` warned as dead code in every Windows
+  test build, unread. `delulu-broker` is in the list now; when a package gains `cfg(unix)` or `cfg(windows)` code, add it.
 - **A witness of an absence must prove it looked** (routine run 15): "a monitor on a sibling node quarantines nothing"
   passed just as well for a monitor that read nothing; the report now counts `records_read` and the witness asserts the
   run's records were read (mutant M174, which skips every record, is red only because of that assertion). For every

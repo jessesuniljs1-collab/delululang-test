@@ -57,7 +57,8 @@ impl SecretStore {
     }
 
     /// An empty store bound to `path`, not read from it: the next `set` writes the path (the FIFO witness).
-    #[cfg(test)]
+    /// Unix-only, as its one caller is: on Windows it warned as dead code in every test build (routine run 15).
+    #[cfg(all(test, unix))]
     fn in_memory_at(path: &Path) -> SecretStore {
         SecretStore { path: Some(path.to_path_buf()), ..SecretStore::in_memory() }
     }

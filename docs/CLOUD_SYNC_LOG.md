@@ -1595,3 +1595,22 @@ it on `origin` was made in the cloud and is listed below.
   (`quarantine` by default for a run holding a device, `continue` as the operator's opt-out), then the study's other two
   rules once their records are measured; (3) **RW 4.44, AUDIT-SEQ-1**. **For the owner:** D-V2-100 and D-V2-101 are this
   run's decisions; P8-04's option (c), a revoke-only principal, is still his.
+
+### 2026-10-09 — routine run 15 (continued): loop engineering — `scripts/mutants.py`; the cross-OS lint reaches `delulu-broker`
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `7a192c9`
+- Commits: this one
+- Files and folders: A `scripts/mutants.py`; M `scripts/check-other-os.sh` (`-p delulu-broker`),
+  `crates/delulu-broker/src/secrets.rs` (`in_memory_at` is `cfg(all(test, unix))`), `docs/CLOUD_ROUTINE.md` (step 5),
+  `docs/REPOSITORY_STRUCTURE.md` (the script's row), `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: the extended lint RED on the unfixed source for Windows, green after for Windows and macOS; the broker's 172
+  unit tests; `scripts/mutants.py` exercised (two RED mutants, a non-unique anchor refused, a BUILD-ERROR, the control
+  green).
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 — the cross-OS lint covers only the packages it names.
+- Open / next: as the previous entry.

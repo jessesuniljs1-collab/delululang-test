@@ -225,6 +225,9 @@ A fixture that fakes what the host writes has a real-run witness beside it (run 
 that buffers by line — was refuted by the first timed probe, and the real cause, a command started only once its input
 ended, took one more; a probe step in the workflow's script costs one dispatch). `scripts/check-other-os.sh TARGET…`
 lints only the targets named — about two minutes for one, against seven for all five.
+**Run mutants with `scripts/mutants.py SPEC.json`** (run 15): it refuses an anchor that is not unique, tells a mutant that
+does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
+kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

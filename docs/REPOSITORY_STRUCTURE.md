@@ -289,6 +289,9 @@ DeluluLang/
 │   │                               #   warnings, named lines — routine run 12's loop engineering
 │   ├── suite.sh                    # the whole suite the routine's way (alone, -j 4), and TREE-MOVED
 │   │                               #   when the tree changed under it — routine run 13's loop engineering
+│   ├── mutants.py                  # a mutant set from a JSON spec against one test command: a unique
+│   │                               #   anchor, BUILD-ERROR told from RED, each file restored with a NEW
+│   │                               #   mtime, and a CONTROL run that must be green — routine run 15
 │   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
 │   │                               #   COMMITS (the index, exported and checked) — `git config
 │   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering

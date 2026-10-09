@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 303 |
-| Rust lines | 158971 |
+| Rust lines | 158972 |
 | Rust files outside `src/` (test/bench targets) | 138 |
 | Markdown documents | 252 |
-| Markdown lines | 70901 |
+| Markdown lines | 70946 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1498 / 13580 |
+| Nodes / edges in this map | 1499 / 13585 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -161,7 +161,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 11025 lines
+- **Modules:** 16 files, 11026 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -177,7 +177,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/lib.rs` | 79 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/ocsf.rs` | 333 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
-| `src/secrets.rs` | 765 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
+| `src/secrets.rs` | 766 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1149 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 677 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
