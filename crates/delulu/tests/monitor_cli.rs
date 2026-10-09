@@ -539,3 +539,50 @@ fn the_chains_seq_is_one_numbering_across_a_restart_and_a_sandboxed_run() {
     let expected: Vec<String> = recs[mid..].iter().map(|r| r["hash"].as_str().unwrap().to_string()).collect();
     assert_eq!(exported, expected, "`--since {since}` must be every record from that one on, none twice, none dropped");
 }
+
+// ----- a record's target is what was used (HTTP-SCHEME-1) ----------------------------------------------
+
+/// **A plain-`http://` fetch is the same refusal under the daemon as without it.** Found while
+/// measuring P8-04's special-use rule (routine run 15): the custody gate took a URL's host with a parse
+/// that strips only `https://`, so for `http://example.com/x` it asked the broker about a host named
+/// `http` — the run died DL0904 ("does not grant `http` in scope `net`") and the chain recorded a
+/// refused use of `http`, where embedded custody answers the documented VALUE: not delivered, only
+/// `https://` is fetched. The effect refuses such a URL before anything is reached, so there is no use
+/// to authorize; the program must be told the same thing either way, and the chain must not name a host
+/// nobody asked for.
+#[test]
+fn a_plain_http_fetch_is_the_same_refusal_under_the_daemon() {
+    let f = setup("http");
+    std::fs::write(
+        f.cwd.join("fetch.delulu"),
+        "module fetch\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"example.com\"])\n    match h.get(\"http://example.com/x\") {\n        \
+         Ok(body) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }\n    \
+         out.println(\"FETCHER DOWN\")\n}\n",
+    )
+    .unwrap();
+    // The control: embedded custody, no daemon.
+    let base = ["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com", "--no-prompt"];
+    let o = delulu_in(&f.cwd, &f.state, &base);
+    assert!(o.status.success(), "embedded: {}\n{}", stdout(&o), stderr(&o));
+    assert_eq!(stdout(&o), "not delivered\nFETCHER DOWN\n", "{}", stderr(&o));
+
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let mut daemon = base.to_vec();
+    daemon.extend_from_slice(&["--broker", "daemon"]);
+    let o = delulu_in(&f.cwd, &f.state, &daemon);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(o.status.success(), "under the daemon the program is told, not killed:\n{so}\n{se}");
+    assert_eq!(so, "not delivered\nFETCHER DOWN\n", "the same answer as without the daemon:\n{se}");
+    assert!(se.contains("only `https://` is fetched"), "and the same reason: {se}");
+    // A sandboxed guest's fetch reaches the same gate through its host channel.
+    daemon.push("--sandbox");
+    let o = delulu_in(&f.cwd, &f.state, &daemon);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(o.status.success(), "a sandboxed guest is told too:\n{so}\n{se}");
+    assert_eq!(so, "not delivered\nFETCHER DOWN\n", "{se}");
+    let named_http = all_records(&f).into_iter().filter(|r| r["target"] == "http").count();
+    assert_eq!(named_http, 0, "no record names a host called `http`");
+}

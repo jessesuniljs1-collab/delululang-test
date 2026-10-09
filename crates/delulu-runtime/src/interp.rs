@@ -2290,6 +2290,12 @@ pub(crate) fn custody_op_for(
         }
         (ResourceKind::Http, "get") => {
             let host = match argvals.first() {
+                // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
+                // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
+                // use to authorize. Asking the broker anyway asked about a "host" named after the scheme
+                // — `host_of` strips only `https://` — and a daemon run died DL0904 where an embedded one
+                // was told `Refused`, with a refused use of `http` in the chain.
+                Some(Value::Str(s)) if !s.starts_with("https://") => return None,
                 Some(Value::Str(s)) => Some(host_of(s)),
                 _ => None,
             };
