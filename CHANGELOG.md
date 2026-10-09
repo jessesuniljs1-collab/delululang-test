@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — V2 P8-04: an out-of-band monitor quarantines a run that misbehaves, 2026-10-09
+
+- **New: `delulu monitor watch --node g_ID --rule envelope|denies=N/MS [--poll MS] [--for MS] [--json]`.** Mint a monitor
+  node with `delulu grants delegate`, delegate each run's lease under it (`grants delegate --parent g_ID`), and start the
+  monitor: it reads the audit chain as it is written and, when a rule fires on a run under its node — `envelope` (any
+  envelope refusal) or `denies=N/MS` (N refusals within MS milliseconds) — it **quarantines that run** by revoking its
+  node. The run's devices park (their declared fail-state engages) and the program is ended. Other runs under the same
+  monitor keep going.
+- The broker lets a monitor stop only runs **under** its node — never a sibling's, never its parent's — and the revocation's
+  own audit record says what the monitor saw: the rule, the count, the window and the records it judged.
+- It is a second, slower line beside each run's own dead-man, not a replacement for it; a quarantine was measured at
+  13 ms after the triggering refusal was recorded, at a 25 ms poll. What happens when the monitor itself dies is not built
+  yet.
+
 ## Unreleased — V2 P8-04 (first step): the audit chain records a device command its envelope refused, 2026-10-09
 
 - **Fixed: a device command your actuator's envelope refused was recorded in the audit chain as allowed.** The broker

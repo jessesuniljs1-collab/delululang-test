@@ -4361,3 +4361,40 @@ incremental reader of the chain (a SIEM feed by `--since`, or a monitor) silentl
 counters is a design question (one numbering authority, or numbering under the append lock with the daemon's references
 following it) — sketched in RW 4.44. **It decides P8-04's cursor:** a monitor resumes from a record's HASH (its position in
 the chain), never from a seq (D-V2-100 item 4).
+
+## 2026-10-09 — routine run 15: P8-04 step 3 (b) — `delulu monitor watch` quarantines a run under its node (D-V2-101)
+
+**Built (`b0a5a80`).** The operator mints a monitor node `g_M` (`grants delegate`) and delegates each run's lease under
+it (`grants delegate --parent g_M`). `delulu monitor watch --node g_M --rule envelope|denies=N/MS [--poll MS] [--for MS]
+[--json]` reads the audit chain from its head at start, resuming after the last record HASH (D-V2-100), maps every node
+under `g_M` to its run (the child of `g_M` on its path) from the daemon's own listing each poll, and when a rule fires on a
+run's `deny` records sends `Quarantine { caller: g_M, target: <the run's node>, why }` — `Revoke` with the monitor's account
+(rule, count, window, evidence seqs and hashes) carried into the revocation's own record by `Broker::revoke_saying`. The
+broker's self-or-descendant rule is what confines it. It ends when `g_M` is no longer live, when `--for` elapses, or
+(exit 1) when it cannot reach its broker or a quarantine is refused. A new subcommand's five gates are in the same commit.
+
+**Witnessed (`monitor_cli.rs`).** A run probing out of its envelope under `g_M` (60 probes, a `fib(21)` burn between) is
+quarantined after its third refusal — **measured: 13 ms after the third refusal was recorded, at a 25 ms poll** — and never
+finishes: its arm's lease dies of the monitor's audit seq and the declared fail-state engages, then the program's next
+console write faults DL1403 naming the same seq (the guest is ended — revoking a run's node takes what it held, as
+`estop_cli.rs`'s parent revoke does; the first form of this witness expected the program to survive and print `REVOKED`,
+and the run showed why it cannot). The revoke record is `g_M`'s, targets the run, and says ``rule `denies=3/60000` — 3
+deny record(s)``; each evidence hash is an envelope refusal of that run. A monitor holding a SIBLING node with the
+`envelope` rule read the run's records (`records_read` ≥ 11 — asserted, so "quarantined nothing" cannot mean "read
+nothing") and quarantined nothing. Unit: the subtree-to-run map; the rules' parser. Mutants, each red: M168 (the subtree
+check removed — both witnesses), M169 (the window never fills), M170 (the monitor's own node targeted), M171 (the run
+revokes itself — the record's actor is wrong), M172 (allowed uses counted), M173 (the why dropped), M174 (nothing read —
+the sibling witness's vacuity). clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit.
+**Read on the runners at `b0a5a80`** over `monitor_cli`, `json_contract`, `completions_cli`, `estop_cli`, `grants_cli`,
+`broker_cli` and `bin:delulu`: macOS `37957000733` 198 passed, Windows `37957004727` 182, arm64 `37957008755` 217 — every
+new test named; and `delulu-broker`'s unit tests on Windows `37957012378`, 170 passed. **The quarantine, measured on each
+runner at a 25 ms poll:** Windows 11 ms, arm64 24 ms, macOS 107 ms after the third refusal was recorded (the VM: 13 ms).
+The Windows broker read also showed a PRE-EXISTING compiler warning in every Windows test build — `secrets.rs`'s
+`in_memory_at` unused, its only caller a Unix-only FIFO test — which `check-other-os.sh` never saw, because it lints
+`delulu`, `delulu-runtime` and `delulu-wasm` but not `delulu-broker` (fixed in the next commit).
+**The full suite alone:** 2,162 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Not built: step 5, the monitor's own death** — a run whose monitor goes quiet is not yet treated as one whose monitor
+fired; and the study's other two rules (break-glass use, special-use reach) wait until their records are measured the way
+step 1's were. **Residual, named (D-V2-101):** `g_M` holds the runs' authority because a parent bounds its child; the
+monitor performs nothing but a revoke, and the same-uid boundary is what keeps it so. Option (c) stays the owner's.

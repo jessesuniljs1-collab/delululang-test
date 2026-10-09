@@ -1093,6 +1093,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A restore by `move` keeps the old mtime** (routine run 15): a mutant loop restored each file from a backup with
   `shutil.move`, cargo saw a source older than its binary and kept the LAST mutant — the green re-run went red. Copy, or
   touch the restored file, then rebuild (§11.5's mutant-binary trap, a second way in).
+- **A witness of an absence must prove it looked** (routine run 15): "a monitor on a sibling node quarantines nothing"
+  passed just as well for a monitor that read nothing; the report now counts `records_read` and the witness asserts the
+  run's records were read (mutant M174, which skips every record, is red only because of that assertion). For every
+  "nothing happened", assert the thing that would have seen it ran.
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch

@@ -161,3 +161,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   last edits. Fixed by `1732d9e`, which also merged run 14's stranded `6dbc54c` (D-V2-99, re-verified).
 - **`git config core.hooksPath scripts/hooks`** in every clone: `pre-commit` refuses a commit whose map does not match
   the files the commit holds (the index, exported and surveyed) — the rule made mechanical.
+- **P8-04 the same run:** step 1 measured — an envelope refusal was not in the audit chain (AUDIT-REFUSAL-1, fixed,
+  D-V2-100); the chain's seq is not a cursor while a sandboxed run's host writes beside the daemon (AUDIT-SEQ-1, RW 4.44,
+  open). Step 3 (b) built: `delulu monitor watch` quarantines a run under its node by revoking it, and the revocation's
+  record says why (D-V2-101). Next: step 5, the monitor's own death.

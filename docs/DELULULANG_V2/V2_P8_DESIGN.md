@@ -222,6 +222,10 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
      widen what any program may do. It still changes who may revoke, which is the Authority model's own rule, so it is
      put in front of the owner rather than taken under the delegation.
    Build (b) now, name (c) as what would make the claim exact, and record (a) as refused.
+   **Built by routine run 15 (`b0a5a80`, D-V2-101):** `delulu monitor watch`, with steps 4 (two of its four rules —
+   `envelope`, `denies=N/MS`), 6 (the surface, its five gates) and 7 (the witnesses: the quarantine measured at 13 ms
+   after the third refusal; a sibling's monitor reads everything and quarantines nothing; a grant attempt has no path —
+   the monitor sends only `Quarantine`). **Next: step 5** (the monitor's own death) and the other two rules.
 4. *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
    envelope refusal on an actuator; any break-glass use (`breakglass.rs` records one); any special-use reach. Each is a
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count

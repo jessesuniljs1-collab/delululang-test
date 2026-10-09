@@ -421,6 +421,11 @@ delulu audit verify --ocsf chain.jsonl                          # anyone holding
 delulu audit verify --ocsf next.jsonl --expect-start <head of the previous export>
 ```
 
+**Until RW 4.44 is closed, export the whole chain rather than `--since SEQ`** when sandboxed runs write beside the
+broker daemon: the two number the chain independently, so a seq can repeat and `--since` can skip a record written after
+a higher-numbered one (AUDIT-SEQ-1 — witnessed dropping a revocation). `--expect-start` on the NEXT export detects the
+gap; it does not prevent it.
+
 Each line is an [OCSF](https://schema.ocsf.io) 1.8.0 event: a refusal, a break-glass use or a bypassed
 Guard is a Detection Finding (2004); a grant, delegation or revocation is User Access Management (3005);
 a sandboxed guest's launch and end are Process Activity (1007), paired by the run's generation; an allowed
@@ -438,6 +443,22 @@ verify` — and the device name and product version are the exporter's labels, c
 on every line. A chain that does not verify is not exported (exit 1). The export never holds secret bytes:
 the audit holds none. `scripts/ocsf-validate.py chain.jsonl` checks an export against the published schema,
 fetched at run time.
+
+### An out-of-band monitor — quarantine a run that misbehaves (P8-04)
+
+```bash
+delulu grants delegate --effects Actuate,Write --device 'arm0/elbow:…' --holder-desc monitor   # → g_M
+delulu grants delegate --parent g_M --effects Actuate,Write --device 'arm0/elbow:…'            # → the run's lease token
+delulu monitor watch --node g_M --rule denies=3/60000 --rule envelope &                        # watch from now
+delulu run arm.delulu --lease <token> --broker-profile …
+```
+
+The monitor reads only the audit chain and acts only as `g_M`: the broker lets a caller revoke its own node or a
+descendant, so it can stop the runs delegated under `g_M` and nothing else. A quarantine revokes the offending run's node —
+its devices park and it is ended — and the revocation's record carries the rule and the records that fired it. Two
+limits, said plainly: `g_M` *holds* the runs' authority (a parent bounds its child), and what keeps the monitor from using
+it is that it performs nothing but a revoke and, as everywhere, the OS account it runs as — run it as an account the
+agent cannot reach (Tier 2). And it is a slower second line: each run's own heartbeat and TTL stay the real-time stop.
 
 ---
 

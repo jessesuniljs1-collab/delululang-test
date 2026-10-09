@@ -157,8 +157,8 @@ another OS, and then takes about seven minutes itself (run 5).
    D-V2-95), P8-02 the Verified-class adapter as a `.dpx` (**complete**, run 14, D-V2-96 and D-V2-97 — RW 4.7 closed),
    P8-03 the reference transport and the sim as a device (**complete**, run 14, D-V2-98 — `delulu device sim`),
    **P8-04 the out-of-band monitor is in progress**: its build order is in `V2_P8_DESIGN.md`; run 15 MEASURED its step 1
-   (two of its claims were false — AUDIT-REFUSAL-1 fixed, AUDIT-SEQ-1 open, D-V2-100), and the next run starts at step 3,
-   option (b) — a monitor node minted between the operator and the run, which can
+   (two of its claims were false — AUDIT-REFUSAL-1 fixed, AUDIT-SEQ-1 open, D-V2-100) and built step 3 (b), `delulu
+   monitor watch` (D-V2-101); the next run starts at **step 5, the monitor's own death** — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,

@@ -2326,6 +2326,40 @@ Routine run 15 measured P8-04 step 1's claim ("everything the monitor reads exis
 5. **Not in this decision:** a dead lease's revocation (missed heartbeat, TTL) is still journaled only on the run's
    standard error; it is the next reading gap for the monitor's rules, recorded in `V2_P8_DESIGN.md`.
 
+## D-V2-101 — P8-04 step 3 (b): `delulu monitor watch` — a monitor node between the operator and the runs, which quarantines a run by revoking it and says why in the revocation's own record — TAKEN (head chef, 2026-10-09, under the owner's delegation)
+
+The question run 14 left (`V2_P8_DESIGN.md` P8-04 step 3) is answered with option (b), as recommended there; (a) stays
+refused and (c) stays the owner's.
+
+1. **The monitor holds one node and acts only as it.** The operator mints `g_M` (`grants delegate`) and delegates each
+   run's lease under it (`grants delegate --parent g_M`); the monitor names `g_M` as the caller of every quarantine. The
+   broker's own rule — a caller revokes only itself or a descendant — is what confines it: not a sibling, not its parent
+   (witnessed: a monitor on a sibling node judged every refusal of the run and quarantined nothing). **The residual, named:**
+   `g_M` HOLDS the runs' authority, because a parent bounds its child (R-7); what keeps the monitor from using it is that
+   this program performs nothing but a revoke, and the same-uid boundary (§11.4, category 7) — a same-uid process could
+   name any node as caller, as it could already. Option (c), a revoke-only principal, is what would make "exactly revoke"
+   true, and it changes who may revoke: the owner's.
+2. **A quarantine stops one run, not the fleet.** Its target is the child of `g_M` on the path to the record's node — the
+   run's own node — so the run's devices park (their nodes are descendants: the declared fail-state engages) and the
+   program's next use of anything it held faults DL1403 naming the monitor's audit seq: the guest is ended, as the study's
+   design asked. A sibling run under the same monitor is untouched.
+3. **It says what it saw, in the chain.** `ReqBody::Quarantine { caller, target, why }` is `Revoke` with the monitor's
+   account carried in the revocation's own record (`why`: the rule, the count, the window, the evidence's seqs and hashes;
+   bounded at 1,024 bytes by `delulu_broker::bounded_text`). It decides nothing new: the same self-or-descendant rule.
+4. **It reads only what the host recorded**, from the chain's head at its start, resuming after the last record's HASH
+   (D-V2-100: a seq is not a cursor while RW 4.44 is open). A record the monitor last read that is no longer in the chain
+   is said, and reading continues from the head — never re-judging records already judged.
+5. **Two rules, declarative:** `envelope` (any `use` `deny` with `refused_by: envelope`) and `denies=N/MS` (N `deny`
+   records of one run within MS ms, by the records' own timestamps). Only `deny` records count — an allowed use never
+   does (mutant M172 red). Break-glass use and special-use reach (`V2_OPENSHELL_STUDY.md` §4.7's other two) wait until
+   their records are measured the way step 1's were.
+6. **The surface:** `delulu monitor watch --node g_ID --rule … [--poll MS] [--for MS] [--state-dir DIR] [--json]`; a new
+   subcommand's five gates in the same commit (the help, the dispatcher and `SUBCOMMANDS`; `json_contract`'s failing sweep
+   and its daemon-backed success sweep; `mcp.rs`'s `EFFECTORS` — it revokes). It ends when `g_M` is no longer live, when
+   `--for` elapses, or (exit 1) when it cannot reach its broker or a quarantine is refused.
+7. **Not built here — step 5, the monitor's own death:** a run whose monitor goes quiet is not yet treated as one whose
+   monitor fired. Each run's own dead-man (10f) remains the real-time guarantee; the monitor is a second, slower line.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -1562,3 +1562,36 @@ it on `origin` was made in the cloud and is listed below.
   (never a seq — AUDIT-SEQ-1), quarantine = a revoke with caller `g_M` of the run's node (the child of `g_M` on the path),
   the rule and its evidence in the revoke's own record; a new subcommand's five gates; witnesses in `monitor_cli.rs`;
   (3) **RW 4.44, AUDIT-SEQ-1** — one numbering for the chain. **For the owner:** D-V2-100 is this run's decision.
+
+### 2026-10-09 — routine run 15 (continued): P8-04 step 3 (b) — `delulu monitor watch` quarantines a run under its node (D-V2-101)
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-a1e0hm`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `0ffaac2`
+- Commits: (1) `b0a5a80` P8-04 step 3 (b): `delulu monitor watch` quarantines a run under its node, and the chain says
+  why; (2) this entry's commit — the records
+- Files and folders: (1) A `crates/delulu/src/monitor_cmd.rs`; M `crates/delulu-broker/src/lib.rs` (`bounded_text`),
+  `crates/delulu-broker/src/tree.rs` (`revoke_saying`), `crates/delulu-broker/src/validate.rs` (uses `bounded_text`),
+  `crates/delulu/src/broker_ipc.rs` (`Quarantine`), `crates/delulu/src/brokerd.rs`, `crates/delulu/src/cli.rs` (the
+  dispatcher's arm, `SUBCOMMANDS`, the help), `crates/delulu/src/main.rs`, `crates/delulu/src/mcp.rs` (`EFFECTORS`),
+  `crates/delulu/tests/json_contract.rs` (both sweeps), `crates/delulu/tests/monitor_cli.rs` (two witnesses),
+  `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (§11.5, one lesson), `docs/CLOUD_ROUTINE.md` (step 4),
+  `docs/DEPLOYMENT.md` (the monitor's section; a caution on `--since SEQ` while RW 4.44 is open),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-101), `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`,
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: two end-to-end witnesses and two unit ones; the quarantine measured 13 ms after the third refusal (the VM),
+  11 ms (Windows), 24 ms (arm64), 107 ms (macOS), at a 25 ms poll; mutants M168–M174 each red; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS after the last code edit; runner reads at `b0a5a80` — macOS
+  `37957000733` (198 passed), Windows `37957004727` (182), arm64 `37957008755` (217), `delulu-broker` lib on Windows
+  `37957012378` (170) — every new test named; the full suite alone 2,162 passed, 0 failed, 16 ignored (161 binaries),
+  cargo exit 0, the tree unmoved. Push runs read: `dcd6f9a` `37954416113` success on every job (arm64 MEASURED
+  2.92x/4.11x); `1732d9e` `37952078892` cancelled by the newer push with its four test jobs green (only `fuzz` cancelled).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a witness of an absence must prove it looked.
+- Open / next: (1) read `0ffaac2`'s and this commit's push runs; (2) **P8-04 step 5** — the monitor's own death
+  (`quarantine` by default for a run holding a device, `continue` as the operator's opt-out), then the study's other two
+  rules once their records are measured; (3) **RW 4.44, AUDIT-SEQ-1**. **For the owner:** D-V2-100 and D-V2-101 are this
+  run's decisions; P8-04's option (c), a revoke-only principal, is still his.
