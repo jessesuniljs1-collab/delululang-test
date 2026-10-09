@@ -321,16 +321,7 @@ impl Broker {
         if self.inspect(node_id).is_none() {
             return Err(Denial::UnknownNode { node: node_id.clone() });
         }
-        const REASON_MAX: usize = 512;
-        let mut reason = reason.to_string();
-        if reason.len() > REASON_MAX {
-            let mut cut = REASON_MAX;
-            while !reason.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            reason.truncate(cut);
-            reason.push('…');
-        }
+        let reason = crate::bounded_text(reason, 512);
         let mut payload = serde_json::json!({
             "op": Op::Actuate.wire_name(),
             "refused_by": "envelope",

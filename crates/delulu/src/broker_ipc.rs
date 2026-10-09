@@ -173,6 +173,9 @@ pub enum ReqBody {
     Renew { receipt: String, anchors: Vec<String> },
     /// Revoke `target` on behalf of `caller` (transitive).
     Revoke { caller: String, target: String },
+    /// P8-04: a monitor's quarantine — exactly `Revoke` (the same self-or-descendant rule), with the
+    /// monitor's account of what it saw carried in the revocation's own audit record. Answered `Revoked`.
+    Quarantine { caller: String, target: String, why: String },
     /// Per-use validation of a synchronous-class op (spec §4.4).
     Check { node: String, op: String, arg: Option<String> },
     /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the

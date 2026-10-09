@@ -350,6 +350,11 @@ fn handle(
         );
     }
 
+    // A monitor's quarantine is a revoke that says why (P8-04); its text rides into the record.
+    let mut quarantine_why = match &req.body {
+        ReqBody::Quarantine { why, .. } => Some(why.clone()),
+        _ => None,
+    };
     match req.body {
         ReqBody::Status => (Response::Status { pid, nodes: broker.len(), epoch: broker.epoch() }, false),
         ReqBody::Shutdown => (Response::Ok, true),
@@ -471,10 +476,11 @@ fn handle(
                 }
             }
         },
-        ReqBody::Revoke { caller, target } => {
+        ReqBody::Revoke { caller, target } | ReqBody::Quarantine { caller, target, .. } => {
+            let why = quarantine_why.take();
             let caller = GrantId::from_trusted(caller);
             let target = GrantId::from_trusted(target);
-            match broker.revoke(&caller, &target) {
+            match broker.revoke_saying(&caller, &target, why.as_deref()) {
                 Ok(out) => {
                     // ADOPT-REPLAY-1: if this revoke retired an adopted certificate's fingerprints,
                     // persist the denylist so the revocation survives a daemon restart. Monotonic and

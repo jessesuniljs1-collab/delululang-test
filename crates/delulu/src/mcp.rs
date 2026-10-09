@@ -574,10 +574,13 @@ mod tests {
     /// effect, but it SERVES — it holds a conversation on its standard input and answers until that
     /// input ends, as `lsp` and `mcp` do, and what it answers is what a control loop acts on. A tool
     /// that could start one would hand an agent a device to talk to, which is not reading.
+    ///
+    /// `monitor` is here because it REVOKES: `monitor watch` quarantines a run by revoking its node, and
+    /// a tool that could start one would let an agent stop runs — the opposite of reading.
     const EFFECTORS: &[&str] = &[
         "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish",
         "login", "deploy", "fleet", "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp",
-        "mcp", "edit", "audit", "device",
+        "mcp", "edit", "audit", "device", "monitor",
     ];
     /// The commands that only read and answer. A tool may run one of these and nothing else.
     const READ_ONLY: &[&str] = &[

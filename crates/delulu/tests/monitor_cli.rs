@@ -202,3 +202,255 @@ fn an_envelope_refusal_is_a_deny_record_citing_the_use_it_overrides() {
 fn a_sandboxed_guests_envelope_refusal_is_recorded_the_same_way() {
     refusals_are_recorded("sbx", &["--sandbox"]);
 }
+
+// ----- the monitor (P8-04 step 3 (b)) ----------------------------------------------------------------
+
+/// The device envelope a delegation carries (RFC 0001 F1), with a heartbeat and TTL far longer than
+/// any test: nothing but the monitor can take the arm.
+const DEVICE: &str = "arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park";
+
+/// A run that keeps probing: one command inside the envelope, then `n` outside it, burning between
+/// them so the wall clock has room for a monitor to act mid-run. It reports every answer.
+fn persistent_prober(n: u32) -> String {
+    format!(
+        "\
+module m
+
+type Elbow {{ angle_deg: Float, velocity_dps: Float }}
+
+fn fib(n: Int) -> Int {{
+  if n < 2 {{ n }} else {{ fib(n - 1) + fib(n - 2) }}
+}}
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {{
+  match r {{
+    Ok(u) => \"COMMANDED\",
+    Err(e) => match e {{
+      Envelope(reason) => \"REFUSED: \" + reason,
+      LeaseRevoked(reason) => \"REVOKED: \" + reason,
+      NoDevice => \"NODEVICE\"
+    }}
+  }}
+}}
+
+fn probe(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {{Write, Actuate}} {{
+  if n <= 0 {{
+    0
+  }} else {{
+    c.println(say(a.command(Elbow {{ angle_deg: 150.0, velocity_dps: 4.0 }})))
+    c.println(\"burn \" + str(fib(21)))
+    probe(c, a, n - 1)
+  }}
+}}
+
+fn main(root: Root) ! {{Write, Actuate}} {{
+  let c = root.console()
+  let a = root.actuator(\"arm0/elbow\")
+  c.println(say(a.command(Elbow {{ angle_deg: 12.0, velocity_dps: 4.0 }})))
+  let done = probe(c, a, {n})
+  c.println(\"PROBER DOWN\")
+}}
+"
+    )
+}
+
+/// `grants delegate … --json` → (node, token).
+fn delegate(f: &Fixture, extra: &[&str]) -> (String, String) {
+    let mut args = vec!["grants", "delegate", "--effects", "Actuate,Write", "--device", DEVICE, "--multi", "--json"];
+    args.extend_from_slice(extra);
+    let o = delulu_in(&f.cwd, &f.state, &args);
+    assert!(o.status.success(), "grants delegate {extra:?}: {}\n{}", stdout(&o), stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+}
+
+/// A monitor started in the background, its standard error read line by line so the test can wait
+/// for "watching" before the run begins — a monitor watches from the chain's head at its start, and a
+/// run that began first would be outside what it was asked to judge.
+struct Monitor {
+    child: std::process::Child,
+    lines: std::sync::mpsc::Receiver<String>,
+    stderr_seen: Vec<String>,
+}
+
+fn start_monitor(f: &Fixture, node: &str, rule: &str) -> Monitor {
+    use std::io::BufRead;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&f.cwd)
+        .env("DELULU_STATE_DIR", &f.state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["monitor", "watch", "--node", node, "--rule", rule, "--poll", "25", "--for", "120000", "--json"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn the monitor");
+    let err = child.stderr.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let mut m = Monitor { child, lines: rx, stderr_seen: Vec::new() };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        match m.lines.recv_timeout(left) {
+            Ok(l) => {
+                let ready = l.starts_with("monitor: watching");
+                m.stderr_seen.push(l);
+                if ready {
+                    return m;
+                }
+            }
+            Err(_) => panic!("the monitor never said it was watching: {:?}", m.stderr_seen),
+        }
+    }
+}
+
+/// End a monitor the way its operator would — revoke the node it watches — and read its one report.
+fn stop_monitor(f: &Fixture, node: &str, mut m: Monitor) -> (serde_json::Value, Vec<String>) {
+    use std::io::Read;
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", node]);
+    assert!(o.status.success(), "grants revoke {node}: {}", stderr(&o));
+    let mut out = String::new();
+    m.child.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let status = m.child.wait().unwrap();
+    while let Ok(l) = m.lines.recv_timeout(std::time::Duration::from_secs(2)) {
+        m.stderr_seen.push(l);
+    }
+    assert!(status.success(), "the monitor's exit: {status:?}\n{out}\n{:?}", m.stderr_seen);
+    let v: serde_json::Value = serde_json::from_str(out.trim())
+        .unwrap_or_else(|e| panic!("the monitor's --json is one object ({e}):\n{out}\n{:?}", m.stderr_seen));
+    (v, m.stderr_seen)
+}
+
+fn all_records(f: &Fixture) -> Vec<serde_json::Value> {
+    let o = delulu_in(&f.cwd, &f.state, &["audit", "query", "--json"]);
+    assert!(o.status.success(), "audit query: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(v["chain_verified"], true, "{v}");
+    v["records"].as_array().unwrap().clone()
+}
+
+/// **A monitor quarantines the run that keeps probing, and the chain says why.** The operator mints a
+/// monitor node `g_M`, then the run's lease UNDER it. A program commands its arm out of the envelope
+/// again and again; the monitor, holding `denies=3/60000`, revokes the RUN's node — acting as `g_M`,
+/// the only standing the broker gives it — after the third refusal. The program is told
+/// `LeaseRevoked` and never commands again. The revocation's own record names the rule, the count and
+/// the evidence, and each piece of evidence is a refusal of THIS run.
+#[test]
+fn a_monitor_quarantines_the_run_that_keeps_probing_and_the_chain_says_why() {
+    let f = setup("quar");
+    std::fs::write(f.cwd.join("persist.delulu"), persistent_prober(60)).unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "the run"]);
+    let mon = start_monitor(&f, &m, "denies=3/60000");
+
+    let o = delulu_in(
+        &f.cwd,
+        &f.state,
+        &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--trace-effects", "--no-prompt"],
+    );
+    let so = stdout(&o);
+    let se = stderr(&o);
+    let (report, mon_err) = stop_monitor(&f, &m, mon);
+    let all = format!("stdout:\n{so}\nstderr:\n{se}\nmonitor: {report}\n{mon_err:?}");
+
+    // The program: it probed, was refused at least three times, and was ENDED — a quarantine revokes
+    // the run's node, so the arm parks (its node is a descendant) and the program's next use of what it
+    // held faults, as revoking a run's parent does in `estop_cli.rs`. It never finished.
+    assert_eq!(so.matches("COMMANDED").count(), 1, "the in-envelope command, and nothing after: {all}");
+    assert!(so.matches("REFUSED:").count() >= 3, "three refusals came first: {all}");
+    assert!(!so.contains("PROBER DOWN"), "the quarantine ended the run before it finished its 60 probes: {all}");
+    assert_eq!(o.status.code(), Some(1), "{all}");
+    let q = report["quarantines"].as_array().expect("quarantines");
+    assert_eq!(q.len(), 1, "one run, one quarantine: {all}");
+    let by_seq = q[0]["revoked_by_seq"].as_u64().expect("the quarantine's revoke seq");
+    assert!(
+        se.contains("DL1403") && se.contains(&format!("revoked by audit seq {by_seq}")),
+        "the program died of the monitor's revocation, and says which: {all}"
+    );
+    assert!(
+        se.contains("lease.revoked") && se.contains(&format!("(by audit seq {by_seq})")) && se.contains("failstate.engaged"),
+        "the arm's lease died of the same revocation and its declared fail-state engaged: {all}"
+    );
+
+    // The monitor's report: one quarantine, of the RUN, by the rule, on three refusals.
+    let q = &q[0];
+    assert_eq!(q["target"], run.as_str(), "the run's node, not the monitor's own: {report}");
+    assert_eq!(q["rule"], "denies=3/60000", "{report}");
+    assert_eq!(q["count"], 3, "{report}");
+    let revoked: Vec<&str> = q["revoked"].as_array().unwrap().iter().filter_map(|v| v.as_str()).collect();
+    assert!(revoked.contains(&run.as_str()) && !revoked.contains(&m.as_str()), "the run's subtree only: {report}");
+    let after = q["ms_after_last_evidence"].as_i64().unwrap();
+    eprintln!("measured: the quarantine landed {after} ms after the third refusal was recorded (poll 25 ms)");
+    assert!(after < 10_000, "a sanity bound, not a published figure: {after} ms");
+    assert!(report["ended"].as_str().unwrap_or("").contains("nothing left to watch"), "{report}");
+
+    // The chain: the evidence is three envelope refusals of this run, and the revocation says why.
+    let recs = all_records(&f);
+    for e in q["evidence"].as_array().unwrap() {
+        let r = recs.iter().find(|r| r["hash"] == e["hash"]).unwrap_or_else(|| panic!("evidence {e} is in the chain"));
+        assert_eq!((r["action"].as_str(), r["decision"].as_str()), (Some("use"), Some("deny")), "{r}");
+        assert_eq!(r["authority"]["refused_by"], "envelope", "{r}");
+        assert_eq!(r["actor_node"], run.as_str(), "{r}");
+    }
+    let rev = recs
+        .iter()
+        .find(|r| r["action"] == "revoke" && r["target"] == run.as_str())
+        .unwrap_or_else(|| panic!("the quarantine is a revoke record: {recs:#?}"));
+    assert_eq!(rev["actor_node"], m.as_str(), "the monitor acted as its own node: {rev}");
+    assert_eq!(rev["decision"], "allow", "{rev}");
+    let why = rev["authority"]["why"].as_str().unwrap_or("");
+    assert!(
+        why.contains("rule `denies=3/60000`") && why.contains("3 deny record(s)"),
+        "the revocation's own record says what the monitor saw: {rev}"
+    );
+}
+
+/// **A monitor sees nothing outside its own subtree.** The same probing run, under `g_M` — and a
+/// monitor holding a SIBLING node, with the strictest rule there is. Every refusal of the run is in
+/// the chain (the baseline), and the monitor quarantines nothing: the run's nodes are not under it,
+/// and the broker would not let it revoke them if they were named (`tree.rs`'s `NotRevocable`).
+#[test]
+fn a_monitor_sees_nothing_outside_its_own_subtree() {
+    let f = setup("sib");
+    std::fs::write(f.cwd.join("persist.delulu"), persistent_prober(5)).unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let (m, _) = delegate(&f, &["--holder-desc", "the run's monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "the run"]);
+    let (sibling, _) = delegate(&f, &["--holder-desc", "someone else's monitor"]);
+    let mon = start_monitor(&f, &sibling, "envelope");
+
+    let o = delulu_in(&f.cwd, &f.state, &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let so = stdout(&o);
+    // Let the monitor read past the run's last record before it is stopped.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let (report, _) = stop_monitor(&f, &sibling, mon);
+
+    assert!(o.status.success(), "{so}\n{}", stderr(&o));
+    assert_eq!(so.matches("REFUSED:").count(), 5, "the baseline — five refusals happened:\n{so}");
+    assert!(!so.contains("REVOKED:"), "nothing took the arm:\n{so}");
+    let refusals = all_records(&f)
+        .into_iter()
+        .filter(|r| r["actor_node"] == run.as_str() && r["authority"]["refused_by"] == "envelope")
+        .count();
+    assert_eq!(refusals, 5, "and every one is in the chain, where the monitor reads");
+    // Not vacuous: the monitor READ the run's records — its six commands' `use allow`s and five
+    // refusals at least — and judged them outside its subtree.
+    assert!(
+        report["records_read"].as_u64().unwrap_or(0) >= 11,
+        "the monitor must have read the run's records before it was stopped, or 'nothing' proves nothing: {report}"
+    );
+    assert_eq!(report["quarantines"], serde_json::json!([]), "a sibling's monitor quarantines nothing: {report}");
+}

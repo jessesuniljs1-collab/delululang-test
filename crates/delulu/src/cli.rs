@@ -1184,6 +1184,7 @@ fn run_inner(args: &[String]) -> i32 {
         "schema" => crate::schema::cmd_schema(rest),
         "examples" => crate::examples::cmd_examples(rest),
         "device" => crate::device_cmd::cmd_device(rest),
+        "monitor" => crate::monitor_cmd::cmd_monitor(rest),
         // PS-A-03: the sandbox guest, spawned by the host with a hello frame on standard input and
         // never typed by a caller. Dispatched by constant through a guard arm, the shape the foreign
         // worker already uses for an internal subcommand: out of `--help`, out of completions, and
@@ -1328,7 +1329,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit", "device",
+    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit", "device", "monitor",
 ];
 
 fn usage() -> &'static str {
@@ -1395,6 +1396,11 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 protocol a driver's transport writes — `--adapter-transport \'delulu device sim …\'`. The bounds given\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 here are the BENCH\'s own limits, not the run\'s grant: narrower ones simulate a hard stop. It models\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 no physics and nothing physical moves; --json describes the bench instead of serving it)\n\
+     \x20 delulu monitor   watch --node g_ID --rule envelope|denies=N/MS... [--poll MS] [--for MS] [--state-dir DIR] [--json]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (P8-04: an out-of-band monitor. It reads the audit chain as it is appended and QUARANTINES a run under\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 g_ID — revokes it, acting as g_ID — when a rule fires: `envelope` (any envelope refusal) or\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `denies=N/MS` (N refusals within MS ms). The broker lets it stop only runs UNDER g_ID: delegate each\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 run's lease with `grants delegate --parent g_ID`. A second, slower line beside each run's dead-man)\n\
      \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\

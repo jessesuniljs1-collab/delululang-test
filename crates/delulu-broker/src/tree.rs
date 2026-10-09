@@ -707,15 +707,32 @@ impl Broker {
     /// subtree; idempotent; bumps the epoch and consumes one audit seq, stamping `revoked_by_seq`
     /// on every node it transitions.
     pub fn revoke(&mut self, caller: &GrantId, target: &GrantId) -> Result<RevokeOutcome, Denial> {
+        self.revoke_saying(caller, target, None)
+    }
+
+    /// [`Broker::revoke`], with the revoker's own account of WHY carried in the record (P8-04): an
+    /// out-of-band monitor's quarantine names the rule that fired and the records it saw, because a
+    /// monitor that revokes without saying what it saw is a monitor nobody can audit. The text is the
+    /// revoker's, bounded; it decides nothing — the same self-or-descendant rule applies.
+    pub fn revoke_saying(
+        &mut self,
+        caller: &GrantId,
+        target: &GrantId,
+        why: Option<&str>,
+    ) -> Result<RevokeOutcome, Denial> {
         let (seq, res) = self.revoke_core(caller, target);
         let decision = if res.is_ok() { "allow" } else { "deny" };
         // Spec §4.2 (normative, playbook trap 3): the stated latency bound appears "in the audit
         // record of every revocation" — VERBATIM, and never a stronger claim. It rides in the
         // record's free-form JSON payload slot under a self-describing key (a revocation has no
         // authority payload of its own; flagged in spec §11 chunk-5 deviations).
-        let payload = res
+        let mut payload = res
             .is_ok()
             .then(|| serde_json::json!({ "revocation_takes_effect": delulu_diag::REVOCATION_BOUND }));
+        if let Some(why) = why {
+            let why = crate::bounded_text(why, 1024);
+            payload.get_or_insert_with(|| serde_json::json!({}))["why"] = serde_json::json!(why);
+        }
         self.record_op(
             seq,
             "revoke",

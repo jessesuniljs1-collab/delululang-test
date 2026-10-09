@@ -20,7 +20,7 @@ use std::process::{Command, Output};
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
     "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "device", "edit", "examples", "explain",
-    "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
+    "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "monitor", "morph", "new",
     "plugin", "publish", "run", "sandbox", "schema", "secrets", "sign", "skill", "test", "toolchain", "verify-sig",
     "why",
 ];
@@ -994,6 +994,10 @@ fn broker_verbs_emit_the_documented_envelope() {
     let fp = ad["fingerprint"].as_str().unwrap_or("").to_string();
     step(&["grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &gk, "--out", "r.dlrcpt"], "grants receipt");
     step(&["grants", "renew", "r.dlrcpt", "--anchor", &ground], "grants renew");
+
+    // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
+    let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");
+    assert!(m["quarantines"].is_array() && m["subcommand"] == "watch", "the watch report keeps its keys at the top level: {m}");
 
     // Last, because it kills the node the steps above used.
     step(&["grants", "revoke", &node], "grants");

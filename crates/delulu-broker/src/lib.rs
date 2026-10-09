@@ -61,3 +61,19 @@ pub use validate::{Decision, Op, OpClass, Snapshot};
 pub(crate) fn path_is_within(child: &str, parent: &str) -> bool {
     path::is_descendant_or_equal(child, parent)
 }
+
+/// `text` cut to at most `max` bytes on a character boundary, with `…` appended when it was cut. For
+/// strings a party outside the broker chose that the audit stores and a person reads later (a device
+/// refusal's reason, a revoker's account of why): a store is a promise to print, so it is bounded.
+pub fn bounded_text(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let mut cut = max;
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    let mut out = text[..cut].to_string();
+    out.push('…');
+    out
+}
