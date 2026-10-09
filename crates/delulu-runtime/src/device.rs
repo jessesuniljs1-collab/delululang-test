@@ -1051,6 +1051,46 @@ mod tests {
         b.shutdown();
     }
 
+    /// **RW 7.17's decided half.** Every dead probe reports the cause `operator-revoke` — the collapse
+    /// above is deliberate, because a program must do the same thing in each case (lose the device,
+    /// park, stop) and a fourth cause would be a distinction with no action behind it. What a person
+    /// investigating MUST still be able to tell apart is which it was, and that lives in the journal:
+    /// the probe's own words travel verbatim into the `lease.revoked` detail. This is the gate for
+    /// that claim, which was a comment until routine run 14 (`estop_cli`'s control test failed once on
+    /// an arm64 runner with only the program's line to read — the line that says `operator-revoke` for
+    /// every one of these).
+    #[test]
+    fn the_journal_tells_the_three_dead_probes_apart_even_though_the_cause_cannot() {
+        for why in [
+            "grant node `g_1` is revoked (by audit seq 7)",
+            "the broker answered the liveness of `g_1` with Pong, which is not an answer",
+            "the broker did not answer for `g_1`: timed out after 1s",
+        ] {
+            let e = env("arm0/elbow", 10_000, 60_000);
+            let b = DeviceBroker::with_authority_watch(
+                Profile::Sim { seed: 7 },
+                std::slice::from_ref(&e),
+                &[],
+                Some(Box::new(move |_device| AuthorityState::Dead(why.to_string()))),
+            );
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            let r = b.revocation("arm0/elbow").expect("a dead probe takes the lease");
+            assert_eq!(r.cause, RevokeCause::Operator, "the cause collapses on purpose: {why}");
+            let events = b.events();
+            let revoked: Vec<&DeviceEvent> = events.iter().filter(|e| e.op == "lease.revoked").collect();
+            assert_eq!(revoked.len(), 1, "one record per death: {events:?}");
+            assert!(
+                revoked[0].detail.contains(why),
+                "the journal must carry the probe's own reason verbatim — it is the only place the three\n                 differ, and a red run is root-caused from it.\nwanted: {why}\ngot: {}",
+                revoked[0].detail
+            );
+            b.shutdown();
+        }
+    }
+
     /// The subtree cuts where the operator aimed it, and nowhere else. Revoking one arm's node
     /// stops that arm; the other arm — a sibling, not a descendant — keeps working. Without this,
     /// a "revoke" that quietly stopped everything would look identical to a correct one in every

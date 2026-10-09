@@ -4266,3 +4266,15 @@ and that is the Authority model's own rule (`HANDOFF.md` §1, "harden, never red
 
 Nothing built. **The next run starts at step 3, option (b).**
 
+## 2026-10-05 — routine run 14: RW 7.17's decision half closed — the journal's detail is a gate now (D-V2-99)
+
+RW 7.17 asked, beside its unreproduced arm64 flake, whether a probe the broker never answered deserves its own
+`RevokeCause`. Read against the code: a program behaves identically for a revoked node, a non-answer and no answer (it
+loses the device, the fail-state engages, it stops), so a fourth cause would be a distinction with no action behind it;
+and the difference is already recorded where a person reads — the probe's own words travel verbatim from
+`mint_device_nodes` into the `lease.revoked` detail in the journal. **That was a comment; it is a gate now:**
+`the_journal_tells_the_three_dead_probes_apart_even_though_the_cause_cannot` asserts each of the three reasons verbatim
+while asserting that the program-visible cause still collapses. Mutants M159 (the probe's reason dropped) and M160 (the
+detail reduced to the cause's name) are red, and two older witnesses go red with them. The row's other half — the flake
+itself — stays open for a recurrence, which is now readable.
+
