@@ -4278,3 +4278,40 @@ while asserting that the program-visible cause still collapses. Mutants M159 (th
 detail reduced to the cause's name) are red, and two older witnesses go red with them. The row's other half — the flake
 itself — stays open for a recurrence, which is now readable.
 
+
+## 2026-10-09 — routine run 15: `master` red four days on a stale map, fixed; run 14's stranded commit merged; a commit hook
+
+**CI on arrival — red.** `75bb33b` (run 14's closing commit) push run `37344075684`: **failure** on all four test jobs
+(Linux, macOS, Windows, arm64), and the nightlies of 2026-10-06 (`37444870874`), 10-07 (`37602353806`), 10-08
+(`37759591993`) and 10-09 (`37914430616`) red on the same four jobs, on the same commit. Every other job of each run
+green (lints, supply-chain, editor, formal, fuzz, `microvm`, `microvm-reproducible`, the Miri jobs, `miri-slow` on the
+nightlies, `heavy-gates` on the nightly). Each test job's log read (Linux, macOS, Windows and arm64 of the push run,
+Linux of the 10-09 nightly): **the same four failures and nothing else** — `doctor_cli`'s
+`doctor_reports_a_healthy_checkout`, `check_mode_is_read_only` and `doctor_never_writes_when_the_map_is_current`, and
+the Survey's `the_committed_map_matches_the_tree` (Linux 2,150 passed / 4 failed; Windows 2,087 / 4; macOS 2,124 / 4;
+arm64 2,150 / 4). The VM agreed at the start of this run: `survey check` **stale** (SURVEY.md, survey.json) and
+`doctor --check` one problem, the map's freshness.
+
+**Cause.** `75bb33b`'s map was built before its last edits to documents: rebuilt on that commit alone it gains 21
+Markdown lines and five edges (13,511 → 13,516) — the closing entry recorded "1,495 nodes, 13,511 edges", the numbers of
+a build made before the entry itself was finished. The rule ("regenerate the map after the LAST edit") had been written
+since 2026-09-28; nothing enforced it, and no run read the push run or the nightlies for four days.
+
+**Run 14's last commit was stranded.** `6dbc54c` (RW 7.17's decision half, D-V2-99) sat on `claude/jolly-hamilton-7fd30a`
+only — pushed, read on three witness runs (`37344931813` arm64 21 passed with the new test named, `37344936032` Windows,
+`37344939689` macOS, all success), never on `master`. Found by step 1's branch listing (the two other branches ahead,
+`7d6a22b` and `d3f0d52`, are recorded as superseded since run 10). **Merged** into `master` (a merge commit, so the hash
+its runs name stays in its history), after re-verifying it here: the device tests 21 passed; M159 (the probe's reason
+dropped) and M160 (the detail reduced to the cause's name) each red, three tests each, as claimed.
+
+**The fix, `1732d9e`:** the merge with the map regenerated after it — `survey check` ok (1,495 nodes, 13,516 edges),
+`doctor_cli` 11 passed, the Survey's tests and the document gates (repository_structure, evidence_claims, governance,
+distribution, book, core_invariance) green, `doctor --check` all checks passed.
+
+**Loop engineering — the rule made mechanical.** `scripts/hooks/pre-commit` (enabled per clone with `git config
+core.hooksPath scripts/hooks`, now in `CLOUD_ROUTINE.md` step 2) refuses a commit whose map does not match the files
+the commit HOLDS: it exports the index to a scratch directory and asks the Survey there, as CI does. Falsified three
+ways: a staged document edit with no rebuild — refused; the map rebuilt and staged — accepted; and the case a working-tree
+check cannot see — an UNSTAGED edit the map was built from, `survey check` on the tree **ok**, the hook **refusing** —
+which is exactly how a commit carries a stale map. It reuses the built Survey unless the Survey's own sources are newer
+(a `cargo build` would wait on the build lock for a whole suite); about 3 s.

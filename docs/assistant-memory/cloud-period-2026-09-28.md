@@ -154,3 +154,10 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   (D-V2-98). **A new subcommand is five gates** (help, dispatcher, `SUBCOMMANDS`, both `json_contract` sweeps, the MCP
   door rule) — and a server is classified by what it hands out, not by what it writes.
 
+
+## Routine run 15 (2026-10-09) — `master` green again; a commit hook
+
+- `master` was red on every OS for four days (push run and four nightlies on `75bb33b`): its map was built before its
+  last edits. Fixed by `1732d9e`, which also merged run 14's stranded `6dbc54c` (D-V2-99, re-verified).
+- **`git config core.hooksPath scripts/hooks`** in every clone: `pre-commit` refuses a commit whose map does not match
+  the files the commit holds (the index, exported and surveyed) — the rule made mechanical.

@@ -1494,3 +1494,38 @@ it on `origin` was made in the cloud and is listed below.
 - For the laptop's memory: `HANDOFF.md` §11.5 and `docs/CLOUD_ROUTINE.md` step 7a (a new surface is never one edit).
 - Open / next: **P8-04 from step 3, option (b)** (`V2_P8_DESIGN.md`); read `1a022c9`'s and this commit's CI runs first.
   **For the owner:** P8-04's option (c), a revoke-only principal in the grant tree.
+
+### 2026-10-09 — routine run 15: `master` red four days on a stale map, fixed (`1732d9e`); run 14's stranded `6dbc54c` merged; a pre-commit hook
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (the scheduled routine; no
+  fallback notice)
+- Branch: `master` (the VM's checkout was the harness branch `claude/happy-pascal-a1e0hm`, at `master`'s head; pushed to
+  both)   Pull request: none   Merged: n/a
+- Base: `75bb33b` (run 14's closing commit). Nothing was committed between 2026-10-05 16:58 and this run (2026-10-09 15:21).
+- Commits: (1) `1732d9e` the merge of `6dbc54c` with the map regenerated after it; (2) this entry's commit — the hook, its
+  routine step and the records
+- Files and folders: (1) M `crates/delulu-runtime/src/device.rs`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-99),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.17), `docs/survey/*` — all from `6dbc54c`, plus the
+  regenerated map. (2) A `scripts/hooks/pre-commit`; M `docs/CLOUD_ROUTINE.md` (step 2: `git config core.hooksPath
+  scripts/hooks`), `docs/REPOSITORY_STRUCTURE.md` (the hook's row), `HANDOFF.md` (§11.5, two lessons),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as
+  co-author.
+- Survey and doctor: at the START, `survey check` **stale** (SURVEY.md, survey.json) and `doctor --check` one problem
+  (the map's freshness) — `75bb33b`'s map was built before its last 21 lines of documents. After `1732d9e`: `survey
+  check` ok (1,495 nodes, 13,516 edges), `doctor --check` all checks passed.
+- Verified: **CI on arrival — red.** `75bb33b`'s push run `37344075684` and the nightlies `37444870874` (10-06),
+  `37602353806` (10-07), `37759591993` (10-08), `37914430616` (10-09): the four test jobs red, every other job green.
+  Logs read (the push run's Linux, macOS, Windows and arm64; the 10-09 nightly's Linux): the same four failures and nothing
+  else — `doctor_cli` ×3 and the Survey's `the_committed_map_matches_the_tree`. Ping-pong on arm64 MEASURED 2.86x
+  (push run), 2.98x, 2.95x, 2.89x, 2.97x (nightlies); macOS MEASURED 1.59x on the push run, NOT MEASURED (3 hardware
+  threads) on the nightlies; Linux and Windows NOT MEASURED (busy or SMT). `6dbc54c`'s three witness runs read
+  (`37344931813` arm64 — the new test named, 21 passed; `37344936032` Windows; `37344939689` macOS — all success); its
+  test and mutants M159/M160 re-run red here. `1732d9e`: `doctor_cli` 11 passed, the Survey's tests and six document gates
+  green locally; push run `37952078892` — see the next entry for its reading. The hook falsified three ways (a staged edit
+  with no rebuild refused; rebuilt and staged accepted; an unstaged edit the map was built from — `survey check` on the
+  tree ok, the hook refusing).
+- Redo on the laptop: `git config core.hooksPath scripts/hooks` in the laptop's checkout (Git-Bash runs it on Windows; it
+  finds `delulu-survey.exe`).
+- For the laptop's memory: `HANDOFF.md` §11.5 — a rule a run must remember is a rule a run will forget (make it a hook);
+  a run's last push is the one nobody reads.
+- Open / next: P8-04 — this run measured step 1 against the binary before building on it (next entry).

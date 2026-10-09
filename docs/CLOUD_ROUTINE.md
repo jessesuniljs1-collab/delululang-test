@@ -95,7 +95,9 @@ record why it is superseded (a witness branch whose work landed in revised form)
 minimal --component rustfmt,clippy --target aarch64-apple-darwin,x86_64-apple-darwin,x86_64-pc-windows-msvc,
 aarch64-unknown-linux-gnu,x86_64-unknown-linux-musl` (about a minute; the targets are the ones below): run 6 started
 `rustup target add` beside the first `cargo` call, the two raced the toolchain's install, and it had to be
-reinstalled. Then start them in the background as soon as the run begins (the
+reinstalled. **And `git config core.hooksPath scripts/hooks`** (run 15): its `pre-commit` refuses a commit whose
+Survey map does not match the files the commit holds — run 14's closing commit carried a map built before its last
+edit, and `master` was red on every OS for four days for that alone. Never `--no-verify` a records commit. Then start them in the background as soon as the run begins (the
 first `doctor` builds the whole `delulu` crate) and do step 1's reading while they build. A failure here is the run's first task. Then `cargo fetch
 --locked` once: a fresh VM holds only Linux's crates, and `egress_features` runs `cargo metadata
 --offline`, which needs every platform's (run 1 lost a suite result to it). And, in the background,

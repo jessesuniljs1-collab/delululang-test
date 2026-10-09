@@ -1076,6 +1076,15 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Classify a server by what it hands out, not by what it writes** (routine run 14): `device sim` creates no file and
   performs no effect, and it is still an EFFECTOR — it serves a conversation whose answers a control loop acts on, as
   `lsp` and `mcp` do.
+- **A rule that a run must remember is a rule a run will forget — make it a hook** (routine run 15): "regenerate the map
+  after the LAST edit" was written down from 2026-09-28, and run 14's closing commit still carried a map built before its
+  own sync-log entry was finished — `master` and four nightlies red on every OS for four days, for that alone.
+  `scripts/hooks/pre-commit` now checks the map against the INDEX (exported, then surveyed), which also catches the case a
+  tree check passes: a map rebuilt from an edit that is not staged. `git config core.hooksPath scripts/hooks` in step 2.
+- **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
+  `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
+  closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch
+  listing is what found the stranded commit.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

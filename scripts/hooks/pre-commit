@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit whose Survey map does not match what the commit holds (routine run 15, loop engineering).
+#
+# Routine run 14's closing commit, `75bb33b`, carried a map built before its last 21 lines of documents were
+# written. Nothing in the VM said so — the run had checked the map, then edited the sync-log entry — and the
+# push run and four nightlies were red on every operating system for that alone (`doctor_cli` three times and
+# the Survey's freshness test), for four days. "Regenerate the map after the LAST edit" had been written down
+# since 2026-09-28; this makes it mechanical.
+#
+# It checks the INDEX, not the working tree: the staged files are exported to a scratch directory and the
+# Survey is asked there, so a map rebuilt from an edit that is not staged (or a staged edit the map never saw)
+# is refused exactly as CI would refuse it.
+#
+# Enable once per clone (the routine's step 2 does):   git config core.hooksPath scripts/hooks
+# A deliberate exception (none is known): git commit --no-verify — and say why in the message.
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+bin="$root/target/debug/delulu-survey"
+[ -x "$bin.exe" ] && bin="$bin.exe"
+# Reuse the built Survey unless its own sources are newer — a `cargo build` here would wait on the build lock
+# for as long as a suite runs, and the routine commits while one does. A build failure is a refusal, never a pass.
+if [ ! -x "$bin" ] || [ -n "$(find crates/delulu-survey Cargo.lock -newer "$bin" -type f -print -quit)" ]; then
+    if ! built=$(cargo build -q -p delulu-survey 2>&1); then
+        echo "$built" >&2
+        echo "pre-commit: could not build delulu-survey to check the map — refusing the commit" >&2
+        exit 1
+    fi
+    bin="$root/target/debug/delulu-survey"
+    [ -x "$bin.exe" ] && bin="$bin.exe"
+fi
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+git checkout-index -a --prefix="$scratch/"
+if ! out=$(cd "$scratch" && "$bin" check 2>&1); then
+    echo "$out" >&2
+    echo >&2
+    echo "pre-commit: the map in this commit does not match the files in this commit." >&2
+    echo "  Regenerate it after the LAST edit and stage everything it read:" >&2
+    echo "    cargo run -p delulu-survey -- build && git add docs/survey <the files you edited>" >&2
+    exit 1
+fi

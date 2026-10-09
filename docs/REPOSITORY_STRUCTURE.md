@@ -289,6 +289,9 @@ DeluluLang/
 │   │                               #   warnings, named lines — routine run 12's loop engineering
 │   ├── suite.sh                    # the whole suite the routine's way (alone, -j 4), and TREE-MOVED
 │   │                               #   when the tree changed under it — routine run 13's loop engineering
+│   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
+│   │                               #   COMMITS (the index, exported and checked) — `git config
+│   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught
