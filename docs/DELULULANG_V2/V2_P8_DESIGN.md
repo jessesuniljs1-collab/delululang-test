@@ -227,7 +227,9 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    `envelope`, `denies=N/MS`), 6 (the surface, its five gates) and 7 (the witnesses: the quarantine measured at 13 ms
    after the third refusal; a sibling's monitor reads everything and quarantines nothing; a grant attempt has no path —
    the monitor sends only `Quarantine`). **Next: step 5** (the monitor's own death) and the other two rules.
-4. *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
+4. **Measured by routine run 15:** `envelope` and `denies=N/MS` are built (D-V2-101); `special-use` waits on RW 4.46 (the
+   egress client's refusal is not in the chain); `break-glass` waits on its record carrying the run's node (`audit_required`
+   writes none). *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
    envelope refusal on an actuator; any break-glass use (`breakglass.rs` records one); any special-use reach. Each is a
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count
    printed in the quarantine's own record — a monitor that fires without saying what it saw is a monitor nobody can

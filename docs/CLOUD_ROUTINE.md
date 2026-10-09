@@ -158,7 +158,9 @@ another OS, and then takes about seven minutes itself (run 5).
    P8-03 the reference transport and the sim as a device (**complete**, run 14, D-V2-98 — `delulu device sim`),
    **P8-04 the out-of-band monitor is in progress**: its build order is in `V2_P8_DESIGN.md`; run 15 MEASURED its step 1
    (two of its claims were false — AUDIT-REFUSAL-1 and AUDIT-SEQ-1, both fixed, D-V2-100 and D-V2-102) and built step 3 (b), `delulu
-   monitor watch` (D-V2-101); the next run starts at **step 5, the monitor's own death** — a monitor node minted between the operator and the run, which can
+   monitor watch` (D-V2-101); the next run starts at **step 5, the monitor's own death — option (c), a broker dead-man for
+   the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
+   and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
@@ -260,7 +262,9 @@ Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees;
 decision; `V2_PHASE_STATUS.md`; `REMAINING_WORK.md`; `HANDOFF.md` §11 and `docs/assistant-memory/` for a
 durable lesson; and **this run's `docs/CLOUD_SYNC_LOG.md` entry** (the template there — commits, every file
 and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open / next for the next run**).
-Commit with the trailers in `CLAUDE.md`, push. **The author is the owner's account** (his routine prompt: commit as
+Commit with the trailers in `CLAUDE.md`, push. **Commit a slice's code (to the branch, for its runner reads) BEFORE its
+records** (run 15): a records-only commit made while code is still uncommitted needs the map built without the code — a
+stash — and the stash's pop conflicts on the generated map; regenerate it rather than resolve it. **The author is the owner's account** (his routine prompt: commit as
 `jessesuniljs1-collab`, or as both it and Claude): `git config user.name jessesuniljs1-collab` and `user.email
 227307678+jessesuniljs1-collab@users.noreply.github.com` — GitHub's no-reply address for the account, never a personal
 one (`HANDOFF.md` §1.1 item 2) — with Claude as `Co-Authored-By` (from run 10; runs 1–9 committed as `Claude`).

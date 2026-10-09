@@ -4476,3 +4476,16 @@ again: 22, 22 and 5 ms). clippy clean; `check-other-os.sh` clean for Windows and
 **The special-use measurement itself is not finished:** with an `https://` URL to the name pointed at loopback, a run
 would reach the egress client's special-use refusal — whether the chain records it (the custody gate records `use allow`
 for the host first, as it did for the envelope) is the next measurement, needed before the monitor's `special-use` rule.
+
+## 2026-10-09 — routine run 15: P8-04's special-use rule measured — the egress client's refusal is not in the chain (RW 4.46, open)
+
+With `https://` this time, to a name the VM's `/etc/hosts` pointed at loopback for one run (restored, checked): the
+program was told "not delivered" and the operator's stderr said why (`the host is, or resolved to, a special-use address
+(loopback (127.0.0.0/8)) … [egress: special-use]`), the run's report carries it — and the chain holds `use allow
+dlx-special-witness.com` and nothing else. AUDIT-REFUSAL-1's shape, for the egress client: the custody gate records the
+host as allowed, and the refusal that follows is decided in the run. **Not fixed in this run:** the fix has the same
+shape as D-V2-100's (a custody note after the effect, a `deny` citing the `allow`), but its witness needs a name that
+resolves to a special-use address on every runner, and the tests have no resolver seam — the egress client resolves
+through the operating system on purpose. Recorded as RW 4.46 with the measurement; P8-04's `special-use` rule waits on
+it. The `break-glass` rule waits on its own gap: `audit_required` writes a break-glass record with no node at all, so a
+monitor cannot attribute it to a run under its node.

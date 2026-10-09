@@ -1671,3 +1671,21 @@ it on `origin` was made in the cloud and is listed below.
   the monitor's node (`V2_P8_DESIGN.md`), witnessed by killing a monitor mid-run; (3) finish measuring the special-use
   rule's records (an `https://` name pointed at loopback: is the egress client's special-use refusal in the chain?), then
   the break-glass rule (its record carries no node today). **For the owner:** D-V2-100, D-V2-101, D-V2-102.
+
+### 2026-10-09 — routine run 15 (continued): the special-use rule measured (RW 4.46, open); the routine's commit order
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `73203fc`
+- Commits: this one — records only
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `V2_P8_DESIGN.md` (step 4 measured), `docs/REMAINING_WORK.md`
+  (4.46 opened), `docs/CLOUD_ROUTINE.md` (step 4's P8 line; step 6 — commit a slice's code before its records),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: the measurement (one `https://` run to a name pointed at loopback: "not delivered", the special-use reason on
+  stderr, and only `use allow` in the chain); the VM's `/etc/hosts` restored and checked. Push runs read: `eebf6a1`
+  `37960632115` success on every job (it carries AUDIT-SEQ-1's fix).
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new beyond the previous entries.
+- Open / next: as the previous entry, with RW 4.46 before the `special-use` rule.
