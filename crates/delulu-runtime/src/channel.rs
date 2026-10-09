@@ -759,11 +759,21 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 match (&capv.scope, method.as_str()) {
                     (crate::value::CapScope::Actuator(env), "command") => {
                         let mut refusals: Vec<String> = Vec::new();
+                        let mut envelope_refusals: Vec<String> = Vec::new();
                         let v = crate::device::actuate(self.devices.as_deref(), env, decoded.first(), &mut |op, why| {
-                            refusals.push(format!("actuator {op}: {}", crate::device::refusal_detail(&env.device, op, why)))
+                            refusals.push(format!("actuator {op}: {}", crate::device::refusal_detail(&env.device, op, why)));
+                            if op == "command.refused" {
+                                envelope_refusals.push(why.to_string());
+                            }
                         });
                         for r in &refusals {
                             self.note_denied(r);
+                        }
+                        // P8-04: the chain recorded this use as allowed; the envelope refused it.
+                        if let Some(custody) = self.custody.as_mut() {
+                            for why in &envelope_refusals {
+                                custody.note_device_refusal(&env.device, why);
+                            }
                         }
                         return self.encode_result(v);
                     }

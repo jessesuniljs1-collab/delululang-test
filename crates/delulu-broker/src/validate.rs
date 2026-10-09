@@ -300,6 +300,59 @@ impl Broker {
         }
     }
 
+    /// Record a device command its ENVELOPE refused (P8-04, routine run 15): one `use` record with
+    /// decision `deny` on `node`, at `device`, carrying the refusal's code (DL1904), the reason in the
+    /// words the program was told, and the seq of the `use allow` it overrides when the run knows it.
+    ///
+    /// The broker never sees a command's magnitudes — it answers the device's IDENTITY (may this node
+    /// command `arm0/elbow`?), records `allow`, and the run's device broker then judges the envelope
+    /// (`device::actuate`). Until this existed that second decision reached only the run's standard
+    /// error, so the chain said a refused command was allowed and an out-of-band monitor reading it
+    /// could never see a refusal. This does not DECIDE anything — the command is already refused —
+    /// it makes the chain say so. Refused for a node the tree does not hold (nothing is recorded about
+    /// a node that does not exist); the reason is bounded, because it is a store a person reads later.
+    pub fn record_device_refusal(
+        &mut self,
+        node_id: &GrantId,
+        device: &str,
+        reason: &str,
+        overrides_seq: Option<u64>,
+    ) -> Result<u64, Denial> {
+        if self.inspect(node_id).is_none() {
+            return Err(Denial::UnknownNode { node: node_id.clone() });
+        }
+        const REASON_MAX: usize = 512;
+        let mut reason = reason.to_string();
+        if reason.len() > REASON_MAX {
+            let mut cut = REASON_MAX;
+            while !reason.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            reason.truncate(cut);
+            reason.push('…');
+        }
+        let mut payload = serde_json::json!({
+            "op": Op::Actuate.wire_name(),
+            "refused_by": "envelope",
+            "code": "DL1904",
+            "reason": reason,
+        });
+        if let Some(s) = overrides_seq {
+            payload["overrides_seq"] = serde_json::json!(s);
+        }
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "use",
+            Some(node_id.as_str().to_string()),
+            Some(device.to_string()),
+            Some(payload),
+            "deny",
+            None,
+        );
+        Ok(seq)
+    }
+
     /// Validate an op against LIVE tree state (spec §4.4), discarding any guard warn note. The
     /// guard-aware form is [`Broker::check_use`]; both share one implementation.
     pub fn check(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> Decision {
@@ -405,6 +458,37 @@ mod tests {
     }
     fn broker_with_clock(clock: Rc<ManualClock>) -> Broker {
         Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
+    }
+
+    /// P8-04: a device refusal is recorded only for a node the tree holds, and its reason is bounded
+    /// on a character boundary — it is a store a person reads later, and a guest chose part of it.
+    #[test]
+    fn a_device_refusal_is_recorded_for_a_held_node_only_with_its_reason_bounded() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000))).with_sink(Box::new(sink.clone()));
+        let ghost = GrantId::from_trusted("g_nobody".to_string());
+        assert!(matches!(
+            b.record_device_refusal(&ghost, "arm0/elbow", "out", None),
+            Err(Denial::UnknownNode { .. })
+        ));
+        assert!(sink.is_empty(), "nothing is recorded about a node that does not exist");
+
+        let node = b.issue(holder(), Authority::new(eff(&["Actuate"]), Scopes::default()), None);
+        let before = sink.len();
+        let long = "é".repeat(400); // 800 bytes, two per character
+        let seq = b.record_device_refusal(&node, "arm0/elbow", &long, Some(7)).unwrap();
+        let recs = sink.records();
+        assert_eq!(recs.len(), before + 1);
+        let r = recs.last().unwrap();
+        assert_eq!((r.seq, r.action.as_str(), r.decision.as_str()), (seq, "use", "deny"));
+        assert_eq!(r.actor_node.as_deref(), Some(node.as_str()));
+        assert_eq!(r.target.as_deref(), Some("arm0/elbow"));
+        let a = r.authority.as_ref().unwrap();
+        assert_eq!(a["refused_by"], "envelope");
+        assert_eq!(a["overrides_seq"], 7);
+        let reason = a["reason"].as_str().unwrap();
+        assert!(reason.len() <= 512 + '…'.len_utf8(), "bounded: {} bytes", reason.len());
+        assert!(reason.ends_with('…') && reason.starts_with("éé"), "cut on a character, and said to be cut");
     }
 
     #[test]

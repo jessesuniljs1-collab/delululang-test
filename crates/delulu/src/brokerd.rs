@@ -504,6 +504,13 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::DeviceRefused { node, device, reason, overrides_seq } => {
+            let node = GrantId::from_trusted(node);
+            match broker.record_device_refusal(&node, &device, &reason, overrides_seq) {
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::Check { node, op, arg } => {
             let Some(op) = Op::from_wire_name(&op) else {
                 return (

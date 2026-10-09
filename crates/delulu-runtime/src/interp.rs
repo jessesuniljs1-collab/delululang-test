@@ -1914,8 +1914,20 @@ impl Interp {
         let CapScope::Actuator(env) = &cap.scope else {
             return Err(Fault::at("DL0907", "Actuator capability without an envelope scope (wiring bug)", span));
         };
-        let mut refused = |op: &str, reason: &str| self.trace_actuate_refusal(&env.device, op, reason, span);
-        Ok(crate::device::actuate(self.devices.as_deref(), env, args.first(), &mut refused))
+        // An ENVELOPE refusal is also said to the custody, whose chain recorded the use as allowed
+        // (P8-04): after `actuate` returns, never inside it, so no borrow is held across the call.
+        let mut envelope_refusals: Vec<String> = Vec::new();
+        let mut refused = |op: &str, reason: &str| {
+            self.trace_actuate_refusal(&env.device, op, reason, span);
+            if op == "command.refused" {
+                envelope_refusals.push(reason.to_string());
+            }
+        };
+        let v = crate::device::actuate(self.devices.as_deref(), env, args.first(), &mut refused);
+        for reason in &envelope_refusals {
+            self.custody.borrow_mut().note_device_refusal(&env.device, reason);
+        }
+        Ok(v)
     }
 
     /// `Cap[Compute].dispatch(kernel, buffer)` (10h, spec §7.1). The refusal channel is a VALUE,

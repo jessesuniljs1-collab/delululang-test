@@ -120,6 +120,16 @@ pub trait Custody {
     fn note_plugin_signature(&mut self, node: &GrantId, signer: &str) {
         let _ = (node, signer);
     }
+
+    /// Record a device command the ENVELOPE refused after this custody allowed the use (P8-04,
+    /// routine run 15): the broker decided the device's identity and recorded `allow`; the device
+    /// broker then refused the command's magnitudes, and the chain must say so, or it reads as an
+    /// allowed use and an out-of-band monitor can never see a refusal. Additive; the **default is a
+    /// no-op** — a custody with no chain has nothing to correct. Never a decision: the command is
+    /// already refused when this is called.
+    fn note_device_refusal(&mut self, device: &str, reason: &str) {
+        let _ = (device, reason);
+    }
 }
 
 /// A node's liveness for the R-6c per-call re-check. `Unknown` is not "maybe fine" — callers treat

@@ -175,6 +175,10 @@ pub enum ReqBody {
     Revoke { caller: String, target: String },
     /// Per-use validation of a synchronous-class op (spec §4.4).
     Check { node: String, op: String, arg: Option<String> },
+    /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the
+    /// use — recorded as a `use` `deny` citing `overrides_seq`, the `allow` it overrides. Records,
+    /// never decides (the command is already refused). Answered `Recorded`.
+    DeviceRefused { node: String, device: String, reason: String, overrides_seq: Option<u64> },
     /// The epoch-class client cache refresh: the current epoch + this node's effective state.
     NodeState { node: String },
     /// Synchronous declassification of a broker-held secret (phase 5g); audited with `span`.
@@ -250,6 +254,8 @@ pub enum Response {
     /// `Renew` reply (RFC 0001 F4): the uplink-lease deadline now in force.
     Renewed { node: String, ttl_millis: i64 },
     Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
+    /// `DeviceRefused` reply: the seq of the `deny` record written.
+    Recorded { seq: u64 },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
     /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that
     /// PROCEEDED — the client surfaces it once per rule per run (addendum §2.6/§2.7).

@@ -70,6 +70,11 @@ pub struct BrokerClientCustody {
     guarded_classes: Vec<String>,
     /// Guard warn notes already surfaced this run (dedup: one line per rule per run, §2.6/§2.7).
     warned: std::collections::HashSet<String>,
+    /// The audit seq of the last synchronous `use` the broker ALLOWED for an actuator command — the
+    /// record a refusal by the device's envelope overrides (P8-04). Taken once, by that refusal.
+    last_actuate_allow: Option<u64>,
+    /// Whether a refusal record has already failed to reach the broker this run (said once).
+    refusal_unrecorded_said: bool,
 }
 
 impl BrokerClientCustody {
@@ -91,6 +96,8 @@ impl BrokerClientCustody {
                 cache: None,
                 guarded_classes: Vec::new(),
                 warned: std::collections::HashSet::new(),
+                last_actuate_allow: None,
+                refusal_unrecorded_said: false,
             }),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected issue response: {other:?}"))),
@@ -115,6 +122,8 @@ impl BrokerClientCustody {
             cache: None,
             guarded_classes: Vec::new(),
             warned: std::collections::HashSet::new(),
+            last_actuate_allow: None,
+            refusal_unrecorded_said: false,
         }
     }
 
@@ -180,10 +189,11 @@ impl BrokerClientCustody {
             Err(d) => return CustodyDecision::Deny(d),
         };
         match resp {
-            Response::Decision { allow: true, warn, .. } => {
+            Response::Decision { allow: true, warn, audit_seq, .. } => {
                 if let Some(note) = warn {
                     self.surface_warn(note);
                 }
+                self.last_actuate_allow = if op == Op::Actuate { audit_seq } else { None };
                 CustodyDecision::Allow
             }
             Response::Decision { allow: false, code, message, .. } => CustodyDecision::Deny(CustodyDenial::new(
@@ -351,6 +361,37 @@ impl Custody for BrokerClientCustody {
             Response::Revoked { by_seq, .. } => Ok(by_seq),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected revoke response: {other:?}"))),
+        }
+    }
+
+    /// The envelope's refusal into the chain (P8-04): one `DeviceRefused` round-trip citing the
+    /// `use allow` this command was given. Best-effort by design — the command is already refused and
+    /// the device already safe — but never silent: a refusal the broker could not record is said once
+    /// on standard error, because a chain missing it is what a monitor reads.
+    fn note_device_refusal(&mut self, device: &str, reason: &str) {
+        let overrides_seq = self.last_actuate_allow.take();
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::DeviceRefused {
+                node: self.node.as_str().to_string(),
+                device: device.to_string(),
+                reason: reason.to_string(),
+                overrides_seq,
+            },
+        );
+        let failure = match resp {
+            Ok(Response::Recorded { .. }) => return,
+            Ok(Response::Error { code, message, .. }) => format!("{code}: {message}"),
+            Ok(other) => format!("unexpected answer {other:?}"),
+            Err(d) => format!("{}: {}", d.code, d.message),
+        };
+        if !std::mem::replace(&mut self.refusal_unrecorded_said, true) {
+            eprintln!(
+                "warning: the broker did not record a refused command of `{}` ({}) — the command was \
+                 refused all the same; the audit chain lacks this refusal",
+                delulu_diag::terminal_line(device),
+                delulu_diag::terminal_line(&failure)
+            );
         }
     }
 }
