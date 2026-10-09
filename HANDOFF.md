@@ -817,6 +817,11 @@ spells the same thing?**
   one verified chain read `1, 2, 3, 1, 2, 3`, and `audit export --since` dropped a revocation. Closed the same run
   (D-V2-102): the log settles each seq under its lock, and the daemon takes the chain's next seq as a floor.
 
+- **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
+  `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
+  answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
+  first.
+
 - **2026-09-30 — AUDIT-TEXT-1: the investigator's and the approver's screens printed an adversary's text raw.**
   TERMINAL-TEXT-1 escaped a program's strings where they are printed live; `audit tail`/`query` (a use's target is a
   path the program chose) and `guard pending` (a request's `why` is the agent's) print them from storage, and did not.

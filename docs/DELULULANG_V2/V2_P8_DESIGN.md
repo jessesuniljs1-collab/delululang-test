@@ -232,7 +232,16 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count
    printed in the quarantine's own record — a monitor that fires without saying what it saw is a monitor nobody can
    audit.
-5. *The monitor's own death.* `quarantine` is the default for a run holding a device (a watchdog gone quiet is treated
+5. *The monitor's own death* — **read against the code by routine run 15 (not built).** A dead monitor cannot act, so
+   whatever quarantines on its death must live elsewhere: (a) a short TTL on `g_M` that the monitor renews — but the tree
+   has no renewal for a local node (RFC 0001 F4's `Renew` needs a receipt signed by the ground), and a holder extending its
+   own deadline is a widening in time; (b) each run probes its monitor's liveness beside its grant node — a run-side opt-in
+   that couples every run to a monitor it cannot see; (c) **recommended:** the broker holds a dead-man FOR A NODE — `monitor
+   watch` arms one on `g_M` and beats it each poll, and if the beats stop the broker revokes `g_M`'s subtree with the
+   cause recorded (`continue` = arm none). The argument that (c) hardens rather than redefines: any node may already revoke
+   itself (`caller == target`), so arming a FUTURE self-revocation adds no authority — it only ever removes some, as the
+   device dead-man (10f) does for a lease. The next run builds (c), witnessed by killing a monitor mid-run.
+   Original text: `quarantine` is the default for a run holding a device (a watchdog gone quiet is treated
    as one that fired, as OpenShell treats the loss of its fence's controller) and `continue` is the operator's explicit
    opt-out; the choice is recorded. The run's own dead-man is unaffected and remains the real-time guarantee — the
    monitor is a second, slower line, never a replacement for it.

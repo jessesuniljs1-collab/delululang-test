@@ -1645,3 +1645,29 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next: (1) read `7a192c9`'s, `2d3741d`'s and this commit's push runs; (2) **P8-04 step 5** — the monitor's own
   death; (3) the study's other two monitor rules once their records are measured. **For the owner:** D-V2-100, D-V2-101,
   D-V2-102.
+
+### 2026-10-09 — routine run 15 (continued): HTTP-SCHEME-1 — a plain-`http://` fetch died under the broker daemon; P8-04 step 5 read
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-a1e0hm`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `eebf6a1`
+- Commits: (1) `e7921cb` HTTP-SCHEME-1: a plain-http fetch is the same refusal under the broker daemon as without it;
+  (2) this entry's commit — the records and P8-04 step 5's reading
+- Files and folders: (1) M `crates/delulu-runtime/src/interp.rs` (`custody_op_for`), `crates/delulu/tests/monitor_cli.rs`,
+  `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `V2_P8_DESIGN.md` (step 5
+  read against the code; option (c) recommended), `docs/REMAINING_WORK.md` (4.45 closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: red first (DL0904 under the daemon, the embedded control green); M179 red through `scripts/mutants.py`,
+  control green; clippy clean; `check-other-os.sh` clean for Windows and macOS; runner reads at `e7921cb` — macOS
+  `37961192830` (28 passed), Windows `37961196373` (29), arm64 `37961200403` (29); the full suite alone 2,165 passed, 0
+  failed, 16 ignored (161 binaries). Push runs read: `7a192c9` `37958130505` and `2d3741d` `37958791794` success. The
+  VM's `/etc/hosts` was edited for one measurement and restored (checked).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 — HTTP-SCHEME-1.
+- Open / next: (1) read `eebf6a1`'s and this commit's push runs; (2) **P8-04 step 5, option (c)** — a broker dead-man for
+  the monitor's node (`V2_P8_DESIGN.md`), witnessed by killing a monitor mid-run; (3) finish measuring the special-use
+  rule's records (an `https://` name pointed at loopback: is the egress client's special-use refusal in the chain?), then
+  the break-glass rule (its record carries no node today). **For the owner:** D-V2-100, D-V2-101, D-V2-102.

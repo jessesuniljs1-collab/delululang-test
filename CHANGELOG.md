@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — fixed: a plain-`http://` fetch under the broker daemon, 2026-10-09
+
+- **Fixed: `http.get("http://…")` under `--broker daemon` (and in every `--lease` run) killed the program** with
+  ``DL0904 … does not grant `http` in scope `net` ``. Only `https://` is ever fetched, and without the daemon such a call
+  returns `Err(Refused)` — the value your program can handle. It now returns that value under the daemon too, sandboxed
+  or not, and the audit chain no longer records a refused use of a host called `http`.
+
 ## Unreleased — V2 P8-04: an out-of-band monitor quarantines a run that misbehaves, 2026-10-09
 
 - **New: `delulu monitor watch --node g_ID --rule envelope|denies=N/MS [--poll MS] [--for MS] [--json]`.** Mint a monitor

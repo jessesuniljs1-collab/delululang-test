@@ -4450,3 +4450,29 @@ on macOS `37959518422`, 173 passed, the new unit witness named.
 **What it leaves.** A chain written BEFORE this fix may hold repeated seqs; it still verifies, and the next record
 continues after its highest. The P8-04 monitor keeps its hash cursor (D-V2-100) — it also detects a chain rewritten under
 it, which a seq cannot.
+
+## 2026-10-09 — routine run 15: HTTP-SCHEME-1 — a plain-`http://` fetch died under the broker daemon
+
+**Found while measuring P8-04's special-use rule.** A runtime special-use refusal needs a NAME that only resolves to a
+special-use address (the grant parser refuses `127.0.0.1` and `localhost` outright), so the VM's `/etc/hosts` was pointed
+at loopback for one ordinary-looking name (restored afterwards) — and the first run, with an `http://` URL, did not reach
+the egress client at all: under `--broker daemon` it died DL0904, "lease … does not grant `http` in scope `net`", and the
+chain held `use deny` with target `http`. The same program under embedded custody printed "not delivered" and finished
+(`only https:// is fetched [egress: scheme]`). **Cause:** `custody_op_for` takes the host with `prim::host_of`, which strips
+only `https://`; for `http://host/x` the "host" is `http`. Embedded custody checks the scheme first and answers a value;
+the daemon's gate runs before the effect and asked the broker about `http`. Fail-closed both ways — but under daemon
+custody, and so in every `--lease` run, a program could not receive the refusal it is documented to receive, and the
+chain named a host nobody asked for.
+
+**The fix (`e7921cb`):** `custody_op_for` mirrors the effect — a URL that is not `https://` is refused by `prim` before
+anything is reached, so no custody op is asked. **Witness** (`monitor_cli.rs`): the program embedded (the control), under
+the daemon, and sandboxed under the daemon — each prints "not delivered" and finishes, with the scheme's reason, and no
+record names `http`. Red before the fix; mutant M179 (the guard removed) red through `scripts/mutants.py`, control green.
+**Read on the runners at `e7921cb`** over `monitor_cli`, `egress_cli` and `sandbox_run_cli`: macOS `37961192830` 28
+passed, Windows `37961196373` 29, arm64 `37961200403` 29 — the new witness named on each (and the quarantine measured
+again: 22, 22 and 5 ms). clippy clean; `check-other-os.sh` clean for Windows and macOS after the last code edit.
+**The full suite alone:** 2,165 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**The special-use measurement itself is not finished:** with an `https://` URL to the name pointed at loopback, a run
+would reach the egress client's special-use refusal — whether the chain records it (the custody gate records `use allow`
+for the host first, as it did for the envelope) is the next measurement, needed before the monitor's `special-use` rule.

@@ -168,3 +168,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **AUDIT-SEQ-1 closed the same run** (D-V2-102): the daemon counted from 1 on every start and a sandboxed run's host
   numbered "last + 1" outside the lock; the log now settles every seq under its append lock and the daemon takes the
   chain's next seq as a floor, so `revoked_by_seq` names the record that is there.
+- **HTTP-SCHEME-1 the same run:** under `--broker daemon` a plain-`http://` fetch died DL0904 (the custody gate asked about
+  a host named `http`); fixed to the embedded answer, `Refused`. P8-04 step 5 read against the code: build (c), a broker
+  dead-man for the monitor's node.
