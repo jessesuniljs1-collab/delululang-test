@@ -2367,8 +2367,10 @@ refused and (c) stays the owner's.
    reconcile`, an adapter's provenance record — therefore writes a seq the chain has never held, in increasing order.
 2. **The daemon keeps its references true.** It stamps a seq into nodes (`revoked_by_seq`) and answers (`audit_seq`)
    before the record is written, so it takes `AuditSink::next_seq` as a floor before each seq; a record is renumbered at
-   the lock only in a true race between that floor and the append (microseconds), never on a restart or after a record
-   another writer appended.
+   the lock only in a true race between that floor and the append, never on a restart or after a record another writer
+   appended. **Corrected the same run (red-team F2, RW 4.48):** that race is not rare under contention — 72 parallel
+   runs beside the daemon left 2 references naming another writer's record. The numbering holds; the references need the
+   lock held from the floor to the write.
 3. **Not chosen:** routing every host record through the daemon (a second path for the same record, and still racy for
    two hosts with no daemon); renumbering only at the lock (uniqueness, but the daemon's references would name other
    records — mutant M176 shows the difference).

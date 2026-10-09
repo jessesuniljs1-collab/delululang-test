@@ -4489,3 +4489,52 @@ resolves to a special-use address on every runner, and the tests have no resolve
 through the operating system on purpose. Recorded as RW 4.46 with the measurement; P8-04's `special-use` rule waits on
 it. The `break-glass` rule waits on its own gap: `audit_required` writes a break-glass record with no node at all, so a
 monitor cannot attribute it to a run under its node.
+
+## 2026-10-09 — routine run 15: the red-team pass on this run's work — ACTOR-CUSTODY-1 found; F3 fixed; AUDIT-SEQ-1's references corrected
+
+**The pass.** One Sonnet 5.5 sous-chef (`sonnet`, the routine's agent model), about 27 minutes, against a frozen copy of
+the binary at `73203fc` in a scratch directory outside the repository (`git status` clean after it), briefed to break the
+monitor's confinement, the envelope-refusal records, the chain's one numbering and the `http://` fix, and to list every
+oddity. Each finding below was re-run by the head chef against the current binary before a word of it was recorded.
+
+**F1 — ACTOR-CUSTODY-1 (HIGH, pre-existing, open; RW 4.47).** Re-run: a run under a lease whose ACTOR loops 60 in-envelope
+actuator commands; `grants revoke` of the run's node at t = 3 s printed "revoked 2 node(s)" and the device journal said
+`lease revoked (operator-revoke) … by audit seq 7` — and the actor was told `COMMANDED` 60 times of 60 and the run exited
+0; the same loop in `main` dies DL1403 after the revoke. Cause, read in `actors.rs`'s `worker_loop`: an actor's worker
+interpreter is built with NO custody and NO device broker, so its commands are checked against the envelope and then
+answered `Ok` by `device::actuate`'s no-broker branch — never reaching a device, never checked against the daemon (so a
+revocation, the e-stop, does not reach an actor's uses — its network uses too: the red team saw no `use` record for an
+actor's fetch), never recorded. Physically fail-safe for a device (no command reaches one), but the program is told its
+command landed, and the authority model's "revocation reaches the next use" does not hold for an actor's effects under
+daemon custody. **The next run's first item.**
+
+**F2 — AUDIT-SEQ-1's references under contention (MEDIUM, open; RW 4.48).** Re-run: 72 runs in parallel beside the daemon
+(60 sandboxed, 12 not): 613 records, 0 duplicate seqs, 0 out of order, the chain verifies — and 2 wrong references: one
+node's `by_seq` names a `sandbox-death` record, another's `audit_seq` a `sandbox-launch`. D-V2-102 item 2 named this race
+("a true race between that floor and the append") and called it microseconds; under contention it is hit about once in 36
+runs. The numbering holds; the daemon's references do not, in that window. The fix is to hold the append lock from the
+floor to the write, within one daemon operation — D-V2-102 is corrected, not softened.
+
+**F3 — a monitor quarantined its own node (MEDIUM, fixed: `495204e`).** Re-run: `denies=1/60000`, one refused delegation
+under `g_M` (a `deny` whose actor is `g_M` itself) → the monitor revoked `g_M` and the innocent run under it. Records whose
+actor is the monitor's own node are skipped now; witness `a_refusal_of_the_monitors_own_node_quarantines_nothing` red
+before the fix; M180 red, control green.
+**F3 read on the runners at `495204e`** over `monitor_cli` and `bin:delulu`: macOS `37965843494`, Windows `37965846952` (148 unit tests and 7 in `monitor_cli`), arm64 `37965849965` — the new witness named on each; clippy clean; `check-other-os.sh` clean for Windows and macOS.
+**The full suite alone at `495204e`:** 2,166 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**F4–F6 (LOW, not re-run; code reading agrees; RW 4.49).** F4: the monitor reads the chain with `audit::query` and never
+verifies it, so a same-uid process that appends a forged `deny` line makes it quarantine an innocent run (the chain then
+fails `audit verify`) — category 7, but a monitor could verify before acting. F5: each poll re-reads the whole chain; the
+quarantine's latency grew to about 200 ms at 10,000 records, and one more refusal slipped through before the revoke. F6:
+`record_device_refusal` answers `Recorded` even when the audit sink's append failed (`record_op` logs and continues).
+
+**What held** (the red team's counts): the monitor's confinement in about 22 experiments (siblings, nesting three deep,
+two bad runs and one good, twelve monitors on one node, missing/revoked/expired/odd node names, a broker restarted
+mid-watch, a truncated chain, junk files in the audit directory); about 8,500 envelope refusals recorded with correct
+`overrides_seq` (NaN, ±inf, 1e300, unlisted dimensions, non-numeric fields, rate refusals, 2,500 in one run, ordinary and
+sandboxed); 0 duplicate or out-of-order seqs over 10,000+ records, five daemon restarts and a `kill -9`, and `--since`
+matching `query` for 30 values; the `http://` fix across 36 URL spellings in three modes (108 runs). **Oddities kept for
+judgment:** a command that omits a bounded dimension is accepted (the envelope bounds what is commanded); an audit-sink
+failure reaches a program as `LeaseRevoked`; the scheme refusal leaves no record (as the special-use one, RW 4.46);
+`denies=+1/+5` parses; a monitor ends on its first broker error, with no retry; the root or `g_M` itself may be named as
+`--node` without a guard.

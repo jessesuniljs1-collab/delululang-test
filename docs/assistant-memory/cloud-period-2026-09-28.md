@@ -171,3 +171,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **HTTP-SCHEME-1 the same run:** under `--broker daemon` a plain-`http://` fetch died DL0904 (the custody gate asked about
   a host named `http`); fixed to the embedded answer, `Refused`. P8-04 step 5 read against the code: build (c), a broker
   dead-man for the monitor's node.
+- **The red-team pass the same run** (Sonnet 5.5, frozen binary): ACTOR-CUSTODY-1 (HIGH, open, RW 4.47 — an actor's
+  effects bypass daemon custody and the device broker; revocation does not reach them); AUDIT-SEQ-1's references are wrong
+  under contention (RW 4.48, D-V2-102 corrected); the monitor revoked its own node on a deny by it (fixed, `495204e`).

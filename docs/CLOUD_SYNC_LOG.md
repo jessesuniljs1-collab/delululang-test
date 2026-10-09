@@ -1689,3 +1689,36 @@ it on `origin` was made in the cloud and is listed below.
 - Redo on the laptop: nothing.
 - For the laptop's memory: nothing new beyond the previous entries.
 - Open / next: as the previous entry, with RW 4.46 before the `special-use` rule.
+
+### 2026-10-09 — routine run 15 (closing): the red-team pass — ACTOR-CUSTODY-1 found (HIGH, open); the monitor's self-quarantine fixed; D-V2-102 corrected
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (head chef, no fallback
+  notice); the red-team sous-chef ran on **Sonnet 5.5** (`sonnet`), about 27 minutes, against a frozen copy of the binary
+  at `73203fc` under `/tmp` — `git status` clean after it
+- Branch: `master` (the fix through the harness branch `claude/happy-pascal-a1e0hm`, read on the runners, then
+  fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `b0597d3`
+- Commits: (1) `495204e` a monitor never quarantines its own node (red-team F3); (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/monitor_cmd.rs`, `crates/delulu/tests/monitor_cli.rs`, `docs/survey/*`.
+  (2) M `CHANGELOG.md`, `HANDOFF.md` (§11.4, ACTOR-CUSTODY-1), `docs/CLOUD_ROUTINE.md` (step 4: the next run's order),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-102 item 2 corrected), `docs/REMAINING_WORK.md` (4.47, 4.48,
+  4.49 opened), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted:
+  nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: every red-team finding recorded here was re-run by the head chef on the current binary first — F1 (a revoke at
+  3 s, the device journal "lease revoked", the actor told `COMMANDED` 60/60, exit 0), F2 (72 parallel runs: 0 duplicate
+  seqs, 2 wrong references), F3 (the monitor revoked its own node) — except F4–F6, recorded as code reading. F3's fix:
+  red first, M180 red, control green; runner reads macOS `37965843494`, Windows `37965846952`, arm64 `37965849965`; the
+  full suite alone 2,166 passed, 0 failed, 16 ignored (161 binaries). Push runs read this run, all green on every job:
+  `dcd6f9a` `37954416113`, `0ffaac2` `37955746780`, `7a192c9` `37958130505`, `2d3741d` `37958791794`, `eebf6a1`
+  `37960632115`, `73203fc` `37962421933`; `1732d9e` `37952078892` cancelled by the next push with its four test jobs green.
+  `da6518c`, `b0597d3` and this commit's are unread at the close.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL; `git config core.hooksPath scripts/hooks`.
+- For the laptop's memory: `HANDOFF.md` §11.4 (ACTOR-CUSTODY-1; HTTP-SCHEME-1; AUDIT-REFUSAL-1; AUDIT-SEQ-1) and §11.5
+  (this run's seven lessons); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next, in order: (1) read `da6518c`'s, `b0597d3`'s and this commit's push runs and the 2026-10-10 nightly; (2) **RW
+  4.47, ACTOR-CUSTODY-1 (HIGH)** — an actor's effects under daemon custody: a custody client and the run's device broker
+  per worker, or refuse actors that hold an actuator until then; the witness is the re-run above; (3) **RW 4.48** — hold
+  the append lock from the daemon's floor to its write; (4) **P8-04 step 5, option (c)**; (5) RW 4.46 and 4.49. **For the
+  owner:** D-V2-100, D-V2-101, D-V2-102 (corrected) are this run's decisions; P8-04's option (c), a revoke-only principal,
+  is still his. **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).

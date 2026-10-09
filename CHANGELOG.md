@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the monitor never quarantines its own node; a known gap for actors, 2026-10-09
+
+- **Fixed: `delulu monitor watch --rule denies=N/MS` could revoke its own node** — and so every run under it — when the
+  monitor's node itself had a request refused (for example a delegation wider than it holds). Only runs under the node are
+  judged now.
+- **Known, not yet fixed (RW 4.47):** under `--broker daemon` or `--lease`, effects performed inside an **actor** are not
+  checked against the broker and not recorded — revoking the run does not stop them, and an actor's actuator command is
+  reported as commanded without reaching a device. Until this is fixed, do not rely on revocation or the audit chain for a
+  program's actors.
+
 ## Unreleased — fixed: a plain-`http://` fetch under the broker daemon, 2026-10-09
 
 - **Fixed: `http.get("http://…")` under `--broker daemon` (and in every `--lease` run) killed the program** with
