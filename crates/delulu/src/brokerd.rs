@@ -238,6 +238,10 @@ impl AuditSink for TrackingSink {
             }
         }
     }
+
+    fn next_seq(&mut self) -> Option<u64> {
+        self.inner.next_seq()
+    }
 }
 
 // ----- wire <-> broker conversions ---------------------------------------------------------------

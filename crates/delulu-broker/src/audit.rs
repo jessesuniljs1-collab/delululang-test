@@ -157,6 +157,14 @@ pub trait AuditSink {
     /// Errors are I/O-class only: the log is observability, so the broker logs a failure and
     /// continues rather than changing any enforcement decision.
     fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError>;
+
+    /// The next seq this sink would give a record, when the sink is shared with other writers and
+    /// can say (AUDIT-SEQ-1): a writer that keeps its own count — the broker — takes it as a floor
+    /// before each seq, so neither a restart nor a record another writer appended can make it repeat
+    /// one. `None` — the default, and every in-memory sink — leaves the writer's own count alone.
+    fn next_seq(&mut self) -> Option<u64> {
+        None
+    }
 }
 
 /// An in-memory, hash-chained sink for unit tests. Cheaply cloneable and shares state, so a test can
@@ -222,6 +230,9 @@ pub struct AuditLog {
     /// The byte length of `current_day`'s file after this handle last touched it. With the anchor,
     /// this is how an append notices that ANOTHER writer moved the chain since (AUDIT-WRITERS-1).
     tail_len: Option<u64>,
+    /// The highest seq any record in the chain carries (0 for none) — what the next record must
+    /// exceed (AUDIT-SEQ-1). Kept with the head: recovered when another writer moved the chain.
+    max_seq: u64,
 }
 
 /// The append lock's file name, beside the day files and the anchor (neither reader lists it).
@@ -350,7 +361,7 @@ fn read_anchor(dir: &Path) -> Option<(String, usize)> {
 
 /// What the files say — the head, the latest day file, the record count — checked against the
 /// anchor, and the anchor written if there is none. Called under the append lock.
-fn recover(dir: &Path) -> Result<(String, Option<String>, usize), AuditError> {
+fn recover(dir: &Path) -> Result<(String, Option<String>, usize, u64), AuditError> {
     let days = list_day_files(dir)?;
     // Head = the hash of the last record across all files, in day order (robust to a trailing
     // header-only file). current_day = the latest existing file, so same-day appends don't
@@ -366,8 +377,11 @@ fn recover(dir: &Path) -> Result<(String, Option<String>, usize), AuditError> {
     // gets its anchor here; an existing one gets it re-affirmed only if it already AGREES —
     // silently rewriting a disagreeing anchor would erase the very evidence it exists to keep.
     let mut records = 0usize;
+    let mut max_seq = 0u64;
     for day in &days {
-        records += count_records(&day_path(dir, day))?;
+        let (n, top) = count_records(&day_path(dir, day))?;
+        records += n;
+        max_seq = max_seq.max(top);
     }
     match read_anchor(dir) {
         Some((a_head, a_records)) if a_head != head || a_records != records => {
@@ -382,7 +396,7 @@ fn recover(dir: &Path) -> Result<(String, Option<String>, usize), AuditError> {
         }
         _ => write_anchor(dir, &head, records)?,
     }
-    Ok((head, current_day, records))
+    Ok((head, current_day, records, max_seq))
 }
 
 fn file_len(path: &Path) -> Option<u64> {
@@ -397,9 +411,9 @@ impl AuditLog {
         // Under the lock: a recovery that raced another writer's append would see its record
         // without its anchor, and refuse a chain that is fine.
         let _lock = AppendLock::take(&dir)?;
-        let (head, current_day, records) = recover(&dir)?;
+        let (head, current_day, records, max_seq) = recover(&dir)?;
         let tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&dir, d)));
-        Ok(AuditLog { dir, head, current_day, records, tail_len })
+        Ok(AuditLog { dir, head, current_day, records, tail_len, max_seq })
     }
 
     /// The current chain head (for tests / cross-links).
@@ -421,11 +435,12 @@ impl AuditLog {
         if anchor_agrees && tail_agrees {
             return Ok(());
         }
-        let (head, current_day, records) = recover(&self.dir)?;
+        let (head, current_day, records, max_seq) = recover(&self.dir)?;
         self.tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&self.dir, d)));
         self.head = head;
         self.current_day = current_day;
         self.records = records;
+        self.max_seq = max_seq;
         Ok(())
     }
 
@@ -447,10 +462,14 @@ impl AuditLog {
 }
 
 impl AuditSink for AuditLog {
-    fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError> {
+    fn append(&mut self, mut entry: AuditEntry) -> Result<AuditRecord, AuditError> {
         // AUDIT-WRITERS-1: one writer at a time, and never onto a head another writer has moved.
         let _lock = AppendLock::take(&self.dir)?;
         self.catch_up()?;
+        // AUDIT-SEQ-1: and never a seq the chain already holds. The number is settled HERE, under the
+        // lock: a writer that asks for none (0) gets the next, and one whose own count is behind the
+        // chain — the daemon, after a sandboxed run's host wrote beside it — is moved past it.
+        entry.seq = entry.seq.max(self.max_seq + 1);
         let day = day_string(entry.ts);
         self.ensure_day_file(&day)?;
         let rec = entry.into_record(&self.head);
@@ -459,11 +478,18 @@ impl AuditSink for AuditLog {
         self.tail_len = file_len(&path);
         self.head = rec.hash.clone();
         self.records += 1;
+        self.max_seq = rec.seq;
         // The anchor is refreshed AFTER the record lands, so a crash between the two leaves the
         // anchor one behind — which `verify` reports as a mismatch. Fail-closed: a log that may
         // have lost its last record says so rather than passing.
         write_anchor(&self.dir, &self.head, self.records)?;
         Ok(rec)
+    }
+
+    fn next_seq(&mut self) -> Option<u64> {
+        let _lock = AppendLock::take(&self.dir).ok()?;
+        self.catch_up().ok()?;
+        Some(self.max_seq + 1)
     }
 }
 
@@ -879,24 +905,26 @@ fn not_regular(e: &std::io::Error) -> bool {
 /// How many CHAIN RECORDS a day file holds. Uses exactly `last_record_hash`'s notion of a record —
 /// a JSON line carrying `seq` — so a header line is not miscounted and the anchor's count means the
 /// same thing `verify` counts.
-fn count_records(path: &Path) -> Result<usize, AuditError> {
+/// How many records one day's file holds, and the highest seq among them (AUDIT-SEQ-1).
+fn count_records(path: &Path) -> Result<(usize, u64), AuditError> {
     let text = match read_day(path) {
         Ok(t) => t,
         Err(e) if not_regular(&e) => return Err(AuditError::io(e)),
-        Err(_) => return Ok(0),
+        Err(_) => return Ok((0, 0)),
     };
-    let mut n = 0usize;
+    let (mut n, mut top) = (0usize, 0u64);
     for line in text.lines() {
         if line.trim().is_empty() {
             continue;
         }
         if let Ok(v) = serde_json::from_str::<Value>(line) {
-            if v.get("seq").is_some() {
+            if let Some(seq) = v.get("seq") {
                 n += 1;
+                top = top.max(seq.as_u64().unwrap_or(0));
             }
         }
     }
-    Ok(n)
+    Ok((n, top))
 }
 
 fn last_record_hash(path: &Path) -> Result<Option<String>, AuditError> {
@@ -1334,6 +1362,36 @@ mod tests {
         daemon.append(entry(6, 1001 + 86_400_000, "use", "g_a", "allow")).unwrap();
         assert_eq!(verify(&dir).expect("across days too").records, 6);
         assert!(AppendLock::take_within(&dir, std::time::Duration::ZERO).is_ok(), "no lock is left held");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// AUDIT-SEQ-1 (routine run 15): ONE numbering, whoever writes. A writer with no counter of its own
+    /// (a sandboxed run's host, an adapter's provenance record) asks for none and is given the next; a
+    /// writer whose counter is behind the chain (the daemon, after another wrote) is moved past it; and
+    /// a log opened again — a daemon restarting — resumes after the highest seq the chain holds. Before
+    /// the fix the daemon started at 1 on every start and the host numbered "last + 1" outside the lock,
+    /// so one verified chain read `1, 2, 3, 1, 2, 3` and `audit export --since` dropped records.
+    #[test]
+    fn every_writer_continues_one_numbering_and_a_reopened_log_resumes_it() {
+        let dir = tmp_dir("one-numbering");
+        let mut daemon = AuditLog::open(&dir).unwrap();
+        assert_eq!(daemon.next_seq(), Some(1), "an empty chain starts at 1");
+        assert_eq!(daemon.append(entry(1, 1000, "issue", "g_a", "allow")).unwrap().seq, 1);
+        assert_eq!(daemon.append(entry(2, 1001, "use", "g_a", "allow")).unwrap().seq, 2);
+        let mut run = AuditLog::open(&dir).unwrap();
+        let launched = run.append(entry(0, 1002, "sandbox-launch", "g_a", "allow")).unwrap();
+        assert_eq!(launched.seq, 3, "a writer that asks for no number is given the next one");
+        // The daemon's own counter says 3 — it never saw the run's record. It must not repeat it.
+        let used = daemon.append(entry(3, 1003, "use", "g_a", "allow")).unwrap();
+        assert_eq!(used.seq, 4, "a writer behind the chain is moved past it, never onto a seq in use");
+        assert_eq!(daemon.next_seq(), Some(5));
+        // A daemon restarting opens the chain again and resumes after its highest seq.
+        let mut restarted = AuditLog::open(&dir).unwrap();
+        assert_eq!(restarted.next_seq(), Some(5), "a reopened chain resumes, it does not start again at 1");
+        assert_eq!(restarted.append(entry(1, 1004, "root-policy-mode", "g_a", "allow")).unwrap().seq, 5);
+        let seqs: Vec<u64> = tail(&dir, 100).unwrap().iter().map(|r| r.seq).collect();
+        assert_eq!(seqs, vec![1, 2, 3, 4, 5], "unique and strictly increasing in chain order");
+        assert_eq!(verify(&dir).expect("and it verifies").records, 5);
         let _ = fs::remove_dir_all(&dir);
     }
 

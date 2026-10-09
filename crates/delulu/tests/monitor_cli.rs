@@ -454,3 +454,88 @@ fn a_monitor_sees_nothing_outside_its_own_subtree() {
     );
     assert_eq!(report["quarantines"], serde_json::json!([]), "a sibling's monitor quarantines nothing: {report}");
 }
+
+// ----- the chain's numbering (AUDIT-SEQ-1, RW 4.44) — what a reader of the chain resumes from ----------
+
+/// **The chain's seq is one numbering — across a daemon restart, and with a sandboxed run's host
+/// writing beside the daemon.** Before the fix a daemon started its count at 1 on every start, and a
+/// sandboxed run's host numbered its own records "last + 1": one verified chain read
+/// `1, 2, 3, 1, 2, 3`, and `audit export --since SEQ` — the documented way to feed a SIEM
+/// incrementally — returned some records twice and dropped others.
+#[test]
+fn the_chains_seq_is_one_numbering_across_a_restart_and_a_sandboxed_run() {
+    let f = setup("seq");
+    let start = |f: &Fixture| {
+        let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+        assert!(o.status.success(), "broker start: {}", stderr(&o));
+    };
+    let stop = |f: &Fixture| {
+        let o = delulu_in(&f.cwd, &f.state, &["broker", "stop"]);
+        assert!(o.status.success(), "broker stop: {}", stderr(&o));
+        // `stop` asks; wait until the socket no longer answers, so the next start is a new daemon.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while delulu_in(&f.cwd, &f.state, &["broker", "status"]).status.success() {
+            assert!(std::time::Instant::now() < deadline, "the daemon did not stop");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    };
+    start(&f);
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (_, _) = delegate(&f, &[]);
+    stop(&f);
+    start(&f); // a second daemon on the same chain
+    let o = delulu_in(
+        &f.cwd,
+        &f.state,
+        &["run", "prober.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant", GRANT, "--broker-profile", "sim", "--no-prompt"],
+    );
+    assert!(o.status.success(), "the sandboxed run: {}\n{}", stdout(&o), stderr(&o));
+    let (late, _) = delegate(&f, &[]);
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &late]);
+    assert!(o.status.success(), "grants revoke: {}", stderr(&o));
+
+    // The daemon's own references name the record that is in the chain: a revoked node's
+    // `revoked_by_seq` (what DL1403 tells a program) is the seq of the revocation's record. A daemon
+    // whose count restarted at 1 would have its record renumbered under the lock and say another number.
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    let listed: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list --json");
+    let by_seq = listed["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["id"] == late.as_str())
+        .and_then(|n| n["by_seq"].as_u64())
+        .unwrap_or_else(|| panic!("the revoked node names the seq that revoked it: {listed}"));
+
+    let recs = all_records(&f);
+    let revoke = recs
+        .iter()
+        .find(|r| r["action"] == "revoke" && r["target"] == late.as_str())
+        .expect("the revocation is in the chain");
+    assert_eq!(
+        revoke["seq"].as_u64(),
+        Some(by_seq),
+        "the node says it was revoked by seq {by_seq}; the chain's revocation of it is {revoke}"
+    );
+    let seqs: Vec<u64> = recs.iter().map(|r| r["seq"].as_u64().unwrap()).collect();
+    // The baseline: two daemons and a sandboxed host all wrote here.
+    assert!(recs.iter().any(|r| r["action"] == "sandbox-launch"), "the host wrote beside the daemon: {seqs:?}");
+    assert_eq!(recs.iter().filter(|r| r["action"] == "root-policy-mode").count(), 2, "two daemons wrote: {seqs:?}");
+    assert!(
+        seqs.windows(2).all(|w| w[1] > w[0]),
+        "seq must be unique and strictly increasing along the chain, whoever wrote: {:?}",
+        recs.iter().map(|r| (r["seq"].as_u64().unwrap(), r["action"].as_str().unwrap().to_string())).collect::<Vec<_>>()
+    );
+    // And so an incremental export from any record's seq returns exactly that record and every one after it.
+    let mid = recs.len() / 2;
+    let since = seqs[mid].to_string();
+    let o = delulu_in(&f.cwd, &f.state, &["audit", "export", "--format", "ocsf", "--since", &since]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let exported: Vec<String> = stdout(&o)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["metadata"]["uid"].as_str().unwrap().to_string())
+        .collect();
+    let expected: Vec<String> = recs[mid..].iter().map(|r| r["hash"].as_str().unwrap().to_string()).collect();
+    assert_eq!(exported, expected, "`--since {since}` must be every record from that one on, none twice, none dropped");
+}

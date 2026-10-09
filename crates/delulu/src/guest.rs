@@ -2680,10 +2680,11 @@ fn append_audit(
     // daemon's next record chain onto a head it had cached before the run's (AUDIT-WRITERS-1). The
     // log itself now takes the append lock and catches up under it, for every writer.
     let mut log = AuditLog::open(&dir).map_err(|e| format!("the audit chain cannot be opened: {e:?}"))?;
-    // Continue the chain's numbering: the last record's seq plus one, or 1 for an empty log.
-    let seq = delulu_broker::audit::tail(&dir, 1).ok().and_then(|r| r.last().map(|x| x.seq + 1)).unwrap_or(1);
+    // The chain's next seq is settled by the log under its append lock (AUDIT-SEQ-1): "the last record's
+    // seq plus one", read here outside the lock, repeated the daemon's numbers whenever it wrote beside a
+    // running one, and two runs in parallel could each take the same.
     let entry = AuditEntry {
-        seq,
+        seq: 0,
         ts: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)

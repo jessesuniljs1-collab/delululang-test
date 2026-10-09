@@ -242,6 +242,13 @@ impl Broker {
     }
 
     fn take_seq(&mut self) -> u64 {
+        // AUDIT-SEQ-1: the chain is shared — a sandboxed run's host appends beside the daemon, and a
+        // restarted daemon finds the records of the one before it — so this count takes the sink's next
+        // seq as a floor. Without it a daemon started at 1 on every start and repeated seqs the chain
+        // already held. The sink settles the number again under its lock (`AuditLog::append`).
+        if let Some(floor) = self.sink.as_mut().and_then(|s| s.next_seq()) {
+            self.audit_seq = self.audit_seq.max(floor);
+        }
         let s = self.audit_seq;
         self.audit_seq += 1;
         s
