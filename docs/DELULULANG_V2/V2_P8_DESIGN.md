@@ -190,6 +190,13 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    arm at all"), so a refused command is a `deny` record on the device's own node. PS-E-06's OCSF export (D-V2-78) is
    the same records in another spelling, so a monitor reading either sees the same thing. Nothing new to build for
    reading — the rules read `query` at a `--since SEQ` and never anything the host did not record.
+   **Measured by routine run 15 (2026-10-09): two of those claims were false.** (i) A refused command was NOT a `deny`:
+   the broker records `use allow` on the RUN's node for the device's identity, and the envelope's refusal reached only
+   standard error — fixed (AUDIT-REFUSAL-1, `5cd4474`, D-V2-100): each envelope refusal is now a `use` `deny` citing the
+   `allow` it overrides. (ii) `--since SEQ` is not a cursor: a sandboxed run's host and the daemon number the chain
+   independently, and `--since` dropped a later revocation (AUDIT-SEQ-1, RW 4.44, open) — the monitor resumes after the
+   last record HASH it read. Still journaled only on the run's stderr: a dead lease's revocation (missed heartbeat, TTL),
+   which a rule on "the device was lost" would need.
 2. *Everything the monitor DOES exists too.* `tree::revoke(caller, target)` is transitive over the subtree, idempotent,
    consumes one audit seq and stamps `revoked_by_seq` on every node; the device's fail-state and the guest's death
    follow from it already (`AuthorityProbe` → `AuthorityState::Dead` → the declared fail-state, and `close_devices`).

@@ -810,6 +810,12 @@ security decision made on an **unnormalized or unresolved representation**, walk
 a relative guard pattern. Ask it of every string compared to decide a security outcome: **what else
 spells the same thing?**
 
+- **2026-10-09 — AUDIT-REFUSAL-1: the chain said a refused command was allowed** (routine run 15). The broker records
+  `use allow` for a device's identity; the run's envelope refused the command afterwards, on stderr only — three refused
+  commands read as three allowed uses. Fixed: a `deny` citing the `allow` it overrides (D-V2-100). **AUDIT-SEQ-1, open
+  (RW 4.44):** a sandboxed run and the daemon number one chain independently, and `audit export --since` dropped a later
+  revocation — a seq is not a cursor; a record's hash is.
+
 - **2026-09-30 — AUDIT-TEXT-1: the investigator's and the approver's screens printed an adversary's text raw.**
   TERMINAL-TEXT-1 escaped a program's strings where they are printed live; `audit tail`/`query` (a use's target is a
   path the program chose) and `guard pending` (a request's `why` is the agent's) print them from storage, and did not.
@@ -1081,6 +1087,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   own sync-log entry was finished — `master` and four nightlies red on every OS for four days, for that alone.
   `scripts/hooks/pre-commit` now checks the map against the INDEX (exported, then surveyed), which also catches the case a
   tree check passes: a map rebuilt from an edit that is not staged. `git config core.hooksPath scripts/hooks` in step 2.
+- **"Everything it needs already exists" is a hypothesis — measure the reading surface first** (routine run 15): P8-04's
+  build order, read against the code, said a refused device command was already a `deny` in the chain; one scratch daemon
+  and a four-line program showed four `allow`s and no `deny`. A design step that builds nothing still gets a witness.
+- **A restore by `move` keeps the old mtime** (routine run 15): a mutant loop restored each file from a backup with
+  `shutil.move`, cargo saw a source older than its binary and kept the LAST mutant — the green re-run went red. Copy, or
+  touch the restored file, then rebuild (§11.5's mutant-binary trap, a second way in).
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch

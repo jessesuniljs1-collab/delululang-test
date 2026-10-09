@@ -1529,3 +1529,36 @@ it on `origin` was made in the cloud and is listed below.
 - For the laptop's memory: `HANDOFF.md` §11.5 — a rule a run must remember is a rule a run will forget (make it a hook);
   a run's last push is the one nobody reads.
 - Open / next: P8-04 — this run measured step 1 against the binary before building on it (next entry).
+
+### 2026-10-09 — routine run 15 (continued): P8-04 step 1 measured — an envelope's refusal is a `deny` in the chain (AUDIT-REFUSAL-1, D-V2-100); AUDIT-SEQ-1 found
+- Session: `https://claude.ai/code/session_01S4tfGaLdv3KbErQ6JExQ4t`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (pushed to the harness branch `claude/happy-pascal-a1e0hm` first, read on the runners, then `master`
+  fast-forwarded)   Pull request: none   Merged: n/a
+- Base: `dcd6f9a`
+- Commits: (1) `5cd4474` P8-04 step 1, measured: an envelope's refusal is a `deny` in the audit chain, citing the use it
+  overrides; (2) this entry's commit — the records
+- Files and folders: (1) A `crates/delulu/tests/monitor_cli.rs`; M `crates/delulu-broker/src/validate.rs`
+  (`record_device_refusal` and its unit test), `crates/delulu-runtime/src/custody.rs` (`note_device_refusal`),
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/channel.rs` (both callers of `device::actuate`),
+  `crates/delulu/src/broker_ipc.rs` (`DeviceRefused`, `Recorded`), `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/src/broker_client.rs`, `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (§11.4 the finding, §11.5 two
+  lessons), `docs/CLOUD_ROUTINE.md` (step 4's P8 line), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-100),
+  `V2_P8_DESIGN.md` (P8-04 step 1, measured), `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.43 closed, 4.44 open),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed (the commit hook checked the map against each commit's index)
+- Verified: the witness red before the fix (four `use allow`, no `deny`); two end-to-end witnesses (ordinary and
+  `--sandbox`) and one unit witness; mutants M161–M167 each red; clippy clean; `check-other-os.sh` clean for Windows and
+  macOS; runner reads at `5cd4474` over the nine actuator targets — macOS `37954533949` (56 passed), Windows `37954537458`
+  (55), arm64 `37954540761` (56), both new witnesses named on each; the full suite alone 2,158 passed, 0 failed, 16 ignored
+  (161 binaries), cargo exit 0, the tree unmoved. `1732d9e`'s push run `37952078892`: all four test jobs green (Windows
+  and Linux ping-pong NOT MEASURED, arm64 MEASURED 2.88x/4.12x, macOS NOT MEASURED — 3 threads).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (AUDIT-REFUSAL-1; AUDIT-SEQ-1 open) and §11.5 ("everything it needs already
+  exists" is a hypothesis; a restore by `move` keeps the old mtime).
+- Open / next: (1) read `dcd6f9a`'s and this commit's push runs; (2) **P8-04 step 3 (b)** — `delulu monitor watch --node
+  g_M --rule envelope|denies=N/MS`: the subtree from the daemon's `List`, the chain read after the last record HASH
+  (never a seq — AUDIT-SEQ-1), quarantine = a revoke with caller `g_M` of the run's node (the child of `g_M` on the path),
+  the rule and its evidence in the revoke's own record; a new subcommand's five gates; witnesses in `monitor_cli.rs`;
+  (3) **RW 4.44, AUDIT-SEQ-1** — one numbering for the chain. **For the owner:** D-V2-100 is this run's decision.

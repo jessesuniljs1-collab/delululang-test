@@ -2306,6 +2306,26 @@ RW 7.17 left a question beside its unreproduced flake: does a probe the broker n
 4. **What stays open in RW 7.17** is the half that needs a recurrence: the arm64 flake was found, not root-caused. The
    next occurrence is now readable from the journal — which is what the row asked for.
 
+## D-V2-100 — P8-04's reading surface: an envelope's refusal is a `deny` in the chain, recorded by the broker at the run's word, citing the use it overrides; a monitor's cursor is a record's hash — TAKEN (head chef, 2026-10-09, under the owner's delegation)
+
+Routine run 15 measured P8-04 step 1's claim ("everything the monitor reads exists") and it was false (AUDIT-REFUSAL-1,
+`V2_LOG.md` 2026-10-09). Decided:
+
+1. **The envelope stays where it is decided.** The device broker in the run judges a command's magnitudes, as
+   `mint_device_nodes`' comment insists (copying the envelope into the broker's decision would make a second authority of
+   record that could drift from the first). The broker is told AFTERWARDS and records; it does not re-decide.
+2. **The record is a `use` with decision `deny`** — the action an investigator and an OCSF export already read — on the
+   node that used the arm (the same actor as the `allow` it overrides, the run's node: a lease client acts only as its own
+   node, invariant 25), at the device, with `refused_by`, `code` (DL1904), `reason` (bounded) and `overrides_seq`. The pair
+   `allow` then `deny` is the truth: the authority allowed the use, the envelope refused the command.
+3. **Best-effort, never silent.** The command is already refused and the device already safe when the record is sent; a
+   record that cannot be written does not fail the run, and is said once on standard error. A same-uid process could forge
+   such a record — as it could any (category 7) — and a forged one can only ADD refusals.
+4. **A monitor's cursor is a record's hash, never a seq** (AUDIT-SEQ-1: two writers number the chain independently, and
+   `--since SEQ` loses records). Until RW 4.44 gives the chain one numbering, P8-04 resumes after the last hash it read.
+5. **Not in this decision:** a dead lease's revocation (missed heartbeat, TTL) is still journaled only on the run's
+   standard error; it is the next reading gap for the monitor's rules, recorded in `V2_P8_DESIGN.md`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

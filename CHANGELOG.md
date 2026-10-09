@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — V2 P8-04 (first step): the audit chain records a device command its envelope refused, 2026-10-09
+
+- **Fixed: a device command your actuator's envelope refused was recorded in the audit chain as allowed.** The broker
+  records `use allow` when it confirms your run may command the device; the envelope then judges the command's values in
+  your run. Until now that refusal reached only the run's standard error, so `delulu audit query` showed every refused
+  command as an allowed use. Each refusal is now a `use` record with decision `deny`, carrying `refused_by: envelope`,
+  `DL1904`, the reason your program was told, and `overrides_seq` — the `allow` it overrides. Ordinary and `--sandbox`
+  runs alike. If the broker cannot record it, the run says so once and carries on (the command is refused either way).
+- **Known, not yet fixed:** when a sandboxed run writes audit records beside the broker daemon, the two number the chain
+  independently, so `seq` can repeat and `audit export --since SEQ` can skip a later record (RW 4.44). The chain still
+  verifies; resume an incremental read from a record's hash.
+
 ## Unreleased — V2 P8-03: the reference simulator can be run as a device, 2026-10-05
 
 - **New: `delulu device sim [--seed N] [--actuator DEVICE:dim=lo..hi,...] [--sensor NAME] [--json]`** runs the in-tree

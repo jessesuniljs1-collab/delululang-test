@@ -4315,3 +4315,49 @@ ways: a staged document edit with no rebuild — refused; the map rebuilt and st
 check cannot see — an UNSTAGED edit the map was built from, `survey check` on the tree **ok**, the hook **refusing** —
 which is exactly how a commit carries a stale map. It reuses the built Survey unless the Survey's own sources are newer
 (a `cargo build` would wait on the build lock for a whole suite); about 3 s.
+
+## 2026-10-09 — routine run 15: P8-04 step 1 measured — an envelope's refusal was not in the chain (AUDIT-REFUSAL-1, D-V2-100); AUDIT-SEQ-1 found
+
+**The hypothesis.** P8-04's build order (run 14) said its first step needed nothing built: "everything the monitor READS
+exists … a refused command is a `deny` record on the device's own node." Measured against the binary before anything was
+built on it: **false.** A daemon in a scratch state directory, a program granted `arm0/elbow` with `angle_deg=-30..95`,
+one command at 12° and three at 150°: the program was told `COMMANDED` once and ``REFUSED: `angle_deg` = 150 is outside
+the envelope [-30, 95]`` three times — and the chain held FOUR `use allow` records, all on the RUN's node (not the
+device's), and no `deny` at all. The broker answers the device's identity (`validate.rs`: "the magnitudes never reach this
+layer") and records `allow`; the run's device broker judges the envelope afterwards, and that decision went only to
+standard error. **AUDIT-REFUSAL-1:** the chain said three refused commands were allowed; an investigator could not tell,
+and an out-of-band monitor could never see a refusal.
+
+**The fix (`5cd4474`, D-V2-100).** `Custody::note_device_refusal` (additive, default no-op, the `note_plugin_signature`
+pattern) is called after `device::actuate` returns, at both of its callers — the interpreter and a sandboxed guest's host
+channel — for `command.refused` (the envelope's and the rate's refusals; a dead lease is not this event). The daemon
+client sends `DeviceRefused { node, device, reason, overrides_seq }`; `Broker::record_device_refusal` writes one `use`
+record, decision `deny`, on the node that used the arm, at the device, with `refused_by: envelope`, `code: DL1904`, the
+reason in the words the program was told (bounded at 512 bytes on a character boundary) and `overrides_seq` — the
+`use allow` this command was given, so the pair reads as what happened. It records, never decides. A refusal the broker
+cannot record is said once on standard error; nothing is recorded for a node the tree does not hold.
+
+**Witnesses.** `crates/delulu/tests/monitor_cli.rs` (P8-04's process-spawning file): the ordinary run and the
+`--sandbox` run each assert 4 allows, 3 denies, every deny's fields, each citing its own command's allow, none citing the
+in-envelope one — red before the fix ("the chain held no deny"). `validate.rs`: an unknown node records nothing; the
+reason is cut on a character and says so. Mutants, each red: M161 (the interpreter's note removed — the ordinary witness),
+M162 (the host channel's — the sandboxed one), M163 (recorded `allow`), M164 (`overrides_seq` dropped), M165 (the first
+allow's seq kept for every refusal), M166 (the unknown-node refusal removed), M167 (the bound removed). clippy clean;
+`check-other-os.sh` clean for Windows and macOS. **Read on the runners at `5cd4474`** over the nine targets that drive an
+actuator (`monitor_cli`, `actuate_cli`, `estop_cli`, `sandbox_devices_cli`, `device_delegation_cli`, `hw_adapter_cli`,
+`hw_dpx_cli`, `sim_device_cli`, `robotics_demo`): macOS `37954533949` 56 passed, Windows `37954537458` 55, arm64
+`37954540761` 56 — both new witnesses named on each, no refusal left unrecorded in any output. The full suite alone: 2,158
+passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved. **A trap paid for again:** the mutant loop restored each file with
+`shutil.move`, which keeps the backup's OLD mtime, so cargo kept the last mutant's binary and the green re-run went red —
+touch a restored file (or copy it) before rebuilding.
+
+**AUDIT-SEQ-1 — found on the same chain, open (RW 4.44).** A sandboxed run under the daemon writes its own records
+(`guest.rs`: `sandbox-launch`, `channel-violation`, `sandbox-death`), numbered "the chain's last seq + 1", while the daemon
+numbers its records from its own counter. One verified chain read `1, 2, 3, 4 (sandbox-launch), 4 (use), 5 … 10, 11
+(channel-violation), 12 (sandbox-death), 11 (revoke)` — seq is neither unique nor monotone along the chain. **Witnessed:**
+`audit export --format ocsf --since 12` returned `sandbox-death` alone and dropped the `revoke` written after it, so an
+incremental reader of the chain (a SIEM feed by `--since`, or a monitor) silently loses a revocation. The OCSF event's
+`uid` is the record's hash (unique), its `metadata.sequence` is the seq. Not fixed in this run: two writers with two
+counters is a design question (one numbering authority, or numbering under the append lock with the daemon's references
+following it) — sketched in RW 4.44. **It decides P8-04's cursor:** a monitor resumes from a record's HASH (its position in
+the chain), never from a seq (D-V2-100 item 4).
