@@ -586,3 +586,37 @@ fn a_plain_http_fetch_is_the_same_refusal_under_the_daemon() {
     let named_http = all_records(&f).into_iter().filter(|r| r["target"] == "http").count();
     assert_eq!(named_http, 0, "no record names a host called `http`");
 }
+
+/// **A monitor never quarantines itself** (the routine-run-15 red-team pass, F3). The `denies=N/MS`
+/// rule counted a `deny` whose actor is the monitor's OWN node — a refused delegation under `g_M`, an
+/// operator's typo — as the misbehaviour of "the run `g_M`", and revoked `g_M`: every run under it,
+/// the innocent ones too. A quarantine's target is a run UNDER the monitor's node; what the monitor's
+/// own node does is the operator's, not a run's.
+#[test]
+fn a_refusal_of_the_monitors_own_node_quarantines_nothing() {
+    let f = setup("self");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "an innocent run"]);
+    let mon = start_monitor(&f, &m, "denies=1/60000");
+
+    // The baseline: a refused delegation under the monitor's node — a `deny` whose actor is `g_M`.
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "delegate", "--parent", &m, "--effects", "Net", "--net", "example.com"]);
+    assert!(!o.status.success(), "a wider child than its parent must be refused: {}", stdout(&o));
+    assert!(
+        all_records(&f).iter().any(|r| r["decision"] == "deny" && r["actor_node"] == m.as_str()),
+        "the chain holds a deny by the monitor's own node"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    let listed: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let state = |id: &str| -> String {
+        listed["nodes"].as_array().unwrap().iter().find(|n| n["id"] == id).map(|n| n["state"].to_string()).unwrap_or_default()
+    };
+    assert_eq!((state(&m), state(&run)), ("\"live\"".to_string(), "\"live\"".to_string()), "nothing was quarantined: {listed}");
+    let (report, _) = stop_monitor(&f, &m, mon);
+    assert!(report["records_read"].as_u64().unwrap_or(0) >= 1, "the monitor read the deny: {report}");
+    assert_eq!(report["quarantines"], serde_json::json!([]), "{report}");
+}

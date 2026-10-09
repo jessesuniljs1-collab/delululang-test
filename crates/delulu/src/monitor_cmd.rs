@@ -266,6 +266,12 @@ fn cmd_watch(rest: &[String]) -> i32 {
         records_read += recs.len() - start;
         for r in &recs[start..] {
             let Some(run) = r.actor_node.as_deref().and_then(|a| runs.get(a)) else { continue };
+            // A run is a node UNDER the monitor's; what the monitor's own node does — a refused
+            // delegation under it, an operator's typo — is not a run's misbehaviour, and quarantining
+            // it would revoke every run below, the innocent ones too (red-team F3, routine run 15).
+            if run == &o.node {
+                continue;
+            }
             if quarantined.contains(run) || fire.contains_key(run) || r.decision != "deny" {
                 continue;
             }
