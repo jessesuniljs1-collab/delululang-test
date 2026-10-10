@@ -344,6 +344,7 @@ impl Custody for BrokerClientCustody {
         let mut spec = authority_to_spec(&authority);
         spec.holder_kind = holder.kind.clone();
         spec.holder_desc = holder.desc.clone();
+        let for_a_plugin = holder.kind == "plugin";
         // `owner: None` — a plugin grant is minted from THIS run's node, under the ordinary
         // attenuation law. If the grant reaches guarded authority the daemon's guard answers
         // (DL1410/DL1413) exactly as it does for any other mint; the loader never bypasses it.
@@ -358,7 +359,12 @@ impl Custody for BrokerClientCustody {
         match resp {
             Response::Issued { node } => {
                 let node = GrantId::from_trusted(node);
-                self.minted.push(node.clone());
+                // RW 4.51: only a PLUGIN's node is remembered for `end_of_run`. A device's node is revoked
+                // by `close_devices` AFTER the device broker stops — revoked earlier, the watchdog reads it
+                // as an operator's e-stop (routine run 16's suite caught exactly that in `estop_cli`).
+                if for_a_plugin {
+                    self.minted.push(node.clone());
+                }
                 Ok(node)
             }
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),

@@ -1673,6 +1673,32 @@ mod tests {
         delulu_broker::verify(audit_dir(&state)).expect("the chain verifies");
     }
 
+    /// RW 4.51, and the regression its first form caused: when a run ends, its custody revokes the
+    /// PLUGIN nodes it minted — and not its DEVICE nodes, which `close_devices` revokes only after the
+    /// device broker stops. The first form remembered every node `attenuate` minted, device nodes
+    /// included, and revoked them while the device watchdog still ran: `estop_cli`'s control run lost its
+    /// arm to an "operator-revoke" nobody made (routine run 16's suite, by timing). This asks the tree.
+    #[test]
+    fn at_the_end_of_a_run_its_plugin_nodes_are_revoked_and_its_device_nodes_left_to_the_device_close() {
+        let state = temp_state("endofrun");
+        let handle = start_daemon(&state);
+        let mut c = BrokerClientCustody::issue_root(state.clone(), spec(&["Write"]), None).expect("a root");
+        let device = c
+            .attenuate(Authority::default(), delulu_broker::Holder::new("device", "arm0/elbow", ""))
+            .expect("a device node");
+        let plugin =
+            c.attenuate(Authority::default(), delulu_broker::Holder::new("plugin", "shout", "")).expect("a plugin node");
+        c.end_of_run();
+        let state_of = |node: &GrantId| match request(&state, ReqBody::NodeState { node: node.as_str().to_string() }) {
+            Ok(Response::NodeState { state, .. }) => state,
+            other => panic!("node state: {other:?}"),
+        };
+        let (device_state, plugin_state) = (state_of(&device), state_of(&plugin));
+        stop_daemon(&state, handle);
+        assert_eq!(plugin_state, "revoked", "the run's plugin node ends with the run");
+        assert_eq!(device_state, "live", "a device node is the device close's to revoke, after its watchdog stops");
+    }
+
     fn spec(effects: &[&str]) -> AuthoritySpec {
         AuthoritySpec {
             effects: effects.iter().map(|s| s.to_string()).collect(),
