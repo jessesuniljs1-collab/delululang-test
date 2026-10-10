@@ -77,7 +77,8 @@ the assistant's memory — which now also travels file by file in
   D-V2-102); step 3 (b) built — `delulu monitor watch` quarantines a run under its node and the revocation's record says
   why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Routine run 16 (2026-10-10):** ACTOR-CUSTODY-1 closed — an actor's
   effects answer to the run's custody and brokers (D-V2-103); PLUGIN-CUSTODY-1 the same — a plugin export runs under the
-  host's custody and devices, and plugins are callable under the daemon at last (D-V2-104). **Next:** RW 4.48, **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
+  host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
+  (D-V2-105). **Next:** **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
   4.46 (the egress client's refusals), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
@@ -823,7 +824,11 @@ spells the same thing?**
   commands read as three allowed uses. Fixed: a `deny` citing the `allow` it overrides (D-V2-100). **AUDIT-SEQ-1** (the same
   run, RW 4.44): the daemon counted from 1 on every START and a sandboxed run's host numbered "last + 1" outside the lock —
   one verified chain read `1, 2, 3, 1, 2, 3`, and `audit export --since` dropped a revocation. Closed the same run
-  (D-V2-102): the log settles each seq under its lock, and the daemon takes the chain's next seq as a floor.
+  (D-V2-102): the log settles each seq under its lock, and the daemon takes the chain's next seq as a floor. **Its
+  residual, RW 4.48, closed 2026-10-10 by routine run 16 (D-V2-105)** — the daemon holds the lock from that floor to its
+  write (2–3 wrong references in 72 parallel runs before, 0 after); and **AUDIT-DAY-1** the same run: a record stamped before
+  midnight but written after another writer's post-midnight record was filed in the earlier day's file, and the whole chain
+  read as broken — filed under the later of its day and the chain's now.
 
 - **2026-10-09 — ACTOR-CUSTODY-1 (HIGH, RW 4.47) — closed 2026-10-10 by routine run 16 (D-V2-103)** — found by run 15's
   red-team pass: an actor's worker interpreter had no custody and no device broker, so under daemon custody a revocation did
@@ -1134,6 +1139,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   every plugin call was refused `Revoked(0)` — safe, so nobody looked, and a decision recorded the path as working. The moment
   liveness was answered, the plugin ran under an allow-all custody (0 of 2 uses recorded). When a fail-closed path is made to
   work, witness again what it was standing in front of.
+- **A key derived from a timestamp is an order claim, and a clock is not an order** (routine run 16, AUDIT-DAY-1): the audit
+  chain filed each record by its own stamp's day, and a record stamped before midnight but written after another writer's
+  post-midnight one broke the whole chain. Found because a test's FIXED timestamp fell on yesterday — a fixed date in a test
+  is a date. Ask of every file, partition or bucket chosen by a time: what does a record stamped before the last one do?
+- **A new witness is an edit — the fourth time the tree moved under a suite** (routine run 16): the next slice's witness was
+  appended to a test file and its target compiled while the full suite ran. Caught by the head chef, not by a tool: the file
+  was restored before the suite reached that target (which ran its own earlier build, a separate hash), so the suite's verdict
+  stands — but `TREE-MOVED` cannot see an edit that is undone. While a suite runs, draft the next witness in the scratchpad.
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch

@@ -182,3 +182,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   device broker; under the daemon no plugin had ever been callable (PLUGIN-DAEMON-1 — liveness was never answered, so every
   call was `Revoked(0)`). It shares the host's custody and devices now. Lesson: a path that fails closed on everything hides
   what stands behind it.
+- **RW 4.48 and AUDIT-DAY-1 closed the same run** (D-V2-105): the daemon holds the audit chain's lock from a seq's floor to
+  its write (2–3 wrong references in 72 parallel runs before, 0 after); and a record stamped before midnight but written after
+  another writer's post-midnight record had been filed in the earlier day's file, breaking the chain — found because a
+  test's fixed timestamp fell on yesterday.

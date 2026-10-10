@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the audit chain: true references under contention, and a chain that survives midnight, 2026-10-10
+
+- **Fixed (RW 4.48): with sandboxed runs writing beside the broker daemon, a node's or an answer's audit seq could name
+  another writer's record** (a `sandbox-death` where the node's own `issue` belonged — 2 or 3 in 72 parallel runs). The
+  daemon now holds the chain from the moment it hands out a seq until its record is written; the references are true.
+- **Fixed (AUDIT-DAY-1): a chain written across midnight could read as broken.** A record stamped just before midnight but
+  written just after another writer's post-midnight record was filed in the earlier day's file, and `delulu audit verify` —
+  and the daemon, which then refuses what it cannot record — reported the chain as truncated. A record is now filed with the
+  chain's newest day when its own is older; it keeps its own time stamp.
+
 ## Unreleased — plugins under the broker daemon; a plugin's effects governed as its host's are, 2026-10-10
 
 - **Fixed: no plugin could be called under `--broker daemon`** — every `p.get` answered `Revoked` because the daemon was

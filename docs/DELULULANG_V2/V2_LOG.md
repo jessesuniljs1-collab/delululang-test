@@ -4639,3 +4639,42 @@ did — RW 4.51).
 
 **The lesson.** A path that fails closed on everything hides what stands behind it: nobody looks at a refusal that is safe.
 When a fail-closed path is made to work, witness again what it was in front of.
+
+## 2026-10-10 — routine run 16 (continued): RW 4.48 closed — the daemon holds the audit chain from a seq's floor to its write; AUDIT-DAY-1 found and closed — a record's day file follows the chain (D-V2-105)
+
+**RW 4.48, measured again before a line changed.** The red team's F2 (run 15) as a probe: one daemon, 60 sandboxed runs
+(their hosts write `sandbox-launch` and `sandbox-death` beside the daemon) and 12 daemon runs holding an actuator, 24 at a
+time; then every node's `audit_seq` (its creation record) and every revoked node's `by_seq` checked against the chain. On
+`80c566c`'s binary: **2 and 3 wrong references** in two probes (169 records each, the chain verified, no duplicate seq) —
+nodes whose creation seq named a `sandbox-death` or `sandbox-launch` record. The cause, D-V2-102 item 2's own words: the
+broker takes the chain's next seq as a floor, releases the append lock, stamps the seq into a node and an answer, and appends
+later — a host's record landing between takes the seq, the daemon's is renumbered at the lock, and its references name the
+host's.
+
+**The fix (D-V2-105).** `AuditLog` gains `take_lock`, `next_seq_under` and `append_under` — a held `AppendLock` is the token,
+and one for another chain is refused. The daemon's `TrackingSink` takes the lock at a request's first seq or record and
+keeps it to the last; the serve loop releases it after `handle` and BEFORE the reply is written (a client that reads its
+answer slowly never holds the chain), and once after the startup record. **On this commit's binary the probe found 0 wrong
+references in three runs.**
+
+**Witnesses** (both in `brokerd.rs`'s tests): `a_seq_the_daemon_reserved_is_the_seq_its_record_is_written_under` — another
+writer is started inside the window and given 300 ms; red first (reserved 2, written 3); `the_daemon_leaves_the_chain_free_between_requests`
+— after the daemon starts, and after a request that wrote a record, another writer appends within 2 s (were the lock kept,
+it would wait out its 5 s bound and lose its record). **Mutants:** M191 (the sink's floor stops holding the lock) red on the
+first; M192 (no release after a request) and M193 (none after the startup record) red on the second; the control green.
+
+**AUDIT-DAY-1 — found while writing the second witness.** Its first form stamped the other writer's records with a fixed
+time — which fell on the previous UTC day — and `AuditLog::open` then refused the chain as truncated. The test was wrong; the
+question it raised was not: a record's day FILE was chosen by its own stamp, and a record is stamped before it waits for the
+append lock (the daemon's up to 5 s). Near midnight a record stamped 23:59:59.9 can be written after one stamped 00:00:00.5;
+it went into the EARLIER day's file, behind records it chains after, and `verify` — and every writer's recovery, so the
+daemon's fail-stop-on-record — read the whole chain as broken. Witness `audit::tests::a_record_stamped_before_midnight_but_written_after_keeps_the_chain_whole`,
+red first (a `prev_hash` chain break at seq 3). **Fixed:** a record is filed under the later of its own day and the chain's
+current day; it keeps its own stamp. M194 (filed by its own day again) red; the control green.
+
+**Runner reads at `7038885`:** macOS `38013294529` (198 passed) and `38013300816` (`delulu-broker` lib, 174), Windows `38013296565` (184) and `38013302335` (172), arm64 `38013298889` (217) and `38013303853` (174) — 0 failed on each, the three new witnesses named over `bin:delulu`, `audit_cli`, `audit_ocsf_cli`, `monitor_cli` and `estop_cli` and the broker's lib. Clippy clean; `check-other-os.sh` clean for Windows and macOS. **The full suite
+alone at `7038885`:** 2,177 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved at its end — but touched DURING it: a test file was edited and one target compiled while it ran (a separate binary hash; the file restored to HEAD before the suite reached it, which ran its own build), recorded in §11.5.
+
+**The lesson.** A key derived from a timestamp — a day file, a partition — is an ORDER claim, and a clock is not an order:
+ask what a record stamped before the last one does. And a fixed date in a test is a date: this one fell on yesterday, and
+that is how the defect showed itself.

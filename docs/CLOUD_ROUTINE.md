@@ -160,8 +160,8 @@ another OS, and then takes about seven minutes itself (run 5).
    (two of its claims were false — AUDIT-REFUSAL-1 and AUDIT-SEQ-1, both fixed, D-V2-100 and D-V2-102) and built step 3 (b), `delulu
    monitor watch` (D-V2-101); run 16 closed **RW 4.47, ACTOR-CUSTODY-1** (D-V2-103 — an actor's effects answer to the run's
    custody and brokers) and **RW 4.50, PLUGIN-CUSTODY-1** (D-V2-104 — the same shape in a plugin export's nested interpreter,
-   and plugins callable under the daemon at last); the next run starts at RW 4.48 (hold the append lock from the floor to the
-   write), then **step 5, the monitor's own death — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
+   and plugins callable under the daemon at last) and **RW 4.48** with AUDIT-DAY-1 (D-V2-105 — the daemon holds the append lock
+   from a seq's floor to its write; a record's day file follows the chain); the next run starts at **step 5, the monitor's own death — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
    and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
@@ -251,7 +251,8 @@ it with its slice once the slice is read green, then dispatch it at `master` or 
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`. Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
 stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
-scratchpad meanwhile, and apply it once the suite has reported. While the suite runs, a fix may be COMMITTED (a commit
+scratchpad meanwhile, and apply it once the suite has reported — and the NEXT slice's witness too (run 16 appended one to a
+test file and compiled it mid-suite; restored in time, but `TREE-MOVED` cannot see an edit that is undone). While the suite runs, a fix may be COMMITTED (a commit
 changes no file) and pushed to the branch for its runner witnesses — `witness.yml` with a warm cache answers in 2–4
 minutes (run 7), so a slice's runner read and its local suite overlap.
 

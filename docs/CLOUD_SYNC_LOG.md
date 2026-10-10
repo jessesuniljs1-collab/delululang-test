@@ -1784,3 +1784,35 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next: (1) read `8f2b848`'s and this commit's push runs and the 2026-10-10 nightly; (2) RW 4.48; (3) **P8-04 step
   5, option (c)**; (4) RW 4.51, 4.46, 4.49. **For the owner:** D-V2-103, D-V2-104 (and D-V2-27 item 4's correction).
   **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-10 — routine run 16 (continued): RW 4.48 closed — the daemon holds the audit chain from a seq's floor to its write; AUDIT-DAY-1 found and closed (D-V2-105)
+- Session: `https://claude.ai/code/session_01FM5pjaFXk3YSik7zQzQXxh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-44t471`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `80c566c`
+- Commits: (1) `7038885` RW 4.48: the daemon holds the audit chain from a seq's floor to its write; AUDIT-DAY-1: a record's
+  day file follows the chain; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-broker/src/audit.rs` (`take_lock`, `next_seq_under`, `append_under`; the day
+  file; a witness), `crates/delulu/src/brokerd.rs` (`TrackingSink` holds the lock per request; the serve loop releases it;
+  two witnesses), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4; §11.5 two lessons),
+  `docs/CLOUD_ROUTINE.md` (step 4's P8 line; step 5 — draft the next witness in the scratchpad), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-105; D-V2-102 item 2 marked closed), `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.48
+  closed, 4.52 added closed), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: the red team's F2 as a probe (60 sandboxed + 12 daemon runs in parallel): 2 and 3 wrong references on
+  `80c566c`'s binary, 0 in three probes on `7038885`'s; witnesses red first (reserved 2, written 3; a `prev_hash` break across
+  midnight); M191–M194 red, control green; clippy clean; `check-other-os.sh` clean for Windows and macOS; runner reads at
+  `7038885` — macOS `38013294529`/`38013300816`, Windows `38013296565`/`38013302335`, arm64 `38013298889`/`38013303853`,
+  green, the three witnesses named; the full suite alone 2,177 passed, 0 failed, 16 ignored (161 binaries). **Not clean:** a
+  test file was edited and one target compiled WHILE that suite ran (the next slice's witness); the file was restored to HEAD
+  before the suite reached the target, which ran its own earlier build (`plugin_load_cli-6fe4557e`) — recorded in §11.5.
+  Push runs read: `80c566c` `38012262994` — success.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.48, AUDIT-DAY-1) and §11.5 (a timestamp-derived key is an order claim;
+  a new witness is an edit).
+- Open / next: (1) read `7038885`'s and this commit's push runs and the 2026-10-10 nightly; (2) RW 4.51 (this run's next
+  slice, if it lands); (3) **P8-04 step 5, option (c)** — IPC `ArmDeadman`/`Beat` for a node, a timer in the daemon's loop
+  (`recv_timeout`), `monitor watch --on-monitor-death quarantine|continue`, witnessed by killing a monitor mid-run;
+  (4) RW 4.46, 4.49. **For the owner:** D-V2-103, D-V2-104, D-V2-105.

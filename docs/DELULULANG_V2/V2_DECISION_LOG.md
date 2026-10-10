@@ -2370,7 +2370,7 @@ refused and (c) stays the owner's.
    the lock only in a true race between that floor and the append, never on a restart or after a record another writer
    appended. **Corrected the same run (red-team F2, RW 4.48):** that race is not rare under contention — 72 parallel
    runs beside the daemon left 2 references naming another writer's record. The numbering holds; the references need the
-   lock held from the floor to the write.
+   lock held from the floor to the write. **Closed by routine run 16 (D-V2-105):** the daemon holds it per request.
 3. **Not chosen:** routing every host record through the daemon (a second path for the same record, and still racy for
    two hosts with no daemon); renumbering only at the lock (uniqueness, but the daemon's references would name other
    records — mutant M176 shows the difference).
@@ -2408,6 +2408,21 @@ refused and (c) stays the owner's.
    carry `ForeignCall`, so a plugin cannot dispatch).
 4. **Not chosen:** a custody client for the PLUGIN's own node — a finer record and an `unload` that stops a call midway, but
    it would make the grant's scopes bind beside the capability's, a change in what a grant means: the owner's.
+
+## D-V2-105 — RW 4.48: the daemon holds the audit chain's append lock from a request's first seq to its last record; AUDIT-DAY-1: a record is filed under the later of its day and the chain's — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **A held lock is a token.** `AuditLog::take_lock` returns the chain's `AppendLock`; `next_seq_under` and `append_under` take
+   it and refuse one for another chain. Every other writer keeps the one-call `append`, which takes and releases the lock.
+2. **The daemon holds it per request.** Its sink takes the lock at the request's first seq or record and keeps it to the
+   last, so a seq stamped into a node or an answer is the seq its record is written under. The serve loop releases it after
+   `handle`, BEFORE the reply is written, and once after the startup record — so the chain is held only while the daemon
+   computes, never while a client reads. D-V2-102 item 2's race is closed, not narrowed.
+3. **A record's day file follows the chain (AUDIT-DAY-1).** Filed under the later of its own stamp's day and the chain's
+   current day; the record keeps its own stamp. Not chosen: re-stamping a late record (its stamp is evidence of when the
+   writer acted) or ordering the chain by stamp (two writers' stamps are not an order; the chain's links are).
+4. **Not chosen for RW 4.48:** renumbering the daemon's references after the fact (every reference site would need the
+   written seq back — a node, an answer, DL1403's text, `overrides_seq`) or routing every host record through the daemon
+   (D-V2-102 item 3's reasons stand).
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
