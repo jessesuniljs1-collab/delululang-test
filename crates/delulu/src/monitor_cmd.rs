@@ -483,9 +483,15 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 "ms_after_last_evidence": after_ms,
             });
             match resp {
-                Ok(Response::Revoked { by_seq, newly_revoked, .. }) => {
+                Ok(Response::Revoked { by_seq, newly_revoked, unrecorded, .. }) => {
                     report["revoked_by_seq"] = json!(by_seq);
                     report["revoked"] = json!(newly_revoked);
+                    // RW 4.58: the quarantine is in force, and the chain does not hold its record.
+                    if let Some(why) = unrecorded {
+                        refused_any = true;
+                        eprintln!("monitor: WARNING — {}", delulu_diag::terminal_line(&why));
+                        report["unrecorded"] = json!(why);
+                    }
                     if !o.json {
                         println!(
                             "quarantine: `{}` — rule {}: {} deny record(s) within {window_ms} ms (seq {}) — revoked at seq {by_seq} ({} node(s)), {after_ms} ms after the last",

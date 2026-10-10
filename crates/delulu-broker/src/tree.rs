@@ -756,6 +756,17 @@ impl Broker {
         res
     }
 
+    /// RW 4.58: withdraw a node whose `issue` record could not be written. It never existed in the chain, so it does
+    /// not stay in the tree — no holder can use it, and no listing shows authority the chain cannot account for. Only
+    /// a LEAF is withdrawn (a node just minted has no children); returns whether it was. Consumes no seq and writes
+    /// nothing: the chain that could not take the node's record would not take a second one either.
+    pub fn withdraw_unrecorded(&mut self, id: &GrantId) -> bool {
+        if self.nodes.values().any(|n| n.parent.as_ref() == Some(id)) {
+            return false;
+        }
+        self.nodes.remove(id).is_some()
+    }
+
     /// The record-free revocation core (phase 5b enforcement). Returns the consumed audit seq and the
     /// outcome; `revoke` wraps it to emit one `"revoke"` record. Consumes exactly one audit seq per
     /// call in every branch (ruling 5), identical to chunk-1 accounting.

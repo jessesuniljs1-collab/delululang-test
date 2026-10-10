@@ -346,9 +346,34 @@ fn persist_adoption_revocations(broker: &Broker, state_dir: &Path) {
     }
 }
 
+/// RW 4.58: a node whose `issue` record could not be written is authority the chain cannot account for — refused
+/// (invariant 26's rule for a synchronous-class use, applied to a mint) and withdrawn from the tree at once, so no
+/// holder can use it. `None` when the record was written.
+fn unrecorded_mint(broker: &mut Broker, failed: &Rc<Cell<bool>>, id: &GrantId) -> Option<Response> {
+    if !failed.get() {
+        return None;
+    }
+    let withdrawn = broker.withdraw_unrecorded(id);
+    Some(Response::Error {
+        code: "DL1401".to_string(),
+        message: format!(
+            "broker could not append the audit record of the new node `{id}` (the chain's append lock was not free within \
+             its wait) — refused{} (fail closed, invariant 26)",
+            if withdrawn { ", and the node withdrawn" } else { "" }
+        ),
+        requires_human: true,
+    })
+}
+
 /// P8-04 step 5: fire every dead-man past its deadline — each revokes its node as itself, the cause in the
 /// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`.
-fn fire_deadmen(broker: &mut Broker, state_dir: &Path, audit_lock: &RefCell<Option<delulu_broker::AppendLock>>) {
+fn fire_deadmen(
+    broker: &mut Broker,
+    state_dir: &Path,
+    audit_lock: &RefCell<Option<delulu_broker::AppendLock>>,
+    failed: &Rc<Cell<bool>>,
+) {
+    failed.set(false);
     let fired = broker.fire_expired_deadmen(std::time::Instant::now());
     if !fired.is_empty() {
         persist_adoption_revocations(broker, state_dir);
@@ -356,6 +381,10 @@ fn fire_deadmen(broker: &mut Broker, state_dir: &Path, audit_lock: &RefCell<Opti
     release_audit_lock(audit_lock);
     for f in &fired {
         log_fired(f);
+    }
+    // RW 4.58: the revocations are in force either way; the log says when the chain does not hold them.
+    if !fired.is_empty() && failed.get() {
+        eprintln!("delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written");
     }
 }
 
@@ -492,8 +521,12 @@ fn handle(
             // Root issuance goes through the gated `issue_root`, so a same-uid IPC client is refused
             // DL1421 in strict mode (DISC-1) — this is the single broker boundary that also covers
             // `grants delegate` auto-root and `run --grant`, since both mint their root via this path.
+            failed.set(false);
             match broker.issue_root(spec_holder(&spec), spec_to_authority(&spec), spec.ttl_millis) {
-                Ok(id) => (Response::Issued { node: id.to_string() }, false),
+                Ok(id) => match unrecorded_mint(broker, failed, &id) {
+                    Some(refused) => (refused, false),
+                    None => (Response::Issued { node: id.to_string() }, false),
+                },
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -505,8 +538,12 @@ fn handle(
             if let Err(d) = broker.guard_check_mint(&child_auth, &parent, owner.as_deref()) {
                 return (deny_response(&d), false);
             }
+            failed.set(false);
             match broker.attenuate(&parent, child_auth, spec_holder(&authority), authority.ttl_millis) {
-                Ok(id) => (Response::Issued { node: id.to_string() }, false),
+                Ok(id) => match unrecorded_mint(broker, failed, &id) {
+                    Some(refused) => (refused, false),
+                    None => (Response::Issued { node: id.to_string() }, false),
+                },
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -516,8 +553,12 @@ fn handle(
             if let Err(d) = broker.guard_check_mint(&child_auth, &parent, owner.as_deref()) {
                 return (deny_response(&d), false);
             }
+            failed.set(false);
             match broker.delegate(&parent, child_auth, spec_holder(&authority), authority.ttl_millis, multi) {
-                Ok((id, token)) => (Response::Delegated { node: id.to_string(), token: token.into_string() }, false),
+                Ok((id, token)) => match unrecorded_mint(broker, failed, &id) {
+                    Some(refused) => (refused, false),
+                    None => (Response::Delegated { node: id.to_string(), token: token.into_string() }, false),
+                },
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -583,14 +624,25 @@ fn handle(
             let why = quarantine_why.take();
             let caller = GrantId::from_trusted(caller);
             let target = GrantId::from_trusted(target);
+            failed.set(false);
             match broker.revoke_saying(&caller, &target, why.as_deref()) {
                 Ok(out) => {
                     persist_adoption_revocations(broker, state_dir);
+                    // RW 4.58: a revocation is never refused for want of its record — it is the e-stop, and refusing
+                    // it would be the unsafe direction — but its answer says the chain does not hold it.
+                    let unrecorded = failed.get().then(|| {
+                        format!(
+                            "the broker could not append this revocation's audit record (the chain's append lock was not \
+                             free within its wait) — the revocation IS in force, but audit seq {} names no record",
+                            out.by_seq
+                        )
+                    });
                     (
                         Response::Revoked {
                             by_seq: out.by_seq,
                             epoch: out.epoch,
                             newly_revoked: out.newly_revoked.iter().map(|g| g.to_string()).collect(),
+                            unrecorded,
                         },
                         false,
                     )
@@ -1111,7 +1163,7 @@ pub(crate) fn serve_inner(
             },
         };
         let Some(next) = next else { break };
-        fire_deadmen(&mut broker, state_dir, &audit_lock);
+        fire_deadmen(&mut broker, state_dir, &audit_lock, &failed);
         let Some((mut conn, req)) = next else { continue };
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
@@ -1922,6 +1974,48 @@ mod tests {
         assert_eq!((beat.as_str(), disarm.as_str(), rearm.as_str()), ("DL1401", "DL1401", "DL1401"));
         assert_eq!(fired.len(), 1, "none of them moved the deadline");
         assert_eq!(late, "DL1403", "a beat after the dead-man fired is told its node is revoked");
+    }
+
+    /// **RW 4.58 (routine run 17's red team, F-06): an operation whose audit record could not be written must not
+    /// answer as if it had been.** The test holds the chain's append lock past the daemon's 5 s wait. A revoke still
+    /// TAKES EFFECT — it is the e-stop, and refusing it would be the unsafe direction — but its answer says the record
+    /// was lost, so the operator knows the chain does not hold it. A mint whose `issue` record was lost is refused and
+    /// its node revoked: authority with no record of its creation is what invariant 26 refuses. Before the fix the
+    /// revoke answered a plain `ok … (audit seq N)` for a seq that was never written, and the mint answered `Issued`.
+    #[test]
+    fn a_revoke_whose_record_was_lost_says_so_and_a_mint_whose_record_was_lost_is_refused() {
+        let state = temp_state("lostrec");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let revoked = request(&state, ReqBody::Revoke { caller: root.clone(), target: root.clone() });
+        let minted = request(&state, ReqBody::Issue(spec(&["Write"])));
+        drop(held);
+        let root_state = match request(&state, ReqBody::NodeState { node: root.clone() }) {
+            Ok(Response::NodeState { state, .. }) => state,
+            other => panic!("node state: {other:?}"),
+        };
+        let listed = match request(&state, ReqBody::List) {
+            Ok(Response::Listed { nodes }) => nodes,
+            other => panic!("list: {other:?}"),
+        };
+        stop_daemon(&state, handle);
+        assert_eq!(root_state, "revoked", "the revoke is in force whatever became of its record");
+        let shown = format!("{revoked:?}");
+        assert!(
+            shown.contains("Revoked") && shown.contains("unrecorded: Some("),
+            "a revoke whose record was lost must say so, not answer a plain success: {shown}"
+        );
+        match minted {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a mint whose issue record was lost must be refused: {other:?}"),
+        }
+        let live: Vec<&str> = listed.iter().filter(|n| n.state == "live").map(|n| n.id.as_str()).collect();
+        assert!(live.is_empty(), "no node lives that the chain does not record: {live:?}");
     }
 
     fn spec(effects: &[&str]) -> AuthoritySpec {

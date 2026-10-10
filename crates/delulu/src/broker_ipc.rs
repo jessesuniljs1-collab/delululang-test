@@ -265,7 +265,15 @@ pub enum Response {
     Adopted { node: String, fingerprint: String, ttl_millis: Option<i64> },
     /// `Renew` reply (RFC 0001 F4): the uplink-lease deadline now in force.
     Renewed { node: String, ttl_millis: i64 },
-    Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
+    Revoked {
+        by_seq: u64,
+        epoch: u64,
+        newly_revoked: Vec<String>,
+        /// RW 4.58: set when the revocation took effect but its audit record could not be written (the chain's
+        /// append lock was not free within its wait) — then `by_seq` names no record, and the operator is told so.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unrecorded: Option<String>,
+    },
     /// `DeviceRefused` reply: the seq of the `deny` record written (and `DisarmDeadman`'s: the
     /// `deadman-disarm` record's).
     Recorded { seq: u64 },
@@ -379,7 +387,7 @@ mod tests {
 
     #[test]
     fn frame_roundtrips_a_response() {
-        let resp = Response::Revoked { by_seq: 7, epoch: 3, newly_revoked: vec!["g_a".into(), "g_b".into()] };
+        let resp = Response::Revoked { by_seq: 7, epoch: 3, newly_revoked: vec!["g_a".into(), "g_b".into()], unrecorded: None };
         let mut buf = Vec::new();
         write_frame(&mut buf, &resp).unwrap();
         let got: Response = read_frame(&mut &buf[..]).unwrap();

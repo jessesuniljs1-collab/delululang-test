@@ -974,3 +974,26 @@ fn a_monitors_memory_is_closed_to_its_own_user() {
     assert!(armed, "the baseline — the monitor holds a dead-man's key: {:?}", mon.stderr_seen);
     assert!(mem.is_err(), "a process of the same user opened the memory of a monitor holding a dead-man's key");
 }
+
+/// **A revoke whose audit record was lost says so, in words and in its exit code** (RW 4.58 — routine run 17's red
+/// team, F-06). Another writer holds the chain's append lock past the daemon's wait: `grants revoke` still takes effect
+/// — it is the e-stop — but it exits 1 and warns that the chain does not hold the revocation, where it printed a plain
+/// `ok … (audit seq N)` for a seq that was never written. An operator's script reading the exit code learns that the
+/// record is missing; the node is revoked either way.
+#[test]
+fn a_revoke_whose_record_was_lost_warns_and_exits_one_and_still_takes_effect() {
+    let f = setup("lostrev");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (node, _) = delegate(&f, &["--holder-desc", "a run"]);
+    let log = delulu_broker::AuditLog::open(f.state.join("audit")).unwrap();
+    let held = log.take_lock().expect("the test holds the chain");
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &node]);
+    drop(held);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert_eq!(o.status.code(), Some(1), "a revoke the chain does not hold must not exit 0:\n{so}\n{se}");
+    assert!(se.contains("warning[DL1401]") && se.contains("IS in force"), "and it says why:\n{so}\n{se}");
+    let states = node_states(&f);
+    assert_eq!(states[&node].0, "revoked", "the revocation took effect: {states:?}");
+}

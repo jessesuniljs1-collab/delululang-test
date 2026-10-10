@@ -6532,10 +6532,15 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 Ok(r) => r,
                 Err(c) => return c,
             };
-            let crate::broker_ipc::Response::Revoked { by_seq, epoch, newly_revoked } = resp else {
+            let crate::broker_ipc::Response::Revoked { by_seq, epoch, newly_revoked, unrecorded } = resp else {
                 eprintln!("error: unexpected revoke response: {resp:?}");
                 return 2;
             };
+            // RW 4.58: the revocation is in force, and the chain does not hold it — said, and the exit says it too.
+            if let Some(why) = &unrecorded {
+                eprintln!("warning[DL1401]: {}", delulu_diag::terminal_line(why));
+            }
+            let code = i32::from(unrecorded.is_some());
             if json {
                 print_success_envelope(
                     "grants",
@@ -6543,6 +6548,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                         "subcommand": "revoke",
                         "by_seq": by_seq, "epoch": epoch, "newly_revoked": newly_revoked,
                         "revocation_takes_effect": delulu_diag::REVOCATION_BOUND,
+                        "unrecorded": unrecorded,
                     }),
                 );
             } else {
@@ -6558,7 +6564,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 // The honest §4.2 bound, stated at the point of revocation (playbook trap 3).
                 eprintln!("takes effect: {}", delulu_diag::REVOCATION_BOUND);
             }
-            0
+            code
         }
         "delegate" => cmd_grants_delegate(args, &state_dir, json),
         // RFC 0001 F3 — federation. `certify` and `pubkey` are the GROUND side (offline, no
