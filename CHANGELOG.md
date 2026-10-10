@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a lost audit record is never answered as success, 2026-10-10
+
+- **Fixed (RW 4.58): when another writer held the audit chain too long, `delulu grants revoke` printed `ok … (audit seq N)` for a
+  record that was never written**, and a new grant could be created with no record of it. A revoke still takes effect, but now
+  warns that the chain does not hold it and exits 1 (`--json`: `unrecorded`); a grant whose creation could not be recorded is
+  refused and withdrawn.
+
 ## Unreleased — a plugin's revoke stops its running export, 2026-10-10
 
 - **Fixed (RW 4.56): `delulu grants revoke` of a plugin's grant did not stop an export that was already running** — a plugin

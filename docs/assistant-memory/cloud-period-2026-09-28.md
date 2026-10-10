@@ -200,3 +200,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   red once on this run's own witness — its baseline asserted a throughput (200 requests in 1.6 s; CI's parallel test job answered
   45). Lessons: a baseline is the state a witness needs, never a throughput; a mutant red only while another load shared the VM is
   not yet red.
+- **RW 4.58 closed for revocations and mints the same run** (D-V2-109): a revoke whose audit record was lost still takes effect
+  but says so and exits 1; a mint whose record was lost is refused and withdrawn. Its first form revoked the unrecorded node —
+  two more 5 s lock waits, and its own witness timed out at the client's 15 s deadline.

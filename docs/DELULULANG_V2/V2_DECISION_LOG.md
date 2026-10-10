@@ -2485,6 +2485,18 @@ refused and (c) stays the owner's.
    hands a plugin with an empty grant, the shape callbacks and handed actuators rely on; and changing the CLI's message to "the
    next call" — weaker, and an e-stop's handle must stop a loop.
 
+## D-V2-109 — RW 4.58: a daemon operation whose audit record was lost never answers as if it had been recorded — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **A revocation is never refused for want of its record** — refusing an e-stop would be the unsafe direction — **but it says
+   so:** `Response::Revoked.unrecorded` carries the reason; `grants revoke` warns (`warning[DL1401]`) and exits 1, a monitor's
+   quarantine reports it and exits 1, a fired dead-man logs it.
+2. **A mint whose record was lost is refused and withdrawn.** Authority the chain cannot account for is what invariant 26
+   refuses for a synchronous-class use; a new node is the same case. It is removed from the tree outright — a leaf just minted,
+   with no second record (a revocation record would meet the same held lock). Not chosen: revoking it (two more lock waits, past
+   a client's 15 s deadline — the first form of this fix, which its own witness timed out).
+3. **Observability, not enforcement still holds** (invariant 26, trap 6) in the sense it was written: no DECISION reads the
+   chain. What changes is the ANSWER — a record that was not written is never claimed.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

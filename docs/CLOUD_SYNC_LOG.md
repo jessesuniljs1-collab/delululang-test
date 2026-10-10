@@ -1966,3 +1966,39 @@ it on `origin` was made in the cloud and is listed below.
   read green at this commit), and the 2026-10-10 nightly; (2) RW 4.58 (a lost audit record answered as success), RW 4.57 (a killed run's nodes), RW 4.53 (the chain's
   catch-up under contention); (3) RW 4.46 and P8-04's two remaining rules; (4) P9. **For the owner:** D-V2-106, D-V2-107,
   D-V2-108. **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-10 — routine run 17 (closing): RW 4.58 closed for revocations and mints — a lost audit record is never answered as success (D-V2-109); the run's close
+- Session: `https://claude.ai/code/session_01WzxFaZVw8HRNkGs9neji5s`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-f86pm9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `ada8fd8`
+- Commits: (1) `75e748e` RW 4.58: a lost audit record is never answered as success (revocations and mints); (2) this entry's
+  commit — the records and the loop's new line
+- Files and folders: (1) M `crates/delulu-broker/src/tree.rs` (`withdraw_unrecorded`), `crates/delulu/src/broker_ipc.rs`
+  (`Revoked.unrecorded`), `crates/delulu/src/brokerd.rs` (`unrecorded_mint`; the revoke's report; a witness),
+  `crates/delulu/src/cli.rs` (`grants revoke` warns and exits 1), `crates/delulu/src/monitor_cmd.rs`,
+  `crates/delulu/tests/monitor_cli.rs` (a witness), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand),
+  `docs/CLOUD_ROUTINE.md` (step 5: a timing read during a sous-chef's load experiments is not evidence),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-109), `docs/REMAINING_WORK.md` (4.58 partly closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: both witnesses red first (a revoke answered `Revoked { by_seq: 3 }` for a seq never written; a mint answered
+  `Issued`); M215–M218 red, controls green; clippy clean; `check-other-os.sh` clean for Windows and macOS; runner reads at
+  `75e748e` — Windows `38032573759`, macOS `38032575295`, arm64 `38032576941` — green, both witnesses named; the full suite
+  alone at `75e748e`: 2,198 passed, 0 failed, 16 ignored (161 binaries). Push runs read this run, all success unless said:
+  `ed7f7b6` `38017544108`; `3e9c496` `38029067385` — **failure** (the busy-daemon witness's baseline, fixed in `a76018f`) with
+  its `openshell` `38029067306` and `ocsf` `38029067286` green; `02cc186` `38029490424`; `c83ebe6` `38030475956`; `9be433d`
+  `38030530082`; `a76018f` `38031803525`; `ada8fd8` `38031871369`. `75e748e`'s and this commit's push runs are unread at the
+  close.
+- **The run in one paragraph:** P8-04 step 5 built (D-V2-106 — a dead monitor quarantines; the broker holds a dead-man for its
+  node); run 16's red-team pass redone, finding CLOSURE-SCOPE-1 (HIGH) and five more; RW 4.55 (D-V2-107), RW 4.56 (D-V2-108)
+  and RW 4.58 for revocations and mints (D-V2-109) closed, each witnessed red first, mutated and read on the runners; `master`
+  red once, on this run's own witness's throughput baseline, fixed within the run.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (CLOSURE-SCOPE-1, RW 4.56) and §11.5 (this run's four lessons).
+- Open / next, in order: (1) read `75e748e`'s and this commit's push runs and the 2026-10-10 nightly; (2) RW 4.57 (a killed
+  run's nodes stay live), RW 4.53 (the chain's catch-up under contention — the red team measured a false DL1405 at 60,000
+  records), RW 4.58's rest; (3) RW 4.46 and P8-04's `special-use` and `break-glass` rules; (4) P9. **For the owner:** D-V2-106,
+  D-V2-107, D-V2-108, D-V2-109 (and D-V2-103 to D-V2-105). **On 2026-10-12 a run starts the closing entry for the cloud period**
+  (the routine's prompt).

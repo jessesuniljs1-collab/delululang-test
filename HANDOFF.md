@@ -80,8 +80,9 @@ the assistant's memory — which now also travels file by file in
   host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
   (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Routine run 17 (2026-10-10):** P8-04 step 5 — a dead
   monitor quarantines: the broker holds a dead-man for its node (D-V2-106); CLOSURE-SCOPE-1 found by its red-team pass and
-  closed (D-V2-107), and RW 4.56 (D-V2-108 — a plugin node's revoke reaches its running export's next use). **Next:** the
-  rest of that pass's findings (RW 4.58, 4.57, 4.53), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
+  closed (D-V2-107), RW 4.56 (D-V2-108 — a plugin node's revoke reaches its running export's next use) and RW 4.58 for
+  revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Next:** RW 4.57 and 4.53, RW 4.58's
+  rest, RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

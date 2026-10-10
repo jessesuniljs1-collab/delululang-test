@@ -266,7 +266,9 @@ to break the new guarantee and to list every oddity, against a frozen COPY of th
 directory outside the repository, while the head chef keeps working (run 2's found seven defects
 around a guarantee that held). Re-run each finding before using it. **Brief it to APPEND each finding to `FINDINGS.md` in its
 scratch directory the moment it has one** (run 16: a container restart killed a pass fifteen minutes in, and everything it
-had found lived only in the final message it never sent).
+had found lived only in the final message it never sent). **While it runs load experiments in the VM, a timing-shaped witness or mutant read
+there is not evidence** — re-read it once the pass has ended (run 17: mutant M201 was red 3 of 3 under the pass's load and
+survived on a quiet VM).
 
 **6. Close it.** After the last edit: `survey build`, `check`, `findings` (0 errors), `doctor --check`.
 Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees; a `D-V2-nn` for each

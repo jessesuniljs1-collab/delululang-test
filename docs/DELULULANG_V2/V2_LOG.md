@@ -4873,3 +4873,26 @@ a 2,001-node tree, so each answer costs the loop milliseconds and a request is a
 the baseline is that requests were answered AFTER the deadline. M201 red 4 of 4 on a quiet VM, M200 red, controls green; the test
 green 3 of 3 with all four CPUs busy (40–51 listings). The wire-key test's period widened from 400 ms to 1.5 s for the same reason
 (M204 still red). The fixed witness read on the runners at `a76018f`: macOS `38031308292` (71 listings, 43 after the deadline), Windows `38031306607` (45, 31) — green. **The full suite alone at `a76018f`:** 2,196 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved; `ff91be5` and `a76018f` pushed to `master`.
+
+## 2026-10-10 — routine run 17 (continued): RW 4.58 closed for revocations and mints — a lost audit record is never answered as success (D-V2-109)
+
+**The defect** (the red team's F-06; code reading agreed — `tree.rs`'s `record_op` logs a failed append and continues — and now
+witnessed). When another writer held the chain's append lock past the daemon's 5 s wait, the operation still happened and its
+answer claimed a record: **witnessed red** — a `Revoke` answered `Revoked { by_seq: 3, … }` for a seq that was never written,
+and an `Issue` answered `Issued`, a live node with no record of its creation. Invariant 26 already refused a synchronous-class USE
+the daemon could not record (`Check`, `Expose`, `Verify`); revocations and mints had no such check.
+
+**Fixed** (D-V2-109): a revocation is never refused for want of its record — it is the e-stop — but `Response::Revoked` carries
+`unrecorded` with the reason, `grants revoke` prints `warning[DL1401]: … the revocation IS in force, but audit seq N names no record`
+and exits 1 (`--json` carries `unrecorded`), a monitor's quarantine reports it and the monitor exits 1, and a dead-man that fired
+says so in `broker.log`. A mint (`Issue`, `Attenuate`, `Delegate`) whose `issue` record was lost is refused DL1401 and the node
+WITHDRAWN from the tree (`Broker::withdraw_unrecorded` — a leaf just minted, removed without a second record the held chain
+would refuse too). **Witnesses:** `brokerd` `a_revoke_whose_record_was_lost_says_so_and_a_mint_whose_record_was_lost_is_refused`
+(the test holds the chain's lock itself; red first, as above) and `monitor_cli`
+`a_revoke_whose_record_was_lost_warns_and_exits_one_and_still_takes_effect`. **Mutants** M215/M215b (no `unrecorded`), M216 (a
+lost mint record answered `Issued`), M217 (the node not withdrawn), M218 (`grants revoke` exits 0) — red; controls green. **Read on the runners at `75e748e`** over `bin:delulu`, `monitor_cli`, `grants_cli` and `json_contract`: Windows `38032573759`, macOS `38032575295`, arm64 `38032576941` — 0 failed, both witnesses named on each. Clippy clean; `check-other-os.sh` clean for Windows and macOS.
+**The full suite alone at `75e748e`:** 2,198 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved; pushed to `master`.
+
+**Left of RW 4.58:** the lost seq can still be TAKEN by another writer (a sandboxed host numbers "last + 1" under the lock it
+finally gets), so a reference the daemon handed out — now flagged — may later name another record; `Adopt`, `DeviceRefused`,
+`ArmDeadman`/`DisarmDeadman` and the guard's records do not yet check; and why a writer holds the lock that long is RW 4.53.
