@@ -186,3 +186,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   its write (2–3 wrong references in 72 parallel runs before, 0 after); and a record stamped before midnight but written after
   another writer's post-midnight record had been filed in the earlier day's file, breaking the chain — found because a
   test's fixed timestamp fell on yesterday.
+- **RW 4.51 closed the same run:** a plugin's grant node is revoked when its run ends (10g's rule for device nodes). The next
+  run starts at P8-04 step 5, option (c) — sized in `V2_LOG.md` 2026-10-10 (closing).

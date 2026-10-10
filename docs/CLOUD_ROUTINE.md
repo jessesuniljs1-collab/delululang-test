@@ -161,7 +161,8 @@ another OS, and then takes about seven minutes itself (run 5).
    monitor watch` (D-V2-101); run 16 closed **RW 4.47, ACTOR-CUSTODY-1** (D-V2-103 — an actor's effects answer to the run's
    custody and brokers) and **RW 4.50, PLUGIN-CUSTODY-1** (D-V2-104 — the same shape in a plugin export's nested interpreter,
    and plugins callable under the daemon at last) and **RW 4.48** with AUDIT-DAY-1 (D-V2-105 — the daemon holds the append lock
-   from a seq's floor to its write; a record's day file follows the chain); the next run starts at **step 5, the monitor's own death — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
+   from a seq's floor to its write; a record's day file follows the chain) and RW 4.51; the next run starts at **step 5, the
+   monitor's own death (sized by run 16, `V2_LOG.md` 2026-10-10 closing) — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
    and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.

@@ -1816,3 +1816,37 @@ it on `origin` was made in the cloud and is listed below.
   slice, if it lands); (3) **P8-04 step 5, option (c)** — IPC `ArmDeadman`/`Beat` for a node, a timer in the daemon's loop
   (`recv_timeout`), `monitor watch --on-monitor-death quarantine|continue`, witnessed by killing a monitor mid-run;
   (4) RW 4.46, 4.49. **For the owner:** D-V2-103, D-V2-104, D-V2-105.
+
+### 2026-10-10 — routine run 16 (closing): RW 4.51 closed — a plugin's node ends with its run (its first form's regression caught before `master`); the next run's step 5, sized
+- Session: `https://claude.ai/code/session_01FM5pjaFXk3YSik7zQzQXxh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-44t471`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `9eb6f90`
+- Commits: (1) `d164a68` RW 4.51: a plugin's grant node does not outlive the run that minted it (its first form — red on the
+  runners, never on `master` alone); (2) `d7e2b8f` RW 4.51 fixed again: end_of_run revokes only a run's PLUGIN nodes;
+  (3) this entry's commit — the records
+- Files and folders: (1)+(2) M `crates/delulu-runtime/src/custody.rs` (`end_of_run`), `crates/delulu-runtime/src/interp.rs`
+  (`end_run`), `crates/delulu/src/broker_client.rs` (`minted`, plugin holders only; `end_of_run`), `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu/src/brokerd.rs` (a witness), `crates/delulu/tests/plugin_load_cli.rs` (a witness), `docs/survey/*`. (3) M
+  `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P8 line),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.51 closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: RW 4.51 red first (`grants list`: the plugin's node `live`); M195–M198 red, controls green; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS. **The first form's regression:** suite 5 at `d164a68` — 2,177 passed,
+  **1 failed** (`estop_cli` `with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm`, cargo exit 101); runner reads
+  `38014455713`, `38014457962`, `38014459712` red on the same test. Fixed in `d7e2b8f`: macOS `38015462027`, Windows `38015464061`, arm64 `38015466138` — green, both witnesses and `estop_cli`'s control named. Suite 6 at `d7e2b8f`:
+  2,179 passed, 0 failed, 16 ignored (161 binaries), exit 0. Push runs read this run, all success: `33f0518` `38010274353`, `2eb7fca` `38010619232`, `80c566c` `38012262994`,
+  `7038885` `38013916987` (and its OCSF run `38013916957`), `9eb6f90` `38014095655`.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 and §11.5 — this run's six lessons (every `Interp::new`; `--no-fail-fast` for
+  mutants; a fail-closed path hides what stands behind it; a timestamp-derived key is an order claim; a new witness is an
+  edit; a function given a new consequence has callers the slice did not look at).
+- Open / next, in order: (1) read this commit's push run and the 2026-10-10 nightly; (2) **P8-04 step 5, option (c)** — the
+  plan is in `V2_LOG.md` 2026-10-10 (closing): `ArmDeadman`/`Beat` for a node, the daemon's loop on `recv_timeout`, `monitor
+  watch --on-monitor-death quarantine|continue`, witnessed by killing a monitor mid-run; (3) RW 4.46 and the `special-use` rule;
+  (4) RW 4.49; (5) a red-team pass (Sonnet 5.5) on this run's four slices — custody now crosses into actors' and plugins'
+  interpreters and the daemon holds the chain per request. **For the owner:** D-V2-103, D-V2-104 (with D-V2-27 item 4's
+  correction), D-V2-105. **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).

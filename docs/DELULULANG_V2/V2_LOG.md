@@ -4678,3 +4678,38 @@ alone at `7038885`:** 2,177 passed, 0 failed, 16 ignored (161 binaries), cargo e
 **The lesson.** A key derived from a timestamp — a day file, a partition — is an ORDER claim, and a clock is not an order:
 ask what a record stamped before the last one does. And a fixed date in a test is a date: this one fell on yesterday, and
 that is how the defect showed itself.
+
+## 2026-10-10 — routine run 16 (closing): RW 4.51 closed — a plugin's grant node does not outlive its run; the run's close
+
+**RW 4.51, measured by this run's PLUGIN-CUSTODY-1 probe.** After a run under the daemon that loaded and called a plugin,
+`grants list` showed the plugin's node `[live]` beside the device node `[revoked@9]`: a live grant nobody holds, offered to an
+operator reading the tree — the shape device nodes had before 10g's `a_device_node_does_not_outlive_the_run_that_minted_it`.
+Reachable only since D-V2-104 made plugins callable under the daemon. **Fixed** (no new decision: 10g's rule for device nodes,
+applied to plugin nodes): `Custody::end_of_run` (a no-op by default — embedded custody's tree ends with the process); the
+daemon's client remembers each plugin node it attenuated, and when the run ends each revokes itself (a node may always revoke
+itself; idempotent after an `unload`). `delulu run` calls it once `main` and every actor are done. **Witness**
+`plugin_load_cli` `under_the_broker_daemon_a_plugins_node_does_not_outlive_its_run`, red first (`live`); **mutants** M195
+(`run` never calls it), M196 (it revokes nothing), M197 (minted nodes are not remembered) red, the control green.
+
+**Its first form (`d164a68`) broke a control elsewhere — caught by the full suite and by all three runners, never on
+`master`.** It remembered EVERY node `attenuate` minted, and a run's device nodes are minted through `attenuate` too
+(`mint_device_nodes`): `end_of_run` revoked them while the device watchdog still ran, which read it as an operator's e-stop —
+`estop_cli`'s `with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm` lost its arm to an "operator-revoke" nobody
+made (suite 5 locally; runner reads `38014455713`, `38014457962`, `38014459712`, all red on that test). The slice's own witness
+and mutants were green throughout: the defect was in a caller the slice never looked at. **Fixed in `d7e2b8f`:** only a
+holder of kind `plugin` is remembered; a device's node stays `close_devices`' to revoke, after the device broker stops. A
+deterministic witness beside the timing one — `brokerd::tests::at_the_end_of_a_run_its_plugin_nodes_are_revoked_and_its_device_nodes_left_to_the_device_close`
+— red under M198 (every node remembered again); `estop_cli` green three times in a row locally.
+**Runner reads at `d7e2b8f`:** macOS `38015462027` (194 passed), Windows `38015464061` (180), arm64 `38015466138` (213) — 0 failed on each over `bin:delulu`, `plugin_load_cli`, `estop_cli` and `examples_run`, both witnesses and `estop_cli`'s control named green. Clippy clean; `check-other-os.sh` clean for Windows and macOS. **The full suite
+alone at `d7e2b8f`:** 2,179 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**This run's push runs:** `33f0518` `38010274353`, `2eb7fca` `38010619232`, `80c566c` `38012262994`, `7038885` `38013916987` (its OCSF run `38013916957`), `9eb6f90` `38014095655` — success on every job; `d7e2b8f`'s and the closing commit's are read by the closing entry or the next run.
+
+**Where the next run starts — P8-04 step 5, option (c), sized by this run and not begun** (too large to finish verified inside
+what remained): a broker dead-man for a node. Its pieces, read against the code: two IPC requests (`ArmDeadman { node,
+period_ms, on_death }` and `Beat { node }`, a disarm on a clean exit); the daemon's serve loop waits on `requests.recv()`, so
+the timer is a `recv_timeout` at the nearest deadline, and an expiry is `tree::revoke(node, node)` with the cause recorded
+(arming a FUTURE self-revocation adds no authority — any node may revoke itself); `monitor watch --on-monitor-death
+quarantine|continue` (the default `quarantine`; `continue` arms none) arms it on `g_M` and beats each poll. A new flag on an
+existing subcommand: `json_contract`'s tables and the help text, not the five gates. Witness: kill a monitor mid-run (its
+run under `g_M` loses its node within a measured bound, the cause in the chain); `continue` keeps it; a clean exit disarms.

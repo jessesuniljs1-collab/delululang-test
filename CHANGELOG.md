@@ -11,6 +11,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a plugin's grant ends with its run, 2026-10-10
+
+- **Fixed (RW 4.51): after a run under `--broker daemon` that loaded a plugin, `delulu grants list` still showed the
+  plugin's grant as live** — a grant nobody held. It is revoked when the run ends now, as a run's device grants already were.
+
 ## Unreleased — the audit chain: true references under contention, and a chain that survives midnight, 2026-10-10
 
 - **Fixed (RW 4.48): with sandboxed runs writing beside the broker daemon, a node's or an answer's audit seq could name

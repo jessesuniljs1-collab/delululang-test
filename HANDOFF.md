@@ -78,7 +78,7 @@ the assistant's memory — which now also travels file by file in
   why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Routine run 16 (2026-10-10):** ACTOR-CUSTODY-1 closed — an actor's
   effects answer to the run's custody and brokers (D-V2-103); PLUGIN-CUSTODY-1 the same — a plugin export runs under the
   host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
-  (D-V2-105). **Next:** **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
+  (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Next:** **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
   4.46 (the egress client's refusals), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
@@ -1147,6 +1147,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   appended to a test file and its target compiled while the full suite ran. Caught by the head chef, not by a tool: the file
   was restored before the suite reached that target (which ran its own earlier build, a separate hash), so the suite's verdict
   stands — but `TREE-MOVED` cannot see an edit that is undone. While a suite runs, draft the next witness in the scratchpad.
+- **A function you give a new consequence has callers you did not write the slice for** (routine run 16, RW 4.51): `end_of_run`
+  revoked every node `attenuate` had minted — and device nodes are minted through `attenuate` too, so a run's arm was e-stopped
+  at its end while the watchdog still ran. The slice's witness and three mutants were green; the full suite and three runners
+  were red. Before giving a shared function a new effect, list its callers (`grep`, `survey affected-by`) and run their targets.
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch
