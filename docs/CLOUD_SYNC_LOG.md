@@ -2002,3 +2002,19 @@ it on `origin` was made in the cloud and is listed below.
   records), RW 4.58's rest; (3) RW 4.46 and P8-04's `special-use` and `break-glass` rules; (4) P9. **For the owner:** D-V2-106,
   D-V2-107, D-V2-108, D-V2-109 (and D-V2-103 to D-V2-105). **On 2026-10-12 a run starts the closing entry for the cloud period**
   (the routine's prompt).
+
+### 2026-10-10 — routine run 17 (postscript): the last push runs read; RW 4.59 found (macOS, open)
+- Session: `https://claude.ai/code/session_01WzxFaZVw8HRNkGs9neji5s`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `f0a39e7`
+- Commits: this one — records only
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.59 opened), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `f0a39e7`'s push run `38033226509` — success, so `master` is green at the close; `75e748e`'s `38033108211` — failure on
+  `test (macos-latest)`, one test (`sandbox_devices_cli` `a_wedged_guest_that_never_asks_again_still_loses_its_actuator`: the
+  guest's first command 28 ms past a 150 ms heartbeat); not reproduced on Linux under six busy loops (5 of 5); recorded as RW 4.59.
+- Redo on the laptop: nothing.
+- Open / next, in order: (1) read THIS commit's push run (unread at the close) and the 2026-10-10 and 2026-10-11 nightlies;
+  (2) **RW 4.59** — measure on a macOS runner first; (3) RW 4.57, RW 4.53, RW 4.58's rest; (4) RW 4.46 and P8-04's two remaining
+  rules; (5) P9. **For the owner:** D-V2-106 to D-V2-109. **On 2026-10-12 a run starts the closing entry for the cloud period.**

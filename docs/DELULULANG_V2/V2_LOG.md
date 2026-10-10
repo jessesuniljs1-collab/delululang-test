@@ -4896,3 +4896,15 @@ lost mint record answered `Issued`), M217 (the node not withdrawn), M218 (`grant
 **Left of RW 4.58:** the lost seq can still be TAKEN by another writer (a sandboxed host numbers "last + 1" under the lock it
 finally gets), so a reference the daemon handed out — now flagged — may later name another record; `Adopt`, `DeviceRefused`,
 `ArmDeadman`/`DisarmDeadman` and the guard's records do not yet check; and why a writer holds the lock that long is RW 4.53.
+
+## 2026-10-10 — routine run 17 (postscript): the last push runs read — `f0a39e7` green, `75e748e` red on macOS (RW 4.59, open)
+
+**`f0a39e7`** (the closing commit, which holds all of this run's code): push run `38033226509` — success on every job; its
+`openshell` and `ocsf` runs were green on `75e748e` (`38033108172`, `38033108184`). **`75e748e`**: push run `38033108211` —
+**failure**, one job, `test (macos-latest)`, one test of 2,171: `sandbox_devices_cli`
+`a_wedged_guest_that_never_asks_again_still_loses_its_actuator` — the sandboxed guest's FIRST command was answered `REVOKED: the
+lease on arm0/elbow was revoked (missed-heartbeat)`, "beat overdue by 28056 µs" on a 150 ms heartbeat. The path is P8-01's (a
+sandboxed run's device broker, no daemon) and none of this run's changes touch it; the same code passed in `f0a39e7`'s run; the
+witness passed 5 of 5 on Linux with six busy loops on four CPUs. Recorded as **RW 4.59**, open — measure the program-send-to-first-
+command interval on a macOS runner under the parallel suite before choosing a fix, and never lengthen the beat to make it green.
+`master` is green at the close (`f0a39e7`).
