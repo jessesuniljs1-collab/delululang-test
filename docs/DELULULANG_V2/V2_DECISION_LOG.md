@@ -2393,6 +2393,22 @@ refused and (c) stays the owner's.
 4. **Unchanged:** an actor gets no plugin engine and no foreign bindings, so its `load` and `root.foreign(load)` still fail
    closed. A plugin export's nested interpreter has the same shape as the worker had (RW 4.50) — its own decision.
 
+## D-V2-104 — PLUGIN-CUSTODY-1: a plugin export runs under the host's custody and the run's device broker; the daemon answers a plugin's liveness — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **The nested interpreter shares the host's custody**, for the call's duration (an `Rc`; the host is suspended while the
+   export runs), and the run's device broker. A plugin's use of a capability its host handed it is checked and recorded as
+   the host's own use of that capability is, and it is the run's node's use — as D-V2-103 decided for an actor's.
+2. **`BrokerClientCustody::liveness`** asks the daemon on every call (one `NodeState` round-trip): live, revoked (with the
+   revoking seq for DL0801), or `Unknown` — dead — for anything else, the broker unreachable included. Until now no plugin
+   could be called under the daemon at all (PLUGIN-DAEMON-1). **D-V2-27 item 4** ("in embedded and daemon custody alike")
+   was true of the node's creation and never of a call under the daemon; it is the owner's ruling and is left as written —
+   this entry is its correction.
+3. **Unchanged:** `load` refuses grants carrying `Declassify` or `ForeignCall` — custody alone decides them, and the host's
+   custody answers for the run's node, which may hold more than the plugin's grant. Compute is not passed (no grant can
+   carry `ForeignCall`, so a plugin cannot dispatch).
+4. **Not chosen:** a custody client for the PLUGIN's own node — a finer record and an `unload` that stops a call midway, but
+   it would make the grant's scopes bind beside the capability's, a change in what a grant means: the owner's.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -1755,3 +1755,32 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next: (1) read `33f0518`'s and this commit's push runs and the 2026-10-10 nightly; (2) **RW 4.50, PLUGIN-CUSTODY-1**
   — witness or refute; (3) RW 4.48; (4) **P8-04 step 5, option (c)**; (5) RW 4.46 and 4.49. **For the owner:** D-V2-103.
   **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).
+
+### 2026-10-10 — routine run 16 (continued): PLUGIN-CUSTODY-1 witnessed and closed; plugins callable under the daemon (D-V2-104)
+- Session: `https://claude.ai/code/session_01FM5pjaFXk3YSik7zQzQXxh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-44t471`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `2eb7fca`
+- Commits: (1) `8f2b848` PLUGIN-CUSTODY-1: a plugin export runs under the host's custody and devices; plugins callable
+  under the daemon; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-runtime/src/interp.rs` (`custody` an `Rc`; `call_plugin_export` shares it and the
+  device broker), `crates/delulu/src/broker_client.rs` (`liveness`), `crates/delulu/tests/plugin_load_cli.rs` (three
+  witnesses), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4; §11.5 a lesson),
+  `docs/CLOUD_ROUTINE.md` (step 4's P8 line), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-104, correcting
+  D-V2-27 item 4 without editing the owner's text), `V2_PHASE_STATUS.md` (P2's daemon note; P8), `docs/REMAINING_WORK.md`
+  (4.50 closed, 4.51 opened), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: red first — embedded, `rate_hz=1`, the plugin's two commands both `COMMANDED`; under the daemon every plugin
+  call `Revoked 0`; with liveness alone, 0 of 2 of the plugin's uses in the chain. Mutants M187–M190 red, control green;
+  clippy clean; `check-other-os.sh` clean for Windows and macOS; `delulu-runtime`'s unit tests green; runner reads at
+  `8f2b848` over six targets — macOS `38011420070`, Windows `38011422634`, arm64 `38011424714` (47 passed, 0 failed), green;
+  the full suite alone 2,174 passed, 0 failed, 16 ignored (161 binaries). Push runs read: `33f0518` `38010274353` and
+  `2eb7fca` `38010619232` — success. RW 4.51 measured by hand (`grants list` after a run: the plugin's node `[live]`).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (PLUGIN-CUSTODY-1, PLUGIN-DAEMON-1) and §11.5 (a path that fails closed on
+  everything hides what stands behind it).
+- Open / next: (1) read `8f2b848`'s and this commit's push runs and the 2026-10-10 nightly; (2) RW 4.48; (3) **P8-04 step
+  5, option (c)**; (4) RW 4.51, 4.46, 4.49. **For the owner:** D-V2-103, D-V2-104 (and D-V2-27 item 4's correction).
+  **On 2026-10-12 a run starts the closing entry for the cloud period.**

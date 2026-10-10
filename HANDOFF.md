@@ -76,8 +76,8 @@ the assistant's memory — which now also travels file by file in
   not in the audit chain (AUDIT-REFUSAL-1, fixed, D-V2-100) and the chain's seq was not unique (AUDIT-SEQ-1, fixed,
   D-V2-102); step 3 (b) built — `delulu monitor watch` quarantines a run under its node and the revocation's record says
   why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Routine run 16 (2026-10-10):** ACTOR-CUSTODY-1 closed — an actor's
-  effects answer to the run's custody and brokers (D-V2-103). **Next:** RW 4.50 (the same shape in a plugin's nested
-  interpreter — witness or refute), RW 4.48, **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
+  effects answer to the run's custody and brokers (D-V2-103); PLUGIN-CUSTODY-1 the same — a plugin export runs under the
+  host's custody and devices, and plugins are callable under the daemon at last (D-V2-104). **Next:** RW 4.48, **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
   4.46 (the egress client's refusals), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
@@ -829,8 +829,10 @@ spells the same thing?**
   red-team pass: an actor's worker interpreter had no custody and no device broker, so under daemon custody a revocation did
   not reach an actor's uses and none was recorded — and in EVERY mode its actuator commands were answered `Ok` without
   reaching a device (no lease, no rate bound). Each worker now holds a custody client for the run's node and shares the
-  run's brokers; five witnesses, red first. **A plugin export's nested interpreter has the same shape (RW 4.50, a hypothesis
-  until witnessed):** never restate a plugin's effects as covered by the e-stop or the audit until it is closed.
+  run's brokers; five witnesses, red first. **Its sibling, PLUGIN-CUSTODY-1 (RW 4.50), witnessed and closed the same run
+  (D-V2-104):** a plugin export's nested interpreter had a fresh allow-all custody and no device broker — and under the
+  daemon no plugin could be called at all (PLUGIN-DAEMON-1: the daemon's custody never answered liveness, so every call was
+  `Revoked(0)`); fixing that made the unrecorded uses reachable, 0 of 2 in the chain. It shares the host's custody now.
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1128,6 +1130,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A mutant spec over several test targets needs `--no-fail-fast`** (routine run 16): M182's first read named one red
   witness — cargo stopped at the first red TARGET, and the second witness never ran under the mutant. A falsification that
   did not run is not a survivor and not a red. `scripts/mutants.py` adds the flag itself now.
+- **A path that fails closed on everything hides what stands behind it** (routine run 16, PLUGIN-DAEMON-1): under the daemon
+  every plugin call was refused `Revoked(0)` — safe, so nobody looked, and a decision recorded the path as working. The moment
+  liveness was answered, the plugin ran under an allow-all custody (0 of 2 uses recorded). When a fail-closed path is made to
+  work, witness again what it was standing in front of.
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch

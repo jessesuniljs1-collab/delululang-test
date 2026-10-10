@@ -4596,3 +4596,46 @@ trace and effect sink and NO custody and no brokers, and an export may take `Cap
 **The lesson.** `Interp::new` is a pass-through custody and no brokers by default, so every place an interpreter is built
 other than `run_cmd`'s is a place the run's authority can silently stop: an actor's worker, a plugin's nested interpreter.
 Ask of each `Interp::new` what custody and brokers it holds.
+
+## 2026-10-10 — routine run 16 (continued): PLUGIN-CUSTODY-1 witnessed and closed — a plugin export runs under the host's custody and devices; plugins callable under the daemon (D-V2-104, RW 4.50)
+
+**The hypothesis (RW 4.50, opened by this run's ACTOR-CUSTODY-1 entry), witnessed on `2eb7fca`'s binary.** A Verified
+plugin `drive` whose one export, `twice(a: Cap[Actuator]) -> Str ! {Actuate}`, commands the actuator its host hands it,
+twice. Embedded custody, `rate_hz=1`: the host's own second command was refused ("granted at most 1 Hz; this command arrived
+75 µs after the last") and the plugin's two commands, milliseconds later, both answered `COMMANDED` — the export ran in a
+nested interpreter with no device broker, so nothing held its commands to the lease or the rate, and none reached a device.
+
+**Under the broker daemon, a second defect stood in front of the first (PLUGIN-DAEMON-1).** The same host under `--broker
+daemon` printed `Revoked`: no plugin had EVER been callable under the daemon. `BrokerClientCustody` never implemented R-6c's
+`liveness`, and the trait's fail-closed default (`Unknown`) refused every `p.get` as `Revoked(0)`. P2 recorded this path as
+untested ("no daemon-mode test of its own", `V2_LOG.md` P2, *Open, and deliberately*), while D-V2-27 item 4 describes the
+holder check as working "in embedded and daemon custody alike" — true of the node's creation (the daemon's tree held it,
+seq 6 in the probe), never of a call. **Fixed:** `liveness` asks the daemon (one `NodeState` round-trip per call; live,
+revoked with its seq, or anything else `Unknown` — dead). **And with only that fixed, the custody half of RW 4.50 went red**:
+the plugin was called and the audit chain held **0** of its 2 commands — the nested interpreter's fresh embedded custody
+allows everything and records nothing. A fail-closed path had been hiding the defect behind it.
+
+**The fix (D-V2-104).** The nested interpreter shares the HOST's custody (the field is an `Rc<RefCell<…>>` now; the host is
+suspended while the export runs, and no borrow is held across the call) and the run's device broker. A plugin's use of a
+capability its host handed it is checked and recorded exactly as the host's own use of it is — the run's node's use.
+`load` still refuses grants carrying `Declassify` or `ForeignCall`: custody alone decides those, and the host's custody
+answers for the RUN's node, which may hold more than the plugin's grant. Compute is not passed: a plugin cannot be granted
+`ForeignCall`, so it cannot dispatch.
+
+**Witnesses — three in `plugin_load_cli`, red first:** `a_plugins_commands_answer_to_the_runs_device_broker_and_its_rate_bound`
+(red: `COMMANDED | COMMANDED`); `under_the_broker_daemon_a_plugin_is_called_and_its_commands_are_uses_of_the_run` (red:
+`NOT CALLED: Revoked 0`; then, with liveness alone, 0 of 2 uses in the chain); `under_the_broker_daemon_unloading_kills_a_callable_the_host_already_holds`
+(red: the first call never succeeded). **Mutants:** M187 (the nested interpreter drops the device broker) red on the rate
+witness; M188 (a revoked node answers `Live`) red on the unload witness; M189 (custody not shared) red on the chain witness;
+M190 (a live node answers `Unknown` — the old behaviour) red on both daemon witnesses; the control green.
+**Runner reads at `8f2b848`** over `plugin_load_cli`, `plugin_cli`, `hw_dpx_cli`, `locale_plugin_cli`, `examples_run` and
+`estop_cli`: macOS `38011420070` (`plugin_load_cli` 14 of 14, the three new witnesses named; the job green over all six targets), Windows `38011422634` (the same), arm64 `38011424714` (47 passed, 0 failed). Clippy clean; `check-other-os.sh` clean for Windows and macOS;
+`delulu-runtime`'s 261 unit tests green. **The full suite alone at `8f2b848`:** 2,174 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**What stays open.** A revocation that lands WHILE an export runs now reaches its next use (the custody is the host's); no
+test holds an export long enough to witness that window by itself — the chain witness proves the custody is the daemon's.
+The plugin's node is not revoked at the end of a run under the daemon (it stays `live` in the tree, as device nodes once
+did — RW 4.51).
+
+**The lesson.** A path that fails closed on everything hides what stands behind it: nobody looks at a refusal that is safe.
+When a fail-closed path is made to work, witness again what it was in front of.

@@ -178,3 +178,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   run's node and shares the run's device and compute brokers — wider than found, since in every mode an actor's command had
   been answered `Ok` by nobody. Its sibling, a plugin export's nested interpreter (RW 4.50, PLUGIN-CUSTODY-1), is a
   hypothesis to witness. Lesson: every `Interp::new` is a place the run's authority can stop.
+- **PLUGIN-CUSTODY-1 closed the same run** (D-V2-104): a plugin export's nested interpreter had an allow-all custody and no
+  device broker; under the daemon no plugin had ever been callable (PLUGIN-DAEMON-1 — liveness was never answered, so every
+  call was `Revoked(0)`). It shares the host's custody and devices now. Lesson: a path that fails closed on everything hides
+  what stands behind it.

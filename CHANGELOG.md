@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — plugins under the broker daemon; a plugin's effects governed as its host's are, 2026-10-10
+
+- **Fixed: no plugin could be called under `--broker daemon`** — every `p.get` answered `Revoked` because the daemon was
+  never asked whether the plugin's grant was still live. It is asked on every call now, so `unload` and `grants revoke`
+  still kill a retained callable, and a live one works.
+- **Fixed (RW 4.50): a plugin export's effects now answer to the host's broker and devices.** An actuator a host hands an
+  export now meets the run's device broker — its lease and `rate_hz` — instead of being reported as commanded without
+  reaching a device; and under the daemon each of a plugin's uses is checked and recorded in the audit chain, as the host's
+  own use of the same capability is.
+
 ## Unreleased — an actor's effects are governed as `main`'s are, 2026-10-10
 
 - **Fixed (RW 4.47): effects performed inside an actor now answer to the run's broker and devices.** Under `--broker daemon`
