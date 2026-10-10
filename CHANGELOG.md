@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a dead monitor stops its runs, 2026-10-10
+
+- **Added (P8-04 step 5, D-V2-106): `delulu monitor watch --on-monitor-death quarantine|continue` and `--death-after MS`.** A
+  monitor arms a dead-man on its own node in the broker daemon and beats it every poll; if it is killed, stopped or hangs, the
+  broker revokes its node — every run under it — within the period (by default the larger of 2 s and eight polls), and the
+  revocation's audit record says it was the monitor's silence. `quarantine` is the default; `continue` lets runs outlive their
+  monitor. A watch ended by `--for` disarms (recorded). The beat needs a key only the monitor holds; on Linux the monitor's memory
+  is closed to other processes of the same user.
+- **Changed:** a monitor whose node is no longer in the broker's tree (the broker was restarted) now ends with an error instead of
+  watching nothing; one whose node its own dead-man revoked exits 1 and says so.
+
 ## Unreleased — a plugin's grant ends with its run, 2026-10-10
 
 - **Fixed (RW 4.51): after a run under `--broker daemon` that loaded a plugin, `delulu grants list` still showed the

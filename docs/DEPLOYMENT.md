@@ -460,6 +460,14 @@ limits, said plainly: `g_M` *holds* the runs' authority (a parent bounds its chi
 it is that it performs nothing but a revoke and, as everywhere, the OS account it runs as — run it as an account the
 agent cannot reach (Tier 2). And it is a slower second line: each run's own heartbeat and TTL stay the real-time stop.
 
+**If the monitor dies, its runs stop** (`--on-monitor-death quarantine`, the default; D-V2-106). The monitor arms a dead-man on
+`g_M` in the broker and beats it every poll; if the beats stop for `--death-after MS` (by default the larger of 2 s and eight
+polls), the broker revokes `g_M` — every run under it — and records that it was the monitor's silence. Killing, stopping or
+hanging the monitor therefore quarantines its runs, and so does Ctrl-C: end a watch with `--for MS` (it disarms, recorded) or by
+revoking `g_M`. `--on-monitor-death continue` lets the runs outlive their monitor. A beat carries a key only the monitor holds; on
+Linux the monitor's memory is closed to other processes of the same user, and on macOS and Windows that rests on the OS account,
+as above.
+
 ---
 
 ## 4. Platform status — stated exactly

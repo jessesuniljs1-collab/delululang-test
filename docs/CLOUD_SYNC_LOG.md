@@ -1872,3 +1872,41 @@ it on `origin` was made in the cloud and is listed below.
   `V2_LOG.md` 2026-10-10 (closing); (4) RW 4.53 (witness the e-stop's latency beside busy sandbox hosts first), RW 4.46, RW
   4.49. **For the owner:** D-V2-103, D-V2-104 (with D-V2-27 item 4's correction), D-V2-105. **On 2026-10-12 a run starts the
   closing entry for the cloud period.**
+
+### 2026-10-10 — routine run 17: CI read green; P8-04 step 5 — a dead monitor quarantines (D-V2-106); the red-team pass redone — CLOSURE-SCOPE-1 found (HIGH)
+- Session: `https://claude.ai/code/session_01WzxFaZVw8HRNkGs9neji5s`   Model: Claude Opus 5.5 (no fallback notice); the red-team
+  sous-chef ran on Sonnet 5.5 (`sonnet`) against a frozen copy of the binary in `/tmp/redteam17` — `git status` clean after it
+- Branch: `master` (through the harness branch `claude/happy-pascal-f86pm9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `ed7f7b6`
+- Commits: (1) `c299e47` P8-04 step 5: a dead monitor quarantines — a dead-man for its node, held by the broker (with the
+  Linux memory witness and NOT its fix, read red on a runner); (2) `3e9c496` D-V2-106 item 2: a monitor holding a dead-man's key
+  is non-dumpable on Linux; (3) this entry's commit — the records
+- Files and folders: (1) A `crates/delulu-broker/src/deadman.rs`; M `crates/delulu-broker/src/lib.rs`,
+  `crates/delulu-broker/src/tree.rs` (the `deadmen` field), `crates/delulu/src/broker_ipc.rs` (`ArmDeadman`, `Beat`,
+  `DisarmDeadman`, `DeadmanArmed`), `crates/delulu/src/brokerd.rs` (the serve loop's timer, `fire_deadmen`,
+  `persist_adoption_revocations`, three unit tests), `crates/delulu/src/cli.rs` (the help), `crates/delulu/src/monitor_cmd.rs`,
+  `crates/delulu/tests/json_contract.rs`, `crates/delulu/tests/monitor_cli.rs` (five witnesses), `docs/survey/*`. (2) M
+  `crates/delulu/src/monitor_cmd.rs`, `docs/survey/*`. (3) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5 two
+  lessons), `docs/CLOUD_ROUTINE.md` (step 4's P8 line; step 5 — a non-root witness is read on `ubuntu-24.04`),
+  `docs/DEPLOYMENT.md` (the monitor's death), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-106),
+  `V2_PHASE_STATUS.md`, `V2_P8_DESIGN.md` (step 5 built), `docs/REMAINING_WORK.md` (4.54 closed; 4.55–4.58 opened; 4.53
+  extended), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: CI first — run 16's closing commit `ed7f7b6`, push run `38017544108`, success; the 2026-10-10 nightly had not fired
+  at 05:08 UTC. Every `origin/claude/*` branch checked after unshallowing: nothing stranded. The witnesses red first on the
+  pre-fix monitor (a killed monitor's run still live 20 s later); the memory witness red on a non-root runner at `c299e47`
+  (`38028218741`). Mutants M199–M207 red (M201 after its witness was strengthened), controls green. Clippy clean;
+  `check-other-os.sh` clean for Windows and macOS. Runner reads at `3e9c496`: ubuntu-24.04 `38028453751` (213 passed),
+  macOS `38028455193` (193), Windows `38028456795` (177), arm64 `38028458119` (213), `delulu-broker` on Windows `38028459469`
+  (7) — 0 failed, every new witness named. The full suite alone at `3e9c496`: 2,194 passed, 0 failed, 16 ignored (161
+  binaries), exit 0, the tree unmoved. The red-team pass: F-03 and F-07 re-run and reproduced by the head chef; F-01, F-06
+  by code reading; F-04, F-05 not re-run (each says so in `REMAINING_WORK.md`).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a witness of an order must build the state where the order matters; a
+  same-user-but-not-root witness is read on a runner).
+- Open / next, in order: (1) read `3e9c496`'s and this commit's push runs and the 2026-10-10 nightly; (2) **RW 4.55,
+  CLOSURE-SCOPE-1 (HIGH)** — this run's next slice; if it does not land, it is the next run's first item; (3) **RW 4.56** (a
+  plugin node's revoke reaches the next CALL only); (4) RW 4.58, 4.57, 4.53; (5) RW 4.46 and P8-04's two remaining rules.
+  **For the owner:** D-V2-106 (and D-V2-103 to D-V2-105). **On 2026-10-12 a run starts the closing entry for the cloud period.**

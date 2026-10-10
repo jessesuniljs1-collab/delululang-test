@@ -4741,3 +4741,83 @@ the medians better, not worse. The sous-chef's own files show one 9.6 s run amon
 1.3 s). Code reading names a likely cause: every writer's `catch_up` re-reads the whole chain whenever another writer moved
 the anchor, so each daemon request beside busy sandbox hosts pays a full re-read under the lock — and the operator's
 e-stop revoke is one such request. Recorded as RW 4.53 (measured, not fixed).
+
+## 2026-10-10 — routine run 17: CI read green; P8-04 step 5 — a dead monitor quarantines: a dead-man for its node, held by the broker (D-V2-106)
+
+**CI read first.** Run 16's closing commit `ed7f7b6` (unread at its close): push run `38017544108` — success on every job.
+The 2026-10-10 nightly had not fired when the run began (05:08 UTC). Every `origin/claude/*` branch listed after unshallowing
+`master`: none holds a commit `master` lacks except the two witness branches already recorded as superseded (V2_LOG
+2026-10-04). Health: `survey check` ok, `doctor --check` all checks passed.
+
+**What was missing.** P8-04's monitor (D-V2-101) quarantines a run that misbehaves; nothing happened when the MONITOR died.
+**Witnessed red on the pre-fix monitor:** a monitor on `g_M` killed while a well-behaved run under `g_M` kept commanding its
+arm — 20 s later the run's node was still live, and the run went on unwatched
+(`a_killed_monitors_runs_are_revoked_by_its_broker_and_the_chain_says_why`); the `continue` and clean-end witnesses were red
+the same way (an unknown flag; no `deadman-*` record in the chain).
+
+**Built (option (c) of `V2_P8_DESIGN.md` P8-04 step 5; D-V2-106).** `delulu-broker`'s `deadman.rs`: a dead-man FOR A NODE —
+`arm_deadman` (recorded, `deadman-arm`, with the period), `beat_deadman`, `disarm_deadman` (recorded, `deadman-disarm`) and
+`fire_expired_deadmen`, which revokes the node AS ITSELF with the cause in the record (`why: "dead-man: … no beat within N
+ms …"`). Any node may revoke itself, so arming a future self-revocation adds no authority. A beat is a proof of possession:
+arming returns a 128-bit key the daemon keeps only as its BLAKE3 hash; a beat or disarm with another key, a second arming, and a
+late beat change nothing — a late beat FIRES it. Deadlines are monotonic `Instant`s. The daemon: `ArmDeadman`, `Beat`,
+`DisarmDeadman` over IPC (misuse DL1401, a fired one DL1403); its loop waits for a request no longer than the nearest deadline
+and fires every dead-man past due BEFORE it handles the next request. `delulu monitor watch --on-monitor-death
+quarantine|continue` (default `quarantine`) and `--death-after MS` (default `max(2000, 8 × poll)`): it arms before it says
+"watching", beats before and after each chain read, disarms on a clean end (`--for`), leaves the dead-man armed when it ends on
+an error, exits 1 and says so when its node was revoked by its OWN dead-man (read from the chain — a monitor that was stopped
+must not end as if asked to), and ends with an error when its node vanished from the tree (a broker restarted — it had gone on
+watching nothing, an oddity of run 15's red team). On Linux it makes itself non-dumpable before it holds the key.
+
+**Witnesses** (`monitor_cli`): a killed monitor's run is revoked by its broker, the arm parks, the program dies DL1403 naming
+the dead-man's seq, and the chain holds the arming and the revocation's `why` — **measured 2,025 ms after the kill** (period
+2,000 ms, poll 25 ms; on the runners 2,018 / 1,990 / 2,187 / 2,007 ms — a bound measured from the kill can be a poll SHORTER than
+the period, because the last beat precedes the kill); `--on-monitor-death continue` keeps the run going a full period after the
+kill, with no arming in the chain; `--for` disarms (recorded) and the run lives on; a STOPPED monitor (SIGSTOP past its period)
+finds its node revoked by its own dead-man on resuming, exits 1 and says so (Unix); the monitor's memory is closed to its own user
+on Linux (`a_monitors_memory_is_closed_to_its_own_user` — **read red on a non-root `ubuntu-24.04` runner at `c299e47`,
+`38028218741`**: "a process of the same user opened the memory of a monitor holding a dead-man's key"; green with the
+`PR_SET_DUMPABLE` step at `3e9c496`; as root it measures nothing and says so). `brokerd` unit tests: an idle daemon fires a
+300 ms dead-man on its own (302 ms after arming), a busy one still fires it, and over the wire only the arming key beats.
+`deadman.rs`: seven unit tests (subtree only, never upward; each beat buys a period from the beat; key, second arming, late beat,
+disarm, a node revoked meanwhile, the edges). `json_contract`: both modes' reports.
+
+**Mutants** (`scripts/mutants.py`): M199 (the monitor never arms), M200 (the daemon never times out), M202 (any key beats), M203
+(a late beat rescues), M204 (a second arming replaces), M205 (no disarm on a clean end), M206 (a fired dead-man read as an
+operator's revoke), M207 (a beat moves nothing) — red; controls green. **M201 (fire only on a timeout) SURVIVED twice** — the
+"busy daemon" witness's clients asked for a cheap `Status` (first with pauses, then eight back to back), the queue still drained,
+and the loop's zero-length wait at the deadline timed out and fired anyway: the ordering the code relies on was invisible. The
+witness's eight clients now MINT nodes (each request writes a record, so the handler is slower than its clients and a request is
+always waiting): M201 red 3 of 3, the fixed test green 3 of 3 (about 3,150 requests in 1.6 s).
+
+**Read on the runners at `3e9c496`** over `monitor_cli`, `bin:delulu` and `json_contract`: ubuntu-24.04 `38028453751` (213
+passed), macOS `38028455193` (193), Windows `38028456795` (177), ubuntu-24.04-arm `38028458119` (213) — 0 failed on each, every
+new witness named (the stopped-monitor one is Unix-only; the memory one Linux-only, real on the non-root runners); `delulu-broker`'s
+dead-man unit tests on Windows `38028459469` (7 passed). Clippy clean; `check-other-os.sh` clean for Windows and macOS. **The full
+suite alone at `3e9c496`:** 2,194 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved. `3e9c496` pushed to
+`master` (a fast-forward from `ed7f7b6`).
+
+**Residuals.** The beat's key on macOS and Windows rests on the OS account (no non-dumpable flag there) — category 7, as is root
+everywhere. Ctrl-C on a `quarantine` monitor is a death: the operator ends a watch with `--for` or by revoking `g_M`. P8-04 is
+left with step 4's two rules: `special-use` (waits on RW 4.46) and `break-glass` (its record must carry the run's node).
+
+**The red-team pass on run 16's four slices (redone, as run 16's entry asked).** One Sonnet 5.5 sous-chef (`sonnet`), about 38
+minutes, against a frozen copy of the binary at `ed7f7b6` in `/tmp/redteam17` (`git status` clean after it), writing
+`FINDINGS.md` as it went. Each finding below says whether the head chef re-ran it on the current binary (`3e9c496`).
+**What held** (its counts): actors' file, network, secret and device uses all recorded and stopped by a revoke (720 of 720 file
+uses across 24 actors; 1,161 envelope refusals each citing its own `use`; an epoch-class revoke reached an actor within 45 ms);
+nested actors; every `Interp::new` site holds the run's custody; plugin liveness under the daemon (get, call, unload, a retained
+callable dead after unload); 7 parallel-writer soaks and 65 `kill -9`s of the daemon with 0 duplicate seqs, gaps, broken links or
+wrong references on small chains; 4 midnight crossings under a clock shim; RW 4.51 for a normal end, a fault and DL0905; two runs
+sharing a plugin path.
+- **F-03 → RW 4.55, CLOSURE-SCOPE-1 (HIGH) — re-run, reproduced.** A closure resolves its function names in the module of the
+  interpreter that CALLS it: a host closure passed to a Verified export calls the plugin's same-named function, which receives
+  the captured capabilities — a plugin loaded with an all-empty grant wrote its own file through the host's `FsWrite` (and,
+  in the red team's run, read a broker-held secret's plaintext). The next slice of this run.
+- **F-07 → RW 4.56 (HIGH for a control loop) — re-run, reproduced:** revoking the plugin's node 2.5 s into a 120-command export
+  — 96 commands landed after it, and the CLI had said "before the next use".
+- **F-01 → RW 4.57, F-06 → RW 4.58 — code reading agrees, not re-run.** **F-04, F-05 → RW 4.53, not re-run.** **F-02** (a plugin
+  node's own grant is never consulted for a capability the host handed it) and **F-08** (a `Cap[Compute]` answers `NoAdapter`
+  inside an export) are D-V2-104's documented design. Oddities kept for judgment: a run whose actors died of a revoke exits 0;
+  `plugin build` accepts a plugin declaring an actor that `load` refuses; one DL0406 printed five times; `ts` not monotone
+  along the chain under load (the links are the order); `audit verify` flags no seq gap or dangling reference.

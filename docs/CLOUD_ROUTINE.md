@@ -161,8 +161,9 @@ another OS, and then takes about seven minutes itself (run 5).
    monitor watch` (D-V2-101); run 16 closed **RW 4.47, ACTOR-CUSTODY-1** (D-V2-103 — an actor's effects answer to the run's
    custody and brokers) and **RW 4.50, PLUGIN-CUSTODY-1** (D-V2-104 — the same shape in a plugin export's nested interpreter,
    and plugins callable under the daemon at last) and **RW 4.48** with AUDIT-DAY-1 (D-V2-105 — the daemon holds the append lock
-   from a seq's floor to its write; a record's day file follows the chain) and RW 4.51; the next run starts at **step 5, the
-   monitor's own death (sized by run 16, `V2_LOG.md` 2026-10-10 closing) — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
+   from a seq's floor to its write; a record's day file follows the chain) and RW 4.51; run 17 built **step 5, the monitor's
+   own death** (D-V2-106 — the broker holds a dead-man for the monitor's node) and its red-team pass found RW 4.55 onward, which
+   come first; then RW 4.46 (the egress client's refusals)
    and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
@@ -228,7 +229,10 @@ dispatch it with `runtime: true` to see the export ENFORCED by a real OpenShell 
 A fixture that fakes what the host writes has a real-run witness beside it (run 7: a faked generation hid a wrong reading).
 **When a runner shows a channel stalling, time it byte by byte before designing a fix** (run 10: the guess — a relay
 that buffers by line — was refuted by the first timed probe, and the real cause, a command started only once its input
-ended, took one more; a probe step in the workflow's script costs one dispatch). `scripts/check-other-os.sh TARGET…`
+ended, took one more; a probe step in the workflow's script costs one dispatch). **A same-user-but-not-root witness**
+(HOST-DUMPABLE-1's shape: may another process of the operator's user read this one?) **is read on `ubuntu-24.04`** — the VM runs
+as root, which reads every process, and the harness refuses a `su -c` probe it cannot inspect (run 17); commit the witness
+without its fix, dispatch, read it red, then the fix. `scripts/check-other-os.sh TARGET…`
 lints only the targets named — about two minutes for one, against seven for all five.
 **Run mutants with `scripts/mutants.py SPEC.json`** (run 15; it adds `--no-fail-fast` itself — run 16's M182 stopped at its
 first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that

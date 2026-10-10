@@ -78,8 +78,9 @@ the assistant's memory — which now also travels file by file in
   why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Routine run 16 (2026-10-10):** ACTOR-CUSTODY-1 closed — an actor's
   effects answer to the run's custody and brokers (D-V2-103); PLUGIN-CUSTODY-1 the same — a plugin export runs under the
   host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
-  (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Next:** **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
-  4.46 (the egress client's refusals), then P9.
+  (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Routine run 17 (2026-10-10):** P8-04 step 5 — a dead
+  monitor quarantines: the broker holds a dead-man for its node (D-V2-106). **Next:** the red-team findings of run 17 (RW 4.55
+  onward), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1159,6 +1160,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch
   listing is what found the stranded commit.
+- **A witness of an ORDER must build the state where the order matters** (routine run 17, M201): the daemon fires dead-men
+  BEFORE it handles the next request, so a stream of requests cannot hold one off — and the witness's clients (first pausing,
+  then eight back to back, asking for a cheap `Status`) let the queue drain, so the loop's zero-length wait at the deadline
+  timed out and fired anyway: a mutant that fired only on a timeout survived twice. Clients whose requests are slower to handle
+  than to send (each mints a node, writing a record) keep a request always waiting, and the mutant is red. When code relies on
+  which of two things happens first, make them conflict in the witness. (Run 13's lesson, from the other side: witness a choice
+  about time where the time is largest.)
+- **A same-user-but-not-root witness is read on a runner** (routine run 17): the VM runs as root, which reads every process, so
+  "may another process of the operator's user read this one?" (HOST-DUMPABLE-1's shape) measures nothing there — and the
+  harness refused a `su -c` probe it could not inspect. `ubuntu-24.04`'s runner is not root: commit the witness without its fix,
+  dispatch `witness.yml`, read it red (three minutes), then the fix.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

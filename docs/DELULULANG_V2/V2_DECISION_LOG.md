@@ -2424,6 +2424,42 @@ refused and (c) stays the owner's.
    written seq back — a node, an answer, DL1403's text, `overrides_seq`) or routing every host record through the daemon
    (D-V2-102 item 3's reasons stand).
 
+## D-V2-106 — P8-04 step 5: the monitor's own death — a dead-man for a node, held by the broker; `quarantine` the default — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **Option (c) of `V2_P8_DESIGN.md` P8-04 step 5, built.** The broker holds a dead-man FOR A NODE (`delulu-broker`'s
+   `deadman.rs`): `ArmDeadman { node, period_ms }`, `Beat { node, key }` and `DisarmDeadman { node, key }` over the daemon's
+   IPC. If no beat arrives within the period of the arming or of the last beat, the daemon revokes the node AS ITSELF — its
+   subtree with it — and the revocation's record says why (`why: "dead-man: … no beat within N ms …"`). **Why this hardens
+   rather than redefines Authority:** any node may already revoke itself, so arming a future self-revocation adds no authority;
+   it can only remove some, never upward or sideways (the step-3 rule is untouched). Not chosen: (a) a TTL the monitor renews
+   (a holder extending its own deadline is a widening in time, and the tree has no local renewal); (b) each run probing its
+   monitor (couples every run to a monitor it cannot see).
+2. **A beat is a proof of possession.** Arming returns a fresh 128-bit key, held by the monitor in memory and by the daemon
+   only as its BLAKE3 hash — never on disk, never in the chain. A beat or a disarm with another key is refused, and so is a
+   second arming over a live one, so no other process can keep a dead monitor's dead-man quiet, replace it with its own, or
+   switch it off. On Linux the monitor makes itself non-dumpable once it holds the key (HOST-DUMPABLE-1's step), so a process
+   of the same user, not root, cannot read the key out of its memory. The residual is root, and a same-user process where the
+   kernel gives no such flag (macOS, Windows) — category 7, named, not claimed.
+3. **Time is the monotonic clock, and late is dead.** Deadlines are `Instant`s; a wall-clock step neither fires a dead-man
+   early nor holds one off. The daemon's loop waits for its next request no longer than the nearest deadline, and fires every
+   dead-man past due BEFORE it handles the next request, whichever woke it — so a stream of requests cannot hold one off, and a
+   beat (or a disarm) that arrives after its deadline fires it rather than rescuing it. A dead-man whose node was revoked by
+   someone else meanwhile records nothing.
+4. **`quarantine` is the default for every monitor; `continue` is the operator's opt-out.** The design made it the default
+   "for a run that holds a device"; a monitor cannot know what the runs it will watch will hold, so it is the default for all
+   — a watchdog gone quiet is treated as one that fired. The period is `--death-after MS` (100 ms to 1 h; at least two polls),
+   by default `max(2000 ms, 8 × poll)`; the monitor beats twice per poll — before reading the chain and after — so a slow read of
+   a long chain costs one period, not two. A run's own dead-man (10f) stays the real-time line; this is the slower one.
+5. **How a watch ends decides what the dead-man does.** Ended as asked (`--for`) while its node lives: the monitor disarms,
+   recorded (`deadman-disarm`) — from that record the runs below are unwatched by the operator's choice. Its node revoked by
+   someone else (the operator's way to end a watch): nothing to disarm. Ended on an error (the chain unreadable, a beat refused,
+   the broker unreachable): the dead-man stays armed — the monitor has stopped watching, and that is a death. A monitor that
+   finds its node revoked by its OWN dead-man (it was stopped, or too slow) reads that from the chain, exits 1 and says so,
+   rather than ending as if it had been asked to. A monitor whose node is no longer in the tree (the broker restarted) ends with
+   an error instead of watching nothing (an oddity of routine run 15's red-team pass).
+6. **No new code.** A dead-man's protocol misuses — nothing armed, a second arming, a wrong key, a period out of bounds — are
+   DL1401 ("broker-protocol failure"); a beat to a node its dead-man has revoked is DL1403, naming the seq.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

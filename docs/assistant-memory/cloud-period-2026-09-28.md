@@ -188,3 +188,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   test's fixed timestamp fell on yesterday.
 - **RW 4.51 closed the same run:** a plugin's grant node is revoked when its run ends (10g's rule for device nodes). The next
   run starts at P8-04 step 5, option (c) — sized in `V2_LOG.md` 2026-10-10 (closing).
+- **Routine run 17 (2026-10-10): P8-04 step 5 built** (D-V2-106): the broker holds a dead-man for the monitor's node — a
+  killed or stopped monitor's runs are revoked about one period later, the cause in the chain; the beat carries a key only the
+  monitor holds, and the monitor is non-dumpable on Linux. Lessons: a witness of an ORDER must build the state where the order
+  matters (M201 survived two floods that let the queue drain); a same-user-but-not-root witness is read on `ubuntu-24.04` (the VM
+  is root, and the harness refuses `su -c`).

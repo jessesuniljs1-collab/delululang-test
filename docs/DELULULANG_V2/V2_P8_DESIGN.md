@@ -226,7 +226,7 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    **Built by routine run 15 (`b0a5a80`, D-V2-101):** `delulu monitor watch`, with steps 4 (two of its four rules —
    `envelope`, `denies=N/MS`), 6 (the surface, its five gates) and 7 (the witnesses: the quarantine measured at 13 ms
    after the third refusal; a sibling's monitor reads everything and quarantines nothing; a grant attempt has no path —
-   the monitor sends only `Quarantine`). **Next: step 5** (the monitor's own death) and the other two rules.
+   the monitor sends only `Quarantine`). **Step 5 built by routine run 17 (`c299e47`, `3e9c496`, D-V2-106)**; next: the other two rules.
 4. **Measured by routine run 15:** `envelope` and `denies=N/MS` are built (D-V2-101); `special-use` waits on RW 4.46 (the
    egress client's refusal is not in the chain); `break-glass` waits on its record carrying the run's node (`audit_required`
    writes none). *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
@@ -234,7 +234,10 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count
    printed in the quarantine's own record — a monitor that fires without saying what it saw is a monitor nobody can
    audit.
-5. *The monitor's own death* — **read against the code by routine run 15 (not built).** A dead monitor cannot act, so
+5. *The monitor's own death* — **BUILT by routine run 17 (2026-10-10, D-V2-106) as option (c)**: `delulu-broker`'s
+   `deadman.rs`, the daemon's `ArmDeadman`/`Beat`/`DisarmDeadman`, `monitor watch --on-monitor-death quarantine|continue
+   --death-after MS`; a beat carries a key only the monitor holds; witnessed by killing and by stopping a monitor mid-run (the run's
+   node revoked about one period after, the cause in the chain). Read against the code by routine run 15 first: A dead monitor cannot act, so
    whatever quarantines on its death must live elsewhere: (a) a short TTL on `g_M` that the monitor renews — but the tree
    has no renewal for a local node (RFC 0001 F4's `Renew` needs a receipt signed by the ground), and a holder extending its
    own deadline is a widening in time; (b) each run probes its monitor's liveness beside its grant node — a run-side opt-in
