@@ -4713,3 +4713,31 @@ the timer is a `recv_timeout` at the nearest deadline, and an expiry is `tree::r
 quarantine|continue` (the default `quarantine`; `continue` arms none) arms it on `g_M` and beats each poll. A new flag on an
 existing subcommand: `json_contract`'s tables and the help text, not the five gates. Witness: kill a monitor mid-run (its
 run under `g_M` loses its node within a measured bound, the cause in the chain); `continue` keeps it; a clean exit disarms.
+
+## 2026-10-10 — routine run 16 (postscript): the push runs read; the red-team pass lost to a restart; RW 4.53 measured
+
+**Push runs read, all success on every job:** `d7e2b8f` `38016042725` and the closing commit `dd724f6` `38016175557` (with
+the run's earlier six, recorded in its closing entry). `master` is green at the close.
+
+**The red-team pass was lost.** One Sonnet 5.5 sous-chef, launched at `dd724f6` against a frozen copy of the binary in
+`/tmp`, was about fifteen minutes in when the container restarted (the run's second restart) and killed it; it left
+experiment files in its scratch directory and no report — so NO finding of it is recorded, and the pass is the next run's to
+redo. **Loop engineering:** a sous-chef's brief now says to append each finding to a file in its scratch directory as it is
+found (`docs/CLOUD_ROUTINE.md` step 5), so a restart loses the time and not the findings.
+
+**One of its experiments, re-run by the head chef (RW 4.53).** It timed a daemon run while N loops of sandboxed runs wrote
+their records beside the daemon. Re-measured on both binaries, 15 daemon runs each, no run failed, every chain verified:
+
+| | median | p90 | max |
+|---|---|---|---|
+| 8 sandbox loops, `80c566c` (before RW 4.48) | 0.205 s | 0.879 s | 0.916 s |
+| 8 sandbox loops, `7038885` (after) | 0.123 s | 0.315 s | 1.361 s |
+| 12 sandbox loops, `80c566c` | 0.388 s | 0.883 s | 1.290 s |
+| 12 sandbox loops, `7038885` | 0.167 s | 0.456 s | 1.077 s |
+| control: 12 loops of plain runs (no chain writes), `7038885` | 0.067 s | 0.080 s | 0.085 s |
+
+So the slowdown is contention on the audit chain, not the CPU, and it predates this run — RW 4.48's per-request lock made
+the medians better, not worse. The sous-chef's own files show one 9.6 s run among twelve loops; not reproduced here (max
+1.3 s). Code reading names a likely cause: every writer's `catch_up` re-reads the whole chain whenever another writer moved
+the anchor, so each daemon request beside busy sandbox hosts pays a full re-read under the lock — and the operator's
+e-stop revoke is one such request. Recorded as RW 4.53 (measured, not fixed).

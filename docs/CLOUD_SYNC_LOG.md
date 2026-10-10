@@ -1850,3 +1850,25 @@ it on `origin` was made in the cloud and is listed below.
   (4) RW 4.49; (5) a red-team pass (Sonnet 5.5) on this run's four slices — custody now crosses into actors' and plugins'
   interpreters and the daemon holds the chain per request. **For the owner:** D-V2-103, D-V2-104 (with D-V2-27 item 4's
   correction), D-V2-105. **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).
+
+### 2026-10-10 — routine run 16 (postscript): push runs read green; the red-team pass lost to a restart; RW 4.53 measured
+- Session: `https://claude.ai/code/session_01FM5pjaFXk3YSik7zQzQXxh`   Model: Claude Opus 5.5 (no fallback notice); the lost
+  red-team sous-chef ran on Sonnet 5.5 (`sonnet`), against a frozen copy of the binary under `/tmp` — `git status` clean after it
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `dd724f6`
+- Commits: this one — records only
+- Files and folders: M `HANDOFF.md` (§11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 5: a sous-chef appends findings to a
+  file as it goes), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.53 opened), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: push runs `d7e2b8f` `38016042725` and `dd724f6` `38016175557` — success on every job, so `master` is green at
+  the close. The latency table in `V2_LOG.md` (postscript), measured on both binaries by hand. The red-team pass: lost to the
+  run's second container restart, no finding recorded.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a sous-chef's findings must reach a file as they are found).
+- Open / next, in order: (1) read THIS commit's push run (unread at the close) and the 2026-10-10 nightly; (2) **redo the
+  red-team pass** on run 16's four slices, briefed to write `FINDINGS.md` as it goes; (3) **P8-04 step 5, option (c)** — sized in
+  `V2_LOG.md` 2026-10-10 (closing); (4) RW 4.53 (witness the e-stop's latency beside busy sandbox hosts first), RW 4.46, RW
+  4.49. **For the owner:** D-V2-103, D-V2-104 (with D-V2-27 item 4's correction), D-V2-105. **On 2026-10-12 a run starts the
+  closing entry for the cloud period.**

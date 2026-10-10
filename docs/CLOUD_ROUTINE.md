@@ -260,7 +260,9 @@ minutes (run 7), so a slice's runner read and its local suite overlap.
 After a security-relevant slice, a **red-team pass** is worth its cost: one Sonnet 5.5 sous-chef, briefed
 to break the new guarantee and to list every oddity, against a frozen COPY of the binary in a scratch
 directory outside the repository, while the head chef keeps working (run 2's found seven defects
-around a guarantee that held). Re-run each finding before using it.
+around a guarantee that held). Re-run each finding before using it. **Brief it to APPEND each finding to `FINDINGS.md` in its
+scratch directory the moment it has one** (run 16: a container restart killed a pass fifteen minutes in, and everything it
+had found lived only in the final message it never sent).
 
 **6. Close it.** After the last edit: `survey build`, `check`, `findings` (0 errors), `doctor --check`.
 Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees; a `D-V2-nn` for each

@@ -1151,6 +1151,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   revoked every node `attenuate` had minted — and device nodes are minted through `attenuate` too, so a run's arm was e-stopped
   at its end while the watchdog still ran. The slice's witness and three mutants were green; the full suite and three runners
   were red. Before giving a shared function a new effect, list its callers (`grep`, `survey affected-by`) and run their targets.
+- **A sous-chef's findings must reach a file as they are found** (routine run 16): the container restarted twice in one run;
+  the second killed a red-team pass mid-way, and its findings — held for its final message — were lost with it. Briefs now say
+  to append each finding to `FINDINGS.md` in the scratch directory. Its leftover experiment was still worth re-running: it
+  measured the daemon waiting on the audit chain beside busy sandbox hosts (RW 4.53).
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch
