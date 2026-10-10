@@ -1848,42 +1848,53 @@ mod tests {
         eprintln!("measured: an idle daemon fired a 300 ms dead-man {} ms after it was armed", took.as_millis());
     }
 
-    /// **A busy daemon fires it too.** Eight clients mint nodes back to back for a second and a half — each
-    /// request writes a record, so the handler is slower than the clients and a whole request is always
-    /// waiting: the loop never times out — and the unbeaten dead-man still fires: dead-men are fired before
-    /// the next request is handled, whichever woke the loop. (Clients asking for a cheap `Status`, even eight
-    /// back to back, let the queue drain, and the loop's zero-length wait at the deadline timed out and fired
-    /// anyway: mutant M201, which fires only on a timeout, survived that witness twice.)
+    /// **A busy daemon fires it too.** Eight clients ask for the whole tree back to back over a tree of 2,000
+    /// nodes: each answer costs the loop milliseconds to build and write, so whole requests are always waiting
+    /// and the loop never times out — and the unbeaten dead-man still fires, because dead-men are fired before
+    /// the next request is handled, whichever woke the loop. Mutant M201 (fire only on a timeout) survived two
+    /// cheaper floods on a quiet machine: when the clients' requests cost the loop less than the clients take to
+    /// send the next, the queue drains, the zero-length wait at a past deadline times out, and it fires anyway.
+    /// It went red only while another load shared the VM — a witness of an ORDER must build the state where the
+    /// order matters, deterministically (`HANDOFF.md` §11.5).
     #[test]
     fn a_busy_daemon_still_fires_an_unbeaten_dead_man() {
         let state = temp_state("dmbusy");
         let handle = start_daemon(&state);
         let node = issue(&state);
+        for _ in 0..2000 {
+            issue(&state);
+        }
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flood: Vec<_> = (0..8)
             .map(|_| {
                 let (state, stop) = (state.clone(), stop.clone());
                 std::thread::spawn(move || {
-                    let mut n = 0u32;
+                    let mut answered = Vec::new();
                     while !stop.load(std::sync::atomic::Ordering::SeqCst) {
-                        if matches!(request(&state, ReqBody::Issue(spec(&["Write"]))), Ok(Response::Issued { .. })) {
-                            n += 1;
+                        if matches!(request(&state, ReqBody::List), Ok(Response::Listed { .. })) {
+                            answered.push(std::time::Instant::now());
                         }
                     }
-                    n
+                    answered
                 })
             })
             .collect();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(200));
         let _key = arm(&state, &node, 300);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
         std::thread::sleep(std::time::Duration::from_millis(1500));
         let fired = deadman_revocations(&state, &node);
         stop.store(true, std::sync::atomic::Ordering::SeqCst);
-        let served: u32 = flood.into_iter().map(|t| t.join().unwrap()).sum();
+        let answered: Vec<std::time::Instant> = flood.into_iter().flat_map(|t| t.join().unwrap()).collect();
+        let (served, past) = (answered.len(), answered.iter().filter(|t| **t > deadline).count());
         stop_daemon(&state, handle);
-        assert!(served >= 200, "the baseline — the daemon was busy all along ({served} requests answered)");
         assert_eq!(fired.len(), 1, "a stream of requests must not hold a dead-man off ({served} requests)");
-        eprintln!("measured: {served} requests answered in 1.6 s, and the dead-man fired among them");
+        // The baseline is that the loop was BUSY across the deadline — requests answered after it — never a
+        // throughput: CI's test job, running the suite in parallel, answered 45 requests in 1.6 s where a quiet
+        // machine answers thousands (push run 38029067385 went red on a floor of 200). A slower handler only keeps
+        // the queue fuller, which is the state this witness needs.
+        assert!(past >= 1, "the baseline — the loop was answering requests past the deadline ({served} answered, {past} after it)");
+        eprintln!("measured: {served} listings of a 2,001-node tree answered ({past} after the deadline), and the dead-man fired among them");
     }
 
     /// **A beat is a proof of possession, over the wire.** A beat or a disarm with another key, and a second
@@ -1894,7 +1905,8 @@ mod tests {
         let state = temp_state("dmkey");
         let handle = start_daemon(&state);
         let node = issue(&state);
-        let key = arm(&state, &node, 400);
+        // A period long enough that the three refusals below land inside it on a loaded runner, too.
+        let key = arm(&state, &node, 1500);
         let code = |r: io::Result<Response>| match r {
             Ok(Response::Error { code, .. }) => code,
             other => format!("{other:?}"),
@@ -1903,7 +1915,7 @@ mod tests {
         let beat = code(request(&state, ReqBody::Beat { node: node.clone(), key: wrong.clone() }));
         let disarm = code(request(&state, ReqBody::DisarmDeadman { node: node.clone(), key: wrong }));
         let rearm = code(request(&state, ReqBody::ArmDeadman { node: node.clone(), period_ms: 3_600_000 }));
-        std::thread::sleep(std::time::Duration::from_millis(900));
+        std::thread::sleep(std::time::Duration::from_millis(2500));
         let fired = deadman_revocations(&state, &node);
         let late = code(request(&state, ReqBody::Beat { node: node.clone(), key }));
         stop_daemon(&state, handle);
