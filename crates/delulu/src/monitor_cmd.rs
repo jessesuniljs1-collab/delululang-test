@@ -268,6 +268,15 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // "watching" is already one whose death quarantines.
     let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
     if o.on_death == OnDeath::Quarantine {
+        // D-V2-106 item 2: the key that lets a beat through is about to live in this process's memory, so no
+        // other process of the same user may read it — non-dumpable, as a serving host is (HOST-DUMPABLE-1):
+        // its `/proc` entries become root's. A monitor starts nothing, so no child inherits the flag. Never
+        // undone. Root, and a same-user process where the kernel gives no such flag, are category 7.
+        #[cfg(target_os = "linux")]
+        // SAFETY: a flag on this process alone.
+        unsafe {
+            libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0);
+        }
         let period = o.death_after.unwrap_or_else(|| default_death_after(o.poll));
         match crate::brokerd::request(
             &state_dir,
