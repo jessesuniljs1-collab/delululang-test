@@ -332,6 +332,10 @@ pub struct Closure {
     pub params: Vec<String>,
     pub body: Block,
     pub env: Env,
+    /// The module whose names the body resolves (CLOSURE-SCOPE-1, RW 4.55): set by the interpreter that
+    /// builds the closure. `None` (a closure rebuilt from an actor message, or the cycle collector's
+    /// probe) resolves in whichever interpreter calls it — an actor's worker runs the program's own module.
+    pub home: Option<std::rc::Rc<crate::interp::Home>>,
 }
 
 /// A compute device's envelope (Stage 10 Track F, spec §7.1): the SCOPE of a `Cap[Compute]`.

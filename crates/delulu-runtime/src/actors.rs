@@ -965,7 +965,7 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
                 }
                 env = child;
             }
-            Value::Closure(Rc::new(Closure { params, body, env }))
+            Value::Closure(Rc::new(Closure { params, body, env, home: None }))
         }
         MsgValue::Cap { kind, scope } => Value::Cap(Rc::new(CapVal { kind, scope })),
         MsgValue::SecretLocal(s) => Value::Secret(Rc::new(SecretVal::new(s))),

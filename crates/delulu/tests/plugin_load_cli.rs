@@ -780,3 +780,127 @@ fn under_the_broker_daemon_a_plugins_node_does_not_outlive_its_run() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----- a closure's names are its own module's (CLOSURE-SCOPE-1, RW 4.55) ---------------------------------
+
+/// A Verified plugin that takes a callback (allowed for Verified, R-4) and returns a closure — each of
+/// its private functions named like one of the host's.
+fn build_scope(dir: &Path) -> PathBuf {
+    let pkg = dir.join("plug");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"scope\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+         [plugin]\napi = 1\nclass = \"verified\"\n\n\
+         [plugin.authority]\neffects  = [\"Write\"]\nrequires = []\n\n\
+         [plugin.exports]\n\
+         run = \"fn(fn(Str) -> Int ! {Write}, Str) -> Int ! {Write}\"\n\
+         mk = \"fn(Int) -> fn(Int) -> Int\"\n\
+         named = \"fn() -> fn(Int) -> Int\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("lib.delulu"),
+        "module scope\n\n\
+         fn save(fs: Cap[FsWrite], name: Str) -> Int ! {Write} {\n\
+         \x20 match fs.write_text(\"PWNED-by-plugin.txt\", \"the plugin chose this name\") {\n\
+         \x20   Ok(u) => 1000,\n\
+         \x20   Err(e) => 0\n\
+         \x20 }\n\
+         }\n\n\
+         fn helper(x: Int) -> Int { 999 }\n\n\
+         pub fn run(cb: fn(Str) -> Int ! {Write}, name: Str) -> Int ! {Write} { cb(name) }\n\n\
+         pub fn mk(seed: Int) -> fn(Int) -> Int { fn(x: Int) -> Int { helper(x) + seed } }\n\n\
+         fn twist(x: Int) -> Int { helper(x) + 1 }\n\n\
+         pub fn named() -> fn(Int) -> Int { twist }\n",
+    )
+    .unwrap();
+    let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+    pkg.join("scope.dpx")
+}
+
+const SCOPE_HOST: &str = "module host\n\n\
+fn save(fs: Cap[FsWrite], name: Str) -> Int ! {Write} {\n\
+\x20 match fs.write_text(name, \"the host chose this name\") {\n\
+\x20   Ok(u) => 1,\n\
+\x20   Err(e) => 0\n\
+\x20 }\n\
+}\n\n\
+fn helper(x: Int) -> Int { x * 2 }\n\n\
+fn bonus() -> Int { 10 }\n\n\
+fn go(h: Cap[PluginHost], out: Cap[Console], fs: Cap[FsWrite]) -> Result[Int, PluginErr] ! {Load, Read, Write} {\n\
+\x20   let g = Grant {\n\
+\x20       effects: [], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+\x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+\x20       require_signed: false,\n\
+\x20   }\n\
+\x20   let p = load(h, \"scope.dpx\", g)?\n\
+\x20   let run: fn(fn(Str) -> Int ! {Write}, Str) -> Int ! {Write} = p.get(\"run\")?\n\
+\x20   let cb = fn(name: Str) -> Int ! {Write} { save(fs, name) }\n\
+\x20   out.println(\"callback answered \" + str(run(cb, \"host-file.txt\")))\n\
+\x20   let mk: fn(Int) -> fn(Int) -> Int = p.get(\"mk\")?\n\
+\x20   let inc = mk(1)\n\
+\x20   out.println(\"plugin closure answered \" + str(inc(5)))\n\
+\x20   let named: fn() -> fn(Int) -> Int = p.get(\"named\")?\n\
+\x20   let tw = named()\n\
+\x20   out.println(\"plugin function answered \" + str(tw(5)))\n\
+\x20   let cb2 = fn(name: Str) -> Int ! {Write} { bonus() + save(fs, name) }\n\
+\x20   out.println(\"second callback answered \" + str(run(cb2, \"host-file-2.txt\")))\n\
+\x20   Ok(0)\n\
+}\n\n\
+fn main(root: Root) ! {Write, Load, Read} {\n\
+\x20   let out = root.console()\n\
+\x20   match go(root.plugin_host(), out, root.fs_write(\"./out\")) {\n\
+\x20       Ok(n) => out.println(\"SCOPE DONE\")\n\
+\x20       Err(e) => out.println(\"plugin error\")\n\
+\x20   }\n\
+}\n";
+
+/// **A closure's free names are its own module's, whoever calls it** (CLOSURE-SCOPE-1, RW 4.55 — found by
+/// routine run 17's red-team pass). The host passes a Verified plugin a callback that calls the host's
+/// `save(fs, name)` with the host's `FsWrite`; the plugin defines a private `save` of its own. Before the
+/// fix the callback, run inside the plugin's interpreter, called the PLUGIN's `save` — a plugin loaded
+/// with an all-empty grant wrote a file of its choosing through the host's capability, and the host's
+/// file was never written. The reverse too: a closure the plugin built and returned called the HOST's
+/// `helper` when the host invoked it. Lexical scope: the callback writes the host's file, the plugin's
+/// closure answers with the plugin's `helper`, and a callback reaches a host function the plugin lacks.
+fn a_closures_names_resolve_in_its_own_module(extra: &[&str]) {
+    let dir = tmp("scope");
+    let dpx = build_scope(&dir);
+    std::fs::copy(&dpx, dir.join("scope.dpx")).unwrap();
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    std::fs::write(dir.join("host.delulu"), SCOPE_HOST).unwrap();
+    let state = dir.join("state");
+    let mut args = vec!["run", "host.delulu", "--grant", "console", "--grant", "plugin=.", "--grant", "fs.write=./out", "--no-prompt"];
+    args.extend_from_slice(extra);
+    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(&args)
+        .current_dir(&dir)
+        .env("DELULU_STATE_DIR", &state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .output()
+        .expect("the delulu binary runs");
+    let text = out(&o);
+    let wrote = |f: &str| dir.join("out").join(f).exists();
+    assert!(
+        !wrote("PWNED-by-plugin.txt"),
+        "a plugin with an all-empty grant wrote a file of its own choosing through the host's FsWrite — the host's callback ran the PLUGIN's `save`:\n{text}"
+    );
+    assert!(text.contains("callback answered 1\n") && wrote("host-file.txt"), "the callback runs the host's `save`:\n{text}");
+    assert!(text.contains("plugin closure answered 1000\n"), "a closure the plugin built runs the plugin's `helper`, not the host's:\n{text}");
+    assert!(text.contains("plugin function answered 1000\n"), "a plugin function handed out as a value runs in the plugin's module:\n{text}");
+    assert!(
+        text.contains("second callback answered 11\n") && wrote("host-file-2.txt"),
+        "a callback reaches a host function the plugin does not have:\n{text}"
+    );
+    assert!(text.contains("SCOPE DONE"), "{text}");
+    assert_eq!(o.status.code(), Some(0), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_closures_names_resolve_in_its_own_module_across_the_plugin_boundary() {
+    a_closures_names_resolve_in_its_own_module(&[]);
+}

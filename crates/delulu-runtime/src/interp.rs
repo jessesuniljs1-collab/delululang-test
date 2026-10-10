@@ -238,13 +238,27 @@ enum Escape {
 
 type R<T> = Result<T, Escape>;
 
-pub struct Interp {
+/// What a module's code resolves its free names against — its functions and its globals (CLOSURE-SCOPE-1,
+/// RW 4.55). Held by the interpreter that runs the module and by every closure that module's code builds, so
+/// a closure resolves its names in its OWN module whoever calls it: a host callback run by a plugin export
+/// calls the host's functions, never a plugin function of the same name; a closure a plugin built and
+/// returned calls the plugin's. Until routine run 17 a closure carried only its parameters, body and captured
+/// environment, and a call by name looked in the CALLER's table — a plugin loaded with an all-empty grant
+/// wrote a file of its choosing through a host callback's `FsWrite` by naming its own function like the
+/// host's.
+pub struct Home {
     funcs: HashMap<String, FnDecl>,
+    globals: Env,
+}
+
+pub struct Interp {
+    /// This interpreter's module, or — while a closure from another module runs — that closure's (see
+    /// [`Home`]). Swapped only by `call_closure`, and restored before it returns.
+    home: RefCell<Rc<Home>>,
     /// `test` bodies by name (Stage 8, phase 8g) — read ONLY by [`Interp::run_test`],
     /// never by any normal execution path (invariant 41).
     tests: HashMap<String, delulu_syntax::ast::Block>,
     consts: Vec<(String, Expr)>,
-    globals: Env,
     depth: Cell<u32>,
     /// The logical call-depth bound this interpreter enforces (DL0905). Defaults to
     /// [`DEFAULT_MAX_DEPTH`]; an embedder on a small native stack lowers it via
@@ -361,10 +375,9 @@ impl Interp {
             }
         }
         Interp {
-            funcs,
+            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root() })),
             tests,
             consts,
-            globals: Scope::root(),
             depth: Cell::new(0),
             max_depth: DEFAULT_MAX_DEPTH,
             in_turn: Cell::new(false),
@@ -445,7 +458,7 @@ impl Interp {
         if let Err(Escape::Fault(f)) = self.eval_consts() {
             return Err(f);
         }
-        let env = Scope::child(&self.globals);
+        let env = Scope::child(&self.home().globals);
         env.define("self", state.clone());
         for (p, v) in params.iter().zip(args) {
             env.define(p, v);
@@ -505,7 +518,7 @@ impl Interp {
     /// Rebuild an actor-boundary message into THIS interpreter's heap (closures reattach to
     /// these globals).
     pub fn msg_to_value(&self, m: crate::actors::MsgValue) -> Value {
-        crate::actors::msg_to_value(m, &self.globals)
+        crate::actors::msg_to_value(m, &self.home().globals)
     }
 
     /// Convert a value FOR an actor boundary, with this turn's self-identity attached (so
@@ -692,7 +705,7 @@ impl Interp {
         };
         let run = || -> R<Value> {
             self.enter()?;
-            let env = Scope::child(&self.globals);
+            let env = Scope::child(&self.home().globals);
             env.define("test_root", test_root);
             let result = self.exec_block_value(body, &env);
             self.leave();
@@ -732,7 +745,7 @@ impl Interp {
     /// Evaluate one top-level expression (for the REPL), with an optional root binding.
     pub fn eval_toplevel(&self, e: &Expr, root: Option<Value>) -> Result<Value, Fault> {
         self.eval_consts().map_err(unwrap_fault)?;
-        let env = Scope::child(&self.globals);
+        let env = Scope::child(&self.home().globals);
         if let Some(r) = root {
             env.define("root", r);
         }
@@ -746,8 +759,9 @@ impl Interp {
             return Ok(());
         }
         for (name, expr) in &self.consts {
-            let v = self.eval_expr(expr, &self.globals)?;
-            self.globals.define(name, v);
+            let globals = self.home().globals.clone();
+            let v = self.eval_expr(expr, &globals)?;
+            globals.define(name, v);
         }
         self.consts_ready.set(true);
         Ok(())
@@ -768,12 +782,13 @@ impl Interp {
     }
 
     fn call_fn(&self, name: &str, args: Vec<Value>) -> R<Value> {
-        let f = match self.funcs.get(name) {
+        let home = self.home();
+        let f = match home.funcs.get(name) {
             Some(f) => f,
             None => return Err(Escape::Fault(Fault::new("DL0907", format!("unknown function `{name}`")))),
         };
         self.enter()?;
-        let env = Scope::child(&self.globals);
+        let env = Scope::child(&self.home().globals);
         for (p, v) in f.params.iter().zip(args) {
             env.define(&p.name.name, v);
         }
@@ -788,9 +803,21 @@ impl Interp {
         for (p, v) in clo.params.iter().zip(args) {
             env.define(p, v);
         }
+        // CLOSURE-SCOPE-1: the body resolves its names in the module that built the closure, whoever calls it.
+        // The interpreter's own custody, brokers and effect sink stay — a plugin export's nested interpreter
+        // shares the host's — so only the NAMES move; restored before the call returns, faults included.
+        let caller = clo.home.as_ref().map(|h| self.home.replace(Rc::clone(h)));
         let result = self.exec_block_value(&clo.body, &env);
+        if let Some(caller) = caller {
+            *self.home.borrow_mut() = caller;
+        }
         self.leave();
         self.finish_call(result)
+    }
+
+    /// The module whose names the code running now resolves against (see [`Home`]).
+    fn home(&self) -> Rc<Home> {
+        Rc::clone(&self.home.borrow())
     }
 
     /// Convert a body result into a call result: `return`/`?`-propagation become the value;
@@ -1005,6 +1032,7 @@ impl Interp {
                     params: params.iter().map(|p| p.name.name.clone()).collect(),
                     body: body.clone(),
                     env: env.clone(),
+                    home: Some(self.home()),
                 }));
                 // 10d: the captured scope is where a `var`-holds-its-own-closure cycle lives.
                 self.note_alloc(&v);
@@ -1090,11 +1118,13 @@ impl Interp {
         // A named function closes over the globals — exactly the environment `call_fn` builds
         // for a direct call — so calling it through this value and calling it by name are the
         // same computation. See `HARDENING_CAMPAIGN.md` C13.
-        if let Some(f) = self.funcs.get(name) {
+        let home = self.home();
+        if let Some(f) = home.funcs.get(name) {
             let v = Value::Closure(Rc::new(Closure {
                 params: f.params.iter().map(|p| p.name.name.clone()).collect(),
                 body: f.body.clone(),
-                env: Scope::child(&self.globals),
+                env: Scope::child(&home.globals),
+                home: Some(Rc::clone(&home)),
             }));
             self.note_alloc(&v);
             return Ok(v);
@@ -1118,7 +1148,7 @@ impl Interp {
                 // P2 — `load(host, path, grant)` is handled HERE rather than in `prim`, for the
                 // reason `root.foreign` is: it mints a custody node and reads a container through the
                 // injected engine, and `prim` has neither.
-                if name == "load" && env.get(name).is_none() && !self.funcs.contains_key(name) {
+                if name == "load" && env.get(name).is_none() && !self.home().funcs.contains_key(name) {
                     let v = self.load_plugin(&argvals, span).map_err(Escape::Fault)?;
                     self.note_alloc(&v);
                     return Ok(v);
@@ -1131,7 +1161,7 @@ impl Interp {
                     return res.map_err(Escape::Fault);
                 }
                 // A user function.
-                if self.funcs.contains_key(name) {
+                if self.home().funcs.contains_key(name) {
                     return self.call_fn(name, argvals);
                 }
                 // A variant constructor with fields (`Say(x)`, `Other(m)`, …) — capitalized, and not
@@ -1340,7 +1370,7 @@ impl Interp {
                     if is_self {
                         if let Some(f) = decl.fns.iter().find(|f| f.name.name == name.name) {
                             // T-SyncMethod: runs within the actor's own turn.
-                            let fenv = Scope::child(&self.globals);
+                            let fenv = Scope::child(&self.home().globals);
                             fenv.define("self", recvv.clone());
                             for (p, v) in f.params.iter().zip(argvals) {
                                 fenv.define(&p.name.name, v);
@@ -1788,7 +1818,7 @@ impl Interp {
     /// reached through. Separate from `call_fn` because it is the only place an outside caller names a
     /// function, and the refusal for a missing one must say that rather than "unknown function".
     fn call_exported(&self, name: &str, args: Vec<Value>, span: delulu_diag::Span) -> R<Value> {
-        if !self.funcs.contains_key(name) {
+        if !self.home().funcs.contains_key(name) {
             return Err(Escape::Fault(Fault::at(
                 "DL1508",
                 format!("this plugin's module has no function `{name}` (the manifest and the code disagree)"),

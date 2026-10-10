@@ -218,6 +218,7 @@ mod tests {
                 span: delulu_diag::Span::new(0, 0, 0),
             },
             env: env.clone(),
+            home: None,
         }));
         env.define("f", clo.clone());
         reg.note_env(&env);
