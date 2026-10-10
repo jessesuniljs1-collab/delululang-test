@@ -1910,3 +1910,30 @@ it on `origin` was made in the cloud and is listed below.
   CLOSURE-SCOPE-1 (HIGH)** — this run's next slice; if it does not land, it is the next run's first item; (3) **RW 4.56** (a
   plugin node's revoke reaches the next CALL only); (4) RW 4.58, 4.57, 4.53; (5) RW 4.46 and P8-04's two remaining rules.
   **For the owner:** D-V2-106 (and D-V2-103 to D-V2-105). **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-10 — routine run 17 (continued): CLOSURE-SCOPE-1 closed — a closure's names are its own module's (D-V2-107, RW 4.55)
+- Session: `https://claude.ai/code/session_01WzxFaZVw8HRNkGs9neji5s`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-f86pm9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `02cc186`
+- Commits: (1) `c83ebe6` CLOSURE-SCOPE-1 (RW 4.55): a closure resolves its names in its own module; (2) this entry's commit —
+  the records
+- Files and folders: (1) M `crates/delulu-runtime/src/interp.rs` (`Home`; `call_closure` swaps and restores it),
+  `crates/delulu-runtime/src/value.rs` (`Closure::home`), `crates/delulu-runtime/src/actors.rs`, `crates/delulu-runtime/src/cycles.rs`,
+  `crates/delulu/tests/plugin_load_cli.rs` (the witness), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things
+  stand; §11.4 CLOSURE-SCOPE-1), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-107), `docs/REMAINING_WORK.md` (4.55
+  closed), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: the red team's F-03 re-run on `3e9c496` before it was recorded (a plugin with an all-empty grant wrote its own file
+  through a host callback's `FsWrite`); the witness red first ("callback answered 1000"); the red team's three repros by hand on
+  the fix, the secret one under the daemon ("host redacted the secret"); mutants M208–M211 red, control green; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS; runner reads at `c83ebe6` — macOS `38029968775`, Windows `38029970294`, arm64
+  `38029972153`, `delulu-runtime` on Windows `38029973402` — green, the witness named; the full suite alone at `c83ebe6`: 2,195
+  passed, 0 failed, 16 ignored (161 binaries). Push runs: `3e9c496`'s `openshell` `38029067306` and `ocsf` `38029067286` — success;
+  its CI run `38029067385` and `02cc186`'s `38029490424` were running at this commit.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (CLOSURE-SCOPE-1, with its search key).
+- Open / next: (1) read the push runs of `3e9c496`, `02cc186`, `c83ebe6` and this commit, and the 2026-10-10 nightly; (2) **RW
+  4.56** — this run's next slice if it lands (a gate on the plugin's node at each use the export makes); (3) RW 4.58, 4.57, 4.53;
+  (4) RW 4.46 and P8-04's two remaining rules. **For the owner:** D-V2-106, D-V2-107.

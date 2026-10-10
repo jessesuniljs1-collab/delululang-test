@@ -4821,3 +4821,32 @@ sharing a plugin path.
   inside an export) are D-V2-104's documented design. Oddities kept for judgment: a run whose actors died of a revoke exits 0;
   `plugin build` accepts a plugin declaring an actor that `load` refuses; one DL0406 printed five times; `ts` not monotone
   along the chain under load (the links are the order); `audit verify` flags no seq gap or dangling reference.
+
+## 2026-10-10 — routine run 17 (continued): CLOSURE-SCOPE-1 closed — a closure's names are its own module's (D-V2-107, RW 4.55)
+
+**The defect** (the red team's F-03, re-run by the head chef on `3e9c496` before a word of it was recorded). A closure was
+`{ params, body, env }`; a call by name inside its body looked in the function table of the interpreter that CALLED it. A
+Verified plugin export may take a callback (R-4), and the export runs in a nested interpreter built from the plugin's module —
+so a host callback calling the host's `save(fs, name)` ran the PLUGIN's `save` when the plugin defined one, with the host's
+captured `FsWrite`. Witnessed: a plugin loaded with an all-empty grant wrote `PWNED-by-plugin.txt` and the host's file was never
+written; under the daemon the red team's variant read a broker-held secret's plaintext through a captured `Secret` and
+`Cap[Declassify]` (re-run: the same). The reverse held too: a closure the plugin built and returned called the HOST's `helper`
+when the host invoked it.
+
+**Fixed** (D-V2-107): `interp.rs`'s `Home` — a module's functions and globals — held by the interpreter that runs the module and by
+every closure that module's code builds (a lambda, or a named function taken as a value). `call_closure` runs the body against the
+closure's home and restores the caller's before it returns; custody, brokers and the effect sink stay the calling interpreter's (a
+nested interpreter shares the host's). A closure rebuilt from an actor message or the cycle collector's probe has no home and
+resolves in the interpreter that calls it — an actor's worker runs the program's own module.
+
+**Witness** `plugin_load_cli` `a_closures_names_resolve_in_its_own_module_across_the_plugin_boundary`, red first ("callback
+answered 1000", the plugin's file written): the callback writes the host's file and answers the host's 1; the plugin's closure and a
+plugin function handed out as a value answer the plugin's 1000; a callback reaches a host function the plugin lacks (before the fix,
+DL0907 `unbound name`). The red team's three repros by hand on the fix: the host's file written, the plugin's closure 1000, and
+"host redacted the secret" under the daemon. **Mutants** M208 (no swap), M209 (a lambda records no home), M210 (a named function's
+value records none), M211 (the caller's home not restored) — red; the control green. **Read on the runners at `c83ebe6`** over `plugin_load_cli`, `actors_cli`, `examples_run` and `bin:delulu`: macOS `38029968775`, Windows `38029970294`, arm64 `38029972153` — 0 failed, the witness named on each; `delulu-runtime`'s unit tests on Windows `38029973402` (260 passed). Clippy clean; `check-other-os.sh` clean for Windows and macOS. **The full suite alone at `c83ebe6`:** 2,195 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved; `c83ebe6` pushed to `master`.
+
+**Residuals.** A closure a plugin built keeps running the plugin's code after the plugin is unloaded — its liveness is not
+checked (RW 4.56's neighbour: a plugin's authority is checked at the CALL of an export, not at each use). In a host callback run
+inside an export, a foreign bind meets the nested interpreter's bind table and grants, which hold none of the host's: it is refused
+(`NotGranted`) where the host would have bound — fail-closed, and the wrong reason.

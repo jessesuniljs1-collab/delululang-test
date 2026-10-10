@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a closure's names are its own module's, 2026-10-10
+
+- **Fixed (RW 4.55, CLOSURE-SCOPE-1 — security): a callback passed to a Verified plugin export called the PLUGIN's function of
+  the same name**, with the capabilities the callback had captured — a plugin with no grant could write a file of its choosing,
+  or read a secret, through a host callback. A closure now resolves its names in the module that built it, whoever calls it; a
+  closure a plugin returns runs the plugin's functions, not the host's.
+
 ## Unreleased — a dead monitor stops its runs, 2026-10-10
 
 - **Added (P8-04 step 5, D-V2-106): `delulu monitor watch --on-monitor-death quarantine|continue` and `--death-after MS`.** A

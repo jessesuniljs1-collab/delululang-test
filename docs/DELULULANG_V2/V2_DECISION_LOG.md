@@ -2460,6 +2460,19 @@ refused and (c) stays the owner's.
 6. **No new code.** A dead-man's protocol misuses — nothing armed, a second arming, a wrong key, a period out of bounds — are
    DL1401 ("broker-protocol failure"); a beat to a node its dead-man has revoked is DL1403, naming the seq.
 
+## D-V2-107 — CLOSURE-SCOPE-1: a closure carries its home module and resolves its names there; Verified callbacks stay — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **Lexical scope across the plugin boundary.** A closure holds its home — its module's functions and globals — and its body
+   resolves names there, whoever calls it (RW 4.55). The calling interpreter's custody, brokers and effect sink stay: only the
+   NAMES move, so a host callback inside an export answers to the host's custody as before (PLUGIN-CUSTODY-1), now running the
+   host's code.
+2. **Not chosen: refusing function-typed parameters in Verified exports** (Contained's R-6a rule, DL0803). R-4 admits callbacks
+   to Verified plugins because their code is re-proved at load and the callback's row is real; refusing them would remove a
+   designed feature to hide an interpreter defect, and would leave the reverse direction — a closure a plugin returns — still
+   wrong.
+3. **A closure without a home** (rebuilt from an actor message; the cycle collector's probe) resolves in the interpreter that
+   calls it — an actor's worker runs the program's own module, so nothing changes for actors.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

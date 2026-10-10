@@ -79,8 +79,8 @@ the assistant's memory — which now also travels file by file in
   effects answer to the run's custody and brokers (D-V2-103); PLUGIN-CUSTODY-1 the same — a plugin export runs under the
   host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
   (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Routine run 17 (2026-10-10):** P8-04 step 5 — a dead
-  monitor quarantines: the broker holds a dead-man for its node (D-V2-106). **Next:** the red-team findings of run 17 (RW 4.55
-  onward), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
+  monitor quarantines: the broker holds a dead-man for its node (D-V2-106); CLOSURE-SCOPE-1 found by its red-team pass and
+  closed (D-V2-107). **Next:** the rest of that pass's findings (RW 4.56 onward), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -839,6 +839,12 @@ spells the same thing?**
   (D-V2-104):** a plugin export's nested interpreter had a fresh allow-all custody and no device broker — and under the
   daemon no plugin could be called at all (PLUGIN-DAEMON-1: the daemon's custody never answered liveness, so every call was
   `Revoked(0)`); fixing that made the unrecorded uses reachable, 0 of 2 in the chain. It shares the host's custody now.
+- **2026-10-10 — CLOSURE-SCOPE-1 (HIGH, RW 4.55) — found and closed by routine run 17 (D-V2-107)**, from its red-team pass: a
+  closure resolved its function names in the module of the interpreter that CALLED it, so a host callback passed to a Verified
+  plugin export ran the plugin's same-named function with the callback's captured capabilities — a plugin loaded with no grant
+  wrote its own file through the host's `FsWrite`, and read a broker-held secret's plaintext. A closure carries its home module
+  now. **The search key: a name resolved against "the current interpreter" is resolved against whoever is running — ask which
+  module a piece of code was WRITTEN in, and resolve there.**
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses

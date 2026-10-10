@@ -193,3 +193,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   monitor holds, and the monitor is non-dumpable on Linux. Lessons: a witness of an ORDER must build the state where the order
   matters (M201 survived two floods that let the queue drain); a same-user-but-not-root witness is read on `ubuntu-24.04` (the VM
   is root, and the harness refuses `su -c`).
+- **CLOSURE-SCOPE-1 closed the same run** (D-V2-107, RW 4.55, HIGH — the red team's F-03): a closure resolved its names in its
+  CALLER's module, so a host callback inside a Verified plugin export ran the plugin's same-named function with the host's
+  captured capabilities (a file written, a secret read, by a plugin with no grant). A closure carries its home module now.
