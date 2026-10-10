@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a plugin's revoke stops its running export, 2026-10-10
+
+- **Fixed (RW 4.56): `delulu grants revoke` of a plugin's grant did not stop an export that was already running** — a plugin
+  driving an arm in a loop kept commanding it (96 of 120 commands after the revoke), though the command said the revoke takes
+  effect before the next use. It does now: the export's next actuator command is refused as an e-stop refuses one, and any other
+  effect ends it.
+
 ## Unreleased — a closure's names are its own module's, 2026-10-10
 
 - **Fixed (RW 4.55, CLOSURE-SCOPE-1 — security): a callback passed to a Verified plugin export called the PLUGIN's function of

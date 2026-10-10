@@ -80,7 +80,8 @@ the assistant's memory — which now also travels file by file in
   host's custody and devices, and plugins are callable under the daemon at last (D-V2-104); RW 4.48 and AUDIT-DAY-1 closed
   (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Routine run 17 (2026-10-10):** P8-04 step 5 — a dead
   monitor quarantines: the broker holds a dead-man for its node (D-V2-106); CLOSURE-SCOPE-1 found by its red-team pass and
-  closed (D-V2-107). **Next:** the rest of that pass's findings (RW 4.56 onward), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
+  closed (D-V2-107), and RW 4.56 (D-V2-108 — a plugin node's revoke reaches its running export's next use). **Next:** the
+  rest of that pass's findings (RW 4.58, 4.57, 4.53), RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -845,6 +846,9 @@ spells the same thing?**
   wrote its own file through the host's `FsWrite`, and read a broker-held secret's plaintext. A closure carries its home module
   now. **The search key: a name resolved against "the current interpreter" is resolved against whoever is running — ask which
   module a piece of code was WRITTEN in, and resolve there.**
+- **2026-10-10 — RW 4.56 (the same pass's F-07) — closed the same run (D-V2-108):** revoking a plugin's node let its running
+  export go on commanding an arm (96 of 120 commands after the revoke) while the CLI said "before the next use"; the node was
+  checked only at the export's CALL. A gate on the plugin's node now stands at each use.
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1166,13 +1170,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch
   listing is what found the stranded commit.
-- **A witness of an ORDER must build the state where the order matters** (routine run 17, M201): the daemon fires dead-men
-  BEFORE it handles the next request, so a stream of requests cannot hold one off — and the witness's clients (first pausing,
-  then eight back to back, asking for a cheap `Status`) let the queue drain, so the loop's zero-length wait at the deadline
-  timed out and fired anyway: a mutant that fired only on a timeout survived twice. Clients whose requests are slower to handle
-  than to send (each mints a node, writing a record) keep a request always waiting, and the mutant is red. When code relies on
-  which of two things happens first, make them conflict in the witness. (Run 13's lesson, from the other side: witness a choice
-  about time where the time is largest.)
+- **A witness of an ORDER must build the state where the order matters — deterministically** (routine run 17, M201): the
+  daemon fires dead-men BEFORE it handles the next request, so a stream of requests cannot hold one off — and the witness's
+  clients asking for cheap answers let the queue drain, so the loop's zero-length wait at the deadline timed out and fired
+  anyway: a mutant that fired only on a timeout survived. A flood of record-writing requests turned it red 3 of 3 — only because
+  a red-team pass was loading the VM at the time; on a quiet VM it survived again. Requests that cost the LOOP milliseconds (a
+  listing of a 2,001-node tree) keep a request always waiting whatever the machine: red 4 of 4. A mutant red under one load is
+  not yet red. (Run 13's lesson, from the other side: witness a choice about time where the time is largest.)
+- **A witness's baseline is the STATE it needs, never a throughput** (routine run 17): the same witness asserted "200 requests
+  answered in 1.6 s" to prove the daemon was busy; CI's test job, running the whole suite in parallel, answered 45 and `master`
+  went red (`38029067385`) with the guarantee unasserted. The baseline is now "requests answered after the deadline", checked
+  with all four CPUs busy. Assert the guarantee first; reproduce a CI-only red by starving the VM, as §11.5 already says.
 - **A same-user-but-not-root witness is read on a runner** (routine run 17): the VM runs as root, which reads every process, so
   "may another process of the operator's user read this one?" (HOST-DUMPABLE-1's shape) measures nothing there — and the
   harness refused a `su -c` probe it could not inspect. `ubuntu-24.04`'s runner is not root: commit the witness without its fix,

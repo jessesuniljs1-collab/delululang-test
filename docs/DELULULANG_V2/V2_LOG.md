@@ -4850,3 +4850,26 @@ value records none), M211 (the caller's home not restored) — red; the control 
 checked (RW 4.56's neighbour: a plugin's authority is checked at the CALL of an export, not at each use). In a host callback run
 inside an export, a foreign bind meets the nested interpreter's bind table and grants, which hold none of the host's: it is refused
 (`NotGranted`) where the host would have bound — fail-closed, and the wrong reason.
+
+## 2026-10-10 — routine run 17 (continued): RW 4.56 closed — a plugin node's revoke reaches its running export's next use (D-V2-108); `master` red once on the busy-daemon witness's baseline, fixed
+
+**RW 4.56** (the red team's F-07, re-run by the head chef on `3e9c496`: 96 of 120 commands landed after the plugin node's
+revoke). **Witness** `plugin_load_cli` `under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_the_next_use`,
+red first: 3 commands before the revoke, **117 after it**, `landed=120`. **Fixed** (D-V2-108): `custody.rs`'s `PluginUseCustody` —
+the export's nested interpreter holds the host's custody behind a gate on the plugin's node; once it is revoked, an actuator
+command is told `LeaseRevoked` and any other effect faults DL0801. Green: 3 before, **0 after**. **Mutants** M212 (the gate always
+open), M213 (`check` skips it), M214 (the nested interpreter gets the host's custody unwrapped) — red; control green. **Read on
+the runners at `ff91be5`** over `plugin_load_cli`, `estop_cli` and `examples_run`: macOS `38030868405` (4 before, 0 after),
+Windows `38030870802` (3, 0), arm64 `38030872242` (3, 0) — 31 passed, 0 failed on each. Clippy clean; `check-other-os.sh` clean
+for Windows and macOS. Residual: a use refused by the gate is not recorded (the revoke is; RW 4.46's shape); each gated use under
+the daemon costs one liveness round trip.
+
+**`master` red once — `3e9c496`'s push run `38029067385`, `test (ubuntu-24.04)`:** `a_busy_daemon_still_fires_an_unbeaten_dead_man`
+asserted a BASELINE of 200 requests answered in 1.6 s, and CI's test job — the whole suite in parallel — answered 45; the dead-man
+assertion never ran. `02cc186`'s run (`38029490424`), the same code, passed by chance. Re-run on a quiet VM, **M201 then SURVIVED**:
+its earlier red 3 of 3 (this run's first entry) had come while the red-team sous-chef loaded the VM — cheap requests let the queue
+drain, the zero-length wait at a past deadline times out, and the dead-man fires anyway. **Fixed in `a76018f`:** eight clients list
+a 2,001-node tree, so each answer costs the loop milliseconds and a request is always waiting; the dead-man assertion comes first;
+the baseline is that requests were answered AFTER the deadline. M201 red 4 of 4 on a quiet VM, M200 red, controls green; the test
+green 3 of 3 with all four CPUs busy (40–51 listings). The wire-key test's period widened from 400 ms to 1.5 s for the same reason
+(M204 still red). The fixed witness read on the runners at `a76018f`: macOS `38031308292` (71 listings, 43 after the deadline), Windows `38031306607` (45, 31) — green. **The full suite alone at `a76018f`:** 2,196 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved; `ff91be5` and `a76018f` pushed to `master`.

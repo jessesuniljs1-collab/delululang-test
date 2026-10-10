@@ -2473,6 +2473,18 @@ refused and (c) stays the owner's.
 3. **A closure without a home** (rebuilt from an actor message; the cycle collector's probe) resolves in the interpreter that
    calls it — an actor's worker runs the program's own module, so nothing changes for actors.
 
+## D-V2-108 — RW 4.56: a plugin's node gates each use its export makes, not only the call — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **The gate.** A plugin export's nested interpreter holds the host's custody behind a check of the plugin's node at every
+   use (`PluginUseCustody`). D-V2-104 item 4 stands — the export's uses are checked against, and recorded on, the run's node,
+   because the capabilities it uses are the ones the host handed it — and gains what it lacked: the operator's revoke of the node
+   `grants list` shows as the plugin's reaches the export's next use, as the CLI's "before the next use" had promised.
+2. **What a refused use is.** An actuator command is told `LeaseRevoked` (the value an e-stop gives, 10e's law); any other effect
+   faults DL0801 (a call through a revoked plugin reference) — the same code the export's next CALL would have met.
+3. **Not chosen:** checking the export's uses against the plugin's own node (F-02) — it would refuse every capability the host
+   hands a plugin with an empty grant, the shape callbacks and handed actuators rely on; and changing the CLI's message to "the
+   next call" — weaker, and an e-stop's handle must stop a loop.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

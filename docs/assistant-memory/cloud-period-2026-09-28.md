@@ -196,3 +196,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **CLOSURE-SCOPE-1 closed the same run** (D-V2-107, RW 4.55, HIGH — the red team's F-03): a closure resolved its names in its
   CALLER's module, so a host callback inside a Verified plugin export ran the plugin's same-named function with the host's
   captured capabilities (a file written, a secret read, by a plugin with no grant). A closure carries its home module now.
+- **RW 4.56 closed the same run** (D-V2-108): a plugin node's revoke now reaches its running export's next use. And `master` went
+  red once on this run's own witness — its baseline asserted a throughput (200 requests in 1.6 s; CI's parallel test job answered
+  45). Lessons: a baseline is the state a witness needs, never a throughput; a mutant red only while another load shared the VM is
+  not yet red.

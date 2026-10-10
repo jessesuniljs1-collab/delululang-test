@@ -1937,3 +1937,32 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next: (1) read the push runs of `3e9c496`, `02cc186`, `c83ebe6` and this commit, and the 2026-10-10 nightly; (2) **RW
   4.56** — this run's next slice if it lands (a gate on the plugin's node at each use the export makes); (3) RW 4.58, 4.57, 4.53;
   (4) RW 4.46 and P8-04's two remaining rules. **For the owner:** D-V2-106, D-V2-107.
+
+### 2026-10-10 — routine run 17 (continued): RW 4.56 closed — a plugin node's revoke reaches its running export (D-V2-108); `master` red once on this run's own witness, fixed
+- Session: `https://claude.ai/code/session_01WzxFaZVw8HRNkGs9neji5s`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-f86pm9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `9be433d`
+- Commits: (1) `ff91be5` RW 4.56: revoking a plugin's node stops its running export at the next use; (2) `a76018f` the
+  busy-daemon witness: a baseline the loop's state needs, not a throughput; (3) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-runtime/src/custody.rs` (`PluginUseCustody`), `crates/delulu-runtime/src/interp.rs`
+  (`call_plugin_export`), `crates/delulu/tests/plugin_load_cli.rs` (the witness), `docs/survey/*`. (2) M
+  `crates/delulu/src/brokerd.rs` (two unit tests), `docs/survey/*`. (3) M `CHANGELOG.md`, `HANDOFF.md` (where things stand;
+  §11.4 RW 4.56; §11.5 the order lesson rewritten and a baseline lesson), `docs/CLOUD_ROUTINE.md` (rules: a baseline is a state,
+  never a throughput), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-108), `docs/REMAINING_WORK.md` (4.56 closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: RW 4.56's witness red first (3 before the revoke, 117 after), green (0 after); M212–M214 red, control green; runner
+  reads at `ff91be5` — macOS `38030868405`, Windows `38030870802`, arm64 `38030872242`, 31 passed and 0 failed on each. **`master`
+  red once:** `3e9c496`'s push run `38029067385`, `test (ubuntu-24.04)` — the busy-daemon witness's baseline (200 requests in
+  1.6 s; 45 answered); `02cc186`'s `38029490424` and `9be433d`'s `38030530082` green by chance on the same code. M201 then survived
+  on a quiet VM (its first red had come under the red team's load); fixed in `a76018f` — M201 red 4 of 4, M200 and M204 red, the
+  test green 3 of 3 with all four CPUs busy; read at `a76018f` on macOS `38031308292` and Windows `38031306607`. The full suite
+  alone at `a76018f`: 2,196 passed, 0 failed, 16 ignored (161 binaries).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.56) and §11.5 (an order witness deterministically; a baseline is a state).
+- Open / next: (1) read the push runs of `a76018f` and this commit (`c83ebe6`'s `38030475956` and `9be433d`'s `38030530082`
+  read green at this commit), and the 2026-10-10 nightly; (2) RW 4.58 (a lost audit record answered as success), RW 4.57 (a killed run's nodes), RW 4.53 (the chain's
+  catch-up under contention); (3) RW 4.46 and P8-04's two remaining rules; (4) P9. **For the owner:** D-V2-106, D-V2-107,
+  D-V2-108. **On 2026-10-12 a run starts the closing entry for the cloud period.**

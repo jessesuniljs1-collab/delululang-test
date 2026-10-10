@@ -321,7 +321,9 @@ fool. Keep this file short enough to read at the start of every run.
 - **One writer at a time.** If `git fetch` shows another run pushed since this one started, rebase before
   pushing; if the other run is still working on the same files, choose different work.
 - **Never weaken a test to make it pass, never lengthen a sleep to make a timing test green** — a timing
-  test failing only on CI may be measuring the runner (`HANDOFF.md` §11.5).
+  test failing only on CI may be measuring the runner (`HANDOFF.md` §11.5). **A witness's baseline is the state it needs, never a
+  throughput** (run 17: "200 requests in 1.6 s" — CI's parallel test job answered 45 and `master` went red); run a new timing-shaped
+  witness with all four CPUs busy before it reaches `master`, and assert the guarantee before the baseline.
 - **Keep usage modest.** Sub-agents only where they add independent value (a testing pass on a finished
   feature). Heavy runs — Miri, `heavy-gates`, the other operating systems — belong to CI. Routine runs
   draw on the owner's subscription: on 2026-09-28 run 1 spent the five-hour window and the next three
