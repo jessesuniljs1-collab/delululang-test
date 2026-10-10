@@ -1309,8 +1309,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             Ok(w) => w,
             Err(code) => return code,
         };
+    // ACTOR-CUSTODY-1: an actor's worker performs its effects under the same custody as `main`.
+    let mut actor_custody: Option<
+        std::sync::Arc<dyn Fn() -> Box<dyn delulu_runtime::Custody> + Send + Sync>,
+    > = None;
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
+        let clients = c.same_node_clients();
+        actor_custody = Some(std::sync::Arc::new(move || Box::new(clients()) as Box<dyn delulu_runtime::Custody>));
         interp = interp.with_custody(Box::new(c));
     } else if !grants.plugins.is_empty() {
         // P2: a run that MAY load a plugin needs a grant tree for the load's step-4 holder check, and
@@ -1398,7 +1404,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 );
             }
         }
-        let system = delulu_runtime::actors::ActorSystem::start_with(
+        let system = delulu_runtime::actors::ActorSystem::start_governed(
             &checked.module,
             threads,
             opts.on_actor_death_abort,
@@ -1406,6 +1412,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             debug_set.clone(),
             mb_default,
             mb_overflow.as_deref() == Some("drop-new"),
+            // ACTOR-CUSTODY-1: the run's custody and brokers, so a capability handed to an actor answers
+            // to the daemon, the e-stop and the device's lease exactly as it did in `main`.
+            delulu_runtime::actors::WorkerEffects {
+                custody: actor_custody.clone(),
+                devices: devices.clone(),
+                computes: computes.clone(),
+            },
         );
         // An honest label for a degraded capability (D67). Actor workers reserve a stack sized for
         // the interpreter's documented depth bound; where the host refuses that reservation the

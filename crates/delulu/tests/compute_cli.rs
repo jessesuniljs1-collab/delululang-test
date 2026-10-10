@@ -519,3 +519,33 @@ fn compute_is_deny_by_default_like_every_other_capability() {
     let o = delulu(&["run", &program("ungranted"), "--grant", "console", "--no-prompt"]);
     assert_ne!(o.status.code(), Some(0), "an ungranted device must not run:\n{}", stderr(&o));
 }
+
+/// ACTOR-CUSTODY-1 (RW 4.47): an actor handed the compute capability dispatches through the run's
+/// compute broker, as `main` does. Before routine run 16 the actor's worker held no broker, so the
+/// same signed kernel answered `NoAdapter` from an actor while it answered `10.0` from `main` — two
+/// answers to one capability, depending on which thread held it.
+#[test]
+fn an_actor_dispatches_through_the_runs_compute_broker() {
+    let dir = scratch("actor");
+    let path = kernel_artifact(&dir, "reduce_sum", "refkernel-1 reduce_sum\n", true);
+    let prog = dir.join("ka.delulu");
+    std::fs::write(
+        &prog,
+        "module ka\n\
+         actor Worker {\n  var n: Int\n  new() { self.n = 0 }\n  \
+         be go(c: Cap[Console], g: Cap[Compute]) ! {Write, ForeignCall} {\n    \
+         match g.dispatch(\"reduce_sum\", [1.0, 2.0, 3.0, 4.0]) {\n      \
+         Ok(v) => c.println(\"OK \" + str(v)),\n      Err(e) => match e {\n        \
+         KernelEnvelope(x) => c.println(\"ENV\"),\n        UnknownKernel(n) => c.println(\"UNK\"),\n        \
+         NoAdapter => c.println(\"NOAD\")\n      }\n    }\n  }\n}\n\
+         fn main(root: Root) ! {Async, Write, ForeignCall} {\n  \
+         let w = spawn Worker()\n  w.go(root.console(), root.compute(\"gpu0\"))\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&[
+        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", &grant_for(&path), "--no-prompt",
+    ]);
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(o.status.success(), "{out}\n{}", stderr(&o));
+    assert_eq!(out.trim(), "OK 10.0", "the actor's dispatch reaches the bound adapter:\n{out}\n{}", stderr(&o));
+}

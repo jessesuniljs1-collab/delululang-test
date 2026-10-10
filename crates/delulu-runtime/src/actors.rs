@@ -337,6 +337,30 @@ pub struct ActorSystem {
     worker_max_depth: u32,
 }
 
+/// What a worker needs to perform an actor's effects under the RUN's authority — the custody and the
+/// brokers `main`'s interpreter holds (ACTOR-CUSTODY-1, RW 4.47).
+///
+/// **An actor's effects are the run's effects.** Until routine run 16 a worker built its interpreter
+/// with none of these, so under `--broker daemon` an actor's uses never asked the daemon (a revoke,
+/// the e-stop, did not reach them) and were never recorded; and in every mode its actuator commands
+/// were envelope-checked and answered `Ok` by nobody — no lease, no rate bound, no device. A capability
+/// handed to an actor is the same authority it was in `main`, so it answers to the same custody.
+///
+/// `Default` is what [`ActorSystem::start`] passes: embedded pass-through custody and no brokers,
+/// which is exactly `main`'s own interpreter when nothing is attached to it.
+#[derive(Clone, Default)]
+pub struct WorkerEffects {
+    /// Builds each worker's custody ON the worker's thread. A custody client caches its node's epoch
+    /// and is not shared between threads, so each worker holds its own client for the same node.
+    pub custody: Option<Arc<dyn Fn() -> Box<dyn crate::custody::Custody> + Send + Sync>>,
+    /// The run's device broker — shared, as it is between `main` and the host channel: one set of
+    /// leases, one rate bound and one dead-man per device, whoever commands it.
+    pub devices: Option<Arc<crate::device::DeviceBroker>>,
+    /// The run's compute broker — without it an actor's dispatch answers `NoAdapter` beside a bound
+    /// adapter.
+    pub computes: Option<Arc<crate::compute::ComputeBroker>>,
+}
+
 impl ActorSystem {
     /// Start `threads` workers for `module` (its actor declarations are cloned into each
     /// worker, which builds its own single-threaded `Interp` — cells never cross threads).
@@ -356,6 +380,31 @@ impl ActorSystem {
         debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
         default_mailbox: Option<usize>,
         overflow_drop_new: bool,
+    ) -> ActorSystem {
+        ActorSystem::start_governed(
+            module,
+            threads,
+            abort_on_death,
+            trace,
+            debug_rcaps,
+            default_mailbox,
+            overflow_drop_new,
+            WorkerEffects::default(),
+        )
+    }
+
+    /// [`ActorSystem::start_with`] whose workers perform their effects under the run's custody and
+    /// brokers ([`WorkerEffects`]) — what `delulu run` starts (ACTOR-CUSTODY-1).
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_governed(
+        module: &Module,
+        threads: usize,
+        abort_on_death: bool,
+        trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
+        debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
+        default_mailbox: Option<usize>,
+        overflow_drop_new: bool,
+        effects: WorkerEffects,
     ) -> ActorSystem {
         let threads = threads.max(1);
         let shared = Arc::new(Shared {
@@ -399,6 +448,7 @@ impl ActorSystem {
                     trace: trace_w,
                     debug_rcaps: debug_w,
                     max_depth: crate::interp::max_depth_for_stack(stack_bytes),
+                    effects: effects.clone(),
                 },
                 stack_bytes,
             ));
@@ -537,6 +587,8 @@ struct WorkerSetup {
     /// The depth bound that fits this worker's stack. Never set independently of the reservation —
     /// see [`spawn_worker`].
     max_depth: u32,
+    /// The run's custody and brokers, attached to this worker's interpreter (ACTOR-CUSTODY-1).
+    effects: WorkerEffects,
 }
 
 /// The stack every worker in this system will take, decided **once** by probing.
@@ -566,10 +618,21 @@ fn usable_worker_stack() -> usize {
 }
 
 fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
-    let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth } = setup;
+    let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth, effects } = setup;
     let mut interp = crate::interp::Interp::new(&module)
         .with_max_depth(max_depth)
         .with_actors(ActorHost { shared: shared.clone(), senders, me: Some(wi) });
+    // ACTOR-CUSTODY-1: an actor's uses go through the run's custody and its devices through the run's
+    // brokers, exactly as `main`'s do — never a pass-through that answers for a device nobody holds.
+    if let Some(make) = &effects.custody {
+        interp = interp.with_custody(make());
+    }
+    if let Some(devices) = &effects.devices {
+        interp = interp.with_devices(devices.clone());
+    }
+    if let Some(computes) = &effects.computes {
+        interp = interp.with_computes(computes.clone());
+    }
     let local_sink = trace.as_ref().map(|_| TraceSink::new());
     if let Some(s) = &local_sink {
         interp = interp.with_trace(s.clone());

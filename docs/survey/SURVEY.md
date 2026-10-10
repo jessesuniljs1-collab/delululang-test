@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 303 |
-| Rust lines | 159220 |
+| Rust lines | 159636 |
 | Rust files outside `src/` (test/bench targets) | 138 |
 | Markdown documents | 252 |
 | Markdown lines | 71261 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1499 / 13627 |
+| Nodes / edges in this map | 1499 / 13634 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 43 files, 40301 lines
+- **Modules:** 43 files, 40323 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -99,7 +99,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/attest.rs` | 789 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
 | `src/boundary.rs` | 739 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
-| `src/broker_client.rs` | 513 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
+| `src/broker_client.rs` | 522 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 426 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 688 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 2688 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
@@ -132,7 +132,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/pipe_channel.rs` | 573 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
 | `src/policy.rs` | 522 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
-| `src/run_cmd.rs` | 1938 | `delulu run` — the command that actually executes a program. |
+| `src/run_cmd.rs` | 1951 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 688 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/schema.rs` | 1014 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
@@ -300,11 +300,11 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 20469 lines
+- **Modules:** 24 files, 20532 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/actors.rs` | 1227 | The native actor runtime (Stage 7 phase 7g, spec §6). |
+| `src/actors.rs` | 1290 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 681 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 772 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 726 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |

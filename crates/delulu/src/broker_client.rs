@@ -127,6 +127,15 @@ impl BrokerClientCustody {
         }
     }
 
+    /// Builds further clients for THIS client's node, one per thread of the same run — an actor's
+    /// worker (ACTOR-CUSTODY-1). Each starts with an empty epoch cache, so it asks the daemon before
+    /// its first use: a revocation that already happened is seen there, never served from a copy.
+    pub fn same_node_clients(&self) -> impl Fn() -> BrokerClientCustody + Send + Sync + 'static {
+        let (state_dir, node, authority, epoch_ms) =
+            (self.state_dir.clone(), self.node.clone(), self.authority.clone(), self.epoch_ms);
+        move || BrokerClientCustody::for_node(state_dir.clone(), node.clone(), authority.clone(), Some(epoch_ms))
+    }
+
     /// The node this custody client holds (displayed by `run --lease`; revoked in tests).
     pub fn node(&self) -> &GrantId {
         &self.node

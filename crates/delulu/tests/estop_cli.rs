@@ -471,3 +471,249 @@ fn the_grant_tree_shows_actuate_for_an_actuator_and_not_for_a_sensor() {
     let text = v.to_string();
     assert!(!text.contains("Actuate"), "a sensor grant is not a licence to command:\n{text}");
 }
+
+// ----- ACTOR-CUSTODY-1 (RW 4.47): an actor's effects are the run's effects ----------------------
+//
+// The supervisor above drives its arm from `main`. Until routine run 16 the same loop moved into an
+// ACTOR escaped all three of the e-stop's mechanisms: the actor's worker interpreter was built with
+// no custody and no device broker, so its commands were envelope-checked and answered `Ok` without
+// reaching a device, never checked against the daemon (a revoke did not reach them) and never
+// recorded. Re-run by the head chef: a revoke at 3 s, the device journal "lease revoked" — and the
+// actor told `COMMANDED` 60 times of 60. An actor holds only what it was handed; what it does with it
+// is governed exactly as `main`'s own uses are.
+
+/// The supervisor's loop, moved into an actor that `main` hands the console and the arm.
+const ACTOR_SUPERVISOR: &str = "\
+module m
+
+type Elbow { angle_deg: Float, velocity_dps: Float }
+
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => \"COMMANDED\",
+    Err(e) => match e {
+      Envelope(reason) => \"REFUSED: \" + reason,
+      LeaseRevoked(reason) => \"REVOKED: \" + reason,
+      NoDevice => \"NODEVICE\"
+    }
+  }
+}
+
+fn drive(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    c.println(say(a.command(Elbow { angle_deg: 12.0, velocity_dps: 4.0 })))
+    c.println(\"burn \" + str(fib(24)))
+    drive(c, a, n - 1)
+  }
+}
+
+actor Arm {
+  var n: Int
+  new() { self.n = 0 }
+  be run(c: Cap[Console], a: Cap[Actuator]) ! {Write, Actuate} {
+    c.println(\"ACTOR UP\")
+    let done = drive(c, a, 14)
+    c.println(\"ACTOR DOWN\")
+  }
+}
+
+fn main(root: Root) ! {Async, Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator(\"arm0/elbow\")
+  c.println(\"SUPERVISOR UP\")
+  let arm = spawn Arm()
+  arm.run(c, a)
+}
+";
+
+const ACTOR_RUN: [&str; 11] = [
+    "run",
+    "actor.delulu",
+    "--broker",
+    "daemon",
+    "--grant",
+    "console",
+    "--grant",
+    GRANT,
+    "--broker-profile",
+    "sim",
+    "--trace-effects",
+];
+
+/// Start the actor supervisor under the daemon and return it with a channel carrying its standard
+/// output line by line — so the operator acts only once the ACTOR has commanded the arm, never on a
+/// guess about how long the run takes to get there.
+fn spawn_actor_run(f: &Fixture) -> (std::process::Child, std::sync::mpsc::Receiver<String>, std::thread::JoinHandle<()>) {
+    std::fs::write(f.cwd.join("actor.delulu"), ACTOR_SUPERVISOR).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&f.cwd)
+        .env("DELULU_STATE_DIR", &f.state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(ACTOR_RUN)
+        .arg("--no-prompt")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the actor supervisor");
+    let out = child.stdout.take().expect("piped stdout");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        use std::io::BufRead;
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    (child, rx, reader)
+}
+
+/// Read lines until one equals `want`, keeping every line read. Fails, with what was read, after 30 s.
+fn read_until(rx: &std::sync::mpsc::Receiver<String>, want: &str, seen: &mut Vec<String>) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(left) {
+            Ok(l) => {
+                let hit = l.trim() == want;
+                seen.push(l);
+                if hit {
+                    return;
+                }
+            }
+            Err(_) => panic!("the run never printed {want:?}; it printed:\n{}", seen.join("\n")),
+        }
+    }
+}
+
+/// Wait for the run to end and return (every stdout line, stderr).
+fn finish_actor_run(
+    child: std::process::Child,
+    rx: std::sync::mpsc::Receiver<String>,
+    reader: std::thread::JoinHandle<()>,
+    mut seen: Vec<String>,
+) -> (Vec<String>, String) {
+    let out = child.wait_with_output().expect("the run exits");
+    let _ = reader.join();
+    seen.extend(rx.try_iter());
+    (seen, String::from_utf8_lossy(&out.stderr).to_string())
+}
+
+/// The control, and the record: nobody revokes anything, every one of the actor's 14 commands lands,
+/// and each is a `use` of the RUN's node in the audit chain — as each of `main`'s is. Before the fix
+/// all 14 landed too (answered by nobody) and the chain held none of them: an actor's actuation was
+/// invisible to the record a monitor reads.
+#[test]
+fn an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain() {
+    let f = setup("actrec");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let (child, rx, reader) = spawn_actor_run(&f);
+    let (lines, se) = finish_actor_run(child, rx, reader, Vec::new());
+    let so = lines.join("\n");
+    assert!(so.contains("ACTOR DOWN"), "the actor must finish its loop:\n{so}\n{se}");
+    assert_eq!(
+        lines.iter().filter(|l| l.trim() == "COMMANDED").count(),
+        14,
+        "every one of the actor's 14 commands lands when nobody revokes:\n{so}\n{se}"
+    );
+
+    let o = delulu_in(&f.cwd, &f.state, &["audit", "query", "--action", "use", "--json"]);
+    assert!(o.status.success(), "audit query: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit json");
+    assert_eq!(v["chain_verified"], serde_json::Value::Bool(true), "{v}");
+    let uses: Vec<&serde_json::Value> = v["records"]
+        .as_array()
+        .expect("records")
+        .iter()
+        .filter(|r| r["authority"]["op"] == "Actuate" && r["target"] == "arm0/elbow")
+        .collect();
+    assert_eq!(
+        uses.len(),
+        14,
+        "each of the actor's commands must be a `use` in the chain, as each of main's is:\n{v}"
+    );
+    let o = delulu_in(&f.cwd, &f.state, &["audit", "query", "--action", "issue", "--json"]);
+    let issued: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit json");
+    let run_node = issued["records"][0]["actor_node"].as_str().expect("the run's node").to_string();
+    assert!(
+        uses.iter().all(|r| r["actor_node"] == run_node.as_str()),
+        "the actor's uses are uses of the run's own node `{run_node}`:\n{v}"
+    );
+}
+
+/// The e-stop aimed at the device: once the actor has commanded the arm, the operator revokes the
+/// device's node, and the actor's next command is `LeaseRevoked` — a value, the actor lives — and no
+/// command after it lands. Before the fix the actor was told `COMMANDED` 14 times of 14 while the
+/// device journal said the lease was gone.
+#[test]
+fn an_operator_revoke_of_the_device_stops_an_actors_arm_too() {
+    let f = setup("actrev");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let (child, rx, reader) = spawn_actor_run(&f);
+    let mut seen = Vec::new();
+    read_until(&rx, "COMMANDED", &mut seen);
+    let (node, parent) = device_node(&f.cwd, &f.state, "arm0/elbow").expect("the run's device node");
+    assert_ne!(node, parent, "the device's node is a CHILD, not the run's own");
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &node]);
+    assert!(o.status.success(), "grants revoke {node}: {}", stderr(&o));
+
+    let (lines, se) = finish_actor_run(child, rx, reader, seen);
+    let so = lines.join("\n");
+    assert!(
+        se.contains("lease.revoked") && se.contains("operator-revoke"),
+        "the device journal must record the operator's revoke:\n{se}"
+    );
+    let first_revoked = lines
+        .iter()
+        .position(|l| l.starts_with("REVOKED:"))
+        .unwrap_or_else(|| panic!("losing the arm must reach the ACTOR as LeaseRevoked:\n{so}\n--- stderr ---\n{se}"));
+    assert!(
+        !lines[first_revoked..].iter().any(|l| l.trim() == "COMMANDED"),
+        "no command of the actor's may land after the revoke:\n{so}"
+    );
+    assert!(
+        so.contains("ACTOR DOWN"),
+        "a revoked device is a value, not a dead actor — the actor finishes its loop:\n{so}\n{se}"
+    );
+}
+
+/// The e-stop aimed at the run: revoking the run's own node ends the actor's effects as it ends
+/// `main`'s — its next use dies DL1403, so the actor dies and its loop never finishes. Before the
+/// fix the actor's uses never asked the daemon, and it drove on to `ACTOR DOWN`.
+#[test]
+fn revoking_the_runs_node_ends_an_actors_effects() {
+    let f = setup("actpar");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let (child, rx, reader) = spawn_actor_run(&f);
+    let mut seen = Vec::new();
+    read_until(&rx, "COMMANDED", &mut seen);
+    let (_, parent) = device_node(&f.cwd, &f.state, "arm0/elbow").expect("the run's device node");
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &parent]);
+    assert!(o.status.success(), "grants revoke {parent}: {}", stderr(&o));
+
+    let (lines, se) = finish_actor_run(child, rx, reader, seen);
+    let so = lines.join("\n");
+    assert!(
+        se.contains("actor Arm died") && se.contains("[DL1403]"),
+        "the actor's next use after its run's node is revoked must die DL1403:\n{so}\n--- stderr ---\n{se}"
+    );
+    assert!(
+        !so.contains("ACTOR DOWN"),
+        "an actor whose run's authority was revoked must not drive on to the end of its loop:\n{so}"
+    );
+}

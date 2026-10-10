@@ -477,3 +477,58 @@ fn a_malformed_device_grant_string_refuses_rather_than_widening() {
         assert_eq!(d.denial().unwrap().code(), "DL0904");
     }
 }
+
+/// ACTOR-CUSTODY-1 (RW 4.47), without any daemon: an actor's commands reach the run's device broker,
+/// so the grant's `rate_hz` binds them as it binds `main`'s. Two commands microseconds apart from an
+/// actor: the first lands, the second is refused with the granted rate named. Before routine run 16
+/// both answered `COMMANDED` — the worker held no broker, so an in-envelope command was answered `Ok`
+/// by nobody: no lease, no rate bound, no device.
+#[test]
+fn an_actors_commands_answer_to_the_runs_device_broker_and_its_rate_bound() {
+    let dir = scratch("actor-rate");
+    let f = dir.join("arm.delulu");
+    let prog = "module m\n\n\
+                type Elbow { angle_deg: Float, velocity_dps: Float }\n\n\
+                fn say(r: Result[Unit, ActuateErr]) -> Str {\n\
+                \x20 match r {\n\
+                \x20   Ok(u) => \"COMMANDED\",\n\
+                \x20   Err(e) => match e {\n\
+                \x20     Envelope(reason) => \"REFUSED: \" + reason,\n\
+                \x20     LeaseRevoked(reason) => \"REVOKED: \" + reason,\n\
+                \x20     NoDevice => \"NODEVICE\"\n\
+                \x20   }\n\
+                \x20 }\n\
+                }\n\n\
+                actor Arm {\n\
+                \x20 var n: Int\n\
+                \x20 new() { self.n = 0 }\n\
+                \x20 be run(c: Cap[Console], a: Cap[Actuator]) ! {Write, Actuate} {\n\
+                \x20   c.println(say(a.command(Elbow { angle_deg: 12.0, velocity_dps: 4.0 })))\n\
+                \x20   c.println(say(a.command(Elbow { angle_deg: 13.0, velocity_dps: 4.0 })))\n\
+                \x20 }\n\
+                }\n\n\
+                fn main(root: Root) ! {Async, Write, Actuate} {\n\
+                \x20 let arm = spawn Arm()\n\
+                \x20 arm.run(root.console(), root.actuator(\"arm0/elbow\"))\n\
+                }\n";
+    std::fs::write(&f, prog).unwrap();
+    let o = delulu(&[
+        "run",
+        &f.to_string_lossy(),
+        "--grant",
+        "console",
+        "--grant",
+        "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,rate_hz=1,\
+         heartbeat_ms=60000,ttl_ms=60000,fail=safe-park",
+    ]);
+    let so = String::from_utf8_lossy(&o.stdout).to_string();
+    let se = String::from_utf8_lossy(&o.stderr).to_string();
+    assert!(o.status.success(), "a refused command is a value, not a fault:\n{so}\n{se}");
+    let lines: Vec<&str> = so.lines().collect();
+    assert_eq!(lines.len(), 2, "the actor commanded twice:\n{so}\n{se}");
+    assert_eq!(lines[0], "COMMANDED", "the actor's first command lands:\n{so}");
+    assert!(
+        lines[1].starts_with("REFUSED: ") && lines[1].contains("at most 1 Hz"),
+        "the actor's second command, microseconds later, is held to the granted 1 Hz:\n{so}\n{se}"
+    );
+}
