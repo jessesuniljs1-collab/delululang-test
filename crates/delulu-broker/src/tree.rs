@@ -154,6 +154,9 @@ pub struct Broker {
     /// enforces the mechanism, the deployment provides that custody (a category-7 boundary — see
     /// `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`).
     strict_anchor: Option<String>,
+    /// P8-04 step 5 (D-V2-106): dead-men armed on nodes — each a FUTURE self-revocation the daemon
+    /// performs if its holder stops beating (`deadman.rs`). Daemon memory only, like the tree itself.
+    pub(crate) deadmen: HashMap<GrantId, crate::deadman::Deadman>,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -198,6 +201,7 @@ impl Broker {
             adoptions_poisoned: false,
             guard: crate::guard::GuardState::new(),
             strict_anchor: None,
+            deadmen: HashMap::new(),
         }
     }
 

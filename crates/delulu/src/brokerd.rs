@@ -327,6 +327,67 @@ fn spec_holder(spec: &AuthoritySpec) -> Holder {
     Holder::new(kind, spec.holder_desc.clone(), "pending")
 }
 
+/// ADOPT-REPLAY-1: if a revoke retired an adopted certificate's fingerprints, persist the denylist so the
+/// revocation survives a daemon restart. Monotonic and small; written only when non-empty (a local,
+/// non-adopted revoke retires nothing). The revoke is already effective in memory; a persist failure does
+/// not undo it, but it does mean the revocation might not survive a restart, so it is logged loudly. Every
+/// path that revokes calls it: an operator's revoke, a monitor's quarantine, and a dead-man that fired.
+fn persist_adoption_revocations(broker: &Broker, state_dir: &Path) {
+    let fps = broker.revoked_adoption_fps_snapshot();
+    if !fps.is_empty() {
+        if let Err(e) = persist_revoked_certs(state_dir, &fps) {
+            eprintln!(
+                "delulu broker: WARNING (ADOPT-REPLAY-1) — a certificate revocation is \
+                 effective now but could NOT be persisted to `{}` ({e}); it may not \
+                 survive a daemon restart. Fix the state directory and re-run the revoke.",
+                revoked_certs_path(state_dir).display()
+            );
+        }
+    }
+}
+
+/// P8-04 step 5: fire every dead-man past its deadline — each revokes its node as itself, the cause in the
+/// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`.
+fn fire_deadmen(broker: &mut Broker, state_dir: &Path, audit_lock: &RefCell<Option<delulu_broker::AppendLock>>) {
+    let fired = broker.fire_expired_deadmen(std::time::Instant::now());
+    if !fired.is_empty() {
+        persist_adoption_revocations(broker, state_dir);
+    }
+    release_audit_lock(audit_lock);
+    for f in &fired {
+        log_fired(f);
+    }
+}
+
+/// A refused dead-man operation (P8-04 step 5): the tree's own refusal keeps its code (DL1403 for a node
+/// whose dead-man already fired, with the seq that revoked it); the protocol's misuses — nothing armed, a
+/// second arming, a wrong key, a period out of bounds — are DL1401's "broker-protocol failure". A late beat
+/// fired the dead-man; the answer is that revocation, logged as the timer's own firing is.
+fn deadman_refused(node: &GrantId, r: &delulu_broker::DeadmanRefusal) -> Response {
+    use delulu_broker::DeadmanRefusal;
+    match r {
+        DeadmanRefusal::Tree(d) => deny_response(d),
+        DeadmanRefusal::Fired(f) => {
+            log_fired(f);
+            Response::Error { code: "DL1403".to_string(), message: r.message(node), requires_human: false }
+        }
+        _ => Response::Error { code: "DL1401".to_string(), message: r.message(node), requires_human: false },
+    }
+}
+
+/// One line in `broker.log` for each dead-man that fired — the chain holds the record; the log says it happened.
+fn log_fired(f: &delulu_broker::Fired) {
+    eprintln!(
+        "delulu broker: the dead-man on `{}` fired — no beat within {} ms (armed at seq {}, {} beat(s)); revoked {} node(s) by audit seq {}",
+        delulu_diag::terminal_line(f.node.as_str()),
+        f.period.as_millis(),
+        f.armed_seq,
+        f.beats,
+        f.newly_revoked.len(),
+        f.by_seq
+    );
+}
+
 fn deny_response(d: &delulu_broker::Denial) -> Response {
     let diag = d.to_diagnostic();
     Response::Error { code: diag.code.to_string(), message: diag.message, requires_human: d.requires_human() }
@@ -524,22 +585,7 @@ fn handle(
             let target = GrantId::from_trusted(target);
             match broker.revoke_saying(&caller, &target, why.as_deref()) {
                 Ok(out) => {
-                    // ADOPT-REPLAY-1: if this revoke retired an adopted certificate's fingerprints,
-                    // persist the denylist so the revocation survives a daemon restart. Monotonic and
-                    // small; written only when non-empty (a local, non-adopted revoke retires nothing).
-                    // The revoke is already effective in memory; a persist failure does not undo it, but
-                    // it does mean the revocation might not survive a restart, so it is logged loudly.
-                    let fps = broker.revoked_adoption_fps_snapshot();
-                    if !fps.is_empty() {
-                        if let Err(e) = persist_revoked_certs(state_dir, &fps) {
-                            eprintln!(
-                                "delulu broker: WARNING (ADOPT-REPLAY-1) — a certificate revocation is \
-                                 effective now but could NOT be persisted to `{}` ({e}); it may not \
-                                 survive a daemon restart. Fix the state directory and re-run the revoke.",
-                                revoked_certs_path(state_dir).display()
-                            );
-                        }
-                    }
+                    persist_adoption_revocations(broker, state_dir);
                     (
                         Response::Revoked {
                             by_seq: out.by_seq,
@@ -550,6 +596,38 @@ fn handle(
                     )
                 }
                 Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::ArmDeadman { node, period_ms } => {
+            let node = GrantId::from_trusted(node);
+            let period = std::time::Duration::from_millis(period_ms);
+            match broker.arm_deadman(&node, period, std::time::Instant::now()) {
+                Ok((seq, key)) => (Response::DeadmanArmed { seq, period_ms, key }, false),
+                Err(r) => (deadman_refused(&node, &r), false),
+            }
+        }
+        ReqBody::Beat { node, key } => {
+            let node = GrantId::from_trusted(node);
+            match broker.beat_deadman(&node, &key, std::time::Instant::now()) {
+                Ok(_) => (Response::Ok, false),
+                Err(r) => {
+                    if matches!(r, delulu_broker::DeadmanRefusal::Fired(_)) {
+                        persist_adoption_revocations(broker, state_dir);
+                    }
+                    (deadman_refused(&node, &r), false)
+                }
+            }
+        }
+        ReqBody::DisarmDeadman { node, key } => {
+            let node = GrantId::from_trusted(node);
+            match broker.disarm_deadman(&node, &key, std::time::Instant::now()) {
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(r) => {
+                    if matches!(r, delulu_broker::DeadmanRefusal::Fired(_)) {
+                        persist_adoption_revocations(broker, state_dir);
+                    }
+                    (deadman_refused(&node, &r), false)
+                }
             }
         }
         ReqBody::DeviceRefused { node, device, reason, overrides_seq } => {
@@ -1017,7 +1095,24 @@ pub(crate) fn serve_inner(
     }
     // The receiving end is never closed while this loop runs: the accept thread holds a sender for as long
     // as it lives, so `recv` waits for the next whole request rather than ending.
-    while let Ok((mut conn, req)) = requests.recv() {
+    loop {
+        // P8-04 step 5 (D-V2-106): wait for the next whole request — or, while a dead-man is armed, no longer
+        // than its deadline. Dead-men are fired BEFORE the next request is handled, whichever woke the loop, so
+        // a stream of requests cannot hold one off and a beat that arrives after its deadline rescues nothing.
+        let next = match broker.next_deadman_deadline() {
+            None => match requests.recv() {
+                Ok(r) => Some(Some(r)),
+                Err(_) => None,
+            },
+            Some(at) => match requests.recv_timeout(at.saturating_duration_since(std::time::Instant::now())) {
+                Ok(r) => Some(Some(r)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Some(None),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
+            },
+        };
+        let Some(next) = next else { break };
+        fire_deadmen(&mut broker, state_dir, &audit_lock);
+        let Some((mut conn, req)) = next else { continue };
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
@@ -1697,6 +1792,124 @@ mod tests {
         stop_daemon(&state, handle);
         assert_eq!(plugin_state, "revoked", "the run's plugin node ends with the run");
         assert_eq!(device_state, "live", "a device node is the device close's to revoke, after its watchdog stops");
+    }
+
+    /// A root node minted over the wire, and the revocation records the daemon wrote, read from DISK — not
+    /// through the daemon, so reading them sends it no request.
+    fn issue(state: &Path) -> String {
+        match request(state, ReqBody::Issue(spec(&["Write"]))) {
+            Ok(Response::Issued { node }) => node,
+            other => panic!("issue: {other:?}"),
+        }
+    }
+    fn deadman_revocations(state: &Path, node: &str) -> Vec<delulu_broker::audit::AuditRecord> {
+        delulu_broker::audit::query(audit_dir(state), &delulu_broker::audit::QueryFilter::default())
+            .unwrap()
+            .into_iter()
+            .filter(|r| {
+                r.action == "revoke"
+                    && r.target.as_deref() == Some(node)
+                    && r.authority.as_ref().and_then(|a| a.get("why")).and_then(|w| w.as_str()).is_some_and(|w| w.starts_with("dead-man:"))
+            })
+            .collect()
+    }
+    fn arm(state: &Path, node: &str, period_ms: u64) -> String {
+        match request(state, ReqBody::ArmDeadman { node: node.to_string(), period_ms }) {
+            Ok(Response::DeadmanArmed { key, period_ms: p, .. }) => {
+                assert_eq!(p, period_ms);
+                key
+            }
+            other => panic!("arm: {other:?}"),
+        }
+    }
+
+    /// **P8-04 step 5: an idle daemon fires a dead-man on its own.** Nothing is sent to it after the arming
+    /// — the loop waits on its next request only as long as the nearest deadline — and the revocation is on
+    /// disk within the period and a little more, read without asking the daemon anything.
+    #[test]
+    fn an_idle_daemon_fires_an_unbeaten_dead_man_without_any_request() {
+        let state = temp_state("dmidle");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let _key = arm(&state, &node, 300);
+        let armed = std::time::Instant::now();
+        let mut fired = Vec::new();
+        while armed.elapsed() < std::time::Duration::from_secs(10) {
+            fired = deadman_revocations(&state, &node);
+            if !fired.is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let took = armed.elapsed();
+        stop_daemon(&state, handle);
+        assert_eq!(fired.len(), 1, "an idle daemon must fire the dead-man by itself — no request arrived after the arming");
+        assert!(took >= std::time::Duration::from_millis(300), "never before its period: {took:?}");
+        eprintln!("measured: an idle daemon fired a 300 ms dead-man {} ms after it was armed", took.as_millis());
+    }
+
+    /// **A busy daemon fires it too.** Eight clients mint nodes back to back for a second and a half — each
+    /// request writes a record, so the handler is slower than the clients and a whole request is always
+    /// waiting: the loop never times out — and the unbeaten dead-man still fires: dead-men are fired before
+    /// the next request is handled, whichever woke the loop. (Clients asking for a cheap `Status`, even eight
+    /// back to back, let the queue drain, and the loop's zero-length wait at the deadline timed out and fired
+    /// anyway: mutant M201, which fires only on a timeout, survived that witness twice.)
+    #[test]
+    fn a_busy_daemon_still_fires_an_unbeaten_dead_man() {
+        let state = temp_state("dmbusy");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flood: Vec<_> = (0..8)
+            .map(|_| {
+                let (state, stop) = (state.clone(), stop.clone());
+                std::thread::spawn(move || {
+                    let mut n = 0u32;
+                    while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                        if matches!(request(&state, ReqBody::Issue(spec(&["Write"]))), Ok(Response::Issued { .. })) {
+                            n += 1;
+                        }
+                    }
+                    n
+                })
+            })
+            .collect();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let _key = arm(&state, &node, 300);
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let fired = deadman_revocations(&state, &node);
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        let served: u32 = flood.into_iter().map(|t| t.join().unwrap()).sum();
+        stop_daemon(&state, handle);
+        assert!(served >= 200, "the baseline — the daemon was busy all along ({served} requests answered)");
+        assert_eq!(fired.len(), 1, "a stream of requests must not hold a dead-man off ({served} requests)");
+        eprintln!("measured: {served} requests answered in 1.6 s, and the dead-man fired among them");
+    }
+
+    /// **A beat is a proof of possession, over the wire.** A beat or a disarm with another key, and a second
+    /// arming, are each refused DL1401 and change nothing: the dead-man fires on time. And the next beat is
+    /// told why it is too late — DL1403, its node revoked.
+    #[test]
+    fn over_the_wire_only_the_arming_key_beats_and_a_second_arming_is_refused() {
+        let state = temp_state("dmkey");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 400);
+        let code = |r: io::Result<Response>| match r {
+            Ok(Response::Error { code, .. }) => code,
+            other => format!("{other:?}"),
+        };
+        let wrong = "f".repeat(32);
+        let beat = code(request(&state, ReqBody::Beat { node: node.clone(), key: wrong.clone() }));
+        let disarm = code(request(&state, ReqBody::DisarmDeadman { node: node.clone(), key: wrong }));
+        let rearm = code(request(&state, ReqBody::ArmDeadman { node: node.clone(), period_ms: 3_600_000 }));
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        let fired = deadman_revocations(&state, &node);
+        let late = code(request(&state, ReqBody::Beat { node: node.clone(), key }));
+        stop_daemon(&state, handle);
+        assert_eq!((beat.as_str(), disarm.as_str(), rearm.as_str()), ("DL1401", "DL1401", "DL1401"));
+        assert_eq!(fired.len(), 1, "none of them moved the deadline");
+        assert_eq!(late, "DL1403", "a beat after the dead-man fired is told its node is revoked");
     }
 
     fn spec(effects: &[&str]) -> AuthoritySpec {

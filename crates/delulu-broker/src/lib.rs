@@ -26,6 +26,7 @@ pub mod audit;
 pub mod authority;
 pub mod budget_scope;
 pub mod cert;
+pub mod deadman;
 pub mod device_scope;
 pub mod diag;
 pub mod guard;
@@ -44,6 +45,7 @@ pub use audit::{
 };
 pub use authority::{attenuation_check, Authority, Scopes};
 pub use budget_scope::BudgetScope;
+pub use deadman::{DeadmanRefusal, Fired};
 pub use device_scope::DeviceScope;
 pub use diag::Denial;
 pub use guard::{

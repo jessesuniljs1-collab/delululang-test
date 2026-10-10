@@ -620,3 +620,357 @@ fn a_refusal_of_the_monitors_own_node_quarantines_nothing() {
     assert!(report["records_read"].as_u64().unwrap_or(0) >= 1, "the monitor read the deny: {report}");
     assert_eq!(report["quarantines"], serde_json::json!([]), "{report}");
 }
+
+// ----- the monitor's own death (P8-04 step 5, D-V2-106) ----------------------------------------------------
+
+/// A well-behaved run: in-envelope commands only, burning between them — it gives a monitor's rules
+/// nothing, and runs far longer than any witness waits, so whatever ends it is the thing under test.
+const STEADY: &str = "\
+module m
+
+type Elbow { angle_deg: Float, velocity_dps: Float }
+
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn drive(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    match a.command(Elbow { angle_deg: 12.0, velocity_dps: 4.0 }) {
+      Ok(u) => c.println(\"COMMANDED\")
+      Err(e) => c.println(\"NOT COMMANDED\")
+    }
+    c.println(\"burn \" + str(fib(21)))
+    drive(c, a, n - 1)
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator(\"arm0/elbow\")
+  let done = drive(c, a, 2000)
+  c.println(\"STEADY DOWN\")
+}
+";
+
+/// The dead-man's period a monitor arms by default: `max(2000 ms, 8 × poll)`, and `start_monitor`
+/// polls every 25 ms.
+const DEFAULT_PERIOD_MS: u64 = 2000;
+
+/// A run in the background, killed on drop so a failed assertion never strands it.
+struct BackgroundRun {
+    child: Option<std::process::Child>,
+}
+impl Drop for BackgroundRun {
+    fn drop(&mut self) {
+        if let Some(c) = self.child.as_mut() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+}
+
+fn start_steady_run(f: &Fixture, token: &str) -> BackgroundRun {
+    std::fs::write(f.cwd.join("steady.delulu"), STEADY).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&f.cwd)
+        .env("DELULU_STATE_DIR", &f.state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["run", "steady.delulu", "--lease", token, "--broker-profile", "sim", "--no-prompt"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn the run");
+    BackgroundRun { child: Some(child) }
+}
+
+/// The state (`live`, `revoked`, …) of every node, from the daemon's own listing.
+fn node_states(f: &Fixture) -> std::collections::HashMap<String, (String, Option<String>, Option<u64>)> {
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    assert!(o.status.success(), "grants list: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list --json");
+    v["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| {
+            (
+                n["id"].as_str().unwrap().to_string(),
+                (n["state"].as_str().unwrap_or("").to_string(), n["parent"].as_str().map(str::to_string), n["by_seq"].as_u64()),
+            )
+        })
+        .collect()
+}
+
+/// Wait until the run has minted its device's node under its own — it is commanding its arm.
+fn wait_until_commanding(f: &Fixture, run: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if node_states(f).values().any(|(s, p, _)| s == "live" && p.as_deref() == Some(run)) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "the run never minted its device node under `{run}`");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+fn start_monitor_args(f: &Fixture, node: &str, extra: &[&str]) -> Monitor {
+    use std::io::BufRead;
+    let mut args = vec!["monitor", "watch", "--node", node, "--rule", "envelope", "--poll", "25", "--json"];
+    args.extend_from_slice(extra);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&f.cwd)
+        .env("DELULU_STATE_DIR", &f.state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(&args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn the monitor");
+    let err = child.stderr.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let mut m = Monitor { child, lines: rx, stderr_seen: Vec::new() };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        match m.lines.recv_timeout(left) {
+            Ok(l) => {
+                let ready = l.starts_with("monitor: watching");
+                m.stderr_seen.push(l);
+                if ready {
+                    return m;
+                }
+            }
+            Err(_) => {
+                let _ = m.child.kill();
+                panic!("the monitor never said it was watching: {:?}", m.stderr_seen)
+            }
+        }
+    }
+}
+
+/// **A monitor that dies takes its runs with it — by its broker's hand, and the chain says why.** The
+/// monitor arms a dead-man on its own node `g_M` and beats it every poll (`--on-monitor-death
+/// quarantine`, the default). It is killed — no clean exit, no last word — while a well-behaved run
+/// under `g_M` keeps commanding its arm. Within the dead-man's period the broker revokes `g_M` AS
+/// ITSELF, and with it the run: the arm parks and the program is ended. The revocation's record names
+/// the dead-man, and the chain holds its arming.
+#[test]
+fn a_killed_monitors_runs_are_revoked_by_its_broker_and_the_chain_says_why() {
+    let f = setup("mdeath");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000"]);
+    let mut bg = start_steady_run(&f, &token);
+    wait_until_commanding(&f, &run);
+
+    mon.child.kill().expect("kill the monitor");
+    let killed = std::time::Instant::now();
+    let _ = mon.child.wait();
+    let deadline = killed + std::time::Duration::from_secs(20);
+    let (by_seq, measured) = loop {
+        let states = node_states(&f);
+        if let Some((s, _, by)) = states.get(&run) {
+            if s == "revoked" {
+                break (by.expect("a revoked node names its seq"), killed.elapsed());
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "20 s after its monitor was killed the run's node is still live — a dead monitor's runs went on unwatched: {states:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    eprintln!(
+        "measured: the run's node was revoked {} ms after its monitor was killed (dead-man period {DEFAULT_PERIOD_MS} ms, poll 25 ms)",
+        measured.as_millis()
+    );
+    assert!(measured.as_millis() < 15_000, "a sanity bound, not a published figure: {measured:?}");
+
+    // The run is ended by it: it does not finish its 2000 commands.
+    let out = bg.child.take().unwrap().wait_with_output().unwrap();
+    let (so, se) = (stdout(&out), stderr(&out));
+    assert!(!so.contains("STEADY DOWN"), "the run must not outlive its monitor's dead-man:\n{so}\n{se}");
+    assert!(so.contains("COMMANDED"), "the baseline — the run was commanding its arm:\n{so}\n{se}");
+    assert!(se.contains("DL1403") && se.contains(&format!("revoked by audit seq {by_seq}")), "{se}");
+
+    let states = node_states(&f);
+    assert_eq!(states[&m].0, "revoked", "the monitor's own node: {states:?}");
+    let recs = all_records(&f);
+    let armed = recs
+        .iter()
+        .find(|r| r["action"] == "deadman-arm" && r["actor_node"] == m.as_str())
+        .unwrap_or_else(|| panic!("the chain records the dead-man's arming: {recs:#?}"));
+    assert_eq!(armed["authority"]["period_ms"], DEFAULT_PERIOD_MS, "{armed}");
+    let rev = recs
+        .iter()
+        .find(|r| r["action"] == "revoke" && r["target"] == m.as_str())
+        .unwrap_or_else(|| panic!("the dead-man's revocation is in the chain: {recs:#?}"));
+    assert_eq!(rev["seq"].as_u64(), Some(by_seq), "the run's node names the dead-man's revocation: {rev}");
+    assert_eq!(rev["actor_node"], m.as_str(), "the broker revoked `g_M` as itself — no authority added: {rev}");
+    let why = rev["authority"]["why"].as_str().unwrap_or("");
+    assert!(
+        why.contains("dead-man") && why.contains(&format!("no beat within {DEFAULT_PERIOD_MS} ms")),
+        "the revocation says it was the monitor's silence: {rev}"
+    );
+    assert!(!recs.iter().any(|r| r["action"] == "deadman-disarm"), "a killed monitor disarmed nothing");
+}
+
+/// **`--on-monitor-death continue` is the operator's opt-out:** the same kill, and the run lives on
+/// unwatched — a full dead-man period and more after the monitor died, the run is still commanding
+/// and every node is live. Nothing was armed, and the chain says so by having no arming in it.
+#[test]
+fn with_on_monitor_death_continue_a_killed_monitors_runs_live_on() {
+    let f = setup("mcont");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000", "--on-monitor-death", "continue"]);
+    let mut bg = start_steady_run(&f, &token);
+    wait_until_commanding(&f, &run);
+
+    mon.child.kill().expect("kill the monitor");
+    let _ = mon.child.wait();
+    std::thread::sleep(std::time::Duration::from_millis(DEFAULT_PERIOD_MS + 1500));
+    let child = bg.child.as_mut().unwrap();
+    assert!(child.try_wait().unwrap().is_none(), "the run must still be running a period after its monitor died");
+    let states = node_states(&f);
+    assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("live", "live"), "{states:?}");
+    let recs = all_records(&f);
+    assert!(!recs.iter().any(|r| r["action"] == "deadman-arm"), "`continue` arms nothing: {recs:#?}");
+    assert!(!recs.iter().any(|r| r["action"] == "revoke"), "and nothing revoked anything: {recs:#?}");
+    // The operator ends it.
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &m]);
+    assert!(o.status.success(), "{}", stderr(&o));
+}
+
+/// **A monitor that ends cleanly disarms its dead-man, and the chain says when.** `--for` ends the
+/// watch; the monitor disarms on its way out, and a full period later the run is still commanding,
+/// every node live. The chain holds the arming and the disarming — from that record on, the runs below
+/// are unwatched by the operator's own choice — and the monitor's report says both.
+#[test]
+fn a_monitor_that_ends_cleanly_disarms_its_dead_man_and_the_runs_live_on() {
+    use std::io::Read;
+    let f = setup("mclean");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mut bg = start_steady_run(&f, &token);
+    wait_until_commanding(&f, &run);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "1000"]);
+    let mut out = String::new();
+    mon.child.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let status = mon.child.wait().unwrap();
+    while let Ok(l) = mon.lines.recv_timeout(std::time::Duration::from_secs(2)) {
+        mon.stderr_seen.push(l);
+    }
+    assert!(status.success(), "the monitor's exit: {status:?}\n{out}\n{:?}", mon.stderr_seen);
+    let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}"));
+    assert_eq!(report["on_monitor_death"], "quarantine", "{report}");
+    assert_eq!(report["deadman"]["period_ms"], DEFAULT_PERIOD_MS, "{report}");
+    let armed = report["deadman"]["armed_seq"].as_u64().unwrap_or_else(|| panic!("{report}"));
+    let disarmed = report["deadman"]["disarmed_seq"].as_u64().unwrap_or_else(|| panic!("{report}"));
+
+    std::thread::sleep(std::time::Duration::from_millis(DEFAULT_PERIOD_MS + 1500));
+    let child = bg.child.as_mut().unwrap();
+    assert!(child.try_wait().unwrap().is_none(), "the run must still be running a period after its monitor ended");
+    let states = node_states(&f);
+    assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("live", "live"), "{states:?}");
+    let recs = all_records(&f);
+    let seq_of = |action: &str| {
+        recs.iter()
+            .find(|r| r["action"] == action && r["actor_node"] == m.as_str())
+            .and_then(|r| r["seq"].as_u64())
+            .unwrap_or_else(|| panic!("the chain records `{action}` by `{m}`: {recs:#?}"))
+    };
+    assert_eq!((seq_of("deadman-arm"), seq_of("deadman-disarm")), (armed, disarmed), "{report}");
+    assert!(disarmed > armed);
+    assert!(!recs.iter().any(|r| r["action"] == "revoke"), "nothing revoked anything: {recs:#?}");
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &m]);
+    assert!(o.status.success(), "{}", stderr(&o));
+}
+
+/// **A monitor that stops beating is dead, whether or not its process is** — and when it wakes it says
+/// so, rather than ending as if it had been asked to. The monitor is STOPPED (not killed) for longer
+/// than its period: its broker revokes `g_M`. Resumed, it finds its node revoked by its own dead-man,
+/// reads that from the chain, and exits 1 saying the dead-man fired — a monitor too slow to beat is not
+/// a monitor whose operator ended the watch.
+#[cfg(unix)]
+#[test]
+fn a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes() {
+    use std::io::Read;
+    let f = setup("mstop");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "a run"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000"]);
+    let pid = mon.child.id().to_string();
+    let signal = |sig: &str| {
+        let o = Command::new("kill").args([sig, &pid]).output().expect("kill(1)");
+        assert!(o.status.success(), "kill {sig} {pid}: {}", stderr(&o));
+    };
+    signal("-STOP");
+    std::thread::sleep(std::time::Duration::from_millis(DEFAULT_PERIOD_MS + 1500));
+    let states = node_states(&f);
+    signal("-CONT");
+    let mut out = String::new();
+    mon.child.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let status = mon.child.wait().unwrap();
+    while let Ok(l) = mon.lines.recv_timeout(std::time::Duration::from_secs(2)) {
+        mon.stderr_seen.push(l);
+    }
+    assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("revoked", "revoked"), "{states:?}");
+    let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}"));
+    assert_eq!(status.code(), Some(1), "a monitor whose dead-man fired did not end as asked: {report}\n{:?}", mon.stderr_seen);
+    assert!(
+        report["ended"].as_str().unwrap_or("").contains("dead-man revoked"),
+        "and it says why: {report}"
+    );
+}
+
+/// **The dead-man's key is closed to the monitor's own user** (D-V2-106 item 2). The key that lets a beat
+/// through lives only in the monitor's memory (the daemon keeps its hash), so a process of the same user
+/// that could read that memory could beat in a dead monitor's place. On Linux the monitor makes itself
+/// non-dumpable before it holds the key, as a serving host does (HOST-DUMPABLE-1): its `/proc` entries are
+/// root's, and no same-user process may open its memory. Root may read any process, so as root this
+/// measures nothing and says so; CI's runners are not root.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_monitors_memory_is_closed_to_its_own_user() {
+    // SAFETY: a plain query of this process's effective uid.
+    if unsafe { libc::geteuid() } == 0 {
+        eprintln!("D-V2-106 item 2: unmeasurable as root, which may read any process");
+        return;
+    }
+    let f = setup("mmem");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000"]);
+    let pid = mon.child.id();
+    let armed = mon.stderr_seen.iter().any(|l| l.contains("armed at seq"));
+    let mem = std::fs::File::open(format!("/proc/{pid}/mem"));
+    let _ = mon.child.kill();
+    let _ = mon.child.wait();
+    assert!(armed, "the baseline — the monitor holds a dead-man's key: {:?}", mon.stderr_seen);
+    assert!(mem.is_err(), "a process of the same user opened the memory of a monitor holding a dead-man's key");
+}

@@ -998,6 +998,14 @@ fn broker_verbs_emit_the_documented_envelope() {
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");
     assert!(m["quarantines"].is_array() && m["subcommand"] == "watch", "the watch report keeps its keys at the top level: {m}");
+    // P8-04 step 5: the report says what the monitor's death would do — and a watch ended by `--for` disarmed.
+    assert_eq!(m["on_monitor_death"], "quarantine", "{m}");
+    assert!(m["deadman"]["armed_seq"].is_u64() && m["deadman"]["disarmed_seq"].is_u64(), "{m}");
+    let m = step(
+        &["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60", "--on-monitor-death", "continue"],
+        "monitor",
+    );
+    assert!(m["on_monitor_death"] == "continue" && m["deadman"].is_null(), "`continue` arms nothing: {m}");
 
     // Last, because it kills the node the steps above used.
     step(&["grants", "revoke", &node], "grants");

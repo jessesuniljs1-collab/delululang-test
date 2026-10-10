@@ -22,8 +22,16 @@
 //!   The revocation's own audit record carries the rule, the count, the window and the evidence: a
 //!   monitor that fires without saying what it saw is a monitor nobody can audit.
 //!
-//! It is a second, slower line. Each run's own dead-man (10f) remains the real-time guarantee; what
-//! happens when the MONITOR dies is P8-04 step 5, not built here.
+//! * **Its own death is handled as the operator chose (P8-04 step 5, D-V2-106).** A dead monitor cannot
+//!   act, so what happens then lives in the broker: with `--on-monitor-death quarantine` (the default)
+//!   the monitor arms a dead-man on `g_M` and beats it every poll; if the beats stop for the period
+//!   (`--death-after`, by default `max(2000 ms, 8 × poll)`), the broker revokes `g_M` as itself — every
+//!   run under it — the cause in the record. Any node may revoke itself, so this adds no authority (a
+//!   watchdog gone quiet is treated as one that fired). `continue` arms nothing: the runs outlive their
+//!   monitor, by the operator's explicit choice. A watch that ends as asked (`--for`) disarms, recorded;
+//!   one that ends on an error leaves the dead-man armed — it stopped watching, and that is a death.
+//!
+//! It is a second, slower line. Each run's own dead-man (10f) remains the real-time guarantee.
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -78,6 +86,15 @@ pub fn cmd_monitor(rest: &[String]) -> i32 {
     }
 }
 
+/// What the broker does if this monitor stops beating (P8-04 step 5).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum OnDeath {
+    /// Arm a dead-man on the monitor's node: silence for a period revokes it, and every run under it.
+    Quarantine,
+    /// Arm nothing: the runs outlive their monitor.
+    Continue,
+}
+
 struct Opts {
     node: String,
     rules: Vec<Rule>,
@@ -85,11 +102,20 @@ struct Opts {
     for_ms: Option<u64>,
     state_dir: Option<String>,
     json: bool,
+    on_death: OnDeath,
+    death_after: Option<Duration>,
+}
+
+/// The dead-man's period when `--death-after` is not given: long enough for several polls to miss and a
+/// slow read of a long chain to finish, short enough that a dead monitor's runs stop within seconds.
+fn default_death_after(poll: Duration) -> Duration {
+    (poll * 8).max(Duration::from_millis(2000))
 }
 
 fn parse(rest: &[String]) -> Result<Opts, String> {
     let (mut node, mut rules, mut poll, mut for_ms, mut state_dir, mut json) =
         (None, Vec::new(), Duration::from_millis(250), None, None, false);
+    let (mut on_death, mut death_after) = (OnDeath::Quarantine, None);
     let mut i = 0;
     while i < rest.len() {
         let arg = rest[i].as_str();
@@ -113,6 +139,22 @@ fn parse(rest: &[String]) -> Result<Opts, String> {
                 for_ms = Some(v.parse().ok().filter(|m| *m >= 1).ok_or_else(|| format!("`--for {v}`: milliseconds, ≥ 1"))?);
             }
             "--state-dir" => state_dir = Some(value()?),
+            "--on-monitor-death" => {
+                on_death = match value()?.as_str() {
+                    "quarantine" => OnDeath::Quarantine,
+                    "continue" => OnDeath::Continue,
+                    v => return Err(format!("`--on-monitor-death {v}`: `quarantine` (the default) or `continue`")),
+                }
+            }
+            "--death-after" => {
+                let v = value()?;
+                let lo = delulu_broker::deadman::MIN_PERIOD.as_millis() as u64;
+                let hi = delulu_broker::deadman::MAX_PERIOD.as_millis() as u64;
+                let ms: u64 = v.parse().ok().filter(|m| (lo..=hi).contains(m)).ok_or_else(|| {
+                    format!("`--death-after {v}`: milliseconds of silence before the broker quarantines, {lo} to {hi}")
+                })?;
+                death_after = Some(Duration::from_millis(ms));
+            }
             other => return Err(format!("unknown `monitor watch` argument `{other}`")),
         }
         i += 1;
@@ -121,7 +163,19 @@ fn parse(rest: &[String]) -> Result<Opts, String> {
     if rules.is_empty() {
         return Err("`monitor watch` needs at least one `--rule` (`envelope`, `denies=N/MS`) — a monitor with no rule watches nothing".into());
     }
-    Ok(Opts { node, rules, poll, for_ms, state_dir, json })
+    if let Some(d) = death_after {
+        if on_death == OnDeath::Continue {
+            return Err("`--death-after` sets the dead-man's period, and `--on-monitor-death continue` arms none".into());
+        }
+        if d < poll * 2 {
+            return Err(format!(
+                "`--death-after {}` is shorter than two polls (`--poll {}`): the dead-man would fire between beats",
+                d.as_millis(),
+                poll.as_millis()
+            ));
+        }
+    }
+    Ok(Opts { node, rules, poll, for_ms, state_dir, json, on_death, death_after })
 }
 
 /// For every node under (and including) `root`, the RUN it belongs to: the child of `root` on its
@@ -210,6 +264,62 @@ fn cmd_watch(rest: &[String]) -> i32 {
     };
     let from = cursor.clone();
     let rule_names: Vec<String> = o.rules.iter().map(Rule::name).collect();
+    // P8-04 step 5: the dead-man, armed BEFORE the watch begins, so a monitor killed the moment it says
+    // "watching" is already one whose death quarantines.
+    let mut deadman: Option<(String, u64, Duration)> = None; // (key, armed_seq, period)
+    if o.on_death == OnDeath::Quarantine {
+        let period = o.death_after.unwrap_or_else(|| default_death_after(o.poll));
+        match crate::brokerd::request(
+            &state_dir,
+            ReqBody::ArmDeadman { node: o.node.clone(), period_ms: period.as_millis() as u64 },
+        ) {
+            Ok(Response::DeadmanArmed { seq, key, .. }) => {
+                eprintln!(
+                    "monitor: if it stops beating for {} ms, the broker revokes `{}` and every run under it \
+                     (--on-monitor-death quarantine; armed at seq {seq})",
+                    period.as_millis(),
+                    delulu_diag::terminal_line(&o.node)
+                );
+                deadman = Some((key, seq, period));
+            }
+            Ok(Response::Error { code, message, .. }) => {
+                eprintln!("error[{code}]: the broker refused the monitor's dead-man: {}", delulu_diag::terminal_line(&message));
+                return 1;
+            }
+            Ok(other) => return fail(format!("unexpected answer to arming a dead-man: {other:?}")),
+            Err(e) => return fail(format!("the dead-man could not be armed: {e}")),
+        }
+    }
+    // A beat, if a dead-man is armed: `Ok` to go on; `Err((fatal, why))` to stop watching — fatal unless
+    // the node was revoked by someone else (the operator's way to end a watch).
+    let beat = || -> Result<(), (bool, String)> {
+        let Some((key, _, period)) = &deadman else { return Ok(()) };
+        match crate::brokerd::request(&state_dir, ReqBody::Beat { node: o.node.clone(), key: key.clone() }) {
+            Ok(Response::Ok) => Ok(()),
+            // Revoked or expired: whose doing it was is read from the chain, below — never from the words.
+            Ok(Response::Error { code, .. }) if code == "DL1403" || code == "DL1402" => {
+                Err(match read_chain().ok().and_then(|recs| deadman_fired_at(&recs, &o.node)) {
+                    Some(seq) => (true, dead_man_fired(&o.node, seq, *period)),
+                    None => (false, format!("`{}` was revoked — nothing left to watch", o.node)),
+                })
+            }
+            Ok(Response::Error { code, message, .. }) => Err((
+                true,
+                format!(
+                    "the broker refused the monitor's beat ({code}: {message}) — a monitor too slow to beat within {} ms is a dead one",
+                    period.as_millis()
+                ),
+            )),
+            Ok(other) => Err((true, format!("unexpected answer to a beat: {other:?}"))),
+            Err(e) => Err((
+                true,
+                format!(
+                    "broker unreachable: {} — a monitor that cannot reach its broker cannot quarantine anything",
+                    crate::cli::broker_unreachable_detail(&e)
+                ),
+            )),
+        }
+    };
     eprintln!(
         "monitor: watching `{}` from {} — rules: {}",
         delulu_diag::terminal_line(&o.node),
@@ -225,6 +335,9 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // How many records the rules judged — so "quarantined nothing" can be told from "read nothing".
     let mut records_read: usize = 0;
     let ended: String;
+    // Whether the watch ended as it was asked to (`--for`, or its node revoked by someone else) — a clean
+    // end, after which the dead-man is disarmed or already gone — rather than on an error.
+    let mut clean_end = false;
     loop {
         let nodes = match list() {
             Ok(n) => n,
@@ -234,11 +347,35 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 break;
             }
         };
-        if let Some(n) = nodes.iter().find(|n| n.id == o.node) {
-            if n.state != "live" {
-                ended = format!("`{}` is {} — nothing left to watch", o.node, n.state);
+        match nodes.iter().find(|n| n.id == o.node) {
+            Some(n) if n.state != "live" => {
+                // Its own dead-man, or someone else (the operator ending the watch)? The chain says which: a
+                // monitor too slow to beat must not end as if it had been asked to.
+                let fired = deadman.as_ref().and(read_chain().ok()).and_then(|recs| deadman_fired_at(&recs, &o.node));
+                match (fired, &deadman) {
+                    (Some(seq), Some((_, _, period))) => {
+                        refused_any = true;
+                        ended = dead_man_fired(&o.node, seq, *period);
+                    }
+                    _ => {
+                        ended = format!("`{}` is {} — nothing left to watch", o.node, n.state);
+                        clean_end = true;
+                    }
+                }
                 break;
             }
+            Some(_) => {}
+            None => {
+                refused_any = true;
+                ended = format!("`{}` is no longer a node of this broker's tree — was the broker restarted?", o.node);
+                break;
+            }
+        }
+        if let Err((fatal, why)) = beat() {
+            refused_any |= fatal;
+            clean_end = !fatal;
+            ended = why;
+            break;
         }
         let runs = runs_under(&o.node, &nodes);
         let recs = match read_chain() {
@@ -249,6 +386,13 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 break;
             }
         };
+        // A long chain is a slow read: beat again once it is read, so the period covers one read, not two.
+        if let Err((fatal, why)) = beat() {
+            refused_any |= fatal;
+            clean_end = !fatal;
+            ended = why;
+            break;
+        }
         let start = match &cursor {
             None => 0,
             Some(h) => match recs.iter().position(|r| &r.hash == h) {
@@ -368,22 +512,81 @@ fn cmd_watch(rest: &[String]) -> i32 {
         if let Some(f) = o.for_ms {
             if started.elapsed() >= Duration::from_millis(f) {
                 ended = format!("watched for {f} ms");
+                clean_end = true;
                 break;
             }
         }
         std::thread::sleep(o.poll);
     }
     eprintln!("monitor: ended — {}", delulu_diag::terminal_line(&ended));
+    // The dead-man: disarmed on a clean end while the node lives (its revocation already ended it otherwise);
+    // left armed on an error — this monitor has stopped watching, and the operator asked for that to quarantine.
+    let mut disarmed_seq: Option<u64> = None;
+    if let Some((key, _, period)) = &deadman {
+        let node_live = list().ok().and_then(|ns| ns.into_iter().find(|n| n.id == o.node)).is_some_and(|n| n.state == "live");
+        if clean_end && node_live {
+            match crate::brokerd::request(&state_dir, ReqBody::DisarmDeadman { node: o.node.clone(), key: key.clone() }) {
+                Ok(Response::Recorded { seq }) => {
+                    disarmed_seq = Some(seq);
+                    eprintln!("monitor: dead-man disarmed (seq {seq}) — the runs under `{}` outlive this monitor", delulu_diag::terminal_line(&o.node));
+                }
+                Ok(Response::Error { code, message, .. }) => {
+                    refused_any = true;
+                    eprintln!("monitor: the broker refused the disarm: {code}: {}", delulu_diag::terminal_line(&message));
+                }
+                Ok(other) => {
+                    refused_any = true;
+                    eprintln!("monitor: unexpected answer to a disarm: {other:?}");
+                }
+                Err(e) => {
+                    refused_any = true;
+                    eprintln!("monitor: the disarm did not reach the broker: {e}");
+                }
+            }
+        } else if !clean_end {
+            eprintln!(
+                "monitor: its dead-man stays armed — unless the broker hears a beat, it revokes `{}` and every run under it within {} ms of the last (--on-monitor-death quarantine)",
+                delulu_diag::terminal_line(&o.node),
+                period.as_millis()
+            );
+        }
+    }
     if o.json {
+        let deadman_report = deadman.as_ref().map(|(_, armed_seq, period)| {
+            json!({ "period_ms": period.as_millis() as u64, "armed_seq": armed_seq, "disarmed_seq": disarmed_seq })
+        });
         crate::cli::print_success_envelope(
             "monitor",
             json!({
                 "subcommand": "watch", "node": o.node, "rules": rule_names, "from": from,
                 "quarantines": reports, "records_read": records_read, "ended": ended,
+                "on_monitor_death": match o.on_death { OnDeath::Quarantine => "quarantine", OnDeath::Continue => "continue" },
+                "deadman": deadman_report,
             }),
         );
     }
     i32::from(refused_any)
+}
+
+/// The seq of the revocation of `node` by its own dead-man, if the chain holds one: the broker's record
+/// of it is a `revoke` of `node` whose stated cause begins `dead-man:` (`delulu_broker::deadman`).
+fn deadman_fired_at(recs: &[delulu_broker::audit::AuditRecord], node: &str) -> Option<u64> {
+    recs.iter()
+        .rev()
+        .find(|r| {
+            r.action == "revoke"
+                && r.decision == "allow"
+                && r.target.as_deref() == Some(node)
+                && r.authority.as_ref().and_then(|a| a.get("why")).and_then(|w| w.as_str()).is_some_and(|w| w.starts_with("dead-man:"))
+        })
+        .map(|r| r.seq)
+}
+
+fn dead_man_fired(node: &str, seq: u64, period: Duration) -> String {
+    format!(
+        "the broker's dead-man revoked `{node}` and every run under it (seq {seq}): this monitor sent no beat within {} ms",
+        period.as_millis()
+    )
 }
 
 fn now_millis() -> i64 {

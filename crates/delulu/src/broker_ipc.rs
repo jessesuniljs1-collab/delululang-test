@@ -176,6 +176,15 @@ pub enum ReqBody {
     /// P8-04: a monitor's quarantine — exactly `Revoke` (the same self-or-descendant rule), with the
     /// monitor's account of what it saw carried in the revocation's own audit record. Answered `Revoked`.
     Quarantine { caller: String, target: String, why: String },
+    /// P8-04 step 5 (D-V2-106): arm a dead-man on `node` — unless a `Beat` with the key this returns
+    /// arrives within `period_ms` of the arming and of every beat, the daemon revokes `node` as itself
+    /// (its subtree with it). Any node may revoke itself, so this adds no authority. Answered
+    /// `DeadmanArmed`; recorded (`deadman-arm`).
+    ArmDeadman { node: String, period_ms: u64 },
+    /// A beat for the dead-man on `node`, with the key its arming returned. Answered `Ok`; not recorded.
+    Beat { node: String, key: String },
+    /// Disarm the dead-man on `node` (its holder ending cleanly), with its key. Answered `Recorded`.
+    DisarmDeadman { node: String, key: String },
     /// Per-use validation of a synchronous-class op (spec §4.4).
     Check { node: String, op: String, arg: Option<String> },
     /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the
@@ -257,8 +266,12 @@ pub enum Response {
     /// `Renew` reply (RFC 0001 F4): the uplink-lease deadline now in force.
     Renewed { node: String, ttl_millis: i64 },
     Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
-    /// `DeviceRefused` reply: the seq of the `deny` record written.
+    /// `DeviceRefused` reply: the seq of the `deny` record written (and `DisarmDeadman`'s: the
+    /// `deadman-disarm` record's).
     Recorded { seq: u64 },
+    /// `ArmDeadman` reply: the `deadman-arm` record's seq, the period in force, and the key every beat
+    /// and the disarm must carry — held only by the armer and (hashed) by the daemon, never written.
+    DeadmanArmed { seq: u64, period_ms: u64, key: String },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
     /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that
     /// PROCEEDED — the client surfaces it once per rule per run (addendum §2.6/§2.7).
