@@ -288,7 +288,9 @@ pub struct Interp {
     /// program built with `Interp::new` behaves EXACTLY as in Stages 1–4 (criterion 11). `--broker
     /// daemon` swaps in a `BrokerClientCustody` (IPC) via [`Interp::with_custody`]. Interior
     /// mutability because `eval_*` take `&self` and custody `check`/`expose` mutate the epoch cache.
-    custody: RefCell<Box<dyn Custody>>,
+    /// `Rc` because a plugin export's nested interpreter SHARES it for the call (PLUGIN-CUSTODY-1): the
+    /// host is suspended while the export runs, so one custody answers both, one borrow at a time.
+    custody: Rc<RefCell<Box<dyn Custody>>>,
     /// Best-effort execution limits (spec §5.4, Stage 6 phase 6e.5). **`None` for every Stage-1..5
     /// entry point** — attached only for a Verified plugin run via [`Interp::with_plugin_budget`], so
     /// a program built with `Interp::new` is byte-identical to Stages 1–4 (criterion 11). When
@@ -376,7 +378,7 @@ impl Interp {
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
             foreign_binder: Rc::new(InProcBinder),
             plugin_engine: None,
-            custody: RefCell::new(Box::new(EmbeddedCustody::new())),
+            custody: Rc::new(RefCell::new(Box::new(EmbeddedCustody::new()))),
             budget: None,
             actors,
             actors_host: None,
@@ -614,7 +616,7 @@ impl Interp {
     /// `BrokerClientCustody` here for `--broker daemon`; the default is [`EmbeddedCustody`], so every
     /// existing entry point is unchanged (criterion 11). Builder style; additive.
     pub fn with_custody(mut self, custody: Box<dyn Custody>) -> Interp {
-        self.custody = RefCell::new(custody);
+        self.custody = Rc::new(RefCell::new(custody));
         self
     }
 
@@ -1727,14 +1729,19 @@ impl Interp {
     /// which is a plugin calling code it was never given. So the plugin's module gets its own
     /// interpreter, and what crosses is only what should: the host's trace sink, so the plugin's
     /// effects appear in the host's trace and `--assert-trace` sees them; the host's effect sink, so a
-    /// sandboxed run still performs them host-side; and the host's depth bound.
+    /// sandboxed run still performs them host-side; the host's device broker, so an actuator the host
+    /// hands in commands the run's device under its lease and rate (PLUGIN-CUSTODY-1 — before routine
+    /// run 16 it answered `Ok` with no device behind it); and the host's depth bound.
     ///
-    /// What does NOT cross is custody, because `Box<dyn Custody>` cannot be shared between two
-    /// interpreters — and that is exactly why `load` refuses any grant carrying `Declassify` or
-    /// `ForeignCall`. Those are the two dimensions whose enforcement lives in custody rather than in
-    /// the primitive table; letting them through here would move a broker decision into a fresh
-    /// embedded custody that always allows. Every other dimension is enforced by the capability the
-    /// HOST hands in as an argument, checked by the same primitive table on the same resolved paths.
+    /// **Custody crosses too, since routine run 16 (PLUGIN-CUSTODY-1, D-V2-104).** Until then it did
+    /// not — the nested interpreter held a fresh embedded custody that allows everything — so under the
+    /// broker daemon a plugin's uses were neither checked against the run's node nor recorded. The
+    /// export now runs under the HOST's custody: a use is checked and recorded exactly as the host's
+    /// own use of the same capability is, and it is the run's node's use. `load` still refuses any
+    /// grant carrying `Declassify` or `ForeignCall`: those are decided by custody alone, and the host's
+    /// custody answers for the RUN's node, which may hold more than the plugin's grant — so a plugin
+    /// is never handed them. Every other dimension is bounded by the capability the HOST hands in,
+    /// checked by the same primitive table on the same resolved paths, and now by the host's custody.
     fn call_plugin_export(
         &self,
         f: &Rc<crate::plugin::PluginFn>,
@@ -1759,6 +1766,16 @@ impl Interp {
             sub = sub.with_trace(t.clone());
         }
         sub = sub.with_effect_sink(self.effects.clone());
+        // PLUGIN-CUSTODY-1 (RW 4.50): the export's uses go through the HOST's custody — under the daemon,
+        // checked against the run's node and recorded, as the host's own uses of the same capability
+        // are — never a fresh embedded custody that allows everything. No borrow of it is held here.
+        sub.custody = Rc::clone(&self.custody);
+        // An actuator or sensor the host hands an export is the RUN's, so the plugin's commands meet the
+        // run's device broker — its lease, rate bound and dead-man — as the host's own do, never a null
+        // device that answers `Ok` for a machine nobody commands.
+        if let Some(devices) = &self.devices {
+            sub = sub.with_devices(devices.clone());
+        }
         sub.call_exported(&f.reference.export, args, span)
     }
 

@@ -483,3 +483,269 @@ chain = \"fn(Cap[PluginHost], Str) -> Str ! {Load, Read}\"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The `drive` plugin: one export that commands the actuator its host hands it, twice, and says what
+/// each command was answered.
+fn build_drive(dir: &Path) -> PathBuf {
+    let pkg = dir.join("plug");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"drive\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+         [plugin]\napi = 1\nclass = \"verified\"\n\n\
+         [plugin.authority]\neffects  = [\"Actuate\"]\nrequires = [\"Cap[Actuator]\"]\n\n\
+         [plugin.exports]\ntwice = \"fn(Cap[Actuator]) -> Str ! {Actuate}\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("lib.delulu"),
+        "module drive\n\n\
+         type Elbow { angle_deg: Float, velocity_dps: Float }\n\n\
+         fn say(r: Result[Unit, ActuateErr]) -> Str {\n\
+         \x20 match r {\n\
+         \x20   Ok(u) => \"COMMANDED\",\n\
+         \x20   Err(e) => match e {\n\
+         \x20     Envelope(reason) => \"REFUSED: \" + reason,\n\
+         \x20     LeaseRevoked(reason) => \"REVOKED: \" + reason,\n\
+         \x20     NoDevice => \"NODEVICE\"\n\
+         \x20   }\n\
+         \x20 }\n\
+         }\n\n\
+         pub fn twice(a: Cap[Actuator]) -> Str ! {Actuate} {\n\
+         \x20 let one = say(a.command(Elbow { angle_deg: 12.0, velocity_dps: 4.0 }))\n\
+         \x20 let two = say(a.command(Elbow { angle_deg: 13.0, velocity_dps: 4.0 }))\n\
+         \x20 one + \" | \" + two\n\
+         }\n",
+    )
+    .unwrap();
+    let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+    pkg.join("drive.dpx")
+}
+
+/// PLUGIN-CUSTODY-1 (RW 4.50), the device half: an actuator a host hands a plugin export is the
+/// run's actuator, so the plugin's commands meet the run's device broker — its lease and its
+/// `rate_hz` — as the host's own do. Two commands microseconds apart under `rate_hz=1`: the first
+/// lands and the second is refused, naming the rate. Before routine run 16 the export ran in a nested
+/// interpreter with no device broker, and both answered `COMMANDED` — reaching no device at all.
+#[test]
+fn a_plugins_commands_answer_to_the_runs_device_broker_and_its_rate_bound() {
+    let dir = tmp("drive");
+    let dpx = build_drive(&dir);
+    std::fs::copy(&dpx, dir.join("drive.dpx")).unwrap();
+    std::fs::write(
+        dir.join("host.delulu"),
+        "module host\n\n\
+         fn driven(h: Cap[PluginHost], a: Cap[Actuator]) -> Result[Str, PluginErr] ! {Load, Read, Actuate} {\n\
+         \x20   let g = Grant {\n\
+         \x20       effects: [\"Actuate\"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+         \x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+         \x20       require_signed: false,\n\
+         \x20   }\n\
+         \x20   let p = load(h, \"drive.dpx\", g)?\n\
+         \x20   let f: fn(Cap[Actuator]) -> Str ! {Actuate} = p.get(\"twice\")?\n\
+         \x20   Ok(f(a))\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Load, Read, Actuate} {\n\
+         \x20   let out = root.console()\n\
+         \x20   match driven(root.plugin_host(), root.actuator(\"arm0/elbow\")) {\n\
+         \x20       Ok(s) => out.println(s),\n\
+         \x20       Err(e) => out.println(\"the plugin was not called\")\n\
+         \x20   }\n\
+         }\n",
+    )
+    .unwrap();
+    let o = delulu_in(
+        &dir,
+        &[
+            "run",
+            "host.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            "plugin=.",
+            "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,rate_hz=1,\
+             heartbeat_ms=60000,ttl_ms=60000,fail=safe-park",
+        ],
+    );
+    let text = out(&o);
+    assert_eq!(o.status.code(), Some(0), "{text}");
+    let line = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    assert!(line.starts_with("COMMANDED | REFUSED: "), "the plugin's second command must be refused:\n{text}");
+    assert!(line.contains("at most 1 Hz"), "the refusal names the granted rate:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- under the broker daemon (routine run 16) --------------------------------------------------
+//
+// Until routine run 16 no plugin could be called under `--broker daemon`: the daemon's custody client
+// never answered R-6c's liveness question, so the trait's fail-closed default — `Unknown` — refused
+// every `p.get` as `Revoked`. Answering it over the wire made the call reachable, and with it the
+// question RW 4.50 asked: a plugin's export runs in a nested interpreter, which held a fresh embedded
+// custody that allows everything — so it shares the host's custody now, and its uses are the run's.
+
+/// The daemon's state directory, short enough for a socket path on macOS (104 bytes).
+fn daemon_state(tag: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("delulu-pld-{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+fn delulu_state(dir: &Path, state: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(args)
+        .current_dir(dir)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .env("DELULU_STATE_DIR", state)
+        .output()
+        .expect("the delulu binary runs")
+}
+
+/// Stops the daemon on drop, so a failed assertion never strands one.
+struct Daemon {
+    state: PathBuf,
+}
+impl Daemon {
+    fn start(state: &Path) -> Daemon {
+        let o = delulu_state(&std::env::temp_dir(), state, &["broker", "start"]);
+        assert_eq!(o.status.code(), Some(0), "broker start: {}", out(&o));
+        Daemon { state: state.to_path_buf() }
+    }
+}
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        let _ = delulu_state(&std::env::temp_dir(), &self.state, &["broker", "stop"]);
+    }
+}
+
+/// Under the daemon a plugin's export is called, and the commands it performs with the actuator its
+/// host handed it are `use`s of the RUN's node in the audit chain — checked by the daemon as the host's
+/// own commands are. Before routine run 16 the call never happened (`p.get` refused as `Revoked`);
+/// with only that fixed, the export would have run under a fresh embedded custody and the chain would
+/// have held none of its commands (mutant M189).
+#[test]
+fn under_the_broker_daemon_a_plugin_is_called_and_its_commands_are_uses_of_the_run() {
+    let dir = tmp("drive-daemon");
+    let state = daemon_state("drive");
+    let dpx = build_drive(&dir);
+    std::fs::copy(&dpx, dir.join("drive.dpx")).unwrap();
+    std::fs::write(
+        dir.join("host.delulu"),
+        "module host\n\n\
+         fn driven(h: Cap[PluginHost], a: Cap[Actuator]) -> Result[Str, PluginErr] ! {Load, Read, Actuate} {\n\
+         \x20   let g = Grant {\n\
+         \x20       effects: [\"Actuate\"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+         \x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+         \x20       require_signed: false,\n\
+         \x20   }\n\
+         \x20   let p = load(h, \"drive.dpx\", g)?\n\
+         \x20   let f: fn(Cap[Actuator]) -> Str ! {Actuate} = p.get(\"twice\")?\n\
+         \x20   Ok(f(a))\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Load, Read, Actuate} {\n\
+         \x20   let out = root.console()\n\
+         \x20   match driven(root.plugin_host(), root.actuator(\"arm0/elbow\")) {\n\
+         \x20       Ok(s) => out.println(s),\n\
+         \x20       Err(e) => match e {\n\
+         \x20           Revoked(n) => out.println(\"NOT CALLED: Revoked \" + str(n)),\n\
+         \x20           NotGranted(m) => out.println(\"NOT CALLED: \" + m),\n\
+         \x20           VerifyFailed(m) => out.println(\"NOT CALLED: \" + m),\n\
+         \x20           BadArtifact(m) => out.println(\"NOT CALLED: \" + m),\n\
+         \x20           LimitExceeded(m) => out.println(\"NOT CALLED: \" + m),\n\
+         \x20           ApiMismatch(m) => out.println(\"NOT CALLED: \" + m)\n\
+         \x20       }\n\
+         \x20   }\n\
+         }\n",
+    )
+    .unwrap();
+    let _daemon = Daemon::start(&state);
+    let o = delulu_state(
+        &dir,
+        &state,
+        &[
+            "run",
+            "host.delulu",
+            "--broker",
+            "daemon",
+            "--grant",
+            "console",
+            "--grant",
+            "plugin=.",
+            "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park",
+            "--no-prompt",
+        ],
+    );
+    let text = out(&o);
+    assert_eq!(o.status.code(), Some(0), "{text}");
+    assert_eq!(
+        String::from_utf8_lossy(&o.stdout).trim(),
+        "COMMANDED | COMMANDED",
+        "under the daemon the plugin's export must be called, and its two commands land:\n{text}"
+    );
+
+    let q = delulu_state(&dir, &state, &["audit", "query", "--action", "use", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&q.stdout)).expect("audit json");
+    let uses: Vec<&serde_json::Value> = v["records"]
+        .as_array()
+        .expect("records")
+        .iter()
+        .filter(|r| r["authority"]["op"] == "Actuate" && r["target"] == "arm0/elbow")
+        .collect();
+    assert_eq!(uses.len(), 2, "each of the plugin's commands is a `use` the daemon checked and recorded:\n{v}");
+    let i = delulu_state(&dir, &state, &["audit", "query", "--action", "issue", "--json"]);
+    let issued: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&i.stdout)).expect("audit json");
+    let run_node = issued["records"][0]["actor_node"].as_str().expect("the run's node").to_string();
+    assert!(
+        uses.iter().all(|r| r["actor_node"] == run_node.as_str()),
+        "the plugin's uses are uses of the run's node `{run_node}`:\n{v}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// R-6c under the daemon: a callable retained across `unload` is dead on its next call, as it is in
+/// embedded custody — the daemon's custody client answers liveness from the daemon's tree. The control
+/// is inside the program: the first call must succeed (before routine run 16 it never did — every call
+/// under the daemon was refused, which this assertion would have caught as "proves nothing").
+#[test]
+fn under_the_broker_daemon_unloading_kills_a_callable_the_host_already_holds() {
+    let dir = tmp("unload-daemon");
+    let state = daemon_state("unload");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+    let src = "module host\n\n\
+         fn after_unload(h: Cap[PluginHost], out: Cap[Console]) -> Result[Str, PluginErr] ! {Load, Read, Write} {\n\
+         \x20   let g = Grant {\n\
+         \x20       effects: [], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+         \x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+         \x20       require_signed: false,\n\
+         \x20   }\n\
+         \x20   let p = load(h, \"shout.dpx\", g)?\n\
+         \x20   let f: fn(Str) -> Str ! {} = p.get(\"shout\")?\n\
+         \x20   out.println(f(\"before\"))\n\
+         \x20   p.unload()\n\
+         \x20   Ok(f(\"after\"))\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Load, Read} {\n\
+         \x20   let out = root.console()\n\
+         \x20   match after_unload(root.plugin_host(), out) {\n\
+         \x20       Ok(s) => out.println(\"STILL CALLABLE: \" + s)\n\
+         \x20       Err(e) => out.println(\"refused\")\n\
+         \x20   }\n\
+         }\n";
+    std::fs::write(dir.join("host.delulu"), src).unwrap();
+    let _daemon = Daemon::start(&state);
+    let o = delulu_state(
+        &dir,
+        &state,
+        &["run", "host.delulu", "--broker", "daemon", "--grant", "console", "--grant", "plugin=.", "--no-prompt"],
+    );
+    let text = out(&o);
+    assert!(text.contains("before!"), "the first call must succeed under the daemon, or this proves nothing: {text}");
+    assert!(!text.contains("STILL CALLABLE"), "a callable retained across an unload must be dead: {text}");
+    assert!(text.contains("DL0801") || text.contains("refused"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -358,6 +358,23 @@ impl Custody for BrokerClientCustody {
         }
     }
 
+    /// R-6c over the wire: one `NodeState` round-trip for a plugin's node, asked on every call. Live is
+    /// live; revoked carries the revoking seq (DL0801's number); anything else — expired, unknown, a
+    /// broker that cannot be reached — is `Unknown`, which every caller treats as dead. Until routine
+    /// run 16 this was the trait's fail-closed default, so every plugin call under the daemon was
+    /// refused as `Revoked(0)`.
+    fn liveness(&self, target: &GrantId) -> delulu_runtime::Liveness {
+        use delulu_runtime::Liveness;
+        match rpc(&self.state_dir, ReqBody::NodeState { node: target.as_str().to_string() }) {
+            Ok(Response::NodeState { state, by_seq, .. }) => match state.as_str() {
+                "live" => Liveness::Live,
+                "revoked" => Liveness::Revoked(by_seq.unwrap_or(0)),
+                _ => Liveness::Unknown,
+            },
+            _ => Liveness::Unknown,
+        }
+    }
+
     fn revoke_node(&mut self, target: &GrantId) -> Result<u64, CustodyDenial> {
         let resp = rpc(
             &self.state_dir,
