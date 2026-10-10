@@ -270,6 +270,9 @@ pub const APPEND_LOCK_FILE: &str = "append.lock";
 pub struct AppendLock {
     /// Held open for as long as the lock is: the OS lock belongs to this handle and ends with it.
     _file: fs::File,
+    /// The chain this lock is for — a held lock is a token ([`AuditLog::append_under`]), and a token for
+    /// another chain proves nothing about this one.
+    dir: PathBuf,
 }
 
 /// How long a writer waits for another: far longer than any real append, short enough that an audit
@@ -292,7 +295,7 @@ impl AppendLock {
         let deadline = std::time::Instant::now() + wait;
         loop {
             match file.try_lock() {
-                Ok(()) => return Ok(AppendLock { _file: file }),
+                Ok(()) => return Ok(AppendLock { _file: file, dir: dir.to_path_buf() }),
                 Err(fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                 }
@@ -461,16 +464,50 @@ impl AuditLog {
     }
 }
 
-impl AuditSink for AuditLog {
-    fn append(&mut self, mut entry: AuditEntry) -> Result<AuditRecord, AuditError> {
-        // AUDIT-WRITERS-1: one writer at a time, and never onto a head another writer has moved.
-        let _lock = AppendLock::take(&self.dir)?;
+impl AuditLog {
+    /// Take this chain's append lock, to hold across several operations (RW 4.48): a writer that hands
+    /// out a seq BEFORE its record exists — the daemon, which stamps it into a node and an answer — holds
+    /// the lock from [`AuditLog::next_seq_under`] to its last [`AuditLog::append_under`], so no other
+    /// writer can take that seq in between. Dropping the lock releases it.
+    pub fn take_lock(&self) -> Result<AppendLock, AuditError> {
+        AppendLock::take(&self.dir)
+    }
+
+    fn check_token(&self, lock: &AppendLock) -> Result<(), AuditError> {
+        if lock.dir == self.dir {
+            Ok(())
+        } else {
+            Err(AuditError::Io(format!(
+                "an append lock for `{}` was offered for the chain at `{}` — nothing was written",
+                lock.dir.display(),
+                self.dir.display()
+            )))
+        }
+    }
+
+    /// [`AuditSink::next_seq`] under a lock the caller holds: the seq no other writer can take while it
+    /// is held.
+    pub fn next_seq_under(&mut self, lock: &AppendLock) -> Result<u64, AuditError> {
+        self.check_token(lock)?;
+        self.catch_up()?;
+        Ok(self.max_seq + 1)
+    }
+
+    /// [`AuditSink::append`] under a lock the caller holds (see [`AuditLog::take_lock`]).
+    pub fn append_under(&mut self, lock: &AppendLock, mut entry: AuditEntry) -> Result<AuditRecord, AuditError> {
+        self.check_token(lock)?;
         self.catch_up()?;
         // AUDIT-SEQ-1: and never a seq the chain already holds. The number is settled HERE, under the
         // lock: a writer that asks for none (0) gets the next, and one whose own count is behind the
         // chain — the daemon, after a sandboxed run's host wrote beside it — is moved past it.
         entry.seq = entry.seq.max(self.max_seq + 1);
-        let day = day_string(entry.ts);
+        // AUDIT-DAY-1: the FILE follows the chain, never falls behind it. A record is stamped before it
+        // waits for this lock, and writers share the chain, so near midnight one stamped 23:59:59.9 can be
+        // written after one stamped 00:00:00.5 — chosen by its own stamp it went into the earlier day's
+        // file, behind records it chains after, and the whole chain read as broken. The record keeps its
+        // own stamp; only where it is filed is the later of its day and the chain's (`YYYYMMDD` sorts as
+        // dates do).
+        let day = std::cmp::max(day_string(entry.ts), self.current_day.clone().unwrap_or_default());
         self.ensure_day_file(&day)?;
         let rec = entry.into_record(&self.head);
         let path = day_path(&self.dir, &day);
@@ -485,11 +522,18 @@ impl AuditSink for AuditLog {
         write_anchor(&self.dir, &self.head, self.records)?;
         Ok(rec)
     }
+}
+
+impl AuditSink for AuditLog {
+    fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError> {
+        // AUDIT-WRITERS-1: one writer at a time, and never onto a head another writer has moved.
+        let lock = AppendLock::take(&self.dir)?;
+        self.append_under(&lock, entry)
+    }
 
     fn next_seq(&mut self) -> Option<u64> {
-        let _lock = AppendLock::take(&self.dir).ok()?;
-        self.catch_up().ok()?;
-        Some(self.max_seq + 1)
+        let lock = AppendLock::take(&self.dir).ok()?;
+        self.next_seq_under(&lock).ok()
     }
 }
 
@@ -1088,6 +1132,29 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         // 2026-07-11 is 20645 days after the epoch (56y = 20454d to 2026-01-01, +191d to Jul 11).
         assert_eq!(day_string(20_645 * 86_400_000), "20260711");
+    }
+
+    /// AUDIT-DAY-1 (routine run 16): a record's day FILE follows the chain, never falls behind it. Two
+    /// writers share the chain, and a record is stamped before it waits for the append lock (the
+    /// daemon's waits up to 5 s) — so near midnight a record stamped 23:59:59.9 can be written after one
+    /// stamped 00:00:00.5. Chosen by its own stamp, it went into the EARLIER day's file, behind records
+    /// it chains after: `verify` and every later writer then read the whole chain as truncated.
+    #[test]
+    fn a_record_stamped_before_midnight_but_written_after_keeps_the_chain_whole() {
+        let dir = tmp_dir("midnight");
+        let midnight = 20_736 * 86_400_000i64;
+        let mut log = AuditLog::open(&dir).expect("open");
+        log.append(entry(0, midnight - 5_000, "issue", "g_a", "allow")).expect("before midnight");
+        log.append(entry(0, midnight + 500, "use", "g_a", "allow")).expect("after midnight");
+        log.append(entry(0, midnight - 100, "revoke", "g_a", "allow")).expect("stamped before, written after");
+        let stats = verify(&dir).expect("the chain verifies across the midnight it was written over");
+        assert_eq!(stats.records, 3);
+        let reopened = AuditLog::open(&dir).expect("and another writer can still open it");
+        assert_eq!(reopened.head(), stats.head);
+        let q = query(&dir, &QueryFilter::default()).expect("query");
+        let seqs: Vec<u64> = q.iter().map(|r| r.seq).collect();
+        assert_eq!(seqs, vec![1, 2, 3], "the chain reads in its written order");
+        assert_eq!(q[2].ts, midnight - 100, "a record keeps its own stamp; only its file follows the chain");
     }
 
     #[test]

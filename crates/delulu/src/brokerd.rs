@@ -13,7 +13,7 @@
 //! **Paths are resolved HERE only (chunk-2 ruling 2).** The library takes injected paths; the state
 //! dir is `~/.delulu` (override `DELULU_STATE_DIR` / `--state-dir`, internal, for tests).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -223,14 +223,52 @@ fn guard_status_response(broker: &Broker) -> Response {
 /// loop can REFUSE a synchronous-class op the broker could not record (invariant 26, head-chef
 /// ruling). The log stays observability-not-enforcement: the flag never *reads* the log to decide,
 /// it only signals "could not write."
+///
+/// **It also holds the chain's append lock across a request (RW 4.48).** The broker hands a seq out
+/// BEFORE its record exists — it stamps it into a node (`revoked_by_seq`) and an answer (`audit_seq`)
+/// — so between that floor and the write another writer (a sandboxed run's host) could take the seq,
+/// the daemon's record was renumbered at the lock, and its references named the other writer's record
+/// (72 parallel runs, 2 wrong references). The lock is taken at the request's first seq or record and
+/// held until the serve loop releases it ([`release_audit_lock`]) — after `handle`, BEFORE the reply is
+/// written, so a slow client never holds the chain; and once after the startup records.
 struct TrackingSink {
     inner: AuditLog,
     failed: Rc<Cell<bool>>,
+    held: Rc<RefCell<Option<delulu_broker::AppendLock>>>,
+}
+
+impl TrackingSink {
+    fn new(inner: AuditLog, failed: Rc<Cell<bool>>) -> TrackingSink {
+        TrackingSink { inner, failed, held: Rc::new(RefCell::new(None)) }
+    }
+
+    /// The handle the serve loop releases the lock through.
+    fn held(&self) -> Rc<RefCell<Option<delulu_broker::AppendLock>>> {
+        Rc::clone(&self.held)
+    }
+
+    /// Run `op` under the held lock, taking it first if this request holds none yet.
+    fn under_lock<T>(
+        &mut self,
+        op: impl FnOnce(&mut AuditLog, &delulu_broker::AppendLock) -> Result<T, AuditError>,
+    ) -> Result<T, AuditError> {
+        let mut held = self.held.borrow_mut();
+        if held.is_none() {
+            *held = Some(self.inner.take_lock()?);
+        }
+        let lock = held.as_ref().expect("taken above");
+        op(&mut self.inner, lock)
+    }
+}
+
+/// Release the chain's append lock a request held (RW 4.48) — see [`TrackingSink`].
+fn release_audit_lock(held: &RefCell<Option<delulu_broker::AppendLock>>) {
+    held.borrow_mut().take();
 }
 
 impl AuditSink for TrackingSink {
     fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError> {
-        match self.inner.append(entry) {
+        match self.under_lock(|log, lock| log.append_under(lock, entry)) {
             Ok(r) => Ok(r),
             Err(e) => {
                 self.failed.set(true);
@@ -240,7 +278,7 @@ impl AuditSink for TrackingSink {
     }
 
     fn next_seq(&mut self) -> Option<u64> {
-        self.inner.next_seq()
+        self.under_lock(|log, lock| log.next_seq_under(lock)).ok()
     }
 }
 
@@ -804,7 +842,8 @@ pub(crate) fn serve_inner(
     let log = AuditLog::open(audit_dir(state_dir))
         .map_err(|e| io::Error::other(format!("audit log: {e}")))?;
     let failed = Rc::new(Cell::new(false));
-    let sink = TrackingSink { inner: log, failed: Rc::clone(&failed) };
+    let sink = TrackingSink::new(log, Rc::clone(&failed));
+    let audit_lock = sink.held();
     let secrets = SecretStore::load(secrets_path(state_dir));
     // The Guard (Stage 5 chunk 6): load the persisted policy (fail closed → poisoned if corrupt),
     // and inject the owner code + bypass flag — all daemon-memory only.
@@ -841,6 +880,8 @@ pub(crate) fn serve_inner(
         (None, true) => broker.record_root_policy_mode("unreadable-policy", None),
         (None, false) => broker.record_root_policy_mode("legacy", None),
     }
+    // RW 4.48: the startup record held the chain's append lock; no request holds it yet.
+    release_audit_lock(&audit_lock);
     let (revoked_fps, adopt_poisoned) = load_revoked_certs(state_dir);
     let revoked_count = revoked_fps.len();
     broker.restore_revoked_adoption_fps(revoked_fps);
@@ -978,6 +1019,9 @@ pub(crate) fn serve_inner(
     // as it lives, so `recv` waits for the next whole request rather than ending.
     while let Ok((mut conn, req)) = requests.recv() {
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
+        // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
+        // that reads its answer slowly never holds another writer's record.
+        release_audit_lock(&audit_lock);
         if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
             eprintln!("delulu broker: response write failed (dropping connection): {e}");
         }
@@ -1505,6 +1549,56 @@ mod tests {
     use delulu_broker::Authority;
     use delulu_runtime::{Custody, CustodyDecision};
 
+    /// RW 4.48 (AUDIT-SEQ-1's residual, red team F2): the seq the daemon RESERVED is the seq its record
+    /// is written under — even when another writer (a sandboxed run's host) appends in the window between
+    /// the daemon's floor and its write. The daemon stamps that seq into a node (`revoked_by_seq`) and an
+    /// answer (`audit_seq`) before the record exists; a record renumbered at the lock left both naming
+    /// another writer's record (72 parallel runs, 2 wrong references). The other writer is started inside
+    /// the window and given 300 ms to land — it lands at once unless the daemon holds the chain.
+    #[test]
+    fn a_seq_the_daemon_reserved_is_the_seq_its_record_is_written_under() {
+        let state = temp_state("seqhold");
+        let dir = audit_dir(&state);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("clock").as_millis() as i64;
+        let entry = |seq: u64, action: &str| AuditEntry {
+            seq,
+            ts: now,
+            actor_node: None,
+            action: action.to_string(),
+            target: None,
+            authority: None,
+            span: None,
+            decision: "allow".to_string(),
+        };
+        let mut sink = TrackingSink::new(AuditLog::open(&dir).expect("open"), Rc::new(Cell::new(false)));
+        sink.append(entry(1, "issue")).expect("a first record");
+        let floor = sink.next_seq().expect("the chain's next seq");
+        let other_dir = dir.clone();
+        let other = std::thread::spawn(move || {
+            let mut log = AuditLog::open(&other_dir).expect("the other writer opens the chain");
+            log.append(AuditEntry {
+                seq: 0,
+                ts: now + 1,
+                actor_node: None,
+                action: "sandbox-launch".to_string(),
+                target: None,
+                authority: None,
+                span: None,
+                decision: "allow".to_string(),
+            })
+            .expect("the other writer appends")
+            .seq
+        });
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let mine = sink.append(entry(floor, "revoke")).expect("the daemon's record").seq;
+        drop(sink);
+        let theirs = other.join().expect("the other writer");
+        assert_eq!(mine, floor, "the daemon's record must carry the seq it reserved (its references name it)");
+        assert_eq!(theirs, floor + 1, "the other writer's record follows the daemon's, never takes its seq");
+        let verified = delulu_broker::verify(&dir);
+        assert!(verified.is_ok(), "the chain verifies: {verified:?}");
+    }
+
     fn temp_state(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("delulu_brokerd_{}_{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1533,6 +1627,50 @@ mod tests {
     fn stop_daemon(state: &Path, handle: std::thread::JoinHandle<()>) {
         let _ = request(state, ReqBody::Shutdown);
         let _ = handle.join();
+    }
+
+    /// RW 4.48's other half: the daemon holds the chain only WITHIN a request. Once it serves, and
+    /// after a request that wrote a record, another writer (a sandboxed run's host) appends at once —
+    /// were the lock kept after the startup record or after a request, every other writer would wait
+    /// out its 5 s bound and fail, its record lost.
+    #[test]
+    fn the_daemon_leaves_the_chain_free_between_requests() {
+        let state = temp_state("seqfree");
+        let dir = state.clone();
+        let handle = std::thread::spawn(move || {
+            let _ = serve_inner(&dir, "gow1_testowner000".to_string(), false, false);
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !pid_path(&state).exists() {
+            assert!(std::time::Instant::now() < deadline, "the daemon never began serving");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let other_writes = |action: &str| {
+            let started = std::time::Instant::now();
+            let mut log = AuditLog::open(audit_dir(&state)).expect("another writer opens the chain");
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("clock");
+            log.append(AuditEntry {
+                seq: 0,
+                ts: now.as_millis() as i64,
+                actor_node: None,
+                action: action.to_string(),
+                target: None,
+                authority: None,
+                span: None,
+                decision: "allow".to_string(),
+            })
+            .expect("another writer appends");
+            started.elapsed()
+        };
+        let after_start = other_writes("sandbox-launch");
+        let resp = request(&state, ReqBody::Issue(spec(&["Write"]))).expect("issue");
+        assert!(matches!(resp, Response::Issued { .. }), "{resp:?}");
+        let after_request = other_writes("sandbox-death");
+        stop_daemon(&state, handle);
+        let bound = std::time::Duration::from_secs(2);
+        assert!(after_start < bound, "the startup record left the chain locked: another writer waited {after_start:?}");
+        assert!(after_request < bound, "a request left the chain locked: another writer waited {after_request:?}");
+        delulu_broker::verify(audit_dir(&state)).expect("the chain verifies");
     }
 
     fn spec(effects: &[&str]) -> AuthoritySpec {
