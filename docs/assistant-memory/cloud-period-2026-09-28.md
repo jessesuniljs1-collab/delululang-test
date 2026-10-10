@@ -174,3 +174,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **The red-team pass the same run** (Sonnet 5.5, frozen binary): ACTOR-CUSTODY-1 (HIGH, open, RW 4.47 — an actor's
   effects bypass daemon custody and the device broker; revocation does not reach them); AUDIT-SEQ-1's references are wrong
   under contention (RW 4.48, D-V2-102 corrected); the monitor revoked its own node on a deny by it (fixed, `495204e`).
+- **Routine run 16 (2026-10-10): ACTOR-CUSTODY-1 closed** (D-V2-103): each actor worker holds a custody client for the
+  run's node and shares the run's device and compute brokers — wider than found, since in every mode an actor's command had
+  been answered `Ok` by nobody. Its sibling, a plugin export's nested interpreter (RW 4.50, PLUGIN-CUSTODY-1), is a
+  hypothesis to witness. Lesson: every `Interp::new` is a place the run's authority can stop.

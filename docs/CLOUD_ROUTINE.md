@@ -158,8 +158,9 @@ another OS, and then takes about seven minutes itself (run 5).
    P8-03 the reference transport and the sim as a device (**complete**, run 14, D-V2-98 — `delulu device sim`),
    **P8-04 the out-of-band monitor is in progress**: its build order is in `V2_P8_DESIGN.md`; run 15 MEASURED its step 1
    (two of its claims were false — AUDIT-REFUSAL-1 and AUDIT-SEQ-1, both fixed, D-V2-100 and D-V2-102) and built step 3 (b), `delulu
-   monitor watch` (D-V2-101); the next run starts at **RW 4.47, ACTOR-CUSTODY-1** (found by run 15's red team: an actor's
-   effects bypass daemon custody and the device broker — HIGH), then RW 4.48 (hold the append lock from the floor to the
+   monitor watch` (D-V2-101); run 16 closed **RW 4.47, ACTOR-CUSTODY-1** (D-V2-103 — an actor's effects answer to the run's
+   custody and brokers); the next run starts at **RW 4.50, PLUGIN-CUSTODY-1** (the same shape in a plugin export's nested
+   interpreter — witness it or refute it), then RW 4.48 (hold the append lock from the floor to the
    write), then **step 5, the monitor's own death — option (c), a broker dead-man for the monitor's node** (read against the code by run 15, `V2_P8_DESIGN.md`); then RW 4.46 (the egress client's refusals)
    and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
@@ -228,7 +229,8 @@ A fixture that fakes what the host writes has a real-run witness beside it (run 
 that buffers by line — was refuted by the first timed probe, and the real cause, a command started only once its input
 ended, took one more; a probe step in the workflow's script costs one dispatch). `scripts/check-other-os.sh TARGET…`
 lints only the targets named — about two minutes for one, against seven for all five.
-**Run mutants with `scripts/mutants.py SPEC.json`** (run 15): it refuses an anchor that is not unique, tells a mutant that
+**Run mutants with `scripts/mutants.py SPEC.json`** (run 15; it adds `--no-fail-fast` itself — run 16's M182 stopped at its
+first red target and never ran the second witness): it refuses an anchor that is not unique, tells a mutant that
 does not compile from a red witness, restores each file with a NEW mtime (a restore by `move` kept the old one and cargo
 kept the last mutant's binary — run 15), and ends with a CONTROL run of the same command that must be green.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —

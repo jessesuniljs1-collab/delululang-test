@@ -20,7 +20,17 @@ witness or the mutant — routine run 11: read what the mutated code returns bef
 import json, os, re, subprocess, sys
 
 
+def no_fail_fast(cmd):
+    """`cargo test` stops at the first test TARGET that fails, so a mutant red in one target never runs the witnesses in the
+    next — routine run 16's M182 read one red witness of two. Every target must run under every mutant: add the flag."""
+    if cmd[:2] == ['cargo', 'test'] and '--no-fail-fast' not in cmd:
+        cut = cmd.index('--') if '--' in cmd else len(cmd)
+        return cmd[:cut] + ['--no-fail-fast'] + cmd[cut:]
+    return cmd
+
+
 def run(cmd):
+    cmd = no_fail_fast(cmd)
     r = subprocess.run(cmd, capture_output=True, text=True)
     out = r.stdout + r.stderr
     built = not ('error[E' in out or 'could not compile' in out)

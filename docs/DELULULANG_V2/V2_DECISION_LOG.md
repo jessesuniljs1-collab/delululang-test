@@ -2377,6 +2377,22 @@ refused and (c) stays the owner's.
 4. **Old chains** keep their repeated seqs — rewriting a hash chain is what an audit log must never do — and continue after
    their highest seq. `DEPLOYMENT.md`'s caution on `--since` now says exactly that.
 
+## D-V2-103 — ACTOR-CUSTODY-1: an actor's worker performs its effects under the run's custody and brokers — TAKEN (head chef, 2026-10-10, under the owner's delegation)
+
+1. **One authority, every thread.** Each actor worker builds its own custody client for the RUN's own node, on its own
+   thread (a client caches its node's epoch and is not shared between threads), and shares the run's device and compute
+   brokers. So under daemon custody a revocation reaches an actor's next use (an epoch-class use within one epoch, a
+   synchronous one at once), each synchronous use is recorded, and in every mode an actor's commands meet the one lease,
+   rate bound and dead-man per device, and its dispatches the bound adapter.
+2. **An actor's uses are the run's node's uses.** The chain names the run's node; which actor performed a use is in the
+   effect trace (`actor`, `member`), not in the chain. Hardening, not a new meaning: a capability handed to an actor is the
+   authority it was in `main`.
+3. **Not chosen:** refusing actors that hold an actuator under daemon custody (RW 4.47's stop-gap) — it leaves an actor's
+   other effects ungoverned by the daemon and refuses a sound design, a control loop in an actor; a grant node per actor or
+   per worker — a finer e-stop, but a new shape of authority (what an actor's node means), which is the owner's to decide.
+4. **Unchanged:** an actor gets no plugin engine and no foreign bindings, so its `load` and `root.foreign(load)` still fail
+   closed. A plugin export's nested interpreter has the same shape as the worker had (RW 4.50) — its own decision.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

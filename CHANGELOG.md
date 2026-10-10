@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an actor's effects are governed as `main`'s are, 2026-10-10
+
+- **Fixed (RW 4.47): effects performed inside an actor now answer to the run's broker and devices.** Under `--broker daemon`
+  or `--lease`, an actor's uses are checked against the broker and recorded in the audit chain, and revoking the run — or
+  the device's node, the e-stop — stops them as it stops `main`'s. In every mode an actor's actuator commands now reach the
+  run's device broker (its lease, `rate_hz` and dead-man) instead of being reported as commanded without reaching a device,
+  and an actor's `dispatch` reaches the bound compute adapter instead of answering `NoAdapter`. A program whose actors
+  command faster than the grant's `rate_hz` now sees those commands refused, as `main`'s always were.
+
 ## Unreleased — the monitor never quarantines its own node; a known gap for actors, 2026-10-09
 
 - **Fixed: `delulu monitor watch --rule denies=N/MS` could revoke its own node** — and so every run under it — when the

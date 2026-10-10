@@ -75,8 +75,10 @@ the assistant's memory — which now also travels file by file in
 - **P8-04 in progress (routine run 15, 2026-10-09):** step 1 MEASURED before building on it — an envelope's refusal was
   not in the audit chain (AUDIT-REFUSAL-1, fixed, D-V2-100) and the chain's seq was not unique (AUDIT-SEQ-1, fixed,
   D-V2-102); step 3 (b) built — `delulu monitor watch` quarantines a run under its node and the revocation's record says
-  why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Next: P8-04 step 5** (option (c), a broker dead-man for the monitor's
-  node), RW 4.46 (the egress client's refusals), then P9.
+  why (D-V2-101); HTTP-SCHEME-1 fixed on the way. **Routine run 16 (2026-10-10):** ACTOR-CUSTODY-1 closed — an actor's
+  effects answer to the run's custody and brokers (D-V2-103). **Next:** RW 4.50 (the same shape in a plugin's nested
+  interpreter — witness or refute), RW 4.48, **P8-04 step 5** (option (c), a broker dead-man for the monitor's node), RW
+  4.46 (the egress client's refusals), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -823,10 +825,12 @@ spells the same thing?**
   one verified chain read `1, 2, 3, 1, 2, 3`, and `audit export --since` dropped a revocation. Closed the same run
   (D-V2-102): the log settles each seq under its lock, and the daemon takes the chain's next seq as a floor.
 
-- **2026-10-09 — ACTOR-CUSTODY-1 (HIGH, open, RW 4.47)** — found by run 15's red-team pass, confirmed: an actor's worker
-  interpreter has no custody and no device broker, so under daemon custody a revocation does not reach an actor's uses, its
-  actuator commands are answered `Ok` without reaching a device, and none is recorded. Never restate actors as covered by
-  the e-stop or the audit until RW 4.47 is closed.
+- **2026-10-09 — ACTOR-CUSTODY-1 (HIGH, RW 4.47) — closed 2026-10-10 by routine run 16 (D-V2-103)** — found by run 15's
+  red-team pass: an actor's worker interpreter had no custody and no device broker, so under daemon custody a revocation did
+  not reach an actor's uses and none was recorded — and in EVERY mode its actuator commands were answered `Ok` without
+  reaching a device (no lease, no rate bound). Each worker now holds a custody client for the run's node and shares the
+  run's brokers; five witnesses, red first. **A plugin export's nested interpreter has the same shape (RW 4.50, a hypothesis
+  until witnessed):** never restate a plugin's effects as covered by the e-stop or the audit until it is closed.
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1117,6 +1121,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   passed just as well for a monitor that read nothing; the report now counts `records_read` and the witness asserts the
   run's records were read (mutant M174, which skips every record, is red only because of that assertion). For every
   "nothing happened", assert the thing that would have seen it ran.
+- **Every `Interp::new` is a place the run's authority can stop** (routine run 16, ACTOR-CUSTODY-1): an interpreter is built
+  with a pass-through custody and no brokers, and only `run_cmd` attached the run's — so an actor's worker, built elsewhere,
+  answered an actuator command `Ok` with no device behind it and was invisible to the daemon, in a project whose every other
+  path had been hardened. When a feature builds an interpreter, ask what custody and brokers it holds; `grep Interp::new`.
+- **A mutant spec over several test targets needs `--no-fail-fast`** (routine run 16): M182's first read named one red
+  witness — cargo stopped at the first red TARGET, and the second witness never ran under the mutant. A falsification that
+  did not run is not a survivor and not a red. `scripts/mutants.py` adds the flag itself now.
 - **A run's last push is the one nobody reads** (routine run 15): run 14 ended after pushing `75bb33b` to `master` and
   `6dbc54c` to its harness branch, with neither run read; the next run fired four days later. Read the push run of the
   closing commit before the closing entry says "green", or say in "Open / next" that it is unread — and step 1's branch

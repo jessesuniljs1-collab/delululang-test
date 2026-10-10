@@ -4538,3 +4538,61 @@ judgment:** a command that omits a bounded dimension is accepted (the envelope b
 failure reaches a program as `LeaseRevoked`; the scheme refusal leaves no record (as the special-use one, RW 4.46);
 `denies=+1/+5` parses; a monitor ends on its first broker error, with no retry; the root or `g_M` itself may be named as
 `--node` without a guard.
+
+## 2026-10-10 — routine run 16: CI read green; ACTOR-CUSTODY-1 closed — an actor's effects answer to the run's custody and brokers (D-V2-103, RW 4.47)
+
+**Health and the previous run, verified first.** `survey check` ok (1,499 nodes, 13,627 edges), `doctor --check` all checks
+passed, `cargo deny --all-features check advisories` ok; `gh` is installed in this VM (`/usr/local/bin/gh`) and was not
+needed — the MCP tools and the REST API answered everything. Run 15's last three push runs, unread at its close, are green
+on every job: `da6518c` `37962831019`, `b0597d3` `37964495079`, `742b11b` `37967062925`. The nightlies of 10-06 to 10-09
+(`37444870874`, `37602353806`, `37759591993`, `37914430616`) are red on `75bb33b` — the stale map run 15 found and fixed in
+`1732d9e`, recorded there; the 10-10 nightly had not fired when this run began (it fires about 09:45 UTC). Branches: the two
+with a commit `master` lacks (`7d6a22b`, `d3f0d52`) are superseded since run 10; the `v1.0.0` tag and `rc/1.0.0-drill` the
+unshallowed fetch listed are the owner's own of 2026-07-19/20 (`HANDOFF.md` §11.3), not a run's. Run 15's new tests ran in
+this run's full suite. The container restarted once mid-run and stopped the first suite; nothing on disk was lost.
+
+**ACTOR-CUSTODY-1, measured again on `742b11b`'s binary before a line changed.** The e-stop supervisor's 14-command loop
+moved into an actor, under `--broker daemon`, nobody revoking: 14 `COMMANDED` and **0** `use` records in the chain — the
+same loop in `main` leaves 14 `use allow … arm0/elbow`. Without any daemon, under `rate_hz=1`: `main`'s second command is
+refused ("granted at most 1 Hz; this command arrived 41 µs after the last") while the actor's two commands both answered
+`COMMANDED`. So the defect was wider than the red team's reading: not only under daemon custody — in EVERY mode an actor's
+actuator command was answered `Ok` by nobody (no lease, no rate bound, no dead-man, no device), and an actor's compute
+dispatch answered `NoAdapter` beside a bound adapter.
+
+**The fix (D-V2-103).** `ActorSystem::start_governed` takes `WorkerEffects` — a factory that builds each worker's custody on
+the worker's own thread, and the run's device and compute brokers (`Arc`s, shared as `main`'s are). `delulu run` passes
+`BrokerClientCustody::same_node_clients()` — one client per worker for the run's own node, each starting with an empty epoch
+cache, so a revocation that already happened is seen before its first use — and its `devices` and `computes`.
+`ActorSystem::start` and `start_with` keep their meaning (`WorkerEffects::default()`: embedded pass-through custody and no
+brokers — `main`'s own interpreter when nothing is attached to it).
+
+**Witnesses — five, red first.**
+- `estop_cli` `an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain` — red on the old code: 0 of 14 in the chain;
+- `estop_cli` `an_operator_revoke_of_the_device_stops_an_actors_arm_too` — red: the device journal said `lease.revoked …
+  operator-revoke` and the actor never saw `REVOKED`; the operator acts once the ACTOR has printed `COMMANDED` (its output is
+  read line by line), never on a guess about timing;
+- `estop_cli` `revoking_the_runs_node_ends_an_actors_effects` — red: no `[DL1403]`, the actor drove on to `ACTOR DOWN`;
+- `actuate_cli` `an_actors_commands_answer_to_the_runs_device_broker_and_its_rate_bound` and `compute_cli`
+  `an_actor_dispatches_through_the_runs_compute_broker` — written after the fix; their red is the by-hand probe above (the
+  rate) and the mutants that remove exactly the attachment the old code lacked.
+
+**Mutants** (`scripts/mutants.py`): M181 (`run_cmd` passes no custody) and M183 (the worker drops it) — red on the chain and
+run-node witnesses; M182 (no device broker) and M184 (the worker drops it) — red on the rate and device-revoke witnesses;
+M185 and M186 (no compute broker) — red on the dispatch witness; the control green after each set. M182's first read named
+only the rate witness: cargo stopped at the first red TARGET, so the device-revoke witness never ran under the mutant —
+`scripts/mutants.py` now adds `--no-fail-fast` itself (loop engineering, below).
+
+**Runner reads at `33f0518`** over `estop_cli`, `actuate_cli`, `compute_cli`, `actors_cli`, `actors_bounded_cli` and
+`actors_cycles_cli`: macOS `38009025737` (49 passed, 0 failed), Windows `38009027757` (49 passed, 0 failed), arm64 `38009029739` (49, 0) —
+the five new witnesses named on each, no compiler warning. Clippy clean; `check-other-os.sh` clean for Windows and macOS.
+**The full suite alone at `33f0518`:** 2,171 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved (`scripts/suite.sh`).
+
+**Not changed, recorded.** An actor still gets no plugin engine and no foreign bindings (code reading), so an actor's `load`
+and `root.foreign(load)` fail closed rather than run ungoverned. **A sibling, a hypothesis until witnessed (RW 4.50,
+PLUGIN-CUSTODY-1):** a plugin export runs in a nested interpreter (`interp.rs` `call_plugin_export`) built with the host's
+trace and effect sink and NO custody and no brokers, and an export may take `Cap[_]` parameters — so a host that hands one a
+`Cap[Actuator]` may see its commands answered `Ok` by nobody, and under the daemon none of a plugin's uses checked or recorded.
+
+**The lesson.** `Interp::new` is a pass-through custody and no brokers by default, so every place an interpreter is built
+other than `run_cmd`'s is a place the run's authority can silently stop: an actor's worker, a plugin's nested interpreter.
+Ask of each `Interp::new` what custody and brokers it holds.

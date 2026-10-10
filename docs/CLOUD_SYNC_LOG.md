@@ -1722,3 +1722,36 @@ it on `origin` was made in the cloud and is listed below.
   the append lock from the daemon's floor to its write; (4) **P8-04 step 5, option (c)**; (5) RW 4.46 and 4.49. **For the
   owner:** D-V2-100, D-V2-101, D-V2-102 (corrected) are this run's decisions; P8-04's option (c), a revoke-only principal,
   is still his. **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).
+
+### 2026-10-10 — routine run 16: CI read green; ACTOR-CUSTODY-1 closed — an actor's effects answer to the run's custody and brokers (D-V2-103)
+- Session: `https://claude.ai/code/session_01FM5pjaFXk3YSik7zQzQXxh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/happy-pascal-44t471`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `742b11b`
+- Commits: (1) `33f0518` ACTOR-CUSTODY-1: an actor's effects answer to the run's custody and brokers; (2) this entry's
+  commit — the records, and `scripts/mutants.py` adds `--no-fail-fast`
+- Files and folders: (1) M `crates/delulu-runtime/src/actors.rs` (`WorkerEffects`, `ActorSystem::start_governed`),
+  `crates/delulu/src/broker_client.rs` (`same_node_clients`), `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu/tests/estop_cli.rs` (three actor witnesses), `crates/delulu/tests/actuate_cli.rs`,
+  `crates/delulu/tests/compute_cli.rs`, `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4
+  ACTOR-CUSTODY-1 closed; §11.5 two lessons), `docs/CLOUD_ROUTINE.md` (step 4's P8 line; step 5's mutants line),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-103), `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.47
+  closed, 4.50 opened), `docs/assistant-memory/cloud-period-2026-09-28.md`, `scripts/mutants.py`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as
+  co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks
+  passed
+- Verified: red first on `742b11b`'s code (the chain held 0 of an actor's 14 commands; a device-node revoke never reached
+  the actor; a run-node revoke never killed it; by hand, no daemon, `rate_hz=1`: the actor's two commands both landed);
+  mutants M181–M186 red, control green; clippy clean; `check-other-os.sh` clean for Windows and macOS; runner reads at
+  `33f0518` over six targets — macOS `38009025737`, Windows `38009027757`, arm64 `38009029739`, 49 passed and 0 failed on
+  each, the five new witnesses named; the full suite alone 2,171 passed, 0 failed, 16 ignored (161 binaries). Push runs
+  read: `da6518c` `37962831019`, `b0597d3` `37964495079`, `742b11b` `37967062925` — success on every job. The nightlies of
+  10-06 to 10-09 are red on `75bb33b` (run 15's stale map, already recorded). The container restarted once mid-run and
+  stopped the first suite; it was run again from the start.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (ACTOR-CUSTODY-1 closed; RW 4.50 a hypothesis) and §11.5 (every
+  `Interp::new` is a place the run's authority can stop; a mutant over several targets needs `--no-fail-fast`).
+- Open / next: (1) read `33f0518`'s and this commit's push runs and the 2026-10-10 nightly; (2) **RW 4.50, PLUGIN-CUSTODY-1**
+  — witness or refute; (3) RW 4.48; (4) **P8-04 step 5, option (c)**; (5) RW 4.46 and 4.49. **For the owner:** D-V2-103.
+  **On 2026-10-12 a run starts the closing entry for the cloud period** (the routine's prompt).
