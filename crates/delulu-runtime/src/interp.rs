@@ -671,6 +671,11 @@ impl Interp {
         s
     }
 
+    /// The run is over (RW 4.51): its custody revokes the grant nodes it minted for plugins.
+    pub fn end_run(&self) {
+        self.custody.borrow_mut().end_of_run();
+    }
+
     /// Run `main(root)`. Returns the runtime value or a fault.
     pub fn run_main(&self, root: Value) -> Result<Value, Fault> {
         self.eval_consts().map_err(unwrap_fault)?;

@@ -1498,6 +1498,9 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             );
         }
     }
+    // RW 4.51: `main` and every actor are done, so nothing holds a plugin's callable any more — the
+    // plugin nodes this run minted are revoked, as its device nodes are below (`close_devices`).
+    interp.end_run();
     if actor_abort {
         eprintln!("aborting: an actor died and --on-actor-death abort is set");
         return 1;

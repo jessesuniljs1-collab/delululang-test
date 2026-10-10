@@ -130,6 +130,12 @@ pub trait Custody {
     fn note_device_refusal(&mut self, device: &str, reason: &str) {
         let _ = (device, reason);
     }
+
+    /// The run is over (RW 4.51): revoke the grant nodes this custody minted for the run's plugins, so
+    /// the tree never offers an operator a live grant nobody holds — as a run's device nodes are revoked
+    /// when it ends (10g). Best-effort: the run is already over. The **default is a no-op** — a custody
+    /// with no tree, or one whose tree ends with the process (embedded), leaves nothing behind.
+    fn end_of_run(&mut self) {}
 }
 
 /// A node's liveness for the R-6c per-call re-check. `Unknown` is not "maybe fine" — callers treat

@@ -749,3 +749,34 @@ fn under_the_broker_daemon_unloading_kills_a_callable_the_host_already_holds() {
     assert!(text.contains("DL0801") || text.contains("refused"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RW 4.51: a plugin's grant node does not outlive the run that minted it — as a device's does not
+/// (10g). Measured by routine run 16: after a run under the daemon that loaded and called a plugin,
+/// `grants list` showed the plugin's node `[live]` beside the device node `[revoked@N]` — a live grant
+/// nobody holds, offered to an operator reading the tree.
+#[test]
+fn under_the_broker_daemon_a_plugins_node_does_not_outlive_its_run() {
+    let dir = tmp("ghost-daemon");
+    let state = daemon_state("ghost");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+    std::fs::write(dir.join("host.delulu"), host_program("shout.dpx")).unwrap();
+    let _daemon = Daemon::start(&state);
+    let o = delulu_state(
+        &dir,
+        &state,
+        &["run", "host.delulu", "--broker", "daemon", "--grant", "console", "--grant", "plugin=.", "--no-prompt"],
+    );
+    let text = out(&o);
+    assert!(text.contains("hello!"), "the plugin must have been loaded and called, or this proves nothing: {text}");
+    let g = delulu_state(&dir, &state, &["grants", "list", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&g.stdout)).expect("grants json");
+    let plugin_nodes: Vec<&serde_json::Value> =
+        v["nodes"].as_array().expect("nodes").iter().filter(|n| n["holder_kind"] == "plugin").collect();
+    assert_eq!(plugin_nodes.len(), 1, "the run minted one plugin node:\n{v}");
+    assert_ne!(
+        plugin_nodes[0]["state"], "live",
+        "a plugin node must not stay live after the run that holds it has ended:\n{v}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -75,6 +75,8 @@ pub struct BrokerClientCustody {
     last_actuate_allow: Option<u64>,
     /// Whether a refusal record has already failed to reach the broker this run (said once).
     refusal_unrecorded_said: bool,
+    /// The plugin nodes this client minted (RW 4.51), revoked when the run ends (`end_of_run`).
+    minted: Vec<GrantId>,
 }
 
 impl BrokerClientCustody {
@@ -98,6 +100,7 @@ impl BrokerClientCustody {
                 warned: std::collections::HashSet::new(),
                 last_actuate_allow: None,
                 refusal_unrecorded_said: false,
+                minted: Vec::new(),
             }),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected issue response: {other:?}"))),
@@ -124,6 +127,7 @@ impl BrokerClientCustody {
             warned: std::collections::HashSet::new(),
             last_actuate_allow: None,
             refusal_unrecorded_said: false,
+            minted: Vec::new(),
         }
     }
 
@@ -352,7 +356,11 @@ impl Custody for BrokerClientCustody {
             },
         )?;
         match resp {
-            Response::Issued { node } => Ok(GrantId::from_trusted(node)),
+            Response::Issued { node } => {
+                let node = GrantId::from_trusted(node);
+                self.minted.push(node.clone());
+                Ok(node)
+            }
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected attenuate response: {other:?}"))),
         }
@@ -387,6 +395,17 @@ impl Custody for BrokerClientCustody {
             Response::Revoked { by_seq, .. } => Ok(by_seq),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected revoke response: {other:?}"))),
+        }
+    }
+
+    /// RW 4.51: each plugin node this run minted revokes itself (a node may always revoke itself), as
+    /// `revoke_device_nodes` does for its device nodes. Idempotent — an `unload` already revoked one.
+    fn end_of_run(&mut self) {
+        for node in std::mem::take(&mut self.minted) {
+            let _ = rpc(
+                &self.state_dir,
+                ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() },
+            );
         }
     }
 
