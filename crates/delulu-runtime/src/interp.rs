@@ -1804,7 +1804,12 @@ impl Interp {
         // PLUGIN-CUSTODY-1 (RW 4.50): the export's uses go through the HOST's custody — under the daemon,
         // checked against the run's node and recorded, as the host's own uses of the same capability
         // are — never a fresh embedded custody that allows everything. No borrow of it is held here.
-        sub.custody = Rc::clone(&self.custody);
+        // RW 4.56: behind a gate on the PLUGIN's node, so its revoke reaches the export's next use — not only its
+        // next call, which is all `check_call` above can see.
+        sub.custody = Rc::new(RefCell::new(Box::new(crate::custody::PluginUseCustody::new(
+            Rc::clone(&self.custody),
+            f.reference.grant_id.clone(),
+        ))));
         // An actuator or sensor the host hands an export is the RUN's, so the plugin's commands meet the
         // run's device broker — its lease, rate bound and dead-man — as the host's own do, never a null
         // device that answers `Ok` for a machine nobody commands.

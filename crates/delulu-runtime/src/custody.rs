@@ -150,6 +150,85 @@ pub enum Liveness {
     Unknown,
 }
 
+/// RW 4.56: the custody a plugin export's nested interpreter holds — the HOST's (PLUGIN-CUSTODY-1: the
+/// export's uses are checked against, and recorded on, the run's node, D-V2-104 item 4), behind a gate on
+/// the PLUGIN's node: once that node is revoked (`grants revoke`, `p.unload()`), the export's next use is
+/// refused — an actuator command is told `LeaseRevoked`, any other effect faults DL0801 — not only its next
+/// call. Until routine run 17 the node was checked only when the export was called, so an export already
+/// running (a control loop) kept commanding after the operator's revoke, which had promised "before the
+/// next use". Pure computation between uses is not interrupted: the gate stands at the effects.
+pub struct PluginUseCustody {
+    host: std::rc::Rc<std::cell::RefCell<Box<dyn Custody>>>,
+    node: GrantId,
+}
+
+impl PluginUseCustody {
+    pub fn new(host: std::rc::Rc<std::cell::RefCell<Box<dyn Custody>>>, node: GrantId) -> PluginUseCustody {
+        PluginUseCustody { host, node }
+    }
+
+    fn gate(&self) -> Result<(), CustodyDenial> {
+        match self.host.borrow().liveness(&self.node) {
+            Liveness::Live => Ok(()),
+            Liveness::Revoked(seq) => Err(CustodyDenial::new(
+                "DL0801",
+                format!(
+                    "the plugin's grant node `{}` was revoked by audit seq {seq} while its export ran — a plugin's revoke reaches the export's next use",
+                    self.node.as_str()
+                ),
+            )),
+            Liveness::Unknown => Err(CustodyDenial::new(
+                "DL0801",
+                format!("the plugin's grant node `{}` could not be confirmed live — refused (fail closed)", self.node.as_str()),
+            )),
+        }
+    }
+}
+
+impl Custody for PluginUseCustody {
+    fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
+        if let Err(d) = self.gate() {
+            return CustodyDecision::Deny(d);
+        }
+        self.host.borrow_mut().check(op, arg)
+    }
+    fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
+        self.gate()?;
+        self.host.borrow_mut().expose(name, span)
+    }
+    fn verify(&mut self, a: &str, b: &str, span: Option<&str>) -> Result<bool, CustodyDenial> {
+        self.gate()?;
+        self.host.borrow_mut().verify(a, b, span)
+    }
+    fn refresh_epoch(&mut self) {
+        self.host.borrow_mut().refresh_epoch()
+    }
+    fn mode(&self) -> &'static str {
+        self.host.borrow().mode()
+    }
+    fn holder_node(&self) -> Option<GrantId> {
+        self.host.borrow().holder_node()
+    }
+    fn attenuate(&mut self, authority: Authority, holder: Holder) -> Result<GrantId, CustodyDenial> {
+        self.gate()?;
+        self.host.borrow_mut().attenuate(authority, holder)
+    }
+    fn revoke_node(&mut self, target: &GrantId) -> Result<u64, CustodyDenial> {
+        self.host.borrow_mut().revoke_node(target)
+    }
+    fn liveness(&self, target: &GrantId) -> Liveness {
+        self.host.borrow().liveness(target)
+    }
+    fn note_plugin_signature(&mut self, node: &GrantId, signer: &str) {
+        self.host.borrow_mut().note_plugin_signature(node, signer)
+    }
+    fn note_device_refusal(&mut self, device: &str, reason: &str) {
+        self.host.borrow_mut().note_device_refusal(device, reason)
+    }
+    /// The run's end is the host's to announce, never an export's.
+    fn end_of_run(&mut self) {}
+}
+
 /// Embedded/dev custody: a pure pass-through for effect checks. Every `check` allows (the
 /// in-process `prim.rs` scope checks stay the enforcement — zero behavior change, criterion 11);
 /// `expose` is never called (the interpreter reveals a local `SecretVal` directly). This is the

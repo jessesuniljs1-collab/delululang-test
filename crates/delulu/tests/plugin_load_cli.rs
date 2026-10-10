@@ -904,3 +904,142 @@ fn a_closures_names_resolve_in_its_own_module(extra: &[&str]) {
 fn a_closures_names_resolve_in_its_own_module_across_the_plugin_boundary() {
     a_closures_names_resolve_in_its_own_module(&[]);
 }
+
+// ----- a plugin node's revoke reaches the export's next use (RW 4.56) -------------------------------------
+
+/// `runloop(a, n)` commands the host's arm `n` times, burning between commands, and answers how many landed.
+fn build_loopdrive(dir: &Path) -> PathBuf {
+    let pkg = dir.join("plug");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"loopdrive\"\nversion = \"0.1.0\"\nkind = \"plugin\"\n\n\
+         [plugin]\napi = 1\nclass = \"verified\"\n\n\
+         [plugin.authority]\neffects  = [\"Actuate\"]\nrequires = [\"Cap[Actuator]\"]\n\n\
+         [plugin.exports]\nrunloop = \"fn(Cap[Actuator], Int) -> Int ! {Actuate}\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("lib.delulu"),
+        "module loopdrive\n\n\
+         type Elbow { angle_deg: Float, velocity_dps: Float }\n\n\
+         fn fib(n: Int) -> Int {\n\
+         \x20 if n < 2 { n } else { fib(n - 1) + fib(n - 2) }\n\
+         }\n\n\
+         fn step(a: Cap[Actuator], n: Int, landed: Int) -> Int ! {Actuate} {\n\
+         \x20 if n <= 0 { landed } else {\n\
+         \x20   let b = fib(19)\n\
+         \x20   match a.command(Elbow { angle_deg: 12.0, velocity_dps: 4.0 }) {\n\
+         \x20     Ok(u) => step(a, n - 1, landed + 1),\n\
+         \x20     Err(e) => step(a, n - 1, landed)\n\
+         \x20   }\n\
+         \x20 }\n\
+         }\n\n\
+         pub fn runloop(a: Cap[Actuator], n: Int) -> Int ! {Actuate} { step(a, n, 0) }\n",
+    )
+    .unwrap();
+    let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
+    pkg.join("loopdrive.dpx")
+}
+
+/// **Revoking a plugin's node stops the export that is running, at its next use** (RW 4.56 — routine run
+/// 17's red-team pass, F-07). An export drives the host's arm in a loop; the operator revokes the node
+/// `grants list` shows as the plugin's, mid-loop, and the CLI says the revoke takes effect "before the next
+/// use". Before the fix the node was checked only when the export was CALLED: 96 of 120 commands landed
+/// after the revoke and the export returned `landed=120`. Now no command lands after it (one in flight at
+/// most), and the export's later commands are told `LeaseRevoked`.
+#[test]
+fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_the_next_use() {
+    use std::io::Read;
+    let dir = tmp("loop-daemon");
+    let state = daemon_state("loop");
+    let dpx = build_loopdrive(&dir);
+    std::fs::copy(&dpx, dir.join("loopdrive.dpx")).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    std::fs::write(
+        dir.join("host.delulu"),
+        "module host\n\n\
+         fn go(h: Cap[PluginHost], a: Cap[Actuator], out: Cap[Console]) -> Result[Int, PluginErr] ! {Load, Read, Actuate, Write} {\n\
+         \x20   let g = Grant {\n\
+         \x20       effects: [\"Actuate\"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+         \x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+         \x20       require_signed: false,\n\
+         \x20   }\n\
+         \x20   let p = load(h, \"loopdrive.dpx\", g)?\n\
+         \x20   let f: fn(Cap[Actuator], Int) -> Int ! {Actuate} = p.get(\"runloop\")?\n\
+         \x20   Ok(f(a, 120))\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Load, Read, Actuate} {\n\
+         \x20   let out = root.console()\n\
+         \x20   match go(root.plugin_host(), root.actuator(\"arm0/elbow\"), out) {\n\
+         \x20       Ok(n) => out.println(\"EXPORT RETURNED landed=\" + str(n))\n\
+         \x20       Err(e) => out.println(\"plugin error\")\n\
+         \x20   }\n\
+         }\n",
+    )
+    .unwrap();
+    let _daemon = Daemon::start(&state);
+    let mut run = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args([
+            "run", "host.delulu", "--broker", "daemon", "--broker-profile", "sim", "--grant", "console", "--grant", "plugin=.",
+            "--grant", "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
+            "--no-prompt",
+        ])
+        .current_dir(&dir)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .env("DELULU_STATE_DIR", &state)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the run starts");
+    // The plugin's node, live, and the export commanding: wait for its first `use` of the arm.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let node = loop {
+        let o = delulu_state(&dir, &state, &["grants", "list", "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).unwrap_or_default();
+        let plugin = v["nodes"].as_array().and_then(|ns| {
+            ns.iter().find(|n| n["holder_kind"] == "plugin" && n["state"] == "live").and_then(|n| n["id"].as_str().map(str::to_string))
+        });
+        let a = delulu_state(&dir, &state, &["audit", "query", "--action", "use", "--json"]);
+        let uses = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&a.stdout)).unwrap_or_default()["records"]
+            .as_array()
+            .map(|r| r.iter().filter(|r| r["target"] == "arm0/elbow" && r["decision"] == "allow").count())
+            .unwrap_or(0);
+        if let (Some(n), true) = (plugin, uses >= 3) {
+            break n;
+        }
+        assert!(std::time::Instant::now() < deadline, "the export never started commanding");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let o = delulu_state(&dir, &state, &["grants", "revoke", &node]);
+    assert_eq!(o.status.code(), Some(0), "grants revoke: {}", out(&o));
+    let text = out(&o);
+    let revoked_at: u64 = text
+        .split("audit seq ")
+        .nth(1)
+        .and_then(|t| t.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("the revoke names its seq: {text}"));
+    let mut so = String::new();
+    run.stdout.take().unwrap().read_to_string(&mut so).unwrap();
+    let mut se = String::new();
+    run.stderr.take().unwrap().read_to_string(&mut se).unwrap();
+    let _ = run.wait();
+    let a = delulu_state(&dir, &state, &["audit", "query", "--action", "use", "--json"]);
+    let recs = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&a.stdout)).unwrap()["records"].as_array().unwrap().clone();
+    let landed_after = recs
+        .iter()
+        .filter(|r| r["target"] == "arm0/elbow" && r["decision"] == "allow" && r["seq"].as_u64().unwrap_or(0) > revoked_at)
+        .count();
+    let landed_before = recs.iter().filter(|r| r["target"] == "arm0/elbow" && r["decision"] == "allow").count() - landed_after;
+    eprintln!("measured: {landed_before} command(s) before the plugin node's revoke, {landed_after} after it");
+    assert!(landed_before >= 3, "the baseline — the export was commanding:\n{so}\n{se}");
+    assert!(
+        landed_after <= 1,
+        "{landed_after} commands landed after the plugin's node was revoked — the revoke reached only the export's next CALL:\n{so}\n{se}"
+    );
+    assert!(!so.contains("landed=120"), "the export must not have landed every command:\n{so}\n{se}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
