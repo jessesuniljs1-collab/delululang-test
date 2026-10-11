@@ -760,10 +760,15 @@ impl Broker {
     /// not stay in the tree — no holder can use it, and no listing shows authority the chain cannot account for. Only
     /// a LEAF is withdrawn (a node just minted has no children); returns whether it was. Consumes no seq and writes
     /// nothing: the chain that could not take the node's record would not take a second one either.
+    ///
+    /// An ADOPTED node takes its adoption with it (RW 4.58's rest): left behind, the certificate would read as "already
+    /// adopted" by a node that does not exist, and the credential could never be adopted again once the chain was free.
     pub fn withdraw_unrecorded(&mut self, id: &GrantId) -> bool {
         if self.nodes.values().any(|n| n.parent.as_ref() == Some(id)) {
             return false;
         }
+        self.adopted.retain(|_, (node, _)| node != id);
+        self.adopted_chain_fps.remove(id);
         self.nodes.remove(id).is_some()
     }
 

@@ -234,36 +234,57 @@ fn guard_status_response(broker: &Broker) -> Response {
 struct TrackingSink {
     inner: AuditLog,
     failed: Rc<Cell<bool>>,
-    held: Rc<RefCell<Option<delulu_broker::AppendLock>>>,
+    held: Rc<RefCell<ChainLock>>,
+}
+
+/// The chain's append lock as one request has it (RW 4.48) — or, RW 4.58's rest, found not free within its wait, which
+/// the rest of that request does not wait for again. Each seq and each record of a request used to ask afresh, so one
+/// adoption (two seqs, two records) waited 20 s on a held chain, past its client's 15 s deadline, and an e-stop's revoke
+/// 10 s; its first record was already lost, so the waits after it changed no answer — only how late it came.
+#[derive(Default)]
+enum ChainLock {
+    #[default]
+    Unasked,
+    Held(delulu_broker::AppendLock),
+    NotFree(String),
 }
 
 impl TrackingSink {
     fn new(inner: AuditLog, failed: Rc<Cell<bool>>) -> TrackingSink {
-        TrackingSink { inner, failed, held: Rc::new(RefCell::new(None)) }
+        TrackingSink { inner, failed, held: Rc::new(RefCell::new(ChainLock::Unasked)) }
     }
 
     /// The handle the serve loop releases the lock through.
-    fn held(&self) -> Rc<RefCell<Option<delulu_broker::AppendLock>>> {
+    fn held(&self) -> Rc<RefCell<ChainLock>> {
         Rc::clone(&self.held)
     }
 
-    /// Run `op` under the held lock, taking it first if this request holds none yet.
+    /// Run `op` under the held lock, taking it first if this request has not asked for it yet — once: a lock this
+    /// request found not free is not waited for again ([`ChainLock`]).
     fn under_lock<T>(
         &mut self,
         op: impl FnOnce(&mut AuditLog, &delulu_broker::AppendLock) -> Result<T, AuditError>,
     ) -> Result<T, AuditError> {
         let mut held = self.held.borrow_mut();
-        if held.is_none() {
-            *held = Some(self.inner.take_lock()?);
+        if matches!(*held, ChainLock::Unasked) {
+            *held = match self.inner.take_lock() {
+                Ok(lock) => ChainLock::Held(lock),
+                Err(AuditError::Io(why)) => ChainLock::NotFree(why),
+                Err(e) => return Err(e),
+            };
         }
-        let lock = held.as_ref().expect("taken above");
-        op(&mut self.inner, lock)
+        match &*held {
+            ChainLock::Held(lock) => op(&mut self.inner, lock),
+            ChainLock::NotFree(why) => Err(AuditError::Io(why.clone())),
+            ChainLock::Unasked => unreachable!("asked above"),
+        }
     }
 }
 
-/// Release the chain's append lock a request held (RW 4.48) — see [`TrackingSink`].
-fn release_audit_lock(held: &RefCell<Option<delulu_broker::AppendLock>>) {
-    held.borrow_mut().take();
+/// Release the chain's append lock a request held (RW 4.48), and forget a lock it found not free — see
+/// [`TrackingSink`].
+fn release_audit_lock(held: &RefCell<ChainLock>) {
+    *held.borrow_mut() = ChainLock::Unasked;
 }
 
 impl AuditSink for TrackingSink {
@@ -370,7 +391,7 @@ fn unrecorded_mint(broker: &mut Broker, failed: &Rc<Cell<bool>>, id: &GrantId) -
 fn fire_deadmen(
     broker: &mut Broker,
     state_dir: &Path,
-    audit_lock: &RefCell<Option<delulu_broker::AppendLock>>,
+    audit_lock: &RefCell<ChainLock>,
     failed: &Rc<Cell<bool>>,
 ) {
     failed.set(false);
@@ -593,11 +614,16 @@ fn handle(
                     // have no way to find the node it renews. `grants inspect` shows it.
                     let holder =
                         delulu_broker::Holder::new("federated", "adopted grant certificate", &fingerprint);
+                    failed.set(false);
                     match broker.adopt(&certs, &anchors, &crate::cert_crypto::Ed25519Verifier, holder) {
-                        Ok(id) => {
-                            let ttl_millis = broker.inspect(&id).and_then(|n| n.ttl_millis);
-                            (Response::Adopted { node: id.to_string(), fingerprint, ttl_millis }, false)
-                        }
+                        // RW 4.58's rest: an adoption is a mint across a broker boundary (D-V2-109, D-V2-111).
+                        Ok(id) => match unrecorded_mint(broker, failed, &id) {
+                            Some(refused) => (refused, false),
+                            None => {
+                                let ttl_millis = broker.inspect(&id).and_then(|n| n.ttl_millis);
+                                (Response::Adopted { node: id.to_string(), fingerprint, ttl_millis }, false)
+                            }
+                        },
                         Err(d) => (deny_response(&d), false),
                     }
                 }
@@ -684,7 +710,22 @@ fn handle(
         }
         ReqBody::DeviceRefused { node, device, reason, overrides_seq } => {
             let node = GrantId::from_trusted(node);
+            failed.set(false);
             match broker.record_device_refusal(&node, &device, &reason, overrides_seq) {
+                // RW 4.58's rest (D-V2-111): `Recorded` is a claim about the chain. A refusal whose record was lost is
+                // said as one, and the client says once on stderr that the chain lacks it — the command stays refused.
+                Ok(seq) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "broker could not append the audit record of a refused command of `{}` (the chain's append \
+                             lock was not free within its wait) — audit seq {seq} names no record",
+                            delulu_diag::terminal_line(&device)
+                        ),
+                        requires_human: false,
+                    },
+                    false,
+                ),
                 Ok(seq) => (Response::Recorded { seq }, false),
                 Err(d) => (deny_response(&d), false),
             }
@@ -2016,6 +2057,82 @@ mod tests {
         }
         let live: Vec<&str> = listed.iter().filter(|n| n.state == "live").map(|n| n.id.as_str()).collect();
         assert!(live.is_empty(), "no node lives that the chain does not record: {live:?}");
+    }
+
+    /// RW 4.58's rest: a device command the run's envelope refused is recorded as a `deny` citing the `allow` it overrides
+    /// (P8-04, D-V2-100) — the record a monitor reads. When that record could not be written, the answer must not be
+    /// `Recorded { seq }` for a seq that names nothing: the client then says once that the chain lacks the refusal.
+    #[test]
+    fn a_device_refusal_whose_record_was_lost_is_not_answered_as_recorded() {
+        let state = temp_state("lostref");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let refusal = |node: &str| ReqBody::DeviceRefused {
+            node: node.to_string(),
+            device: "arm0/elbow".to_string(),
+            reason: "angle_deg=999 is outside the envelope".to_string(),
+            overrides_seq: None,
+        };
+        // The baseline: with the chain free, the refusal is recorded.
+        let free = request(&state, refusal(&root));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, refusal(&root));
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(free, Ok(Response::Recorded { .. })), "the refusal is recorded when the chain is free: {free:?}");
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
+        }
+    }
+
+    /// RW 4.58's rest: an adopted certificate is a new node, a mint across a broker boundary — and one whose `adopt` record
+    /// was lost is authority the chain cannot account for, refused and withdrawn like any other mint (D-V2-109). The
+    /// credential is not burned by it: once the chain is free, the same certificate adopts.
+    #[test]
+    fn an_adoption_whose_record_was_lost_is_refused_and_the_certificate_still_adopts_later() {
+        let state = temp_state("lostadopt");
+        let handle = start_daemon(&state);
+        let ground = [7u8; 32];
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        let mut c = delulu_broker::cert::Certificate {
+            alg: crate::cert_crypto::ALG_ED25519.to_string(),
+            issuer: crate::cert_crypto::public_key_hex(&ground),
+            subject: crate::cert_crypto::public_key_hex(&[9u8; 32]),
+            parent: delulu_broker::cert::ANCHOR.to_string(),
+            not_before: now - 60_000,
+            not_after: now + 3_600_000,
+            nonce: crate::cert_crypto::fresh_nonce(),
+            uplink_ttl_ms: None,
+            authority: Authority::new([Effect::Write], delulu_broker::Scopes::default()),
+            sig: Vec::new(),
+        };
+        c.sig = crate::cert_crypto::sign(&ground, &c.signing_bytes());
+        let adopt = || ReqBody::Adopt { chain: vec![c.to_wire()], anchors: vec![crate::cert_crypto::public_key_hex(&ground)] };
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, adopt());
+        drop(held);
+        let listed = match request(&state, ReqBody::List) {
+            Ok(Response::Listed { nodes }) => nodes,
+            other => panic!("list: {other:?}"),
+        };
+        let again = request(&state, adopt());
+        stop_daemon(&state, handle);
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("an adoption whose record was lost must be refused: {other:?}"),
+        }
+        let live: Vec<&str> = listed.iter().filter(|n| n.state == "live").map(|n| n.id.as_str()).collect();
+        assert!(live.is_empty(), "no adopted node lives that the chain does not record: {live:?}");
+        assert!(matches!(again, Ok(Response::Adopted { .. })), "the certificate adopts once the chain is free: {again:?}");
     }
 
     fn spec(effects: &[&str]) -> AuthoritySpec {
