@@ -84,8 +84,9 @@ the assistant's memory — which now also travels file by file in
   revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Routine run 18 (2026-10-11):** RW 4.59
   closed — a guest's devices start at its first request, so its own check of the program no longer costs it its first heartbeat
   (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
-  (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112). **Next:** P8-04's
-  `special-use` and `break-glass` rules, RW 4.57 and 4.53, the dead-man's records (RW 4.58), then P9.
+  (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112) — and with it P8-04's
+  `special-use` rule (D-V2-113). **Next:** P8-04's `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53, the
+  dead-man's records (RW 4.58), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1205,6 +1206,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   past its client's 15 s deadline, `Adopted` to nobody — and an e-stop's revoke after 10 s, though the first lost record had
   already decided every answer. SILENT-QUEUE-1's lesson (a deadline per connection is that deadline times N) holds inside one
   request too: ask what a request does after its first failure.
+- **A rule watched only for what it must NOT do was never seen to do anything** (routine run 18, M233): every `monitor_cli` test
+  that used the `envelope` rule asserted an absence (a sibling's monitor, a dead monitor), so a monitor whose `envelope` never
+  fired passed the whole target. For every rule, filter or gate, keep one witness of it FIRING beside the witnesses of it holding
+  back — the "witness of an absence must prove it looked" lesson from the other side.
 - **A mutant that survives because its code is unreachable is a reason to delete the code** (routine run 18, M222): a guard that
   `Confined` never starts a run's devices could not fire — the confinement report is answered before the host is given them.
   Keeping it would leave a check no witness can fail; it was removed.

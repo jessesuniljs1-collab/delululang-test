@@ -2104,3 +2104,27 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next, in order: (1) read this commit's push run (unread at this entry); (2) P8-04's `special-use` rule (this run's next slice
   if it lands), then `break-glass`; (3) RW 4.58's last parts, RW 4.57, RW 4.53; (4) P9. **For the owner:** D-V2-110 to D-V2-112.
   **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-11 — routine run 18 (continued): P8-04 step 4's `special-use` rule (D-V2-113); the `envelope` rule seen firing at last
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `8084e4e`
+- Commits: (1) `db40109` P8-04 step 4: the monitor's special-use rule, and every single-record rule decided in one place; (2) this
+  entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/monitor_cmd.rs` (`Rule::SpecialUse`, `fires_on`; a unit witness), `crates/delulu/src/cli.rs`
+  (the help), `crates/delulu/tests/monitor_cli.rs` (the envelope rule firing), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md`
+  (where things stand; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P8 line), `docs/DEPLOYMENT.md` (the monitor's rules),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-113), `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`,
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the
+  owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `8084e4e`'s `openshell` and `ocsf` runs success (its CI run running at this entry); the rule by hand in the VM through a
+  one-run `/etc/hosts` entry (restored); M232–M234 red (M233 red only once the new integration witness existed), control green;
+  clippy clean; `check-other-os.sh` clean for Windows and macOS; runner reads at `db40109` — Windows `38157840795`, macOS `38157843623`,
+  arm64 `38157845681` — green, both witnesses named; the full suite alone at `db40109`: 2,207 passed, 0 failed, 16 ignored.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a rule watched only for what it must not do was never seen to do anything).
+- Open / next, in order: (1) read `8084e4e`'s CI run and this commit's push run; (2) the red-team pass on this run's four guarantees
+  (Sonnet 5.5, running at this entry); (3) P8-04's `break-glass` rule; RW 4.58's last parts, RW 4.57, RW 4.53; (4) P9. **For the
+  owner:** D-V2-110 to D-V2-113. **On 2026-10-12 a run starts the closing entry for the cloud period.**

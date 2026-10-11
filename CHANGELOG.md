@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu monitor watch --rule special-use`, 2026-10-11
+
+- **New: `--rule special-use`** for `delulu monitor watch`: the monitor quarantines a run under its node the first time the
+  run's fetch is refused for reaching a loopback, private, link-local or metadata address (D-V2-113). Use it beside
+  `envelope` and `denies=N/MS`.
+
 ## Unreleased — a refused fetch is in the audit chain, 2026-10-11
 
 - **Fixed (RW 4.46): under the broker daemon, a fetch the egress client refused** — a granted name that resolved to a

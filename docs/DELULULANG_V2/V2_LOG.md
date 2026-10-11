@@ -5013,3 +5013,26 @@ at `ced5dc4`:** macOS `38156513763` (the whole `delulu` package: 937 passed), Wi
 `ced5dc4`:** 2,205 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
 
 **Unblocked:** P8-04 step 4's `special-use` rule.
+
+## 2026-10-11 — routine run 18 (continued): P8-04 step 4's `special-use` rule (D-V2-113); the `envelope` rule seen firing at last
+
+**`8084e4e`** (RW 4.46's records): `openshell` `38157216942` and `ocsf` `38157216971` success; its CI run was running at this entry.
+
+**Built:** `delulu monitor watch --rule special-use` — a `use` `deny` with `refused_by: egress` and `reason: special-use` (D-V2-112's
+record) quarantines the run at the first one. `Rule::fires_on` decides every rule one record fires; the watch loop routes on its
+answer and has no per-rule arm left. **By hand in the VM** (a one-run `/etc/hosts` entry, `127.0.0.1 dlx-special-witness.com`,
+restored and checked): a monitor node `g_M`, a run's lease delegated under it, `monitor watch --node g_M --rule special-use --poll
+25`, and a program fetching that name 40 times — the run printed `not delivered` ONCE and died `DL1403 … revoked by audit seq 9`;
+the monitor's report: one quarantine, `rule: special-use`, `count: 1`, the run's node; the revocation's own record: `monitor … quarantined
+…: rule special-use — 1 deny record(s) within 0 ms (seq 8; …)`. **Witnesses:** `monitor_cmd` `the_special_use_rule_fires_on_a_special_use_refusal_and_nothing_else`
+(unit: not on userinfo or not-allowlisted, not on an envelope's refusal, not on another action, not without the host's record) and the
+parse test. **A gap found on the way:** mutant M233 — the `envelope` rule never firing — passed the WHOLE `monitor_cli` target: every
+test that used `envelope` asserted an absence (a sibling's monitor, a dead monitor). `the_envelope_rule_quarantines_the_run_at_its_first_refusal`
+now witnesses a single-record rule firing end to end on any runner — the path `special-use` shares. **Mutants:** M232 (special-use
+fires on any egress refusal), M233 (envelope never fires: red on the new integration witness), M233b (the same, on the unit test),
+M234 (the rule not parsed) — red; control green. Clippy clean; `check-other-os.sh` clean for Windows and macOS. **Read on the runners at
+`db40109`** over `monitor_cli`, `bin:delulu`, `completions_cli` and `cli_contract`: Windows `38157840795` (199 passed), macOS
+`38157843623` (214), arm64 `38157845681` (234) — 0 failed, both new witnesses named. **The full suite alone at `db40109`:** 2,207
+passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Left of step 4:** `break-glass` — `audit_required` writes its record with no node, so a monitor cannot attribute it to a run.

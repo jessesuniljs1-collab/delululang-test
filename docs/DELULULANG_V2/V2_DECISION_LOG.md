@@ -2557,6 +2557,23 @@ refused and (c) stays the owner's.
    (embedded and sandboxed). The scheme refusal (`http://`) stays unrecorded: no use was authorized for it (HTTP-SCHEME-1).
 4. **What this unblocks:** P8-04's `special-use` rule — a monitor can now count a run's refused fetches.
 
+## D-V2-113 — P8-04 step 4: the monitor's `special-use` rule; every single-record rule decided by one function — TAKEN (head chef, 2026-10-11, under the owner's delegation)
+
+1. **`special-use` fires on any special-use reach** in the watched subtree: a `use` `deny` with `refused_by: egress` and
+   `reason: special-use` — the record D-V2-112 made the chain hold — quarantines the run at the FIRST one, as `envelope` does at
+   the first envelope refusal (`V2_OPENSHELL_STUDY.md` §4.7's "any special-use reach"). A run under a monitor that tries to
+   reach loopback, a private range, link-local or a cloud metadata address — the shape of a server-side request forgery — is
+   stopped by a second, out-of-band line, beside the egress client's own refusal. Only that reason: the egress client's other
+   refusals (a URL's userinfo, a redirect off the grant) count toward `denies=N/MS`, not here.
+2. **One function decides every rule that one record fires** (`Rule::fires_on`, unit-tested), and the watch loop has no
+   per-rule arm left to drift from it; `denies=N/MS` counts records instead. Read only from what the HOST recorded
+   (`authority`'s `refused_by` and `reason`), never from words a guest chose.
+3. **Its witness is split, and says so:** the rule's matching is unit-tested; the single-record path it shares with `envelope`
+   is witnessed end to end by a new `monitor_cli` test — no integration test had ever seen `envelope` FIRE (mutant M233, the
+   rule never firing, passed the whole target; the tests that used it assert absences); the special-use case itself needs a
+   name resolving into a special-use range and was read by hand in the VM through a one-run `/etc/hosts` entry.
+4. **Left of step 4:** `break-glass` — its record (`audit_required`) carries no node, so a monitor cannot attribute it to a run.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -215,3 +215,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   interpreter and a guest's host. Its witness needed no resolver seam after all: a URL's userinfo is refused before any
   resolution on every OS; the special-use case was read by hand through a one-run `/etc/hosts` entry. P8-04's `special-use` rule
   is unblocked.
+- **P8-04's `special-use` rule built the same run** (D-V2-113), every single-record rule decided by `Rule::fires_on`; mutant M233
+  showed no test had ever seen the `envelope` rule fire — one does now. Lesson: a rule watched only for what it must not do was
+  never seen to do anything.
