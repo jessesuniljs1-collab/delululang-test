@@ -16,7 +16,9 @@
 //!   trusts nothing a guest says. It resumes after the last record HASH it read, never a seq: a hash
 //!   also shows a chain rewritten under it (and until D-V2-102 two writers numbered the chain apart).
 //! * **Its rules are declarative and few:** `envelope` (any envelope refusal — a `use` `deny` with
-//!   `refused_by: envelope`, D-V2-100) and `denies=N/MS` (N `deny` records within MS milliseconds).
+//!   `refused_by: envelope`, D-V2-100), `special-use` (any fetch the egress client refused because its
+//!   host is, or resolved to, a special-use address — a `use` `deny` with `refused_by: egress` and
+//!   `reason: special-use`, D-V2-112, D-V2-113) and `denies=N/MS` (N `deny` records within MS milliseconds).
 //! * **A quarantine stops one run, not the fleet:** the target is the child of `g_M` on the path to
 //!   the record's node — the run's own node — so a sibling run under the same monitor keeps going.
 //!   The revocation's own audit record carries the rule, the count, the window and the evidence: a
@@ -46,6 +48,9 @@ use crate::broker_ipc::{ReqBody, Response};
 enum Rule {
     /// Any envelope refusal in the watched subtree.
     Envelope,
+    /// Any special-use reach in the watched subtree: a fetch the egress client refused because its host is, or
+    /// resolved to, a loopback, private, link-local or metadata address (D-V2-113).
+    SpecialUse,
     /// `n` `deny` records within `ms` milliseconds (by the records' own timestamps), per run.
     Denies { n: usize, ms: i64 },
 }
@@ -55,18 +60,35 @@ impl Rule {
         if s == "envelope" {
             return Ok(Rule::Envelope);
         }
+        if s == "special-use" {
+            return Ok(Rule::SpecialUse);
+        }
         if let Some(spec) = s.strip_prefix("denies=") {
             let (n, ms) = spec.split_once('/').ok_or_else(|| format!("`{s}`: the form is denies=N/MS"))?;
             let n: usize = n.parse().ok().filter(|n| *n >= 1).ok_or_else(|| format!("`{s}`: N is a whole number ≥ 1"))?;
             let ms: i64 = ms.parse().ok().filter(|m| *m >= 1).ok_or_else(|| format!("`{s}`: MS is a whole number ≥ 1"))?;
             return Ok(Rule::Denies { n, ms });
         }
-        Err(format!("`{s}` is not a rule — the rules are `envelope` and `denies=N/MS`"))
+        Err(format!("`{s}` is not a rule — the rules are `envelope`, `special-use` and `denies=N/MS`"))
+    }
+
+    /// Whether one `deny` record alone fires this rule — `envelope` and `special-use` do; `denies=N/MS` counts
+    /// records instead (`None`). Read from what the HOST recorded (`authority`), never from a guest's words.
+    fn fires_on(&self, action: &str, authority: Option<&serde_json::Value>) -> Option<bool> {
+        let field = |k: &str| authority.and_then(|a| a.get(k)).and_then(|v| v.as_str());
+        match self {
+            Rule::Envelope => Some(action == "use" && field("refused_by") == Some("envelope")),
+            Rule::SpecialUse => {
+                Some(action == "use" && field("refused_by") == Some("egress") && field("reason") == Some("special-use"))
+            }
+            Rule::Denies { .. } => None,
+        }
     }
 
     fn name(&self) -> String {
         match self {
             Rule::Envelope => "envelope".to_string(),
+            Rule::SpecialUse => "special-use".to_string(),
             Rule::Denies { n, ms } => format!("denies={n}/{ms}"),
         }
     }
@@ -161,7 +183,7 @@ fn parse(rest: &[String]) -> Result<Opts, String> {
     }
     let node = node.ok_or("`monitor watch` needs `--node g_ID` — the monitor's own node, an ancestor of the runs it watches")?;
     if rules.is_empty() {
-        return Err("`monitor watch` needs at least one `--rule` (`envelope`, `denies=N/MS`) — a monitor with no rule watches nothing".into());
+        return Err("`monitor watch` needs at least one `--rule` (`envelope`, `special-use`, `denies=N/MS`) — a monitor with no rule watches nothing".into());
     }
     if let Some(d) = death_after {
         if on_death == OnDeath::Continue {
@@ -429,19 +451,15 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 continue;
             }
             for rule in &o.rules {
-                match rule {
-                    Rule::Envelope => {
-                        let by_envelope = r.action == "use"
-                            && r.authority.as_ref().and_then(|a| a.get("refused_by")).and_then(|v| v.as_str())
-                                == Some("envelope");
-                        if by_envelope {
-                            fire.insert(
-                                run.clone(),
-                                Evidence { rule: rule.name(), records: vec![(r.seq, r.hash.clone(), r.ts)] },
-                            );
-                        }
+                // A rule that one record fires is decided by `fires_on` alone (unit-tested there), so no rule's
+                // match can drift between a test and this loop; `denies=N/MS` counts records instead.
+                match (rule.fires_on(&r.action, r.authority.as_ref()), rule) {
+                    (Some(true), _) => {
+                        fire.insert(run.clone(), Evidence { rule: rule.name(), records: vec![(r.seq, r.hash.clone(), r.ts)] });
                     }
-                    Rule::Denies { n, ms } => {
+                    (Some(false), _) => {}
+                    (None, Rule::Envelope | Rule::SpecialUse) => unreachable!("a single-record rule always answers"),
+                    (None, Rule::Denies { n, ms }) => {
                         let w = windows.entry(run.clone()).or_default();
                         w.push_back((r.seq, r.hash.clone(), r.ts));
                         while w.front().is_some_and(|f| f.2 < r.ts - ms) {
@@ -642,11 +660,30 @@ mod tests {
         }
     }
 
+    /// D-V2-113: `special-use` fires on a special-use refusal by the egress client and on nothing else — not on its
+    /// other refusals (a userinfo URL), not on an envelope's, not on an `allow`'s action, not on a record whose words
+    /// a guest could have chosen (the reason sits in the host's `authority`, beside `refused_by`).
+    #[test]
+    fn the_special_use_rule_fires_on_a_special_use_refusal_and_nothing_else() {
+        let egress = |reason: &str| json!({ "op": "Net", "refused_by": "egress", "reason": reason, "overrides_seq": 3 });
+        let r = Rule::SpecialUse;
+        assert_eq!(r.fires_on("use", Some(&egress("special-use"))), Some(true));
+        assert_eq!(r.fires_on("use", Some(&egress("userinfo"))), Some(false));
+        assert_eq!(r.fires_on("use", Some(&egress("not-allowlisted"))), Some(false));
+        assert_eq!(r.fires_on("use", Some(&json!({ "refused_by": "envelope", "reason": "special-use" }))), Some(false));
+        assert_eq!(r.fires_on("issue", Some(&egress("special-use"))), Some(false));
+        assert_eq!(r.fires_on("use", None), Some(false));
+        assert_eq!(Rule::Envelope.fires_on("use", Some(&egress("special-use"))), Some(false));
+        assert_eq!(Rule::Envelope.fires_on("use", Some(&json!({ "refused_by": "envelope" }))), Some(true));
+        assert_eq!(Rule::Denies { n: 1, ms: 1 }.fires_on("use", Some(&egress("special-use"))), None);
+    }
+
     #[test]
     fn the_rules_parse_and_refuse_what_they_cannot_mean() {
         assert_eq!(Rule::parse("envelope"), Ok(Rule::Envelope));
+        assert_eq!(Rule::parse("special-use"), Ok(Rule::SpecialUse));
         assert_eq!(Rule::parse("denies=3/60000"), Ok(Rule::Denies { n: 3, ms: 60_000 }));
-        for bad in ["denies=0/100", "denies=3/0", "denies=3", "denies=x/1", "everything", ""] {
+        for bad in ["denies=0/100", "denies=3/0", "denies=3", "denies=x/1", "everything", "", "special", "special-use=1"] {
             assert!(Rule::parse(bad).is_err(), "`{bad}` must be refused");
         }
     }

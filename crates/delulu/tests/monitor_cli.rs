@@ -419,6 +419,39 @@ fn a_monitor_quarantines_the_run_that_keeps_probing_and_the_chain_says_why() {
 /// monitor holding a SIBLING node, with the strictest rule there is. Every refusal of the run is in
 /// the chain (the baseline), and the monitor quarantines nothing: the run's nodes are not under it,
 /// and the broker would not let it revoke them if they were named (`tree.rs`'s `NotRevocable`).
+/// **A single-record rule quarantines on the first record that fires it** (routine run 18). The `envelope` rule had
+/// been watched only for what it must NOT do (a sibling's monitor, a dead monitor): mutant M233 — the rule never firing
+/// — passed every test here. `special-use` (D-V2-113) fires through the same path (`Rule::fires_on`), which this
+/// witnesses end to end with a refusal any runner can make; the special-use case itself needs a name resolving into
+/// a special-use range, and was read by hand in the VM (`V2_LOG.md`, 2026-10-11).
+#[test]
+fn the_envelope_rule_quarantines_the_run_at_its_first_refusal() {
+    let f = setup("envq");
+    std::fs::write(f.cwd.join("persist.delulu"), persistent_prober(60)).unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "the run"]);
+    let mon = start_monitor(&f, &m, "envelope");
+    let o = delulu_in(&f.cwd, &f.state, &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let (so, se) = (stdout(&o), stderr(&o));
+    let (report, mon_err) = stop_monitor(&f, &m, mon);
+    let all = format!("stdout:\n{so}\nstderr:\n{se}\nmonitor: {report}\n{mon_err:?}");
+    assert!(so.contains("REFUSED:"), "the baseline — the run was refused by its envelope: {all}");
+    assert!(!so.contains("PROBER DOWN"), "the quarantine ended the run before its 60 probes: {all}");
+    let q = report["quarantines"].as_array().expect("quarantines");
+    assert_eq!(q.len(), 1, "one run, one quarantine: {all}");
+    assert_eq!(q[0]["target"], run.as_str(), "{report}");
+    assert_eq!(q[0]["rule"], "envelope", "{report}");
+    assert_eq!(q[0]["count"], 1, "one envelope refusal is the whole evidence: {report}");
+    let recs = all_records(&f);
+    let e = &q[0]["evidence"][0];
+    let r = recs.iter().find(|r| r["hash"] == e["hash"]).unwrap_or_else(|| panic!("evidence {e} is in the chain"));
+    assert_eq!((r["action"].as_str(), r["decision"].as_str()), (Some("use"), Some("deny")), "{r}");
+    assert_eq!(r["authority"]["refused_by"], "envelope", "{r}");
+}
+
 #[test]
 fn a_monitor_sees_nothing_outside_its_own_subtree() {
     let f = setup("sib");
