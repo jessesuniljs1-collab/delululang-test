@@ -2079,3 +2079,28 @@ it on `origin` was made in the cloud and is listed below.
   disarm, the guard's records), RW 4.57 (a killed run's nodes), RW 4.53; (3) RW 4.46 and P8-04's two remaining rules; (4) P9.
   **For the owner:** D-V2-110, D-V2-111 (and D-V2-106 to D-V2-109). **On 2026-10-12 a run starts the closing entry for the cloud
   period.**
+
+### 2026-10-11 — routine run 18 (continued): RW 4.46 closed — an egress refusal is a `deny` record citing its `allow` (D-V2-112)
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `9c758c3`
+- Commits: (1) `ced5dc4` RW 4.46: an egress refusal is a deny record citing the use it overrides; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-broker/src/validate.rs` (`record_egress_refusal`), `crates/delulu-runtime/src/channel.rs`,
+  `crates/delulu-runtime/src/custody.rs` (`note_egress_refusal`), `crates/delulu-runtime/src/egress.rs` (`refusals_since`),
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu/src/broker_client.rs`, `crates/delulu/src/broker_ipc.rs` (`EgressRefused`),
+  `crates/delulu/src/brokerd.rs` (the handler; a witness), `crates/delulu/tests/monitor_cli.rs` (two witnesses), `docs/survey/*`. (2) M
+  `CHANGELOG.md`, `HANDOFF.md` (where things stand), `docs/CLOUD_ROUTINE.md` (step 4's P8 line), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-112), `V2_P8_DESIGN.md` (step 4), `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.46 closed),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the
+  owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `9c758c3`'s push run `38155661919` and `ocsf` `38155661891` — success. The witnesses red on the pre-fix behaviour (M227,
+  M228); M227–M231 red, control green; the special-use case by hand in the VM through a one-run `/etc/hosts` entry (restored); clippy
+  clean; `check-other-os.sh` clean for Windows and macOS; runner reads at `ced5dc4` — macOS `38156513763`, Windows `38156516142`, arm64
+  `38156518032` — green, the witnesses named; the full suite alone at `ced5dc4`: 2,205 passed, 0 failed, 16 ignored (161 binaries).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new beyond the snapshot line.
+- Open / next, in order: (1) read this commit's push run (unread at this entry); (2) P8-04's `special-use` rule (this run's next slice
+  if it lands), then `break-glass`; (3) RW 4.58's last parts, RW 4.57, RW 4.53; (4) P9. **For the owner:** D-V2-110 to D-V2-112.
+  **On 2026-10-12 a run starts the closing entry for the cloud period.**

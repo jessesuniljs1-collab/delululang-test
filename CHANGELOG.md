@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused fetch is in the audit chain, 2026-10-11
+
+- **Fixed (RW 4.46): under the broker daemon, a fetch the egress client refused** — a granted name that resolved to a
+  loopback or private address, a URL carrying userinfo, a redirect off the grant — **was recorded only as an allowed use of
+  its host.** The chain now holds a `use deny` record for each such refusal, citing the `allow` it overrides, with
+  `refused_by: egress` and the reason (`special-use`, `userinfo`, …), so `delulu audit` and a monitor see it (D-V2-112). A
+  network failure (a timeout, a TLS error, an HTTP status) is not recorded as a refusal.
+
 ## Unreleased — a lost device-refusal or adoption record is never answered as success, 2026-10-11
 
 - **Fixed (RW 4.58): when another writer held the audit chain too long, a device command the run's envelope refused was

@@ -228,8 +228,9 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    `envelope`, `denies=N/MS`), 6 (the surface, its five gates) and 7 (the witnesses: the quarantine measured at 13 ms
    after the third refusal; a sibling's monitor reads everything and quarantines nothing; a grant attempt has no path —
    the monitor sends only `Quarantine`). **Step 5 built by routine run 17 (`c299e47`, `3e9c496`, D-V2-106)**; next: the other two rules.
-4. **Measured by routine run 15:** `envelope` and `denies=N/MS` are built (D-V2-101); `special-use` waits on RW 4.46 (the
-   egress client's refusal is not in the chain); `break-glass` waits on its record carrying the run's node (`audit_required`
+4. **Measured by routine run 15:** `envelope` and `denies=N/MS` are built (D-V2-101); `special-use` waited on RW 4.46 (the
+   egress client's refusal was not in the chain) — closed by routine run 18 (D-V2-112): a refused fetch is a `deny` with
+   `refused_by: egress` and its reason, citing its `allow`; `break-glass` waits on its record carrying the run's node (`audit_required`
    writes none). *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
    envelope refusal on an actuator; any break-glass use (`breakglass.rs` records one); any special-use reach. Each is a
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count

@@ -84,8 +84,8 @@ the assistant's memory — which now also travels file by file in
   revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Routine run 18 (2026-10-11):** RW 4.59
   closed — a guest's devices start at its first request, so its own check of the program no longer costs it its first heartbeat
   (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
-  (D-V2-111). **Next:** RW 4.57 and 4.53, the dead-man's records (RW 4.58), RW 4.46 (the egress client's refusals) and P8-04's
-  two remaining rules, then P9.
+  (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112). **Next:** P8-04's
+  `special-use` and `break-glass` rules, RW 4.57 and 4.53, the dead-man's records (RW 4.58), then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

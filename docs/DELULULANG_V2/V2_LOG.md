@@ -4982,3 +4982,34 @@ alone at `aa20498`:** 2,202 passed, 0 failed, 16 ignored (161 binaries), cargo e
 
 **Left of RW 4.58:** the lost seq can still be taken by another writer; the dead-man's arm and disarm and the guard's records do not
 yet check (D-V2-111 item 4 says why each needs its own answer); the long hold itself is RW 4.53.
+
+## 2026-10-11 — routine run 18 (continued): RW 4.46 closed — an egress refusal is a `deny` record citing its `allow` (D-V2-112)
+
+**`9c758c3`** (RW 4.58's rest's records): push run `38155661919` — success on every job; `ocsf` `38155661891` success.
+
+**RW 4.46, witnessed without a resolver seam.** Run 15 measured it (a name pointed at loopback through `/etc/hosts`: `use allow
+dlx-special-witness.com` and nothing else) and left it open because "the witness needs a name that resolves to a special-use address on
+every runner". This run first tried `net=localhost` — the GRANT layer refuses it, and every other spelling of loopback tried (`127.1`,
+`2130706433`, `0x7f000001`, `0177.0.0.1`, `::1`, `localhost.`): a pin that holds. But the egress client refuses more than special-use
+after the gate has allowed the host — and a URL's **userinfo** (`https://user@example.com/a`, granted `net=example.com`) is refused
+by it before any resolution or connection, on every operating system. `monitor_cli`
+`an_egress_refusal_is_a_deny_record_citing_the_use_it_overrides` and `a_sandboxed_guests_egress_refusal_is_recorded_the_same_way`:
+two such fetches under `--broker daemon`, the program told "not delivered" twice, stderr `[egress: userinfo]` — and the chain must hold
+two `use deny` records at `example.com`, `refused_by: egress`, `reason: userinfo`, each citing its own fetch's `use allow`. Red on the
+pre-fix behaviour (mutants M227 and M228 remove the note from the interpreter and from the guest's host: each path's witness red).
+
+**Fixed** (D-V2-112): `Custody::note_egress_refusal`, called where the interpreter and a guest's host perform a fetch the gate allowed,
+once per refusal the egress client logged for that URL (`egress::refusals_since` — a refusal is a reason whose `answer()` is `Refused`;
+a timeout, TLS or connection error or HTTP status is a failure, not a refusal); `BrokerClientCustody` sends `EgressRefused` with
+`overrides_seq` from the last `use allow` of a host (`last_net_allow`); the daemon records it (`Broker::record_egress_refusal`: `use`,
+`deny`, `op: Net`, `refused_by: egress`, the reason) and answers DL1401 for a lost record (D-V2-111's rule; its own witness,
+`brokerd` `an_egress_refusal_whose_record_was_lost_is_not_answered_as_recorded`). **By hand in the VM, the special-use case** (a
+one-run `/etc/hosts` entry, `127.0.0.1 dlx-special-witness.com`, restored and checked): under the daemon, `3 allow` → `4 deny
+{reason: special-use, overrides_seq: 3}`; sandboxed, `7 allow` → `8 deny {… overrides_seq: 7}`; the chain verified. **Mutants**
+M227 (no note in the interpreter), M228 (none in the guest's host), M229 (no `overrides_seq`), M230 (no refusal found), M231 (a lost
+record answered `Recorded`) — red; control green. Clippy clean; `check-other-os.sh` clean for Windows and macOS. **Read on the runners
+at `ced5dc4`:** macOS `38156513763` (the whole `delulu` package: 937 passed), Windows `38156516142` (the whole package: 907), arm64
+`38156518032` (`monitor_cli`, `bin:delulu`: 206) — 0 failed, the three new witnesses named on each. **The full suite alone at
+`ced5dc4`:** 2,205 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Unblocked:** P8-04 step 4's `special-use` rule.

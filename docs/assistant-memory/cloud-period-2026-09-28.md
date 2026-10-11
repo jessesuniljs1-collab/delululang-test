@@ -211,3 +211,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   and withdraws the node and its adoption (the certificate adopts later); and a daemon request waits for a busy audit chain once —
   an adoption had waited 20 s (four waits), past its client's deadline. Lesson: a wait per operation inside one request is that
   wait times the operations.
+- **RW 4.46 closed the same run** (D-V2-112): an egress refusal after an allowed use is a `use deny` citing the `allow`, from the
+  interpreter and a guest's host. Its witness needed no resolver seam after all: a URL's userinfo is refused before any
+  resolution on every OS; the special-use case was read by hand through a one-run `/etc/hosts` entry. P8-04's `special-use` rule
+  is unblocked.

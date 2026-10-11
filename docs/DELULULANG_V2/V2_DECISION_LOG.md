@@ -2538,6 +2538,25 @@ refused and (c) stays the owner's.
    dead-man a departing monitor cannot beat — each needs its own answer, left open in RW 4.58); retrying the lock later in the
    request (the lost record is already lost).
 
+## D-V2-112 — RW 4.46: an egress refusal is a `deny` record citing the `use allow` it overrides — TAKEN (head chef, 2026-10-11, under the owner's delegation)
+
+1. **D-V2-100's shape, for the network.** The broker answers whether a node may use a HOST and records `use allow`; the egress
+   client then decides what the broker cannot see — what the name resolved to, the URL's userinfo, where a redirect points —
+   and its refusal reached only the run's report and stderr. Now `Custody::note_egress_refusal` is called where the
+   interpreter (`interp.rs`) and a guest's host (`channel.rs`) perform a fetch the gate allowed, once per refusal the egress
+   client logged for that URL (`egress::refusals_since`), and the broker records `use deny` on the run's node at the host with
+   `refused_by: egress`, the egress client's machine-readable reason, and `overrides_seq` — the `use allow` it overrides
+   (`EgressRefused`, `Broker::record_egress_refusal`). A lost record is DL1401, never `Recorded` (D-V2-111).
+2. **A refusal, not a failure.** Only what the egress client REFUSED (its reason's `answer()` is `Refused`: special-use,
+   userinfo, malformed, not-allowlisted, no-address, too-many-redirects, host-mismatch, no-client) becomes a `deny`. A timeout,
+   a TLS or connection error or an HTTP status is a use that was allowed and failed — a `deny` would say the authority refused
+   it, which it did not.
+3. **The witness needs no resolver seam.** A URL's userinfo is refused by the egress client before any resolution or
+   connection, on every operating system, after the gate allowed its host — so `monitor_cli`'s witnesses run hermetically on
+   every runner. A special-use refusal takes the same path; it was read by hand in the VM through a one-run `/etc/hosts` entry
+   (embedded and sandboxed). The scheme refusal (`http://`) stays unrecorded: no use was authorized for it (HTTP-SCHEME-1).
+4. **What this unblocks:** P8-04's `special-use` rule — a monitor can now count a run's refused fetches.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
