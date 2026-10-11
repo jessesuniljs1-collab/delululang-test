@@ -2556,6 +2556,12 @@ refused and (c) stays the owner's.
    every runner. A special-use refusal takes the same path; it was read by hand in the VM through a one-run `/etc/hosts` entry
    (embedded and sandboxed). The scheme refusal (`http://`) stays unrecorded: no use was authorized for it (HTTP-SCHEME-1).
 4. **What this unblocks:** P8-04's `special-use` rule — a monitor can now count a run's refused fetches.
+5. **Corrected the same run, from its red-team pass (F1/F2):** the first form read a fetch's refusal from the run's egress
+   LOG, which keeps its first 64 records — so from the 65th request of a run on, refusals left an `allow` and no `deny`, and a
+   `special-use` monitor was walked past by spending 64 requests first (no quarantine, the run's node left live). The refusal
+   now comes from the call's own outcome: `get_for_program` keeps the calling thread's last refusal whatever the log's bound,
+   and the gate takes it after the effect (`egress::fetch_refusal`). **Never read a decision's evidence from a store that
+   stops keeping.**
 
 ## D-V2-113 — P8-04 step 4: the monitor's `special-use` rule; every single-record rule decided by one function — TAKEN (head chef, 2026-10-11, under the owner's delegation)
 

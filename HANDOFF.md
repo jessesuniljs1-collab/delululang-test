@@ -1206,6 +1206,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   past its client's 15 s deadline, `Adopted` to nobody — and an e-stop's revoke after 10 s, though the first lost record had
   already decided every answer. SILENT-QUEUE-1's lesson (a deadline per connection is that deadline times N) holds inside one
   request too: ask what a request does after its first failure.
+- **A fix that reads its evidence from a bounded store inherits the bound** (routine run 18, the red team's F1/F2): RW 4.46's first
+  fix read each fetch's refusal from the run's egress log — kept to its first 64 records against a program that would fill it —
+  so from the 65th request on no refusal reached the chain, and the `special-use` monitor built on it was walked past by spending
+  64 requests first. Found within an hour by a red-team pass briefed on the new guarantee. Ask of every store a decision reads:
+  is it bounded, and what does the decision see past the bound? Take a decision's evidence from the call's own outcome.
 - **A rule watched only for what it must NOT do was never seen to do anything** (routine run 18, M233): every `monitor_cli` test
   that used the `envelope` rule asserted an absence (a sibling's monitor, a dead monitor), so a monitor whose `envelope` never
   fired passed the whole target. For every rule, filter or gate, keep one witness of it FIRING beside the witnesses of it holding

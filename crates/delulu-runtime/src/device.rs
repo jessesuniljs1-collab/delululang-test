@@ -524,6 +524,13 @@ fn spawn_watchdog(
     // never so fast that it burns a core. The tick is a term in the published latency budget.
     let min_hb = envelopes.iter().map(|e| e.heartbeat_ms).min().unwrap_or(200);
     let tick = Duration::from_millis((min_hb / 4).clamp(1, 25));
+    // The e-stop's FIRST check runs here, on the constructing thread, before the broker exists for anyone to
+    // command (routine run 18's red team, F3). A sandboxed guest's devices start at its first request
+    // (D-V2-110) — possibly seconds after the operator revoked a device's node — and checked only at the
+    // watchdog's first tick, the commands in that tick landed on a machine the operator had stopped.
+    if let Some(probe) = &authority {
+        estop_sweep(&inner, probe);
+    }
     Some(std::thread::spawn(move || {
         while !stop.load(Ordering::SeqCst) {
             std::thread::sleep(tick);
@@ -531,26 +538,7 @@ fn spawn_watchdog(
             // is never credited with a beat it has no right to. `Dead` covers "revoked", "expired"
             // and "the broker did not answer" alike — see `AuthorityState`.
             if let Some(probe) = &authority {
-                let live: Vec<String> = {
-                    let leases = inner.leases.lock().unwrap();
-                    leases.iter().filter(|(_, l)| l.revoked.is_none()).map(|(d, _)| d.clone()).collect()
-                };
-                for device in live {
-                    // Probed OUTSIDE the lease lock: this is an IPC round-trip, and holding the
-                    // lock across it would stall every command in the interpreter for its
-                    // duration — turning the safety mechanism into a latency problem.
-                    let AuthorityState::Dead(why) = probe(&device) else { continue };
-                    let mut leases = inner.leases.lock().unwrap();
-                    let Some(lease) = leases.get_mut(&device) else { continue };
-                    // THE SKIP BRANCH, re-checked after re-acquiring: the dead-man may have taken
-                    // this same lease while the probe was in flight, and revoking twice would
-                    // overwrite a genuine missed-heartbeat record with an operator one — falsifying
-                    // the audit trail about why a machine stopped.
-                    if lease.revoked.is_some() {
-                        continue;
-                    }
-                    revoke_lease(&inner, &device, lease, RevokeCause::Operator, 0, Some(&why));
-                }
+                estop_sweep(&inner, probe);
             }
             // Heartbeat/TTL is the watchdog's job ONLY on the wall clock. Under a stepped sim the
             // lease clock advances on interactions and expiry is swept synchronously there
@@ -571,6 +559,31 @@ fn spawn_watchdog(
             }
         }
     }))
+}
+
+/// One e-stop check of every live lease against the grant tree: a device whose authority is gone loses its lease,
+/// cause `operator-revoke`. Run once when the broker is built and then on every watchdog tick.
+fn estop_sweep(inner: &Arc<BrokerInner>, probe: &AuthorityProbe) {
+    let live: Vec<String> = {
+        let leases = inner.leases.lock().unwrap();
+        leases.iter().filter(|(_, l)| l.revoked.is_none()).map(|(d, _)| d.clone()).collect()
+    };
+    for device in live {
+        // Probed OUTSIDE the lease lock: this is an IPC round-trip, and holding the
+        // lock across it would stall every command in the interpreter for its
+        // duration — turning the safety mechanism into a latency problem.
+        let AuthorityState::Dead(why) = probe(&device) else { continue };
+        let mut leases = inner.leases.lock().unwrap();
+        let Some(lease) = leases.get_mut(&device) else { continue };
+        // THE SKIP BRANCH, re-checked after re-acquiring: the dead-man may have taken
+        // this same lease while the probe was in flight, and revoking twice would
+        // overwrite a genuine missed-heartbeat record with an operator one — falsifying
+        // the audit trail about why a machine stopped.
+        if lease.revoked.is_some() {
+            continue;
+        }
+        revoke_lease(inner, &device, lease, RevokeCause::Operator, 0, Some(&why));
+    }
 }
 
 /// The one wording for "you no longer hold this machine", shared by every path that has to say it —

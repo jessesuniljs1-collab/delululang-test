@@ -520,6 +520,72 @@ fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
     assert!(!se.contains("missed-heartbeat"), "nothing here missed a beat:\n{se}");
 }
 
+/// **An e-stop made while a guest is still computing stops its FIRST command** (routine run 18's red team, F3). A guest's
+/// devices start at its first request (D-V2-110); the watchdog that notices a revoked node first looked one tick after
+/// that start, so a revoke made seconds earlier, during the guest's compute, let the commands of that tick reach the
+/// arm (8–13 of 300 in the red team's runs). The broker now checks the grant tree as it is built, before it can be
+/// commanded: the lease is revoked as the devices start, and no command lands.
+#[test]
+fn an_operator_revoke_during_a_guests_compute_stops_its_first_command() {
+    let (cwd, state) = scratch("estop0");
+    let program = format!(
+        "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n\
+         fn fib(n: Int) -> Int {{\n  if n < 2 {{ n }} else {{ fib(n - 1) + fib(n - 2) }}\n}}\n\n\
+         fn drive(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {{Write, Actuate}} {{\n  if n <= 0 {{ 0 }} else {{\n    \
+         c.println(say(a.command(Elbow {{ angle_deg: 12.0 }})))\n    drive(c, a, n - 1)\n  }}\n}}\n\n\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20 let burned = fib(28)\n\
+         \x20 let c = root.console()\n\
+         \x20 let a = root.actuator(\"arm0/elbow\")\n\
+         \x20 let n = drive(c, a, 40)\n\
+         }}\n"
+    );
+    std::fs::write(cwd.join("late.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&cwd)
+        .env("DELULU_STATE_DIR", &state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args([
+            "run", "late.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
+            "--broker-profile", "sim", "--report-out", "rep.json", "--no-prompt",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the sandboxed run");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let node = loop {
+        if let Some(n) = device_node(&cwd, &state, "arm0/elbow") {
+            break n;
+        }
+        assert!(Instant::now() < deadline, "the sandboxed run never published a node for arm0/elbow");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let o = delulu_in(&cwd, &state, &["grants", "revoke", &node]);
+    assert!(o.status.success(), "grants revoke {node}: {}", stderr(&o));
+    let out = child.wait_with_output().expect("the run exits");
+    let (so, se) = (String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string());
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(cwd.join("rep.json")).expect("the report")).unwrap();
+    let revoked = report["devices"]
+        .as_array()
+        .and_then(|j| j.iter().find(|e| e["op"] == "lease.revoked"))
+        .unwrap_or_else(|| panic!("the report journals the lease's revocation: {report}\n{so}\n{se}"));
+    // The state this witness needs: the e-stop was in the tree before the guest's devices started.
+    assert!(
+        revoked["detail"].as_str().is_some_and(|d| d.contains("operator-revoke")),
+        "the lease died of the operator's revoke: {revoked}"
+    );
+    // Measured, not asserted (it is the probe's round trip): before the fix the lease died at the watchdog's first tick.
+    eprintln!("F3: the lease was revoked {} ms after the devices started", revoked["at_ms"]);
+    assert!(so.lines().any(|l| l.starts_with("REVOKED")), "the guest did command its arm: {so}\n{se}");
+    assert_eq!(so.matches("COMMANDED").count(), 0, "NO COMMAND MAY LAND AFTER THE OPERATOR'S E-STOP:\n{so}\n{se}");
+}
+
 /// Witness 4: the DL1905 sign-off gate binds a sandboxed hardware run as it binds an ordinary one —
 /// before a driver is started and before a guest exists.
 #[test]
