@@ -5036,3 +5036,54 @@ M234 (the rule not parsed) — red; control green. Clippy clean; `check-other-os
 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
 
 **Left of step 4:** `break-glass` — `audit_required` writes its record with no node, so a monitor cannot attribute it to a run.
+
+## 2026-10-11 — routine run 18 (continued): the Sunday sweep's red-team pass — F1/F2 and F3 fixed the same run; RW 4.60 and 4.61 opened
+
+**The sweep** (step 4 item 5; today is Sunday): the CI read is the 2026-10-11 nightly `38128985173` (all 18 jobs green — `heavy-gates`,
+the three `miri-slow` jobs, `microvm`); the document scan found no open `REMAINING_WORK.md` row the log calls closed, and four live
+passages that said a guest's devices start at the send (updated with D-V2-110); and an adversarial pass on this run's four new
+guarantees — **one Sonnet 5.5 sous-chef** (`sonnet`), ~27 minutes, against a frozen copy of the binary at `db40109` in `/tmp/redteam18`,
+briefed to append each finding to `FINDINGS.md` as found and to log what held. After it: `git status` showed only the head chef's own
+edits, `/etc/hosts` (edited by the pass for one-run entries) compared equal to the backup, no broker, server or lock holder left.
+`f875a6b`'s push runs: CI `38158626570` and `openshell` `38158626534` — success.
+
+**F1 (real — fixed in `bc124e9`):** D-V2-112's first form read a fetch's refusal from the run's egress log, kept to its first 64
+records — from a run's 65th request on, refused fetches left `use allow` and no `deny`. Re-run by the head chef on the frozen binary:
+two runs of 70 refused fetches, 128 `deny`s of 140. **F2 (its consequence):** a `special-use` monitor walked past by 64 fetches to port
+0 (refused `malformed`) and then one special-use reach — `quarantines: []`, the run's node left live. Fixed (D-V2-112 item 5): the
+refusal comes from the calling thread's own outcome (`egress::fetch_refusal`); `every_egress_refusal_is_recorded_past_the_logs_bound`
+and its guest form, 70 of 70 (140 of 140 by hand); M235/M236 red, control green. Read at `bc124e9`: Windows `38159257751` (23 passed),
+macOS `38159260568` (24), arm64 `38159262871` (25).
+
+**F3 (HIGH — fixed in `db70f1f`):** D-V2-110's late device start moved the e-stop's first look past it: the watchdog first checked the
+grant tree one tick (≤ 25 ms) after the start, so a device node revoked while the guest still computed let that tick's commands reach
+the arm — 13, 11 and 8 of 300 in three runs, 20 of 300 with four devices (the sweep probes devices one at a time). Fixed (D-V2-110 item
+5): `device::estop_sweep` runs once synchronously as the broker is built, then on every tick. `an_operator_revoke_during_a_guests_compute_stops_its_first_command`:
+the node revoked during the guest's compute, then 40 commands — none COMMANDED, the lease revoked 0–3 ms after the devices started.
+M237 (no synchronous check) red 3 of 3 — once under the pass's load, twice on a quiet VM; control green. Read at `db70f1f` over
+`sandbox_devices_cli`, `estop_cli`, `dead_man_cli` and `robotics_demo`: Windows `38159975775`, macOS `38159978489`, arm64 `38159981058` —
+green, the witness named on each.
+
+**F5 (reproduced by the head chef — RW 4.61, open):** with another writer holding the chain's lock, `guard bypass on --owner CODE` printed
+`ok: guard bypass ENABLED` (exit 0, 5,014 ms); `guard status` said BYPASSED; the chain held only seq 1 — no `guard_bypass_on`. **F5b**
+(the pass's, not re-run): `monitor watch` answered `armed at seq 4` for a seq with no record, and its beats, queued behind lock waits,
+let its own dead-man revoke every run under it. The handlers that never read `failed`: `GuardBypass`, `GuardPolicySet`/`Unset`,
+`GuardApprove`/`Deny`/`Request`, `GuardPermitRevoke`, `ArmDeadman`, `Redeem`. Not fixed this run: each needs its own answer (a downgrade
+rolled back, an upgrade said `unrecorded`), witnessed per handler — the next run's first item.
+
+**F4 and F6 (the pass's, run twice and once — added to RW 4.53):** the daemon is serial, so queued requests each pay their own lock
+wait — an e-stop behind four answered `did not answer within 15s` while the revoke landed at ~25 s; and a flooded chain (82,587 records
+from 8 parallel runs) made the monitor's whole-chain read per poll 1.9 s late against a 2 s default dead-man. **D1 (RW 4.60, low):** a
+guest that never asks never starts its devices, its report has no `devices` entry, and its device node shows `live` until the run ends.
+
+**Held, as logged by the pass:** fourteen URL spellings through both paths — each one `allow` and one `deny` at the same host citing the
+right seq, the plain chain equal to the sandboxed; userinfo variants; `not-allowlisted` reached through a redirect with real TLS (a local
+CA through `SSL_CERT_FILE`); every numeric and named spelling of loopback, metadata and `0.0.0.0` refused at the grant; contention —
+12 daemon and 12 sandboxed runs with 60 refused fetches each beside 6 delegate/revoke pairs: delegate ≤ 0.22 s, revoke ≤ 0.10 s, a
+2,959-record chain with unique contiguous seqs, 1,440 `allow`s and 1,440 `deny`s, every `deny` citing an earlier `allow` of its node and
+host; one 5 s wait per request under a held lock (revoke, delegate, adopt — refused and withdrawn); the monitor never quarantined
+outside `g_M` nor fired on anything but a special-use reach. **Oddities recorded:** O1 (attribution by the custody gate's parse; the
+egress client refuses the ambiguous spelling), O3 (a redirect hop's refusal names the first hop's host) — RW 4.46; O2/O4 (`grants
+revoke`'s `ok:` line and its `--json` summary beside `unrecorded`; `audit verify` passes a seq hole) — RW 4.58. **Not tested by the
+pass, by its own account:** actors (cross-thread citations — the F1 fix reads a thread's own outcome, so this no longer applies by
+construction), `hw:`, the monitor's node-list/chain-read race (source only).

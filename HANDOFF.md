@@ -85,8 +85,9 @@ the assistant's memory — which now also travels file by file in
   closed — a guest's devices start at its first request, so its own check of the program no longer costs it its first heartbeat
   (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
   (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112) — and with it P8-04's
-  `special-use` rule (D-V2-113). **Next:** P8-04's `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53, the
-  dead-man's records (RW 4.58), then P9.
+  `special-use` rule (D-V2-113). Its red-team pass broke two of those fixes within the hour (F1/F2, F3 — fixed the same run) and
+  found **RW 4.61** (guard operations answer success with no record — open, reproduced). **Next:** RW 4.61, P8-04's
+  `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53 (with the pass's F4 and F6), RW 4.60, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -858,6 +859,11 @@ spells the same thing?**
   program, so the guest's own check of that program counted against its actuators' first heartbeat — a program whose check
   outlasted the beat lost its arm before its first command in a guest, and not unsandboxed. Seen once as a 178 ms macOS stall
   on a small program; made red on every OS by growing the program. The devices start at the guest's first request now.
+- **2026-10-11 — the run's own fixes, broken by its red-team pass within the hour (routine run 18):** **F1/F2** — RW 4.46's first
+  fix read refusals from the run's 64-record egress log, so from a run's 65th request on no refusal reached the chain and the
+  `special-use` monitor was walked past (fixed: the call's own outcome); **F3 (HIGH)** — RW 4.59's late device start moved the
+  e-stop's first look past it, and an operator's revoke made during the guest's compute let 8–13 of 300 commands reach the arm
+  (fixed: the first e-stop check is synchronous at the broker's construction). Neither may be restated as "the fix held".
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1206,6 +1212,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
   past its client's 15 s deadline, `Adopted` to nobody — and an e-stop's revoke after 10 s, though the first lost record had
   already decided every answer. SILENT-QUEUE-1's lesson (a deadline per connection is that deadline times N) holds inside one
   request too: ask what a request does after its first failure.
+- **Moving WHEN a mechanism starts moves every check it carries** (routine run 18, the red team's F3): D-V2-110 moved the device
+  broker's start from the program's send to the guest's first request — right for the heartbeat — and the e-stop's watch, which
+  lived on the same watchdog, moved with it: a revoke made in between waited one tick past the start, and commands landed. Before
+  moving a start, list everything that starts with it, and give each the question "what happened while it was not running?"
 - **A fix that reads its evidence from a bounded store inherits the bound** (routine run 18, the red team's F1/F2): RW 4.46's first
   fix read each fetch's refusal from the run's egress log — kept to its first 64 records against a program that would fill it —
   so from the 65th request on no refusal reached the chain, and the `special-use` monitor built on it was walked past by spending

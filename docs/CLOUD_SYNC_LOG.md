@@ -2128,3 +2128,44 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next, in order: (1) read `8084e4e`'s CI run and this commit's push run; (2) the red-team pass on this run's four guarantees
   (Sonnet 5.5, running at this entry); (3) P8-04's `break-glass` rule; RW 4.58's last parts, RW 4.57, RW 4.53; (4) P9. **For the
   owner:** D-V2-110 to D-V2-113. **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-11 — routine run 18 (closing): the Sunday sweep's red-team pass — F1/F2 and F3 fixed the same run; RW 4.60 and 4.61 opened
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice); the red-team sous-chef
+  ran on Sonnet 5.5 (`sonnet`) against a frozen copy of the binary in `/tmp/redteam18` — `git status` clean of it afterwards, `/etc/hosts`
+  restored
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `f875a6b`
+- Commits: (1) `bc124e9` RW 4.46 again (red team F1/F2): a refusal is read from the call's own outcome, not the bounded log; (2)
+  `db70f1f` Red team F3: an e-stop made during a guest's compute stops its first command; (3) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-runtime/src/egress.rs` (`fetch_refusal`, the thread's last refusal),
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/channel.rs`, `crates/delulu/tests/monitor_cli.rs` (two witnesses),
+  `docs/CLOUD_ROUTINE.md` (step 5: a patch script checks every anchor first; a mutant's own command is part of it), `docs/survey/*`. (2) M
+  `crates/delulu-runtime/src/device.rs` (`estop_sweep`, synchronous at construction), `crates/delulu/tests/sandbox_devices_cli.rs` (a
+  witness), `CHANGELOG.md`, `HANDOFF.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-112 item 5), `docs/REMAINING_WORK.md` (4.46, 4.58
+  notes; 4.60 opened), `docs/survey/*`. (3) M `HANDOFF.md` (where things stand; §11.4 the run's own fixes broken by its pass; §11.5 two
+  lessons), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-110 item 5), `docs/REMAINING_WORK.md` (4.59 corrected; 4.53 F4/F6;
+  4.61 opened), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `f875a6b`'s push runs (CI `38158626570`, `openshell` `38158626534`) — success. F1 re-run on the frozen binary (128 `deny`s of
+  140) and green on the fix (140 of 140); M235/M236 red; read at `bc124e9` — Windows `38159257751`, macOS `38159260568`, arm64
+  `38159262871` — green. F3's witness red on M237 3 of 3 (twice on a quiet VM), green on the fix; read at `db70f1f` — Windows
+  `38159975775`, macOS `38159978489`, arm64 `38159981058` — green. F5 re-run by the head chef on the current binary (reproduced). Clippy
+  clean; `check-other-os.sh` clean for Windows and macOS after each code edit. The full suite alone at `db70f1f` with this entry's record edits applied: 2,206 passed, 4 failed — the
+  stale-map four (`doctor_cli` ×3, `freshness`): the records were applied after the last map build and before the suite (§11.5's
+  trap, met again); after `survey build` those four and the document gates re-run green.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (the run's own fixes broken by its pass) and §11.5 (moving when a mechanism starts moves
+  every check it carries; a fix that reads evidence from a bounded store inherits the bound; a rule watched only for what it must not
+  do; a mutant surviving on unreachable code).
+- **The run in one paragraph:** CI green at the start (push and both nightlies); RW 4.59 found to be a design asymmetry and closed
+  (D-V2-110); RW 4.58's rest for device refusals and adoptions, with one wait per request (D-V2-111); RW 4.46 closed with a hermetic
+  witness (D-V2-112); P8-04 step 4's `special-use` rule built (D-V2-113) and the `envelope` rule seen firing at last; the Sunday sweep's
+  red-team pass broke two of the run's own fixes (F1/F2, F3 — both fixed and read on the runners the same run) and found RW 4.61.
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) **RW 4.61** — guard operations and the dead-man's arm
+  answer success with no record (HIGH for the guard; reproduced): a downgrade rolled back and refused, an upgrade said `unrecorded`, a
+  witness per handler; (3) P8-04's `break-glass` rule — its record is written at the gate in `run_cmd.rs` before the lease is redeemed,
+  so it has no node, and the monitor's loop reads `deny` records only: record the run's node with the use (after `redeem_lease`) and let
+  a rule read that `allow`; (4) RW 4.57, RW 4.53 (with F4 and F6 — an incremental chain read for the monitor), RW 4.60, RW 4.58's last
+  parts (O2/O4); (5) P9. **For the owner:** D-V2-110 to D-V2-113. **On 2026-10-12 a run starts the closing entry for the cloud period.**

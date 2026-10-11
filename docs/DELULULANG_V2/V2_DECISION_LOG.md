@@ -2519,6 +2519,12 @@ refused and (c) stays the owner's.
    guest (a protocol version for what the first request already says); starting at the first device COMMAND (a guest could
    mint its actuator, compute, and hold it unbeaten until it chose — the first request of any kind is the earlier,
    stricter point). And never a longer heartbeat in the witnesses to make them green.
+5. **Corrected the same run, from its red-team pass (F3, HIGH):** moving WHEN the device broker starts moved the e-stop's watch
+   with it — the watchdog first looked one tick after the late start, so an operator's revoke of the device node made while
+   the guest computed let that tick's commands reach the arm (8–13 of 300). The broker now runs its first e-stop check
+   synchronously as it is built (`device::estop_sweep`), before it can be commanded, on both paths. And (D1, RW 4.60) a guest
+   that never asks leaves its devices unstarted and its report silent about them; the lease's TTL, like its heartbeat, counts
+   from the late start — by design, since nothing is held until it is asked for.
 
 ## D-V2-111 — RW 4.58's rest: a lost device-refusal or adoption record is never answered as success; one wait for the chain per request — TAKEN (head chef, 2026-10-11, under the owner's delegation)
 
