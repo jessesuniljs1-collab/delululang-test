@@ -1000,6 +1000,14 @@ impl Broker {
         Ok(())
     }
 
+    /// RW 4.61: undo a `guard bypass on` whose record could not be written — the guard is back in force, with no record
+    /// (the chain that refused the first would refuse a second). Only the daemon calls this, in the same request that
+    /// turned the bypass on, so no client saw the bypass in between.
+    pub fn withdraw_unrecorded_bypass(&mut self) {
+        self.guard.bypass = false;
+        self.bump_epoch();
+    }
+
     /// The current policy (for persistence after an edit).
     pub fn guard_policy_snapshot(&self) -> GuardPolicy {
         self.guard.policy.clone()

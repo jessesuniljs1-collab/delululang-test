@@ -934,10 +934,39 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
-        ReqBody::GuardBypass { owner, on } => match broker.guard_set_bypass(owner.as_deref(), on) {
-            Ok(()) => (Response::Ok, false),
-            Err(d) => (deny_response(&d), false),
-        },
+        ReqBody::GuardBypass { owner, on } => {
+            failed.set(false);
+            match broker.guard_set_bypass(owner.as_deref(), on) {
+                // RW 4.61 (D-V2-114): a bypass turned ON whose record was lost is a downgrade the chain cannot account for —
+                // turned back off, unrecorded (the chain that refused the first record would refuse a second), and refused.
+                Ok(()) if failed.get() && on => {
+                    broker.withdraw_unrecorded_bypass();
+                    (
+                        Response::Error {
+                            code: "DL1401".to_string(),
+                            message: "broker could not append the audit record of `guard bypass on` (the chain's append lock was \
+                                      not free within its wait) — refused, and the guard left in force (fail closed)"
+                                .to_string(),
+                            requires_human: true,
+                        },
+                        false,
+                    )
+                }
+                // Turned OFF it stays off — the safe direction — and says the chain lacks the record.
+                Ok(()) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: "broker could not append the audit record of `guard bypass off` (the chain's append lock was \
+                                  not free within its wait) — the guard bypass IS off, but the chain lacks this record"
+                            .to_string(),
+                        requires_human: false,
+                    },
+                    false,
+                ),
+                Ok(()) => (Response::Ok, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::GuardRequest { node, uses, why } => {
             let Some(subset) = delulu_broker::GuardSubset::parse(&uses) else {
                 return (
@@ -2514,6 +2543,48 @@ mod tests {
     // ============================================================================================
 
     const TEST_OWNER: &str = "gow1_testowner000";
+
+    /// RW 4.61 (routine run 18's red team, F5 — reproduced by the head chef): with the chain held by another writer,
+    /// `guard bypass on` answered `Ok` and the bypass was in force with no `guard_bypass_on` record — a security
+    /// downgrade the chain could not account for. Now it is turned back off and refused DL1401; turning the bypass OFF
+    /// (the safe direction) stays in force and says its record was lost.
+    #[test]
+    fn a_guard_bypass_whose_record_was_lost_does_not_happen() {
+        let state = temp_state("lostbypass");
+        let handle = start_daemon(&state);
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let on = request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true });
+        drop(held);
+        let status_after_on = request(&state, ReqBody::GuardStatus);
+        // The baseline: with the chain free the bypass turns on, and then off again under a held chain.
+        let on_free = request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true });
+        let held = log.take_lock().expect("the test holds the chain again");
+        let off = request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: false });
+        drop(held);
+        let status_after_off = request(&state, ReqBody::GuardStatus);
+        stop_daemon(&state, handle);
+        match on {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a bypass whose record was lost must be refused: {other:?}"),
+        }
+        assert!(
+            matches!(status_after_on, Ok(Response::GuardStatus { bypass: false, .. })),
+            "and it must not be in force: {status_after_on:?}"
+        );
+        assert!(matches!(on_free, Ok(Response::Ok)), "the baseline: with the chain free the bypass turns on: {on_free:?}");
+        match off {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("IS off"), "turning it off stays in force and says the record was lost: {message}");
+            }
+            other => panic!("a bypass-off whose record was lost must say so: {other:?}"),
+        }
+        assert!(matches!(status_after_off, Ok(Response::GuardStatus { bypass: false, .. })), "{status_after_off:?}");
+    }
 
     fn declassify_spec(kind: &str) -> AuthoritySpec {
         AuthoritySpec {
