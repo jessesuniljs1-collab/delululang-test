@@ -2520,6 +2520,24 @@ refused and (c) stays the owner's.
    mint its actuator, compute, and hold it unbeaten until it chose — the first request of any kind is the earlier,
    stricter point). And never a longer heartbeat in the witnesses to make them green.
 
+## D-V2-111 — RW 4.58's rest: a lost device-refusal or adoption record is never answered as success; one wait for the chain per request — TAKEN (head chef, 2026-10-11, under the owner's delegation)
+
+1. **`DeviceRefused` answers DL1401 when its record was lost** — the command stays refused (the envelope refused it before the
+   broker was asked), and the client's existing path says once on stderr that the chain lacks the refusal. `Recorded { seq }` is a
+   claim about the chain; it is never made for a seq that names nothing (D-V2-109's rule).
+2. **An adoption is a mint across a broker boundary**, so a lost `adopt` (or its node's `issue`) record refuses it DL1401 and
+   withdraws the node (`unrecorded_mint`), as D-V2-109 does for `Issue`, `Attenuate` and `Delegate`. **The withdrawal takes the
+   adoption's bookkeeping with it** (`withdraw_unrecorded` clears the certificate's `adopted` entry and the chain's fingerprints):
+   a lost record must not burn a credential — the same certificate adopts once the chain is free.
+3. **One wait for the chain per request** (`ChainLock::NotFree`): a request that found the append lock not free within its wait
+   does not wait for it again; the serve loop forgets it when it releases the request's lock. Each seq and each record used to
+   ask afresh, so an adoption waited 20 s on a held chain (past its client's 15 s deadline, answering `Adopted` to nobody) and an
+   e-stop's revoke 10 s. After the first lost record the later waits changed no answer — only how late it came — and a request
+   that found the chain not free writes none of its records, so the chain holds no half of it.
+4. **Not chosen:** refusing an arm or disarm of the dead-man for a lost record (an arm adds safety; refusing a disarm keeps a
+   dead-man a departing monitor cannot beat — each needs its own answer, left open in RW 4.58); retrying the lock later in the
+   request (the lost record is already lost).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

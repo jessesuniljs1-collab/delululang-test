@@ -163,7 +163,8 @@ another OS, and then takes about seven minutes itself (run 5).
    and plugins callable under the daemon at last) and **RW 4.48** with AUDIT-DAY-1 (D-V2-105 — the daemon holds the append lock
    from a seq's floor to its write; a record's day file follows the chain) and RW 4.51; run 17 built **step 5, the monitor's
    own death** (D-V2-106 — the broker holds a dead-man for the monitor's node) and its red-team pass found RW 4.55 onward, which
-   come first (run 18 closed RW 4.59, D-V2-110 — a guest's devices start at its first request); then RW 4.46 (the egress client's refusals)
+   come first (run 18 closed RW 4.59, D-V2-110 — a guest's devices start at its first request — and RW 4.58 for device refusals and
+   adoptions, D-V2-111); then RW 4.46 (the egress client's refusals)
    and the `special-use` and `break-glass` rules — a monitor node minted between the operator and the run, which can
    revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.

@@ -4954,3 +4954,31 @@ named on each, and the measurement **0 ms from the first request to the first co
 
 **Left, watched:** the window the wedged witnesses still assume is the guest's first request to its first command — two round trips.
 If a runner stalls there, the next step is to make the witnesses' first request the actuator's own mint; never a longer beat.
+
+## 2026-10-11 — routine run 18 (continued): RW 4.58's rest for device refusals and adoptions; one wait for the chain per request (D-V2-111)
+
+**`439fdbb`** (RW 4.59 and its records): push run `38154053591` — success on every job (`miri-slow` and `heavy-gates` skipped on a
+push); its `ocsf` run `38154053594` success. `actors_pingpong`: arm64 MEASURED 2.79x against 4.11x (bar 1.50x); the other three NOT
+MEASURED, as on the nightlies. `master` green with D-V2-110.
+
+**RW 4.58's rest, witnessed red first** — each holding the chain's append lock as D-V2-109's witness does. `brokerd`
+`a_device_refusal_whose_record_was_lost_is_not_answered_as_recorded`: with the chain free a refusal is `Recorded`; held, it was still
+answered **`Recorded { seq: 4 }`** for a record the chain never got — so the client's "the chain lacks this refusal" warning
+(`broker_client::note_device_refusal`), written for exactly that case, could never fire. `an_adoption_whose_record_was_lost_is_refused_and_the_certificate_still_adopts_later`:
+held, the adoption did not answer within the client's 15 s deadline (`TimedOut … did not answer within 15s`) — the daemon's sink
+asked for the lock afresh at each of the adoption's two seqs and two records, 5 s each, and answered `Adopted` after 20 s to a client
+that had gone.
+
+**Fixed** (D-V2-111): a refusal whose record was lost is DL1401 in words; an adoption is a mint across a broker boundary, refused and
+withdrawn through `unrecorded_mint`, and `withdraw_unrecorded` now clears the withdrawn node's adoption (`adopted`,
+`adopted_chain_fps`) so the certificate adopts once the chain is free; and the sink waits for a busy chain once per request
+(`ChainLock::NotFree`, forgotten when the serve loop releases the request's lock) — an e-stop's revoke now waits at most 5 s for a
+held chain, where it waited 10 s. **Mutants:** M223 (no `DeviceRefused` check), M224 (`Adopt` answered without the mint check), M225
+(the adoption's bookkeeping left behind — the later adoption refused "already adopted"), M226 (a not-free lock waited for again — the
+adoption times out) — red; control green. Clippy clean; `check-other-os.sh` clean for Windows and macOS. **Read on the runners at
+`aa20498`** over `bin:delulu`, `federation_cli`, `monitor_cli` and `grants_cli`: Windows `38154807791` (179 passed), macOS
+`38154809795` (194), arm64 `38154811843` (214) — 0 failed, the two new witnesses and D-V2-109's two named on each. **The full suite
+alone at `aa20498`:** 2,202 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Left of RW 4.58:** the lost seq can still be taken by another writer; the dead-man's arm and disarm and the guard's records do not
+yet check (D-V2-111 item 4 says why each needs its own answer); the long hold itself is RW 4.53.

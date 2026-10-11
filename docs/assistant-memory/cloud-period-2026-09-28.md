@@ -207,3 +207,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   not at the send — the guest's own check no longer counts against the first heartbeat, as an ordinary run's check never did.
   Found by growing the program until the 178 ms macOS flake was a red on every OS. Lessons: a flake seen once may be a design
   asymmetry — scale what its window hides; a mutant that survives on unreachable code is a reason to delete the code.
+- **RW 4.58's rest the same run** (D-V2-111): a lost device-refusal record is DL1401, not `Recorded`; a lost adoption record refuses
+  and withdraws the node and its adoption (the certificate adopts later); and a daemon request waits for a busy audit chain once —
+  an adoption had waited 20 s (four waits), past its client's deadline. Lesson: a wait per operation inside one request is that
+  wait times the operations.

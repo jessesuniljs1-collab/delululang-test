@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a lost device-refusal or adoption record is never answered as success, 2026-10-11
+
+- **Fixed (RW 4.58): when another writer held the audit chain too long, a device command the run's envelope refused was
+  reported to the broker as recorded when it was not**, so no warning said the chain lacked it; it is now said once on stderr.
+  **`delulu grants adopt` could take 20 s and time out** while the adoption still happened; an adoption whose record could not be
+  written is now refused (DL1401) within one wait, and the certificate can be adopted again once the chain is free. Every daemon
+  operation now waits for a busy audit chain at most once — an e-stop's revoke at most 5 s, where it could wait 10 s (D-V2-111).
+
 ## Unreleased — a sandboxed program's own check no longer costs it its first heartbeat, 2026-10-11
 
 - **Fixed (RW 4.59): under `--sandbox`, a control program whose check took longer than its actuator's `heartbeat_ms` lost the

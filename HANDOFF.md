@@ -83,8 +83,9 @@ the assistant's memory — which now also travels file by file in
   closed (D-V2-107), RW 4.56 (D-V2-108 — a plugin node's revoke reaches its running export's next use) and RW 4.58 for
   revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Routine run 18 (2026-10-11):** RW 4.59
   closed — a guest's devices start at its first request, so its own check of the program no longer costs it its first heartbeat
-  (D-V2-110). **Next:** RW 4.57 and 4.53, RW 4.58's rest, RW 4.46 (the egress client's refusals) and P8-04's two remaining
-  rules, then P9.
+  (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
+  (D-V2-111). **Next:** RW 4.57 and 4.53, the dead-man's records (RW 4.58), RW 4.46 (the egress client's refusals) and P8-04's
+  two remaining rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1199,6 +1200,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   it (a 4,000-function program): a deterministic red on Linux, Windows and macOS in one dispatch each, and a parity defect no
   quiet machine would ever have shown. The measurement then says how much of the flake the fix removed (send → first command 2 ms,
   first request → first command 0 ms).
+- **A wait repeated per operation inside one request is that wait times the operations** (routine run 18, D-V2-111): the daemon
+  waited 5 s for a held audit chain at each seq and each record of a request, so an adoption (four of them) answered after 20 s —
+  past its client's 15 s deadline, `Adopted` to nobody — and an e-stop's revoke after 10 s, though the first lost record had
+  already decided every answer. SILENT-QUEUE-1's lesson (a deadline per connection is that deadline times N) holds inside one
+  request too: ask what a request does after its first failure.
 - **A mutant that survives because its code is unreachable is a reason to delete the code** (routine run 18, M222): a guard that
   `Confined` never starts a run's devices could not fire — the confinement report is answered before the host is given them.
   Keeping it would leave a check no witness can fail; it was removed.

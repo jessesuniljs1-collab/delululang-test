@@ -2054,3 +2054,28 @@ it on `origin` was made in the cloud and is listed below.
   dead-man's arm and disarm, the guard's records; (3) RW 4.57 (a killed run's nodes), RW 4.53; (4) RW 4.46 and P8-04's two
   remaining rules; (5) P9. **For the owner:** D-V2-110 (and D-V2-106 to D-V2-109). **On 2026-10-12 a run starts the closing entry
   for the cloud period.**
+
+### 2026-10-11 — routine run 18 (continued): RW 4.58's rest for device refusals and adoptions; one wait for the chain per request (D-V2-111)
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `439fdbb`
+- Commits: (1) `aa20498` RW 4.58's rest: a lost device-refusal or adoption record is never answered as success; (2) this entry's
+  commit — the records
+- Files and folders: (1) M `crates/delulu/src/brokerd.rs` (`ChainLock`; `Adopt` and `DeviceRefused`; two witnesses),
+  `crates/delulu-broker/src/tree.rs` (`withdraw_unrecorded` clears an adoption), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md`
+  (where things stand; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P8 line), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-111), `docs/REMAINING_WORK.md` (4.58), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply
+  address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `439fdbb`'s push run `38154053591` and `ocsf` `38154053594` — success. Both witnesses red first (a lost refusal answered
+  `Recorded { seq: 4 }`; a held-chain adoption past the client's 15 s deadline); M223–M226 red, control green; clippy clean;
+  `check-other-os.sh` clean for Windows and macOS; runner reads at `aa20498` — Windows `38154807791`, macOS `38154809795`, arm64
+  `38154811843` — green, the witnesses named; the full suite alone at `aa20498`: 2,202 passed, 0 failed, 16 ignored (161 binaries).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a wait per operation inside one request is that wait times the operations).
+- Open / next, in order: (1) read this commit's push run (unread at this entry); (2) RW 4.58's last parts (the dead-man's arm and
+  disarm, the guard's records), RW 4.57 (a killed run's nodes), RW 4.53; (3) RW 4.46 and P8-04's two remaining rules; (4) P9.
+  **For the owner:** D-V2-110, D-V2-111 (and D-V2-106 to D-V2-109). **On 2026-10-12 a run starts the closing entry for the cloud
+  period.**
