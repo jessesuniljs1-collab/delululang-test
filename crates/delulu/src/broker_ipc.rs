@@ -191,6 +191,9 @@ pub enum ReqBody {
     /// use — recorded as a `use` `deny` citing `overrides_seq`, the `allow` it overrides. Records,
     /// never decides (the command is already refused). Answered `Recorded`.
     DeviceRefused { node: String, device: String, reason: String, overrides_seq: Option<u64> },
+    /// RW 4.46 (D-V2-112): a fetch the run's egress client refused after the broker allowed the use of its
+    /// host — recorded as a `deny` citing that `allow`. `reason` is the egress client's machine-readable one.
+    EgressRefused { node: String, host: String, reason: String, overrides_seq: Option<u64> },
     /// The epoch-class client cache refresh: the current epoch + this node's effective state.
     NodeState { node: String },
     /// Synchronous declassification of a broker-held secret (phase 5g); audited with `span`.

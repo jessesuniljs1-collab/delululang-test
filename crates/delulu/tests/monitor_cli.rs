@@ -587,6 +587,79 @@ fn a_plain_http_fetch_is_the_same_refusal_under_the_daemon() {
     assert_eq!(named_http, 0, "no record names a host called `http`");
 }
 
+// ----- an egress refusal is in the chain (RW 4.46) ------------------------------------------------------
+
+/// **RW 4.46: the chain records an egress refusal as a refusal**, as it records an envelope's (D-V2-100). The
+/// custody gate allows the use of a granted host and records `use allow`; the egress client then refuses the
+/// request. Here the refusal is the URL's userinfo (`https://user@example.com/…`) — refused by the egress
+/// client before any resolution or connection on every operating system, so the witness needs neither a
+/// network nor a resolver of its own; a special-use refusal (a granted name resolving to loopback) takes the
+/// same path, read by hand in the VM through `/etc/hosts` (`V2_LOG.md`, 2026-10-11). Before, the chain held
+/// the `allow`s and nothing else: a monitor reading it could never see a refused fetch (P8-04's `special-use`
+/// rule waited on this). Each refusal is a `deny` on the run's node, at the host, naming the egress client's
+/// reason, citing the `allow` it overrides. `extra` runs it another way (`--sandbox`: the guest's fetch
+/// reaches its host).
+fn egress_refusals_are_recorded(tag: &str, extra: &[&str]) {
+    let f = setup(tag);
+    std::fs::write(
+        f.cwd.join("fetch.delulu"),
+        "module fetch\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"example.com\"])\n    match h.get(\"https://user@example.com/a\") {\n        \
+         Ok(body) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }\n    \
+         match h.get(\"https://user@example.com/b\") {\n        \
+         Ok(body) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }\n}\n",
+    )
+    .unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let mut args =
+        vec!["run", "fetch.delulu", "--broker", "daemon", "--grant", "console", "--grant", "net=example.com", "--no-prompt"];
+    args.extend_from_slice(extra);
+    let o = delulu_in(&f.cwd, &f.state, &args);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(o.status.success(), "a refused fetch is a value, never the run's end:\n{so}\n{se}");
+    // The baseline: both fetches reached the egress client and were refused there, for their userinfo.
+    assert_eq!(so, "not delivered\nnot delivered\n", "{se}");
+    assert!(se.contains("[egress: userinfo]"), "the operator was told why: {se}");
+    assert!(!se.contains("did not record a refused"), "every refusal reached the chain:\n{se}");
+    let uses: Vec<serde_json::Value> = use_records(&f).into_iter().filter(|r| r["target"] == "example.com").collect();
+    let allows: Vec<&serde_json::Value> = uses.iter().filter(|r| r["decision"] == "allow").collect();
+    let denies: Vec<&serde_json::Value> = uses.iter().filter(|r| r["decision"] == "deny").collect();
+    assert_eq!(allows.len(), 2, "the authority allowed both fetches to reach the egress client: {uses:#?}");
+    assert_eq!(
+        denies.len(),
+        2,
+        "each fetch the egress client refused must be a `deny` record — without one the chain says two uses of \
+         `example.com` were allowed and a monitor can never see a refusal:\n{uses:#?}"
+    );
+    for d in &denies {
+        assert_eq!(d["actor_node"], allows[0]["actor_node"], "the refusal is on the node that used the host: {d}");
+        let a = &d["authority"];
+        assert_eq!(a["refused_by"], "egress", "{d}");
+        assert_eq!(a["reason"], "userinfo", "the egress client's machine-readable reason: {d}");
+        assert_eq!(a["op"], "Net", "{d}");
+        let cited = a["overrides_seq"].as_u64().expect("a refusal cites the use it overrides");
+        assert!(cited < d["seq"].as_u64().unwrap(), "the cited use precedes its refusal: {d}");
+        assert!(allows.iter().any(|r| r["seq"].as_u64() == Some(cited)), "the cited seq is a `use allow`: {d}\n{uses:#?}");
+    }
+    let mut cited: Vec<u64> = denies.iter().filter_map(|d| d["authority"]["overrides_seq"].as_u64()).collect();
+    cited.dedup();
+    assert_eq!(cited.len(), 2, "each refusal cites its own fetch's use:\n{uses:#?}");
+}
+
+#[test]
+fn an_egress_refusal_is_a_deny_record_citing_the_use_it_overrides() {
+    egress_refusals_are_recorded("egress", &[]);
+}
+
+/// The same for a sandboxed guest: its fetch crosses the channel and its host performs it, through the same
+/// egress client, under the same custody.
+#[test]
+fn a_sandboxed_guests_egress_refusal_is_recorded_the_same_way() {
+    egress_refusals_are_recorded("egress-sb", &["--sandbox"]);
+}
+
 /// **A monitor never quarantines itself** (the routine-run-15 red-team pass, F3). The `denies=N/MS`
 /// rule counted a `deny` whose actor is the monitor's OWN node — a refused delegation under `g_M`, an
 /// operator's typo — as the misbehaviour of "the run `g_M`", and revoked `g_M`: every run under it,

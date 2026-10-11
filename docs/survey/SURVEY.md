@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 304 |
-| Rust lines | 162267 |
+| Rust lines | 162517 |
 | Rust files outside `src/` (test/bench targets) | 138 |
 | Markdown documents | 252 |
 | Markdown lines | 72469 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1500 / 13827 |
+| Nodes / edges in this map | 1500 / 13833 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 43 files, 41234 lines
+- **Modules:** 43 files, 41321 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -99,10 +99,10 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/attest.rs` | 789 | PS-D-02: the attestation seam (D-V2-48) — an external launcher's attester vouches for the guest's |
 | `src/boundary.rs` | 739 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
-| `src/broker_client.rs` | 564 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
-| `src/broker_ipc.rs` | 447 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
+| `src/broker_client.rs` | 600 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
+| `src/broker_ipc.rs` | 450 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 688 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 3288 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 3336 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
@@ -161,7 +161,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 11581 lines
+- **Modules:** 17 files, 11620 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -181,7 +181,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/secrets.rs` | 766 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1176 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
-| `src/validate.rs` | 677 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
+| `src/validate.rs` | 716 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`
 
@@ -301,7 +301,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 20708 lines
+- **Modules:** 24 files, 20759 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -309,15 +309,15 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/adapter.rs` | 681 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 772 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 726 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 1725 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
+| `src/channel.rs` | 1738 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
-| `src/custody.rs` | 361 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
+| `src/custody.rs` | 371 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 231 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1456 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
-| `src/egress.rs` | 937 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
+| `src/egress.rs` | 953 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 790 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 458 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2658 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2670 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 446 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 273 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2282 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |

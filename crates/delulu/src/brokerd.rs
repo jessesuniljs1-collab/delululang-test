@@ -730,6 +730,26 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::EgressRefused { node, host, reason, overrides_seq } => {
+            let node = GrantId::from_trusted(node);
+            failed.set(false);
+            match broker.record_egress_refusal(&node, &host, &reason, overrides_seq) {
+                Ok(seq) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "broker could not append the audit record of a refused fetch of `{}` (the chain's append \
+                             lock was not free within its wait) — audit seq {seq} names no record",
+                            delulu_diag::terminal_line(&host)
+                        ),
+                        requires_human: false,
+                    },
+                    false,
+                ),
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::Check { node, op, arg } => {
             let Some(op) = Op::from_wire_name(&op) else {
                 return (
@@ -2074,6 +2094,34 @@ mod tests {
             overrides_seq: None,
         };
         // The baseline: with the chain free, the refusal is recorded.
+        let free = request(&state, refusal(&root));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, refusal(&root));
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(free, Ok(Response::Recorded { .. })), "the refusal is recorded when the chain is free: {free:?}");
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append"), "{message}");
+            }
+            other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
+        }
+    }
+
+    /// RW 4.46's record keeps D-V2-111's rule: an egress refusal whose record was lost is not answered as recorded.
+    #[test]
+    fn an_egress_refusal_whose_record_was_lost_is_not_answered_as_recorded() {
+        let state = temp_state("lostegr");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let refusal = |node: &str| ReqBody::EgressRefused {
+            node: node.to_string(),
+            host: "example.com".to_string(),
+            reason: "special-use".to_string(),
+            overrides_seq: None,
+        };
         let free = request(&state, refusal(&root));
         let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
         let held = log.take_lock().expect("the test holds the chain");

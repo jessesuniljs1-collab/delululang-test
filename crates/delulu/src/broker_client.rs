@@ -73,6 +73,9 @@ pub struct BrokerClientCustody {
     /// The audit seq of the last synchronous `use` the broker ALLOWED for an actuator command — the
     /// record a refusal by the device's envelope overrides (P8-04). Taken once, by that refusal.
     last_actuate_allow: Option<u64>,
+    /// The same for a fetch (RW 4.46): the `use allow` of the last host the broker allowed, which a refusal
+    /// by the egress client overrides. Taken once, by that refusal.
+    last_net_allow: Option<u64>,
     /// Whether a refusal record has already failed to reach the broker this run (said once).
     refusal_unrecorded_said: bool,
     /// The plugin nodes this client minted (RW 4.51), revoked when the run ends (`end_of_run`).
@@ -99,6 +102,7 @@ impl BrokerClientCustody {
                 guarded_classes: Vec::new(),
                 warned: std::collections::HashSet::new(),
                 last_actuate_allow: None,
+                last_net_allow: None,
                 refusal_unrecorded_said: false,
                 minted: Vec::new(),
             }),
@@ -126,6 +130,7 @@ impl BrokerClientCustody {
             guarded_classes: Vec::new(),
             warned: std::collections::HashSet::new(),
             last_actuate_allow: None,
+            last_net_allow: None,
             refusal_unrecorded_said: false,
             minted: Vec::new(),
         }
@@ -207,6 +212,7 @@ impl BrokerClientCustody {
                     self.surface_warn(note);
                 }
                 self.last_actuate_allow = if op == Op::Actuate { audit_seq } else { None };
+                self.last_net_allow = if op == Op::Net { audit_seq } else { None };
                 CustodyDecision::Allow
             }
             Response::Decision { allow: false, code, message, .. } => CustodyDecision::Deny(CustodyDenial::new(
@@ -411,6 +417,36 @@ impl Custody for BrokerClientCustody {
             let _ = rpc(
                 &self.state_dir,
                 ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() },
+            );
+        }
+    }
+
+    /// The egress client's refusal into the chain (RW 4.46): one `EgressRefused` round-trip citing the `use
+    /// allow` this fetch was given — best-effort, and said once on standard error when the broker could not
+    /// record it, as a device refusal is.
+    fn note_egress_refusal(&mut self, host: &str, reason: &str) {
+        let overrides_seq = self.last_net_allow.take();
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::EgressRefused {
+                node: self.node.as_str().to_string(),
+                host: host.to_string(),
+                reason: reason.to_string(),
+                overrides_seq,
+            },
+        );
+        let failure = match resp {
+            Ok(Response::Recorded { .. }) => return,
+            Ok(Response::Error { code, message, .. }) => format!("{code}: {message}"),
+            Ok(other) => format!("unexpected answer {other:?}"),
+            Err(d) => format!("{}: {}", d.code, d.message),
+        };
+        if !std::mem::replace(&mut self.refusal_unrecorded_said, true) {
+            eprintln!(
+                "warning: the broker did not record a refused fetch of `{}` ({}) — the fetch was refused all the \
+                 same; the audit chain lacks this refusal",
+                delulu_diag::terminal_line(host),
+                delulu_diag::terminal_line(&failure)
             );
         }
     }

@@ -1307,6 +1307,7 @@ impl Interp {
         // GUARD-ALIAS-1: a file effect's path is resolved ONCE; the custody gate decides on that
         // resolved path and the effect opens exactly it (below), so no link can make the two differ.
         let fs_pin = fs_pin_for(&recvv, &name.name, &argvals);
+        let mut fetch_allowed: Option<(crate::egress::Mark, String)> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
@@ -1321,6 +1322,9 @@ impl Interp {
                     return Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(d.message)])));
                 }
                 return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
+            }
+            if let (CustodyOp::Net, Some(Value::Str(url))) = (op, argvals.first()) {
+                fetch_allowed = Some((crate::egress::mark(), url.to_string()));
             }
         }
         // T-Send at runtime (7g): any method on an actor REFERENCE is a behavior send (sync
@@ -1469,6 +1473,14 @@ impl Interp {
             Value::Map(m) => prim::call_map_method(m, &name.name, &argvals, span),
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
+        // RW 4.46: the custody allowed this fetch's host and its chain recorded `use allow`; what the egress
+        // client then refused is said to it, as an envelope's refusal is (`call_actuator`).
+        if let Some((mark, url)) = fetch_allowed {
+            let host = host_of(&url);
+            for reason in crate::egress::refusals_since(mark, &url) {
+                self.custody.borrow_mut().note_egress_refusal(&host, reason);
+            }
+        }
         // 10d: a primitive may mint a fresh mutable cell (`split`, `slice`, …) — register its
         // top-level cell. Anything nested was either built at eval sites (already registered)
         // or is a clone of an existing registered cell.

@@ -131,6 +131,13 @@ pub trait Custody {
         let _ = (device, reason);
     }
 
+    /// Record a fetch the EGRESS CLIENT refused after this custody allowed the use of its host (RW 4.46,
+    /// D-V2-112) — [`Custody::note_device_refusal`]'s twin: `reason` is the egress client's machine-readable
+    /// one. Additive, never a decision (the fetch is already refused); the **default is a no-op**.
+    fn note_egress_refusal(&mut self, host: &str, reason: &str) {
+        let _ = (host, reason);
+    }
+
     /// The run is over (RW 4.51): revoke the grant nodes this custody minted for the run's plugins, so
     /// the tree never offers an operator a live grant nobody holds — as a run's device nodes are revoked
     /// when it ends (10g). Best-effort: the run is already over. The **default is a no-op** — a custody
@@ -224,6 +231,9 @@ impl Custody for PluginUseCustody {
     }
     fn note_device_refusal(&mut self, device: &str, reason: &str) {
         self.host.borrow_mut().note_device_refusal(device, reason)
+    }
+    fn note_egress_refusal(&mut self, host: &str, reason: &str) {
+        self.host.borrow_mut().note_egress_refusal(host, reason)
     }
     /// The run's end is the host's to announce, never an export's.
     fn end_of_run(&mut self) {}

@@ -774,10 +774,14 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 // and the sink opens exactly it.
                 let recv = Value::Cap(capv.clone());
                 let fs_pin = crate::interp::fs_pin_for(&recv, method, &decoded);
+                let mut fetch_allowed: Option<(crate::egress::Mark, String)> = None;
                 if let Some(custody) = self.custody.as_mut() {
                     if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded, fs_pin.as_deref()) {
                         if let crate::custody::CustodyDecision::Deny(d) = custody.check(op, arg.as_deref()) {
                             return Response::Fault { code: d.code.to_string(), message: d.message };
+                        }
+                        if let (crate::custody::Op::Net, Some(Value::Str(url))) = (op, decoded.first()) {
+                            fetch_allowed = Some((crate::egress::mark(), url.to_string()));
                         }
                     }
                 }
@@ -812,7 +816,16 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                     }
                     _ => {}
                 }
-                match self.sink.cap_method_pinned(&capv, method, &decoded, span, fs_pin.as_deref()) {
+                let performed = self.sink.cap_method_pinned(&capv, method, &decoded, span, fs_pin.as_deref());
+                // RW 4.46: the custody allowed this fetch's host; what the egress client then refused is said
+                // to it, as an envelope's refusal is (above).
+                if let (Some((mark, url)), Some(custody)) = (fetch_allowed, self.custody.as_mut()) {
+                    let host = crate::prim::host_of(&url).to_string();
+                    for reason in crate::egress::refusals_since(mark, &url) {
+                        custody.note_egress_refusal(&host, reason);
+                    }
+                }
+                match performed {
                     Ok(v) => self.encode_result(v),
                     Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },
                 }

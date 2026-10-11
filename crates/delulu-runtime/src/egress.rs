@@ -579,6 +579,22 @@ pub fn records_since(m: Mark) -> (Vec<EgressRecord>, u64) {
     (l.records[kept_before..].to_vec(), l.refused.saturating_sub(m.refused))
 }
 
+/// RW 4.46: the egress client's REFUSALS of `url` logged after `m` — each request it refused rather than
+/// failed (its [`Reason::answer`] is `Refused`), by machine-readable reason — for the custody that allowed
+/// the use of its host, whose chain must then say it was refused. A network failure (a timeout, a TLS or
+/// connection error, an HTTP status) is not a refusal and is not returned.
+pub fn refusals_since(m: Mark, url: &str) -> Vec<&'static str> {
+    records_since(m)
+        .0
+        .iter()
+        .filter(|r| r.url == url)
+        .filter_map(|r| match &r.outcome {
+            Err(reason) if reason.answer() == Answer::Refused => Some(reason.code()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Record a refusal the primitive table made before the request reached [`get_for_program`] (the
 /// scheme check, which predates this module and answers first).
 pub fn note_refusal(url: &str, reason: Reason) {

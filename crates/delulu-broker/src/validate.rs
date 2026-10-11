@@ -300,6 +300,45 @@ impl Broker {
         }
     }
 
+    /// Record a fetch the run's EGRESS CLIENT refused after this broker allowed the use of its host (RW 4.46,
+    /// D-V2-112): one `use` record with decision `deny` on `node`, at `host`, carrying the egress client's
+    /// machine-readable reason (`special-use`, `not-allowlisted`, …) and the seq of the `use allow` it
+    /// overrides when the run knows it — [`Broker::record_device_refusal`]'s shape for the network. The
+    /// broker answers whether this node may use the host; the egress client then checks what the name
+    /// resolved to, where a redirect points, and more, and its refusal reached only the run's report and
+    /// standard error, so the chain said the fetch was allowed. Decides nothing; refused for a node the
+    /// tree does not hold; the reason is bounded.
+    pub fn record_egress_refusal(
+        &mut self,
+        node_id: &GrantId,
+        host: &str,
+        reason: &str,
+        overrides_seq: Option<u64>,
+    ) -> Result<u64, Denial> {
+        if self.inspect(node_id).is_none() {
+            return Err(Denial::UnknownNode { node: node_id.clone() });
+        }
+        let mut payload = serde_json::json!({
+            "op": Op::Net.wire_name(),
+            "refused_by": "egress",
+            "reason": crate::bounded_text(reason, 128),
+        });
+        if let Some(s) = overrides_seq {
+            payload["overrides_seq"] = serde_json::json!(s);
+        }
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "use",
+            Some(node_id.as_str().to_string()),
+            Some(crate::bounded_text(host, 512)),
+            Some(payload),
+            "deny",
+            None,
+        );
+        Ok(seq)
+    }
+
     /// Record a device command its ENVELOPE refused (P8-04, routine run 15): one `use` record with
     /// decision `deny` on `node`, at `device`, carrying the refusal's code (DL1904), the reason in the
     /// words the program was told, and the seq of the `use allow` it overrides when the run knows it.
