@@ -269,7 +269,7 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
         &state,
         &[
             "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim",
-            "--limits", "wall=3", "--no-prompt",
+            "--limits", "wall=3", "--report-out", "rep.json", "--no-prompt",
         ],
     );
     let took = started.elapsed();
@@ -284,6 +284,114 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
     let late = overdue_us(&err);
     assert!(late < 1_000_000, "the lease died {late} µs after its beat was due — the watchdog was not watching:\n{err}");
     assert!(took < Duration::from_secs(60), "the wall ceiling ended the wedged guest: {took:?}");
+    // RW 4.59's measurement, read under `--nocapture` (`witness.yml`): when the one command beat the lease, on
+    // the devices' own clock — the revocation's instant less the heartbeat and the overdue.
+    if let Ok(text) = std::fs::read_to_string(cwd.join("rep.json")) {
+        let report: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        let at = report["devices"].as_array().and_then(|j| j.iter().find(|e| e["op"] == "lease.revoked")).and_then(|e| e["at_ms"].as_u64());
+        if let Some(at) = at {
+            eprintln!("RW 4.59: the first command beat the lease {} ms after the devices started", at.saturating_sub(150 + late / 1000));
+        }
+    }
+}
+
+/// A program of `n` small functions, then `main`: one command, as the first thing it does. Its check takes
+/// time in proportion to `n`, and nothing else about it does.
+fn long_to_check(n: usize) -> String {
+    let pad: String =
+        (0..n).map(|i| format!("fn pad{i}(x: Int) -> Int {{\n  if x < {i} {{ x + {i} }} else {{ pad{i}(x - 1) }}\n}}\n\n")).collect();
+    format!(
+        "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n{pad}\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20 let c = root.console()\n\
+         \x20 let a = root.actuator(\"arm0/elbow\")\n\
+         \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
+         }}\n"
+    )
+}
+
+/// RW 4.59: a guest checks the program it is sent before it runs a line of it, as the host checked it before
+/// sending — and an ordinary run's devices start after ITS check, just before `main`. So a guest's devices
+/// start at its first request after the program, the first instant the host knows the program is running,
+/// and a program whose check outlasts its heartbeat is told what it would be told unsandboxed. Before, the
+/// devices started at the send: the guest's own check was charged against its first heartbeat, and such a
+/// program lost its arm before its first command — what a loaded macOS runner did to a small program once
+/// (`75e748e`'s push run), and what a long program does on every machine.
+#[test]
+fn a_guests_own_check_of_its_program_is_not_charged_against_its_first_heartbeat() {
+    let (cwd, state) = scratch("check");
+    // The baseline is the STATE the witness needs — a check that outlasts the heartbeat several times over on
+    // THIS machine — measured, never assumed: double the program until `delulu check` takes 450 ms.
+    let (mut n, mut took) = (4_000, Duration::ZERO);
+    while n <= 64_000 {
+        std::fs::write(cwd.join("arm.delulu"), long_to_check(n)).unwrap();
+        let started = Instant::now();
+        let c = delulu_in(&cwd, &state, &["check", "arm.delulu"]);
+        took = started.elapsed();
+        assert!(c.status.success(), "the program checks: {}", stderr(&c));
+        if took >= Duration::from_millis(450) {
+            break;
+        }
+        n *= 2;
+    }
+    assert!(took >= Duration::from_millis(300), "{n} functions checked in {took:?}: no longer than the 150 ms heartbeat");
+    let base = ["run", "arm.delulu", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim", "--no-prompt"];
+    let plain = delulu_in(&cwd, &state, &base);
+    assert_eq!(stdout(&plain), "COMMANDED\n", "the ordinary run checks before its devices start:\n{}", stderr(&plain));
+    let mut sandboxed = base.to_vec();
+    sandboxed.push("--sandbox");
+    let guest = delulu_in(&cwd, &state, &sandboxed);
+    assert!(guest.status.success(), "{}", stderr(&guest));
+    assert_eq!(
+        stdout(&guest),
+        stdout(&plain),
+        "a guest whose own check of {n} functions took about {took:?} lost its arm before its first command:\n{}",
+        stderr(&guest)
+    );
+}
+
+/// RW 4.59's other half: a guest that never asks its host for anything after its program — here, one that
+/// computes until its wall ceiling ends it — never starts its devices, and still leaves no device node live
+/// in the grant tree. The node is the run's, not the broker's: an e-stop aimed at a node nobody holds says
+/// `revoked` and stops nothing (`revoke_device_nodes`).
+#[test]
+fn a_guest_that_never_asks_leaves_no_device_node_live() {
+    let (cwd, state) = scratch("mute");
+    let program = format!(
+        "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n\
+         fn fib(n: Int) -> Int {{\n  if n < 2 {{ n }} else {{ fib(n - 1) + fib(n - 2) }}\n}}\n\n\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20 let burned = fib(40)\n\
+         \x20 let c = root.console()\n\
+         \x20 let a = root.actuator(\"arm0/elbow\")\n\
+         \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
+         }}\n"
+    );
+    std::fs::write(cwd.join("mute.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "run", "mute.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant", SHORT_BEAT,
+            "--broker-profile", "sim", "--limits", "wall=2", "--no-prompt",
+        ],
+    );
+    assert!(stdout(&o).is_empty(), "the guest never reached its first request:\n{}\n{}", stdout(&o), stderr(&o));
+    assert!(!o.status.success(), "the wall ceiling ended it: {}", stderr(&o));
+    // The witness looked: the run's device node exists in the tree, revoked.
+    let listed = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&listed)).expect("grants list --json");
+    let nodes: Vec<&serde_json::Value> = v["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .filter(|n| n["holder_kind"] == "device" && n["holder_desc"] == "arm0/elbow")
+        .collect();
+    assert!(!nodes.is_empty(), "the run minted a node for arm0/elbow: {v}");
+    assert!(nodes.iter().all(|n| n["state"] != "live"), "a device node outlived a guest that never asked: {nodes:?}");
 }
 
 /// Witness 2's other half: a guest that keeps its host busy — console and clock requests, 50 at a time, for
