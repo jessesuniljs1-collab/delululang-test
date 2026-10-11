@@ -129,7 +129,7 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   — its build order is in `V2_P8_DESIGN.md`.
 - **Routine run 13 (2026-10-05): P8-01 complete** (D-V2-95; L1 and L2, the stepped clock and sign-off, the devices' journal in the report) — a control program runs in a sandboxed guest; the host performs
   each actuator command and sensor read by the interpreter's own body (`device::actuate`/`sense`) against the run's device
-  broker, which starts when the guest is sent its program; `run_cmd.rs`'s device code is shared with the sandboxed path. A
+  broker, which starts when the guest is sent its program (since D-V2-110, at its first request after it); `run_cmd.rs`'s device code is shared with the sandboxed path. A
   hardware run's flags without `--broker-profile hw:` are now refused on both paths (they were silently ignored).
   `scripts/suite.sh` reports `TREE-MOVED`. **Next: P8-02** (the Verified-class adapter as a `.dpx`).
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
@@ -203,3 +203,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **RW 4.58 closed for revocations and mints the same run** (D-V2-109): a revoke whose audit record was lost still takes effect
   but says so and exits 1; a mint whose record was lost is refused and withdrawn. Its first form revoked the unrecorded node —
   two more 5 s lock waits, and its own witness timed out at the client's 15 s deadline.
+- **Routine run 18 (2026-10-11): RW 4.59 closed** (D-V2-110): a guest's devices start at its first request after its program,
+  not at the send — the guest's own check no longer counts against the first heartbeat, as an ordinary run's check never did.
+  Found by growing the program until the 178 ms macOS flake was a red on every OS. Lessons: a flake seen once may be a design
+  asymmetry — scale what its window hides; a mutant that survives on unreachable code is a reason to delete the code.

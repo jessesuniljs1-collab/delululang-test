@@ -2162,7 +2162,8 @@ for a filter) red under both walls; M85 (the check always yes — run 9's surviv
    and the e-stop probe, under broker custody), `plan_devices` (under `hw:`, the driver resolved once, its provenance
    checked and recorded, the process started — all before a guest exists) and `close_devices` (the watchdog stopped,
    every lost device said on stderr, the devices' nodes revoked).
-4. **The broker starts when the guest is sent its program** (`guest::GuestDevices`), not before the launch: the leases'
+4. **The broker starts when the guest is sent its program** (`guest::GuestDevices`) — *since D-V2-110 (2026-10-11), at the guest's
+   first request after it, so the guest's own check of the program is not counted either* — not before the launch: the leases'
    dead-man counts from the program's first instant, so a guest's launch — a microVM's boot above all — is not charged
    against its first heartbeat. Everything that can refuse (DL1905, the driver's signature, its start) still refuses
    before any guest exists. A guest that never beats after that loses its device on the host's watchdog: the beat rides
@@ -2496,6 +2497,28 @@ refused and (c) stays the owner's.
    a client's 15 s deadline — the first form of this fix, which its own witness timed out).
 3. **Observability, not enforcement still holds** (invariant 26, trap 6) in the sense it was written: no DECISION reads the
    chain. What changes is the ANSWER — a record that was not written is never claimed.
+
+## D-V2-110 — RW 4.59: a sandboxed guest's devices start at its first request after its program, not at the send — TAKEN (head chef, 2026-10-11, under the owner's delegation)
+
+1. **When a run's devices start is "just before the program runs", on every path.** An ordinary run starts its device broker
+   after its own check, just before `main` (`run_cmd.rs`). D-V2-95 item 4 started a guest's at the SEND, which kept a microVM's
+   boot out of the first heartbeat but left the guest's own check of the program in it: a program whose check outlasted the
+   heartbeat lost its arm before its first command in a guest and not unsandboxed — the parity witness's claim, broken by the
+   program's size alone (witnessed red at `b0a520c` on Linux, Windows and macOS). Now
+   `HostChannel::with_devices_at_first_request` starts them at the first request the host answers after the program is sent
+   — the first instant the host KNOWS the program is running.
+2. **A guest gains nothing by asking late.** Until its first request it holds no capability at all (every capability is minted
+   by the host on request), so a guest that delays its first request delays nothing but itself; the leases, the dead-man, the
+   TTL and the e-stop's watch all start together, as in the ordinary run. The difference that remains, stated: a guest's pure
+   computation before its first request is not counted against its first heartbeat, where an ordinary run's is. No device
+   moves in that time on either path.
+3. **A guest that never asks never starts its devices, and its device nodes are revoked all the same**
+   (`revoke_device_nodes` on that path): the nodes are the run's, minted before the guest existed. This also covers a guest
+   that was never sent its program, which left its device nodes live before (code reading; no witness of that path).
+4. **Not chosen:** a longer first window (a number with no meaning but "long enough here"); a new `Started` frame from the
+   guest (a protocol version for what the first request already says); starting at the first device COMMAND (a guest could
+   mint its actuator, compute, and hold it unbeaten until it chose — the first request of any kind is the earlier,
+   stricter point). And never a longer heartbeat in the witnesses to make them green.
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

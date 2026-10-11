@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sandboxed program's own check no longer costs it its first heartbeat, 2026-10-11
+
+- **Fixed (RW 4.59): under `--sandbox`, a control program whose check took longer than its actuator's `heartbeat_ms` lost the
+  actuator before its first command** (`REVOKED … (missed-heartbeat)`), where the same program run without `--sandbox` commanded
+  it. A guest's devices now start at its first request after it is sent the program — as an ordinary run's start after its
+  check, just before `main` (D-V2-110). A guest that never asks for anything never starts them, and its device grants are
+  revoked at the run's end all the same.
+
 ## Unreleased — a lost audit record is never answered as success, 2026-10-10
 
 - **Fixed (RW 4.58): when another writer held the audit chain too long, `delulu grants revoke` printed `ok … (audit seq N)` for a

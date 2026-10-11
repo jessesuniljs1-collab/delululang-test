@@ -85,7 +85,8 @@ sharing that code, not copying it.
    control program never outlives the host that holds its watchdog.
 
 **Built as written (D-V2-95), with three departures:** the broker starts when the guest is SENT its program, not before
-its launch (a microVM's boot is not charged against the first heartbeat); `--sim-step` and `--signoff` were refused
+its launch (a microVM's boot is not charged against the first heartbeat — and since D-V2-110, at the guest's first request
+after it, so the guest's own check of the program is not charged either); `--sim-step` and `--signoff` were refused
 under `--sandbox` at first and applied the same run (`5b89f9f`); and witness 2 has two more forms — a guest wedged for ever loses the arm all the same, and a
 guest that only talks to its host is not beating it. M123 (the capability's own envelope check removed) survives on the
 broker's own check, the second wall; M123b (both removed) is red. Level 2 is read on the KVM runner, where M128 — the broker

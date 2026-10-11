@@ -2018,3 +2018,39 @@ it on `origin` was made in the cloud and is listed below.
 - Open / next, in order: (1) read THIS commit's push run (unread at the close) and the 2026-10-10 and 2026-10-11 nightlies;
   (2) **RW 4.59** — measure on a macOS runner first; (3) RW 4.57, RW 4.53, RW 4.58's rest; (4) RW 4.46 and P8-04's two remaining
   rules; (5) P9. **For the owner:** D-V2-106 to D-V2-109. **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-11 — routine run 18: CI read green; RW 4.59 closed — a guest's devices start at its first request (D-V2-110)
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `b77c64d`
+- Commits: (1) `b0a520c` RW 4.59 witness: a guest's own check of its program is charged against its first heartbeat (the witness
+  alone, read red on the runners); (2) `25a53d0` RW 4.59: a guest's devices start at its first request, not at the send; (3) this
+  entry's commit — the records
+- Files and folders: (1) M `crates/delulu/tests/sandbox_devices_cli.rs` (two witnesses, the measurement), `docs/survey/*`. (2) M
+  `crates/delulu-runtime/src/channel.rs` (`with_devices_at_first_request`, `devices`), `crates/delulu/src/guest.rs` (`GuestDevices`;
+  the close revokes the device nodes when the devices never started), `crates/delulu/src/run_cmd.rs` (the `DevicePlan` doc),
+  `crates/delulu/tests/sandbox_devices_cli.rs` (a comment), `docs/survey/*`. (3) M `CHANGELOG.md`, `HANDOFF.md` (where things
+  stand; §11.4 RW 4.59; §11.5 two lessons), `docs/CLOUD_ROUTINE.md` (step 4's P8 line; step 5 — a flake seen once is first a
+  question about its window), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-110; D-V2-95 item 4 annotated),
+  `V2_P8_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/REMAINING_WORK.md` (4.59 closed), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply
+  address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: CI first — `b77c64d`'s push run `38034360521` success; the 2026-10-10 nightly `38040982137` and the 2026-10-11 nightly
+  `38128985173` success on all 18 jobs (this Sunday's sweep's CI read). Every `origin/claude/*` branch checked after unshallowing:
+  nothing stranded (`7d6a22b`, `d3f0d52` superseded since run 10). Survey `ok` and `doctor --check` all passed at the start;
+  `cargo deny … advisories` ok; `gh` present, token refused. The witness red first in the VM and on the runners at `b0a520c` —
+  Windows `38152502475`, macOS `38152500629`; M219–M221 red, M222 equivalent (its unreachable guard removed), control green; clippy
+  clean; `check-other-os.sh` clean for Windows and macOS; runner reads at `25a53d0` green — Windows `38153193744`, arm64
+  `38153195727`, macOS `38153204486` (the whole package: 932 passed) — the witnesses named on each; the full suite alone at
+  `25a53d0`: 2,200 passed, 0 failed, 16 ignored (161 binaries), exit 0, the tree unmoved. The Sunday sweep's document scan: no open
+  `REMAINING_WORK.md` row that `V2_LOG.md` calls closed; four live passages that said a guest's devices start at the send, updated.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.59) and §11.5 (a flake seen once may be a design asymmetry — grow its window;
+  a mutant surviving on unreachable code is a reason to delete the code).
+- Open / next, in order: (1) read this commit's push run (unread at this entry); (2) RW 4.58's rest — `DeviceRefused` answers
+  `Recorded { seq }` for a record the chain never got (the client's "said once on stderr" path never fires), then `Adopt`, the
+  dead-man's arm and disarm, the guard's records; (3) RW 4.57 (a killed run's nodes), RW 4.53; (4) RW 4.46 and P8-04's two
+  remaining rules; (5) P9. **For the owner:** D-V2-110 (and D-V2-106 to D-V2-109). **On 2026-10-12 a run starts the closing entry
+  for the cloud period.**

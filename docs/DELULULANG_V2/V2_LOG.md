@@ -4908,3 +4908,49 @@ sandboxed run's device broker, no daemon) and none of this run's changes touch i
 witness passed 5 of 5 on Linux with six busy loops on four CPUs. Recorded as **RW 4.59**, open — measure the program-send-to-first-
 command interval on a macOS runner under the parallel suite before choosing a fix, and never lengthen the beat to make it green.
 `master` is green at the close (`f0a39e7`).
+
+## 2026-10-11 — routine run 18: CI read green; RW 4.59 closed — a guest's devices start at its first request (D-V2-110)
+
+**The previous run, verified.** Run 17's last push, `b77c64d`: push run `38034360521` — success on every job (`heavy-gates` and
+`miri-slow` skipped on a push, as always). The nightlies since: 2026-10-10 `38040982137` and 2026-10-11 `38128985173` — success on
+all 18 jobs each, `heavy-gates`, the three `miri-slow` jobs, `microvm` and `microvm-reproducible` included; today's nightly is this
+Sunday's sweep's CI read. `actors_pingpong` on the 2026-10-11 nightly: arm64 MEASURED 2.87x against a control of 4.12x (bar 1.50x,
+passed); ubuntu-24.04 and Windows NOT MEASURED (no 3x of perfectly parallel work in 3 attempts — busy or SMT runners); macOS NOT
+MEASURED (3 hardware threads). The sandbox properties: Linux and arm64 all five established; Windows established, its writes only
+its own per-run container folder; macOS `filesystem_confinement absent` (reads not confined) — unchanged, PS-E's named residual.
+Every `origin/claude/*` branch checked after unshallowing: two carry one commit `master` lacks (`7d6a22b`, `d3f0d52`), both recorded
+as superseded since run 10. The `v1.0.0` tag seen on this run's first full fetch is the owner's of 2026-07-20 (`HANDOFF.md` §11.3),
+not a new one. Survey `ok` (1,500 nodes, 13,796 edges) and `doctor --check` all checks passed at the start; `cargo deny … check
+advisories` ok; `gh` is installed and its token refused, as run 10 found — CI read with `curl` and the MCP tools.
+
+**RW 4.59, measured and then found.** Run 17 saw one macOS push run lose `sandbox_devices_cli`'s wedged witness: the guest's FIRST
+command answered `REVOKED (missed-heartbeat)`, 28 ms past a 150 ms beat. The row said: measure first. Reading the code first showed an
+asymmetry the measurement would only have sampled: an ordinary run starts its device broker after its check, just before `main`
+(`run_cmd.rs`); a guest's started when the guest was SENT its program (D-V2-95 item 4), and the guest checks that program again
+(`delulu_check::check_source`) before running a line of it — so the guest's own check was charged against the first heartbeat. The
+window was a few milliseconds for the witness's small program, so a quiet machine never showed it. **Witnessed deterministically by
+growing what the window hid**: `a_guests_own_check_of_its_program_is_not_charged_against_its_first_heartbeat` doubles a program of
+small functions until `delulu check` takes 450 ms on the machine (the baseline is that state, measured, never assumed), then runs it
+plain and sandboxed at a 150 ms beat — `COMMANDED` unsandboxed, `REVOKED: the lease on arm0/elbow was revoked (missed-heartbeat)` in
+the guest. **Red at `b0a520c`** in the VM, on Windows (`38152502475`: 4,000 functions, the check 1.23 s; 11 others passed) and on macOS
+(`38152500629`, the whole `delulu` package under `--nocapture`: the check 474 ms; 931 passed, 1 failed). The same commit made the wedged
+witness print when its one command beat the lease, on the devices' clock: **2 ms after the send on macOS** under the package's
+parallel run, 4 ms on Windows and in the VM — so run 17's 178 ms was a runner stall, of which the guest's check was one part.
+
+**Fixed** (D-V2-110): `HostChannel::with_devices_at_first_request` starts the run's devices at the first request the host answers after
+the program is sent — the first instant it knows the program is running; `guest.rs` hands it the plan and takes the started broker
+back after `serve` for the close and the report. A guest gains nothing by asking late: until it asks it holds no capability. A guest
+that never asks never starts them, so the close now revokes the run's device nodes on that path too (`revoke_device_nodes`) — the
+second witness, `a_guest_that_never_asks_leaves_no_device_node_live` (a daemon run whose guest computes until its wall ceiling ends it;
+the run's device node exists and is not live), green before the fix and red under its mutant. **Mutants:** M219 (devices started at
+the send) red on the first witness; M220 (no revoke when never started) red on the second; M221 (the started broker not handed back)
+red on three witnesses (no lost-device line, no e-stop); **M222** (start on the confinement report too) **survived — an equivalent
+mutant**: `confirm` answers the report before the host is given the devices, so its guard could never fire; the guard was removed
+rather than kept as a check no witness can fail. Control green. Clippy clean; `check-other-os.sh` clean for Windows and macOS.
+**Read on the runners at `25a53d0`:** Windows `38153193744` and arm64 `38153195727` (`sandbox_devices_cli`, `sandbox_cli`,
+`guest_cli`: 20 passed, 0 failed each), macOS `38153204486` (the whole `delulu` package: 932 passed, 0 failed) — the new witnesses
+named on each, and the measurement **0 ms from the first request to the first command** on all three. **The full suite alone at
+`25a53d0`:** 2,200 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Left, watched:** the window the wedged witnesses still assume is the guest's first request to its first command — two round trips.
+If a runner stalls there, the next step is to make the witnesses' first request the actuator's own mint; never a longer beat.

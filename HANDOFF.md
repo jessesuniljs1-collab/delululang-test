@@ -69,7 +69,7 @@ the assistant's memory — which now also travels file by file in
 - **PS-E complete (routine run 12, D-V2-93)** — `contained` requires egress, resource and host-loss confinement (D-V2-92),
   with three residuals kept open: E-03's H6, macOS's launcher window, macOS's reads. **Next: P8** (P8-01 first), then P9.
 - **P8-01 complete (routine run 13, D-V2-95)** — a control program runs in a guest, at L1 and L2: the host performs its actuator commands and
-  sensor reads by the interpreter's own body against the run's device broker; the broker starts when the guest is sent its
+  sensor reads by the interpreter's own body against the run's device broker; the broker starts at the guest's first request after its
   program. P8-02 (a signed Verified driver, D-V2-96/97 — RW 4.7 closed) and P8-03 (the simulator as a device process,
   D-V2-98) complete (routine run 14).
 - **P8-04 in progress (routine run 15, 2026-10-09):** step 1 MEASURED before building on it — an envelope's refusal was
@@ -81,8 +81,10 @@ the assistant's memory — which now also travels file by file in
   (D-V2-105); RW 4.51 (a plugin's node revoked when its run ends). **Routine run 17 (2026-10-10):** P8-04 step 5 — a dead
   monitor quarantines: the broker holds a dead-man for its node (D-V2-106); CLOSURE-SCOPE-1 found by its red-team pass and
   closed (D-V2-107), RW 4.56 (D-V2-108 — a plugin node's revoke reaches its running export's next use) and RW 4.58 for
-  revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Next:** RW 4.57 and 4.53, RW 4.58's
-  rest, RW 4.46 (the egress client's refusals) and P8-04's two remaining rules, then P9.
+  revocations and mints (D-V2-109 — a lost audit record is never answered as success). **Routine run 18 (2026-10-11):** RW 4.59
+  closed — a guest's devices start at its first request, so its own check of the program no longer costs it its first heartbeat
+  (D-V2-110). **Next:** RW 4.57 and 4.53, RW 4.58's rest, RW 4.46 (the egress client's refusals) and P8-04's two remaining
+  rules, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -850,6 +852,10 @@ spells the same thing?**
 - **2026-10-10 — RW 4.56 (the same pass's F-07) — closed the same run (D-V2-108):** revoking a plugin's node let its running
   export go on commanding an arm (96 of 120 commands after the revoke) while the CLI said "before the next use"; the node was
   checked only at the export's CALL. A gate on the plugin's node now stands at each use.
+- **2026-10-11 — RW 4.59 (FIRST-BEAT-1) — closed by routine run 18 (D-V2-110):** a guest's devices started when it was SENT its
+  program, so the guest's own check of that program counted against its actuators' first heartbeat — a program whose check
+  outlasted the beat lost its arm before its first command in a guest, and not unsandboxed. Seen once as a 178 ms macOS stall
+  on a small program; made red on every OS by growing the program. The devices start at the guest's first request now.
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1186,6 +1192,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   "may another process of the operator's user read this one?" (HOST-DUMPABLE-1's shape) measures nothing there — and the
   harness refused a `su -c` probe it could not inspect. `ubuntu-24.04`'s runner is not root: commit the witness without its fix,
   dispatch `witness.yml`, read it red (three minutes), then the fix.
+
+- **A flake seen once may be a design asymmetry with a small window — grow what the window hides until it is red everywhere**
+  (routine run 18, RW 4.59): one macOS runner lost an arm 28 ms past a 150 ms beat. Rather than measure a stall's distribution, ask
+  what the window CONTAINS that one path counts and the other does not — here the guest's own check of its program — and scale
+  it (a 4,000-function program): a deterministic red on Linux, Windows and macOS in one dispatch each, and a parity defect no
+  quiet machine would ever have shown. The measurement then says how much of the flake the fix removed (send → first command 2 ms,
+  first request → first command 0 ms).
+- **A mutant that survives because its code is unreachable is a reason to delete the code** (routine run 18, M222): a guard that
+  `Confined` never starts a run's devices could not fire — the confinement report is answered before the host is given them.
+  Keeping it would leave a check no witness can fail; it was removed.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
