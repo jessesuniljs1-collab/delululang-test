@@ -206,8 +206,9 @@ fn burner(burn: u32, tail: &str) -> String {
     )
 }
 
-/// 150 ms: far more than a slow runner's guest needs between being sent its program and its first command (the
-/// broker starts at the send, so the guest's own check of the program counts), far less than each burn below.
+/// 150 ms: far more than a slow runner's guest needs between its first request and its first command (the
+/// devices start at that request, RW 4.59 — the guest's own check of the program is not counted), far less
+/// than each burn below.
 const SHORT_BEAT: &str = "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=150,ttl_ms=600000,fail=safe-park";
 
 /// The beat overdue figure the host journaled — measured on the host's clock, never the guest's.

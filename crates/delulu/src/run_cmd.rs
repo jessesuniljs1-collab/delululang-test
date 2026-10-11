@@ -1772,8 +1772,9 @@ pub(crate) struct DeviceWatch {
 /// Everything a run's device broker is made of, checked before the program runs: the profile, the
 /// granted envelopes and sensors, the e-stop probe, the clock, and — under `hw:` — the driver, its
 /// provenance checked and the process started. [`DevicePlan::start`] builds the broker, and its
-/// dead-man starts then: an ordinary run starts it before `main`, a sandboxed one when its guest is
-/// sent the program (`guest.rs`), so the guest's launch is not counted against its first heartbeat.
+/// dead-man starts then: an ordinary run starts it after its check, just before `main`; a sandboxed one at
+/// its guest's first request after the program (`guest.rs`, RW 4.59), so neither the guest's launch nor
+/// its own check of the program is counted against its first heartbeat.
 pub(crate) struct DevicePlan {
     profile: delulu_runtime::Profile,
     actuators: Vec<delulu_runtime::value::ActuatorEnvelope>,

@@ -963,7 +963,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     let custody_record = custody.as_ref().map(|c| serde_json::json!({ "mode": "daemon", "node": c.node().to_string() }));
     // P8-01: the devices, as the ordinary run builds them — each actuator's own grant node and the e-stop
     // probe under broker custody, then the broker's plan (under `hw:`, the driver checked and started) —
-    // all before a guest exists. The broker itself starts when the guest is sent its program.
+    // all before a guest exists. The broker itself starts at the guest's first request after its program.
     let crate::run_cmd::DeviceWatch { probe, nodes: device_nodes, state_dir: device_state_dir } =
         match crate::run_cmd::watch_devices(custody.as_mut(), &grants.actuators, &map, opts.json) {
             Ok(w) => w,
@@ -987,8 +987,17 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     );
     // The watchdog stopped, every lost device said, the devices' nodes revoked — as the ordinary run
     // closes them, before any verdict.
-    if let Some(b) = devices.as_ref().and_then(GuestDevices::started) {
-        crate::run_cmd::close_devices(b, device_state_dir.as_deref(), &device_nodes);
+    // A guest that never asked for anything after its program never started them (RW 4.59): its
+    // devices' nodes are the run's all the same, and revoked all the same.
+    match devices.as_ref().and_then(GuestDevices::started) {
+        Some(b) => {
+            crate::run_cmd::close_devices(b, device_state_dir.as_deref(), &device_nodes);
+        }
+        None => {
+            if let Some(dir) = device_state_dir.as_deref() {
+                crate::cli::revoke_device_nodes(dir, &device_nodes);
+            }
+        }
     }
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
@@ -1115,10 +1124,11 @@ pub fn spawn_and_serve_with(
 }
 
 /// P8-01: a sandboxed run's devices — the plan checked before the guest exists, and the broker it
-/// becomes when the guest is sent its program. Started then, not before: the leases' dead-man counts
-/// from the program's first instant, so a guest's launch (a microVM's boot) is not charged against its
-/// first heartbeat — while a guest that never beats after that loses its devices on the host's
-/// watchdog, which owes the guest nothing.
+/// becomes at the guest's first request after its program (RW 4.59). Started then, not before: the
+/// leases' dead-man counts from the first instant the host knows the program is running, so neither a
+/// guest's launch (a microVM's boot) nor its own check of the program is charged against its first
+/// heartbeat — an ordinary run's check is not either — while a guest that never beats after that loses
+/// its devices on the host's watchdog, which owes the guest nothing.
 pub(crate) struct GuestDevices {
     plan: std::cell::Cell<Option<crate::run_cmd::DevicePlan>>,
     started: std::cell::OnceCell<std::sync::Arc<delulu_runtime::DeviceBroker>>,
@@ -1129,15 +1139,17 @@ impl GuestDevices {
         GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new() }
     }
 
-    /// Start the broker, once.
-    fn start(&self) -> Option<std::sync::Arc<delulu_runtime::DeviceBroker>> {
-        let plan = self.plan.take()?;
-        let b = plan.start();
-        let _ = self.started.set(b.clone());
-        Some(b)
+    /// The plan, once: the host starts it at the guest's first request.
+    fn take_plan(&self) -> Option<crate::run_cmd::DevicePlan> {
+        self.plan.take()
     }
 
-    /// The broker, if the guest was ever sent its program.
+    /// The broker the host started.
+    fn set_started(&self, b: &std::sync::Arc<delulu_runtime::DeviceBroker>) {
+        let _ = self.started.set(b.clone());
+    }
+
+    /// The broker, if the guest ever asked its host for anything after its program.
     fn started(&self) -> Option<&std::sync::Arc<delulu_runtime::DeviceBroker>> {
         self.started.get()
     }
@@ -2032,9 +2044,10 @@ fn converse(
     evidence.confirmed = true;
     // RW 4.23: what the guest applied to itself, as the host accepted it.
     evidence.own = confirmed.applied().to_vec();
-    // P8-01: the run's devices exist from the moment the program is sent — confirmed, never before.
-    if let Some(b) = devices.and_then(GuestDevices::start) {
-        host = host.with_devices(b);
+    // P8-01: the run's devices exist once the program is sent — confirmed, never before — and RW 4.59:
+    // from the guest's first request after it, so the guest's own check of the program is not counted.
+    if let Some(plan) = devices.and_then(GuestDevices::take_plan) {
+        host = host.with_devices_at_first_request(Box::new(move || plan.start()));
     }
     let mut conn = confirmed.send_program(&Program {
         program: program.to_string(),
@@ -2050,6 +2063,9 @@ fn converse(
     let served = host.serve(&mut conn).map_err(in_words);
     // Read on both paths, before the result is returned: a guest that died mid-conversation still
     // reports what it had been refused up to then.
+    if let (Some(d), Some(b)) = (devices, host.devices()) {
+        d.set_started(b);
+    }
     let (list, total) = host.denied();
     evidence.denied = (list.to_vec(), total);
     served

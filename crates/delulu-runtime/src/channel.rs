@@ -508,6 +508,9 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// guest holds a handle and nothing else, so a guest that stops talking is a program that stopped
     /// beating, and the broker's watchdog — on its own thread here — owes it nothing.
     devices: Option<std::sync::Arc<crate::device::DeviceBroker>>,
+    /// RW 4.59: the run's devices, not yet started — started at the first request answered after they are
+    /// given ([`HostChannel::with_devices_at_first_request`]).
+    start_devices: Option<Box<dyn FnOnce() -> std::sync::Arc<crate::device::DeviceBroker>>>,
     /// How long the guest has to send one whole frame, from its first byte ([`FRAME_DEADLINE`]).
     frame_deadline: std::time::Duration,
 }
@@ -528,6 +531,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             generation: None,
             custody: None,
             devices: None,
+            start_devices: None,
             frame_deadline: FRAME_DEADLINE,
         }
     }
@@ -562,6 +566,27 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn with_devices(mut self, broker: std::sync::Arc<crate::device::DeviceBroker>) -> Self {
         self.devices = Some(broker);
         self
+    }
+
+    /// RW 4.59: start the run's devices with `start` at the FIRST request answered after this — given as the
+    /// program is sent (`guest.rs`, after the confinement report was answered), so that request is the first
+    /// instant the host knows the program is running — and perform the guest's device operations against
+    /// them from then on. An ordinary run starts its devices after its check, just
+    /// before `main`; a guest checks the program it is sent before it runs a line of it, and started at
+    /// the send, the leases' dead-man charged that check against the first heartbeat: a program whose
+    /// check outlasted the heartbeat lost its arm before its first command in a guest, and not
+    /// unsandboxed. A guest gains nothing by asking late: until it asks, it holds no capability at all.
+    pub fn with_devices_at_first_request(
+        mut self,
+        start: Box<dyn FnOnce() -> std::sync::Arc<crate::device::DeviceBroker>>,
+    ) -> Self {
+        self.start_devices = Some(start);
+        self
+    }
+
+    /// The run's device broker, once started.
+    pub fn devices(&self) -> Option<&std::sync::Arc<crate::device::DeviceBroker>> {
+        self.devices.as_ref()
     }
 
     /// The custody label a report states: `"daemon"` when a broker decides, `"embedded"` otherwise.
@@ -617,6 +642,10 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// host never guesses at a frame it does not understand.
     pub fn answer(&mut self, req: &Request) -> Response {
         let egress_mark = crate::egress::mark();
+        // RW 4.59: the devices start before the request that starts them is decided, so its handling counts.
+        if let Some(start) = self.start_devices.take() {
+            self.devices = Some(start());
+        }
         let resp = self.decide(req);
         self.answered += 1;
         // ONE place, on the way out. Recording at each refusal site would mean a new refusal added
