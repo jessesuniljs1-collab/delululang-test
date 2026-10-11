@@ -1307,7 +1307,7 @@ impl Interp {
         // GUARD-ALIAS-1: a file effect's path is resolved ONCE; the custody gate decides on that
         // resolved path and the effect opens exactly it (below), so no link can make the two differ.
         let fs_pin = fs_pin_for(&recvv, &name.name, &argvals);
-        let mut fetch_allowed: Option<(crate::egress::Mark, String)> = None;
+        let mut fetch_allowed: Option<String> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
@@ -1324,7 +1324,8 @@ impl Interp {
                 return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
             }
             if let (CustodyOp::Net, Some(Value::Str(url))) = (op, argvals.first()) {
-                fetch_allowed = Some((crate::egress::mark(), url.to_string()));
+                crate::egress::begin_fetch();
+                fetch_allowed = Some(url.to_string());
             }
         }
         // T-Send at runtime (7g): any method on an actor REFERENCE is a behavior send (sync
@@ -1475,10 +1476,9 @@ impl Interp {
         };
         // RW 4.46: the custody allowed this fetch's host and its chain recorded `use allow`; what the egress
         // client then refused is said to it, as an envelope's refusal is (`call_actuator`).
-        if let Some((mark, url)) = fetch_allowed {
-            let host = host_of(&url);
-            for reason in crate::egress::refusals_since(mark, &url) {
-                self.custody.borrow_mut().note_egress_refusal(&host, reason);
+        if let Some(url) = fetch_allowed {
+            if let Some(reason) = crate::egress::fetch_refusal() {
+                self.custody.borrow_mut().note_egress_refusal(&host_of(&url), reason);
             }
         }
         // 10d: a primitive may mint a fresh mutable cell (`split`, `slice`, …) — register its

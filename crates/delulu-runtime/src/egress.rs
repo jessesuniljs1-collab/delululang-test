@@ -579,20 +579,26 @@ pub fn records_since(m: Mark) -> (Vec<EgressRecord>, u64) {
     (l.records[kept_before..].to_vec(), l.refused.saturating_sub(m.refused))
 }
 
-/// RW 4.46: the egress client's REFUSALS of `url` logged after `m` — each request it refused rather than
-/// failed (its [`Reason::answer`] is `Refused`), by machine-readable reason — for the custody that allowed
-/// the use of its host, whose chain must then say it was refused. A network failure (a timeout, a TLS or
-/// connection error, an HTTP status) is not a refusal and is not returned.
-pub fn refusals_since(m: Mark, url: &str) -> Vec<&'static str> {
-    records_since(m)
-        .0
-        .iter()
-        .filter(|r| r.url == url)
-        .filter_map(|r| match &r.outcome {
-            Err(reason) if reason.answer() == Answer::Refused => Some(reason.code()),
-            _ => None,
-        })
-        .collect()
+thread_local! {
+    /// RW 4.46: the refusal of the last request THIS thread made through [`get_for_program`], kept whatever
+    /// the evidence log's bound. The log keeps its first [`MAX_RECORDED`] records only, and the first form of
+    /// this fix read refusals from it — so after 64 requests of any kind a run's refusals reached no chain, and a
+    /// `special-use` monitor could be walked past by spending the 64 first (routine run 18's red team, F1/F2).
+    static LAST_REFUSAL: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// RW 4.46: begin a fetch the custody allowed — forget this thread's last refusal.
+pub fn begin_fetch() {
+    LAST_REFUSAL.with(|c| c.set(None));
+}
+
+/// RW 4.46: the egress client's REFUSAL of the fetch this thread made since [`begin_fetch`], by its
+/// machine-readable reason — for the custody that allowed the use of its host, whose chain must then say
+/// it was refused. A request it refused rather than failed (its [`Reason::answer`] is `Refused`); a network
+/// failure (a timeout, a TLS or connection error, an HTTP status) is not a refusal. From the call's own
+/// outcome, on the calling thread: never from the bounded log, never another thread's (an actor's) request.
+pub fn fetch_refusal() -> Option<&'static str> {
+    LAST_REFUSAL.with(|c| c.take())
 }
 
 /// Record a refusal the primitive table made before the request reached [`get_for_program`] (the
@@ -615,6 +621,11 @@ pub fn get_for_program(url: &str, allow: &[String], special: &[String]) -> Answe
         // as the refusal it would have to be rather than as an empty success.
         (Ok(_), None) => Answer::Refused,
     };
+    if let Err(r) = &rec.outcome {
+        if r.answer() == Answer::Refused {
+            LAST_REFUSAL.with(|c| c.set(Some(r.code())));
+        }
+    }
     log(rec);
     answer
 }

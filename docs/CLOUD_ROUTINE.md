@@ -242,6 +242,11 @@ kept the last mutant's binary — run 15), and ends with a CONTROL run of the sa
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
+edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
+Collect the edits, assert each anchor exactly once against the files as they are, then write. **A mutant's own `test` command is
+part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
+subset's reason — read what a per-mutant command runs.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

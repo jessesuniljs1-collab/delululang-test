@@ -693,6 +693,50 @@ fn a_sandboxed_guests_egress_refusal_is_recorded_the_same_way() {
     egress_refusals_are_recorded("egress-sb", &["--sandbox"]);
 }
 
+/// **Every refusal is recorded, however many requests came before it** (routine run 18's red team, F1/F2). The first
+/// form of D-V2-112 read a fetch's refusal from the run's egress log, which keeps its first 64 records only — so the
+/// 65th request on was refused with no `deny` in the chain, and a `special-use` monitor could be walked past by
+/// spending 64 requests first. The refusal now comes from the call's own outcome. Seventy refused fetches, seventy
+/// `deny` records — plainly and in a guest.
+fn every_refusal_is_recorded_past_the_logs_bound(tag: &str, extra: &[&str]) {
+    let f = setup(tag);
+    std::fs::write(
+        f.cwd.join("many.delulu"),
+        "module many\n\nfn probe(out: Cap[Console], h: Cap[Http], n: Int) -> Int ! {Net, Write} {\n    if n <= 0 {\n        0\n    } \
+         else {\n        match h.get(\"https://user@example.com/a\") {\n            Ok(body) => out.println(\"delivered\")\n            \
+         Err(e) => out.println(\"not delivered\")\n        }\n        probe(out, h, n - 1)\n    }\n}\n\n\
+         fn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    let h = root.http([\"example.com\"])\n    \
+         let n = probe(out, h, 70)\n}\n",
+    )
+    .unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let mut args =
+        vec!["run", "many.delulu", "--broker", "daemon", "--grant", "console", "--grant", "net=example.com", "--no-prompt"];
+    args.extend_from_slice(extra);
+    let o = delulu_in(&f.cwd, &f.state, &args);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(o.status.success(), "{so}\n{se}");
+    assert_eq!(so.matches("not delivered").count(), 70, "the baseline — seventy refused fetches:\n{se}");
+    assert!(se.contains("the log keeps the first 64 records"), "the run's log WAS past its bound — the state this needs:\n{se}");
+    let uses: Vec<serde_json::Value> = use_records(&f).into_iter().filter(|r| r["target"] == "example.com").collect();
+    let allows = uses.iter().filter(|r| r["decision"] == "allow").count();
+    let denies = uses.iter().filter(|r| r["decision"] == "deny" && r["authority"]["refused_by"] == "egress").count();
+    assert_eq!(allows, 70, "{uses:#?}");
+    assert_eq!(denies, 70, "every refused fetch is a `deny`, the 65th and after too — {denies} of 70 were");
+}
+
+#[test]
+fn every_egress_refusal_is_recorded_past_the_logs_bound() {
+    every_refusal_is_recorded_past_the_logs_bound("bound", &[]);
+}
+
+#[test]
+fn a_guests_every_egress_refusal_is_recorded_past_the_logs_bound() {
+    every_refusal_is_recorded_past_the_logs_bound("bound-sb", &["--sandbox"]);
+}
+
 /// **A monitor never quarantines itself** (the routine-run-15 red-team pass, F3). The `denies=N/MS`
 /// rule counted a `deny` whose actor is the monitor's OWN node — a refused delegation under `g_M`, an
 /// operator's typo — as the misbehaviour of "the run `g_M`", and revoked `g_M`: every run under it,
