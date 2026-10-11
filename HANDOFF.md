@@ -86,7 +86,7 @@ the assistant's memory — which now also travels file by file in
   (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
   (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112) — and with it P8-04's
   `special-use` rule (D-V2-113). Its red-team pass broke two of those fixes within the hour (F1/F2, F3 — fixed the same run) and
-  found **RW 4.61** (guard operations answer success with no record — open, reproduced). **Next:** RW 4.61, P8-04's
+  found **RW 4.61** (guard operations answer success with no record — reproduced; the bypass closed the same run, D-V2-114). **Next:** RW 4.61's rest, P8-04's
   `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53 (with the pass's F4 and F6), RW 4.60, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a

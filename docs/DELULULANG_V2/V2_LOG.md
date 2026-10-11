@@ -5087,3 +5087,18 @@ egress client refuses the ambiguous spelling), O3 (a redirect hop's refusal name
 revoke`'s `ok:` line and its `--json` summary beside `unrecorded`; `audit verify` passes a seq hole) — RW 4.58. **Not tested by the
 pass, by its own account:** actors (cross-thread citations — the F1 fix reads a thread's own outcome, so this no longer applies by
 construction), `hw:`, the monitor's node-list/chain-read race (source only).
+
+## 2026-10-11 — routine run 18 (postscript): RW 4.61's guard bypass closed (D-V2-114); the closing commit's push runs read
+
+**RW 4.61, the bypass** (the red team's F5, reproduced by the head chef: under a held chain lock `guard bypass on` answered `ok`,
+exit 0, 5,014 ms, the bypass in force and no `guard_bypass_on` record). **Fixed** in `d908884` (D-V2-114): a bypass turned on whose
+record was lost is undone in the same request (`withdraw_unrecorded_bypass`, no second record) and refused DL1401; turned off it
+stays off and answers DL1401 that the chain lacks the record. **Witness:** `brokerd` `a_guard_bypass_whose_record_was_lost_does_not_happen`
+(the test holds the chain; its baseline turns the bypass on with the chain free, then off under a held chain). **Mutants:** M238 (answered
+`Ok` — the pre-fix behaviour), M239 (refused but not undone), M240 (the bypass-off answered `Ok`) — red; control green. Clippy clean;
+`check-other-os.sh` clean for Windows and macOS. **Read on the runners at `d908884`** over `bin:delulu`, `guard_cli` and `guard_e2e`: Windows `38161584149` (165 passed), macOS `38161586576` (179), arm64 `38161588717` (198) — 0 failed, the witness named on each. **The full suite alone at `d908884`:** 2,211 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**The closing commit `00112e5`** (every code change of this run before `d908884`): push run `38161113083` — success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38161113026` success; `db70f1f`, `bc124e9` and the records commits between were pushed to `master` only inside `00112e5`'s fast-forward.
+
+**Left of RW 4.61:** the guard's policy edits, approvals, requests and permits, the dead-man's arm and `Redeem` — each its own answer
+by D-V2-114's rule (a downgrade undone and refused, an upgrade in force and said).

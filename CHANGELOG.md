@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a guard bypass is never in force without its record, 2026-10-11
+
+- **Fixed (RW 4.61): when another writer held the audit chain too long, `delulu guard bypass on` answered `ok` and the bypass was
+  in force with no audit record.** It is now refused (DL1401) and the guard stays in force; `guard bypass off` still turns the
+  bypass off and says the chain lacks its record (D-V2-114). Under contention a monitor's dead-man or the guard's other edits may
+  still answer success for a lost record (RW 4.61, open).
+
 ## Unreleased — `delulu monitor watch --rule special-use`, 2026-10-11
 
 - **New: `--rule special-use`** for `delulu monitor watch`: the monitor quarantines a run under its node the first time the

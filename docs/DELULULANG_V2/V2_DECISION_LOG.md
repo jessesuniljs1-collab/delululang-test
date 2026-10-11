@@ -2586,6 +2586,18 @@ refused and (c) stays the owner's.
    name resolving into a special-use range and was read by hand in the VM through a one-run `/etc/hosts` entry.
 4. **Left of step 4:** `break-glass` — its record (`audit_required`) carries no node, so a monitor cannot attribute it to a run.
 
+## D-V2-114 — RW 4.61, the guard bypass: a `guard bypass on` whose record was lost does not happen — TAKEN (head chef, 2026-10-11, under the owner's delegation)
+
+1. **A security DOWNGRADE the chain cannot account for does not happen.** `guard bypass on` whose `guard_bypass_on` record could not
+   be written (another writer held the chain past the lock's wait) is undone in the same request — the guard back in force,
+   `withdraw_unrecorded_bypass`, no second record (the chain that refused the first would refuse it too) — and refused DL1401. No
+   client saw the bypass in between: the daemon serves one request at a time.
+2. **An UPGRADE stays in force and says so:** `guard bypass off` whose record was lost leaves the bypass off and answers DL1401 —
+   "the guard bypass IS off, but the chain lacks this record". D-V2-109's revocation rule: never refuse the safe direction for want
+   of its record, never claim the record.
+3. **Left of RW 4.61:** the guard's policy edits (a seal unset is a downgrade, a seal set an upgrade), approvals and permits (a
+   downgrade each), requests, the dead-man's arm and `Redeem` — each its own answer by the same rule.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

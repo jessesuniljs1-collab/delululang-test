@@ -2169,3 +2169,23 @@ it on `origin` was made in the cloud and is listed below.
   so it has no node, and the monitor's loop reads `deny` records only: record the run's node with the use (after `redeem_lease`) and let
   a rule read that `allow`; (4) RW 4.57, RW 4.53 (with F4 and F6 — an incremental chain read for the monitor), RW 4.60, RW 4.58's last
   parts (O2/O4); (5) P9. **For the owner:** D-V2-110 to D-V2-113. **On 2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-11 — routine run 18 (postscript): RW 4.61's guard bypass closed (D-V2-114); the closing commit's push runs read
+- Session: `https://claude.ai/code/session_0129srJbQbPEieN9QdR4wHqx`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-v2rh0i`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `00112e5`
+- Commits: (1) `d908884` RW 4.61, the guard bypass: a bypass whose record was lost does not happen; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/brokerd.rs` (`GuardBypass`; a witness), `crates/delulu-broker/src/guard.rs`
+  (`withdraw_unrecorded_bypass`), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand),
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-114), `docs/REMAINING_WORK.md` (4.61 partly closed), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: the witness red under M238 (the pre-fix answer), M239, M240; control green; clippy and `check-other-os.sh` clean.
+  **Read on the runners at `d908884`** over `bin:delulu`, `guard_cli` and `guard_e2e`: Windows `38161584149` (165 passed), macOS `38161586576` (179), arm64 `38161588717` (198) — 0 failed, the witness named on each. **The full suite alone at `d908884`:** 2,211 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved. **The closing commit `00112e5`** (every code change of this run before `d908884`): push run `38161113083` — success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38161113026` success; `db70f1f`, `bc124e9` and the records commits between were pushed to `master` only inside `00112e5`'s fast-forward.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) RW 4.61's rest (the guard's policy edits,
+  approvals, requests and permits; the dead-man's arm; `Redeem`); (3) P8-04's `break-glass` rule (the closing entry above says
+  how); (4) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's last parts; (5) P9. **For the owner:** D-V2-110 to D-V2-114. **On
+  2026-10-12 a run starts the closing entry for the cloud period.**
