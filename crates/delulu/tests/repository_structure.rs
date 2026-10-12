@@ -128,3 +128,59 @@ fn the_accounting_rule_refuses_a_file_nobody_listed() {
         assert!(accounted_for(p, &s5), "`{p}` is accounted for and the rule must say so");
     }
 }
+
+/// The heading lines of `text` that repeat the heading just before them with nothing but blank lines between —
+/// outside fenced code. (A section name used again further down, `### Evidence` under two dates, is not this.)
+fn repeated_headings(text: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut prev: Option<String> = None;
+    let mut fence = false;
+    for (i, line) in text.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            fence = !fence;
+            prev = None;
+            continue;
+        }
+        if fence {
+            continue;
+        }
+        let is_heading = line.starts_with('#') && line.trim_start_matches('#').starts_with(' ');
+        if is_heading {
+            if prev.as_deref() == Some(line) {
+                out.push((i + 1, line.to_string()));
+            }
+            prev = Some(line.to_string());
+        } else if !line.trim().is_empty() {
+            prev = None;
+        }
+    }
+    out
+}
+
+/// Routine run 20: a records patch inserted its lessons BEFORE `### 11.6` with that heading at the end of the
+/// inserted text as well, and `HANDOFF.md` went to `master` (`52b2572`) with the heading twice — every anchor
+/// checked, every document gate green. No document of this repository repeats a heading on the line that
+/// follows it; the check is generic, and it is a machine's, because the eye skips a repeated line.
+#[test]
+fn no_markdown_file_repeats_a_heading_on_the_heading_after_it() {
+    let mut bad: Vec<String> = Vec::new();
+    for f in markdown_files() {
+        let Ok(text) = std::fs::read_to_string(repo_root().join(&f)) else { continue };
+        for (line, heading) in repeated_headings(&text) {
+            bad.push(format!("{f}:{line}: `{heading}` repeats the heading before it"));
+        }
+    }
+    assert!(bad.is_empty(), "a heading written twice in a row:\n  {}", bad.join("\n  "));
+}
+
+/// The check above, watched failing: `52b2572`'s shape is found, and headings with content between them, or a
+/// repeat inside fenced code, are not.
+#[test]
+fn the_repeated_heading_rule_finds_the_shape_it_was_written_for_and_nothing_else() {
+    let shape = "- a lesson\n\n### 11.6 If you are an assistant with memory, keep it current\n### 11.6 If you are an assistant with memory, keep it current\n\nbody\n";
+    assert_eq!(repeated_headings(shape).len(), 1, "the 52b2572 shape must be found");
+    let spaced = "### Evidence\n\n\n### Evidence\n";
+    assert_eq!(repeated_headings(spaced).len(), 1, "blank lines between do not hide a repeat");
+    let control = "## 2026-10-11\n### Evidence\ntext\n## 2026-10-12\n### Evidence\ntext\n```\n# x\n# x\n```\n#hashtag\n#hashtag\n";
+    assert!(repeated_headings(control).is_empty(), "{:?}", repeated_headings(control));
+}
