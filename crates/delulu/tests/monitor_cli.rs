@@ -1194,7 +1194,9 @@ fn the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other() {
     assert!(o.status.success(), "sandbox ticket: {}", stderr(&o));
     let o = operator(&["run", "hello.delulu", "--lease", &glass_token, "--broker-profile", "sim", "--break-glass", &ticket, "--no-prompt"]);
     let (so, se) = (stdout(&o), stderr(&o));
-    assert!(so.contains("started") && se.contains("BREAK-GLASS"), "the baseline — the glass was broken: {so}\n{se}");
+    // The baseline is the glass broken, never the program's output: the monitor polls every 25 ms, and on a loaded machine it
+    // quarantines the run before its first console write (DL1403) — routine run 19's own full suite saw exactly that.
+    assert!(se.contains("BREAK-GLASS"), "the baseline — the glass was broken: {so}\n{se}");
     // The monitor polls every 25 ms; give it the time to read the run's record before its node is revoked to end it.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while node_states(&f).get(&glass).is_some_and(|(s, _, _)| s == "live") {
