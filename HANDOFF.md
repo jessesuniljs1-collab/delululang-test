@@ -86,7 +86,10 @@ the assistant's memory — which now also travels file by file in
   (D-V2-110); and RW 4.58's rest for device refusals and adoptions, with one wait for the audit chain per daemon request
   (D-V2-111); and RW 4.46 — a refused fetch is a `deny` in the chain citing its `allow` (D-V2-112) — and with it P8-04's
   `special-use` rule (D-V2-113). Its red-team pass broke two of those fixes within the hour (F1/F2, F3 — fixed the same run) and
-  found **RW 4.61** (guard operations answer success with no record — reproduced; the bypass closed the same run, D-V2-114). **Next:** RW 4.61's rest, P8-04's
+  found **RW 4.61** (guard operations answer success with no record — reproduced; the bypass closed the same run, D-V2-114).
+  **Routine run 19 (2026-10-12):** the cloud period's closing entry begun in `docs/CLOUD_SYNC_LOG.md` (kept current by every run
+  until 2026-10-16); RW 4.61 closed — twelve daemon operations whose record was lost, four of them beyond the red team's list: a
+  loosening undone, a claim withdrawn, a tightening in force and said (D-V2-115). **Next:** P8-04's
   `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53 (with the pass's F4 and F6), RW 4.60, then P9.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
@@ -864,6 +867,12 @@ spells the same thing?**
   `special-use` monitor was walked past (fixed: the call's own outcome); **F3 (HIGH)** — RW 4.59's late device start moved the
   e-stop's first look past it, and an operator's revoke made during the guest's compute let 8–13 of 300 commands reach the arm
   (fixed: the first e-stop check is synchronous at the broker's construction). Neither may be restated as "the fix held".
+- **2026-10-11/12 — RW 4.61 (the red team's F5/F5b; HIGH for the guard) — closed by routine runs 18 and 19 (D-V2-114, D-V2-115):**
+  with another writer holding the audit chain past its wait, `guard bypass on` answered `ok` and was in force with no record — a
+  guard downgrade the chain could not account for — and so did policy edits, approvals, requests, a monitor's dead-man arming
+  (`armed at seq N` for a seq with no record), redemptions, renewals, `Secret.map` and a key rotation. Twelve handlers; the red
+  team named eight, and reading every `record_op` against its handler found four more. A loosening is undone and refused, a step
+  whose answer would claim a record is withdrawn, a tightening stays in force and says so — never "the guard held".
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1228,6 +1237,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A mutant that survives because its code is unreachable is a reason to delete the code** (routine run 18, M222): a guard that
   `Confined` never starts a run's devices could not fire — the confinement report is answered before the host is given them.
   Keeping it would leave a check no witness can fail; it was removed.
+
+- **Enumerate a class from its mechanism, not from the finding's list** (routine run 19, RW 4.61): the red team named eight
+  daemon handlers that answered success for a lost record; listing every `record_op` call in `delulu-broker` and reading each
+  against the handler that reaches it found four more (`DisarmDeadman`, `Renew`, `SecretMap`, `RotateKey`) — a finding's list is
+  what its author tried. §11.4's "one fix does not close a class", asked BEFORE the fix: grep the mechanism's every use, then put
+  the finding's question to each.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

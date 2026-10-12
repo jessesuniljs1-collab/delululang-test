@@ -218,3 +218,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **P8-04's `special-use` rule built the same run** (D-V2-113), every single-record rule decided by `Rule::fires_on`; mutant M233
   showed no test had ever seen the `envelope` rule fire — one does now. Lesson: a rule watched only for what it must not do was
   never seen to do anything.
+- **Routine run 19 (2026-10-12): the cloud period's closing entry begun** four days early (the routine's prompt: a weekly limit
+  can end the last runs) — a section near the top of `docs/CLOUD_SYNC_LOG.md` that every run keeps current until 2026-10-16.
+- **RW 4.61 closed the same run** (D-V2-115): twelve daemon handlers answered success for a lost record; a loosening is undone and
+  refused, a step whose answer would claim a record withdrawn, a tightening in force and said. The red team named eight; reading
+  every `record_op` against its handler found four more. Lesson: enumerate a class from its mechanism, not from the finding's list.

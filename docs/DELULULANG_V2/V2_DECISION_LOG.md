@@ -2598,6 +2598,42 @@ refused and (c) stays the owner's.
 3. **Left of RW 4.61:** the guard's policy edits (a seal unset is a downgrade, a seal set an upgrade), approvals and permits (a
    downgrade each), requests, the dead-man's arm and `Redeem` — each its own answer by the same rule.
 
+## D-V2-115 — RW 4.61's rest: every daemon operation whose audit record was lost — a loosening undone, a step whose answer would be a claim withdrawn, a tightening in force and said — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **The class, enumerated from the writer's side.** RW 4.61 named eight handlers that never read the daemon's `failed`
+   flag (after D-V2-114's bypass): `GuardPolicySet`/`Unset`, `GuardRequest`/`Approve`/`Deny`, `GuardPermitRevoke`,
+   `ArmDeadman`, `Redeem`. Every `record_op` site in `delulu-broker` was then read against the handler that reaches it:
+   four more wrote a record and answered as if it were written — `DisarmDeadman`, `Renew`, `SecretMap`, `RotateKey`. All
+   twelve now answer by D-V2-109/111/114's rule, three ways.
+2. **A LOOSENING the chain cannot account for is undone in the same request and refused DL1401** (requires a human): a
+   policy edit that lowers a rule's tier or removes a rule (`GuardPolicy::loosened_by` — a rule ADDED never loosens, since
+   every gate takes the strongest tier of the rules that match it; the policy is put back in memory and never persisted); an
+   approval (its permit withdrawn, its request pending again); a dead-man's disarm (re-armed exactly as it stood — from a
+   disarm on the runs below outlive their monitor, and the chain must say when that began; so a monitor whose clean end
+   cannot record its disarm leaves its runs to be revoked at the period, the safe direction); a redemption (a single-use
+   token unspent, the node's holder as it was — it redeems once the chain is free); a renewal (the adopted node's deadline
+   back where it was: a receipt widens the one revocation bound that survives a partition).
+3. **A step whose answer would itself be a claim about the chain is withdrawn and refused DL1401:** a guard request (an
+   approval of it would approve something the chain never saw asked — the approval's record names the permit, not the
+   subset or the `why`; its agent may ask again); a dead-man's arming (the red team's F5b: `armed at seq N` named no record,
+   and a firing would have cited that seq as its arming — refused at a monitor's start, before its watch begins, so nothing
+   that was in force is lost; this departs from RW 4.61's plan line "the dead-man's arm says so", for that reason); a
+   `Secret.map` (a synchronous-class use, refused as an expose and a verify are — invariant 26 — and its derivative, named by
+   a counter and so guessable, removed from the store).
+4. **A TIGHTENING stays in force and says so** (DL1401, no human needed — D-V2-109's revocation rule: never refuse the safe
+   direction for want of its record, never claim the record): a policy edit that adds or raises a rule, or changes nothing
+   (persisted); a denial; a permit's revocation; a key rotation (it only kills tokens).
+5. **The undo is explicit, not remembered.** Each loosening returns what it replaced (`Broker::redeem_undoable`,
+   `renew_undoable`, `disarm_deadman_undoable`; the daemon snapshots the policy before an edit), and only the daemon puts it
+   back, in the request that made the change — so no client saw the change in between (the daemon serves one request at a
+   time). An in-process broker's answers are unchanged.
+6. **Not changed:** a beat's firing — the daemon fires every due dead-man before it handles the next request, so the beat's
+   own firing path is reachable only in a race no witness can hold open; `fire_deadmen` already says when a firing's record
+   is lost (§11.5, M222: no check a witness cannot fail). The daemon's startup records (its start, `root-policy-mode`).
+7. **Witnessed** — seven daemon tests under a held chain, each red on the code before (`a_guard_policy_edit_…`,
+   `a_guard_approval_or_request_…`, `a_dead_mans_arming_or_disarming_…`, `a_redemption_…`, `a_renewal_…`, `a_secret_map_…`,
+   `a_key_rotation_…`); mutants M241–M257 red.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

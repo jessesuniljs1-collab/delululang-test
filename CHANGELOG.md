@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — no broker operation is answered as recorded when its record was lost, 2026-10-12
+
+- **Fixed (RW 4.61): when another writer held the audit chain too long, twelve broker daemon operations answered success with
+  no audit record.** One that loosens custody is now undone and refused (DL1401): `guard policy set` lowering a tier and
+  `guard policy unset` removing a rule (the policy is left as it was, on disk too), `guard approve` (no permit is minted and
+  the request is pending again), a monitor's dead-man disarm (it stays armed), a lease redemption (the token stays unspent)
+  and `grants renew` (the deadline stays). One whose answer would claim a record is refused: `guard request` (ask again), a
+  monitor's dead-man arming (`monitor watch` stops before it watches) and `Secret.map`. One that tightens custody stays in
+  force and says the chain lacks its record: a new or raised guard rule, `guard deny`, `guard permits revoke` and `broker
+  rotate-key` (D-V2-115).
+
 ## Unreleased — a guard bypass is never in force without its record, 2026-10-11
 
 - **Fixed (RW 4.61): when another writer held the audit chain too long, `delulu guard bypass on` answered `ok` and the bypass was

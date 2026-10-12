@@ -5102,3 +5102,45 @@ stays off and answers DL1401 that the chain lacks the record. **Witness:** `brok
 
 **Left of RW 4.61:** the guard's policy edits, approvals, requests and permits, the dead-man's arm and `Redeem` — each its own answer
 by D-V2-114's rule (a downgrade undone and refused, an upgrade in force and said).
+
+## 2026-10-12 — routine run 19: CI read green; the cloud period's closing entry begun; RW 4.61 closed — no daemon operation is answered as recorded when its record was lost (D-V2-115)
+
+**CI at the start, read:** run 18's closing push `e95acf1` — CI `38162468215` success on every job (`miri-slow` and `heavy-gates`
+skipped on a push), `ocsf` `38162468217` success; the 2026-10-12 nightlies — CI `38234415113` all 18 jobs success (`heavy-gates`,
+the three `miri-slow` jobs, `microvm`, `microvm-reproducible`), the release dry run `38248184651` success. `actors_pingpong`, from
+the annotations: arm64 MEASURED 2.88x against a control of 4.11x (push) and 4.12x (nightly), bar 1.50x; macOS NOT MEASURED (3
+hardware threads); Windows and Ubuntu NOT MEASURED (busy or SMT). Sandbox properties per OS as since D-V2-57. The Survey matched
+the tree (1,500 nodes) and `doctor --check` passed every check; run 18's witness re-run green in the VM; no branch held a commit
+`master` lacks but the two superseded since run 10.
+
+**The closing entry** (`docs/CLOUD_SYNC_LOG.md`, *The closing entry*), begun four days early as the routine's prompt asks — a
+weekly limit can end the period's last runs: what the period built (P7, PS-D, PS-E complete; P8-01 to P8-03 complete, P8-04 in
+progress; the defects closed; the loop's tools), what stays open, what is the owner's, how the laptop syncs. `CLOUD_ROUTINE.md`
+step 0 and step 6 now say every run keeps it current in place. Pushed as `5bd440d`.
+
+**RW 4.61's rest (`96b7b87`, D-V2-115).** Run 18 closed the guard bypass and left eight handlers that never read the daemon's
+`failed` flag. Before fixing them, every `record_op` call in `delulu-broker` was read against the daemon handler that reaches it:
+four more wrote a record and answered as if it were written — `DisarmDeadman` (`Recorded { seq }`), `Renew`, `SecretMap` and
+`RotateKey`. All twelve witnessed red under a held chain — seven daemon tests, each asserting its handler's answer AND the state
+after it: `guard policy set`'s lowered tier answered `Ok` (and was in force); an approval answered `GuardApproved { gp_0001 }`; a
+redemption `Redeemed`; a renewal `Renewed` with the later deadline; `Secret.map` `Mapped { s_derived_00000000 }` — a name a
+counter chose, so a guessable one; a key rotation `Ok`; an arming was in force (the baseline's second arming was refused "already
+armed"). **Fixed** by D-V2-115's three answers: a loosening undone in the same request and refused (a policy edit that lowers or
+removes a rule — `GuardPolicy::loosened_by`, restored and never persisted; an approval; a disarm, re-armed as it stood; a
+redemption, the token unspent; a renewal, the deadline back); a step whose answer would claim a record withdrawn and refused (a
+request, an arming, a `Secret.map` and its derivative); a tightening in force and said (a rule added or raised, a denial, a permit
+revoked, a key rotation). The undo is explicit — `redeem_undoable`, `renew_undoable`, `disarm_deadman_undoable` return what they
+replaced; the daemon snapshots the policy before an edit — and only the daemon puts it back, in the same request.
+**Mutants M241–M257** (`scripts/mutants.py`, one spec): no undo of a loosening, a lowered tier not counted as loosening, a raise
+counted as one, the loosened policy persisted anyway, a tightening not persisted, the approval's permit kept, its request left
+approved, a request kept, a denial's and a permit revocation's answers claimed, an arming kept, a disarm not re-armed, a
+redemption kept, its nonce left spent, a renewal kept, a derivative kept, a rotation's answer claimed — each red, by its own
+witness only; the control green. The policy witness first let M244 live in reading (the tightenings, persisted after the
+loosenings, rewrote the disk) — reordered so the loosenings come last before any mutant ran. Clippy clean; `check-other-os.sh`
+clean for Windows and macOS. **Read on the runners at `96b7b87`** over `bin:delulu`, `guard_cli`, `guard_e2e` and `federation_cli`:
+Windows `38274676231` (181 passed), macOS `38274680188` (195), arm64 `38274684944` (214) — 0 failed, the seven witnesses named on
+each. **The full suite alone at `96b7b87`:** 2,218 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**Left of RW 4.61:** a beat's own firing path (reachable only in a race — the daemon fires every due dead-man before the next
+request; `fire_deadmen` already says when a firing's record is lost) and the daemon's startup records. The lesson (§11.5): a
+finding's list is what its author tried; enumerate the class from its mechanism.

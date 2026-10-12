@@ -66,7 +66,8 @@ running summary.
   AUDIT-FIFO-1, AUDIT-TEXT-1, SCOPE-HIDDEN-1, REPLY-HOLD-1, ANSWER-HOLD-1, RUNDIR-PERM-1, SILENT-QUEUE-1, a macOS guest's
   missing memory ceiling, AUDIT-REFUSAL-1, AUDIT-SEQ-1, AUDIT-DAY-1, HTTP-SCHEME-1, ACTOR-CUSTODY-1 (HIGH),
   PLUGIN-CUSTODY-1/PLUGIN-DAEMON-1, CLOSURE-SCOPE-1 (HIGH), RW 4.56, RW 4.58, FIRST-BEAT-1 (RW 4.59), the red team's F1/F2
-  and F3 (HIGH), RW 4.61's bypass — and whatever the entries after run 18 add.
+  and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record) — and
+  whatever the entries after run 19 add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
@@ -79,8 +80,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-RW 4.61's rest (guard operations and the dead-man's arm that answer success with no record — HIGH for the guard), P8-04's
-`break-glass` rule, RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+P8-04's `break-glass` rule, RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.60, RW 4.58's O2/O4, then **P9** (P9-01 to P9-05). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -88,7 +88,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-114); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-115); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2280,3 +2280,31 @@ directory, or have the laptop session read §11.
 - Redo on the laptop: nothing.
 - For the laptop's memory: nothing new.
 - Open / next: this run continues — RW 4.61's rest first (the newest entry after this one says how far it got).
+
+### 2026-10-12 — routine run 19 (continued): RW 4.61 closed — no daemon operation is answered as recorded when its record was lost (D-V2-115)
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-kkuv5g`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `5bd440d`
+- Commits: (1) `96b7b87` RW 4.61's rest: no daemon operation is answered as done when its record was lost; (2) this entry's
+  commit — the records
+- Files and folders: (1) M `crates/delulu-broker/src/guard.rs` (`GuardPolicy::loosened_by`; `withdraw_unrecorded_policy_edit`,
+  `_approval`, `_request`), `deadman.rs` (`Disarmed`, `disarm_deadman_undoable`, `rearm_unrecorded_disarm`,
+  `withdraw_unrecorded_arming`), `lease.rs` (`Redemption`, `redeem_undoable`, `withdraw_unrecorded_redemption`), `cert.rs`
+  (`Renewal`, `renew_undoable`, `withdraw_unrecorded_renewal`), `tree.rs` (`unmark_redeemed`, `restore_ttl`), `secrets.rs`
+  (`remove_derived`), `crates/delulu/src/brokerd.rs` (twelve handlers; `unrecorded_undone`, `unrecorded_in_force`,
+  `guard_policy_edited`; seven witnesses), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4 RW 4.61;
+  §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P8-04 line), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-115),
+  `docs/REMAINING_WORK.md` (4.61 closed), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md` (this
+  entry; the closing entry refreshed), `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub
+  no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: seven witnesses red on the code before; M241–M257 red, control green; clippy clean; `check-other-os.sh` clean for
+  Windows and macOS. Read on the runners at `96b7b87` over `bin:delulu`, `guard_cli`, `guard_e2e`, `federation_cli`: Windows
+  `38274676231` (181 passed), macOS `38274680188` (195), arm64 `38274684944` (214) — 0 failed, the witnesses named on each. The
+  full suite alone at `96b7b87`: 2,218 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.61) and §11.5 (enumerate a class from its mechanism, not from the finding's
+  list); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next, in order: (1) read this commit's push run; (2) P8-04's `break-glass` rule (this run, next); (3) RW 4.57, RW 4.53
+  (with F4 and F6), RW 4.60, RW 4.58's last parts (O2/O4); (4) P9. **For the owner:** D-V2-115.
