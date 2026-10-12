@@ -2785,6 +2785,21 @@ refused and (c) stays the owner's.
 5. **P9-02 is built** but for `secret_reach_expansion`, which waits for P9-04's endpoint-bound secrets (no secret has a
    destination to widen until then).
 
+## D-V2-121 — P9-03's proposals are computed from the refused call's span; step 1: a refused run's report records the refusal at its call — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **Measured first** (`V2_P9_DESIGN.md`, P9-03): the study's premise that a refusal "already carries a structured repair" is
+   false for DL0703 — the grant is prose (`repairs: []`) — and `run --report-out` recorded no diagnostic for a refused run.
+2. **The decision:** a proposal is never built from a grant line the runtime or the program words. It is the requirement P9-01's
+   `requirements` give for the refused call's SPAN — the static authority of the call site, as §4.10 asks. So the refusal needs
+   to travel with its span, not with a repair: no new repair kind, no prose parsed.
+3. **Step 1, built (`c2dd5f0`):** the ordinary run's report carries the fault that ended the run as the envelope's own
+   diagnostic object (code, message, the call's span) in the `diagnostics` field it always had and left empty — additive, the
+   run-report schema unchanged. A clean run's report carries none. A sandboxed run's report is written by its host and is the
+   next step, with `grants propose --from REPORT` after it.
+4. **Witnessed** — `within_cli`'s `a_refused_runs_report_records_the_refusal_at_the_call_the_verdict_names`, red first: the
+   report's span is the very `at` `authority --within` names for `fs.read=./config` (48:18). Mutants M296 (the report ignores
+   the fault) and M297 (the fault recorded before its span) red, the control green.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

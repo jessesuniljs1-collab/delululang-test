@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused run's report records the refusal, 2026-10-12
+
+- **Fixed: `delulu run --report-out F` recorded no diagnostic for a refused run** — `diagnostics: []`, while the refusal
+  (DL0703, say) reached only the terminal. The report now carries the fault that ended the run with the call's span, so a
+  tool can tell which call was refused and compute the narrowest grant from it (D-V2-121, P9-03's first step).
+
 ## Unreleased — `delulu grants diff OLD NEW`, 2026-10-12
 
 - **New (P9-02): `delulu grants diff OLD NEW`** names what a change of grant set ADDS — OLD and NEW are files of grants, one a

@@ -127,6 +127,8 @@ skip branch, §11.2).
      by `⊑`" needs no new check.
   4. **Auto-approval** (`grants auto-approve --within BOUNDARY`) is P9-02 already: a proposal is auto-approvable exactly when
      `grants diff BOUNDARY PROPOSAL` adds nothing (D-V2-119).
+  **Step 1 built** (routine run 20, `c2dd5f0`, D-V2-121): the ordinary run's report records the refusal with its span; a
+  sandboxed run's report is next, then `grants propose`.
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

@@ -5336,3 +5336,15 @@ by the program or the runtime. Build order recorded: the report records the refu
 maps it to one grant line (a hidden site proposes nothing); a proposal kind beside the Guard's queue; approval mints a child through
 `attenuate` (the tree's own `⊑`); auto-approval is `grants diff BOUNDARY PROPOSAL` adding nothing (D-V2-119). Three hypotheses named
 there, each to be witnessed when built.
+
+## 2026-10-12 — routine run 20 (closing): P9-03 step 1 — a refused run's report records the refusal at its call (D-V2-121)
+
+**`ec026a0`'s and `9357ddc`'s push runs:** CI `38313420752` (`ec026a0`) and CI `38313748666` (`9357ddc`) — success on every job (no `openshell` run: neither push touched its paths).
+
+**P9-03 step 1 (`c2dd5f0`, D-V2-121)**, from the reading recorded above: the ordinary run's report carries the fault that ended
+the run as the envelope's diagnostic object, with the call's span — the span P9-01's requirements map to the narrowest grant.
+Witnessed red first (`diagnostics: []`); the witness holds the report's span to `authority --within`'s `at` (48:18,
+`fs.read=./config`). Mutants M296 and M297 red, the control green; clippy clean. **Read on the runners at `c2dd5f0`** over
+`within_cli`, `json_contract` and `schema_cli`: Windows `38314043269`, macOS `38314046573`, arm64 `38314049378` — each job green over its three targets (`within_cli` 8 passed on each), no orphan process. **The full suite alone at `c2dd5f0`:** 2,240 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+**Next for P9-03:** a sandboxed run's report (written by its host), then `grants propose --from REPORT`.
