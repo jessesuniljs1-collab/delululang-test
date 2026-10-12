@@ -51,6 +51,7 @@ mod openshell;
 mod sandbox;
 mod schema;
 mod toolchain;
+mod within;
 
 use std::process::ExitCode;
 

@@ -1416,6 +1416,24 @@ fn a_scope_the_source_does_not_show_leaves_its_placeholder_beside_the_literals()
             &["fs.read=./data", "fs.read=PATH", "net=example.com", "net=HOST"],
         ),
         (
+            // SECRET-HIDDEN-1 (routine run 20): a secret read under a computed NAME. The report said
+            // `secrets: []` and the flags named the console alone, while the run refused DL0703 at
+            // `root.secret(name)` — the review list under-reported a secret.
+            "secret_computed.delulu",
+            "module secret_computed\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    \
+             let name = \"API_\" + \"KEY\"\n    let s = root.secret(name)\n    out.println(\"got\")\n}\n",
+            &["console", "secret:NAME=VALUE"],
+        ),
+        (
+            // Its control: a literal secret name through a `Root` under another name is known to the
+            // checker (it reads the type, not the name) — named, and no placeholder beside it.
+            "secret_helper.delulu",
+            "module secret_helper\n\nfn helper(r: Root) -> Secret[Str] {\n    r.secret(\"API_KEY\")\n}\n\n\
+             fn main(root: Root) ! {Write} {\n    let out = root.console()\n    let s = helper(root)\n    \
+             out.println(\"got\")\n}\n",
+            &["console", "secret:API_KEY=VALUE"],
+        ),
+        (
             // The control: every site literal, through `root` — no placeholder may appear.
             "literal.delulu",
             "module literal\n\nfn main(root: Root) ! {Read, Net} {\n    let one = root.fs_read(\"./data\")\n    \

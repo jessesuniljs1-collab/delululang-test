@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 304 |
-| Rust lines | 163623 |
-| Rust files outside `src/` (test/bench targets) | 138 |
+| Rust files | 306 |
+| Rust lines | 164720 |
+| Rust files outside `src/` (test/bench targets) | 139 |
 | Markdown documents | 253 |
 | Markdown lines | 73415 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1502 / 13979 |
+| Nodes / edges in this map | 1504 / 14005 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 43 files, 41972 lines
+- **Modules:** 44 files, 42763 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 10278 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 10507 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -122,7 +122,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/launcher.rs` | 182 | PS-E-04 (`V2_OPENSHELL_STUDY.md` §4.4): an external launcher, resolved once, hashed, pinnable — and, |
 | `src/locale.rs` | 306 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 2024 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
-| `src/main.rs` | 103 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
+| `src/main.rs` | 104 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 672 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1461 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/monitor_cmd.rs` | 728 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
@@ -134,9 +134,10 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1992 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 688 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
-| `src/schema.rs` | 1015 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
+| `src/schema.rs` | 1044 | P4-09: `delulu schema` — the JSON the toolchain emits, described as JSON Schema, and checked. |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 | `src/toolchain.rs` | 171 | P4-02: `delulu toolchain --json` — what this toolchain IS, as data. |
+| `src/within.rs` | 532 | P9-01 — `delulu authority FILE --within BOUNDARY` (`V2_OPENSHELL_STUDY.md` §4.8, `V2_P9_DESIGN.md`). |
 
 ### `delulu-atlas`
 

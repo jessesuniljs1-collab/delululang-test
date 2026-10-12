@@ -234,6 +234,11 @@ pub(crate) struct Opts {
     pub(crate) accept_authority: Vec<String>,
     /// `--diff <old.lock>`: for `authority`, the previous lockfile to diff against (§8).
     pub(crate) diff: Option<String>,
+    /// `--within <grant>` (repeatable): for `authority`, one grant of a BOUNDARY in the `--grant`
+    /// grammar — the program is checked against it, never run under it (P9-01).
+    pub(crate) within: Vec<String>,
+    /// `--within-file <file>`: the same boundary, one grant a line (blank lines and `#` comments skipped).
+    pub(crate) within_file: Option<String>,
     /// `--grants`: for `authority`, print the exact `--grant` flags this program needs (NE-10).
     ///
     /// Deliberately NOT `grants`, which is the LIST OF GRANTS a caller passed with `--grant`. Two
@@ -388,6 +393,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         locked: false,
         accept_authority: Vec::new(),
         diff: None,
+        within: Vec::new(),
+        within_file: None,
         show_grants: false,
         trace_effects: false,
         trace_out: None,
@@ -462,6 +469,24 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--diff=") => opts.diff = Some(s["--diff=".len()..].to_string()),
+            "--within" => {
+                if i + 1 < rest.len() {
+                    opts.within.push(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--within".to_string());
+                }
+            }
+            s if s.starts_with("--within=") => opts.within.push(s["--within=".len()..].to_string()),
+            "--within-file" => {
+                if i + 1 < rest.len() {
+                    opts.within_file = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--within-file".to_string());
+                }
+            }
+            s if s.starts_with("--within-file=") => opts.within_file = Some(s["--within-file=".len()..].to_string()),
             "--trace-effects" => opts.trace_effects = true,
             "--assert-trace" => opts.assert_trace = true,
             "--debug-rcaps" => opts.debug_rcaps = true,
@@ -1408,6 +1433,10 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 run under it; `continue` arms none. `--for` ends the watch cleanly and disarms it)\n\
      \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)\n\
+     \x20 delulu authority <file.delulu> --within <grant>... | --within-file <file> [--json]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (P9-01: is everything the program asks for inside this boundary? within (exit 0), or exceeds /\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 unsupported / inconclusive (exit 1) with each request named and the call that makes it. The\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 boundary is in the --grant grammar and is checked against, never granted)\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
      \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]\n\
@@ -3366,6 +3395,21 @@ fn cmd_authority(rest: &[String]) -> i32 {
     if let Some(code) = refuse_unknown_flags("authority", &opts) {
         return code;
     }
+    // P9-01: `--within` is documented for `authority`, so the shared parser hands it to every form of
+    // the command — and a form that does not answer it refuses it by name, never ignores it (§11.5: a
+    // flag documented for a command reaches every verb of it).
+    let asks_within = !opts.within.is_empty() || opts.within_file.is_some();
+    if asks_within && opts.diff.is_some() {
+        eprintln!("error: `authority --within` checks one program against a boundary; it cannot be combined with `--diff`");
+        return 2;
+    }
+    if asks_within && opts.show_grants {
+        eprintln!(
+            "error: `--within` and `--grants` ask two different questions — what the program needs (`--grants`) \
+             and whether a boundary holds it (`--within`); ask one at a time"
+        );
+        return 2;
+    }
     if let Some(old_path) = opts.diff.clone() {
         let Some(new_arg) = file else {
             eprintln!("error: `authority --diff` needs <old.lock> and <new.lock-or-package-dir>");
@@ -3377,6 +3421,13 @@ fn cmd_authority(rest: &[String]) -> i32 {
         eprintln!("error: `authority` needs a file or package directory");
         return 2;
     };
+    if asks_within && (std::path::Path::new(&file).is_dir() || looks_like_dwx(&file)) {
+        eprintln!(
+            "error: `authority --within` reads one source file; a package directory or a `.dwx` is not checked \
+             against a boundary yet — name the `.delulu` file"
+        );
+        return 2;
+    }
     if std::path::Path::new(&file).is_dir() {
         return authority_package(&file, &opts);
     }
@@ -3397,6 +3448,9 @@ fn cmd_authority(rest: &[String]) -> i32 {
         return 1;
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
+    if asks_within {
+        return authority_within(&map, &checked, report, &opts);
+    }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
         return 0;
@@ -3408,6 +3462,50 @@ fn cmd_authority(rest: &[String]) -> i32 {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+/// P9-01: `delulu authority FILE --within BOUNDARY` — is everything the program asks for inside the
+/// boundary? The boundary is parsed by `Grants::add`, the parser `run --grant` uses, and is only ever
+/// checked against: nothing here grants it. The verdict is `within.rs`'s; exit 0 for *within* and 1 for
+/// any other answer, which the report names (`--json` carries it under `authority.within`).
+fn authority_within(map: &SourceMap, checked: &delulu_check::Checked, mut report: Json, opts: &Opts) -> i32 {
+    let mut lines: Vec<String> = opts.within.clone();
+    if let Some(f) = &opts.within_file {
+        if std::path::Path::new(f).is_dir() {
+            eprintln!("error: `--within-file {f}` is a directory; it takes a file of grants, one a line");
+            return 2;
+        }
+        match std::fs::read_to_string(f) {
+            Ok(text) => lines.extend(
+                text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string),
+            ),
+            Err(e) => {
+                eprintln!("error: {}", unreadable(f, &e));
+                return 2;
+            }
+        }
+    }
+    let mut boundary = Grants::default();
+    for g in &lines {
+        if let Err(e) = boundary.add(g) {
+            eprintln!("error: bad --within grant: {e}");
+            return 2;
+        }
+    }
+    let walk = requested_scopes(&[&checked.module]);
+    let (reqs, unsupported) = requirements(&report, &walk);
+    let v = crate::within::verdict(&reqs, &unsupported, &boundary);
+    let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
+    if opts.json {
+        if let Some(obj) = report.as_object_mut() {
+            obj.insert("within".into(), crate::within::verdict_json(&v, &lines, map));
+        }
+        note_json_emitted();
+        println!("{}", envelope_to_string("authority", &[], Some(report), map));
+    } else {
+        print!("{}", crate::within::render_verdict(&v, report["program"].as_str().unwrap_or("?"), map));
+    }
+    code
 }
 
 /// The authority report of one checked source file, stamped in the one order `delulu authority`
@@ -3478,7 +3576,7 @@ fn render_required_grants(report: &Json) -> String {
     }
     // An UPPERCASE placeholder is a shape to fill in, and saying so once is cheaper than a reader
     // pasting `fs.read=PATH` and watching it fail.
-    const PLACEHOLDERS: [&str; 7] = ["PATH", "HOST", "VALUE", "DEVICE", "PATTERN", "LOGICAL", "DIM"];
+    const PLACEHOLDERS: [&str; 8] = ["PATH", "HOST", "VALUE", "DEVICE", "PATTERN", "LOGICAL", "DIM", "NAME"];
     if grants.iter().any(|g| PLACEHOLDERS.iter().any(|p| g.contains(p))) {
         out.push_str(
             "\nAn UPPERCASE word is a placeholder the program does not name in its source — you \
@@ -3509,21 +3607,37 @@ fn render_required_grants(report: &Json) -> String {
 /// and [`required_grants`] prints that kind's placeholder beside the literals it did see. Before,
 /// one literal site of a kind silenced the placeholder for every other site of it, and
 /// `authority --grants` named `fs.read=./data` alone for a program that also read `./secret`.
-struct ScopeWalk {
-    found: BTreeMap<String, Vec<String>>,
-    hidden: std::collections::BTreeSet<String>,
+///
+/// **And where** (P9-01, routine run 20): `authority --within` answers *exceeds* with the call that
+/// asks for the scope, so the walk keeps the first call site of each literal, of each kind's first
+/// hidden site, and of each kind's first minting call — the scopeless mints (`console`, `clock`, …)
+/// included. The report's fields are unchanged by it.
+pub(crate) struct ScopeWalk {
+    pub(crate) found: BTreeMap<String, Vec<String>>,
+    pub(crate) hidden: std::collections::BTreeSet<String>,
+    pub(crate) lit_at: BTreeMap<(String, String), delulu_diag::Span>,
+    pub(crate) hidden_at: BTreeMap<String, delulu_diag::Span>,
+    pub(crate) mint_at: BTreeMap<String, delulu_diag::Span>,
 }
 
 impl ScopeWalk {
-    fn record(&mut self, kind: &str, lit: &str) {
+    fn record(&mut self, kind: &str, lit: &str, at: delulu_diag::Span) {
         let slot = self.found.entry(kind.to_string()).or_default();
         if !slot.iter().any(|s| s == lit) {
             slot.push(lit.to_string());
         }
+        self.note(kind, lit, at);
     }
 
-    fn hide(&mut self, kind: &str) {
+    /// Where a literal is asked for, without reporting it as `root`'s own (a secret's name through a
+    /// `Root` under another name: the checker reports the name, the walk keeps only its call).
+    fn note(&mut self, kind: &str, lit: &str, at: delulu_diag::Span) {
+        self.lit_at.entry((kind.to_string(), lit.to_string())).or_insert(at);
+    }
+
+    fn hide(&mut self, kind: &str, at: delulu_diag::Span) {
         self.hidden.insert(kind.to_string());
+        self.hidden_at.entry(kind.to_string()).or_insert(at);
     }
 
     fn walk_block(&mut self, b: &delulu_syntax::ast::Block) {
@@ -3558,7 +3672,7 @@ impl ScopeWalk {
     fn walk_expr(&mut self, e: &delulu_syntax::ast::Expr) {
         use delulu_syntax::ast::Expr::*;
         match e {
-            Method { recv, name, args, .. } => {
+            Method { recv, name, args, span, .. } => {
                 self.walk_expr(recv);
                 for a in args {
                     self.walk_expr(a);
@@ -3571,6 +3685,13 @@ impl ScopeWalk {
                 // table): its literal is not attributed, and its kind is marked hidden.
                 let is_root = matches!(&**recv, Var { path, .. }
                     if path.segs.len() == 1 && path.segs[0].name == "root");
+                // P9-01: `verify` and `expose` are a secret's only primitives, and each carries
+                // `Declassify` — so where nothing calls `root.declassify()`, the first of them is the
+                // call that needs `--grant declassify` (`05_secrets` reaches the effect that way alone).
+                if matches!(name.name.as_str(), "verify" | "expose") {
+                    self.mint_at.entry("Declassify".to_string()).or_insert(*span);
+                    return;
+                }
                 let kind = match name.name.as_str() {
                     "fs_read" => "FsRead",
                     "fs_write" => "FsWrite",
@@ -3581,10 +3702,36 @@ impl ScopeWalk {
                     "secret" => "Secret",
                     "python" => "Python",
                     "foreign" => "ForeignLoad",
+                    // P9-01: the mints that take no scope. Their call is what a counterexample names;
+                    // they have nothing to record and nothing to hide.
+                    "console" => "Console",
+                    "clock" => "Clock",
+                    "rand" => "Rand",
+                    "declassify" => "Declassify",
+                    "plugin_host" => "PluginHost",
+                    "foreign_load" => "ForeignLoad",
                     _ => return,
                 };
+                self.mint_at.entry(kind.to_string()).or_insert(*span);
+                if matches!(name.name.as_str(), "console" | "clock" | "rand" | "declassify" | "plugin_host" | "foreign_load") {
+                    return;
+                }
+                // SECRET-HIDDEN-1 (routine run 20): a secret's NAME is reported by the checker, which
+                // reads the receiver's TYPE (`check_method` records a string-literal argument of any
+                // `Root`) — so a literal through a `Root` under another name is already named, and only
+                // a COMPUTED name is unseen. That, and only that, hides the kind; before, nothing read
+                // the hidden secret at all, and `authority --grants` named no secret for a program that
+                // reads one under a computed name.
+                if name.name == "secret" {
+                    match args.first().and_then(literal_str) {
+                        Some(s) if is_root => self.record(kind, &s, *span),
+                        Some(s) => self.note(kind, &s, *span),
+                        None => self.hide(kind, *span),
+                    }
+                    return;
+                }
                 if !is_root {
-                    self.hide(kind);
+                    self.hide(kind, *span);
                     return;
                 }
                 let Some(first) = args.first() else { return };
@@ -3592,14 +3739,14 @@ impl ScopeWalk {
                     List { items, .. } => {
                         for it in items {
                             match literal_str(it) {
-                                Some(s) => self.record(kind, &s),
-                                None => self.hide(kind),
+                                Some(s) => self.record(kind, &s, *span),
+                                None => self.hide(kind, *span),
                             }
                         }
                     }
                     other => match literal_str(other) {
-                        Some(s) => self.record(kind, &s),
-                        None => self.hide(kind),
+                        Some(s) => self.record(kind, &s, *span),
+                        None => self.hide(kind, *span),
                     },
                 }
             }
@@ -3641,11 +3788,15 @@ impl ScopeWalk {
 }
 
 /// The literal scopes per kind, and the kinds with a minting site whose scope the source does not
-/// show (SCOPE-HIDDEN-1).
-fn requested_scopes(
-    modules: &[&delulu_syntax::ast::Module],
-) -> (BTreeMap<String, Vec<String>>, std::collections::BTreeSet<String>) {
-    let mut w = ScopeWalk { found: BTreeMap::new(), hidden: Default::default() };
+/// show (SCOPE-HIDDEN-1) — with where each was asked for (P9-01).
+pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> ScopeWalk {
+    let mut w = ScopeWalk {
+        found: BTreeMap::new(),
+        hidden: Default::default(),
+        lit_at: BTreeMap::new(),
+        hidden_at: BTreeMap::new(),
+        mint_at: BTreeMap::new(),
+    };
     for m in modules {
         for item in &m.items {
             match item {
@@ -3669,7 +3820,41 @@ fn requested_scopes(
         v.sort();
         v.dedup();
     }
-    (w.found, w.hidden)
+    w
+}
+
+/// One `--grant` a program needs: the line to type, what it asks the runtime for, and where (P9-01).
+///
+/// `required_grants` prints these lines, and `authority --within` decides each against a boundary —
+/// one list, so the flags an operator types and the verdict an agent reads can never disagree about
+/// what a program asks for.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Requirement {
+    /// The `--grant` line, exactly as `required_grants` prints it.
+    pub(crate) grant: String,
+    pub(crate) ask: Ask,
+    /// The first call in the source that asks for it, when one is attributable.
+    pub(crate) at: Option<delulu_diag::Span>,
+}
+
+/// What a [`Requirement`] asks the runtime for, in the terms the runtime decides it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Ask {
+    /// A `root.<method>(…)` the runtime decides at the mint (`prim::call_root_method`): `console`,
+    /// `clock`, `rand` and `declassify` take no argument; `fs_read`, `fs_write`, `http`, `secret`,
+    /// `actuator`, `sensor` and `compute` take the literal the source writes (a secret's name, a
+    /// device's name — the value and the envelope are the operator's grant data).
+    Mint { method: &'static str, arg: Option<String> },
+    /// A minting site whose scope the source does not show (SCOPE-HIDDEN-1, SECRET-HIDDEN-1).
+    Hidden { method: &'static str },
+    /// A foreign C library by its logical name; the binary's path is the operator's grant data.
+    ForeignLib(String),
+    /// A Python import: a module the program imports, or a pattern its manifest allows.
+    PythonImport { name: String, pattern: bool },
+    /// Python, with no import the source or the manifest names.
+    PythonUnknown,
+    /// Plugin loading: the artifact's path is checked at the load, against the roots and the manifest.
+    PluginLoad,
 }
 
 /// The exact `--grant` flags this program needs, derived from its own authority report.
@@ -3684,18 +3869,33 @@ fn requested_scopes(
 /// literals AND a site the source does not show carries both (SCOPE-HIDDEN-1). The list is
 /// what the program **requires**, never what it has been granted: nothing here reports a decision
 /// the operator has not made.
-fn required_grants(
-    report: &Json,
-    requested: &BTreeMap<String, Vec<String>>,
-    hidden: &std::collections::BTreeSet<String>,
-) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    fn push(out: &mut Vec<String>, s: String) {
-        if !out.contains(&s) {
-            out.push(s);
+fn required_grants(report: &Json, walk: &ScopeWalk) -> Vec<String> {
+    requirements(report, walk).0.into_iter().map(|r| r.grant).collect()
+}
+
+/// [`required_grants`], structured: each line with its [`Ask`] and its call site, and — second — the
+/// capability kinds the program holds that no grant form bounds (`authority --within`'s
+/// *unsupported*). Every kind the checker has today has a form, so the second list is empty on the
+/// current language; it exists so a kind added later is NAMED rather than dropped by a skip branch.
+pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>, Vec<String>) {
+    let requested = &walk.found;
+    let hidden = &walk.hidden;
+    let mut out: Vec<Requirement> = Vec::new();
+    let mut unsupported: Vec<String> = Vec::new();
+    fn push(out: &mut Vec<Requirement>, grant: String, ask: Ask, at: Option<delulu_diag::Span>) {
+        if !out.iter().any(|r| r.grant == grant) {
+            out.push(Requirement { grant, ask, at });
         }
     }
-    let scopes_for = |kind: &str, placeholder: &str| -> Vec<String> {
+    // One scope a kind asks for: a literal the source writes (with its call), or the kind's
+    // placeholder where the source does not show one (with the hidden site, else the first mint).
+    enum Scope {
+        Lit(String, Option<delulu_diag::Span>),
+        Unseen(Option<delulu_diag::Span>),
+    }
+    let unseen_at = |kind: &str| walk.hidden_at.get(kind).or_else(|| walk.mint_at.get(kind)).copied();
+    let lit_at = |kind: &str, s: &str| walk.lit_at.get(&(kind.to_string(), s.to_string())).copied();
+    let scopes_for = |kind: &str| -> Vec<Scope> {
         let mut all: Vec<String> = report["capabilities"]
             .as_array()
             .map(|caps| {
@@ -3711,19 +3911,24 @@ fn required_grants(
                 all.push(s);
             }
         }
-        if all.is_empty() || hidden.contains(kind) {
-            all.push(placeholder.to_string());
+        let unseen = all.is_empty() || hidden.contains(kind);
+        let mut scopes: Vec<Scope> = all.into_iter().map(|s| { let at = lit_at(kind, &s); Scope::Lit(s, at) }).collect();
+        if unseen {
+            scopes.push(Scope::Unseen(unseen_at(kind)));
         }
-        all
+        scopes
     };
     // The device kinds read the walk alone; a hidden site adds the placeholder the same way.
-    let devices_for = |kind: &str| -> Vec<String> {
-        let mut all = requested.get(kind).cloned().unwrap_or_default();
-        if all.is_empty() || hidden.contains(kind) {
-            all.push("DEVICE".into());
+    let devices_for = |kind: &str| -> Vec<Scope> {
+        let all = requested.get(kind).cloned().unwrap_or_default();
+        let unseen = all.is_empty() || hidden.contains(kind);
+        let mut scopes: Vec<Scope> = all.into_iter().map(|s| { let at = lit_at(kind, &s); Scope::Lit(s, at) }).collect();
+        if unseen {
+            scopes.push(Scope::Unseen(unseen_at(kind)));
         }
-        all
+        scopes
     };
+    let mint_at = |kind: &str| walk.mint_at.get(kind).copied();
 
     let kinds: Vec<String> = report["capabilities"]
         .as_array()
@@ -3736,61 +3941,80 @@ fn required_grants(
 
     for k in &kinds {
         match k.as_str() {
-            "Console" => push(&mut out, "console".into()),
-            "Clock" => push(&mut out, "clock".into()),
-            "Rand" => push(&mut out, "rand".into()),
-            "FsRead" => {
-                for s in scopes_for("FsRead", "PATH") {
-                    push(&mut out, format!("fs.read={s}"));
-                }
-            }
-            "FsWrite" => {
-                for s in scopes_for("FsWrite", "PATH") {
-                    push(&mut out, format!("fs.write={s}"));
-                }
-            }
-            "Http" => {
-                for s in scopes_for("Http", "HOST") {
-                    // D-NE-28: a special-use host is granted only by its explicit spelling, so the
-                    // line to paste must be that spelling (a plain `net=` would be refused).
-                    if delulu_runtime::netclass::special_use_class(&s).is_some() {
-                        push(&mut out, format!("net.special={s}"));
-                    } else {
-                        push(&mut out, format!("net={s}"));
+            "Console" => push(&mut out, "console".into(), Ask::Mint { method: "console", arg: None }, mint_at("Console")),
+            "Clock" => push(&mut out, "clock".into(), Ask::Mint { method: "clock", arg: None }, mint_at("Clock")),
+            "Rand" => push(&mut out, "rand".into(), Ask::Mint { method: "rand", arg: None }, mint_at("Rand")),
+            "FsRead" | "FsWrite" => {
+                let (key, method) = if k == "FsRead" { ("fs.read", "fs_read") } else { ("fs.write", "fs_write") };
+                for s in scopes_for(k) {
+                    match s {
+                        Scope::Lit(s, at) => push(&mut out, format!("{key}={s}"), Ask::Mint { method, arg: Some(s) }, at),
+                        Scope::Unseen(at) => push(&mut out, format!("{key}=PATH"), Ask::Hidden { method }, at),
                     }
                 }
             }
-            "Actuator" => {
-                for s in devices_for("Actuator") {
-                    push(&mut out, format!("actuator={s}:DIM=lo..hi"));
+            "Http" => {
+                for s in scopes_for("Http") {
+                    match s {
+                        Scope::Lit(s, at) => {
+                            // D-NE-28: a special-use host is granted only by its explicit spelling, so the
+                            // line to paste must be that spelling (a plain `net=` would be refused).
+                            let line = if delulu_runtime::netclass::special_use_class(&s).is_some() {
+                                format!("net.special={s}")
+                            } else {
+                                format!("net={s}")
+                            };
+                            push(&mut out, line, Ask::Mint { method: "http", arg: Some(s) }, at);
+                        }
+                        Scope::Unseen(at) => push(&mut out, "net=HOST".into(), Ask::Hidden { method: "http" }, at),
+                    }
                 }
             }
-            "Sensor" => {
-                for s in devices_for("Sensor") {
-                    push(&mut out, format!("sensor={s}"));
-                }
-            }
-            "Compute" => {
-                for s in devices_for("Compute") {
-                    push(&mut out, format!("compute={s}:memory_bytes=N"));
+            "Actuator" | "Sensor" | "Compute" => {
+                let method = match k.as_str() {
+                    "Actuator" => "actuator",
+                    "Sensor" => "sensor",
+                    _ => "compute",
+                };
+                let line = |dev: &str| match method {
+                    "actuator" => format!("actuator={dev}:DIM=lo..hi"),
+                    "sensor" => format!("sensor={dev}"),
+                    _ => format!("compute={dev}:memory_bytes=N"),
+                };
+                for s in devices_for(k) {
+                    match s {
+                        Scope::Lit(s, at) => push(&mut out, line(&s), Ask::Mint { method, arg: Some(s) }, at),
+                        Scope::Unseen(at) => push(&mut out, line("DEVICE"), Ask::Hidden { method }, at),
+                    }
                 }
             }
             // P2 (D-V2-27): a program that reaches for `root.plugin_host()` needs somewhere to load
             // from. The placeholder is a PATH because the source cannot say which artifact an
             // operator will permit — that is the operator's half of the decision.
-            "PluginHost" => push(&mut out, "plugin=PATH".into()),
-            _ => {}
+            "PluginHost" => push(&mut out, "plugin=PATH".into(), Ask::PluginLoad, mint_at("PluginHost")),
+            // A capability kind no grant form bounds. Named — never dropped: a skip branch here is how a
+            // verdict would answer *within* for authority it never looked at (§11.2).
+            other => {
+                if !unsupported.iter().any(|u| u == other) {
+                    unsupported.push(other.to_string());
+                }
+            }
         }
     }
     // `Declassify` is reported as an effect, not as a capability line (spec §6), so it is read from
     // there — the one exception a reader would otherwise have to know.
     if effects.iter().any(|e| e == "Declassify") {
-        push(&mut out, "declassify".into());
+        push(&mut out, "declassify".into(), Ask::Mint { method: "declassify", arg: None }, mint_at("Declassify"));
     }
     for s in report["secrets"].as_array().cloned().unwrap_or_default() {
         if let Some(name) = s.as_str() {
-            push(&mut out, format!("secret:{name}=VALUE"));
+            push(&mut out, format!("secret:{name}=VALUE"), Ask::Mint { method: "secret", arg: Some(name.to_string()) }, lit_at("Secret", name));
         }
+    }
+    // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
+    // and the list named no secret at all.
+    if hidden.contains("Secret") {
+        push(&mut out, "secret:NAME=VALUE".into(), Ask::Hidden { method: "secret" }, unseen_at("Secret"));
     }
     // The two foreign flags come from the foreign section, because that is where a program's holes
     // in the proof are enumerated (spec §6) and nowhere else. The section carries three `abi`s —
@@ -3811,21 +4035,26 @@ fn required_grants(
                     .as_array()
                     .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
                     .unwrap_or_default();
-                let pats = if !allow.is_empty() {
-                    allow
+                let at = mint_at("Python");
+                if !allow.is_empty() {
+                    for p in allow {
+                        push(&mut out, format!("foreign.python={p}"), Ask::PythonImport { name: p, pattern: true }, at);
+                    }
                 } else if !seen.is_empty() {
-                    seen
+                    for p in seen {
+                        push(&mut out, format!("foreign.python={p}"), Ask::PythonImport { name: p, pattern: false }, at);
+                    }
                 } else {
-                    vec!["PATTERN".into()]
-                };
-                for p in pats {
-                    push(&mut out, format!("foreign.python={p}"));
+                    push(&mut out, "foreign.python=PATTERN".into(), Ask::PythonUnknown, at);
                 }
             }
             Some("compute") => {}
             _ => {
-                let lib = fc["lib"].as_str().unwrap_or("LOGICAL");
-                push(&mut out, format!("foreign.c={lib}:PATH"));
+                let at = mint_at("ForeignLoad");
+                match fc["lib"].as_str() {
+                    Some(lib) => push(&mut out, format!("foreign.c={lib}:PATH"), Ask::ForeignLib(lib.to_string()), at),
+                    None => push(&mut out, "foreign.c=LOGICAL:PATH".into(), Ask::Hidden { method: "foreign" }, at),
+                }
             }
         }
     }
@@ -3835,7 +4064,7 @@ fn required_grants(
     // Claiming it as required would be an overstatement, and `attributes_cli.rs`'s twin test catches
     // exactly that. The request is already reported, as `native_emission.requested`, which is where
     // a caller reads it and where the grant grammar stays discoverable from the report.
-    out
+    (out, unsupported)
 }
 
 /// Stamp `requested_scopes` (per capability and as a top-level map) and `required_grants` onto an
@@ -3856,19 +4085,19 @@ pub(crate) fn required_grants_of(file: &str, checked: &delulu_check::Checked) ->
 }
 
 fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
-    let (requested, hidden) = requested_scopes(modules);
+    let walk = requested_scopes(modules);
     if let Some(caps) = report["capabilities"].as_array_mut() {
         for c in caps.iter_mut() {
             let kind = c["kind"].as_str().unwrap_or("").to_string();
-            let v = requested.get(&kind).cloned().unwrap_or_default();
+            let v = walk.found.get(&kind).cloned().unwrap_or_default();
             if let Some(obj) = c.as_object_mut() {
                 obj.insert("requested_scopes".into(), json!(v));
             }
         }
     }
-    let grants = required_grants(report, &requested, &hidden);
+    let grants = required_grants(report, &walk);
     if let Some(obj) = report.as_object_mut() {
-        obj.insert("requested_scopes".into(), json!(requested));
+        obj.insert("requested_scopes".into(), json!(walk.found));
         obj.insert("required_grants".into(), json!(grants));
     }
 }

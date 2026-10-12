@@ -336,7 +336,36 @@ fn defs() -> Value {
                 ("isolation", t("string")),
                 ("native_emission", obj(&[("requested", t("boolean")), ("via", t("string"))], &[])),
                 ("plugins", arr(r("plugin_load"))),
+                // P9-01: present only when `--within` asked the question.
+                ("within", r("within")),
             ],
+        ),
+        "within_finding": obj(
+            &[
+                ("grant", t("string")),
+                ("dimension", t("string")),
+                ("result", en(&["exceeds", "unsupported", "inconclusive"])),
+                ("reason", t("string")),
+                ("at", json!({ "anyOf": [
+                    obj(&[("file", t("string")), ("line", t("integer")), ("column", t("integer"))], &[]),
+                    t("null"),
+                ]})),
+            ],
+            &[],
+        ),
+        "within": obj(
+            &[
+                ("result", en(&["within", "exceeds", "unsupported", "inconclusive"])),
+                ("boundary", str_list.clone()),
+                ("counterexample", json!({ "anyOf": [r("within_finding"), t("null")] })),
+                ("findings", arr(r("within_finding"))),
+                ("coverage", json!({
+                    "type": "object",
+                    "additionalProperties": en(&["within", "exceeds", "unsupported", "inconclusive", "not-requested"]),
+                })),
+                ("requests", t("integer")),
+            ],
+            &[],
         ),
         "atlas_node": obj(
             &[("id", t("string")), ("kind", en(&node_kinds)), ("name", t("string"))],
