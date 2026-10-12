@@ -5213,3 +5213,6 @@ Reproduced with four CPUs busy: 1 of 5 red, the same message. The baseline is no
 the same load. **The full suite alone at `0df4302`:** 2,223 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree
 unmoved. `3a91ab7`'s push run CI `38281286403` — success. The lesson (§11.5): a witness whose subject races the program is
 timing-shaped even when it measures no time.
+
+**`e2ea6a5`'s push runs** (RW 4.60, the race fix and their records): CI `38284697941` — success on every job, `ocsf` `38284697894`
+success. Every code change of routine run 19 is on `master` and read green there.

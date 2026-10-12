@@ -56,7 +56,7 @@ running summary.
   pinnable (E-04), the OpenShell export checked by OpenShell's own prover and run inside a real OpenShell sandbox on the
   runners (E-05), the audit chain exported as OCSF 1.8.0 (E-06). **P8** (safe autonomy): **P8-01** a control program in a
   guest, **P8-02** a signed Verified driver as a `.dpx` (RW 4.7 closed), **P8-03** the simulator as a device process (`delulu
-  device sim`) — complete; **P8-04** the out-of-band monitor — in progress: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
+  device sim`) — complete; **P8-04** the out-of-band monitor — complete: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
   fixed), step 3 (b) `delulu monitor watch`, step 4's four rules (`envelope`, `denies=N/MS`, `special-use`, and `break-glass` —
   run 19), step 5 a dead monitor quarantines — **every step built by run 19 (D-V2-116): P8 complete as far as software
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — designed; P9-01's build order read against the code by run 19
@@ -68,8 +68,8 @@ running summary.
   AUDIT-FIFO-1, AUDIT-TEXT-1, SCOPE-HIDDEN-1, REPLY-HOLD-1, ANSWER-HOLD-1, RUNDIR-PERM-1, SILENT-QUEUE-1, a macOS guest's
   missing memory ceiling, AUDIT-REFUSAL-1, AUDIT-SEQ-1, AUDIT-DAY-1, HTTP-SCHEME-1, ACTOR-CUSTODY-1 (HIGH),
   PLUGIN-CUSTODY-1/PLUGIN-DAEMON-1, CLOSURE-SCOPE-1 (HIGH), RW 4.56, RW 4.58, FIRST-BEAT-1 (RW 4.59), the red team's F1/F2
-  and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record) — and
-  whatever the entries after run 19 add.
+  and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record), RW 4.60 (D-V2-117 — a
+  report silent about devices that never started) — and whatever the entries after run 19 add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
@@ -83,7 +83,7 @@ running summary.
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
 **P9** (P9-01 to P9-05, next), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
-waits on the chain), RW 4.58's O2/O4, RW 4.49, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
+waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 
@@ -2392,3 +2392,18 @@ directory, or have the laptop session read §11.
 - Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) **P9-01** from `V2_P9_DESIGN.md` (step 1, spans
   in the walk; step 2, the verdict); (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. **For the owner:** D-V2-115
   to D-V2-117, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-12 — routine run 19 (last): `e2ea6a5`'s push runs read green; the closing entry corrected
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through `claude/zealous-keller-kkuv5g`)   Pull request: none   Merged: n/a
+- Base: `e2ea6a5`
+- Commits: (1) this entry's commit — records only
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (the closing entry: P8-04 complete, RW 4.60 among the closed, a duplicate RW
+  4.49 removed; this entry), `docs/DELULULANG_V2/V2_LOG.md` (the push runs), `docs/survey/*`. Deleted: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `e2ea6a5`'s push runs — CI `38284697941` success on every job, `ocsf` `38284697894` success. Every code change of run 19
+  (`96b7b87`, `0d3f514`, `11b48cc`, `0df4302`) is on `master` and its push run read green.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: as the entry before this one — (1) read THIS commit's push run; (2) **P9-01** from `V2_P9_DESIGN.md`; (3) RW 4.57,
+  RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. Keep the closing entry current.
