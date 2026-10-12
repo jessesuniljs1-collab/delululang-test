@@ -120,15 +120,34 @@ impl Broker {
     /// `holder.peer` (display/storage — NEVER a decision input; criterion 9 stays green). Emits one
     /// `"redeem"` record (allow, or deny with `decision: "deny"` for a refused redemption).
     pub fn redeem(&mut self, token: &Token, peer_desc: impl Into<String>) -> Result<GrantId, Denial> {
+        self.redeem_undoable(token, peer_desc).map(|(node, _)| node)
+    }
+
+    /// [`Broker::redeem`], with what it changed — for the daemon to put back if the record is lost (RW 4.61's rest).
+    pub fn redeem_undoable(
+        &mut self,
+        token: &Token,
+        peer_desc: impl Into<String>,
+    ) -> Result<(GrantId, Redemption), Denial> {
         let seq = self.consume_seq();
         let peer_desc = peer_desc.into();
         let result = self.redeem_inner(token, &peer_desc);
         let (actor, decision) = match &result {
-            Ok(node) => (Some(node.as_str().to_string()), "allow"),
+            Ok((node, _)) => (Some(node.as_str().to_string()), "allow"),
             Err(_) => (None, "deny"),
         };
         self.record_op(seq, "redeem", actor, Some(peer_desc), None, decision, None);
         result
+    }
+
+    /// RW 4.61's rest (D-V2-115): a redemption whose record could not be written is undone — a single-use token unspent,
+    /// the node's holder as it was — so the holder may redeem again once the chain is free, and the chain never lacks the
+    /// moment authority passed to a holder. Only the daemon calls this, in the request that redeemed.
+    pub fn withdraw_unrecorded_redemption(&mut self, r: Redemption) {
+        if let Some(nonce) = &r.nonce {
+            self.unmark_redeemed(nonce);
+        }
+        self.set_holder_peer(&r.node, r.peer);
     }
 
     /// Rotate the broker key to a SPECIFIC value and emit the `"rotate_key"` audit record. Split out
@@ -173,7 +192,7 @@ impl Broker {
         Token(format!("{TOKEN_PREFIX}{}.{}", to_hex(&payload_bytes), mac.to_hex()))
     }
 
-    fn redeem_inner(&mut self, token: &Token, peer_desc: &str) -> Result<GrantId, Denial> {
+    fn redeem_inner(&mut self, token: &Token, peer_desc: &str) -> Result<(GrantId, Redemption), Denial> {
         let key = self.ensure_key();
         // Parse the versioned envelope.
         let Some((payload_bytes, mac_bytes)) = parse_token(token.as_str()) else {
@@ -242,6 +261,7 @@ impl Broker {
             });
         }
         // Single-redemption (DL1407) unless minted `multi`.
+        let mut spent = None;
         if !claims.multi {
             if self.is_redeemed(&claims.nonce) {
                 return Err(Denial::TokenInvalid {
@@ -249,11 +269,22 @@ impl Broker {
                 });
             }
             self.mark_redeemed(&claims.nonce);
+            spent = Some(claims.nonce.clone());
         }
         // Bind the node to the redeeming peer (storage/display only).
+        let peer = self.inspect(&node).map(|n| n.holder.peer.clone()).unwrap_or_default();
         self.set_holder_peer(&node, peer_desc);
-        Ok(node)
+        Ok((node.clone(), Redemption { node, nonce: spent, peer }))
     }
+}
+
+/// What a redemption changed — the node, the single-use nonce it spent, the holder's peer before it — for the daemon to put
+/// back when the redemption's record was lost (RW 4.61's rest, D-V2-115).
+#[derive(Debug)]
+pub struct Redemption {
+    node: GrantId,
+    nonce: Option<String>,
+    peer: String,
 }
 
 /// The authenticated token claims (only read after the MAC verifies).

@@ -45,6 +45,11 @@ pub(crate) struct Deadman {
     beats: u64,
 }
 
+/// A dead-man as it stood before a disarm — what the daemon puts back when the disarm's record was lost (RW 4.61's rest,
+/// D-V2-115): from a disarm on, the runs below outlive their monitor, and the chain must say when that began.
+#[derive(Debug)]
+pub struct Disarmed(GrantId, Deadman);
+
 /// A dead-man that fired: the node it revoked, and what it had waited for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fired {
@@ -149,6 +154,13 @@ impl Broker {
         Ok((seq, key))
     }
 
+    /// RW 4.61's rest (D-V2-115): an arming whose record could not be written is withdrawn — its answer would name a seq
+    /// that is no record of it, and a firing would cite that seq as its arming. Only the daemon calls this, in the request
+    /// that armed it.
+    pub fn withdraw_unrecorded_arming(&mut self, node: &GrantId) {
+        self.deadmen.remove(node);
+    }
+
     /// A beat: the dead-man on `node` waits another full period from `now`. Not recorded — a monitor
     /// beats every poll, and the chain would fill with them; its arming and its end are what the chain
     /// keeps. A beat after the deadline fires the dead-man instead (`Fired`).
@@ -177,6 +189,16 @@ impl Broker {
     /// the runs below outlive their monitor, and the chain says when that began. Past its deadline the
     /// dead-man has already lapsed, and fires instead.
     pub fn disarm_deadman(&mut self, node: &GrantId, key: &str, now: Instant) -> Result<u64, DeadmanRefusal> {
+        self.disarm_deadman_undoable(node, key, now).map(|(seq, _)| seq)
+    }
+
+    /// [`Broker::disarm_deadman`], with the dead-man as it stood — for the daemon to put back if the record is lost.
+    pub fn disarm_deadman_undoable(
+        &mut self,
+        node: &GrantId,
+        key: &str,
+        now: Instant,
+    ) -> Result<(u64, Disarmed), DeadmanRefusal> {
         let Some(d) = self.deadmen.get(node) else {
             self.deadman_node_live(node)?;
             return Err(DeadmanRefusal::NotArmed);
@@ -202,7 +224,14 @@ impl Broker {
             "allow",
             None,
         );
-        Ok(seq)
+        Ok((seq, Disarmed(node.clone(), d)))
+    }
+
+    /// RW 4.61's rest (D-V2-115): a disarm whose record could not be written is undone — the dead-man armed again exactly
+    /// as it stood, its deadline unmoved. Only the daemon calls this, in the request that disarmed it.
+    pub fn rearm_unrecorded_disarm(&mut self, disarmed: Disarmed) {
+        let Disarmed(node, d) = disarmed;
+        self.deadmen.insert(node, d);
     }
 
     /// The nearest deadline of any armed dead-man — how long the daemon may wait for its next request.

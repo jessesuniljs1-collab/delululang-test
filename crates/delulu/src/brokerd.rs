@@ -386,6 +386,34 @@ fn unrecorded_mint(broker: &mut Broker, failed: &Rc<Cell<bool>>, id: &GrantId) -
     })
 }
 
+/// RW 4.61's rest (D-V2-115): the answer to an operation whose record was lost and which was UNDONE — a downgrade the
+/// chain cannot account for (a policy loosened, an approval, a disarm, a redemption, a renewal), or a step whose answer
+/// would be a claim about the chain (a request, an arming, a `Secret.map`). Refused; `left` says what stands.
+fn unrecorded_undone(what: &str, left: &str) -> Response {
+    Response::Error {
+        code: "DL1401".to_string(),
+        message: format!(
+            "broker could not append the audit record of {what} (the chain's append lock was not free within its wait) — \
+             refused, and {left} (fail closed)"
+        ),
+        requires_human: true,
+    }
+}
+
+/// RW 4.61's rest (D-V2-115): the answer to an operation whose record was lost and which STAYS in force — the safe
+/// direction (a seal set, a denial, a permit revoked, the bypass off, a key rotated). Never refused for want of its record
+/// (D-V2-109's rule for a revocation), never claimed recorded; `state` says what is in force.
+fn unrecorded_in_force(what: &str, state: &str) -> Response {
+    Response::Error {
+        code: "DL1401".to_string(),
+        message: format!(
+            "broker could not append the audit record of {what} (the chain's append lock was not free within its wait) — \
+             {state}, but the chain lacks this record"
+        ),
+        requires_human: false,
+    }
+}
+
 /// P8-04 step 5: fire every dead-man past its deadline — each revokes its node as itself, the cause in the
 /// record — then free the chain, as a request does (RW 4.48), and say so in `broker.log`.
 fn fire_deadmen(
@@ -521,7 +549,15 @@ fn handle(
             getrandom::fill(&mut new_key).expect("OS randomness (getrandom) unavailable");
             match write_broker_key(&key_path(state_dir), &new_key) {
                 Ok(()) => {
+                    failed.set(false);
                     broker.rotate_key_to(new_key);
+                    // RW 4.61's rest: a rotation only kills tokens — the safe direction stays in force and says so.
+                    if failed.get() {
+                        return (
+                            unrecorded_in_force("a key rotation", "the key IS rotated (every token minted before it is dead)"),
+                            false,
+                        );
+                    }
                     (Response::Ok, false)
                 }
                 Err(e) => (
@@ -585,8 +621,14 @@ fn handle(
         }
         ReqBody::Redeem { token, peer } => {
             let token = delulu_broker::Token::from_wire(token);
-            match broker.redeem(&token, peer) {
-                Ok(id) => (Response::Redeemed { node: id.to_string() }, false),
+            failed.set(false);
+            match broker.redeem_undoable(&token, peer) {
+                // RW 4.61's rest (D-V2-115): the moment authority passes to a holder is not one the chain may lack.
+                Ok((_, undo)) if failed.get() => {
+                    broker.withdraw_unrecorded_redemption(undo);
+                    (unrecorded_undone("a redemption", "the token left unspent and its node unbound"), false)
+                }
+                Ok((id, _)) => (Response::Redeemed { node: id.to_string() }, false),
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -634,8 +676,14 @@ fn handle(
             Ok(r) => {
                 let anchors: std::collections::BTreeSet<String> = anchors.iter().cloned().collect();
                 let cert = r.certificate.clone();
-                match broker.renew(&r, &anchors, &crate::cert_crypto::Ed25519Verifier) {
-                    Ok(ttl_millis) => {
+                failed.set(false);
+                match broker.renew_undoable(&r, &anchors, &crate::cert_crypto::Ed25519Verifier) {
+                    // RW 4.61's rest (D-V2-115): a receipt widens the one revocation bound that survives a partition.
+                    Ok((_, undo)) if failed.get() => {
+                        broker.withdraw_unrecorded_renewal(undo);
+                        (unrecorded_undone("a renewal", "the adopted node's deadline left where it was"), false)
+                    }
+                    Ok((ttl_millis, _)) => {
                         let node = broker
                             .adopted_node_public(&cert)
                             .map(|id| id.to_string())
@@ -679,7 +727,14 @@ fn handle(
         ReqBody::ArmDeadman { node, period_ms } => {
             let node = GrantId::from_trusted(node);
             let period = std::time::Duration::from_millis(period_ms);
+            failed.set(false);
             match broker.arm_deadman(&node, period, std::time::Instant::now()) {
+                // RW 4.61's rest (D-V2-115, the red team's F5b): `armed at seq N` named no record. Withdrawn and refused: the
+                // monitor stops before its watch begins, and nothing that was in force is lost.
+                Ok(_) if failed.get() => {
+                    broker.withdraw_unrecorded_arming(&node);
+                    (unrecorded_undone("the dead-man's arming", "the dead-man not armed"), false)
+                }
                 Ok((seq, key)) => (Response::DeadmanArmed { seq, period_ms, key }, false),
                 Err(r) => (deadman_refused(&node, &r), false),
             }
@@ -698,8 +753,20 @@ fn handle(
         }
         ReqBody::DisarmDeadman { node, key } => {
             let node = GrantId::from_trusted(node);
-            match broker.disarm_deadman(&node, &key, std::time::Instant::now()) {
-                Ok(seq) => (Response::Recorded { seq }, false),
+            failed.set(false);
+            match broker.disarm_deadman_undoable(&node, &key, std::time::Instant::now()) {
+                // RW 4.61's rest (D-V2-115): from a disarm on the runs below outlive their monitor, and the chain must say when
+                // that began — undone, the dead-man armed as it stood.
+                Ok((_, undo)) if failed.get() => {
+                    broker.rearm_unrecorded_disarm(undo);
+                    let left = format!(
+                        "the dead-man stays armed — unless it is beaten or disarmed within its period it revokes `{}` and \
+                         every run under it",
+                        delulu_diag::terminal_line(node.as_str())
+                    );
+                    (unrecorded_undone("the dead-man's disarming", &left), false)
+                }
+                Ok((seq, _)) => (Response::Recorded { seq }, false),
                 Err(r) => {
                     if matches!(r, delulu_broker::DeadmanRefusal::Fired(_)) {
                         persist_adoption_revocations(broker, state_dir);
@@ -869,7 +936,14 @@ fn handle(
             let node = GrantId::from_trusted(node);
             // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
             secrets.refresh();
+            failed.set(false);
             match broker.secret_map(&node, &name, &op, arg.as_deref(), secrets) {
+                // RW 4.61's rest (D-V2-115): a synchronous-class use, refused as an expose is (invariant 26) — and its
+                // derivative, named by a counter, does not outlive the refusal.
+                Ok(new_name) if failed.get() => {
+                    secrets.remove_derived(&new_name);
+                    (unrecorded_undone("a `Secret.map`", "no derivative kept"), false)
+                }
                 Ok(new_name) => (Response::Mapped { name: new_name }, false),
                 Err(d) => (deny_response(&d), false),
             }
@@ -911,11 +985,16 @@ fn handle(
                     false,
                 );
             };
+            let before = broker.guard_policy_snapshot();
+            let what = format!(
+                "`guard policy set {}:{} {}`",
+                class.wire_name(),
+                delulu_diag::terminal_line(&pattern),
+                tier.wire_name()
+            );
+            failed.set(false);
             match broker.guard_policy_set(owner.as_deref(), class, pattern, tier) {
-                Ok(()) => {
-                    persist_guard_policy(state_dir, &broker.guard_policy_snapshot());
-                    (Response::Ok, false)
-                }
+                Ok(()) => (guard_policy_edited(broker, failed, state_dir, before, &what), false),
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -926,11 +1005,11 @@ fn handle(
                     false,
                 );
             };
+            let before = broker.guard_policy_snapshot();
+            let what = format!("`guard policy unset {}:{}`", class.wire_name(), delulu_diag::terminal_line(&pattern));
+            failed.set(false);
             match broker.guard_policy_unset(owner.as_deref(), class, &pattern) {
-                Ok(_removed) => {
-                    persist_guard_policy(state_dir, &broker.guard_policy_snapshot());
-                    (Response::Ok, false)
-                }
+                Ok(_removed) => (guard_policy_edited(broker, failed, state_dir, before, &what), false),
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -941,28 +1020,10 @@ fn handle(
                 // turned back off, unrecorded (the chain that refused the first record would refuse a second), and refused.
                 Ok(()) if failed.get() && on => {
                     broker.withdraw_unrecorded_bypass();
-                    (
-                        Response::Error {
-                            code: "DL1401".to_string(),
-                            message: "broker could not append the audit record of `guard bypass on` (the chain's append lock was \
-                                      not free within its wait) — refused, and the guard left in force (fail closed)"
-                                .to_string(),
-                            requires_human: true,
-                        },
-                        false,
-                    )
+                    (unrecorded_undone("`guard bypass on`", "the guard left in force"), false)
                 }
                 // Turned OFF it stays off — the safe direction — and says the chain lacks the record.
-                Ok(()) if failed.get() => (
-                    Response::Error {
-                        code: "DL1401".to_string(),
-                        message: "broker could not append the audit record of `guard bypass off` (the chain's append lock was \
-                                  not free within its wait) — the guard bypass IS off, but the chain lacks this record"
-                            .to_string(),
-                        requires_human: false,
-                    },
-                    false,
-                ),
+                Ok(()) if failed.get() => (unrecorded_in_force("`guard bypass off`", "the guard bypass IS off"), false),
                 Ok(()) => (Response::Ok, false),
                 Err(d) => (deny_response(&d), false),
             }
@@ -975,7 +1036,13 @@ fn handle(
                 );
             };
             let node = GrantId::from_trusted(node);
+            failed.set(false);
             match broker.guard_request(&node, subset, why) {
+                // RW 4.61's rest (D-V2-115): an approval of it would approve something the chain never saw asked.
+                Ok((id, _)) if failed.get() => {
+                    broker.withdraw_unrecorded_request(&id);
+                    (unrecorded_undone("the guard request", "nothing queued — ask again once the chain is free"), false)
+                }
                 Ok((id, deduped)) => (Response::GuardRequested { id, deduped }, false),
                 // A sealed subset is refused DL1413 at request time (F-CUSTODY-1), surfaced through
                 // the same `deny_response` path as `guard_approve`'s refusals.
@@ -987,7 +1054,14 @@ fn handle(
             (Response::GuardPendingList { requests }, false)
         }
         ReqBody::GuardApprove { owner, id, ttl_millis, uses, comment } => {
+            failed.set(false);
             match broker.guard_approve(owner.as_deref(), &id, ttl_millis, uses, comment) {
+                // RW 4.61's rest (D-V2-115): a permit lifts a gate — a downgrade the chain cannot account for.
+                Ok(Some(permit_id)) if failed.get() => {
+                    broker.withdraw_unrecorded_approval(&id, &permit_id);
+                    let what = format!("the approval of `{}`", delulu_diag::terminal_line(&id));
+                    (unrecorded_undone(&what, "no permit minted — the request is pending again"), false)
+                }
                 Ok(Some(permit_id)) => (Response::GuardApproved { permit_id }, false),
                 Ok(None) => (
                     Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
@@ -996,27 +1070,66 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
-        ReqBody::GuardDeny { owner, id, comment } => match broker.guard_deny(owner.as_deref(), &id, comment) {
-            Ok(true) => (Response::Ok, false),
-            Ok(false) => (
-                Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
-                false,
-            ),
-            Err(d) => (deny_response(&d), false),
-        },
+        ReqBody::GuardDeny { owner, id, comment } => {
+            failed.set(false);
+            match broker.guard_deny(owner.as_deref(), &id, comment) {
+                // RW 4.61's rest (D-V2-115): a denial is the safe direction — in force, and said.
+                Ok(true) if failed.get() => {
+                    let what = format!("the denial of `{}`", delulu_diag::terminal_line(&id));
+                    (unrecorded_in_force(&what, "the request IS denied"), false)
+                }
+                Ok(true) => (Response::Ok, false),
+                Ok(false) => (
+                    Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
+                    false,
+                ),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::GuardPermits => {
             let permits = broker.guard_permits().iter().map(guard_permit_wire).collect();
             (Response::GuardPermitList { permits }, false)
         }
-        ReqBody::GuardPermitRevoke { owner, id } => match broker.guard_permit_revoke(owner.as_deref(), &id) {
-            Ok(true) => (Response::Ok, false),
-            Ok(false) => (
-                Response::Error { code: "DL0904".to_string(), message: format!("no such permit `{id}`"), requires_human: false },
-                false,
-            ),
-            Err(d) => (deny_response(&d), false),
-        },
+        ReqBody::GuardPermitRevoke { owner, id } => {
+            failed.set(false);
+            match broker.guard_permit_revoke(owner.as_deref(), &id) {
+                Ok(true) if failed.get() => {
+                    let what = format!("the revocation of permit `{}`", delulu_diag::terminal_line(&id));
+                    (unrecorded_in_force(&what, "the permit IS revoked"), false)
+                }
+                Ok(true) => (Response::Ok, false),
+                Ok(false) => (
+                    Response::Error { code: "DL0904".to_string(), message: format!("no such permit `{id}`"), requires_human: false },
+                    false,
+                ),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
     }
+}
+
+/// A guard policy edit made (RW 4.61's rest, D-V2-115): recorded, it is persisted and answered `Ok`. Its record lost, an
+/// edit that LOOSENS the guard is undone — in memory, and never persisted — and refused; one that tightens it or changes
+/// nothing stays, is persisted, and says the chain lacks its record.
+fn guard_policy_edited(
+    broker: &mut Broker,
+    failed: &Rc<Cell<bool>>,
+    state_dir: &Path,
+    before: delulu_broker::GuardPolicy,
+    what: &str,
+) -> Response {
+    let after = broker.guard_policy_snapshot();
+    if !failed.get() {
+        persist_guard_policy(state_dir, &after);
+        return Response::Ok;
+    }
+    if before.loosened_by(&after) {
+        broker.withdraw_unrecorded_policy_edit(before);
+        return unrecorded_undone(what, "the guard left as it was");
+    }
+    let state = if before == after { "the policy is unchanged" } else { "the rule IS in force" };
+    persist_guard_policy(state_dir, &after);
+    unrecorded_in_force(what, state)
 }
 
 // ----- the guard owner-code / bypass handoff (parent → detached child, never on disk) ------------
@@ -2584,6 +2697,263 @@ mod tests {
             other => panic!("a bypass-off whose record was lost must say so: {other:?}"),
         }
         assert!(matches!(status_after_off, Ok(Response::GuardStatus { bypass: false, .. })), "{status_after_off:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115): an answer to an operation whose record was lost — DL1401, saying `says`.
+    fn assert_unrecorded(what: &str, answer: &io::Result<Response>, says: &str) {
+        match answer {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{what}: {message}");
+                assert!(message.contains("could not append"), "{what}: {message}");
+                assert!(message.contains(says), "{what} must say `{says}`: {message}");
+            }
+            other => panic!("{what} whose record was lost must not be answered as done and recorded: {other:?}"),
+        }
+    }
+
+    /// RW 4.61's rest (D-V2-115): a guard policy edit whose record was lost. One that LOOSENS the guard — a rule's tier
+    /// lowered, a rule removed — is undone, in memory and on disk, and refused; one that tightens it — a new rule, a tier
+    /// raised — stays in force and says the chain lacks its record.
+    #[test]
+    fn a_guard_policy_edit_whose_record_was_lost_is_undone_when_it_loosens() {
+        let state = temp_state("lostpolicy");
+        let handle = start_daemon(&state);
+        let set = |pattern: &str, tier: &str| ReqBody::GuardPolicySet {
+            owner: Some(TEST_OWNER.into()),
+            class: "net".into(),
+            pattern: pattern.into(),
+            tier: tier.into(),
+        };
+        // The baseline: with the chain free, two rules are set and recorded.
+        let sealed = request(&state, set("api.example.com", "sealed"));
+        let warned = request(&state, set("cache.example.com", "warn"));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        // The tightenings first: each persists the whole policy, so the loosenings, last, are the ones the disk shows.
+        let added = request(&state, set("db.example.com", "guarded"));
+        let raised = request(&state, set("cache.example.com", "guarded"));
+        let lowered = request(&state, set("api.example.com", "warn"));
+        let removed = request(
+            &state,
+            ReqBody::GuardPolicyUnset { owner: Some(TEST_OWNER.into()), class: "net".into(), pattern: "api.example.com".into() },
+        );
+        drop(held);
+        let status = request(&state, ReqBody::GuardStatus);
+        stop_daemon(&state, handle);
+        assert!(matches!(sealed, Ok(Response::Ok)) && matches!(warned, Ok(Response::Ok)), "the baseline: {sealed:?} {warned:?}");
+        assert_unrecorded("a lowered tier", &lowered, "refused");
+        assert_unrecorded("a removed rule", &removed, "refused");
+        assert_unrecorded("a new rule", &added, "IS in force");
+        assert_unrecorded("a raised tier", &raised, "IS in force");
+        let Ok(Response::GuardStatus { rules, .. }) = status else { panic!("status: {status:?}") };
+        let tier_of = |p: &str| rules.iter().find(|r| r.class == "net" && r.pattern == p).map(|r| r.tier.clone());
+        assert_eq!(tier_of("api.example.com").as_deref(), Some("sealed"), "the seal stands: {rules:?}");
+        assert_eq!(tier_of("db.example.com").as_deref(), Some("guarded"), "the new rule is in force: {rules:?}");
+        assert_eq!(tier_of("cache.example.com").as_deref(), Some("guarded"), "the raised tier is in force: {rules:?}");
+        // On disk the same — a restart neither brings back a loosening nor loses a tightening.
+        let (on_disk, poisoned) = load_guard_policy(&state);
+        assert!(!poisoned);
+        let disk_tier = |p: &str| {
+            on_disk.rules().iter().find(|r| r.class == delulu_broker::GuardClass::Net && r.pattern == p).map(|r| r.tier)
+        };
+        assert_eq!(disk_tier("api.example.com"), Some(delulu_broker::GuardTier::Sealed));
+        assert_eq!(disk_tier("db.example.com"), Some(delulu_broker::GuardTier::Guarded));
+        assert_eq!(disk_tier("cache.example.com"), Some(delulu_broker::GuardTier::Guarded));
+    }
+
+    /// RW 4.61's rest (D-V2-115): the approval flow under a lost record. An approval whose record was lost mints no permit
+    /// (the request is pending again) and a request is not queued — the chain would hold an approval of nothing it ever
+    /// saw asked; a denial and a permit's revocation stay in force and say the chain lacks their records.
+    #[test]
+    fn a_guard_approval_or_request_whose_record_was_lost_does_not_happen() {
+        let state = temp_state("lostapprove");
+        let handle = start_daemon(&state);
+        let (_r1, asked) = guarded_child(&state);
+        let (_r2, late) = guarded_child(&state);
+        let (_r3, permitted) = guarded_child(&state);
+        let ask = |node: &str| ReqBody::GuardRequest {
+            node: node.to_string(),
+            uses: vec!["declassify:*".into()],
+            why: "call home once".into(),
+        };
+        let approve = |id: &str| ReqBody::GuardApprove {
+            owner: Some(TEST_OWNER.into()),
+            id: id.to_string(),
+            ttl_millis: None,
+            uses: None,
+            comment: Some("ok".into()),
+        };
+        let use_of = |node: &str| ReqBody::Check { node: node.to_string(), op: "Declassify".into(), arg: Some("S".into()) };
+        // The baseline, with the chain free: two requests queued, one approved, its node's use passing.
+        let Ok(Response::GuardRequested { id: asked_id, .. }) = request(&state, ask(&asked)) else { panic!("ask") };
+        let Ok(Response::GuardRequested { id: permitted_id, .. }) = request(&state, ask(&permitted)) else { panic!("ask") };
+        let Ok(Response::GuardApproved { permit_id }) = request(&state, approve(&permitted_id)) else { panic!("approve") };
+        let baseline = request(&state, use_of(&permitted));
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let approved = request(&state, approve(&asked_id));
+        let late_ask = request(&state, ask(&late));
+        let denied = request(
+            &state,
+            ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: asked_id.clone(), comment: "no".into() },
+        );
+        let unpermitted = request(&state, ReqBody::GuardPermitRevoke { owner: Some(TEST_OWNER.into()), id: permit_id.clone() });
+        drop(held);
+        let pending = request(&state, ReqBody::GuardPending);
+        let permits = request(&state, ReqBody::GuardPermits);
+        let asked_use = request(&state, use_of(&asked));
+        let permitted_use = request(&state, use_of(&permitted));
+        stop_daemon(&state, handle);
+        assert!(matches!(baseline, Ok(Response::Decision { allow: true, .. })), "the baseline: an approved use passes: {baseline:?}");
+        assert_unrecorded("an approval", &approved, "refused");
+        assert_unrecorded("a request", &late_ask, "refused");
+        assert_unrecorded("a denial", &denied, "IS denied");
+        assert_unrecorded("a permit's revocation", &unpermitted, "IS revoked");
+        let Ok(Response::GuardPendingList { requests }) = pending else { panic!("pending: {pending:?}") };
+        assert!(requests.iter().all(|r| r.node != late), "no request is queued that the chain lacks: {requests:?}");
+        let asked_status = requests.iter().find(|r| r.id == asked_id).map(|r| r.status.clone());
+        assert_eq!(asked_status.as_deref(), Some("denied: no"), "the approval undone, the denial in force: {requests:?}");
+        assert!(matches!(&permits, Ok(Response::GuardPermitList { permits }) if permits.is_empty()), "no permit: {permits:?}");
+        assert!(matches!(asked_use, Ok(Response::Decision { allow: false, .. })), "{asked_use:?}");
+        assert!(matches!(permitted_use, Ok(Response::Decision { allow: false, .. })), "{permitted_use:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115), F5b: a dead-man's arming whose record was lost is not armed — `armed at seq N` named no
+    /// record; and a disarming whose record was lost leaves it armed, since from a disarm on the runs below outlive their
+    /// monitor and the chain must say when that began.
+    #[test]
+    fn a_dead_mans_arming_or_disarming_whose_record_was_lost_does_not_happen() {
+        let state = temp_state("lostarm");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let armed = request(&state, ReqBody::ArmDeadman { node: node.clone(), period_ms: 3_600_000 });
+        drop(held);
+        // The baseline, with the chain free: it arms — which it could not, were the first arming in force.
+        let key = arm(&state, &node, 3_600_000);
+        let held = log.take_lock().expect("the test holds the chain again");
+        let disarmed = request(&state, ReqBody::DisarmDeadman { node: node.clone(), key: key.clone() });
+        drop(held);
+        let beat = request(&state, ReqBody::Beat { node: node.clone(), key });
+        stop_daemon(&state, handle);
+        assert_unrecorded("an arming", &armed, "not armed");
+        assert_unrecorded("a disarming", &disarmed, "stays armed");
+        assert!(matches!(beat, Ok(Response::Ok)), "still armed, it takes a beat: {beat:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115): a redemption whose record was lost neither binds the node nor spends a single-use token;
+    /// the same token redeems once the chain is free.
+    #[test]
+    fn a_redemption_whose_record_was_lost_neither_binds_nor_spends_its_token() {
+        let state = temp_state("lostredeem");
+        let handle = start_daemon(&state);
+        let root = issue(&state);
+        let child_spec = AuthoritySpec {
+            effects: vec!["Write".to_string()],
+            fs_write: vec!["./out".to_string()],
+            holder_kind: "delegate".to_string(),
+            holder_desc: "agent-1".to_string(),
+            ..Default::default()
+        };
+        let delegated = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: None });
+        let Ok(Response::Delegated { node: child, token }) = delegated else { panic!("delegate: {delegated:?}") };
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, ReqBody::Redeem { token: token.clone(), peer: "pid:held".into() });
+        drop(held);
+        let inspected = request(&state, ReqBody::Inspect { node: child.clone() });
+        let again = request(&state, ReqBody::Redeem { token, peer: "pid:free".into() });
+        stop_daemon(&state, handle);
+        assert_unrecorded("a redemption", &lost, "refused");
+        let Ok(Response::Inspected { node }) = inspected else { panic!("inspect: {inspected:?}") };
+        assert_ne!(node.holder_peer, "pid:held", "a refused redemption binds nothing");
+        assert!(matches!(&again, Ok(Response::Redeemed { node }) if node == &child), "the token is unspent: {again:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115): a contact receipt whose record was lost does not extend the adopted node's deadline.
+    #[test]
+    fn a_renewal_whose_record_was_lost_does_not_extend_the_deadline() {
+        let state = temp_state("lostrenew");
+        let handle = start_daemon(&state);
+        let ground = [7u8; 32];
+        let anchors = vec![crate::cert_crypto::public_key_hex(&ground)];
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        let mut c = delulu_broker::cert::Certificate {
+            alg: crate::cert_crypto::ALG_ED25519.to_string(),
+            issuer: crate::cert_crypto::public_key_hex(&ground),
+            subject: crate::cert_crypto::public_key_hex(&[9u8; 32]),
+            parent: delulu_broker::cert::ANCHOR.to_string(),
+            not_before: now - 60_000,
+            not_after: now + 3_600_000,
+            nonce: crate::cert_crypto::fresh_nonce(),
+            uplink_ttl_ms: Some(60_000),
+            authority: Authority::new([Effect::Write], delulu_broker::Scopes::default()),
+            sig: Vec::new(),
+        };
+        c.sig = crate::cert_crypto::sign(&ground, &c.signing_bytes());
+        let adopted = request(&state, ReqBody::Adopt { chain: vec![c.to_wire()], anchors: anchors.clone() });
+        let Ok(Response::Adopted { node, ttl_millis: Some(first), .. }) = adopted else { panic!("adopt: {adopted:?}") };
+        let mut r = delulu_broker::cert::Receipt {
+            alg: crate::cert_crypto::ALG_ED25519.to_string(),
+            issuer: crate::cert_crypto::public_key_hex(&ground),
+            certificate: c.fingerprint(),
+            not_after: now + 600_000,
+            nonce: crate::cert_crypto::fresh_nonce(),
+            sig: Vec::new(),
+        };
+        r.sig = crate::cert_crypto::sign(&ground, &r.signing_bytes());
+        let renew = || ReqBody::Renew { receipt: r.to_wire(), anchors: anchors.clone() };
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, renew());
+        drop(held);
+        let inspected = request(&state, ReqBody::Inspect { node: node.clone() });
+        let again = request(&state, renew());
+        stop_daemon(&state, handle);
+        assert_unrecorded("a renewal", &lost, "refused");
+        let Ok(Response::Inspected { node: info }) = inspected else { panic!("inspect: {inspected:?}") };
+        assert_eq!(info.ttl_millis, Some(first), "the deadline stands where adoption put it");
+        assert!(matches!(again, Ok(Response::Renewed { ttl_millis, .. }) if ttl_millis == now + 600_000), "{again:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115): a `Secret.map` whose record was lost is refused as an expose is (invariant 26), and its
+    /// derivative — named by a counter, so guessable — does not outlive the refusal.
+    #[test]
+    fn a_secret_map_whose_record_was_lost_leaves_no_derivative() {
+        let state = temp_state("lostmap");
+        SecretStore::load(state.join("secrets.json")).set("API_KEY", "hunter2").unwrap();
+        let handle = start_daemon(&state);
+        let resp = request(&state, ReqBody::Issue(spec(&["Write", "Declassify"]))).unwrap();
+        let Response::Issued { node } = resp else { panic!("issue: {resp:?}") };
+        let map = || ReqBody::SecretMap { node: node.clone(), name: "API_KEY".into(), op: "upper".into(), arg: None };
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, map());
+        drop(held);
+        let guessed = request(&state, ReqBody::Expose { node: node.clone(), name: "s_derived_00000000".into(), span: None });
+        let free = request(&state, map());
+        stop_daemon(&state, handle);
+        assert_unrecorded("a secret map", &lost, "refused");
+        assert!(matches!(guessed, Ok(Response::Error { .. })), "the lost map's derivative must not expose: {guessed:?}");
+        // The guess was the lost map's own name: the next derivative is the store's second.
+        assert!(matches!(&free, Ok(Response::Mapped { name }) if name == "s_derived_00000001"), "{free:?}");
+    }
+
+    /// RW 4.61's rest (D-V2-115): a key rotation whose record was lost stays in force — it only kills tokens — and says so.
+    #[test]
+    fn a_key_rotation_whose_record_was_lost_stays_in_force_and_says_so() {
+        let state = temp_state("lostrotate");
+        let handle = start_daemon(&state);
+        let before = std::fs::read(key_path(&state)).expect("broker.key exists after start");
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, ReqBody::RotateKey);
+        drop(held);
+        let after = std::fs::read(key_path(&state)).expect("broker.key exists after rotate");
+        stop_daemon(&state, handle);
+        assert_unrecorded("a key rotation", &lost, "IS rotated");
+        assert_ne!(before, after, "the rotation is in force");
     }
 
     fn declassify_spec(kind: &str) -> AuthoritySpec {

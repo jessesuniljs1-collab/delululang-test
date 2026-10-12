@@ -333,6 +333,11 @@ impl Broker {
         self.redeemed.insert(nonce.to_string());
     }
 
+    /// Unspend a nonce whose redemption was undone (RW 4.61's rest).
+    pub(crate) fn unmark_redeemed(&mut self, nonce: &str) {
+        self.redeemed.remove(nonce);
+    }
+
     /// The node a certificate chain was adopted as, if it was (RFC 0001 F3/F4). Scoped to the
     /// process lifetime on purpose — see [`Broker::adopt`] for why that is both sufficient and
     /// necessary.
@@ -410,6 +415,13 @@ impl Broker {
             }
         };
         Some(now)
+    }
+
+    /// Put a node's deadline back where it was (RW 4.61's rest: a renewal whose record was lost).
+    pub(crate) fn restore_ttl(&mut self, id: &GrantId, ttl_millis: Option<i64>) {
+        if let Some(n) = self.nodes.get_mut(id) {
+            n.ttl_millis = ttl_millis;
+        }
     }
 
     /// Bind a node's holder `peer` to the redeeming party (phase 5e). Storage/display ONLY — never a

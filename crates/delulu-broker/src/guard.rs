@@ -381,6 +381,15 @@ impl GuardPolicy {
         }
     }
 
+    /// RW 4.61's rest (D-V2-115): does `after` loosen this policy — a rule of this one gone, or its tier lowered? A rule
+    /// ADDED never loosens: every gate takes the strongest tier of the rules that match it. A rule removed or lowered may
+    /// leave another to hold the same gate; it still counts, which can only undo an edit that was harmless.
+    pub fn loosened_by(&self, after: &GuardPolicy) -> bool {
+        self.rules.iter().any(|r| {
+            after.rules.iter().find(|a| a.class == r.class && a.pattern == r.pattern).is_none_or(|a| a.tier < r.tier)
+        })
+    }
+
     /// Remove the rule for `class:pattern`. Returns whether one was removed.
     pub fn unset(&mut self, class: GuardClass, pattern: &str) -> bool {
         let before = self.rules.len();
@@ -1006,6 +1015,30 @@ impl Broker {
     pub fn withdraw_unrecorded_bypass(&mut self) {
         self.guard.bypass = false;
         self.bump_epoch();
+    }
+
+    /// RW 4.61's rest (D-V2-115): put back the policy an edit LOOSENED when the edit's record could not be written — the
+    /// guard as it was, with no record (the chain that refused the first would refuse a second). Only the daemon calls
+    /// this, in the request that made the edit, so no client saw the looser policy in between.
+    pub fn withdraw_unrecorded_policy_edit(&mut self, before: GuardPolicy) {
+        self.guard.policy = before;
+        self.bump_epoch();
+    }
+
+    /// RW 4.61's rest (D-V2-115): undo an approval whose record could not be written — its permit withdrawn and its request
+    /// pending again, so the chain never holds a permit it did not see approved. Only the daemon calls this, in the same
+    /// request.
+    pub fn withdraw_unrecorded_approval(&mut self, request: &str, permit: &str) {
+        self.guard.permits.retain(|p| p.id != permit);
+        if let Some(r) = self.guard.requests.iter_mut().find(|r| r.id == request) {
+            r.status = ReqStatus::Pending;
+        }
+    }
+
+    /// RW 4.61's rest (D-V2-115): take a request whose record could not be written off the queue — an approval of it would
+    /// be an approval of something the chain never saw asked, and its `why` with it. Its agent may ask again.
+    pub fn withdraw_unrecorded_request(&mut self, id: &str) {
+        self.guard.requests.retain(|r| r.id != id);
     }
 
     /// The current policy (for persistence after an edit).

@@ -654,6 +654,17 @@ impl crate::tree::Broker {
         anchors: &BTreeSet<String>,
         verifier: &dyn SignatureVerifier,
     ) -> Result<i64, Denial> {
+        self.renew_undoable(receipt, anchors, verifier).map(|(in_force, _)| in_force)
+    }
+
+    /// [`Broker::renew`], with the deadline it replaced — for the daemon to put back if the record is lost (RW 4.61's
+    /// rest, D-V2-115).
+    pub fn renew_undoable(
+        &mut self,
+        receipt: &Receipt,
+        anchors: &BTreeSet<String>,
+        verifier: &dyn SignatureVerifier,
+    ) -> Result<(i64, Renewal), Denial> {
         if !verifier.supports(&receipt.alg) {
             return Err(Denial::CertUnsupported {
                 detail: format!(
@@ -706,6 +717,7 @@ impl crate::tree::Broker {
             Some(w) => receipt.not_after.min(w),
             None => receipt.not_after,
         };
+        let before = self.inspect(&node).and_then(|n| n.ttl_millis);
         let in_force = self.extend_ttl(&node, deadline).ok_or(Denial::UnknownNode { node: node.clone() })?;
         let seq = self.consume_seq();
         self.record_op(
@@ -717,8 +729,22 @@ impl crate::tree::Broker {
             "allow",
             None,
         );
-        Ok(in_force)
+        Ok((in_force, Renewal { node, ttl_millis: before }))
     }
+
+    /// RW 4.61's rest (D-V2-115): a renewal whose record could not be written is undone — the deadline back where it was,
+    /// since a receipt extends the one revocation bound that survives a partition. Only the daemon calls this, in the
+    /// request that renewed.
+    pub fn withdraw_unrecorded_renewal(&mut self, r: Renewal) {
+        self.restore_ttl(&r.node, r.ttl_millis);
+    }
+}
+
+/// The deadline a renewal replaced (RW 4.61's rest, D-V2-115).
+#[derive(Debug)]
+pub struct Renewal {
+    node: crate::GrantId,
+    ttl_millis: Option<i64>,
 }
 
 fn to_hex(bytes: &[u8]) -> String {

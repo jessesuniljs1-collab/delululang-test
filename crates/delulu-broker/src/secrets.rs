@@ -132,6 +132,12 @@ impl SecretStore {
         name
     }
 
+    /// RW 4.61's rest (D-V2-115): drop a derivative whose `Secret.map` was refused for a lost record — its name comes from a
+    /// counter, so it is guessable, and it must not outlive the refusal. Returns whether it was held.
+    pub fn remove_derived(&self, name: &str) -> bool {
+        self.derived.borrow_mut().remove(name).is_some()
+    }
+
     fn persist(&self) -> std::io::Result<()> {
         let Some(path) = &self.path else { return Ok(()) };
         if let Some(parent) = path.parent() {
