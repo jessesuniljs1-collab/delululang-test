@@ -91,7 +91,8 @@ the assistant's memory — which now also travels file by file in
   until 2026-10-16); RW 4.61 closed — twelve daemon operations whose record was lost, four of them beyond the red team's list: a
   loosening undone, a claim withdrawn, a tightening in force and said (D-V2-115); and P8-04's `break-glass` rule — a lease run
   records its break-glass use on its own node, and `monitor watch --rule break-glass` fires on it (D-V2-116): every step of
-  P8-04 is built, and **P8 is complete as far as software reaches** once its push run is read (residuals named in D-V2-116).
+  P8-04 is built, and **P8 is complete as far as software reaches** — `9000c57`'s push run `38278927092` read green (residuals
+  named in D-V2-116); P9-01's build order read against the code (`docs/DELULULANG_V2/V2_P9_DESIGN.md`).
   **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6) and RW 4.60.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a

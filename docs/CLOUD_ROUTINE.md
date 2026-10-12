@@ -251,6 +251,7 @@ edits before it already written — a 12-space anchor that was a substring of a 
 Collect the edits, assert each anchor exactly once against the files as they are, then write. **A mutant's own `test` command is
 part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
 subset's reason — read what a per-mutant command runs.
+**Enumerate a finding's class from its mechanism before fixing it** (run 19, RW 4.61: the red team named eight daemon handlers; `grep record_op` and reading each call against the handler that reaches it found four more). **A measurement over a corpus carries a control that must come out non-empty** (run 19: a wrong JSON path read all 23 corpus programs as pure; `scripts/authority-corpus.py` fails such a read). **A disk check reads the LAST write**: order a witness so the edit it is about is the last to persist (run 19: tightenings persisted after the loosenings would have rewritten the disk, and M244 would have lived).
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

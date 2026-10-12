@@ -5168,3 +5168,29 @@ MCP gates green. **Read on the runners at `0d3f514`** over `bin:delulu`, `monito
 
 **P8-04's build order is complete** — steps 1 to 7, the four rules of `V2_OPENSHELL_STUDY.md` §4.7 among them — and with it P8 as
 far as software reaches (D-V2-116 item 5, recorded once this push run is read; the residuals are named there).
+
+## 2026-10-12 — routine run 19 (closing): P8 complete as far as software reaches; P9-01's build order read against the code
+
+**`9000c57`'s push runs** (every code change of this run): CI `38278927092` — success on every job (`miri-slow` and `heavy-gates`
+skipped on a push), `ocsf` `38278927078` and `openshell` `38278927163` success. `actors_pingpong`: arm64 MEASURED 2.95x against a
+control of 4.12x (bar 1.50x); macOS NOT MEASURED (3 hardware threads); Windows and Ubuntu NOT MEASURED (busy or SMT). **P8 is
+complete as far as software reaches** (D-V2-116 item 5; `V2_PHASE_STATUS.md`'s row carries the commits and the runs).
+
+**P9-01, read against the code before it is built** (`docs/DELULULANG_V2/V2_P9_DESIGN.md`): the program's side exists without
+spans (`ScopeWalk` drops each call's `Span`); the boundary's side is the runtime's own (`Grants::add` → `authority_spec_from_grants`
+→ `spec_to_authority`, the conversion `run --grant` mints a daemon root with — read at `run_cmd.rs`); the lattice answers yes or no
+(`attenuation_check`'s `Err` is the intersection), so the verdict asks its per-dimension functions item by item. **The corpus,
+measured** (`scripts/authority-corpus.py`, new): 23 programs — 6 pure, 12 with a fully literal authority, 4 whose placeholders are
+grant DATA the program never requests (a secret's VALUE, a library's PATH, an actuator's DIM bounds — decidable by the name), 1
+with a scope the source COMPUTES (`10_actuate_errors`, `actuator=DEVICE`). The design question answered there: a hidden site is
+`exceeds` against a boundary that grants nothing of its kind, `within` against one that grants the kind unbounded, and otherwise
+`inconclusive`, named — never `within`. `unsupported` is empty on today's language (each of the thirteen `ResourceKind`s and
+secrets have a grant form), and stays for a kind added later, held by a test.
+
+**The first corpus read was vacuous** — a wrong JSON path read all 23 programs as pure, caught because programs that plainly print
+said "no grants". `authority-corpus.py` carries the control that makes that read fail (exit 1 when no program asks for anything);
+run against one pure program it fails as it should.
+
+**Loop engineering** (`CLOUD_ROUTINE.md`): the closing entry kept current by every run (steps 0 and 6); three lines in step 5 —
+enumerate a finding's class from its mechanism before fixing it; a corpus measurement carries a control that must come out
+non-empty; a disk check reads the LAST write, so the edit a witness is about persists last.

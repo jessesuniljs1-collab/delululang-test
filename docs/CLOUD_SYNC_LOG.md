@@ -46,7 +46,7 @@ ends. A run on or after 2026-10-16 that finds this section only updates its "as 
 and stops (`docs/CLOUD_ROUTINE.md` step 0). The dates may be extended by the owner; this section then stays the
 running summary.
 
-**As of:** `master` at routine run 19 (2026-10-12) — the newest entry under *Entries* names the last commit.
+**As of:** `master` at routine run 19's close (2026-10-12) — the newest entry under *Entries* names the last commit.
 
 **What the period built** (each item's entry below has its commits, files, evidence and CI runs):
 - **Phases.** **P7** (verification depth) and **PS-D** (external launchers and the attestation seam) completed by run 1;
@@ -59,7 +59,8 @@ running summary.
   device sim`) — complete; **P8-04** the out-of-band monitor — in progress: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
   fixed), step 3 (b) `delulu monitor watch`, step 4's four rules (`envelope`, `denies=N/MS`, `special-use`, and `break-glass` —
   run 19), step 5 a dead monitor quarantines — **every step built by run 19 (D-V2-116): P8 complete as far as software
-  reaches**. **P9** — designed, not started.
+  reaches**, `9000c57`'s push run `38278927092` read green. **P9** — designed; P9-01's build order read against the code by run 19
+  (`V2_P9_DESIGN.md`), not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -71,7 +72,7 @@ running summary.
   whatever the entries after run 19 add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
-  `scripts/suite.sh`, the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
+  `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
   `docs/CLOUD_ROUTINE.md` itself — rewritten by almost every run (its step 8).
 - **Decisions:** D-V2-56 to the newest `D-V2-nn` in `V2_DECISION_LOG.md` (run 1 took D-V2-46 to D-V2-51; the laptop's study
   took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **One entrenched edit:** `DELULU_CORE.md` v0.3
@@ -2336,3 +2337,32 @@ directory, or have the laptop session read §11.
 - Open / next, in order: (1) read this commit's push run, and record P8 complete in `V2_PHASE_STATUS.md` with it; (2) **P9** —
   P9-01 `authority --within` first (`V2_OPENSHELL_STUDY.md` §4.8); (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's
   O2/O4, RW 4.49. **For the owner:** D-V2-115, D-V2-116 (and option (c), a revoke-only principal in the tree).
+
+### 2026-10-12 — routine run 19 (closing): P8 complete as far as software reaches; P9-01's build order read against the code; the loop's new lines
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef
+  this run)
+- Branch: `master` (through the harness branch `claude/zealous-keller-kkuv5g`, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `9000c57`
+- Commits: (1) this entry's commit — the records, the P9 design and a script
+- Files and folders: A `docs/DELULULANG_V2/V2_P9_DESIGN.md` (P9-01's build order read against the code),
+  `scripts/authority-corpus.py` (the corpus's required grants, classified, with a control); M `docs/REPOSITORY_STRUCTURE.md`
+  (both listed), `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (P8 complete; P9's row), `docs/DELULULANG_V2/V2_LOG.md`, `HANDOFF.md`
+  (where things stand), `docs/CLOUD_ROUTINE.md` (step 5: three lines), `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry),
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `9000c57`'s push runs — CI `38278927092` success on every job, `ocsf` `38278927078`, `openshell` `38278927163` success
+  (`actors_pingpong`: arm64 MEASURED 2.95x, control 4.12x; the others NOT MEASURED, as every run). `scripts/authority-corpus.py`
+  run over the corpus (23 programs: 6 pure, 12 literal, 4 grant data, 1 computed — exit 0) and against one pure program (its
+  control fails, exit 1). The document gates and the Survey's tests after the records.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 (this run's lesson, in the earlier entry); nothing new here.
+- **The run in one paragraph:** CI green at the start (push, both nightlies); the cloud period's closing entry begun four days
+  early and kept current; RW 4.61 closed — twelve daemon operations that answered success for a lost record, four beyond the red
+  team's list (D-V2-115); P8-04's `break-glass` rule and step 7's last witness (D-V2-116) — **P8 complete as far as software
+  reaches**, its push run read green; P9-01's build order read against the code, the corpus measured.
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) **P9-01** — build step 1 (spans in the
+  walk) and step 2 (the verdict as a pure function) from `V2_P9_DESIGN.md`, then the surface and the corpus witnesses; take the
+  hidden-site rule as a `D-V2-nn` when built; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's O2/O4, RW 4.49; (4) the
+  Sunday sweep (2026-10-18 if the period is extended). **For the owner:** D-V2-115, D-V2-116, option (c). **Keep the closing
+  entry current; from 2026-10-16 a run only refreshes it and stops.**

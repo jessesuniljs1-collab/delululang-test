@@ -289,6 +289,8 @@ DeluluLang/
 │   │                               #   warnings, named lines — routine run 12's loop engineering
 │   ├── suite.sh                    # the whole suite the routine's way (alone, -j 4), and TREE-MOVED
 │   │                               #   when the tree changed under it — routine run 13's loop engineering
+│   ├── authority-corpus.py         # what every corpus program asks for (pure, literal, grant data, computed),
+│   │                               #   with a control that fails a vacuous read — routine run 19, for P9-01
 │   ├── mutants.py                  # a mutant set from a JSON spec against one test command: a unique
 │   │                               #   anchor, BUILD-ERROR told from RED, each file restored with a NEW
 │   │                               #   mtime, and a CONTROL run that must be green — routine run 15
@@ -740,6 +742,8 @@ material, this is the execution:
 - `V2_P8_DESIGN.md` — P8, safe autonomy as far as software reaches: the slices (a control program in a
   guest; the Verified-class adapter as a `.dpx`; a reference transport; an out-of-band monitor), their
   witnesses, what stays out.
+- `V2_P9_DESIGN.md` — P9, authority at the boundary: each slice's build order read against the code before it
+  is built (P9-01 `authority --within` first, with the corpus measured and its design question answered).
 - `V2_OPENSHELL_STUDY.md` — the study of NVIDIA OpenShell (2026-09-28): what was read, the two designs
   side by side, what DeluluLang takes (phases PS-E and P9, P8-04) and what it does not, and why.
 
