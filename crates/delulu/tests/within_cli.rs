@@ -434,7 +434,7 @@ fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
     };
     let o = run(&["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", out(&o));
-    let _guard = BrokerGuard(state.clone());
+    let guard = BrokerGuard(state.clone());
     let delegate = |extra: &[&str]| -> String {
         let mut args = vec!["grants", "delegate", "--ttl", "1h", "--json"];
         args.extend_from_slice(extra);
@@ -491,5 +491,9 @@ fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
     std::fs::write(cwd.join("g.grants"), "console\n").unwrap();
     let o = run(&["grants", "diff", "g.grants", &old]);
     assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    // The broker is stopped BEFORE its state directory goes: `broker stop` finds the daemon through that directory,
+    // and a guard dropped after the removal left the daemon running past the test (seen as an orphan `delulu` the
+    // runners killed at cleanup, and three in the VM).
+    drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
