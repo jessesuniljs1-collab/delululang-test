@@ -1817,6 +1817,11 @@ pub(crate) struct DevicePlan {
 }
 
 impl DevicePlan {
+    /// The devices this plan would start, by name — what a report says never started when a guest never asked (RW 4.60).
+    pub(crate) fn device_names(&self) -> Vec<String> {
+        self.actuators.iter().map(|a| a.device.clone()).chain(self.sensors.iter().cloned()).collect()
+    }
+
     /// The run's device broker, its watchdog started.
     pub(crate) fn start(self) -> std::sync::Arc<delulu_runtime::DeviceBroker> {
         std::sync::Arc::new(delulu_runtime::DeviceBroker::with_adapter(

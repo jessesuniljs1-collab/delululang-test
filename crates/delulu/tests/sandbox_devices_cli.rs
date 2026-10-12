@@ -731,3 +731,51 @@ fn a_clean_sandboxed_simulation_signs_off_and_a_faulted_one_does_not() {
     assert!(!cwd.join("bad.json").exists(), "a faulted simulation signs nothing off:\n{}", stderr(&faulted));
     assert!(stderr(&faulted).contains("sign-off withheld"), "{}", stderr(&faulted));
 }
+
+/// **RW 4.60 (D-V2-117): a report says when a guest's devices never started.** A guest that computes until its wall ceiling
+/// and never asks its host for anything never starts its devices (D-V2-110) — and its report used to carry no `devices` entry
+/// at all, so an operator could not tell "nothing happened to the arm" from "the arm was never started". Each planned device
+/// is now journaled `device.not-started`. The control: a guest that asks starts them, and its journal has no such entry.
+#[test]
+fn a_report_says_when_a_guests_devices_never_started() {
+    let (cwd, state) = scratch("nostart");
+    let mute = format!(
+        "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n\
+         fn fib(n: Int) -> Int {{\n  if n < 2 {{ n }} else {{ fib(n - 1) + fib(n - 2) }}\n}}\n\n\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20 let burned = fib(40)\n\
+         \x20 let c = root.console()\n\
+         \x20 let a = root.actuator(\"arm0/elbow\")\n\
+         \x20 c.println(say(a.command(Elbow {{ angle_deg: 10.0 }})))\n\
+         }}\n"
+    );
+    std::fs::write(cwd.join("mute.delulu"), mute).unwrap();
+    std::fs::write(cwd.join("arm.delulu"), arm_program()).unwrap();
+    let report = |file: &str, extra: &[&str]| -> serde_json::Value {
+        let rep = cwd.join(format!("{file}.report.json"));
+        let rep_s = rep.display().to_string();
+        let mut args = vec!["run", file, "--sandbox", "--grant", "console", "--broker-profile", "sim"];
+        args.extend_from_slice(extra);
+        args.extend_from_slice(&["--report-out", &rep_s, "--no-prompt"]);
+        let o = delulu_in(&cwd, &state, &args);
+        let text = std::fs::read_to_string(&rep).unwrap_or_else(|e| panic!("no report for {file} ({e}): {}", stderr(&o)));
+        serde_json::from_str(&text).expect("the report is JSON")
+    };
+    let not_started = |r: &serde_json::Value| -> Vec<String> {
+        r["devices"]
+            .as_array()
+            .map(|j| {
+                j.iter()
+                    .filter(|e| e["op"] == "device.not-started")
+                    .filter_map(|e| e["device"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mute_report = report("mute.delulu", &["--grant", SHORT_BEAT, "--limits", "wall=2"]);
+    assert_eq!(mute_report["outcome"]["ran"], true, "the baseline: the guest ran (and its wall ended it): {mute_report}");
+    assert_eq!(not_started(&mute_report), vec!["arm0/elbow".to_string()], "the report names the device that never started: {mute_report}");
+    let asked = report("arm.delulu", &["--grant", GRANT, "--grant", SENSOR]);
+    assert!(asked["devices"].is_array(), "the control's devices were started and journaled: {asked}");
+    assert!(not_started(&asked).is_empty(), "a guest that asked started its devices: {asked}");
+}

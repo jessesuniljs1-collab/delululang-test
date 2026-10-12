@@ -1132,11 +1132,14 @@ pub fn spawn_and_serve_with(
 pub(crate) struct GuestDevices {
     plan: std::cell::Cell<Option<crate::run_cmd::DevicePlan>>,
     started: std::cell::OnceCell<std::sync::Arc<delulu_runtime::DeviceBroker>>,
+    /// The planned devices, by name — kept when the plan goes to the host at the program's send (RW 4.60).
+    names: Vec<String>,
 }
 
 impl GuestDevices {
     fn new(plan: crate::run_cmd::DevicePlan) -> Self {
-        GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new() }
+        let names = plan.device_names();
+        GuestDevices { plan: std::cell::Cell::new(Some(plan)), started: std::cell::OnceCell::new(), names }
     }
 
     /// The plan, once: the host starts it at the guest's first request.
@@ -1152,6 +1155,12 @@ impl GuestDevices {
     /// The broker, if the guest ever asked its host for anything after its program.
     fn started(&self) -> Option<&std::sync::Arc<delulu_runtime::DeviceBroker>> {
         self.started.get()
+    }
+
+    /// RW 4.60 (D-V2-117): the planned devices, by name — what the report journals as never started, on its branch for a
+    /// guest that never asked (no broker was started; mutant M267 showed a second check here could not be reached).
+    fn planned(&self) -> &[String] {
+        &self.names
     }
 }
 
@@ -1627,6 +1636,26 @@ fn serve_under(
                 .map(|e| serde_json::json!({ "op": e.op, "device": e.device, "at_ms": e.at_ms, "detail": e.detail }))
                 .collect();
             report["devices"] = serde_json::json!(journal);
+        } else if let Some(d) = devices {
+            // RW 4.60 (D-V2-117): a guest that never asked its host for anything after its program never started its
+            // devices (D-V2-110), and the report said nothing about them — an operator could not tell "nothing happened to
+            // the arm" from "the arm was never started". Each planned device is journaled as never started.
+            let journal: Vec<serde_json::Value> = d
+                .planned()
+                .iter()
+                .map(|name| {
+                    serde_json::json!({
+                        "op": "device.not-started",
+                        "device": name,
+                        "at_ms": 0,
+                        "detail": "the guest made no request after its program, so the host never started this device: \
+                                   it was never commanded or read",
+                    })
+                })
+                .collect();
+            if !journal.is_empty() {
+                report["devices"] = serde_json::json!(journal);
+            }
         }
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
         if let Err(e) = std::fs::write(path, format!("{text}\n")) {

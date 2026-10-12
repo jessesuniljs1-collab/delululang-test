@@ -713,7 +713,8 @@ pub fn document(name: &str) -> Option<Value> {
                 &req,
                 &[
                     ("egress", r("egress")),
-                    // P8-01: a sandboxed run's devices' journal (it has no trace) — the host's watchdog's events.
+                    // P8-01: a sandboxed run's devices' journal (it has no trace) — the host's watchdog's events; and
+                    // `device.not-started` for each planned device a guest that never asked never started (RW 4.60).
                     ("devices", arr(r("device_event"))),
                     // A sandboxed run's custody: the broker's node when one decided every use.
                     ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
