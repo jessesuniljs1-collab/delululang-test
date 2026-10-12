@@ -96,8 +96,9 @@ the assistant's memory — which now also travels file by file in
   **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6); RW 4.60 closed the same run (D-V2-117).
   **Routine run 20 (2026-10-12): P9-01 built** — `delulu authority FILE --within BOUNDARY` answers within, exceeds, unsupported or
   inconclusive, each request named with the call that makes it, each decided by the runtime's own mint (D-V2-118); and
-  **SECRET-HIDDEN-1** closed beside it (a secret read under a computed name was missing from `--grants`). **Next: P9-02** (`grants
-  diff`), then P9-03 to P9-05.
+  **SECRET-HIDDEN-1** closed beside it (a secret read under a computed name was missing from `--grants`); and **P9-02's first
+  slice** — `delulu grants diff OLD NEW` names what a change of grant set adds, by category (D-V2-119). **Next:** lease nodes
+  under `grants diff`, then P9-03 to P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

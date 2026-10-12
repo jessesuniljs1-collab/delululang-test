@@ -370,6 +370,10 @@ checked against, never granted, and each request is decided exactly as `run --gr
 decide it at that call. A scope the source computes is `inconclusive` against a boundary that grants
 some of its kind — never `within`, because the answer is a claim about every run.
 
+`delulu grants diff <old.grants> <new.grants> --json` (P9-02) is the same question asked of a CHANGE of
+grant set: each finding names what NEW adds — `effect_expansion`, `scope_expansion`,
+`special_use_reach` or `device_reach_expansion` — with no severity grade; exit 1 when it adds anything.
+
 ## [agents.effects] The effect kinds
 
 There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`,

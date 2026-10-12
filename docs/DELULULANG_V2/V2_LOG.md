@@ -5265,3 +5265,23 @@ reads them). The document gates were re-run after the records were applied (belo
 
 **Not taken in this slice:** a package directory and a `.dwx` under `--within` (refused by name; each needs its own requirement
 list); P9-02 `grants diff`, which reads this verdict between two authorities, is next.
+
+## 2026-10-12 — routine run 20 (continued): P9-02's first slice — `delulu grants diff OLD NEW` between two grant files (D-V2-119)
+
+**`52b2572`'s push runs** (P9-01 and its records): CI `38306908871` success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38306907585` success; `actors_pingpong` — arm64 MEASURED 2.94x (control 4.12x, bar 1.50x), Windows and Ubuntu NOT MEASURED (busy or SMT), macOS NOT MEASURED (3 hardware threads).
+
+**P9-02, first slice (`4f0fdd3`, D-V2-119).** `delulu grants diff OLD NEW [--json]` — two grant files; each NEW line decided against
+OLD as P9-01 decides a request (the runtime's own mint), an actuator's envelope by the broker's device lattice and a compute
+device's by its bounds, adapter, formats, kernel names and waiver; four categories (`effect_expansion`, `scope_expansion`,
+`special_use_reach`, `device_reach_expansion`), no grade; exit 1 when the change adds anything. Offline; a lease node refused by name.
+Witnessed red first (no verb); the witness reads every grant form's own example from `toolchain --json`. Two expectations of the
+witness were wrong and were corrected against the product, not the reverse: `grants` verbs print their fields beside the envelope's
+own (not under `grants`), and the reverse of the widening pair is no narrowing (`./data` is wider than `./data/sub`) — the diff
+named it, and a pure-narrowing pair now carries the "adds nothing" case. **7a again:** `json_contract`'s broker-verbs sweep failed
+the new verb at once — every advertised `grants` verb must be driven with `--json` — and drives it now, as does the success table.
+Mutants M281–M289 red, the control green; clippy clean.
+
+**Read on the runners at `4f0fdd3`** over `within_cli` and `json_contract`: Windows `38308017895` (`json_contract` 13, `within_cli` 6), macOS `38308020954` (14, 6), arm64 `38308023699` (14, 6) — 0 failed, no compiler warning. **The full suite alone at `4f0fdd3`:** 2,236 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved.
+
+**Next:** lease nodes under `grants diff` (the broker's `Authority`, `budget_expansion` with it), then P9-03 — proposals whose
+approval reads this diff.

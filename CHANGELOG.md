@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu grants diff OLD NEW`, 2026-10-12
+
+- **New (P9-02): `delulu grants diff OLD NEW`** names what a change of grant set ADDS — OLD and NEW are files of grants, one a
+  line — by category and with no severity grade: `effect_expansion`, `scope_expansion`, `special_use_reach` and
+  `device_reach_expansion` (a device OLD does not name, or a wider envelope). It asks no broker. Exit 1 when the change adds
+  anything, 0 when it adds nothing; `--json` lists each finding with its grant and why (D-V2-119).
+
 ## Unreleased — `delulu authority FILE --within BOUNDARY`, 2026-10-12
 
 - **New (P9-01): `delulu authority FILE --within GRANT…` / `--within-file FILE`** asks whether everything a program asks for

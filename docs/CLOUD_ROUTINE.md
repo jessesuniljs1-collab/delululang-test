@@ -173,8 +173,8 @@ another OS, and then takes about seven minutes itself (run 5).
    The monitor is a node minted between the operator and the run, which can revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
-   D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (next — read it against the code first, as
-   `V2_P9_DESIGN.md` did for P9-01), P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (its first slice
+   **built**, run 20, D-V2-119 — two grant files; lease nodes next), P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**

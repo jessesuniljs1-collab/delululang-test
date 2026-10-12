@@ -2732,6 +2732,38 @@ refused and (c) stays the owner's.
 8. **Not taken here:** a package directory and a `.dwx` (each needs its own requirement list: a package's merged modules, an
    artifact's embedded manifest with no spans); P9-02's `grants diff`, which reads this verdict between two authorities.
 
+## D-V2-119 — P9-02, first slice: `delulu grants diff OLD NEW` between two grant files — what a change ADDS, by category, decided as `--within` decides — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **The verb** (`V2_OPENSHELL_STUDY.md` §4.9): `delulu grants diff OLD NEW [--json]`, OLD and NEW each a file of grants, one a
+   line (the `--within-file` format: blank lines and `#` comments skipped). Offline — no broker is asked. Every finding has a
+   category from a closed set and no severity grade: `effect_expansion` (a dimension of the grant grammar OLD grants none of),
+   `scope_expansion` (a wider scope in a dimension OLD grants), `special_use_reach` (a `net.special=` host OLD does not name),
+   `device_reach_expansion` (a device OLD does not name, or an envelope wider than OLD's). Only what NEW ADDS is a finding; a
+   line NEW shares with OLD, or narrows, is none.
+2. **Decided as P9-01 decides** (D-V2-118): each NEW line is put to the runtime's own mint against the root OLD builds — a path
+   by on-disk containment, a host by the mint's exact match, a flag by the flag — so a diff and a `--within` answer cannot disagree
+   about what OLD covers. The mint reads a device's NAME only, so an actuator's envelope is decided by the broker's device lattice
+   (`device_scope::all_within`: interval containment, rate, heartbeat and lease), and a compute device's by its bounds (memory,
+   queue depth, kernel time, power), its adapter, its formats, its kernel names and its attestation waiver (a waiver OLD did not
+   make is reach added — DL1911). A dimension is "effect" in the grant grammar's sense: `console` is its own, though the broker
+   folds it into `Write` — D-V2-118's reason.
+3. **Exit 1 when the change adds anything, 0 when it adds nothing, 2 on a bad invocation** — unlike `authority --diff`, which
+   reports a widening and exits 0: this is the check a CI gate, and P9-03's auto-approval, read without parsing the report.
+4. **The door rule is unchanged:** `grants` stays an EFFECTOR in `mcp.rs` (it mints and revokes), so this read-only verb is not
+   reachable from an MCP tool. That is the safe direction; a per-verb door rule would be the change that exposes it, not taken.
+5. **Not taken here:** lease nodes (`g_…` is refused by name — a node's authority is the broker's, and `budget_expansion` lives
+   there); `secret_reach_expansion`, which waits for P9-04's endpoint-bound secrets; a foreign library's or a kernel's changed
+   binary PATH — the broker compares names, and a path swap is not a `⊑` widening, though it is worth a finding of its own later.
+6. **Witnessed** — `within_cli`'s `grants_diff_names_what_a_change_adds_and_nothing_it_does_not`, red first (no verb, exit 2):
+   every grant form's own example, read from `toolchain --json` (so a form added later is in the witness the day it exists), is
+   one finding of its own dimension and category against nothing and none against itself; a subdirectory and an unchanged host
+   add nothing while another directory, another host and a wider envelope each add one; the reverse change is no narrowing and
+   says so; a compute device's larger memory, extra kernel and waived attestation each add device reach, a smaller ceiling
+   nothing; the human answer; a lease node refused as a node. `json_contract` drives it in its success table and its broker-verbs
+   sweep (every advertised `grants` verb must be driven). Mutants M281–M289 red: the device lattice replaced by names, every
+   expansion called an effect expansion, a path decided by presence, the waiver, the memory bound and the kernel names unchecked,
+   the exit code, the node refusal and the host decision dropped.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

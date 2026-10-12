@@ -231,3 +231,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   folds `console` into `Write` and lacks four dimensions). **SECRET-HIDDEN-1** closed beside it: a computed secret name was missing
   from `--grants`. Lessons: measure a design's "decide with X" against the enforcement; a witness of an order uses an order neither
   the list nor its reverse gives; give each mutant a command that runs its witnesses.
+- **P9-02's first slice the same run** (D-V2-119): `delulu grants diff OLD NEW` between two grant files — four categories, decided
+  as `--within` decides; exit 1 when the change adds anything. Lease nodes next.
