@@ -449,6 +449,10 @@ fn every_json_success_emits_the_documented_envelope() {
     std::fs::write(pkg.join("env.toml"), "[authority]
 effects = [\"Write\"]
 ").unwrap();
+    // P9-02: two grant files for `grants diff`, the second a narrowing of the first — it adds nothing, so the
+    // command succeeds (exit 0) and its success envelope is the one exercised.
+    std::fs::write(pkg.join("old.grants"), "console\nfs.read=./data\n").unwrap();
+    std::fs::write(pkg.join("new.grants"), "# narrower\nfs.read=./data/sub\n").unwrap();
 
     // (subcommand, argv, cwd, the `command` field the envelope must carry)
     let dpx_s = dpx.display().to_string();
@@ -469,6 +473,7 @@ effects = [\"Write\"]
         ),
         ("authority-artifact", vec!["authority", &dwx_s, "--json"], Cwd::Pkg, "authority"),
         ("authority-diff", vec!["authority", "--diff", "delulu.lock", ".", "--json"], Cwd::Pkg, "authority"),
+        ("grants-diff", vec!["grants", "diff", "old.grants", "new.grants", "--json"], Cwd::Pkg, "grants"),
         ("build", vec!["build", ".", "--json"], Cwd::Pkg, "build"),
         ("lock", vec!["lock", ".", "--json"], Cwd::Pkg, "lock"),
         ("fmt", vec!["fmt", "src", "--check", "--json"], Cwd::Pkg, "fmt"),
@@ -994,6 +999,12 @@ fn broker_verbs_emit_the_documented_envelope() {
     let fp = ad["fingerprint"].as_str().unwrap_or("").to_string();
     step(&["grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &gk, "--out", "r.dlrcpt"], "grants receipt");
     step(&["grants", "renew", "r.dlrcpt", "--anchor", &ground], "grants renew");
+
+    // ----- grants diff (P9-02): offline, between two grant files; a narrowing adds nothing (exit 0) ---
+    std::fs::write(cwd.join("old.grants"), "console\nnet=example.com\n").unwrap();
+    std::fs::write(cwd.join("new.grants"), "net=example.com\n").unwrap();
+    let d = step(&["grants", "diff", "old.grants", "new.grants"], "grants");
+    assert!(d["subcommand"] == "diff" && d["adds"] == false && d["findings"].is_array(), "{d}");
 
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");

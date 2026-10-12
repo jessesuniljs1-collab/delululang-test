@@ -318,6 +318,136 @@ pub(crate) fn render_verdict(v: &Verdict, program: &str, map: &SourceMap) -> Str
     out
 }
 
+/// One thing a change of grant set ADDS (P9-02, `V2_OPENSHELL_STUDY.md` §4.9): a category, no severity grade.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DiffFinding {
+    /// `effect_expansion` (a dimension OLD grants none of), `scope_expansion` (a wider scope in a dimension OLD grants),
+    /// `special_use_reach` (a `net.special=` host OLD does not name), `device_reach_expansion` (a device OLD does not name,
+    /// or an envelope wider than OLD's). `budget_expansion` belongs to lease nodes, which carry a budget; a grant set
+    /// carries none.
+    pub(crate) category: &'static str,
+    pub(crate) dimension: String,
+    /// NEW's line, as written.
+    pub(crate) grant: String,
+    pub(crate) detail: String,
+}
+
+/// P9-02 — `delulu grants diff OLD NEW` between two grant sets: each line of NEW, decided against OLD exactly as
+/// `authority --within OLD` decides a request — through the runtime's own mint where one decides it (a path, a host, a
+/// flag), and through the broker's device lattice for an actuator's envelope, which the mint does not read. A line NEW
+/// shares with OLD, or narrows, adds nothing. `Err` is a line that does not parse.
+pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding>, String> {
+    let root = old.build_root();
+    let span = Span::new(0, 0, 0);
+    let mint = |method: &str, arg: Option<&str>| -> Result<(), String> {
+        let args: Vec<Value> = match arg {
+            None => Vec::new(),
+            Some(h) if method == "http" => {
+                vec![Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![Value::str(h.to_string())])))]
+            }
+            Some(a) => vec![Value::str(a.to_string())],
+        };
+        delulu_runtime::prim::call_root_method(&root, method, &args, span).map(|_| ()).map_err(|f| f.message)
+    };
+    let devices = |g: &Grants| {
+        crate::brokerd::spec_to_authority(&crate::cli::authority_spec_from_grants(g, "diff")).scopes.device
+    };
+    let mut out = Vec::new();
+    for line in new_lines {
+        let mut one = Grants::default();
+        one.add(line).map_err(|e| format!("bad grant in NEW: {e}"))?;
+        let dimension = if line.trim_start().starts_with("secret:") { "secret".to_string() } else { dimension_of(line.trim()) };
+        let none = |what: &str| Err(format!("OLD grants no {what}"));
+        let covered: Result<(), String> = match dimension.as_str() {
+            "console" | "clock" | "rand" | "declassify" => mint(&dimension, None),
+            "exec.native" => if old.exec_native { Ok(()) } else { none("native emission") },
+            "fs.read" => one.fs_read.iter().try_for_each(|p| mint("fs_read", Some(p))),
+            "fs.write" => one.fs_write.iter().try_for_each(|p| mint("fs_write", Some(p))),
+            // `net.special=` puts its host in `net` too: decided once, as special-use reach.
+            "net" => one.net.iter().try_for_each(|h| mint("http", Some(h))),
+            "net.special" => one.net_special.iter().try_for_each(|h| {
+                if old.net_special.contains(h) { Ok(()) } else { Err(format!("OLD does not grant `{h}` as special-use reach")) }
+            }),
+            "secret" => one.secrets.keys().try_for_each(|n| {
+                if old.secrets.contains_key(n) { Ok(()) } else { Err(format!("OLD grants no secret `{n}`")) }
+            }),
+            "foreign.c" => one.foreign_c.keys().try_for_each(|l| {
+                if old.foreign_c.contains_key(l) { Ok(()) } else { Err(format!("OLD grants no foreign library `{l}`")) }
+            }),
+            // A pattern by exact string (the broker's rule); a plain module name as an import is matched.
+            "foreign.python" => one.foreign_python.iter().try_for_each(|p| {
+                let ok = old.foreign_python.contains(p)
+                    || (!p.contains('*') && delulu_runtime::python::allowlist_allows(&old.foreign_python, p));
+                if ok { Ok(()) } else { Err(format!("OLD's Python allowlist does not allow `{p}`")) }
+            }),
+            "actuator" => {
+                let (n, o) = (devices(&one), devices(old));
+                if delulu_broker::device_scope::all_within(&n, &o) {
+                    Ok(())
+                } else if n.keys().all(|d| o.contains_key(d)) {
+                    Err("its envelope is wider than OLD's for the same device".to_string())
+                } else {
+                    Err("OLD grants no such actuator".to_string())
+                }
+            }
+            "sensor" => one.sensors.iter().try_for_each(|d| mint("sensor", Some(d))),
+            "compute" => one.computes.iter().try_for_each(|c| match root.computes.iter().find(|o| o.device == c.device) {
+                None => Err(format!("OLD grants no compute device `{}`", c.device)),
+                Some(o) => {
+                    // Every bound no wider, the same adapter, no format or kernel name OLD lacks — and no waiver of the
+                    // adapter's attestation that OLD did not already make (DL1911): each is reach the device did not have.
+                    let within = c.memory_bytes <= o.memory_bytes
+                        && c.queue_depth <= o.queue_depth
+                        && c.kernel_ms.0 >= o.kernel_ms.0
+                        && c.kernel_ms.1 <= o.kernel_ms.1
+                        && c.power_w.0 >= o.power_w.0
+                        && c.power_w.1 <= o.power_w.1
+                        && c.adapter == o.adapter
+                        && c.formats.iter().all(|f| o.formats.contains(f))
+                        && c.kernels.iter().all(|(k, _)| o.kernels.iter().any(|(ok, _)| ok == k))
+                        && (!c.waived || o.waived);
+                    if within { Ok(()) } else { Err(format!("its envelope is wider than OLD's for `{}`", c.device)) }
+                }
+            }),
+            "plugin" => one.plugins.iter().try_for_each(|p| {
+                let want = delulu_runtime::prim::granted_root(p);
+                if root.plugins.iter().any(|g| delulu_runtime::prim::contains_on_disk(g, &want)) {
+                    Ok(())
+                } else {
+                    Err(format!("OLD grants no plugin root holding `{p}`"))
+                }
+            }),
+            // A form this diff does not decide is reported as added — never skipped (§11.2).
+            _ => Err("a grant form this diff does not decide".to_string()),
+        };
+        if let Err(detail) = covered {
+            let granted_any = match dimension.as_str() {
+                "console" => old.console,
+                "clock" => old.clock,
+                "rand" => old.rand,
+                "declassify" => old.declassify,
+                "exec.native" => old.exec_native,
+                "fs.read" => !old.fs_read.is_empty(),
+                "fs.write" => !old.fs_write.is_empty(),
+                "net" => !old.net.is_empty(),
+                "secret" => !old.secrets.is_empty(),
+                "foreign.c" => !old.foreign_c.is_empty(),
+                "foreign.python" => !old.foreign_python.is_empty(),
+                "plugin" => !old.plugins.is_empty(),
+                _ => false,
+            };
+            let category = match dimension.as_str() {
+                "net.special" => "special_use_reach",
+                "actuator" | "sensor" | "compute" => "device_reach_expansion",
+                _ if granted_any => "scope_expansion",
+                _ => "effect_expansion",
+            };
+            out.push(DiffFinding { category, dimension, grant: line.trim().to_string(), detail });
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

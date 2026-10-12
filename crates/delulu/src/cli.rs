@@ -1487,6 +1487,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
+     \x20 delulu grants    diff <old.grants> <new.grants>   (P9-02: what a change of grant set ADDS, one grant a line in each\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 file — effect, scope, special-use and device reach; exit 1 when it adds any, 0 when none)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -6804,10 +6806,12 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "adopt" => cmd_grants_adopt(args, &state_dir, json),
         "receipt" => cmd_grants_receipt(args, json),
         "renew" => cmd_grants_renew(args, &state_dir, json),
+        // P9-02: offline, between two grant files — no broker is asked.
+        "diff" => cmd_grants_diff(args, json),
         other => {
             eprintln!(
                 "error: unknown grants subcommand `{other}` \
-                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey)"
+                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey | diff)"
             );
             2
         }
@@ -6845,6 +6849,84 @@ fn grant_key_path(explicit: Option<&str>) -> Option<std::path::PathBuf> {
         Some(p) => Some(std::path::PathBuf::from(p)),
         None => crate::brokerd::resolve_state_dir(None).map(|d| d.join("grant.key")),
     }
+}
+
+/// One grant a line — the `--within-file` format: blank lines and `#` comments skipped. A directory or an unreadable
+/// file is the caller's error, in words (exit 2).
+fn read_grant_lines(f: &str) -> Result<Vec<String>, i32> {
+    if std::path::Path::new(f).is_dir() {
+        eprintln!("error: `{f}` is a directory; a grant file holds one grant a line");
+        return Err(2);
+    }
+    match std::fs::read_to_string(f) {
+        Ok(text) => Ok(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect()),
+        Err(e) => {
+            eprintln!("error: {}", unreadable(&f, &e));
+            Err(2)
+        }
+    }
+}
+
+/// `delulu grants diff OLD NEW [--json]` (P9-02, `V2_OPENSHELL_STUDY.md` §4.9): the categorical findings a change from
+/// grant set OLD to grant set NEW introduces, each NEW line decided against OLD as `authority --within OLD` decides a
+/// request (`within::diff`). No severity grade. Exit 1 when the change adds anything, 0 when it adds nothing, 2 on a
+/// bad invocation — a lease node (`g_…`) is refused by name until nodes are diffed, as the study also asks.
+fn cmd_grants_diff(args: &[String], json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants diff", args, &["--json", "--state-dir"]) {
+        return code;
+    }
+    let files: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
+    let [old_f, new_f] = files.as_slice() else {
+        eprintln!("error: `grants diff` takes two grant files: <old.grants> <new.grants>");
+        return 2;
+    };
+    for f in [old_f, new_f] {
+        if f.starts_with("g_") && !std::path::Path::new(f.as_str()).exists() {
+            eprintln!(
+                "error: `{f}` names a lease node; `grants diff` compares two grant FILES so far — lease nodes, and their \
+                 budgets, are not diffed yet"
+            );
+            return 2;
+        }
+    }
+    let (old_lines, new_lines) = match (read_grant_lines(old_f), read_grant_lines(new_f)) {
+        (Ok(o), Ok(n)) => (o, n),
+        (Err(c), _) | (_, Err(c)) => return c,
+    };
+    let mut old = Grants::default();
+    for g in &old_lines {
+        if let Err(e) = old.add(g) {
+            eprintln!("error: bad grant in OLD: {e}");
+            return 2;
+        }
+    }
+    let findings = match crate::within::diff(&old, &new_lines) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+    let code = if findings.is_empty() { 0 } else { 1 };
+    if json {
+        let fj: Vec<Json> = findings
+            .iter()
+            .map(|f| json!({ "category": f.category, "dimension": f.dimension, "grant": f.grant, "detail": f.detail }))
+            .collect();
+        print_success_envelope(
+            "grants",
+            json!({ "subcommand": "diff", "old": old_lines, "new": new_lines, "adds": !findings.is_empty(), "findings": fj }),
+        );
+    } else if findings.is_empty() {
+        println!("no finding: every grant in `{new_f}` is within `{old_f}` — the change adds nothing");
+    } else {
+        println!("{} finding(s) — what the change from `{old_f}` to `{new_f}` adds:", findings.len());
+        for f in &findings {
+            println!("  {:<23} {}", f.category, delulu_diag::terminal_line(&f.grant));
+            println!("  {:<23} {}", "", delulu_diag::terminal_line(&f.detail));
+        }
+    }
+    code
 }
 
 /// `delulu grants pubkey [--key FILE]` — print the public identity of a signing key.

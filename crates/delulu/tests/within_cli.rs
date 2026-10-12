@@ -286,3 +286,115 @@ fn both_answers_validate_against_the_authority_schema() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// P9-02 (`V2_OPENSHELL_STUDY.md` §4.9): `delulu grants diff OLD NEW` names what a change of grant set
+/// ADDS, by category and with no severity grade — every grant form, read through the generator of its
+/// own documented example: against an empty OLD each example is one finding of its own dimension, and
+/// against itself none. Exit 1 when the change adds anything, 0 when it adds nothing.
+#[test]
+fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
+    let dir = std::env::temp_dir().join(format!("delulu-grants-diff-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, lines: &[&str]| -> String {
+        let f = dir.join(name);
+        std::fs::write(&f, lines.iter().map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+        f.to_string_lossy().to_string()
+    };
+    let diff = |old: &str, new: &str| -> (i32, Value) {
+        let o = delulu(&["grants", "diff", old, new, "--json"]);
+        let code = o.status.code().unwrap_or(-1);
+        // `grants` verbs print their fields beside the envelope's own.
+        (code, json_of(&o))
+    };
+    // The grant grammar's own examples, read from the binary (`toolchain --json`), so a form added
+    // later is in this witness the day it exists.
+    let tc = json_of(&delulu(&["toolchain", "--json"]));
+    let forms: Vec<(String, String)> = tc["toolchain"]["grants"]
+        .as_array()
+        .unwrap_or_else(|| panic!("toolchain lists no grant forms: {tc}"))
+        .iter()
+        .map(|f| (f["key"].as_str().unwrap().to_string(), f["example"].as_str().unwrap().to_string()))
+        .collect();
+    assert!(forms.len() >= 15, "{forms:?}");
+    let empty = write("empty.grants", &["# grants nothing"]);
+    for (key, example) in &forms {
+        if example.contains("env:") {
+            continue; // a secret read from the environment: its variable is unset here
+        }
+        let one = write("one.grants", &[example]);
+        let (code, v) = diff(&empty, &one);
+        assert_eq!(code, 1, "`{example}` added to nothing: {v:#}");
+        let found = v["findings"].as_array().unwrap();
+        assert_eq!(found.len(), 1, "`{example}`: {v:#}");
+        let want_dim = key.trim_end_matches(':');
+        assert_eq!(found[0]["dimension"], want_dim, "`{example}`: {v:#}");
+        let want_cat = match want_dim {
+            "net.special" => "special_use_reach",
+            "actuator" | "sensor" | "compute" => "device_reach_expansion",
+            _ => "effect_expansion",
+        };
+        assert_eq!(found[0]["category"], want_cat, "`{example}`: {v:#}");
+        let (code, v) = diff(&one, &one);
+        assert_eq!((code, v["findings"].as_array().unwrap().len()), (0, 0), "`{example}` against itself: {v:#}");
+    }
+    // A wider scope in a kind OLD already grants is a scope expansion; a narrower one is no finding.
+    let old = write("old.grants", &["fs.read=./data", "net=example.com", "actuator=arm0/elbow:angle_deg=-30..30,heartbeat_ms=200,ttl_ms=60000,fail=hold"]);
+    let new = write(
+        "new.grants",
+        &["fs.read=./data/sub", "fs.read=./other", "net=example.com", "net=api.example.com",
+          "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"],
+    );
+    let (code, v) = diff(&old, &new);
+    assert_eq!(code, 1, "{v:#}");
+    let got: Vec<(String, String)> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| (f["category"].as_str().unwrap().to_string(), f["grant"].as_str().unwrap().to_string()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("scope_expansion".to_string(), "fs.read=./other".to_string()),
+            ("scope_expansion".to_string(), "net=api.example.com".to_string()),
+            ("device_reach_expansion".to_string(), "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold".to_string()),
+        ],
+        "the narrower `./data/sub` and the unchanged host are no finding; a widened envelope is: {v:#}"
+    );
+    // The reverse is no narrowing (`./data` is wider than `./data/sub`) — and is named as one scope expansion.
+    let (code, v) = diff(&new, &old);
+    assert_eq!((code, v["findings"][0]["grant"].as_str()), (1, Some("fs.read=./data")), "{v:#}");
+    // A change that only narrows — a subdirectory, the same host, a tighter envelope — adds nothing.
+    let narrower = write(
+        "narrower.grants",
+        &["fs.read=./data/sub", "net=example.com", "actuator=arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold"],
+    );
+    let (code, v) = diff(&old, &narrower);
+    assert_eq!((code, v["findings"].as_array().unwrap().len(), v["adds"].as_bool()), (0, 0, Some(false)), "{v:#}");
+    // An accelerator's envelope: a larger memory ceiling, another kernel, a waived attestation — each is reach added.
+    let gpu = "compute=gpu0:memory_bytes=1048576,kernel_ms=0..50,queue_depth=4,power_w=0..120,adapter=cpu-reference,format=refkernel-1,kernel=reduce_sum:k.refkernel";
+    let base_g = write("gpu.grants", &[gpu]);
+    for (why, wider) in [
+        ("memory", gpu.replace("memory_bytes=1048576", "memory_bytes=2097152")),
+        ("a kernel", format!("{gpu},kernel=scale:s.refkernel")),
+        ("a waiver", format!("{gpu},waive-attestation")),
+    ] {
+        let f = write("gpu-wider.grants", &[&wider]);
+        let (code, v) = diff(&base_g, &f);
+        assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("device_reach_expansion")), "{why}: {v:#}");
+    }
+    let tighter = write("gpu-tighter.grants", &[&gpu.replace("memory_bytes=1048576", "memory_bytes=4096")]);
+    assert_eq!(diff(&base_g, &tighter).0, 0, "a smaller ceiling adds nothing");
+    // The human answer names the same, and a lease node is refused by name until it is diffed (exit 2).
+    let o = delulu(&["grants", "diff", &old, &new]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert!(out(&o).contains("device_reach_expansion") && out(&o).contains("fs.read=./other"), "{}", out(&o));
+    let o = delulu(&["grants", "diff", "g_1", &new]);
+    assert!(o.status.code() == Some(2) && out(&o).contains("lease node"), "a node is refused as a node: {}", out(&o));
+    for args in [vec!["grants", "diff", &old], vec!["grants", "diff", &old, &new, "--bogus"]] {
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {}", out(&o));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
