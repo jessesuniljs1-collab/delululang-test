@@ -38,6 +38,71 @@ it on `origin` was made in the cloud and is listed below.
    `HANDOFF.md` §11, which holds them too).
 8. Delete no branch and no entry here: this log stays as the record of the cloud period.
 
+## The closing entry — the cloud period, 2026-09-28 → 2026-10-16
+
+**Begun 2026-10-12 by routine run 19** — four days early, as the routine's prompt asks ("start writing it on 2026-10-12,
+because the weekly limit can hit before 2026-10-16"), and kept current in place by every later run until the period
+ends. A run on or after 2026-10-16 that finds this section only updates its "as of" line and the open list, pushes,
+and stops (`docs/CLOUD_ROUTINE.md` step 0). The dates may be extended by the owner; this section then stays the
+running summary.
+
+**As of:** `master` at routine run 19 (2026-10-12) — the newest entry under *Entries* names the last commit.
+
+**What the period built** (each item's entry below has its commits, files, evidence and CI runs):
+- **Phases.** **P7** (verification depth) and **PS-D** (external launchers and the attestation seam) completed by run 1;
+  **PS-E** — the boundary, confirmed, designed from the owner's commission to study NVIDIA OpenShell — **complete** (run 12,
+  D-V2-93): the `/3` channel and confirmed boundary (E-01), a guest that ends with its host on every OS (E-02), the
+  escaped-guest harness and its ten closed hypotheses H1–H5, H7–H10 (E-03), the external launcher resolved once, hashed and
+  pinnable (E-04), the OpenShell export checked by OpenShell's own prover and run inside a real OpenShell sandbox on the
+  runners (E-05), the audit chain exported as OCSF 1.8.0 (E-06). **P8** (safe autonomy): **P8-01** a control program in a
+  guest, **P8-02** a signed Verified driver as a `.dpx` (RW 4.7 closed), **P8-03** the simulator as a device process (`delulu
+  device sim`) — complete; **P8-04** the out-of-band monitor — in progress: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
+  fixed), step 3 (b) `delulu monitor watch`, step 4's `special-use` rule, step 5 a dead monitor quarantines. **P9** —
+  designed, not started.
+- **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
+  CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
+  GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
+  LAUNCHER-SPELL-1, TERMINAL-TEXT-1, FRAME-DRIP-1, REQUEST-HANG-1, PROBE-DRIP-1, BROKER-RELDIR-1, REGISTRY-BOUNDS-1,
+  AUDIT-FIFO-1, AUDIT-TEXT-1, SCOPE-HIDDEN-1, REPLY-HOLD-1, ANSWER-HOLD-1, RUNDIR-PERM-1, SILENT-QUEUE-1, a macOS guest's
+  missing memory ceiling, AUDIT-REFUSAL-1, AUDIT-SEQ-1, AUDIT-DAY-1, HTTP-SCHEME-1, ACTOR-CUSTODY-1 (HIGH),
+  PLUGIN-CUSTODY-1/PLUGIN-DAEMON-1, CLOSURE-SCOPE-1 (HIGH), RW 4.56, RW 4.58, FIRST-BEAT-1 (RW 4.59), the red team's F1/F2
+  and F3 (HIGH), RW 4.61's bypass — and whatever the entries after run 18 add.
+- **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
+  (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
+  `scripts/suite.sh`, the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
+  `docs/CLOUD_ROUTINE.md` itself — rewritten by almost every run (its step 8).
+- **Decisions:** D-V2-56 to the newest `D-V2-nn` in `V2_DECISION_LOG.md` (run 1 took D-V2-46 to D-V2-51; the laptop's study
+  took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **One entrenched edit:** `DELULU_CORE.md` v0.3
+  (D-V2-49, run 1, `ENTRENCHED_CHANGE_RECORD.md`). **No `DL` code was added. No `.md` file was deleted.**
+- **Size, at run 19's start** (`git diff --name-status cfbfbdc..e95acf1`): 207 commits; 139 files — 35 added, 104
+  modified, **0 deleted, 0 renamed**; +31,482 / −3,538 lines. Commits by `Claude` (92, runs 1–9) and by
+  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
+
+**What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
+RW 4.61's rest (guard operations and the dead-man's arm that answer success with no record — HIGH for the guard), P8-04's
+`break-glass` rule, RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+waits on the chain), RW 4.60, RW 4.58's O2/O4, then **P9** (P9-01 to P9-05). PS-E's three residuals: E-03's H6 (macOS and
+Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
+RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
+
+**The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
+D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
+**For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-114); and P8-04's option
+(c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
+
+**Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
+expected. Then, beyond the suite on Windows and in WSL: **rebuild the WSL microVM guest images** (`~/microvm-image-a`,
+`~/microvm-image-b` — the channel is `/3` since run 2 and the guest's own lock-down changed in run 3; a guest built before
+refuses the current host); `git config core.hooksPath scripts/hooks` (run 15); `node editors/vscode/e2e.js` once on
+Windows (run 1); and `cargo run -p delulu-survey -- check` and `cargo run -p delulu -- doctor --check` on Windows and in
+WSL. **Memory:** every lesson is in `HANDOFF.md` §11 (§11.4 the findings, §11.5 the traps); `docs/assistant-memory/`
+changed in two files (`cloud-period-2026-09-28.md`, `delulu-ipc-deadman-findings.md`) — copy both into the laptop's memory
+directory, or have the laptop session read §11.
+
+**The routine** keeps firing until it is paused at [claude.ai/code/routines](https://claude.ai/code/routines); from
+2026-10-16 each fire only checks this section and stops, unless the owner extends the dates.
+
 ## Entry template
 
 ```
@@ -2189,3 +2254,29 @@ it on `origin` was made in the cloud and is listed below.
   approvals, requests and permits; the dead-man's arm; `Redeem`); (3) P8-04's `break-glass` rule (the closing entry above says
   how); (4) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's last parts; (5) P9. **For the owner:** D-V2-110 to D-V2-114. **On
   2026-10-12 a run starts the closing entry for the cloud period.**
+
+### 2026-10-12 — routine run 19: CI read green; the cloud period's closing entry begun (four days early)
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-kkuv5g`, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `e95acf1`
+- Commits: (1) this entry's commit — the closing entry and the routine's step 0 and step 6
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (the section *The closing entry*, before the template; this entry),
+  `docs/CLOUD_ROUTINE.md` (step 0: where the closing entry lives and that every run keeps it current; step 6: the same),
+  `docs/survey/*`. Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as
+  co-author.
+- Survey and doctor: at the start `survey check` ok (1,500 nodes, 13,892 edges), `doctor --check` all checks passed; after
+  the last edit — the same (this commit's map rebuilt last; the pre-commit hook checked it against the index).
+- Verified: run 18's closing push runs — CI `38162468215` on `e95acf1`, success on every job (`miri-slow` and `heavy-gates`
+  skipped on a push), `ocsf` `38162468217` success; the 2026-10-12 nightly CI `38234415113` — all 18 jobs success
+  (`heavy-gates`, the three `miri-slow` jobs, `microvm`, `microvm-reproducible`); the nightly release dry run `38248184651`
+  success. `actors_pingpong` (annotations): push run — arm64 MEASURED 2.88x (control 4.11x, bar 1.50x); macOS NOT MEASURED
+  (3 hardware threads); Windows and Ubuntu NOT MEASURED (busy or SMT); the nightly the same (arm64 2.88x, control 4.12x).
+  Sandbox properties per OS as recorded since D-V2-57 (macOS: `filesystem_confinement absent` — its reads). Run 18's
+  witness `a_guard_bypass_whose_record_was_lost_does_not_happen` re-run in the VM — green. Branches: every `origin/claude/*`
+  read against `master` after `git fetch --unshallow`; the two with a commit `master` lacks (`7d6a22b`, `d3f0d52`) are
+  superseded since run 10 — nothing stranded. `gh`: present at `/usr/local/bin/gh`, not needed (the REST API answers
+  `curl`).
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: this run continues — RW 4.61's rest first (the newest entry after this one says how far it got).

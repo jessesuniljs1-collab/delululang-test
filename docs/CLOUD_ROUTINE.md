@@ -76,7 +76,10 @@ force-push. If a push to `master` is rejected:
 **0. Date and budget.** `date -u`. If it is **2026-10-16 or later**: do no new work — if the closing
 entry is not yet in `docs/CLOUD_SYNC_LOG.md`, write it (what the period built, what is open, how to sync)
 and push it; then stop at once, spending nothing more (the routine keeps firing until the owner pauses
-it).
+it). **The closing entry exists since run 19 (2026-10-12)**: the section *The closing entry* near the top of
+`docs/CLOUD_SYNC_LOG.md`, begun early because a weekly limit can end the period's last runs. Every run before
+2026-10-16 keeps it current IN PLACE as part of its close (step 6) — its "as of" line, the defects and decisions
+it adds, the open list; a run on or after that date only refreshes it, pushes, and stops.
 Otherwise note the start time: **stop starting new work about three hours after it**, and always leave
 the tree committed and pushed — the VM is discarded when the run ends, and anything uncommitted is lost.
 
@@ -283,7 +286,8 @@ survived on a quiet VM).
 Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees; a `D-V2-nn` for each
 decision; `V2_PHASE_STATUS.md`; `REMAINING_WORK.md`; `HANDOFF.md` §11 and `docs/assistant-memory/` for a
 durable lesson; and **this run's `docs/CLOUD_SYNC_LOG.md` entry** (the template there — commits, every file
-and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open / next for the next run**).
+and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open / next for the next run**),
+and **the closing entry kept current** (from run 19 — step 0).
 Commit with the trailers in `CLAUDE.md`, push. **Commit a slice's code (to the branch, for its runner reads) BEFORE its
 records** (run 15): a records-only commit made while code is still uncommitted needs the map built without the code — a
 stash — and the stash's pop conflicts on the generated map; regenerate it rather than resolve it. **The author is the owner's account** (his routine prompt: commit as
