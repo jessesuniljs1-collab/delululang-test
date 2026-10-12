@@ -2527,3 +2527,22 @@ directory, or have the laptop session read §11.
 - Open / next: as the closing entry before this one — (1) read THIS commit's push run; (2) **P9-03**, read against the code first;
   (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package directory and a `.dwx`.
   **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-12 — routine run 20 (last): P9-03 read against the code
+- Session: `https://claude.ai/code/session_01UbS6DfQbubWag83bcEk12u`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-an8lk9`)   Pull request: none   Merged: n/a
+- Base: `ec026a0`
+- Commits: (1) this entry's commit — records only
+- Files and folders: M `docs/DELULULANG_V2/V2_P9_DESIGN.md` (P9-03's reading, measured), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_ROUTINE.md` (step 4's P9 line: P9-03's build step 1 first), `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: the measurements in the reading, by hand on the current binary (`run --json` and `run --report-out` on
+  `examples/guide/05_capabilities.delulu` with `--grant console`; the diagnostic's span against `authority --within`'s `at`). The
+  document gates and the Survey's tests after the records. `ec026a0`'s push runs: see the next entry, or unread if there is none.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read `ec026a0`'s and THIS commit's push runs; (2) **P9-03** from `V2_P9_DESIGN.md` — step 1, the
+  report records a refusal with its span; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a
+  package directory and a `.dwx`. **For the owner:** D-V2-115 to D-V2-120, option (c). **Keep the closing entry current; from
+  2026-10-16 a run only refreshes it and stops.**

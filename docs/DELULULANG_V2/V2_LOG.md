@@ -5324,3 +5324,15 @@ on the next heading line; blank lines between do not hide one, and a section nam
 fenced code is not one. Measured before it was written: no such repeat in the tree; `52b2572`'s `HANDOFF.md` has one. Witnessed red
 with that duplicate put back (`HANDOFF.md:1293` named), green once restored; the rule's own synthetic cases beside it. Read on the
 runners at `b566969` over `repository_structure`: Windows `38311565631`, macOS `38311568364`, arm64 `38311571579` — 4 passed each, the two new tests named. **The full suite alone at `b566969`:** 2,239 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, and no broker daemon left running after it.
+
+## 2026-10-12 — routine run 20 (last): P9-03 read against the code — the study's premise measured false for DL0703
+
+Before P9-03 is built, as `V2_P9_DESIGN.md` did for P9-01 (its P9-03 bullet has the whole reading). **§4.10's premise is false for the
+commonest refusal:** a DL0703 carries its grant in prose only (`run --json`: `"repairs": []`), and `run --report-out` records no
+diagnostic for a refused run (`diagnostics: []`, `outcome: {exit: 1, ran: true}` on `05_capabilities` with `--grant console`). What
+holds instead: the refusal's diagnostic carries the call's span (`48:18`), and P9-01's `requirements` map that very span to
+`fs.read=./config` — so a proposal can be the static authority of the refused call site, computed by the checker and never worded
+by the program or the runtime. Build order recorded: the report records the refusal with its span; `grants propose --from REPORT`
+maps it to one grant line (a hidden site proposes nothing); a proposal kind beside the Guard's queue; approval mints a child through
+`attenuate` (the tree's own `⊑`); auto-approval is `grants diff BOUNDARY PROPOSAL` adding nothing (D-V2-119). Three hypotheses named
+there, each to be witnessed when built.

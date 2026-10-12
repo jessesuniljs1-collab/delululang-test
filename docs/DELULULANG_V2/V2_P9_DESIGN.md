@@ -106,8 +106,30 @@ skip branch, §11.2).
   the broker's `Authority` is the domain and `attenuation_check`'s per-dimension functions decide, `budget` included. There is no
   `grants diff` today (`grants` has `list`, `tree`, `inspect`, `revoke`, `delegate`, `certify`, `adopt`, `receipt`, `renew`,
   `pubkey`), and `grants` is an EFFECTOR in `mcp.rs`'s door rule — a read-only verb under it is a door-rule question to answer first.
-- **P9-03** proposals (§4.10): an agent proposes a grant; approval is `⊑`-bounded by the approver's own node — the Guard's
-  request/approve flow (D-V2-115 just made its records exact) is the place to read first.
+- **P9-03** proposals (§4.10): an agent proposes a grant; approval is `⊑`-bounded by the approver's own node. **Read against the
+  code by routine run 20 (2026-10-12) — measured, before it is built:**
+  1. **The study's premise is false for the commonest refusal.** §4.10 says a refusal "already carries a structured repair". A
+     DL0703 does not: `run --json` gives `{"code": "DL0703", "message": "filesystem read of ./config was not granted — pass
+     --grant fs.read=./config", "repairs": []}` — the grant in PROSE only — and `run --report-out` records no diagnostic at all
+     for a refused run (`diagnostics: []`, `outcome: {exit: 1, ran: true}`; `examples/guide/05_capabilities.delulu` with
+     `--grant console`).
+  2. **What a proposal can be computed from without trusting the program:** the refusal's diagnostic carries the call's SPAN
+     (`05_capabilities.delulu:48:18`), and P9-01's `requirements` already map a call's span to its requirement — the same
+     `48:18` names `fs.read=./config`. So `grants propose` needs the refused call's span from the report, never a grant line the
+     runtime or the program words: the narrowest grant is the static authority of the refused call site, as §4.10 asks. **Build
+     step 1:** the report records the refusal (code and span), additively; **step 2:** `grants propose --from REPORT` maps that
+     span through `requirements` to one grant line (a hidden site proposes nothing — there is no static narrowest grant for a
+     computed scope, and it says so).
+  3. **The store.** The Guard's queue (`GuardRequest {id, node, subset, why, created, status}`, approve and deny gated by the
+     owner code, every record exact since D-V2-115) is the nearest shape — but a Guard request asks for PERMITS on a node's uses
+     (`class:pattern`), and a proposal asks for a new child NODE. A proposal kind beside it, not a reuse of `GuardSubset`.
+     Approval mints a child under the approver's node through `attenuate`, whose `⊑` check is the tree's own: "approval bounded
+     by `⊑`" needs no new check.
+  4. **Auto-approval** (`grants auto-approve --within BOUNDARY`) is P9-02 already: a proposal is auto-approvable exactly when
+     `grants diff BOUNDARY PROPOSAL` adds nothing (D-V2-119).
+  5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
+     kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
+     live — V2 §5); a rejection's reason reaches the agent in `--json`.
 - **P9-04** secrets bound to endpoints (§4.11, RW 2.11): the language has no request a secret can ride on; the broker's
   `secret_map` (D-V2-115) is the nearest existing shape.
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
