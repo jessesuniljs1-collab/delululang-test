@@ -2680,6 +2680,58 @@ refused and (c) stays the owner's.
    entry; the control, a guest that asks, has no `device.not-started`); M266 (no names) and M268 (journaled even when started)
    red; M267, a second "none once they started" check, survived because the report's branch never reaches it — removed.
 
+## D-V2-118 — P9-01: `delulu authority FILE --within BOUNDARY` — each request decided by the runtime's own mint; a scope the source does not show is never *within* unless the boundary bounds its whole kind — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **The question, as the study put it** (`V2_OPENSHELL_STUDY.md` §4.8): given a boundary in the `--grant` grammar, does
+   everything a program asks for fall inside it? Four answers, a closed enum — `within` (exit 0), `exceeds`, `unsupported`,
+   `inconclusive` (exit 1; a bad invocation is 2, as everywhere). `exceeds` names a counterexample: the first request in SOURCE
+   order the boundary does not cover, with the call that makes it (file, line, column — and in the human answer the line itself,
+   escaped). `--json` carries `authority.within {result, boundary, counterexample, findings, coverage, requests}`: every request
+   that is not within is a finding, and the coverage names each of the grammar's fifteen dimensions (`not-requested` where the
+   program asks for none). One exit code for the three non-`within` answers keeps the CLI's 0/1/2 contract; the answer is named.
+2. **The program's side is the list `--grants` prints.** `required_grants` is now `requirements(report, walk)` structured — each
+   line with what it asks the runtime for (`Ask`) and its call (`ScopeWalk` keeps the first call of each literal, of each kind's
+   first hidden site, of each kind's first mint, and — where nothing mints `Declassify` — of a secret's first `verify`/`expose`).
+   One list, so the flags an operator types and the verdict an agent reads cannot disagree about what is asked for; the report is
+   byte-identical (`core_invariance`, `atlas_chain`).
+3. **Each request is decided by the runtime's own mint, not by the broker's lattice — a departure from `V2_P9_DESIGN.md` step 2,
+   taken because the lattice is coarser than a grant set.** The boundary is parsed by `Grants::add` (the parser `run --grant`
+   uses) and every literal request is put to `prim::call_root_method` against the root it builds — the decision `run --grant
+   BOUNDARY` makes at that call, its refusal quoted in its own words. The broker's `Authority` folds `console` into `Write`
+   (`authority_spec_from_grants`) and has no `net.special`, sensor, compute or plugin dimension, so a verdict read through
+   `attenuation_check` calls a printing program within an `fs.write`-only boundary that `run` refuses — pinned by
+   `a_printing_program_exceeds_a_boundary_that_grants_only_a_write`. Where the two speak of the same thing (paths, hosts,
+   secret names), `the_verdict_agrees_with_the_lattice_where_both_speak` holds them to one answer over 400 generated pairs
+   (with a control: both answers must occur). A special-use host is within only under `net.special=` (D-NE-28). A foreign
+   library is decided by its logical name, a Python import by the runtime's allowlist matcher (a manifest's pattern by exact
+   string, the broker's rule).
+4. **A scope the source does not show** (a hidden site — SCOPE-HIDDEN-1, SECRET-HIDDEN-1 — or a kind with no minting call in the
+   file) is `exceeds` against a boundary that grants none of its kind, `within` only against one that bounds the whole kind (on
+   Unix, `fs.read=/` or `fs.write=/`; no other dimension has a widest form), and otherwise `inconclusive`, named. The study
+   defined *inconclusive* as "a resource limit reached"; this widens it to "no static answer", as `V2_P9_DESIGN.md` proposed. A
+   plugin load is `inconclusive` against any `plugin=` root: its artifact is checked at its load, against the roots and the
+   manifest's hash list, not by this reading.
+5. **`unsupported`** is empty on today's language — each of the ten capability kinds a report lists has a grant form, and
+   `Declassify`, `ForeignLoad` and `Python` have theirs — and stays for a kind added later: `requirements` names an unknown kind
+   instead of dropping it in its skip branch, and `every_capability_kind_has_a_grant_form_and_an_unknown_one_is_unsupported`
+   holds an exhaustive match over `ResourceKind` (a new kind does not compile until it is placed).
+6. **The surface:** `--within GRANT` (repeatable) and `--within-file FILE` (one grant a line; `#` comments and blank lines
+   skipped — and an empty file is the empty boundary, which no flag can spell). Refused by name, exit 2, beside `--diff`,
+   beside `--grants` (two questions), on a package directory and on a `.dwx` (not checked against a boundary yet), with a bad
+   grant, and on every other command (the help documents it for `authority` alone). Not a new subcommand: `authority` stays
+   `READ_ONLY` in `mcp.rs`'s door rule — a supervising agent may ask it of a sub-agent's program before running it.
+7. **Witnessed** — `within_cli`: every corpus program within its own required grants (operator data filled in: a secret's
+   value, a library's path, an actuator's envelope) and `exceeds` each one-grant narrowing, the counterexample the dropped grant
+   and its line the call that asks for it (19 programs, 27 narrowings, with a control); `10_actuate_errors` exceeds with no
+   device and is inconclusive with one; a computed secret name exceeds with no secret and is inconclusive with the right one; a
+   boundary file says what the flags say; six refusals; both answers validate against the authority schema. `within.rs`'s seven
+   unit tests. Mutants M269–M280: a dimension decided within regardless, the counterexample's call taken from the wrong kind, a
+   hidden site answered within, the special-use rule dropped, SECRET-HIDDEN-1's placeholder dropped, a helper's literal secret
+   hidden, an unknown kind dropped, the outcome's precedence inverted, the `verify`/`expose` site dropped, the `--grants` and
+   package refusals dropped, the source order reversed.
+8. **Not taken here:** a package directory and a `.dwx` (each needs its own requirement list: a package's merged modules, an
+   artifact's embedded manifest with no spans); P9-02's `grants diff`, which reads this verdict between two authorities.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

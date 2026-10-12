@@ -172,8 +172,9 @@ another OS, and then takes about seven minutes itself (run 5).
    (D-V2-116): **P8-04's build order is complete, and P8 complete as far as software reaches** (its residuals named in D-V2-116).
    The monitor is a node minted between the operator and the run, which can revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
-   **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
-   P9-02 `grants diff`, P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
+   D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (next — read it against the code first, as
+   `V2_P9_DESIGN.md` did for P9-01), P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -252,6 +253,12 @@ Collect the edits, assert each anchor exactly once against the files as they are
 part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
 subset's reason — read what a per-mutant command runs.
 **Enumerate a finding's class from its mechanism before fixing it** (run 19, RW 4.61: the red team named eight daemon handlers; `grep record_op` and reading each call against the handler that reaches it found four more). **A measurement over a corpus carries a control that must come out non-empty** (run 19: a wrong JSON path read all 23 corpus programs as pure; `scripts/authority-corpus.py` fails such a read). **A disk check reads the LAST write**: order a witness so the edit it is about is the last to persist (run 19: tightenings persisted after the loosenings would have rewritten the disk, and M244 would have lived).
+**A design's "decide it with X" is measured against the enforcement first** (run 20: the broker's lattice was coarser than a
+grant set; the runtime's mint decides). **A witness of an order uses an order neither the list nor its reverse produces** (run
+20, M280). **Give every mutant a command that runs the witnesses that see it** — a spec's default command is a subset (run 20,
+M276 "survived" a run that never compiled the unit test seeing it).
+**A patch script's own dry-run switch is an edit with an anchor** (run 20: a missed anchor made the dry run real, mid-suite) —
+assert it, and try a writer against a copy while a suite runs.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

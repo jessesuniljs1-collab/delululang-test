@@ -226,3 +226,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **P8-04's `break-glass` rule the same run** (D-V2-116): the gate's record names no node (it is written before a lease run has
   one), so a lease run records its use again on its own node once redeemed, and the rule fires on that `allow`. Every step of
   P8-04 is built; P8 complete as far as software reaches, its residuals named in D-V2-116. Next: P9.
+- **Routine run 20 (2026-10-12): P9-01 built** (D-V2-118): `delulu authority FILE --within BOUNDARY` — within / exceeds /
+  unsupported / inconclusive, each request named with its call; decided by the runtime's own mint, not the broker's lattice (which
+  folds `console` into `Write` and lacks four dimensions). **SECRET-HIDDEN-1** closed beside it: a computed secret name was missing
+  from `--grants`. Lessons: measure a design's "decide with X" against the enforcement; a witness of an order uses an order neither
+  the list nor its reverse gives; give each mutant a command that runs its witnesses.

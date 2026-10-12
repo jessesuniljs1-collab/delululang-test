@@ -5216,3 +5216,52 @@ timing-shaped even when it measures no time.
 
 **`e2ea6a5`'s push runs** (RW 4.60, the race fix and their records): CI `38284697941` — success on every job, `ocsf` `38284697894`
 success. Every code change of routine run 19 is on `master` and read green there.
+
+## 2026-10-12 — routine run 20: CI read green; P9-01 — `delulu authority FILE --within BOUNDARY` (D-V2-118); SECRET-HIDDEN-1 found and closed
+
+**The previous run, verified.** `21421ec`'s push run CI `38286315257` — success (run 19's last commit, unread at its entry). Run
+19's witnesses re-run in the VM: `sandbox_devices_cli`'s `a_report_says_when_a_guests_devices_never_started` and `monitor_cli`'s
+`the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other` — green. `survey check` ok (1,502 nodes, 13,979 edges),
+`doctor --check` all checks passed. Branches: every `origin/claude/*` read against `master` after `git fetch --unshallow`; the two
+with a commit `master` lacks (`7d6a22b`, `d3f0d52`) are superseded since run 10. `gh` present at `/usr/local/bin/gh`, not needed.
+
+**SECRET-HIDDEN-1 — found while reading the walk for P9-01, witnessed, closed (`3611ac5`).** `root.secret(name)` with a computed
+name: the checker records a secret's name only for a string-literal argument, and the walk marked the kind hidden — but nothing
+read the hidden secret. `delulu authority --grants` printed `--grant console` alone and the report said `secrets: []`; `delulu
+run --grant console` refused DL0703 at line 6. SCOPE-HIDDEN-1's class (D-V2-81), one kind it never reached. The walk now hides the
+kind for a computed name only (a literal through a `Root` under another name is already named by the checker, which reads the
+TYPE — its control case), and `required_grants` carries `secret:NAME=VALUE`. Witnessed red first: two new cases in `cli.rs`'s
+`a_scope_the_source_does_not_show_leaves_its_placeholder_beside_the_literals` (`left: ["console"]`).
+
+**P9-01 built (`3611ac5`, D-V2-118).** `delulu authority FILE --within GRANT… | --within-file FILE` — within (exit 0), exceeds,
+unsupported, inconclusive (exit 1), each request named with the call that makes it. Step 1 (spans in the walk) and step 2 (the
+verdict as a pure function, `crates/delulu/src/within.rs`) as `V2_P9_DESIGN.md` ordered, with one departure: **each request is
+decided by the runtime's own mint (`prim::call_root_method` against the root `Grants::add` builds), not by the broker's
+lattice** — the lattice is coarser than a grant set (`console` folded into `Write`; no `net.special`, sensor, compute or plugin
+dimension), so `attenuation_check` would call a printing program within an `fs.write`-only boundary that `run` refuses
+(pinned). Where both speak of the same thing they agree over 400 generated pairs. `required_grants` became `requirements()` —
+the same list structured — and every report stayed byte-identical (`core_invariance`, `atlas_chain`, `json_contract`).
+
+**Witnesses** — `within_cli` (new): every corpus program within its own required grants and exceeding each one-grant narrowing,
+the counterexample the dropped grant at the line of the call that asks (19 programs, 27 narrowings, a control); a computed
+scope exceeds against none and is inconclusive against some; an exceeding literal beside inconclusive scopes is `exceeds`; the
+empty boundary names `05_capabilities`' four requests in SOURCE order (console, line 44, first — neither the list's order nor its
+reverse); a boundary file says what the flags say; six refusals (exit 2); both answers validate against the authority schema.
+`within.rs`: seven unit tests. **Mutants M269–M280:** M269–M271, M273–M275, M277–M279 red at once; **M276** (precedence
+inverted) survived its first read because its command never ran the unit test that sees it (§11.5, M233) — red under an
+integration witness added for it and under the unit test; **M280** (source order reversed) survived because the unit test's
+source-first request was also listed last, so the reverse picked it too — red once the order witnessed differs from both the
+list's order and its reverse; **M272** (the special-use check dropped) survived because the check was unreachable: `Grants::add`
+refuses a special-use host under plain `net=` (read on four hosts), so the mint alone decides — the code was removed (§11.5,
+M222). Clippy clean.
+
+**Read on the runners at `3611ac5`** over `within_cli`, `cli`, `schema_cli`, `bin:delulu`: Windows `38305782405` (237 passed), macOS `38305785803` (250), arm64 `38305788572` (269) — 0 failed, `within.rs`'s seven unit tests and `within_cli` named on each, no compiler warning. **The full suite alone at
+`3611ac5`:** 2,235 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, and no `TREE-MOVED` line — `suite.sh` cannot see an edit undone before its end, which is why the slip below is recorded by hand.
+
+**The tree moved once under that suite** — a slip recorded, not tidied away: the records' patch script was given a dry-run
+switch by a `replace` whose anchor did not match, so its "dry run" wrote these nine records into the tree at about 20:42; they were
+restored byte for byte at 20:42:47, while the suite ran its first `delulu` targets (`actuate_cli` to `atlas_chain`, none of which
+reads them). The document gates were re-run after the records were applied (below). §11.5 has the lesson.
+
+**Not taken in this slice:** a package directory and a `.dwx` under `--within` (refused by name; each needs its own requirement
+list); P9-02 `grants diff`, which reads this verdict between two authorities, is next.

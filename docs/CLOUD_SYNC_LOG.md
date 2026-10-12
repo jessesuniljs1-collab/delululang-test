@@ -46,7 +46,7 @@ ends. A run on or after 2026-10-16 that finds this section only updates its "as 
 and stops (`docs/CLOUD_ROUTINE.md` step 0). The dates may be extended by the owner; this section then stays the
 running summary.
 
-**As of:** `master` at routine run 19's close (2026-10-12) — the newest entry under *Entries* names the last commit.
+**As of:** `master` at routine run 20's close (2026-10-12) — the newest entry under *Entries* names the last commit.
 
 **What the period built** (each item's entry below has its commits, files, evidence and CI runs):
 - **Phases.** **P7** (verification depth) and **PS-D** (external launchers and the attestation seam) completed by run 1;
@@ -59,8 +59,9 @@ running summary.
   device sim`) — complete; **P8-04** the out-of-band monitor — complete: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
   fixed), step 3 (b) `delulu monitor watch`, step 4's four rules (`envelope`, `denies=N/MS`, `special-use`, and `break-glass` —
   run 19), step 5 a dead monitor quarantines — **every step built by run 19 (D-V2-116): P8 complete as far as software
-  reaches**, `9000c57`'s push run `38278927092` read green. **P9** — designed; P9-01's build order read against the code by run 19
-  (`V2_P9_DESIGN.md`), not yet built.
+  reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
+  (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
+  the runtime's own mint, the counterexample's call named); P9-02 to P9-05 designed, not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -69,7 +70,8 @@ running summary.
   missing memory ceiling, AUDIT-REFUSAL-1, AUDIT-SEQ-1, AUDIT-DAY-1, HTTP-SCHEME-1, ACTOR-CUSTODY-1 (HIGH),
   PLUGIN-CUSTODY-1/PLUGIN-DAEMON-1, CLOSURE-SCOPE-1 (HIGH), RW 4.56, RW 4.58, FIRST-BEAT-1 (RW 4.59), the red team's F1/F2
   and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record), RW 4.60 (D-V2-117 — a
-  report silent about devices that never started) — and whatever the entries after run 19 add.
+  report silent about devices that never started), SECRET-HIDDEN-1 (run 20 — a secret read under a computed name missing from
+  `authority --grants`) — and whatever the entries after run 20 add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
@@ -82,7 +84,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-01 to P9-05, next), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-02 to P9-05, next — P9-01 built by run 20), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -90,7 +92,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-117); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-118); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2407,3 +2409,34 @@ directory, or have the laptop session read §11.
 - For the laptop's memory: nothing new.
 - Open / next: as the entry before this one — (1) read THIS commit's push run; (2) **P9-01** from `V2_P9_DESIGN.md`; (3) RW 4.57,
   RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. Keep the closing entry current.
+
+### 2026-10-12 — routine run 20: CI read green; P9-01 — `delulu authority FILE --within BOUNDARY` (D-V2-118); SECRET-HIDDEN-1 closed
+- Session: `https://claude.ai/code/session_01UbS6DfQbubWag83bcEk12u`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef this run)
+- Branch: `master` (through the harness branch `claude/zealous-keller-an8lk9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `21421ec`
+- Commits: (1) `3611ac5` P9-01: delulu authority FILE --within BOUNDARY; SECRET-HIDDEN-1 closed; (2) this entry's commit — the
+  records
+- Files and folders: (1) A `crates/delulu/src/within.rs` (the verdict, its renderings, seven unit tests), `crates/delulu/tests/within_cli.rs` (five witnesses); M `crates/delulu/src/cli.rs` (`ScopeWalk` keeps call sites; `requirements`/`Requirement`/`Ask`; SECRET-HIDDEN-1; `--within`/`--within-file`; `authority_within`; the help line), `crates/delulu/src/main.rs` (`mod within`), `crates/delulu/src/schema.rs` (`within`, `within_finding`), `crates/delulu/tests/cli.rs` (two SECRET-HIDDEN-1 cases), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.4 SECRET-HIDDEN-1; §11.5 four
+  lessons), `docs/CLOUD_ROUTINE.md` (step 4's P9 line; step 5: three lines), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md`
+  (D-V2-118), `V2_P9_DESIGN.md` (P9-01 built, its departure), `V2_PHASE_STATUS.md` (P9 in progress), `docs/REMAINING_WORK.md`
+  (4.29: P9-01 built), `docs/for-agents.md` (`--within` for a supervising agent), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry
+  refreshed), `docs/survey/*`. Added: `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`. Deleted: nothing.
+  **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor: at the start `survey check` ok (1,502 nodes, 13,979 edges), `doctor --check` all checks passed; after the
+  last edit — `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed (this
+  commit's map rebuilt last; the pre-commit hook checked it against the index).
+- Verified: `21421ec`'s push run CI `38286315257` — success. Run 19's two witnesses re-run in the VM — green. The SECRET-HIDDEN-1
+  witness red first; `within_cli` (5) and `within.rs` (7) green; mutants M269–M280 red (M276 and M280 after their witnesses were
+  strengthened; M272's code removed as unreachable), the control green; clippy clean. Read on the runners at `3611ac5` over
+  `within_cli`, `cli`, `schema_cli`, `bin:delulu`: Windows `38305782405` (237 passed), macOS `38305785803` (250), arm64 `38305788572` (269) — 0 failed, `within.rs`'s seven unit tests and `within_cli` named on each, no compiler warning. The full suite alone at `3611ac5`: 2,235 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, and no `TREE-MOVED` line — `suite.sh` cannot see an edit undone before its end, which is why the slip below is recorded by hand. **The tree moved once
+  under that suite** (a patch script's dry run that was not one — nine records written and restored byte for byte within about
+  twenty seconds, during targets that read none of them); the document gates re-run after the records — green.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 (SECRET-HIDDEN-1) and §11.5 (measure a design's "decide with X" against the
+  enforcement; a witness of an order uses an order neither the list nor its reverse gives; an empty set needs its own spelling;
+  a patch script's dry-run switch is an edit with an anchor); `docs/assistant-memory/cloud-period-2026-09-28.md`.
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry, unless a later entry says so); (2) **P9-02**
+  `grants diff` — read it against the code first (`V2_P9_DESIGN.md`), then build it on P9-01's verdict; (3) RW 4.57, RW 4.53 (with
+  F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package directory and a `.dwx`. **For the owner:** D-V2-115 to
+  D-V2-118, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

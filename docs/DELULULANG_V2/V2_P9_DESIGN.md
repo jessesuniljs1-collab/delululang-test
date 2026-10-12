@@ -6,6 +6,14 @@ P8 had (`V2_P8_DESIGN.md`, "the build order, read against the code"): what each 
 (D-V2-116). Nothing of OpenShell is copied here; its prover is the question this phase asks of a *program* instead of a
 policy.
 
+**P9-01 is built** (routine run 20, 2026-10-12, D-V2-118 — `crates/delulu/src/within.rs`, `crates/delulu/tests/within_cli.rs`), with
+one departure from step 2 below: each request is decided by the runtime's own mint (`prim::call_root_method` against the root
+`Grants::add` builds), not by the lattice's per-dimension functions — the broker's `Authority` is coarser than a grant set
+(`console` is folded into `Write`; it has no `net.special`, sensor, compute or plugin dimension), so a verdict read through it
+would answer *within* where `run` refuses. The agreement test holds the two to one answer where both speak (paths, hosts, secret
+names). The corpus witness ran as step 4 says; a package directory and a `.dwx` are refused under `--within` until each has its
+own requirement list. Building it found SECRET-HIDDEN-1 (a secret read under a computed name was missing from `--grants`).
+
 The order is the study's: **P9-01** `authority --within` (first — every later slice reads its verdict), P9-02 `grants
 diff` findings, P9-03 proposals with `⊑`-bounded approval, P9-04 secrets bound to endpoints, P9-05 method-and-path network
 scopes.
@@ -87,7 +95,15 @@ skip branch, §11.2).
 
 ## P9-02 to P9-05 — to be read against the code before each is built
 
-- **P9-02** `grants diff` findings (study §4.9) reads P9-01's verdict between two authorities.
+- **P9-02** `grants diff` findings (study §4.9) reads P9-01's verdict between two authorities. *A note from P9-01's build, to be
+  measured when P9-02 is read against the code:* between two GRANT SETS the lattice is too coarse for the same reason it was for
+  P9-01 (no `console`, `net.special`, sensor, compute or plugin dimension), so the diff is most likely P9-01's verdict with NEW's
+  lines as the requests and OLD as the boundary — each finding's category read from the dimension (absent in OLD: an effect
+  expansion; present: a scope expansion; `net.special`: special-use reach; a device: device reach) — plus the device lattice
+  (`device_scope::all_within`) for an envelope widened on a device both name, which the mint does not see; between two lease NODES,
+  the broker's `Authority` is the domain and `attenuation_check`'s per-dimension functions decide, `budget` included. There is no
+  `grants diff` today (`grants` has `list`, `tree`, `inspect`, `revoke`, `delegate`, `certify`, `adopt`, `receipt`, `renew`,
+  `pubkey`), and `grants` is an EFFECTOR in `mcp.rs`'s door rule — a read-only verb under it is a door-rule question to answer first.
 - **P9-03** proposals (§4.10): an agent proposes a grant; approval is `⊑`-bounded by the approver's own node — the Guard's
   request/approve flow (D-V2-115 just made its records exact) is the place to read first.
 - **P9-04** secrets bound to endpoints (§4.11, RW 2.11): the language has no request a secret can ride on; the broker's

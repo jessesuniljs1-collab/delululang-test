@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu authority FILE --within BOUNDARY`, 2026-10-12
+
+- **New (P9-01): `delulu authority FILE --within GRANT…` / `--within-file FILE`** asks whether everything a program asks for
+  is inside a boundary written in the `--grant` grammar — the boundary is only checked against, never granted. The answer is
+  `within` (exit 0), or `exceeds`, `unsupported` or `inconclusive` (exit 1), with each request named and the line of code that
+  makes it; `--json` carries it under `authority.within` (`result`, `boundary`, `counterexample`, `findings`, `coverage`,
+  `requests`). Each request is decided exactly as `run --grant BOUNDARY` would decide it at that call; a scope the source
+  computes is never answered `within` unless the boundary bounds its whole kind (D-V2-118).
+- **Fixed (SECRET-HIDDEN-1): a program that reads a secret under a computed name** got no secret line from `delulu authority
+  --grants` (`secrets: []`), while running it refused DL0703 at that call. The list now carries `--grant secret:NAME=VALUE`
+  beside the names it can read.
+
 ## Unreleased — a run report says when a guest's devices never started, 2026-10-12
 
 - **Fixed (RW 4.60): a sandboxed run whose guest never asked its host for anything said nothing about its devices** — no

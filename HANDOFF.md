@@ -94,6 +94,10 @@ the assistant's memory — which now also travels file by file in
   P8-04 is built, and **P8 is complete as far as software reaches** — `9000c57`'s push run `38278927092` read green (residuals
   named in D-V2-116); P9-01's build order read against the code (`docs/DELULULANG_V2/V2_P9_DESIGN.md`).
   **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6); RW 4.60 closed the same run (D-V2-117).
+  **Routine run 20 (2026-10-12): P9-01 built** — `delulu authority FILE --within BOUNDARY` answers within, exceeds, unsupported or
+  inconclusive, each request named with the call that makes it, each decided by the runtime's own mint (D-V2-118); and
+  **SECRET-HIDDEN-1** closed beside it (a secret read under a computed name was missing from `--grants`). **Next: P9-02** (`grants
+  diff`), then P9-03 to P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -876,6 +880,11 @@ spells the same thing?**
   (`armed at seq N` for a seq with no record), redemptions, renewals, `Secret.map` and a key rotation. Twelve handlers; the red
   team named eight, and reading every `record_op` against its handler found four more. A loosening is undone and refused, a step
   whose answer would claim a record is withdrawn, a tightening stays in force and says so — never "the guard held".
+- **2026-10-12 — SECRET-HIDDEN-1** (routine run 20, found while building P9-01): `delulu authority --grants` named no secret for a
+  program that reads one under a computed name (`root.secret(name)`) — the report said `secrets: []` and the run refused DL0703 at
+  that call. SCOPE-HIDDEN-1's class (D-V2-81) in the one kind its fix never reached: the walk had marked the kind hidden and nothing
+  read it. The list carries `secret:NAME=VALUE` now. **One fix does not close a class — and a hidden mark that nothing reads is a
+  fix half-made.**
 - **2026-10-09 — HTTP-SCHEME-1** (routine run 15): the daemon's custody gate parsed a host out of `http://host/x` as
   `http` — a plain-http fetch died DL0904 under the daemon where embedded custody returns `Refused`. Two custody modes that
   answer a program differently are a defect even when both fail closed. Fixed: no custody op for a URL the effect refuses
@@ -1253,6 +1262,23 @@ Added in V2 (2026-09-17 → 2026-09-28):
   1 of 5 with four CPUs busy), on `master` already. Take a baseline the subject cannot pre-empt (here the gate's banner), and
   run any witness of a watcher with every CPU busy before it reaches `master`.
 
+- **A design's "decide it with X" is a hypothesis about X's resolution — measure X against the enforcement first** (routine run 20,
+  P9-01): the design said to decide each request with the broker's lattice; reading `authority_spec_from_grants` showed it folds
+  `console` into `Write` and lacks four dimensions, so it would answer *within* where `run` refuses. The enforcement's own check
+  (the mint) decides; the lattice is held to it where both speak, by a generated agreement test.
+- **A witness of an ORDER must use an order no simpler rule produces** (routine run 20, M280): a unit test whose source-first item
+  was also listed last let "reverse the list" pass as "source order". Make the expected order differ from the list's order AND its
+  reverse (and from any sort a mutant might fall back to).
+- **A test helper that passes no flag for an empty set asks a different question** (routine run 20): dropping a one-grant
+  program's only grant left no `--within` at all, and the command answered as plain `authority`. The empty case needs its own
+  spelling (an empty `--within-file`), and a witness that drops items one at a time reaches it at the last one.
+- **A patch script's dry-run switch is an edit too — and the fifth time the tree moved under a suite** (routine run 20): the
+  switch was added with a `replace` whose anchor did not match, so the "dry run" wrote nine records into the tree mid-suite; they
+  were restored byte for byte within about twenty seconds, while only early targets that read none of them ran, and the document
+  gates were re-run after the records. Assert the anchor of every edit to the script itself, and try a writer against a COPY of
+  the files — never the live tree — while a suite runs.
+
+### 11.6 If you are an assistant with memory, keep it current
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
