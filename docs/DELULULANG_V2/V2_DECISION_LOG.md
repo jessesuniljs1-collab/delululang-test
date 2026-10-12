@@ -2666,6 +2666,20 @@ refused and (c) stays the owner's.
    any `allow`, on the gate's action, the daemon claiming a lost record, `denies` counting `allow`s, a record without its node,
    the tree's reach check gone.
 
+## D-V2-117 — RW 4.60: a guest's devices that never started are journaled `device.not-started` — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **Say it in the report, in the shape it already has.** A sandboxed guest that never asks its host for anything after its
+   program never starts its devices (D-V2-110 — by design: until it asks it holds no capability). Its report now journals each
+   planned device as `{"op": "device.not-started", "device": NAME, "at_ms": 0, "detail": …}` in `devices` — the run-report
+   schema's `device_event`, so no field changes shape; `at_ms` is 0 because no broker started to count from, and the detail
+   says so. A guest that asks starts its devices and its journal is the watchdog's, as before.
+2. **Not taken: minting the device node at the first request too** (RW 4.60's other suggestion). The node is the run's — an
+   e-stop aimed at it reaches the run — and it is revoked when the run ends (`a_guest_that_never_asks_leaves_no_device_node_live`);
+   minting it later would move every check that starts with it (§11.5's lesson from F3), for no authority gained.
+3. **Witnessed** — `sandbox_devices_cli`'s `a_report_says_when_a_guests_devices_never_started` (red before: no `devices`
+   entry; the control, a guest that asks, has no `device.not-started`); M266 (no names) and M268 (journaled even when started)
+   red; M267, a second "none once they started" check, survived because the report's branch never reaches it — removed.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -83,14 +83,14 @@ running summary.
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
 **P9** (P9-01 to P9-05, next), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
-waits on the chain), RW 4.60, RW 4.58's O2/O4, RW 4.49, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
+waits on the chain), RW 4.58's O2/O4, RW 4.49, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-116); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-117); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2366,3 +2366,29 @@ directory, or have the laptop session read §11.
   hidden-site rule as a `D-V2-nn` when built; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's O2/O4, RW 4.49; (4) the
   Sunday sweep (2026-10-18 if the period is extended). **For the owner:** D-V2-115, D-V2-116, option (c). **Keep the closing
   entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-12 — routine run 19 (postscript): RW 4.60 closed (D-V2-117); the break-glass witness's race fixed
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-kkuv5g`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `3a91ab7`
+- Commits: (1) `11b48cc` RW 4.60: a run report says when a guest's devices never started; (2) `0df4302` The break-glass witness's
+  baseline is the glass broken, not the program's output; (3) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/guest.rs` (`GuestDevices::planned`; the report's `device.not-started`),
+  `crates/delulu/src/run_cmd.rs` (`DevicePlan::device_names`), `crates/delulu/src/schema.rs` (a comment),
+  `crates/delulu/tests/sandbox_devices_cli.rs` (a witness), `docs/survey/*`. (2) M `crates/delulu/tests/monitor_cli.rs`,
+  `docs/survey/*`. (3) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 5: a
+  witness racing the program is timing-shaped), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-117),
+  `docs/REMAINING_WORK.md` (4.60 closed), `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Deleted:
+  nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: the RW 4.60 witness red first; M266/M268 red, M267 survived on unreachable code and the code was removed; clippy and
+  `check-other-os.sh` clean; read on the runners at `11b48cc` — Windows `38282229036`, macOS `38282233982`, arm64 `38282237136`
+  (18 passed each). The full suite at `11b48cc`: 2,222 passed, **1 failed** (the break-glass witness's race, read and reproduced:
+  1 of 5 with four CPUs busy); after `0df4302`, 0 of 8 under the same load, and the full suite alone: 2,223 passed, 0 failed, 16
+  ignored, cargo exit 0, the tree unmoved. `3a91ab7`'s CI `38281286403` — success.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a witness whose subject races the program is timing-shaped, though it times nothing.
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) **P9-01** from `V2_P9_DESIGN.md` (step 1, spans
+  in the walk; step 2, the verdict); (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. **For the owner:** D-V2-115
+  to D-V2-117, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

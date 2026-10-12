@@ -93,7 +93,7 @@ the assistant's memory — which now also travels file by file in
   records its break-glass use on its own node, and `monitor watch --rule break-glass` fires on it (D-V2-116): every step of
   P8-04 is built, and **P8 is complete as far as software reaches** — `9000c57`'s push run `38278927092` read green (residuals
   named in D-V2-116); P9-01's build order read against the code (`docs/DELULULANG_V2/V2_P9_DESIGN.md`).
-  **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6) and RW 4.60.
+  **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6); RW 4.60 closed the same run (D-V2-117).
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1246,6 +1246,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   against the handler that reaches it found four more (`DisarmDeadman`, `Renew`, `SecretMap`, `RotateKey`) — a finding's list is
   what its author tried. §11.4's "one fix does not close a class", asked BEFORE the fix: grep the mechanism's every use, then put
   the finding's question to each.
+
+- **A witness whose subject races the program is timing-shaped, though it times nothing** (routine run 19): the break-glass
+  witness took "the program printed `started`" as its baseline; the monitor it watched polls every 25 ms, and on a loaded
+  machine it quarantined the run before its first console write — the product right, the witness red (once in the full suite,
+  1 of 5 with four CPUs busy), on `master` already. Take a baseline the subject cannot pre-empt (here the gate's banner), and
+  run any witness of a watcher with every CPU busy before it reaches `master`.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

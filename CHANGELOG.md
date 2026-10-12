@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a run report says when a guest's devices never started, 2026-10-12
+
+- **Fixed (RW 4.60): a sandboxed run whose guest never asked its host for anything said nothing about its devices** — no
+  `devices` entry at all, so "nothing happened to the arm" and "the arm was never started" read the same. Each planned device
+  is now journaled `device.not-started` in the report's `devices` (D-V2-117).
+
 ## Unreleased — `delulu monitor watch --rule break-glass`, 2026-10-12
 
 - **New: `--rule break-glass`** for `delulu monitor watch`: the monitor quarantines a run under its node that runs under a

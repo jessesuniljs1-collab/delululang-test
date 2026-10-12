@@ -5194,3 +5194,22 @@ run against one pure program it fails as it should.
 **Loop engineering** (`CLOUD_ROUTINE.md`): the closing entry kept current by every run (steps 0 and 6); three lines in step 5 —
 enumerate a finding's class from its mechanism before fixing it; a corpus measurement carries a control that must come out
 non-empty; a disk check reads the LAST write, so the edit a witness is about persists last.
+
+## 2026-10-12 — routine run 19 (postscript): RW 4.60 closed (D-V2-117); the break-glass witness's race, found by the run's own suite
+
+**RW 4.60 (`11b48cc`, D-V2-117).** Witnessed red first (`sandbox_devices_cli`, `a_report_says_when_a_guests_devices_never_started`:
+a guest that computes until `--limits wall=2` left a report with no `devices` entry). Each planned device is journaled
+`device.not-started` now. The first form read the plan at report time and stayed red — the plan goes to the host when the program
+is sent — so `GuestDevices` keeps the names from construction. M266 (no names) and M268 (journaled even when started, via the
+control) red; **M267 survived**: a second "none once they started" check that the report's branch can never reach — removed (§11.5,
+M222). Clippy and `check-other-os.sh` clean. Read on the runners at `11b48cc` over `sandbox_devices_cli` and `schema_cli`: Windows
+`38282229036`, macOS `38282233982`, arm64 `38282237136` — 18 passed each, the witness named on each.
+
+**The break-glass witness's race (`0df4302`).** The full suite at `11b48cc` was 2,222 passed and **1 failed**:
+`the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other`. Read: the monitor had quarantined the run (DL1403 at its
+first console write) before the program printed `started`, which the witness's baseline asserted — the product right, the witness
+assuming a timing, and already on `master` (the push runs at `9000c57` and `3a91ab7` were green: their runners were quick enough).
+Reproduced with four CPUs busy: 1 of 5 red, the same message. The baseline is now the gate's `BREAK-GLASS` banner: 0 of 8 red under
+the same load. **The full suite alone at `0df4302`:** 2,223 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree
+unmoved. `3a91ab7`'s push run CI `38281286403` — success. The lesson (§11.5): a witness whose subject races the program is
+timing-shaped even when it measures no time.
