@@ -194,6 +194,10 @@ pub enum ReqBody {
     /// RW 4.46 (D-V2-112): a fetch the run's egress client refused after the broker allowed the use of its
     /// host — recorded as a `deny` citing that `allow`. `reason` is the egress client's machine-readable one.
     EgressRefused { node: String, host: String, reason: String, overrides_seq: Option<u64> },
+    /// P8-04's `break-glass` rule (D-V2-116): a break-glass run's use, bound to the node its lease redeemed — recorded as
+    /// `break-glass-run` `allow` on `node`, citing the ticket's fingerprint, before a line of the program runs. Answered
+    /// `Recorded`; a use whose record was lost does not happen (the run does not run).
+    BreakGlassRun { node: String, ticket: String, relax: String },
     /// The epoch-class client cache refresh: the current epoch + this node's effective state.
     NodeState { node: String },
     /// Synchronous declassification of a broker-held secret (phase 5g); audited with `span`.

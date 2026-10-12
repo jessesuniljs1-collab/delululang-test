@@ -51,6 +51,11 @@ enum Rule {
     /// Any special-use reach in the watched subtree: a fetch the egress client refused because its host is, or
     /// resolved to, a loopback, private, link-local or metadata address (D-V2-113).
     SpecialUse,
+    /// Any break-glass run in the watched subtree: a run that holds its node under a ticket the operator signed to run it
+    /// WITHOUT the sandbox this host requires — its `break-glass-run` record, written once its lease is redeemed and before
+    /// its program runs (D-V2-116). The one rule an `allow` fires: the glass is broken on purpose, and a subtree whose
+    /// operator asked for this rule is one where nothing runs outside the sandbox unwatched.
+    BreakGlass,
     /// `n` `deny` records within `ms` milliseconds (by the records' own timestamps), per run.
     Denies { n: usize, ms: i64 },
 }
@@ -63,24 +68,30 @@ impl Rule {
         if s == "special-use" {
             return Ok(Rule::SpecialUse);
         }
+        if s == "break-glass" {
+            return Ok(Rule::BreakGlass);
+        }
         if let Some(spec) = s.strip_prefix("denies=") {
             let (n, ms) = spec.split_once('/').ok_or_else(|| format!("`{s}`: the form is denies=N/MS"))?;
             let n: usize = n.parse().ok().filter(|n| *n >= 1).ok_or_else(|| format!("`{s}`: N is a whole number ≥ 1"))?;
             let ms: i64 = ms.parse().ok().filter(|m| *m >= 1).ok_or_else(|| format!("`{s}`: MS is a whole number ≥ 1"))?;
             return Ok(Rule::Denies { n, ms });
         }
-        Err(format!("`{s}` is not a rule — the rules are `envelope`, `special-use` and `denies=N/MS`"))
+        Err(format!("`{s}` is not a rule — the rules are `envelope`, `special-use`, `break-glass` and `denies=N/MS`"))
     }
 
-    /// Whether one `deny` record alone fires this rule — `envelope` and `special-use` do; `denies=N/MS` counts
-    /// records instead (`None`). Read from what the HOST recorded (`authority`), never from a guest's words.
-    fn fires_on(&self, action: &str, authority: Option<&serde_json::Value>) -> Option<bool> {
+    /// Whether one record alone fires this rule — `envelope` and `special-use` on a refusal, `break-glass` on a break-glass
+    /// run's use; `denies=N/MS` counts refusals instead (`None`). Read from what the HOST recorded (`decision`,
+    /// `authority`), never from a guest's words.
+    fn fires_on(&self, action: &str, decision: &str, authority: Option<&serde_json::Value>) -> Option<bool> {
         let field = |k: &str| authority.and_then(|a| a.get(k)).and_then(|v| v.as_str());
+        let refused = decision == "deny";
         match self {
-            Rule::Envelope => Some(action == "use" && field("refused_by") == Some("envelope")),
-            Rule::SpecialUse => {
-                Some(action == "use" && field("refused_by") == Some("egress") && field("reason") == Some("special-use"))
-            }
+            Rule::Envelope => Some(refused && action == "use" && field("refused_by") == Some("envelope")),
+            Rule::SpecialUse => Some(
+                refused && action == "use" && field("refused_by") == Some("egress") && field("reason") == Some("special-use"),
+            ),
+            Rule::BreakGlass => Some(decision == "allow" && action == "break-glass-run"),
             Rule::Denies { .. } => None,
         }
     }
@@ -89,6 +100,7 @@ impl Rule {
         match self {
             Rule::Envelope => "envelope".to_string(),
             Rule::SpecialUse => "special-use".to_string(),
+            Rule::BreakGlass => "break-glass".to_string(),
             Rule::Denies { n, ms } => format!("denies={n}/{ms}"),
         }
     }
@@ -447,18 +459,22 @@ fn cmd_watch(rest: &[String]) -> i32 {
             if run == &o.node {
                 continue;
             }
-            if quarantined.contains(run) || fire.contains_key(run) || r.decision != "deny" {
+            if quarantined.contains(run) || fire.contains_key(run) {
                 continue;
             }
             for rule in &o.rules {
                 // A rule that one record fires is decided by `fires_on` alone (unit-tested there), so no rule's
                 // match can drift between a test and this loop; `denies=N/MS` counts records instead.
-                match (rule.fires_on(&r.action, r.authority.as_ref()), rule) {
+                match (rule.fires_on(&r.action, &r.decision, r.authority.as_ref()), rule) {
                     (Some(true), _) => {
                         fire.insert(run.clone(), Evidence { rule: rule.name(), records: vec![(r.seq, r.hash.clone(), r.ts)] });
                     }
                     (Some(false), _) => {}
-                    (None, Rule::Envelope | Rule::SpecialUse) => unreachable!("a single-record rule always answers"),
+                    (None, Rule::Envelope | Rule::SpecialUse | Rule::BreakGlass) => {
+                        unreachable!("a single-record rule always answers")
+                    }
+                    // `denies=N/MS` counts refusals, and only refusals.
+                    (None, Rule::Denies { .. }) if r.decision != "deny" => {}
                     (None, Rule::Denies { n, ms }) => {
                         let w = windows.entry(run.clone()).or_default();
                         w.push_back((r.seq, r.hash.clone(), r.ts));
@@ -667,23 +683,45 @@ mod tests {
     fn the_special_use_rule_fires_on_a_special_use_refusal_and_nothing_else() {
         let egress = |reason: &str| json!({ "op": "Net", "refused_by": "egress", "reason": reason, "overrides_seq": 3 });
         let r = Rule::SpecialUse;
-        assert_eq!(r.fires_on("use", Some(&egress("special-use"))), Some(true));
-        assert_eq!(r.fires_on("use", Some(&egress("userinfo"))), Some(false));
-        assert_eq!(r.fires_on("use", Some(&egress("not-allowlisted"))), Some(false));
-        assert_eq!(r.fires_on("use", Some(&json!({ "refused_by": "envelope", "reason": "special-use" }))), Some(false));
-        assert_eq!(r.fires_on("issue", Some(&egress("special-use"))), Some(false));
-        assert_eq!(r.fires_on("use", None), Some(false));
-        assert_eq!(Rule::Envelope.fires_on("use", Some(&egress("special-use"))), Some(false));
-        assert_eq!(Rule::Envelope.fires_on("use", Some(&json!({ "refused_by": "envelope" }))), Some(true));
-        assert_eq!(Rule::Denies { n: 1, ms: 1 }.fires_on("use", Some(&egress("special-use"))), None);
+        assert_eq!(r.fires_on("use", "deny", Some(&egress("special-use"))), Some(true));
+        assert_eq!(r.fires_on("use", "deny", Some(&egress("userinfo"))), Some(false));
+        assert_eq!(r.fires_on("use", "deny", Some(&egress("not-allowlisted"))), Some(false));
+        assert_eq!(r.fires_on("use", "deny", Some(&json!({ "refused_by": "envelope", "reason": "special-use" }))), Some(false));
+        assert_eq!(r.fires_on("issue", "deny", Some(&egress("special-use"))), Some(false));
+        assert_eq!(r.fires_on("use", "deny", None), Some(false));
+        assert_eq!(Rule::Envelope.fires_on("use", "deny", Some(&egress("special-use"))), Some(false));
+        assert_eq!(Rule::Envelope.fires_on("use", "deny", Some(&json!({ "refused_by": "envelope" }))), Some(true));
+        assert_eq!(Rule::Denies { n: 1, ms: 1 }.fires_on("use", "deny", Some(&egress("special-use"))), None);
+        // The loop hands every record to the rules now (D-V2-116), so a refusal rule reads the decision itself.
+        assert_eq!(r.fires_on("use", "allow", Some(&egress("special-use"))), Some(false));
+        assert_eq!(Rule::Envelope.fires_on("use", "allow", Some(&json!({ "refused_by": "envelope" }))), Some(false));
+    }
+
+    /// D-V2-116: `break-glass` fires on a break-glass run's use and on nothing else — not on the gate's own record (it names
+    /// no node, and its action is `break-glass`), not on a refused ticket, not on any other `allow`.
+    #[test]
+    fn the_break_glass_rule_fires_on_a_break_glass_run_and_nothing_else() {
+        let r = Rule::BreakGlass;
+        let relax = json!({ "relax": "sandbox" });
+        assert_eq!(r.fires_on("break-glass-run", "allow", Some(&relax)), Some(true));
+        assert_eq!(r.fires_on("break-glass-run", "allow", None), Some(true));
+        assert_eq!(r.fires_on("break-glass", "allow", Some(&relax)), Some(false));
+        assert_eq!(r.fires_on("break-glass", "deny", Some(&relax)), Some(false));
+        assert_eq!(r.fires_on("break-glass-run", "deny", Some(&relax)), Some(false));
+        for action in ["use", "redeem", "issue", "attenuate", "revoke"] {
+            assert_eq!(r.fires_on(action, "allow", None), Some(false), "`{action}`");
+        }
+        assert_eq!(Rule::Envelope.fires_on("break-glass-run", "allow", Some(&relax)), Some(false));
+        assert_eq!(Rule::Denies { n: 1, ms: 1 }.fires_on("break-glass-run", "allow", None), None);
     }
 
     #[test]
     fn the_rules_parse_and_refuse_what_they_cannot_mean() {
         assert_eq!(Rule::parse("envelope"), Ok(Rule::Envelope));
         assert_eq!(Rule::parse("special-use"), Ok(Rule::SpecialUse));
+        assert_eq!(Rule::parse("break-glass"), Ok(Rule::BreakGlass));
         assert_eq!(Rule::parse("denies=3/60000"), Ok(Rule::Denies { n: 3, ms: 60_000 }));
-        for bad in ["denies=0/100", "denies=3/0", "denies=3", "denies=x/1", "everything", "", "special", "special-use=1"] {
+        for bad in ["denies=0/100", "denies=3/0", "denies=3", "denies=x/1", "everything", "", "special", "special-use=1", "breakglass", "break-glass=1"] {
             assert!(Rule::parse(bad).is_err(), "`{bad}` must be refused");
         }
     }

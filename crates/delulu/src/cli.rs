@@ -1396,11 +1396,11 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 protocol a driver's transport writes — `--adapter-transport \'delulu device sim …\'`. The bounds given\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 here are the BENCH\'s own limits, not the run\'s grant: narrower ones simulate a hard stop. It models\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 no physics and nothing physical moves; --json describes the bench instead of serving it)\n\
-     \x20 delulu monitor   watch --node g_ID --rule envelope|special-use|denies=N/MS... [--poll MS] [--for MS]\n\
+     \x20 delulu monitor   watch --node g_ID --rule envelope|special-use|break-glass|denies=N/MS... [--poll MS] [--for MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--on-monitor-death quarantine|continue] [--death-after MS] [--state-dir DIR] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (P8-04: an out-of-band monitor. It reads the audit chain as it is appended and QUARANTINES a run under\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 g_ID — revokes it, acting as g_ID — when a rule fires: `envelope` (any envelope refusal), `special-use` (any\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 fetch refused for reaching a special-use address) or\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 fetch refused for reaching a special-use address), `break-glass` (any run under a break-glass ticket) or\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `denies=N/MS` (N refusals within MS ms). The broker lets it stop only runs UNDER g_ID: delegate each\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 run's lease with `grants delegate --parent g_ID`. A second, slower line beside each run's dead-man.\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Its own death: by default (`quarantine`) it arms a dead-man on g_ID and beats it each poll — if\n\

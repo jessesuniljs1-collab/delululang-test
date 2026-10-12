@@ -383,6 +383,28 @@ impl Broker {
         Ok(seq)
     }
 
+    /// P8-04's `break-glass` rule (D-V2-116): a break-glass run's use, bound to the run's node — one `break-glass-run`
+    /// record with decision `allow` on `node`, citing the ticket's fingerprint. The gate (`breakglass::gate`) records the
+    /// glass broken before the run has a node; a lease run learns its node only when it redeems, and an out-of-band
+    /// monitor judges only records that name a node in its subtree. Records, never decides (the ticket was accepted
+    /// already). Refused for a node the tree does not hold; the ticket's words are bounded, as every stored string is.
+    pub fn record_break_glass_run(&mut self, node_id: &GrantId, ticket: &str, relax: &str) -> Result<u64, Denial> {
+        if self.inspect(node_id).is_none() {
+            return Err(Denial::UnknownNode { node: node_id.clone() });
+        }
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "break-glass-run",
+            Some(node_id.as_str().to_string()),
+            Some(crate::bounded_text(ticket, 128)),
+            Some(serde_json::json!({ "relax": crate::bounded_text(relax, 64) })),
+            "allow",
+            None,
+        );
+        Ok(seq)
+    }
+
     /// Validate an op against LIVE tree state (spec §4.4), discarding any guard warn note. The
     /// guard-aware form is [`Broker::check_use`]; both share one implementation.
     pub fn check(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> Decision {

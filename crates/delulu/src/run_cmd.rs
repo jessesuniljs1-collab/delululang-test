@@ -513,6 +513,33 @@ fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog
 /// what a lease is. `hold` receives the node's budget when it carries one: the ordinary run holds
 /// its watchdog to it, the sandboxed run its guest's limits. Fail closed: broker down ⇒ DL1401; a
 /// bad, expired or already-redeemed token ⇒ DL1407/DL1402 — before `main` runs.
+/// P8-04's `break-glass` rule (D-V2-116): a break-glass lease run's use, bound to the node it redeemed, in the chain before a
+/// line of the program runs. The gate's own record (`breakglass::gate`) is written before the run has a node, and an
+/// out-of-band monitor judges only the records that name a node in its subtree — so without this a run that broke the glass
+/// under a monitor was invisible to it. A use that cannot be recorded does not happen: the run refuses itself, exit 2.
+fn bind_break_glass_run(custody: &crate::broker_client::BrokerClientCustody) -> Result<(), i32> {
+    let Some(ticket) = BREAK_GLASS.lock().ok().and_then(|g| g.clone()) else {
+        return Ok(());
+    };
+    let body = crate::broker_ipc::ReqBody::BreakGlassRun {
+        node: custody.node().to_string(),
+        ticket: ticket["ticket"].as_str().unwrap_or_default().to_string(),
+        relax: ticket["relax"].as_str().unwrap_or_default().to_string(),
+    };
+    let why = match crate::brokerd::request(custody.state_dir(), body) {
+        Ok(crate::broker_ipc::Response::Recorded { .. }) => return Ok(()),
+        Ok(crate::broker_ipc::Response::Error { code, message, .. }) => format!("{code}: {message}"),
+        Ok(other) => format!("an unexpected answer: {other:?}"),
+        Err(e) => format!("the broker did not answer: {e}"),
+    };
+    eprintln!(
+        "error: break-glass refused: the run's use could not be recorded with its node ({}), and a break-glass use that is \
+         not recorded does not happen. Nothing ran.",
+        delulu_diag::terminal_line(&why)
+    );
+    Err(2)
+}
+
 pub(crate) fn redeem_lease(
     token: &str,
     grants: &mut Grants,
@@ -1042,7 +1069,12 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             Ok(())
         };
         match redeem_lease(token, &mut grants, &opts, &map, &mut hold) {
-            Ok(custody) => lease_custody = Some(custody),
+            Ok(custody) => {
+                if let Err(code) = bind_break_glass_run(&custody) {
+                    return code;
+                }
+                lease_custody = Some(custody)
+            }
             Err(code) => return code,
         }
     }

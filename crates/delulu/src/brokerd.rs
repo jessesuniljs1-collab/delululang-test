@@ -817,6 +817,16 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::BreakGlassRun { node, ticket, relax } => {
+            let node = GrantId::from_trusted(node);
+            failed.set(false);
+            match broker.record_break_glass_run(&node, &ticket, &relax) {
+                // PS-B-06: a break-glass use that is not recorded does not happen — the run refuses itself on this answer.
+                Ok(_) if failed.get() => (unrecorded_undone("a break-glass run's use", "the run does not run"), false),
+                Ok(seq) => (Response::Recorded { seq }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::Check { node, op, arg } => {
             let Some(op) = Op::from_wire_name(&op) else {
                 return (
@@ -2938,6 +2948,59 @@ mod tests {
         assert!(matches!(guessed, Ok(Response::Error { .. })), "the lost map's derivative must not expose: {guessed:?}");
         // The guess was the lost map's own name: the next derivative is the store's second.
         assert!(matches!(&free, Ok(Response::Mapped { name }) if name == "s_derived_00000001"), "{free:?}");
+    }
+
+    /// P8-04 step 7's last witness, over the wire: a monitor's quarantine reaches only its own subtree. The broker refuses a
+    /// `Quarantine` of a node that is not the caller's own or a descendant — across to a sibling root, or upward from a child
+    /// — with `NotRevocable` (DL0904), and both stay live; the same request on the caller's own child is the baseline.
+    #[test]
+    fn a_quarantine_outside_the_callers_subtree_is_refused() {
+        let state = temp_state("qreach");
+        let handle = start_daemon(&state);
+        let monitor = issue(&state);
+        let sibling = issue(&state);
+        let child = match request(&state, ReqBody::Attenuate { parent: monitor.clone(), authority: spec(&["Write"]), owner: None }) {
+            Ok(Response::Issued { node }) => node,
+            other => panic!("attenuate: {other:?}"),
+        };
+        let quarantine =
+            |caller: &str, target: &str| ReqBody::Quarantine { caller: caller.into(), target: target.into(), why: "rule `envelope`".into() };
+        let across = request(&state, quarantine(&monitor, &sibling));
+        let upward = request(&state, quarantine(&child, &monitor));
+        let states = |state: &Path| match request(state, ReqBody::List) {
+            Ok(Response::Listed { nodes }) => nodes.into_iter().map(|n| (n.id, n.state)).collect::<std::collections::HashMap<_, _>>(),
+            other => panic!("list: {other:?}"),
+        };
+        let before = states(&state);
+        let down = request(&state, quarantine(&monitor, &child));
+        stop_daemon(&state, handle);
+        for (what, answer) in [("across", &across), ("upward", &upward)] {
+            assert!(matches!(answer, Ok(Response::Error { code, .. }) if code == "DL0904"), "{what}: {answer:?}");
+        }
+        assert_eq!(before.get(&sibling).map(String::as_str), Some("live"), "{before:?}");
+        assert_eq!(before.get(&monitor).map(String::as_str), Some("live"), "{before:?}");
+        assert!(
+            matches!(&down, Ok(Response::Revoked { newly_revoked, .. }) if newly_revoked == &vec![child.clone()]),
+            "the baseline: its own child: {down:?}"
+        );
+    }
+
+    /// P8-04's `break-glass` rule (D-V2-116): a break-glass run's use whose record was lost is refused — a break-glass use
+    /// that is not recorded does not happen (PS-B-06), and the run refuses itself on this answer.
+    #[test]
+    fn a_break_glass_run_whose_record_was_lost_is_refused() {
+        let state = temp_state("lostbg");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let used = || ReqBody::BreakGlassRun { node: node.clone(), ticket: "ab".repeat(32), relax: "sandbox".into() };
+        let free = request(&state, used());
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, used());
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(free, Ok(Response::Recorded { .. })), "the baseline: recorded when the chain is free: {free:?}");
+        assert_unrecorded("a break-glass run's use", &lost, "does not run");
     }
 
     /// RW 4.61's rest (D-V2-115): a key rotation whose record was lost stays in force — it only kills tokens — and says so.

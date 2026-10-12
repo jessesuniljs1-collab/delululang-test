@@ -1147,3 +1147,74 @@ fn a_revoke_whose_record_was_lost_warns_and_exits_one_and_still_takes_effect() {
     let states = node_states(&f);
     assert_eq!(states[&node].0, "revoked", "the revocation took effect: {states:?}");
 }
+
+/// **P8-04's `break-glass` rule (D-V2-116): a monitor quarantines the run that breaks the glass, and no other.** Two runs
+/// under the monitor's node: the first, before the operator requires the sandbox, runs plainly — its records are read and
+/// none fires; then the operator requires the sandbox and signs a ticket for this one program, and the second run uses it.
+/// The gate records the glass broken before that run has a node, so the run records its use again once its lease is
+/// redeemed — `break-glass-run` on its own node — and that record is the quarantine's whole evidence.
+#[test]
+fn the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other() {
+    let f = setup("bgq");
+    let program = "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"started\")\n}\n";
+    std::fs::write(f.cwd.join("hello.delulu"), program).unwrap();
+    let home = f.state.parent().unwrap().join("h");
+    std::fs::create_dir_all(&home).unwrap();
+    let operator = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&f.cwd)
+            .env("DELULU_STATE_DIR", &f.state)
+            .env("DELULU_HOME", &home)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args(args)
+            .output()
+            .expect("run delulu")
+    };
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (plain, plain_token) = delegate(&f, &["--parent", &m, "--holder-desc", "a plain run"]);
+    let (glass, glass_token) = delegate(&f, &["--parent", &m, "--holder-desc", "a break-glass run"]);
+    let mon = start_monitor(&f, &m, "break-glass");
+    let o = operator(&["run", "hello.delulu", "--lease", &plain_token, "--broker-profile", "sim", "--no-prompt"]);
+    assert!(stdout(&o).contains("started"), "the control run ran: {}\n{}", stdout(&o), stderr(&o));
+    let o = operator(&["keygen", "--name", "bg", "--json"]);
+    assert!(o.status.success(), "keygen: {}", stderr(&o));
+    let k: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("keygen --json");
+    let (key, public) = (k["key"].as_str().unwrap().to_string(), k["public_key"].as_str().unwrap().to_string());
+    let o = operator(&["sandbox", "require", "--break-glass-key", &public]);
+    assert!(o.status.success(), "sandbox require: {}", stderr(&o));
+    let ticket = f.state.parent().unwrap().join("t.ticket").display().to_string();
+    let hello = f.cwd.join("hello.delulu").display().to_string();
+    let o = operator(&[
+        "sandbox", "ticket", "--key", &key, "--ttl", "15m", "--reason", "the pump controller is down", "--out", &ticket,
+        "--program", &hello,
+    ]);
+    assert!(o.status.success(), "sandbox ticket: {}", stderr(&o));
+    let o = operator(&["run", "hello.delulu", "--lease", &glass_token, "--broker-profile", "sim", "--break-glass", &ticket, "--no-prompt"]);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(so.contains("started") && se.contains("BREAK-GLASS"), "the baseline — the glass was broken: {so}\n{se}");
+    // The monitor polls every 25 ms; give it the time to read the run's record before its node is revoked to end it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while node_states(&f).get(&glass).is_some_and(|(s, _, _)| s == "live") {
+        assert!(std::time::Instant::now() < deadline, "the monitor never quarantined the break-glass run");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let (report, mon_err) = stop_monitor(&f, &m, mon);
+    let all = format!("monitor: {report}\n{mon_err:?}");
+    let q = report["quarantines"].as_array().expect("quarantines");
+    assert_eq!(q.len(), 1, "the break-glass run, and not the plain one: {all}");
+    assert_eq!(q[0]["target"], glass.as_str(), "{all}");
+    assert_ne!(q[0]["target"], plain.as_str(), "{all}");
+    assert_eq!(q[0]["rule"], "break-glass", "{all}");
+    assert_eq!(q[0]["count"], 1, "one record is the whole evidence: {all}");
+    assert!(report["records_read"].as_u64().unwrap_or(0) > 1, "the plain run's records were read too: {all}");
+    let recs = all_records(&f);
+    let e = &q[0]["evidence"][0];
+    let r = recs.iter().find(|r| r["hash"] == e["hash"]).unwrap_or_else(|| panic!("evidence {e} is in the chain"));
+    assert_eq!((r["action"].as_str(), r["decision"].as_str()), (Some("break-glass-run"), Some("allow")), "{r}");
+    assert_eq!(r["actor_node"], glass.as_str(), "the use names the run's own node: {r}");
+    let gate = recs.iter().find(|x| x["action"] == "break-glass" && x["decision"] == "allow").expect("the gate's record");
+    assert_eq!(r["target"], gate["target"], "both name the same ticket: {r}\n{gate}");
+}
