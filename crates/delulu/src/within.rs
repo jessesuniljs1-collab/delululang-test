@@ -448,6 +448,66 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
     Ok(out)
 }
 
+/// P9-02 between two lease NODES: here the broker's `Authority` IS the domain — a node carries no `console` flag, no
+/// `net.special`, no sensor — so the lattice decides, and each item of NEW is asked of `attenuation_check` as a one-item
+/// authority. The probe carries OLD's budget, because an absent budget is the TOP of that dimension and would make every
+/// probe fail; the budget itself is decided once, by `budget_scope::within`. An effect NEW adds is an effect expansion;
+/// a path, host, name or library is a scope expansion; a device a device-reach expansion; a budget a budget expansion.
+pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Authority) -> Vec<DiffFinding> {
+    use delulu_broker::{Authority, Scopes};
+    let covered = |set: &dyn Fn(&mut Scopes)| -> bool {
+        let mut scopes = Scopes { budget: old.scopes.budget, ..Default::default() };
+        set(&mut scopes);
+        delulu_broker::attenuation_check(&Authority { effects: Default::default(), scopes }, old).is_ok()
+    };
+    let mut out = Vec::new();
+    let mut push = |category: &'static str, dimension: &str, grant: String, detail: String| {
+        out.push(DiffFinding { category, dimension: dimension.to_string(), grant, detail });
+    };
+    for e in &new.effects {
+        if !old.effects.contains(e) {
+            push("effect_expansion", "effect", e.name().to_string(), format!("OLD's node has no `{}` effect", e.name()));
+        }
+    }
+    let n = &new.scopes;
+    type Pick = fn(&mut Scopes) -> &mut std::collections::BTreeSet<String>;
+    let dims: [(&str, &std::collections::BTreeSet<String>, Pick); 7] = [
+        ("fs.read", &n.fs_read, |s| &mut s.fs_read),
+        ("fs.write", &n.fs_write, |s| &mut s.fs_write),
+        ("net", &n.net, |s| &mut s.net),
+        ("secret", &n.secrets, |s| &mut s.secrets),
+        ("declassify", &n.declassify, |s| &mut s.declassify),
+        ("foreign.c", &n.foreign_c, |s| &mut s.foreign_c),
+        ("foreign.python", &n.foreign_python, |s| &mut s.foreign_python),
+    ];
+    for (dimension, items, pick) in dims {
+        for item in items {
+            if !covered(&|s: &mut Scopes| {
+                pick(s).insert(item.clone());
+            }) {
+                push("scope_expansion", dimension, format!("{dimension}={item}"), format!("OLD's node does not cover `{item}`"));
+            }
+        }
+    }
+    for (dev, scope) in &n.device {
+        if !covered(&|s: &mut Scopes| {
+            s.device.insert(dev.clone(), scope.clone());
+        }) {
+            let detail = if old.scopes.device.contains_key(dev) {
+                "its envelope is wider than OLD's for the same device".to_string()
+            } else {
+                "OLD's node grants no such device".to_string()
+            };
+            push("device_reach_expansion", "device", scope.to_grant_string(), detail);
+        }
+    }
+    if !delulu_broker::budget_scope::within(n.budget.as_ref(), old.scopes.budget.as_ref()) {
+        let shown = n.budget.map_or("none — the operator's own".to_string(), |b| b.to_grant_string());
+        push("budget_expansion", "budget", shown, "a budget OLD's node does not bound".to_string());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

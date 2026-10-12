@@ -1487,8 +1487,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
-     \x20 delulu grants    diff <old.grants> <new.grants>   (P9-02: what a change of grant set ADDS, one grant a line in each\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 file — effect, scope, special-use and device reach; exit 1 when it adds any, 0 when none)\n\
+     \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 effect, scope, special-use, device and budget reach; two grant files, one grant a line, or two\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 lease nodes through their broker; exit 1 when it adds any, 0 when none)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -6807,7 +6808,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "receipt" => cmd_grants_receipt(args, json),
         "renew" => cmd_grants_renew(args, &state_dir, json),
         // P9-02: offline, between two grant files — no broker is asked.
-        "diff" => cmd_grants_diff(args, json),
+        "diff" => cmd_grants_diff(args, &state_dir, json),
         other => {
             eprintln!(
                 "error: unknown grants subcommand `{other}` \
@@ -6870,8 +6871,9 @@ fn read_grant_lines(f: &str) -> Result<Vec<String>, i32> {
 /// `delulu grants diff OLD NEW [--json]` (P9-02, `V2_OPENSHELL_STUDY.md` §4.9): the categorical findings a change from
 /// grant set OLD to grant set NEW introduces, each NEW line decided against OLD as `authority --within OLD` decides a
 /// request (`within::diff`). No severity grade. Exit 1 when the change adds anything, 0 when it adds nothing, 2 on a
-/// bad invocation — a lease node (`g_…`) is refused by name until nodes are diffed, as the study also asks.
-fn cmd_grants_diff(args: &[String], json: bool) -> i32 {
+/// bad invocation. Two lease NODES (`g_…`) are diffed through the broker that holds them (`within::diff_nodes`) — a node's
+/// authority is the broker's, budget included; a file beside a node is refused (two different domains).
+fn cmd_grants_diff(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
     if let Some(code) = refuse_unlisted_flags("grants diff", args, &["--json", "--state-dir"]) {
         return code;
     }
@@ -6880,11 +6882,14 @@ fn cmd_grants_diff(args: &[String], json: bool) -> i32 {
         eprintln!("error: `grants diff` takes two grant files: <old.grants> <new.grants>");
         return 2;
     };
-    for f in [old_f, new_f] {
-        if f.starts_with("g_") && !std::path::Path::new(f.as_str()).exists() {
+    let is_node = |f: &str| f.starts_with("g_") && !std::path::Path::new(f).exists();
+    match (is_node(old_f), is_node(new_f)) {
+        (true, true) => return grants_diff_nodes(old_f, new_f, state_dir, json),
+        (false, false) => {}
+        _ => {
             eprintln!(
-                "error: `{f}` names a lease node; `grants diff` compares two grant FILES so far — lease nodes, and their \
-                 budgets, are not diffed yet"
+                "error: `grants diff` compares two grant files or two lease nodes — not a file with a node (a node carries a \
+                 budget and no `console` flag; a grant file the reverse)"
             );
             return 2;
         }
@@ -6921,6 +6926,56 @@ fn cmd_grants_diff(args: &[String], json: bool) -> i32 {
         println!("no finding: every grant in `{new_f}` is within `{old_f}` — the change adds nothing");
     } else {
         println!("{} finding(s) — what the change from `{old_f}` to `{new_f}` adds:", findings.len());
+        for f in &findings {
+            println!("  {:<23} {}", f.category, delulu_diag::terminal_line(&f.grant));
+            println!("  {:<23} {}", "", delulu_diag::terminal_line(&f.detail));
+        }
+    }
+    code
+}
+
+/// `grants diff g_OLD g_NEW`: each node's authority from the broker that holds it, compared by the lattice.
+fn grants_diff_nodes(old_id: &str, new_id: &str, state_dir: &std::path::Path, json: bool) -> i32 {
+    let mut auth = Vec::new();
+    for id in [old_id, new_id] {
+        let resp = match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Inspect { node: id.to_string() }, json) {
+            Ok(r) => r,
+            Err(c) => return c,
+        };
+        let crate::broker_ipc::Response::Inspected { node: n } = resp else {
+            eprintln!("error: unexpected inspect response for `{id}`: {resp:?}");
+            return 2;
+        };
+        let spec = crate::broker_ipc::AuthoritySpec {
+            effects: n.effects,
+            fs_read: n.fs_read,
+            fs_write: n.fs_write,
+            net: n.net,
+            secrets: n.secrets,
+            declassify: n.declassify,
+            foreign_c: n.foreign_c,
+            foreign_python: n.foreign_python,
+            device: n.device,
+            budget: n.budget,
+            ..Default::default()
+        };
+        auth.push(crate::brokerd::spec_to_authority(&spec));
+    }
+    let findings = crate::within::diff_nodes(&auth[0], &auth[1]);
+    let code = if findings.is_empty() { 0 } else { 1 };
+    if json {
+        let fj: Vec<Json> = findings
+            .iter()
+            .map(|f| json!({ "category": f.category, "dimension": f.dimension, "grant": f.grant, "detail": f.detail }))
+            .collect();
+        print_success_envelope(
+            "grants",
+            json!({ "subcommand": "diff", "old": old_id, "new": new_id, "adds": !findings.is_empty(), "findings": fj }),
+        );
+    } else if findings.is_empty() {
+        println!("no finding: `{new_id}`'s authority is within `{old_id}`'s — the change adds nothing");
+    } else {
+        println!("{} finding(s) — what `{new_id}` holds beyond `{old_id}`:", findings.len());
         for f in &findings {
             println!("  {:<23} {}", f.category, delulu_diag::terminal_line(&f.grant));
             println!("  {:<23} {}", "", delulu_diag::terminal_line(&f.detail));

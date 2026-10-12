@@ -391,10 +391,105 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     assert!(out(&o).contains("device_reach_expansion") && out(&o).contains("fs.read=./other"), "{}", out(&o));
     let o = delulu(&["grants", "diff", "g_1", &new]);
-    assert!(o.status.code() == Some(2) && out(&o).contains("lease node"), "a node is refused as a node: {}", out(&o));
+    assert!(o.status.code() == Some(2) && out(&o).contains("not a file with a node"), "a node beside a file is refused: {}", out(&o));
     for args in [vec!["grants", "diff", &old], vec!["grants", "diff", &old, &new, "--bogus"]] {
         let o = delulu(&args);
         assert_eq!(o.status.code(), Some(2), "{args:?}: {}", out(&o));
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Stops a test's broker on drop, from a stable directory, never panicking.
+struct BrokerGuard(PathBuf);
+impl Drop for BrokerGuard {
+    fn drop(&mut self) {
+        let _ = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(std::env::temp_dir())
+            .env("DELULU_STATE_DIR", &self.0)
+            .args(["broker", "stop"])
+            .output();
+    }
+}
+
+/// P9-02 between two lease NODES: each node's authority comes from the broker that holds it and is compared by
+/// the lattice — effects, paths, hosts, a device's envelope and the budget (absent is the top of that dimension).
+#[test]
+fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
+    // Short: a broker's socket path is bounded (104 bytes on macOS).
+    let base = std::env::temp_dir().join(format!("dgd{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    for d in ["data/sub", "other"] {
+        std::fs::create_dir_all(cwd.join(d)).unwrap();
+    }
+    std::fs::create_dir_all(&state).unwrap();
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&cwd)
+            .env("DELULU_STATE_DIR", &state)
+            .env("DELULU_NO_COLOR", "1")
+            .args(args)
+            .output()
+            .expect("failed to run delulu")
+    };
+    let o = run(&["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", out(&o));
+    let _guard = BrokerGuard(state.clone());
+    let delegate = |extra: &[&str]| -> String {
+        let mut args = vec!["grants", "delegate", "--ttl", "1h", "--json"];
+        args.extend_from_slice(extra);
+        let o = run(&args);
+        assert!(o.status.success(), "delegate {extra:?}: {}", out(&o));
+        json_of(&o)["node"].as_str().unwrap().to_string()
+    };
+    let arm = "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold";
+    let old = delegate(&["--effects", "Read,Net", "--fs-read", "./data", "--net", "example.com", "--budget", "mem=1048576,cpu=10"]);
+    let new = delegate(&[
+        "--effects", "Read,Write,Net,Actuate", "--fs-read", "./data/sub", "--fs-read", "./other", "--fs-write", "./data",
+        "--net", "example.com", "--net", "api.example.com", "--device", arm, "--budget", "mem=2097152,cpu=10",
+    ]);
+    let narrow_arm = delegate(&["--effects", "Actuate", "--device", "arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold"]);
+    let unbudgeted = delegate(&["--effects", "Read,Net", "--fs-read", "./data", "--net", "example.com"]);
+    let diff = |a: &str, b: &str| -> (i32, Vec<(String, String)>) {
+        let o = run(&["grants", "diff", a, b, "--json"]);
+        let code = o.status.code().unwrap_or(-1);
+        let v = json_of(&o);
+        assert_eq!(v["adds"].as_bool(), Some(code == 1), "{v:#}");
+        let found = v["findings"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{a} {b}: {v:#}"))
+            .iter()
+            .map(|f| (f["category"].as_str().unwrap().to_string(), f["grant"].as_str().unwrap().to_string()))
+            .collect();
+        (code, found)
+    };
+    let (code, found) = diff(&old, &new);
+    assert_eq!(code, 1, "{found:?}");
+    let cats: Vec<&str> = found.iter().map(|(c, _)| c.as_str()).collect();
+    assert_eq!(
+        cats,
+        ["effect_expansion", "effect_expansion", "scope_expansion", "scope_expansion", "scope_expansion", "device_reach_expansion", "budget_expansion"],
+        "{found:?}"
+    );
+    let grants: Vec<&str> = found.iter().map(|(_, g)| g.as_str()).collect();
+    assert!(grants.contains(&"Write") && grants.contains(&"Actuate") && grants.contains(&"net=api.example.com"), "{found:?}");
+    assert!(grants.iter().any(|g| g.starts_with("fs.read=") && g.ends_with("other")), "{found:?}");
+    assert!(!grants.iter().any(|g| g.ends_with("sub")), "a subdirectory of OLD's scope adds nothing: {found:?}");
+    // The reverse: OLD's `./data` is wider than NEW's `./data/sub` — the one thing it adds.
+    let (code, found) = diff(&new, &old);
+    assert_eq!((code, found.len()), (1, 1), "{found:?}");
+    assert!(found[0].0 == "scope_expansion" && found[0].1.ends_with("data"), "{found:?}");
+    // A wider envelope on a device both grant; no budget beside a budget (absent is the top).
+    let o = run(&["grants", "diff", &narrow_arm, &new, "--json"]);
+    let v = json_of(&o);
+    let wider = v["findings"].as_array().unwrap().iter().find(|f| f["category"] == "device_reach_expansion").cloned();
+    assert!(wider.is_some_and(|f| f["detail"].as_str().unwrap().contains("wider")), "{v:#}");
+    let (code, found) = diff(&old, &unbudgeted);
+    assert_eq!((code, found.len(), found[0].0.as_str()), (1, 1, "budget_expansion"), "{found:?}");
+    assert_eq!(diff(&old, &old), (0, vec![]));
+    // A file beside a node is two domains: refused (exit 2).
+    std::fs::write(cwd.join("g.grants"), "console\n").unwrap();
+    let o = run(&["grants", "diff", "g.grants", &old]);
+    assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    let _ = std::fs::remove_dir_all(&base);
 }
