@@ -173,8 +173,8 @@ another OS, and then takes about seven minutes itself (run 5).
    The monitor is a node minted between the operator and the run, which can revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
-   D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (its first slice
-   **built**, run 20, D-V2-119 — two grant files; lease nodes next), P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 (next — read it against the code first), P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -258,7 +258,8 @@ grant set; the runtime's mint decides). **A witness of an order uses an order ne
 20, M280). **Give every mutant a command that runs the witnesses that see it** — a spec's default command is a subset (run 20,
 M276 "survived" a run that never compiled the unit test seeing it).
 **A patch script's own dry-run switch is an edit with an anchor** (run 20: a missed anchor made the dry run real, mid-suite) —
-assert it, and try a writer against a copy while a suite runs.
+assert it, and try a writer against a copy while a suite runs. **A runner's `Terminate orphan process … (delulu)` is a leaked
+daemon** (run 20: a test removed its broker's state directory before its stop guard ran) — read a green read's last lines for it.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

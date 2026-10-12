@@ -95,9 +95,10 @@ skip branch, §11.2).
 
 ## P9-02 to P9-05 — to be read against the code before each is built
 
-- **P9-02** `grants diff` findings (study §4.9) reads P9-01's verdict between two authorities. **First slice built** (routine run
-  20, D-V2-119): between two grant FILES, as the note below predicted — P9-01's mint for each NEW line, the device lattice for an
-  actuator's envelope, a compute envelope's own terms; lease nodes next. *The note, from P9-01's build:* between two GRANT SETS the lattice is too coarse for the same reason it was for
+- **P9-02** `grants diff` findings (study §4.9) reads P9-01's verdict between two authorities. **Built** (routine run 20):
+  between two grant FILES (D-V2-119), as the note below predicted — P9-01's mint for each NEW line, the device lattice for an
+  actuator's envelope, a compute envelope's own terms; and between two lease NODES (D-V2-120) — the lattice, each item asked as a
+  one-item authority carrying OLD's budget. `secret_reach_expansion` waits for P9-04. *The note, from P9-01's build:* between two GRANT SETS the lattice is too coarse for the same reason it was for
   P9-01 (no `console`, `net.special`, sensor, compute or plugin dimension), so the diff is most likely P9-01's verdict with NEW's
   lines as the requests and OLD as the boundary — each finding's category read from the dimension (absent in OLD: an effect
   expansion; present: a scope expansion; `net.special`: special-use reach; a device: device reach) — plus the device lattice

@@ -17,6 +17,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   line — by category and with no severity grade: `effect_expansion`, `scope_expansion`, `special_use_reach` and
   `device_reach_expansion` (a device OLD does not name, or a wider envelope). It asks no broker. Exit 1 when the change adds
   anything, 0 when it adds nothing; `--json` lists each finding with its grant and why (D-V2-119).
+- **New: `delulu grants diff g_OLD g_NEW`** compares two lease nodes through the broker that holds them — the same categories,
+  and `budget_expansion` for a budget the old node does not bound (D-V2-120).
 
 ## Unreleased — `delulu authority FILE --within BOUNDARY`, 2026-10-12
 

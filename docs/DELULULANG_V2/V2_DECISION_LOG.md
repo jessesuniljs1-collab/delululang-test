@@ -2764,6 +2764,27 @@ refused and (c) stays the owner's.
    expansion called an effect expansion, a path decided by presence, the waiver, the memory bound and the kernel names unchecked,
    the exit code, the node refusal and the host decision dropped.
 
+## D-V2-120 — P9-02 between two lease nodes: `delulu grants diff g_OLD g_NEW`, decided by the lattice, budget included — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **The second form of the verb** (`V2_OPENSHELL_STUDY.md` §4.9 names "grant sets or lease nodes"): two `g_…` ids are read from
+   the broker that holds them (`Inspect`) and compared; a file beside a node is refused (exit 2) — they are two domains, a node
+   carrying a budget and no `console` flag, a grant file the reverse. D-V2-119's exit codes and categories hold, and one is
+   added: `budget_expansion` (a budget OLD's node does not bound; an absent budget is the top of the dimension — PS-B-05).
+2. **Here the lattice decides** — the opposite of D-V2-118/119, for the same reason: a node's authority IS the broker's
+   `Authority`, so `attenuation_check` is the enforcement's own answer. Each item of NEW is asked as a one-item authority (an
+   effect by membership; a path, host, name or library through its dimension; a device by its envelope), so every finding names
+   one item rather than the whole intersection `attenuation_check` returns.
+3. **The probe carries OLD's budget.** A one-item probe built with no budget has the TOP of that dimension, and `⊑` fails it
+   against any budgeted OLD — every item of NEW would read as an expansion. The budget is decided once, by `budget_scope::within`.
+   Mutant M290 (a probe without it) is red.
+4. **Witnessed** — `within_cli`'s `grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach`, on a real daemon
+   with four delegated nodes: seven findings one way (two effects, three scopes, a device, a budget) and a subdirectory adding
+   nothing; one the other way (OLD's `./data` is wider than NEW's `./data/sub`); a wider envelope on a device both grant; an
+   unbudgeted node beside a budgeted one; none against itself; a file beside a node refused. Mutants M290–M295 red (M291 is the
+   form before it: node mode refused), the control green.
+5. **P9-02 is built** but for `secret_reach_expansion`, which waits for P9-04's endpoint-bound secrets (no secret has a
+   destination to widen until then).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -61,8 +61,8 @@ running summary.
   run 19), step 5 a dead monitor quarantines — **every step built by run 19 (D-V2-116): P8 complete as far as software
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
   (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
-  the runtime's own mint, the counterexample's call named); **P9-02's first slice** by the same run (D-V2-119 — `delulu
-  grants diff OLD NEW` between two grant files); P9-02's lease nodes and P9-03 to P9-05 not yet built.
+  the runtime's own mint, the counterexample's call named); **P9-02** by the same run (D-V2-119, D-V2-120 — `delulu
+  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 to P9-05 not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -85,7 +85,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-02's lease nodes, then P9-03 to P9-05 — P9-01 and P9-02's first slice built by run 20), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-03 to P9-05, next — P9-01 and P9-02 built by run 20), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -93,7 +93,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-119); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-120); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2467,3 +2467,42 @@ directory, or have the laptop session read §11.
   nodes (`grants diff g_A g_B` — the broker's `Authority`, `budget_expansion` with it); (3) P9-03 proposals, reading this diff;
   (4) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (5) `--within` for a package directory and a `.dwx`. **For the
   owner:** D-V2-115 to D-V2-119, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-12 — routine run 20 (closing): P9-02 between two lease nodes (D-V2-120) — P9-02 built; the run's close
+- Session: `https://claude.ai/code/session_01UbS6DfQbubWag83bcEk12u`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef
+  this run)
+- Branch: `master` (through the harness branch `claude/zealous-keller-an8lk9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `02147ac`
+- Commits: (1) `3f96546` P9-02: grants diff between two lease nodes, through their broker; (2) `94a7b21` The node-diff witness
+  stops its broker before removing its state directory; (3) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/within.rs` (`diff_nodes`), `crates/delulu/src/cli.rs` (`grants_diff_nodes`; the
+  node mode of `cmd_grants_diff`; the help line), `crates/delulu/tests/within_cli.rs` (a witness on a real daemon),
+  `docs/survey/*`. (2) M `crates/delulu/tests/within_cli.rs` (the guard drops first), `docs/survey/*`. (3) M `CHANGELOG.md`,
+  `HANDOFF.md` (where things stand; §11.5 two lessons; a `### 11.6` heading `52b2572` had put in twice), `docs/CLOUD_ROUTINE.md`
+  (step 4's P9 line; step 5 a line),
+  `docs/for-agents.md`, `docs/REMAINING_WORK.md` (4.29), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-120),
+  `V2_P9_DESIGN.md`, `V2_PHASE_STATUS.md` (P9-02 built), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Added, deleted, renamed: nothing. **Authorship:** the
+  owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check`
+  all checks passed
+- Verified: `02147ac`'s push runs — CI `38309152070` success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38309152114` success; `actors_pingpong` — arm64 MEASURED 2.73x (control 4.08x, bar 1.50x), macOS MEASURED 1.73x (control 3.61x, bar 1.35x — a runner that offered four threads this time), Windows and Ubuntu NOT MEASURED (busy or SMT). Mutants M290–M295 red, the control green; clippy clean. Read on the runners at
+  `3f96546` over `within_cli` and `json_contract`: Windows `38309762033` (`json_contract` 13, `within_cli` 7), macOS `38309764907` (14, 7), arm64 `38309768345` (14, 7) — 0 failed, no compiler warning. The full suite alone at `3f96546`: 2,237 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved. **An orphan daemon,
+  found in those green reads' last lines** (`Terminate orphan process … (delulu)` on macOS and arm64) and in the VM (three): the
+  node witness removed its broker's state directory before its stop guard ran — fixed in `94a7b21`, read on the runners: `within_cli` at `94a7b21` — Windows `38310713607`, macOS `38310716813`, arm64 `38310720046`, 7 passed each and no orphan `delulu` in any cleanup.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a guard that reaches its subject through a directory drops first; a runner's
+  orphan-process line is a leaked daemon.
+- **The run in one paragraph:** CI green at the start (`21421ec`); **P9-01 built** — `delulu authority FILE --within BOUNDARY`,
+  each request decided by the runtime's own mint, the counterexample's call named (D-V2-118), with **SECRET-HIDDEN-1** found and
+  closed beside it (a computed secret name missing from `--grants`); **P9-02 built** — `delulu grants diff` between two grant
+  files (D-V2-119) and two lease nodes (D-V2-120). Every code commit read on Windows, macOS and arm64 before `master` moved, three
+  full suites alone (2,235, 2,236 and the last below — 0 failed), 27 mutants (M269–M295: 26 red, one on unreachable code that
+  was removed), every push run read green but the last. One slip, recorded: a records patch's dry run wrote into the tree for
+  about twenty seconds mid-suite (§11.5 has the lesson; the next two patches were tried on copies).
+- Open / next, in order: (1) read THIS commit's push run (unread at this entry); (2) **P9-03** — proposals whose approval is
+  bounded by `⊑` and reads `grants diff` (`V2_OPENSHELL_STUDY.md` §4.10) — read it against the code first, as `V2_P9_DESIGN.md`
+  did for P9-01; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package directory and a
+  `.dwx`; (5) the Sunday sweep (2026-10-18 if the period is extended). **For the owner:** D-V2-115 to D-V2-120, option (c).
+  **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

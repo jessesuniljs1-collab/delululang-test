@@ -5285,3 +5285,31 @@ Mutants M281–M289 red, the control green; clippy clean.
 
 **Next:** lease nodes under `grants diff` (the broker's `Authority`, `budget_expansion` with it), then P9-03 — proposals whose
 approval reads this diff.
+
+## 2026-10-12 — routine run 20 (continued): P9-02 between two lease nodes (D-V2-120) — P9-02 built
+
+**`02147ac`'s push runs** (P9-02's first slice and its records): CI `38309152070` success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38309152114` success; `actors_pingpong` — arm64 MEASURED 2.73x (control 4.08x, bar 1.50x), macOS MEASURED 1.73x (control 3.61x, bar 1.35x — a runner that offered four threads this time), Windows and Ubuntu NOT MEASURED (busy or SMT).
+
+**Lease nodes (`3f96546`, D-V2-120).** `delulu grants diff g_OLD g_NEW` reads each node from its broker and compares them by the
+lattice — a node's authority IS the broker's `Authority`, so here `attenuation_check` is the enforcement's own answer, asked of
+each item of NEW as a one-item authority. Tried by hand on a scratch broker before the witness: seven findings one way, one the
+other, none against itself. **One trap, found by reasoning before the first run:** a one-item probe built with no budget holds the
+top of that dimension and fails against any budgeted OLD; the probe carries OLD's budget, and the budget is decided once (M290 red
+without it). A first by-hand try put the broker's state directory in the scratchpad and the daemon refused it: a Unix socket path
+is bounded (108 bytes on Linux, 104 on macOS) — the witness uses a short name under the temporary directory, as `json_contract`
+does. Mutants M290–M295 red, the control green; clippy clean.
+
+**Read on the runners at `3f96546`** over `within_cli` and `json_contract`: Windows `38309762033` (`json_contract` 13, `within_cli` 7), macOS `38309764907` (14, 7), arm64 `38309768345` (14, 7) — 0 failed, no compiler warning. **The full suite alone at `3f96546`:** 2,237 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved.
+
+**An orphan daemon, found by reading the green reads whole (`94a7b21`).** The macOS and arm64 reads at `3f96546` ended with the
+runner's cleanup line `Terminate orphan process: pid … (delulu)` — absent at `4f0fdd3`, before the node witness existed. The witness
+removed its state directory before its broker guard dropped, and `broker stop` finds the daemon through that directory, so the
+daemon outlived the test; three such daemons were running in the VM. The guard now drops first: none after, read again on the
+runners: `within_cli` at `94a7b21` — Windows `38310713607`, macOS `38310716813`, arm64 `38310720046`, 7 passed each and no orphan `delulu` in any cleanup.
+
+**A duplicated heading in this run's own records.** `52b2572`'s patch inserted `HANDOFF.md`'s new §11.5 lessons before `### 11.6`
+with the heading repeated at the end of its text, so `master` carried `### 11.6` twice; the next patch's anchor check counted 2 and
+stopped before writing. Fixed in this commit; §11.5 has the lesson.
+
+**P9-02 is built** — two grant files (D-V2-119) and two lease nodes (D-V2-120); `secret_reach_expansion` waits for P9-04.
+**Next: P9-03**, proposals whose approval reads this diff — read it against the code first (`V2_P9_DESIGN.md`).

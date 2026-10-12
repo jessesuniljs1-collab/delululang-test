@@ -373,6 +373,8 @@ some of its kind — never `within`, because the answer is a claim about every r
 `delulu grants diff <old.grants> <new.grants> --json` (P9-02) is the same question asked of a CHANGE of
 grant set: each finding names what NEW adds — `effect_expansion`, `scope_expansion`,
 `special_use_reach` or `device_reach_expansion` — with no severity grade; exit 1 when it adds anything.
+`delulu grants diff g_OLD g_NEW --json` asks it of two lease nodes, through their broker, and adds
+`budget_expansion`.
 
 ## [agents.effects] The effect kinds
 

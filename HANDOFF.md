@@ -97,8 +97,8 @@ the assistant's memory — which now also travels file by file in
   **Routine run 20 (2026-10-12): P9-01 built** — `delulu authority FILE --within BOUNDARY` answers within, exceeds, unsupported or
   inconclusive, each request named with the call that makes it, each decided by the runtime's own mint (D-V2-118); and
   **SECRET-HIDDEN-1** closed beside it (a secret read under a computed name was missing from `--grants`); and **P9-02's first
-  slice** — `delulu grants diff OLD NEW` names what a change of grant set adds, by category (D-V2-119). **Next:** lease nodes
-  under `grants diff`, then P9-03 to P9-05.
+  slice** — `delulu grants diff OLD NEW` names what a change of grant set adds, by category (D-V2-119) — and its lease nodes
+  (D-V2-120): **P9-02 built** (`secret_reach_expansion` waits for P9-04). **Next: P9-03** (proposals), then P9-04 and P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1279,7 +1279,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   gates were re-run after the records. Assert the anchor of every edit to the script itself, and try a writer against a COPY of
   the files — never the live tree — while a suite runs.
 
-### 11.6 If you are an assistant with memory, keep it current
+- **A guard that reaches its subject through a directory must drop before the directory goes — and a runner's
+  `Terminate orphan process … (delulu)` is a leaked daemon** (routine run 20): the node-diff witness removed its broker's state
+  directory and only then dropped the guard that runs `broker stop`, which finds the daemon through that directory — the daemon
+  outlived every run of the test (three in the VM). Found only by reading a GREEN read's tail, where the runner names what it
+  had to kill. Drop cleanup guards explicitly, in order; and after a suite, `ps` for the daemons its tests started.
+- **An insertion BEFORE an anchor must not carry the anchor** (routine run 20): this run's first records patch inserted its
+  lessons before `### 11.6` with that heading at the end of the inserted text too, and the heading went into `master` twice
+  (`52b2572`) — every anchor checked, every document gate green. Found by the next patch's own anchor check (count 2). A gate
+  for a duplicated heading would have caught it; an insertion's text ends where the anchor begins.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

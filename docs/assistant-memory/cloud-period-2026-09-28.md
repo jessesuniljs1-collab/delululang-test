@@ -233,3 +233,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   the list nor its reverse gives; give each mutant a command that runs its witnesses.
 - **P9-02's first slice the same run** (D-V2-119): `delulu grants diff OLD NEW` between two grant files — four categories, decided
   as `--within` decides; exit 1 when the change adds anything. Lease nodes next.
+- **P9-02 built the same run** (D-V2-120): `grants diff g_OLD g_NEW` compares two lease nodes by the lattice — each item a
+  one-item authority carrying OLD's budget (an absent budget is the top, so a probe without it fails everything).
