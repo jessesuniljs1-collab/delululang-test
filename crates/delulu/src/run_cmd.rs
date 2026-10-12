@@ -291,6 +291,12 @@ struct BudgetRun {
 
 static BUDGET_RUN: std::sync::Mutex<Option<BudgetRun>> = std::sync::Mutex::new(None);
 
+/// P9-03's build step 1 (`V2_P9_DESIGN.md`): the fault that ended the run, as the envelope's own diagnostic object — code,
+/// message and the span of the call — for `run --report-out`. A refused run's report recorded no diagnostic before, and
+/// the refusal reached only the terminal in prose; a proposal is computed from this span (P9-01's requirement for the
+/// call), never from words the runtime or the program chose.
+static RUN_FAULT: std::sync::Mutex<Option<Json>> = std::sync::Mutex::new(None);
+
 /// Arm the watchdog the moment the program starts, on whichever engine runs it — the interpreter,
 /// the WASM engine and a `.dwx` artifact all pass through [`note_program_started`], which is what
 /// makes one budget hold on every engine (PS-B-01's "on every engine" is this one call site).
@@ -502,6 +508,9 @@ fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog
     );
     if exit != 0 {
         env["summary"]["errors"] = json!(1);
+    }
+    if let Some(d) = RUN_FAULT.lock().ok().and_then(|g| g.clone()) {
+        env["diagnostics"] = json!([d]);
     }
     env
 }
@@ -1611,6 +1620,9 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             let mut d = Diagnostic::error(fault.code, fault.message.clone());
             if let Some(span) = fault.span {
                 d = d.with_span(span, "runtime fault here");
+            }
+            if let Ok(mut g) = RUN_FAULT.lock() {
+                *g = delulu_diag::envelope("run", std::slice::from_ref(&d), None, &map)["diagnostics"].get(0).cloned();
             }
             print_diagnostics("run", &[d], &map, None, opts.json);
             1

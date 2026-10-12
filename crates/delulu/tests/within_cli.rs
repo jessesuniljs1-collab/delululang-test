@@ -497,3 +497,35 @@ fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// P9-03's build step 1 (`V2_P9_DESIGN.md`): a refused run's report records the refusal and the call it was made at — the
+/// span P9-01's requirement list maps to the narrowest grant (here `fs.read=./config` at 48:18, the same place
+/// `authority --within` names). Before, `run --report-out` wrote `diagnostics: []` for a refused run and the refusal reached
+/// only the terminal, in prose.
+#[test]
+fn a_refused_runs_report_records_the_refusal_at_the_call_the_verdict_names() {
+    let dir = std::env::temp_dir().join(format!("delulu-refusal-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let report = dir.join("report.json");
+    let file = "examples/guide/05_capabilities.delulu";
+    let o = delulu(&["run", file, "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let r: Value = serde_json::from_str(&std::fs::read_to_string(&report).expect("a report is written")).unwrap();
+    let d = &r["diagnostics"][0];
+    assert_eq!(d["code"], "DL0703", "the refusal is in the report: {r:#}");
+    let start = &d["spans"][0]["start"];
+    let (line, col) = (start["line"].as_u64(), start["col"].as_u64());
+    let (code, v) = within(file, &["console".to_string()]);
+    assert_eq!(code, 1);
+    let at = &v["counterexample"]["at"];
+    assert_eq!((line, col), (at["line"].as_u64(), at["column"].as_u64()), "the report's call is the verdict's: {r:#}\n{v:#}");
+    assert_eq!(v["counterexample"]["grant"], "fs.read=./config");
+    assert_eq!(r["summary"]["errors"], 1, "{r:#}");
+    // A clean run's report still carries none.
+    let o = delulu(&["run", "docs/book/samples/01_hello.delulu", "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let r: Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(r["diagnostics"], serde_json::json!([]), "{r:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
