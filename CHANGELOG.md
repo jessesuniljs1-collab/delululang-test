@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu monitor watch --rule break-glass`, 2026-10-12
+
+- **New: `--rule break-glass`** for `delulu monitor watch`: the monitor quarantines a run under its node that runs under a
+  break-glass ticket — outside the sandbox the host requires. A lease run that breaks the glass now records its use on its own
+  node (`break-glass-run`) once its lease is redeemed and before its program runs; if that record cannot be written the run
+  does not run (D-V2-116).
+
 ## Unreleased — no broker operation is answered as recorded when its record was lost, 2026-10-12
 
 - **Fixed (RW 4.61): when another writer held the audit chain too long, twelve broker daemon operations answered success with

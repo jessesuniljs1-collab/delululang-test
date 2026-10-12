@@ -5144,3 +5144,27 @@ each. **The full suite alone at `96b7b87`:** 2,218 passed, 0 failed, 16 ignored 
 **Left of RW 4.61:** a beat's own firing path (reachable only in a race — the daemon fires every due dead-man before the next
 request; `fire_deadmen` already says when a firing's record is lost) and the daemon's startup records. The lesson (§11.5): a
 finding's list is what its author tried; enumerate the class from its mechanism.
+
+## 2026-10-12 — routine run 19 (continued): P8-04's `break-glass` rule (D-V2-116) — every step of P8-04 built
+
+**`cad7c47`'s push runs:** CI `38276195408` success on every job, `ocsf` `38276194840` success; `5bd440d`'s CI `38270912985` success.
+
+**The gap, read against the code before building.** `breakglass::gate` writes its `break-glass` record with `audit_required`,
+which names no node — and it runs before a lease run has one (the lease is redeemed later in `run_cmd`); the monitor's loop
+skipped every record that was not a `deny`. So a run that broke the glass under a monitor was invisible to it twice over.
+**Witness first** (`monitor_cli`, `the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other`): red on the code
+before — `break-glass` was not a rule; with the rule, mutant M258 (no binding record) shows the run is still invisible.
+**Built (`0d3f514`, D-V2-116):** once a lease run has redeemed and before its program runs, it asks the daemon to record its use
+on its own node (`ReqBody::BreakGlassRun` → `Broker::record_break_glass_run` → `break-glass-run` `allow`, target the ticket's
+fingerprint); a lost record is DL1401 and the run refuses itself (exit 2). `--rule break-glass` fires on that record; the loop now
+hands every record to the rules, the refusal rules read the decision themselves and `denies=N/MS` counts refusals only. And
+P8-04 step 7's last witness over the wire: `a_quarantine_outside_the_callers_subtree_is_refused` (a `Quarantine` across or
+upward is `NotRevocable`, DL0904; the caller's own child is the baseline) — a pin, falsified by M265. **Mutants M258–M265** red,
+each by its own witness (M263 — `denies` counting `allow`s — by the existing `a_monitor_quarantines_the_run_that_keeps_probing…`);
+controls green. Clippy clean; `check-other-os.sh` clean for Windows and macOS; the help, completion, JSON-contract, skill and
+MCP gates green. **Read on the runners at `0d3f514`** over `bin:delulu`, `monitor_cli` and `break_glass_cli`: Windows
+`38277449931` (190 passed), macOS `38277453631` (205), arm64 `38277459675` (225) — 0 failed, the new witnesses named on each.
+**The full suite alone at `0d3f514`:** 2,222 passed, 0 failed, 16 ignored (161 binaries), cargo exit 0, the tree unmoved.
+
+**P8-04's build order is complete** — steps 1 to 7, the four rules of `V2_OPENSHELL_STUDY.md` §4.7 among them — and with it P8 as
+far as software reaches (D-V2-116 item 5, recorded once this push run is read; the residuals are named there).

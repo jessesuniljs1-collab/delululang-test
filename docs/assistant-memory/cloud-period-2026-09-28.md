@@ -223,3 +223,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **RW 4.61 closed the same run** (D-V2-115): twelve daemon handlers answered success for a lost record; a loosening is undone and
   refused, a step whose answer would claim a record withdrawn, a tightening in force and said. The red team named eight; reading
   every `record_op` against its handler found four more. Lesson: enumerate a class from its mechanism, not from the finding's list.
+- **P8-04's `break-glass` rule the same run** (D-V2-116): the gate's record names no node (it is written before a lease run has
+  one), so a lease run records its use again on its own node once redeemed, and the rule fires on that `allow`. Every step of
+  P8-04 is built; P8 complete as far as software reaches, its residuals named in D-V2-116. Next: P9.

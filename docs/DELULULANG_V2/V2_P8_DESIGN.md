@@ -230,8 +230,9 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    the monitor sends only `Quarantine`). **Step 5 built by routine run 17 (`c299e47`, `3e9c496`, D-V2-106)**; next: the other two rules.
 4. **Measured by routine run 15:** `envelope` and `denies=N/MS` are built (D-V2-101); `special-use` waited on RW 4.46 (the
    egress client's refusal was not in the chain) — closed by routine run 18 (D-V2-112): a refused fetch is a `deny` with
-   `refused_by: egress` and its reason, citing its `allow` — and **`special-use` built the same run (D-V2-113)**; `break-glass` waits on its record carrying the run's node (`audit_required`
-   writes none). *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
+   `refused_by: egress` and its reason, citing its `allow` — and **`special-use` built the same run (D-V2-113)**; **`break-glass` built by routine run 19 (`0d3f514`, D-V2-116)** — the gate's
+   record names no node (`audit_required` writes none, before a lease run has one), so a lease run records its use again on its
+   own node once its lease is redeemed (`break-glass-run`), and the rule fires on that `allow`. All four rules are built. *The rules, declarative and few* (`V2_OPENSHELL_STUDY.md` §4.7): N `deny` records within T on one run's subtree; any
    envelope refusal on an actuator; any break-glass use (`breakglass.rs` records one); any special-use reach. Each is a
    predicate over the records of step 1, evaluated at a poll interval the operator sets, with the window and the count
    printed in the quarantine's own record — a monitor that fires without saying what it saw is a monitor nobody can
@@ -260,7 +261,8 @@ one that fired, as OpenShell treats the loss of its fence's controller) or `cont
    loses its actuator within a measured bound after the Nth refusal (the bound printed, as D-V2-90's sampler is); a
    monitor that tries to grant is refused by the broker (a mutant that asks for `Issue` gets DL1421/`NotRevocable`); a
    monitor given a node it is not an ancestor of revokes nothing (`Denial::NotRevocable`, the step-3 rule as a test);
-   and the monitor's death handled both ways.
+   and the monitor's death handled both ways. **All built** — the last, the step-3 rule over the wire, by routine run 19
+   (`a_quarantine_outside_the_callers_subtree_is_refused`, D-V2-116 item 4). **P8-04's build order is complete.**
 
 ## What stays out, and why
 

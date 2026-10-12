@@ -89,8 +89,10 @@ the assistant's memory — which now also travels file by file in
   found **RW 4.61** (guard operations answer success with no record — reproduced; the bypass closed the same run, D-V2-114).
   **Routine run 19 (2026-10-12):** the cloud period's closing entry begun in `docs/CLOUD_SYNC_LOG.md` (kept current by every run
   until 2026-10-16); RW 4.61 closed — twelve daemon operations whose record was lost, four of them beyond the red team's list: a
-  loosening undone, a claim withdrawn, a tightening in force and said (D-V2-115). **Next:** P8-04's
-  `break-glass` rule (its record needs the run's node), RW 4.57 and 4.53 (with the pass's F4 and F6), RW 4.60, then P9.
+  loosening undone, a claim withdrawn, a tightening in force and said (D-V2-115); and P8-04's `break-glass` rule — a lease run
+  records its break-glass use on its own node, and `monitor watch --rule break-glass` fires on it (D-V2-116): every step of
+  P8-04 is built, and **P8 is complete as far as software reaches** once its push run is read (residuals named in D-V2-116).
+  **Next: P9** (P9-01 `authority --within` first), beside RW 4.57 and 4.53 (with the pass's F4 and F6) and RW 4.60.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

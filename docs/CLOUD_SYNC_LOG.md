@@ -57,8 +57,9 @@ running summary.
   runners (E-05), the audit chain exported as OCSF 1.8.0 (E-06). **P8** (safe autonomy): **P8-01** a control program in a
   guest, **P8-02** a signed Verified driver as a `.dpx` (RW 4.7 closed), **P8-03** the simulator as a device process (`delulu
   device sim`) — complete; **P8-04** the out-of-band monitor — in progress: step 1 measured (AUDIT-REFUSAL-1, AUDIT-SEQ-1
-  fixed), step 3 (b) `delulu monitor watch`, step 4's `special-use` rule, step 5 a dead monitor quarantines. **P9** —
-  designed, not started.
+  fixed), step 3 (b) `delulu monitor watch`, step 4's four rules (`envelope`, `denies=N/MS`, `special-use`, and `break-glass` —
+  run 19), step 5 a dead monitor quarantines — **every step built by run 19 (D-V2-116): P8 complete as far as software
+  reaches**. **P9** — designed, not started.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -80,15 +81,15 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-P8-04's `break-glass` rule, RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
-waits on the chain), RW 4.60, RW 4.58's O2/O4, then **P9** (P9-01 to P9-05). PS-E's three residuals: E-03's H6 (macOS and
+**P9** (P9-01 to P9-05, next), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+waits on the chain), RW 4.60, RW 4.58's O2/O4, RW 4.49, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-115); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-116); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2308,3 +2309,30 @@ directory, or have the laptop session read §11.
   list); `docs/assistant-memory/cloud-period-2026-09-28.md`.
 - Open / next, in order: (1) read this commit's push run; (2) P8-04's `break-glass` rule (this run, next); (3) RW 4.57, RW 4.53
   (with F4 and F6), RW 4.60, RW 4.58's last parts (O2/O4); (4) P9. **For the owner:** D-V2-115.
+
+### 2026-10-12 — routine run 19 (continued): P8-04's `break-glass` rule — every step of P8-04 built (D-V2-116)
+- Session: `https://claude.ai/code/session_01DeHytTS7xJQjv5K5ddrWP2`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-kkuv5g`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `cad7c47`
+- Commits: (1) `0d3f514` P8-04's break-glass rule: a monitor quarantines a run that breaks the glass; (2) this entry's commit —
+  the records
+- Files and folders: (1) M `crates/delulu-broker/src/validate.rs` (`record_break_glass_run`), `crates/delulu/src/broker_ipc.rs`
+  (`ReqBody::BreakGlassRun`), `crates/delulu/src/brokerd.rs` (its handler; two witnesses), `crates/delulu/src/run_cmd.rs`
+  (`bind_break_glass_run`), `crates/delulu/src/monitor_cmd.rs` (`Rule::BreakGlass`; `fires_on` reads the decision; the loop),
+  `crates/delulu/src/cli.rs` (the help line), `crates/delulu/tests/monitor_cli.rs` (a witness), `docs/survey/*`. (2) M
+  `CHANGELOG.md`, `HANDOFF.md` (where things stand), `docs/CLOUD_ROUTINE.md` (step 4: P8-04 complete), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-116), `V2_P8_DESIGN.md` (steps 4 and 7 built), `V2_PHASE_STATUS.md` (P8's row),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`.
+  Deleted: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors, `doctor --check` all checks passed
+- Verified: `cad7c47`'s push runs (CI `38276195408`, `ocsf` `38276194840`) and `5bd440d`'s CI (`38270912985`) — success. The witness
+  red before the fix; M258–M265 red, controls green; clippy and `check-other-os.sh` (Windows, macOS) clean. Read on the runners at
+  `0d3f514` over `bin:delulu`, `monitor_cli`, `break_glass_cli`: Windows `38277449931` (190 passed), macOS `38277453631` (205), arm64
+  `38277459675` (225) — 0 failed. The full suite alone at `0d3f514`: 2,222 passed, 0 failed, 16 ignored (161 binaries), cargo exit
+  0, the tree unmoved.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new beyond D-V2-116.
+- Open / next, in order: (1) read this commit's push run, and record P8 complete in `V2_PHASE_STATUS.md` with it; (2) **P9** —
+  P9-01 `authority --within` first (`V2_OPENSHELL_STUDY.md` §4.8); (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.60, RW 4.58's
+  O2/O4, RW 4.49. **For the owner:** D-V2-115, D-V2-116 (and option (c), a revoke-only principal in the tree).

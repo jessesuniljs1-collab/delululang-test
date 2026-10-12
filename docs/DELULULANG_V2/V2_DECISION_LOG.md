@@ -2634,6 +2634,38 @@ refused and (c) stays the owner's.
    `a_guard_approval_or_request_…`, `a_dead_mans_arming_or_disarming_…`, `a_redemption_…`, `a_renewal_…`, `a_secret_map_…`,
    `a_key_rotation_…`); mutants M241–M257 red.
 
+## D-V2-116 — P8-04's `break-glass` rule: a break-glass run's use is recorded on its own node, and a monitor fires on it; P8 complete as far as software reaches — TAKEN (head chef, 2026-10-12, under the owner's delegation)
+
+1. **The record a rule can judge.** `breakglass::gate` records the glass broken (`break-glass` `allow`, the ticket's
+   fingerprint as its target) before the run reads a line of its program — and before a lease run has a node, so the
+   record names none, and a monitor judges only records that name a node in its subtree: a run that broke the glass under a
+   monitor was invisible to it. Now a lease run, once its lease is redeemed and before its program runs, asks the daemon to
+   record its use on its own node — `break-glass-run` `allow`, actor the run's node, target the same fingerprint, `relax` in
+   the payload (`ReqBody::BreakGlassRun`, `Broker::record_break_glass_run`). Two records, not one moved: the gate's stays
+   where it is, the moment the ticket is spent and the evidence of an attempt whatever follows; the second binds that use to
+   the node. A distinct action, so a count of `break-glass` uses stays one per ticket.
+2. **A use that cannot be recorded does not happen** (PS-B-06's rule, kept): the daemon answers a lost record DL1401 (D-V2-115's
+   form) and the run refuses itself, exit 2, before a line runs. The node must be in the tree; nothing is recorded about one
+   that is not.
+3. **`--rule break-glass`** fires on that record — the one rule an `allow` fires. The watch loop used to skip every record that
+   was not a `deny`; it now hands each record to the rules, the refusal rules (`envelope`, `special-use`) read the decision
+   themselves, and `denies=N/MS` counts refusals only. A ticket the operator signed is still a reason to quarantine under a
+   monitor whose operator asked for this rule: that subtree is one where nothing runs outside the sandbox unwatched.
+4. **P8-04 step 7's last witness**, over the wire: a `Quarantine` of a node outside the caller's subtree — across to a
+   sibling root, or upward from a child — is `NotRevocable` (DL0904) and both stay live (M265 red).
+5. **P8 complete, as far as software reaches** (taken here, recorded with its push run's read): P8-01 to P8-04, every step of
+   `V2_P8_DESIGN.md`'s build orders built and witnessed against the simulator and `delulu device sim`. Named and kept open
+   where they are recorded: a real device (environment-blocked — no hardware in a cloud VM), the monitor's residuals (RW 4.49),
+   a daemon request's waits on the chain beside busy hosts (RW 4.53, with the red team's F4 and F6), a killed run's nodes
+   under the daemon (RW 4.57), a guest that never asks (RW 4.60) — and option (c), a revoke-only principal in the tree, which
+   would make "a monitor holds exactly revoke" exact and is the owner's (it changes who may revoke). **Next: P9.**
+6. **Witnessed** — `monitor_cli`'s `the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other` (a plain run under the
+   same monitor is read and left alone; the evidence is the `break-glass-run` record on the run's node, naming the gate's
+   ticket); the daemon's `a_break_glass_run_whose_record_was_lost_is_refused`; `a_quarantine_outside_the_callers_subtree_is_refused`;
+   `monitor_cmd`'s two unit tests. Mutants M258–M265 red: no binding record, the loop's `deny` filter restored, the rule firing on
+   any `allow`, on the gate's action, the daemon claiming a lost record, `denies` counting `allow`s, a record without its node,
+   the tree's reach check gone.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

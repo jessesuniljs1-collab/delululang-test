@@ -159,7 +159,7 @@ another OS, and then takes about seven minutes itself (run 5).
    **P8** as far as software reaches (`V2_P8_DESIGN.md`): P8-01 the control program in a guest (**complete**, run 13,
    D-V2-95), P8-02 the Verified-class adapter as a `.dpx` (**complete**, run 14, D-V2-96 and D-V2-97 — RW 4.7 closed),
    P8-03 the reference transport and the sim as a device (**complete**, run 14, D-V2-98 — `delulu device sim`),
-   **P8-04 the out-of-band monitor is in progress**: its build order is in `V2_P8_DESIGN.md`; run 15 MEASURED its step 1
+   **P8-04 the out-of-band monitor — complete** (run 19, D-V2-116): its build order is in `V2_P8_DESIGN.md`; run 15 MEASURED its step 1
    (two of its claims were false — AUDIT-REFUSAL-1 and AUDIT-SEQ-1, both fixed, D-V2-100 and D-V2-102) and built step 3 (b), `delulu
    monitor watch` (D-V2-101); run 16 closed **RW 4.47, ACTOR-CUSTODY-1** (D-V2-103 — an actor's effects answer to the run's
    custody and brokers) and **RW 4.50, PLUGIN-CUSTODY-1** (D-V2-104 — the same shape in a plugin export's nested interpreter,
@@ -168,8 +168,9 @@ another OS, and then takes about seven minutes itself (run 5).
    own death** (D-V2-106 — the broker holds a dead-man for the monitor's node) and its red-team pass found RW 4.55 onward, which
    come first; run 18 closed RW 4.59 (D-V2-110 — a guest's devices start at its first request), RW 4.58 for device refusals
    and adoptions (D-V2-111) and RW 4.46 (D-V2-112 — a refused fetch is a `deny` in the chain), and built the `special-use` rule
-   (D-V2-113); run 19 closed RW 4.61 (D-V2-114/115 — every daemon operation whose record was lost); next the `break-glass` rule (its record needs the run's node) — a monitor node minted between the operator and the run, which can
-   revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
+   (D-V2-113); run 19 closed RW 4.61 (D-V2-114/115 — every daemon operation whose record was lost) and built the `break-glass` rule
+   (D-V2-116): **P8-04's build order is complete, and P8 complete as far as software reaches** (its residuals named in D-V2-116).
+   The monitor is a node minted between the operator and the run, which can revoke its own subtree and nothing else. Option (c), a revoke-only principal in the tree, is for the OWNER. Witnessed
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within`,
    P9-02 `grants diff`, P9-03 proposals, P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
