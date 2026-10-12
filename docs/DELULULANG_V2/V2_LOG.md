@@ -5313,3 +5313,14 @@ stopped before writing. Fixed in this commit; §11.5 has the lesson.
 
 **P9-02 is built** — two grant files (D-V2-119) and two lease nodes (D-V2-120); `secret_reach_expansion` waits for P9-04.
 **Next: P9-03**, proposals whose approval reads this diff — read it against the code first (`V2_P9_DESIGN.md`).
+
+## 2026-10-12 — routine run 20 (postscript): `1fc3aa0`'s push runs read; a gate for a heading written twice
+
+**`1fc3aa0`'s push runs** (P9-02's lease nodes, the orphan fix and their records): CI `38311372015` success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38311371940` success; `actors_pingpong` — arm64 MEASURED 2.90x (control 4.11x, bar 1.50x), macOS NOT MEASURED (3 hardware threads), Windows and Ubuntu NOT MEASURED (busy or SMT).
+
+**The repeated-heading gate (`b566969`)** — loop engineering from this run's own slip (`52b2572` put `HANDOFF.md`'s `### 11.6` in
+twice, every document gate green). `repository_structure` reads every markdown file the Survey lists and refuses a heading repeated
+on the next heading line; blank lines between do not hide one, and a section name reused under another date or a repeat inside
+fenced code is not one. Measured before it was written: no such repeat in the tree; `52b2572`'s `HANDOFF.md` has one. Witnessed red
+with that duplicate put back (`HANDOFF.md:1293` named), green once restored; the rule's own synthetic cases beside it. Read on the
+runners at `b566969` over `repository_structure`: Windows `38311565631`, macOS `38311568364`, arm64 `38311571579` — 4 passed each, the two new tests named. **The full suite alone at `b566969`:** 2,239 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, and no broker daemon left running after it.

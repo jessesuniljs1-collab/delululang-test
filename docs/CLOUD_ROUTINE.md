@@ -260,6 +260,8 @@ M276 "survived" a run that never compiled the unit test seeing it).
 **A patch script's own dry-run switch is an edit with an anchor** (run 20: a missed anchor made the dry run real, mid-suite) —
 assert it, and try a writer against a copy while a suite runs. **A runner's `Terminate orphan process … (delulu)` is a leaked
 daemon** (run 20: a test removed its broker's state directory before its stop guard ran) — read a green read's last lines for it.
+**A waiter fixes its run id or SHA when it starts** (run 20: a background loop that re-read `HEAD` on every poll reported the next
+commit's witness runs as the push runs it was waiting for).
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then

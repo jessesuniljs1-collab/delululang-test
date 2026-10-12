@@ -75,7 +75,8 @@ running summary.
   `authority --grants`) — and whatever the entries after run 20 add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
-  `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, `ocsf.yml` and `openshell.yml`, and
+  `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, the repeated-heading gate in
+  `repository_structure` (run 20), `ocsf.yml` and `openshell.yml`, and
   `docs/CLOUD_ROUTINE.md` itself — rewritten by almost every run (its step 8).
 - **Decisions:** D-V2-56 to the newest `D-V2-nn` in `V2_DECISION_LOG.md` (run 1 took D-V2-46 to D-V2-51; the laptop's study
   took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **One entrenched edit:** `DELULU_CORE.md` v0.3
@@ -2505,4 +2506,24 @@ directory, or have the laptop session read §11.
   bounded by `⊑` and reads `grants diff` (`V2_OPENSHELL_STUDY.md` §4.10) — read it against the code first, as `V2_P9_DESIGN.md`
   did for P9-01; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package directory and a
   `.dwx`; (5) the Sunday sweep (2026-10-18 if the period is extended). **For the owner:** D-V2-115 to D-V2-120, option (c).
+  **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-12 — routine run 20 (postscript): `1fc3aa0`'s push runs read; a gate for a heading written twice
+- Session: `https://claude.ai/code/session_01UbS6DfQbubWag83bcEk12u`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master` (through the harness branch `claude/zealous-keller-an8lk9`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `1fc3aa0`
+- Commits: (1) `b566969` A gate: no markdown file repeats a heading on the heading after it; (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/tests/repository_structure.rs` (`repeated_headings`; two tests), `docs/survey/*`.
+  (2) M `HANDOFF.md` (§11.5: the gate exists), `docs/CLOUD_ROUTINE.md` (step 5: a waiter fixes its SHA), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md` (this entry; the closing
+  entry's list of the loop's tools), `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check`
+  all checks passed
+- Verified: `1fc3aa0`'s push runs — CI `38311372015` success on every job (`miri-slow` and `heavy-gates` skipped on a push), `openshell` `38311371940` success; `actors_pingpong` — arm64 MEASURED 2.90x (control 4.11x, bar 1.50x), macOS NOT MEASURED (3 hardware threads), Windows and Ubuntu NOT MEASURED (busy or SMT). The gate red with `52b2572`'s duplicate put back, green restored. Read on the runners
+  at `b566969` over `repository_structure`: Windows `38311565631`, macOS `38311568364`, arm64 `38311571579` — 4 passed each, the two new tests named. The full suite alone at `b566969`: 2,239 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, and no broker daemon left running after it.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new.
+- Open / next: as the closing entry before this one — (1) read THIS commit's push run; (2) **P9-03**, read against the code first;
+  (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package directory and a `.dwx`.
   **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

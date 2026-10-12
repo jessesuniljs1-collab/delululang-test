@@ -1287,7 +1287,8 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **An insertion BEFORE an anchor must not carry the anchor** (routine run 20): this run's first records patch inserted its
   lessons before `### 11.6` with that heading at the end of the inserted text too, and the heading went into `master` twice
   (`52b2572`) — every anchor checked, every document gate green. Found by the next patch's own anchor check (count 2). A gate
-  for a duplicated heading would have caught it; an insertion's text ends where the anchor begins.
+  for it exists now (`repository_structure`: no heading repeated on the heading after it, `b566969`); an insertion's text ends
+  where the anchor begins.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
