@@ -367,7 +367,13 @@ fn a_monitor_quarantines_the_run_that_keeps_probing_and_the_chain_says_why() {
     // the run's node, so the arm parks (its node is a descendant) and the program's next use of what it
     // held faults, as revoking a run's parent does in `estop_cli.rs`. It never finished.
     assert_eq!(so.matches("COMMANDED").count(), 1, "the in-envelope command, and nothing after: {all}");
-    assert!(so.matches("REFUSED:").count() >= 3, "three refusals came first: {all}");
+    // Three refusals came first — counted in the TRACE, where the program records each at the refusal itself, before the
+    // monitor can have seen it. Not on standard output: the monitor may quarantine the run between its third refusal and the
+    // `println` of it, and that `println` is then refused DL1403 (routine run 21: red on `187494a`'s Ubuntu runner, two lines
+    // of three; red 3 of 3 in the VM with work between a refusal and its line). The first two lines are printed whatever the
+    // timing — the rule cannot fire before the third refusal exists.
+    assert!(se.matches("\"op\":\"command.refused\"").count() >= 3, "three refusals came first: {all}");
+    assert!(so.matches("REFUSED:").count() >= 2, "the first two refusals were printed: {all}");
     assert!(!so.contains("PROBER DOWN"), "the quarantine ended the run before it finished its 60 probes: {all}");
     assert_eq!(o.status.code(), Some(1), "{all}");
     let q = report["quarantines"].as_array().expect("quarantines");
