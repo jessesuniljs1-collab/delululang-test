@@ -117,6 +117,17 @@ fn corpus() -> Vec<String> {
         here.sort();
         files.extend(here);
     }
+    // And every package under `examples/` (routine run 21): `--within` answers for a package directory too.
+    let mut packages: Vec<String> = std::fs::read_dir(root.join("examples"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.join("delulu.toml").is_file())
+        .map(|p| format!("examples/{}", p.file_name().unwrap().to_string_lossy()))
+        .collect();
+    packages.sort();
+    assert!(packages.len() >= 3, "the packages under examples/ were read: {packages:?}");
+    files.extend(packages);
     files
 }
 
@@ -141,7 +152,11 @@ fn every_corpus_program_is_within_its_own_grants_and_exceeds_each_narrowing_at_t
             let c = &v["counterexample"];
             assert_eq!(c["grant"].as_str(), Some(dropped.as_str()), "{file}: the counterexample is the dropped grant: {v:#}");
             let line = c["at"]["line"].as_u64().unwrap_or_else(|| panic!("{file}: `{dropped}` names no call: {v:#}"));
-            let text = std::fs::read_to_string(workspace_root().join(&file)).unwrap();
+            // The call's own file: the program itself, or a package's module (named relative to the package).
+            let named_file = c["at"]["file"].as_str().unwrap_or_else(|| panic!("{file}: no file named: {v:#}"));
+            let program = workspace_root().join(&file);
+            let src = if program.is_dir() { program.join(named_file) } else { workspace_root().join(named_file) };
+            let text = std::fs::read_to_string(&src).unwrap_or_else(|e| panic!("{file}: `{}`: {e}", src.display()));
             let src_line = text.lines().nth(line as usize - 1).unwrap();
             let method = method_of(dropped);
             let named = if method.is_empty() {
@@ -248,10 +263,13 @@ fn a_boundary_file_says_what_the_flags_say_and_every_form_that_cannot_answer_ref
     // Each form that does not answer the question refuses it by name — never ignores it (exit 2).
     let lock = dir.join("old.lock");
     std::fs::write(&lock, "").unwrap();
+    // A `.dwx` carries a manifest, not the calls a counterexample names. (A package directory is answered since routine run 21.)
+    let dwx = dir.join("shipped.dwx");
+    std::fs::write(&dwx, b"\0asm\x01\0\0\0").unwrap();
     for (why, args) in [
         ("--diff", vec!["authority", "--diff", lock.to_str().unwrap(), "examples/line_driver", "--within", "console"]),
         ("--grants", vec!["authority", file, "--grants", "--within", "console"]),
-        ("a package", vec!["authority", "examples/line_driver", "--within", "console"]),
+        ("a .dwx", vec!["authority", dwx.to_str().unwrap(), "--within", "console"]),
         ("a bad grant", vec!["authority", file, "--within", "fs.read="]),
         ("no value", vec!["authority", file, "--within"]),
         ("another command", vec!["check", file, "--within", "console"]),
@@ -722,5 +740,53 @@ fn grants_propose_names_the_dropped_grants_call_for_every_kind() {
         proposed += 1;
     }
     assert_eq!(proposed, 8, "every requirement was dropped once");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// P9-01 and P9-03 for a PACKAGE (routine run 21): `authority DIR --within` answers for a package directory as for a file —
+/// the counterexample's call named in the module's own file — and `grants propose` reads a package run's report, whose call is
+/// in the flattened text the run executed (named so by the run's own diagnostic), and proposes the requirement `authority DIR`
+/// names for it. Before, both refused a package in words.
+#[test]
+fn a_package_is_checked_against_a_boundary_and_its_refusal_is_proposed_for() {
+    let pkg = "examples/greeter";
+    assert_eq!(required(pkg), ["console"]);
+    let (code, v) = within(pkg, &["console".to_string()]);
+    assert_eq!((code, v["result"].as_str()), (0, Some("within")), "{v:#}");
+    let (code, v) = within(pkg, &[]);
+    assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "{v:#}");
+    let at = &v["counterexample"]["at"];
+    // Named as `authority DIR` names a module — relative to the package — and never the flattened text.
+    let file = at["file"].as_str().unwrap_or_else(|| panic!("the call is named: {v:#}"));
+    assert!(!file.contains("flattened") && file.ends_with(".delulu"), "the module's own file: {v:#}");
+    let text = std::fs::read_to_string(workspace_root().join(pkg).join(file)).unwrap();
+    let line = text.lines().nth(at["line"].as_u64().unwrap() as usize - 1).unwrap();
+    assert!(line.contains("console("), "the counterexample points at its call: `{line}`");
+
+    let dir = std::env::temp_dir().join(format!("delulu-package-propose-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = dir.join("report.json").to_string_lossy().to_string();
+    for sandbox in [false, true] {
+        let mut args = vec!["run", pkg, "--report-out", &r];
+        if sandbox {
+            args.push("--sandbox");
+        }
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(1), "sandbox={sandbox}: {}", out(&o));
+        let report: Value = serde_json::from_str(&std::fs::read_to_string(&r).unwrap()).unwrap();
+        let o = delulu(&["grants", "propose", &r, "--json"]);
+        let p = json_of(&o);
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}: {p:#}");
+        assert_eq!(p["proposal"], serde_json::json!(["console"]), "the call's own requirement: {p:#}");
+        assert_eq!(p["call"], "root.console()", "{p:#}");
+        let span = &report["diagnostics"][0]["spans"][0];
+        assert_eq!(p["program"], span["file"], "the flattened text the run named: {p:#}");
+        assert_eq!(
+            (p["refusal"]["at"]["line"].as_u64(), p["refusal"]["at"]["column"].as_u64()),
+            (span["start"]["line"].as_u64(), span["start"]["col"].as_u64()),
+            "{p:#}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

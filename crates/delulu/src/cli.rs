@@ -3427,10 +3427,12 @@ fn cmd_authority(rest: &[String]) -> i32 {
         eprintln!("error: `authority` needs a file or package directory");
         return 2;
     };
-    if asks_within && (std::path::Path::new(&file).is_dir() || looks_like_dwx(&file)) {
+    // A package directory is checked as `authority DIR` reads it (routine run 21); a `.dwx` carries a manifest, not the calls
+    // a counterexample names.
+    if asks_within && looks_like_dwx(&file) {
         eprintln!(
-            "error: `authority --within` reads one source file; a package directory or a `.dwx` is not checked \
-             against a boundary yet — name the `.delulu` file"
+            "error: `authority --within` reads a source file or a package directory; a `.dwx` is not checked against a \
+             boundary yet — name its source"
         );
         return 2;
     }
@@ -3455,7 +3457,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
     }
     let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if asks_within {
-        return authority_within(&map, &checked, report, &opts);
+        return authority_within(&map, &[&checked.module], report, &opts);
     }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
@@ -3474,7 +3476,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
 /// boundary? The boundary is parsed by `Grants::add`, the parser `run --grant` uses, and is only ever
 /// checked against: nothing here grants it. The verdict is `within.rs`'s; exit 0 for *within* and 1 for
 /// any other answer, which the report names (`--json` carries it under `authority.within`).
-fn authority_within(map: &SourceMap, checked: &delulu_check::Checked, mut report: Json, opts: &Opts) -> i32 {
+fn authority_within(map: &SourceMap, modules: &[&delulu_syntax::ast::Module], mut report: Json, opts: &Opts) -> i32 {
     let mut lines: Vec<String> = opts.within.clone();
     if let Some(f) = &opts.within_file {
         if std::path::Path::new(f).is_dir() {
@@ -3498,7 +3500,7 @@ fn authority_within(map: &SourceMap, checked: &delulu_check::Checked, mut report
             return 2;
         }
     }
-    let walk = requested_scopes(&[&checked.module]);
+    let walk = requested_scopes(modules);
     let (reqs, unsupported) = requirements(&report, &walk);
     let v = crate::within::verdict(&reqs, &unsupported, &boundary);
     let code = if v.outcome == crate::within::Outcome::Within { 0 } else { 1 };
@@ -5633,6 +5635,10 @@ fn emit_authority(
     stamp_foreign_isolation(&mut report, opts);
     stamp_isolation(&mut report, opts);
     stamp_grants(&mut report, modules);
+    // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
+    if !opts.within.is_empty() || opts.within_file.is_some() {
+        return authority_within(map, modules, report, opts);
+    }
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
         return 0;
@@ -7058,18 +7064,24 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
     else {
         return answer(refusal(Json::Null), None, None, &[], "the report does not place the refusal at a call, so no call's requirement can be read");
     };
-    if file.ends_with(" (flattened for execution)") {
-        return answer(
-            refusal(Json::Null),
-            Some(file),
-            None,
-            &[],
-            "the refusal is in a package's flattened text — `grants propose` reads a single file today, as `authority --within` does",
-        );
-    }
-    let (map, id, src) = match load(file) {
-        Ok(x) => x,
-        Err(c) => return c,
+    // A package's run names its calls in the flattened text it executed (`run_cmd::flattened_name`): the call is found, and its
+    // requirement read, there (routine run 21).
+    let package = file.strip_suffix(" (flattened for execution)").filter(|d| std::path::Path::new(d).join("delulu.toml").is_file());
+    let (map, id, src) = match package {
+        Some(dir) => match crate::run_cmd::flattened_package(dir) {
+            Some(flat) => {
+                let mut map = SourceMap::new();
+                let id = map.add_file(file.to_string(), flat.clone());
+                (map, id, flat)
+            }
+            None => {
+                return answer(refusal(Json::Null), Some(file), None, &[], "the package does not check, or would not run, as it is now")
+            }
+        },
+        None => match load(file) {
+            Ok(x) => x,
+            Err(c) => return c,
+        },
     };
     // The report is input: its offsets are checked against the program as it is now before anything reads them.
     let changed = "the program changed since the run (or the report was edited): no capability-minting call is at the refused call's place";
@@ -7083,6 +7095,8 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
     if errors(&checked.diagnostics) > 0 {
         return answer(refusal(at), Some(file), None, &[], "the program does not check as it is now, so its requirements cannot be read");
     }
+    // A package's flattened text is the program the run executed; a proposal filters the requirements by the call's own kind
+    // and literals, so a manifest's scopes — lines no call of the source writes — never change it.
     let (_, opts) = parse_opts(&[]);
     let authority =
         source_authority_report(file, &map, &checked, manifest_scopes(file), &manifest_python_allowlist(file), &opts);
