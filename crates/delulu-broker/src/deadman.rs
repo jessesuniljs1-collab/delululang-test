@@ -154,6 +154,17 @@ impl Broker {
         Ok((seq, key))
     }
 
+    /// DEADMAN-BUSY-1 (D-V2-127): the first period starts when the arming is ANSWERED — once its record is written — not
+    /// when it was decided: writing the record can wait on the chain, and the holder cannot beat before it holds the key.
+    /// Never earlier than the deadline it replaces. Only the daemon calls this, in the request that armed it.
+    pub fn start_deadman_period(&mut self, node: &GrantId, now: Instant) {
+        if let Some(d) = self.deadmen.get_mut(node) {
+            if let Some(at) = now.checked_add(d.period) {
+                d.deadline = d.deadline.max(at);
+            }
+        }
+    }
+
     /// RW 4.61's rest (D-V2-115): an arming whose record could not be written is withdrawn — its answer would name a seq
     /// that is no record of it, and a firing would cite that seq as its arming. Only the daemon calls this, in the request
     /// that armed it.

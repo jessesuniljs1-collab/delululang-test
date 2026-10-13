@@ -782,7 +782,11 @@ fn handle(
                     broker.withdraw_unrecorded_arming(&node);
                     (unrecorded_undone("the dead-man's arming", "the dead-man not armed"), false)
                 }
-                Ok((seq, key)) => (Response::DeadmanArmed { seq, period_ms, key }, false),
+                // DEADMAN-BUSY-1 (D-V2-127): its first period from now — the record written, the answer about to go.
+                Ok((seq, key)) => {
+                    broker.start_deadman_period(&node, std::time::Instant::now());
+                    (Response::DeadmanArmed { seq, period_ms, key }, false)
+                }
                 Err(r) => (deadman_refused(&node, &r), false),
             }
         }
@@ -2210,7 +2214,16 @@ mod tests {
         let state = temp_state("dmidle");
         let handle = start_daemon(&state);
         let node = issue(&state);
-        let _key = arm(&state, &node, 300);
+        // The arming's record written slowly — the chain held 200 ms, as a slow disk held it on a runner (`76f83a2`).
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let arming = {
+            let (state, node) = (state.clone(), node.clone());
+            std::thread::spawn(move || arm(&state, &node, 300))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        drop(held);
+        let _key = arming.join().unwrap();
         let armed = std::time::Instant::now();
         let mut fired = Vec::new();
         while armed.elapsed() < std::time::Duration::from_secs(10) {
@@ -2223,8 +2236,18 @@ mod tests {
         let took = armed.elapsed();
         stop_daemon(&state, handle);
         assert_eq!(fired.len(), 1, "an idle daemon must fire the dead-man by itself — no request arrived after the arming");
-        assert!(took >= std::time::Duration::from_millis(300), "never before its period: {took:?}");
-        eprintln!("measured: an idle daemon fired a 300 ms dead-man {} ms after it was armed", took.as_millis());
+        // "Never before its period" is measured between the daemon's own records — the arming's and the firing's — never
+        // from when the test got the arming's answer: the daemon answers once the arming's record is written, so a slow
+        // write moved the test's clock and not the dead-man's (routine run 22: `76f83a2`'s Ubuntu run read 201 ms). Whole
+        // milliseconds of the wall clock: the firing is at least the period after the arming, less one for the truncation.
+        let arming = delulu_broker::audit::query(audit_dir(&state), &delulu_broker::audit::QueryFilter::default())
+            .unwrap()
+            .into_iter()
+            .find(|r| r.action == "deadman-arm" && r.target.as_deref() == Some(node.as_str()))
+            .expect("the arming is in the chain");
+        let gap = fired[0].ts - arming.ts;
+        assert!(gap >= 299, "never before its period: fired {gap} ms after the arming (the test saw it {took:?} after the answer)");
+        eprintln!("measured: an idle daemon fired a 300 ms dead-man {gap} ms after it was armed ({} ms after the answer)", took.as_millis());
     }
 
     /// **A beat sent in time keeps its dead-man, though the daemon answers it late** (routine run 22: `11c9d94`'s push run
