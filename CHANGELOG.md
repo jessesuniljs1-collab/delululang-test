@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `delulu grants propose REPORT`, 2026-10-13
+
+- **New (P9-03): `delulu grants propose REPORT`** — the narrowest grant for the call a refused run was refused at, read
+  from the run's `--report-out` report (ordinary or sandboxed) and the program's source: that call's own static
+  requirement, as `authority --grants` names it. It grants and stores nothing. Exit 0 with a proposal; 1 with none, and
+  why — a computed scope, a refusal a grant does not answer, a program that changed since the run (D-V2-123).
+- **Fixed: a refused run's report was never checked against the `run-report` schema** — the schema test ran only
+  programs that succeed. Both kinds of refused report are now validated.
+
 ## Unreleased — a sandboxed run's report records the host's refusal, 2026-10-13
 
 - **Fixed: `delulu run --sandbox --report-out F` recorded no diagnostic for a refused run** — the host wrote

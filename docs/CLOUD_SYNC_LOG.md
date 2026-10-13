@@ -62,7 +62,7 @@ running summary.
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
   (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
   the runtime's own mint, the counterexample's call named); **P9-02** by the same run (D-V2-119, D-V2-120 — `delulu
-  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), and step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call); P9-03's rest (`grants propose`, the store, approval), P9-04 and P9-05 not yet built.
+  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement); P9-03's rest (the store and approval), P9-04 and P9-05 not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -86,7 +86,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-03's `grants propose` onward, then P9-04 and P9-05 — P9-01 and P9-02 built by run 20, P9-03's steps 1 and 1b by runs 20 and 21), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-03's store and approval, then P9-04 and P9-05 — P9-01 and P9-02 built by run 20, P9-03's steps 1, 1b and 2 by runs 20 and 21), RW 4.62 (a custody-refused operation reads as dispatched in the trace), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -94,7 +94,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-122); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-123); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2605,3 +2605,41 @@ directory, or have the laptop session read §11.
   matches the `run-report` schema; (3) RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49; (4) `--within` for a package
   directory and a `.dwx`. **For the owner:** D-V2-115 to D-V2-122, option (c). **Keep the closing entry current; from 2026-10-16 a
   run only refreshes it and stops.**
+
+### 2026-10-13 — routine run 21 (continued): P9-03 step 2 — `grants propose REPORT` (D-V2-123); `master` red on `187494a`, two witnesses fixed
+- Session: `https://claude.ai/code/session_01DAyavJ4QKjZKUovSd9V255`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-keller-uym82b`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `187494a`
+- Commits: (1) `93a74b7` P9-03: grants propose REPORT - the refused call's own requirement; (2) `ea31897` The quarantine witness
+  counts the third refusal in the trace; (3) `ba60f60`, `4c2ba86`, `0e92a3e` — the macOS footprint witness's three forms (green,
+  green with readings, red), each read on a runner; (4) `fe621c6` The macOS peak-footprint witness reads a process of its own;
+  (5) `e879816` MUTANT M317 (read red on macOS) and `995581e` its revert; (6) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/cli.rs` (`ScopeWalk.sites`, `MintSite`; `cmd_grants_propose`; the help line),
+  `crates/delulu/src/within.rs` (`Proposal`, `propose`), `crates/delulu/tests/within_cli.rs` (two witnesses),
+  `crates/delulu/tests/json_contract.rs` (the success row; the broker-verbs sweep), `crates/delulu/tests/schema_cli.rs` (a refused
+  report validated), `docs/survey/*`. (2) M `crates/delulu/tests/monitor_cli.rs`, `docs/survey/*`. (3)–(5) M
+  `crates/delulu/src/jail.rs` (its macOS tests only), `docs/survey/*`. (6) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5
+  five lessons), `docs/CLOUD_ROUTINE.md` (step 4's P9 line; step 5 a line; step 7a a gate), `docs/for-agents.md` (`grants propose`),
+  `docs/REMAINING_WORK.md` (4.29; **4.62 added**), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-123),
+  `V2_P9_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Added, deleted,
+  renamed: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check`
+  all checks passed
+- Verified: `187494a`'s push runs — `ocsf` `38328124557` success, CI `38328124600` **failure** (Ubuntu's and macOS's test jobs; read
+  and fixed — `V2_LOG.md`). `93a74b7`: the witnesses red first; mutants M307–M316 red, the control green; clippy clean; read on the
+  runners over `within_cli`, `json_contract`, `schema_cli` and `delulu`'s unit tests — Windows `38328775607` (207 passed), macOS
+  `38328777737` (222), arm64 `38328781069` (241); the full suite alone at `93a74b7`: 2,246 passed, 0 failed, 16 ignored (162
+  binaries). The two fixes: `monitor_cli` red 3 of 3 with its window grown, green 3 of 3 after, 19 passed 3 of 3 under four busy
+  CPUs, read on `ubuntu-24.04` (`38330138742`, 19 passed); the footprint witness red on macOS in its third form (`38330675493`), the
+  fix read green (`38331001159`, 193 passed), M317 red (`38331248991`). The full suite alone at `995581e` with these records in the
+  tree: 2,246 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a gate over the paths that succeed says nothing about the paths that fail; a list
+  kept by key keeps one location per key; an offset someone else supplies is checked on a character boundary; a grown window that
+  stays green refutes the guessed mechanism (print the readings); a count of a program's output is a baseline its watcher can
+  pre-empt.
+- Open / next, in order: (1) read THIS commit's push run; (2) **P9-03 step 3** — the store and approval (`V2_P9_DESIGN.md` item 3;
+  D-V2-123 item 6); (3) `--within` and `grants propose` for a package directory (both refuse one in words today) and a `.dwx`;
+  (4) RW 4.62, RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. **For the owner:** D-V2-115 to D-V2-123, option (c).
+  **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

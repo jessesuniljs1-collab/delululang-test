@@ -376,6 +376,13 @@ grant set: each finding names what NEW adds — `effect_expansion`, `scope_expan
 `delulu grants diff g_OLD g_NEW --json` asks it of two lease nodes, through their broker, and adds
 `budget_expansion`.
 
+**When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
+sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
+`proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the
+runtime or the program worded; `proposes` is `false` (exit 1) with a `reason` when there is none — a scope the source
+computes, a refusal a grant does not answer, a program changed since the run. It grants nothing: whoever holds the
+authority decides, and `grants diff` tells them what the proposal adds.
+
 ## [agents.effects] The effect kinds
 
 There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`,

@@ -134,6 +134,11 @@ skip branch, §11.2).
   requirement list keeps only each grant's FIRST call (`push` deduplicates by grant), so a refusal at a second call of the same
   grant maps to no requirement's `at`; the walk must keep every minting call (`ScopeWalk.sites`), and the report records no
   grant set, so a proposal is the refused call's own static requirement, not a difference from what the run held.
+  **Step 2 built** (routine run 21, `93a74b7`, D-V2-123): `grants propose REPORT` — the report as a positional, not `--from` (a flag
+  documented for `grants` reaches every verb of it). Hypothesis 5's first half witnessed: a proposal is never wider than the
+  refused call's requirement (mutants M309, the whole requirement list, and M310, any literal of the kind, red). **Next: step
+  3, the store and approval** (item 3 above); the rest of hypothesis 5 (the run's node unchanged by an approval; a rejection's
+  reason reaching the agent) is witnessed there.
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

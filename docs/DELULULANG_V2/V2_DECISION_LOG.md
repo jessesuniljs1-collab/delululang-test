@@ -2827,6 +2827,40 @@ refused and (c) stays the owner's.
    backwards, another file — recorded unplaced; nothing for a clean exit or a failed channel). Mutants M298–M306 red, the
    control green. Read on Windows, macOS and arm64 before `master` moved.
 
+## D-V2-123 — P9-03 step 2: `grants propose REPORT` proposes the refused call's own static requirement, read through every minting call — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **What it proposes.** The `--grant` line(s) of the requirement of the capability-minting call at exactly the report's
+   refusal span, as `authority --grants` names them (`within::propose` filters P9-01's requirement list by that call's kind
+   and literals). Never a line the runtime or the program worded: the refusal's message is not parsed, its repairs are not
+   read. One call's requirement and nothing wider — a call that asks for two hosts at once proposes both, because that is
+   that call's requirement (the report records no grant set — `sandbox.granted` is the sandbox level — so a proposal is not
+   a difference from what the run held; `grants diff BOUNDARY PROPOSAL` is where an approver asks what it adds).
+2. **Every call, not each grant's first** (measured while step 1b was built): the requirement list keeps each grant's
+   FIRST call (`push` deduplicates by grant), so a refusal at a second call of the same grant matched no requirement's
+   `at`. The Survey walk now keeps every minting call (`ScopeWalk.sites` — kind, literals, hidden), and the report's
+   fields are unchanged by it.
+3. **When it proposes nothing** (exit 1, a `reason`): no refusal in the report; a code a grant does not answer (only
+   DL0703 — every DL0703 is raised at a mint, `prim::call_root_method`); a refusal the report does not place; a package's
+   flattened text (single files, as `authority --within` — both open together); a program that does not check; a call that
+   computes its scope (no static narrowest grant — the operator chooses; the shape, `fs.read=PATH`, is named); a mint whose
+   grant names what only the operator holds (a library's or an artifact's path); and a program that changed since the run.
+   The report is input: its offsets are checked to lie on character boundaries of the program as it is now before anything
+   slices it (mutant M312, without the check, panicked the binary).
+4. **Read-only, and under `grants`.** It reads two files, asks no broker, writes nothing. `grants` stays an EFFECTOR in
+   `mcp.rs`'s door rule (the command is classified, not the verb); the json contract drives the verb in its success table
+   and in the broker-verbs sweep, whose advertised-verbs check refused the verb until it was driven. The report is a
+   positional, not `--from`: a flag documented for a command reaches every verb of it (routine run 8).
+5. **Witnessed** — `within_cli`'s `grants_propose_reads_the_refused_calls_own_requirement_from_the_report` (red first: no
+   verb): the guide's refusal from an ordinary and a sandboxed report (`fs.read=./config`, the `at` `authority --within`
+   names); a refusal at a second call of a grant; nothing for a computed scope, a changed program, offsets past the end, a
+   clean run, DL1403, and exit 2 for a file that is not a run report. And, generated, `grants_propose_names_the_dropped_
+   grants_call_for_every_kind`: a program minting eight requirements across seven kinds, run with all but one, eight times —
+   each proposal is exactly the dropped call's requirement. `schema_cli`'s `a_refused_runs_report_matches_the_run_report_
+   schema` (ordinary and sandboxed). Mutants M307–M316 red, the control green.
+6. **Next (P9-03 step 3):** the store — a proposal kind beside the Guard's queue (a proposal asks for a child NODE, a Guard
+   request for permits on a node's uses), approval minting through `attenuate` under the approver's own node, effective on
+   the next run; auto-approval within a standing boundary is `grants diff BOUNDARY PROPOSAL` adding nothing (D-V2-119).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

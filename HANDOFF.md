@@ -101,7 +101,9 @@ the assistant's memory — which now also travels file by file in
   (D-V2-120): **P9-02 built** (`secret_reach_expansion` waits for P9-04); P9-03 read against the code — its premise measured false
   for DL0703 — and its step 1 built (D-V2-121).
   **Routine run 21 (2026-10-13):** P9-03 step 1b — a sandboxed run's report records the HOST's refusal at the call the guest's
-  request named, the ordinary run's code, message and span (D-V2-122). **Next: `grants propose`.**
+  request named, the ordinary run's code, message and span (D-V2-122); and step 2 — `delulu grants propose REPORT`, the
+  narrowest grant for the refused call, read from the report and the program's source: that call's own requirement, through
+  every minting call (D-V2-123). **Next: P9-03 step 3** (the store and approval), then P9-04.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1292,6 +1294,28 @@ Added in V2 (2026-09-17 → 2026-09-28):
   (`52b2572`) — every anchor checked, every document gate green. Found by the next patch's own anchor check (count 2). A gate
   for it exists now (`repository_structure`: no heading repeated on the heading after it, `b566969`); an insertion's text ends
   where the anchor begins.
+
+- **A gate over the paths that succeed says nothing about the paths that fail** (routine run 21): `schema_cli` held every
+  kind of run report to the `run-report` schema — for programs that RUN — and a refused run's report, whose `diagnostics`
+  started carrying the refusal the day before, was validated by nothing. When a field that was always empty on a path
+  starts to carry content there, take the gates that read that field to that path.
+- **A list kept by key keeps one location per key** (routine run 21): the requirement list deduplicates by grant and keeps
+  each grant's FIRST call, so a refusal at a second call of the same grant mapped back to nothing. Before mapping a location
+  back through a list, ask what the list dropped to be one entry per key — here the walk had to keep every call.
+- **An offset someone else supplies is input — check it is on a character boundary before slicing** (routine run 21, twice
+  in one run): a guest's span inside a multi-byte character panicked the host's renderer (D-V2-122), and a report's edited
+  offsets panicked `grants propose` (mutant M312). `&s[a..b]` and `SourceMap::position` both panic mid-character.
+
+- **A grown window that stays green refutes the guessed mechanism — make the witness print what it reads** (routine run 21):
+  `master` went red on macOS once — 64 MiB touched moved the process's peak footprint 39 MB. The first guess (another thread's
+  freed memory leaves the peak above the current footprint) grew a window that read GREEN; its second form printed every
+  reading, and the readings refuted the guess (a freed block STAYS in a macOS footprint) and pointed at the real one: the
+  allocator serves a new block from memory another thread freed, which the footprint already counts. A same-size freed block
+  read red at once. **And a measurement of a shared process measures every thread's allocator:** the witness reads a child
+  process of its own now.
+- **A count of a program's output is a baseline its watcher can pre-empt** (routine run 21, run 19's lesson again): the
+  quarantine witness counted `REFUSED:` lines, and the monitor revoked the run between its third refusal and the line that
+  said so. Count the event where it is recorded at the event (the trace), not where the program reports it afterwards.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

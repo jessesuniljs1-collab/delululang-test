@@ -174,7 +174,7 @@ another OS, and then takes about seven minutes itself (run 5).
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
    D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
-   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; `grants propose` next), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21; the store and approval next), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -262,6 +262,9 @@ assert it, and try a writer against a copy while a suite runs. **A runner's `Ter
 daemon** (run 20: a test removed its broker's state directory before its stop guard ran) — read a green read's last lines for it.
 **A waiter fixes its run id or SHA when it starts** (run 20: a background loop that re-read `HEAD` on every poll reported the next
 commit's witness runs as the push runs it was waiting for).
+**A red witness that comes back green refutes the mechanism you guessed — have it PRINT its readings** (run 21: the first form of the
+macOS footprint witness read green; its second form printed every reading, which refuted the guess and named the real mechanism;
+the third was red at once). One dispatch per form, about three minutes each on a warm cache.
 **A mutant that survives is first a question about the mutant** (run 11: M93 wrote into a map the next loop overwrote —
 the binary's answers never changed); read what the mutated code returns before recording a survivor.
 **A macOS- or Windows-only mutant is read on a runner as its own commit** (run 12): commit the mutant alone, dispatch, then
@@ -329,7 +332,8 @@ is a new case, one removed is the core's answer moving). A new **subcommand** is
 arm and `cli::SUBCOMMANDS` (`completions_cli` proves the three name one set), `json_contract`'s failing sweep AND its
 success table (a `--json` form a blind sweep can drive), and `mcp.rs`'s door rule (every command in exactly one of
 `READ_ONLY` and `EFFECTORS`, so one added later cannot reach an agent's tool unreviewed — and a server is classified by
-what it HANDS OUT, not by what it writes). **No witness target reaches these**, so they appear only in the slice's own
+what it HANDS OUT, not by what it writes). A new **verb of `grants` or `guard`** is one more: `json_contract`'s broker-verbs
+sweep drives every verb the help advertises with `--json` and refuses one it never drove (run 21, `grants propose`). **No witness target reaches these**, so they appear only in the slice's own
 full suite: run it before `master` moves, and put the rows in the slice's commit.
 
 **8. Improve the loop — loop engineering.** Before ending, ask what this run lost time to: an ambiguous

@@ -5379,3 +5379,62 @@ the tree unmoved, no daemon left.
 the requirement list as it stands: `push` keeps each grant's FIRST call only (a refusal at a second call of the same grant matches
 no `at`), and the report records no grant set (`sandbox.granted` is the sandbox level) — so the walk must keep every minting call,
 and a proposal is the refused call's own static requirement.
+
+## 2026-10-13 — routine run 21 (continued): P9-03 step 2 — `delulu grants propose REPORT` (D-V2-123)
+
+**`grants propose REPORT` (`93a74b7`, D-V2-123)** — the narrowest grant for the call a refused run was refused at: the report's
+refusal (code and span, D-V2-121/D-V2-122) and the program's source as it is now; the proposal is the static requirement of the
+minting call at exactly that span, filtered from P9-01's requirement list by the call's kind and literals — never a line the runtime
+or the program worded. **Measured while step 1b was built, and the reason for `ScopeWalk.sites`:** the requirement list keeps each
+grant's FIRST call, so a refusal at a second call of a grant matched no `at`; the walk now keeps every minting call. Nothing is
+proposed (exit 1, a `reason`) for a clean run, a code a grant does not answer (only DL0703 — every DL0703 is raised at a mint), an
+unplaced refusal, a package (open, with `--within` for one), a program that does not check, a computed scope, a mint whose grant
+names the operator's data, or a program changed since the run; the report's offsets are checked on character boundaries before
+anything slices them (M312 without the check panicked the binary). The report is a positional — a `--from` documented for `grants`
+would reach every verb of it.
+
+**Two gates the verb met:** `json_contract`'s success table (a fixture whose report a real refused run writes) and its broker-verbs
+sweep, which refused the verb as "advertised but never driven" until it was — one more gate for a new surface, now in
+`docs/CLOUD_ROUTINE.md` step 7a. **And `schema_cli`'s gap closed:** a refused run's report, ordinary and sandboxed, is held to the
+`run-report` schema (`a_refused_runs_report_matches_the_run_report_schema`; mutants M314 and M315, a malformed diagnostic in each
+report, red).
+
+**Witnessed:** `within_cli`'s `grants_propose_reads_the_refused_calls_own_requirement_from_the_report`, red first (no verb), and the
+generated `grants_propose_names_the_dropped_grants_call_for_every_kind` (eight requirements across seven kinds, each dropped once;
+each proposal exactly the dropped call's requirement, both hosts for the call that names two). Mutants M307–M316 red — among them
+M307 (only sites that are a requirement's first call), M309 (the whole requirement list) and M310 (any literal of the kind) — the
+control green; clippy clean. **Read on the runners at `93a74b7`** over `within_cli`, `json_contract`, `schema_cli` and `delulu`'s unit
+tests: Windows `38328775607` (207 passed), macOS `38328777737` (222), arm64 `38328781069` (241) — 0 failed, every new test named, no
+compiler warning, no orphan `delulu`. **The full suite alone at `93a74b7`:** 2,246 passed, 0 failed, 16 ignored (162 binaries), cargo
+exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-13 — routine run 21 (continued): `master` red on `187494a` — two witnesses that measured more than their subject, fixed
+
+**`187494a`'s push runs:** `ocsf` `38328124557` success; CI `38328124600` **failure** — `test (ubuntu-24.04)` and `test
+(macos-latest)` red, every other job green (Windows' test job included; `actors_pingpong` arm64 MEASURED 2.91x, control 4.10x, the
+others NOT MEASURED). Neither red is this run's diff, and neither is the product: each witness measured something its subject
+does not control. Fixed on the harness branch, each read red first, before `master` moved.
+
+**Ubuntu — `monitor_cli`'s `a_monitor_quarantines_the_run_that_keeps_probing_and_the_chain_says_why`** (`ea31897`): "three refusals
+came first" counted `REFUSED:` lines on the program's standard output and found two. The trace held all three refusals (seq 3, 7,
+11) and a fourth operation, the `println` of the third, refused DL1403 at 24:5 — the monitor quarantined the run between its third
+refusal and the line that reports it. Run 19's lesson again (a witness whose subject races the program is timing-shaped though it
+times nothing). Witnessed: with work put between a refusal and its line, the old assertion red 3 of 3 in the VM; the third refusal
+is now counted in the TRACE, where the program records it at the refusal — green 3 of 3 with the window open, and `monitor_cli`
+19 passed 3 of 3 with all four CPUs busy; a monitor firing on two refusals turns the new assertion red. Read on `ubuntu-24.04` at
+`ba60f60` (`38330138742`): 19 passed, the quarantine 34 ms after the third refusal. **Found beside it, RW 4.62:** the trace records an
+operation at its dispatch, before the custody gate decides, and a custody fault adds no record after it — so the trace listed the
+`println` that never printed.
+
+**macOS — `jail::macos_tests::the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched`** (`fe621c6`): "64 MiB
+touched moved the peak footprint only from 66504000 to 105874816". The reader is a PEAK (`ri_lifetime_max_phys_footprint`) of the
+TEST process, which every unit test's thread shares. Three witness forms on the runner, each its own commit: `ba60f60` — another
+thread's 128 MiB touched and freed at once — GREEN (`38330136441`): the guess did not reproduce; `4c2ba86` — the block held 1.5 s,
+then freed, every reading printed — GREEN (`38330478020`) and the measurement: the peak was 136,987,904 while held and before, and
+204,146,048 after 64 MiB, so a freed block stays in the footprint and the first guess (a footprint falling under its peak) is
+refuted; `0e92a3e` — a SAME-size 64 MiB block freed first — **RED** (`38330675493`: 69,878,912 to 69,911,744): the allocator served
+the test's block from memory the footprint already counted. The witness now reads a child process of its own
+(`footprint_probe_child`), with that window kept open in the parent; read on macOS at `fe621c6` (`38331001159`): `delulu`'s unit tests
+193 passed, both footprint tests named. Mutant M317 — the reader answers a constant — read RED on the runner as its own commit
+(`e879816`, `38331248991`: "from 1 to 1"), reverted in `995581e` (the tree byte for byte `fe621c6`'s). (`fe621c6`'s message names the
+first form wrongly as "`0e92a3e`'s parents"; it is `ba60f60`.)
