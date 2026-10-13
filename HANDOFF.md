@@ -109,7 +109,9 @@ the assistant's memory — which now also travels file by file in
   with what an approval would mint, approved as a delegation under the APPROVER's own node of the node's authority joined
   with the ask (a proposer's own approval DL0802; the proposer's node never changed; a re-run under the new lease), or
   rejected with a reason the agent reads (D-V2-125).
-  **Next: P9-03 step 4** (auto-approval within the operator's standing boundary), then P9-04.
+  And **P9-03 step 4** the same run — `delulu grants auto-approve --parent g_B`: the operator's standing delegation is a node,
+  approving every pending proposal whose mint it bounds and never guarded authority (D-V2-126): **P9-03 complete**.
+  **Next: P9-04** (secrets bound to endpoints — a language change, read against the code first), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -910,6 +912,14 @@ spells the same thing?**
   `list` and `inspect` the same run (RW 4.42): a delegation's path with a line break forged a node line on the owner's
   screen.
 
+- **2026-10-13 — DEADMAN-BUSY-1** (routine run 22, D-V2-127): the broker's dead-man read the DAEMON's unavailability as its
+  holder's silence — the daemon is serial, fired dead-men before the next queued request, and so revoked a healthy monitor
+  (and every run under it) whenever one request held it for a period: beats sent in time sat in its queue, and a monitor
+  waiting on its own listing could not beat at all. Seen as a CI red (two monitors on Ubuntu, the daemon silent for over
+  2 s), witnessed deterministically by holding the audit chain under one request. Fixed: a beat is judged by when it
+  ARRIVED (stamped on the reader thread), and a monitor waiting on the daemon beats from a thread of its own. A watchdog
+  judged by a serial server measures the server too — ask whose time each second of the period is.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -1327,6 +1337,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   witness filed the same ask again once the chain was free, and the store's dedup answered with the id of the proposal the
   mutant had failed to withdraw — the list counted right and the mutant survived. Read the state straight after the operation
   whose undoing is the subject, before any step that deduplicates, merges or reuses can paper over what was left behind.
+
+- **A CI red in code the run did not touch is a witness of a CLASS before it is a flake** (routine run 22): two monitors
+  revoked on Ubuntu once, 6 of 6 green in the VM — but the record showed the daemon had served NOTHING for 2 s, and the
+  question "what holds a serial daemon for seconds?" had an answer in the tree already (a request waiting on a held audit
+  chain, RW 4.53). Holding the chain under one request turned the once-seen red into a deterministic one in two witnesses
+  (the daemon's and the monitor's), and each fix was read against its own. Read what the failing run's records say did NOT
+  happen in the window — here not even a lease redemption — before deciding what the window held.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

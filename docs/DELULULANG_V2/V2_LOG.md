@@ -5480,3 +5480,53 @@ control green. **M331 first survived:** the lost-record witness filed the same a
 answered with the leftover's id; it now reads the list before anything else is filed (red). Clippy clean.
 **Read on the runners at `45877b7`** over `within_cli`, `json_contract` and `delulu`'s unit tests: Windows `38352400253` (205 passed), macOS `38352403113` (221), arm64 `38352405496` (239), and the broker's unit tests on Windows `38352408072` (`proposal`, 7) — 0 failed, every new test named, no compiler warning, no orphan `delulu`.
 **The full suite alone at `45877b7`:** 2,256 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-13 — routine run 22 (continued): P9-03 step 4 — `grants auto-approve`, the operator's standing node (D-V2-126); P9-03 complete
+
+**`11c9d94`'s push runs** (step 3's records): CI `38353462220` **failure** — `test (ubuntu-24.04)` only: `monitor_cli`'s two monitors revoked by their own dead-men (DEADMAN-BUSY-1, found and fixed below); every other job green, `actors_pingpong` arm64 MEASURED 2.99x (control 4.12x), the others NOT MEASURED; `ocsf` `38353462196` and `openshell` `38353462310` success.
+
+**Step 3's new audit records checked against OCSF** (the routine's rule for a change to the records): a chain holding two
+`proposal`, one `proposal_approve` and one `proposal_reject` record, exported with `audit export --format ocsf`, re-verifies
+(`audit verify --ocsf`, 10 events) and validates against OCSF 1.8.0's published schema with `scripts/ocsf-validate.py` — 0
+problems over classes 0, 2004 and 3005 (a filing and an approval are Base events, a rejection a Finding); its self-test caught
+11 of 11 mutations.
+
+**Step 4** (`a7c409c`, D-V2-126): `grants auto-approve --parent g_B` offers every pending proposal to the broker for approval
+under B — the tree's own `⊑` decides what each would MINT — and leaves each refused one pending with its code and what
+`grants diff` finds its mint adds beyond B. The boundary is a node rather than a grant file: what an approval mints is a node,
+and a file translated into the node domain would approve a console wherever it grants `fs.write` (`console` is the `Write`
+effect there); a node is also the operator's delegation in the tree it governs — revoking it revokes everything it approved.
+It never takes the owner code: `--owner` is refused (saying why) and `DELULU_GUARD_OWNER` is not read, so guarded authority
+is approved by a person, one proposal at a time. **P9-03 complete** (`V2_P9_DESIGN.md` items 1–4, hypothesis 5 witnessed).
+
+**Witnessed:** `within_cli`'s `auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guarded_authority`, red
+first (no verb, exit 2); `json_contract`'s sweep drives the verb. Mutants M337–M341 red, the control green — M338 (the
+`--owner` refusal removed) only after the witness asserted the refusal's words: without them `--owner` is refused as an
+unknown flag anyway, exit 2, and the dedicated refusal was code no witness could fail. Clippy clean. **Read on the runners at
+`a7c409c`** over `within_cli` and `json_contract`: Windows `38353918721` (27 passed: `json_contract` 13, `within_cli` 14), macOS `38353921081` (28), arm64 `38353923894` (28) — 0 failed, the new test named, no compiler warning, no orphan `delulu`. **The full suite alone at `a7c409c`:** 2,257 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-13 — routine run 22 (continued): `master` red on `11c9d94` — DEADMAN-BUSY-1, a healthy monitor revoked while the daemon was held (D-V2-127)
+
+**The red** (`11c9d94`'s CI `38353462220`, `test (ubuntu-24.04)` job `115150876593`; every other job green): `monitor_cli`'s
+`a_monitor_quarantines_the_run_that_keeps_probing_and_the_chain_says_why` and `a_monitor_sees_nothing_outside_its_own_subtree` —
+each monitor exited 1, "the broker's dead-man revoked `g_…` and every run under it: this monitor sent no beat within 2000 ms".
+In the first, nothing reached the chain between the arming (seq 5) and the firing (seq 6) — not even the test program's lease
+redemption: the daemon served nothing for over two seconds. Not reproduced in the VM: `monitor_cli` 3 of 3 green quiet, 3 of 3
+with all four CPUs busy; nothing this run had changed reaches the monitor or the serve loop.
+
+**The class, witnessed** (the question the window asked: what holds a serial daemon for seconds? — RW 4.53's answer, a request
+waiting on an audit chain another writer holds): `brokerd`'s `a_beat_sent_in_time_keeps_its_dead_man_though_a_held_request_
+delays_its_answer` — 25 beats every 100 ms against a 1,000 ms dead-man while one request waited 2 s on a held chain — **RED**,
+every beat answered DL1403, the holder revoked. The daemon's half fixed (each whole request stamped on arrival; dead-men fired
+as of the handled request's arrival; a beat and a disarm judged by arrival, a beat's period restarted at its answer), the
+monitor's half: `monitor_cli`'s `a_monitor_waiting_on_a_held_daemon_is_not_revoked_by_its_own_dead_man` — a real `monitor
+watch`, `--death-after 1000`, the daemon held 2.5 s — **RED 2 of 2**: its `List` queued behind the held request, and the beat it
+sent once the answer came was late. Fixed: while the watch is blocked inside a request to the daemon, and only then, a thread of
+the monitor's own beats every quarter period. Both green; `monitor_cli` 20 passed and the daemon's dead-man tests 9 passed,
+each three more times with all four CPUs busy — `a_busy_daemon_still_fires_an_unbeaten_dead_man` and
+`a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes` among them. Mutants M342 (fire as of now), M343 and M344 (a beat
+judged when handled), M345 (the beater silent) red, the control green; **M346 (the beater beats whatever the watch does)
+SURVIVES** — no witness reaches a watch wedged outside the daemon: RW 4.63, opened. Clippy clean; Windows and macOS linted from
+Linux (`check-other-os.sh`). `e074330`.
+**Read on the runners at `e074330`** over `monitor_cli` and `delulu`'s unit tests: Ubuntu `38357155428` (233 passed), Windows `38357158233` (198), macOS `38357161227` (214), arm64 `38357164145` (233) — 0 failed, both new witnesses named on each, no compiler warning, no orphan `delulu`. **The full suite alone at
+`e074330`:** at `e074330`, 2,258 passed and 1 failed — the runtime's thread-stack gate, red for a thread no list named, the beater (`ae9dffe` lists it; `delulu-runtime`'s library then 262 passed); at `ae9dffe`, with these records in the tree, 2,259 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.

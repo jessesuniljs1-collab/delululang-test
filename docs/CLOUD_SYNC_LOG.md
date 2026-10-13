@@ -62,7 +62,7 @@ running summary.
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
   (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
   the runtime's own mint, the counterexample's call named); **P9-02** by the same run (D-V2-119, D-V2-120 — `delulu
-  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads); P9-03's auto-approval, P9-04 and P9-05 not yet built.
+  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads), and step 4 the same run (D-V2-126 — `grants auto-approve`, the operator's standing node): **P9-03 complete**; P9-04 and P9-05 not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -72,7 +72,8 @@ running summary.
   PLUGIN-CUSTODY-1/PLUGIN-DAEMON-1, CLOSURE-SCOPE-1 (HIGH), RW 4.56, RW 4.58, FIRST-BEAT-1 (RW 4.59), the red team's F1/F2
   and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record), RW 4.60 (D-V2-117 — a
   report silent about devices that never started), SECRET-HIDDEN-1 (run 20 — a secret read under a computed name missing from
-  `authority --grants`) — and whatever the entries after run 20 add.
+  `authority --grants`), DEADMAN-BUSY-1 (run 22, D-V2-127 — a healthy monitor's runs quarantined whenever the daemon was held on
+  one request: a beat is now judged by when it arrived) — and whatever the later entries add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, the repeated-heading gate in
@@ -86,7 +87,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-03's auto-approval, then P9-04 and P9-05 — P9-01 and P9-02 built by run 20, P9-03's steps 1, 1b, 2 and 3 by runs 20, 21 and 22), RW 4.62 (a custody-refused operation reads as dispatched in the trace), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-04 and P9-05 — P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22), RW 4.62 (a custody-refused operation reads as dispatched in the trace), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -94,7 +95,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-125); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-127); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2697,3 +2698,54 @@ directory, or have the laptop session read §11.
   boundary, asked of what an approval would MINT (`V2_P9_DESIGN.md` item 4); (3) P9-04 (secrets bound to endpoints); (4) a boundary
   over a `.dwx`; (5) RW 4.62, RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. **For the owner:** D-V2-115 to D-V2-125,
   option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-13 — routine run 22 (continued): P9-03 step 4 — `grants auto-approve`, the operator's standing node (D-V2-126); P9-03 complete
+- Session: `https://claude.ai/code/session_01XEfaGaikkQiMYt3Z72178T`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-keller-ekmk5a`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `11c9d94`
+- Commits: (1) `a7c409c` P9-03 step 4: grants auto-approve - the operator's standing node approves what it bounds; (2) this
+  entry's commit — the records
+- Files and folders: (1) M `crates/delulu/src/cli.rs` (`cmd_grants_auto_approve`; the help; the advertised verbs),
+  `crates/delulu/tests/within_cli.rs` (the witness), `crates/delulu/tests/json_contract.rs` (the sweep), `docs/survey/*`. (2) M
+  `CHANGELOG.md`, `HANDOFF.md` (where things stand), `docs/CLOUD_ROUTINE.md` (step 4's P9 line), `docs/for-agents.md`,
+  `docs/REMAINING_WORK.md` (4.29), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-126), `V2_P9_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing
+  entry), `docs/survey/*`. Added, deleted, renamed: nothing. **Authorship:** the owner's account through its GitHub no-reply
+  address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `11c9d94`'s push runs — CI `38353462220` **failure** — `test (ubuntu-24.04)` only: `monitor_cli`'s two monitors revoked by their own dead-men (DEADMAN-BUSY-1, found and fixed below); every other job green, `actors_pingpong` arm64 MEASURED 2.99x (control 4.12x), the others NOT MEASURED; `ocsf` `38353462196` and `openshell` `38353462310` success; step 3's audit records exported as OCSF and validated against 1.8.0 (0 problems,
+  self-test 11 of 11). `a7c409c`: the witness red first; mutants M337–M341 red, the control green; clippy
+  clean; read on the runners — Windows `38353918721` (27 passed: `json_contract` 13, `within_cli` 14), macOS `38353921081` (28), arm64 `38353923894` (28) — 0 failed, the new test named, no compiler warning, no orphan `delulu`; the full suite alone — 2,257 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new beyond D-V2-126 (the memory snapshot's run-22 line).
+- Open / next, in order: (1) read THIS commit's push run; (2) **P9-04** — secrets bound to endpoints (RW 2.11; a request with
+  headers, a `Secret[Str]` audience) — read against the code first, as P9-01 and P9-03 were; (3) a boundary over a `.dwx`;
+  (4) RW 4.62, RW 4.57, RW 4.53 (with F4 and F6), RW 4.58's O2/O4, RW 4.49. **For the owner:** D-V2-115 to D-V2-126, option (c).
+  **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-13 — routine run 22 (continued): `master` red on `11c9d94` — DEADMAN-BUSY-1 found and fixed (D-V2-127)
+- Session: `https://claude.ai/code/session_01XEfaGaikkQiMYt3Z72178T`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-keller-ekmk5a`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `a7c409c`
+- Commits: (1) `e074330` DEADMAN-BUSY-1: a dead-man counts its holder's silence, never the daemon's; (2) this entry's commit —
+  the records of P9-03 step 4 and of DEADMAN-BUSY-1
+- Files and folders: (1) M `crates/delulu-broker/src/deadman.rs` (`beat_deadman_arrived`), `crates/delulu/src/brokerd.rs` (each
+  request stamped on arrival; dead-men fired as of it; beats and disarms judged by it; a witness), `crates/delulu/src/monitor_cmd.rs`
+  (the beater thread), `crates/delulu/tests/monitor_cli.rs` (a witness; `start_monitor_with`), `docs/survey/*`. (2) M `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 DEADMAN-BUSY-1; §11.5 a lesson), `docs/REMAINING_WORK.md` (4.53; **4.63 added**),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-127),
+  `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*` — beside step 4's records above. Added, deleted,
+  renamed: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `11c9d94`'s push run red (`38353462220`: Ubuntu's `monitor_cli`, two monitors revoked by their own dead-men; every
+  other job green) — read, its class witnessed red twice, fixed; mutants M342–M345 red, M346 survived (RW 4.63), the control
+  green; read on the runners — Ubuntu `38357155428` (233 passed), Windows `38357158233` (198), macOS `38357161227` (214), arm64 `38357164145` (233) — 0 failed, both new witnesses named on each, no compiler warning, no orphan `delulu`; the full suite alone — at `e074330`, 2,258 passed and 1 failed — the runtime's thread-stack gate, red for a thread no list named, the beater (`ae9dffe` lists it; `delulu-runtime`'s library then 262 passed); at `ae9dffe`, with these records in the tree, 2,259 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 DEADMAN-BUSY-1; §11.5 — a CI red in code the run did not touch is first a witness
+  of its class: read what the failing run's records say did NOT happen in the window.
+- Open / next, in order: (1) read THIS commit's push run — `master` was red on `11c9d94`, and this is its fix; (2) **P9-04** —
+  secrets bound to endpoints, read against the code first; (3) RW 4.63 (a seam to witness a wedged watch), RW 4.53's rest (the
+  daemon's waits on the chain), RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:**
+  D-V2-115 to D-V2-127, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

@@ -238,4 +238,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - **Routine run 22 (2026-10-13): P9-03 step 3** (D-V2-125): proposals filed with the broker against the refused run's node;
   an approval is a delegation under the APPROVER's own node of the node's authority joined with the ask (`⊑` and the Guard
   bound it; the proposer's own approval is DL0802); a rejection keeps its reason. Lesson (M331): a witness of a withdrawal
-  reads the state before anything that deduplicates can answer with the leftover.
+  reads the state before anything that deduplicates can answer with the leftover. **Step 4 the same run** (D-V2-126): `grants
+  auto-approve --parent g_B` — the standing boundary is a node (revoking it revokes all it approved), never the owner code.
+  **P9-03 complete.** **And DEADMAN-BUSY-1** (D-V2-127): `11c9d94`'s push run read two monitors revoked by their own
+  dead-men on Ubuntu while the daemon was silent 2 s — a beat is now judged by when it ARRIVED, and a monitor waiting on the
+  daemon beats from a thread of its own; witnessed by holding the audit chain under one request.

@@ -388,7 +388,9 @@ authority decides, and `grants diff` tells them what the proposal adds.
 operator answers: `grants approve pp_ID --parent g_THEIRS` delegates, under THEIR node, your node's authority joined with
 the ask, and hands you a new lease token — re-run under it; your old node is never widened, and approving under your own
 node is refused (DL0802). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
-`approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all).
+`approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all). An operator may approve
+within a standing node automatically (`grants auto-approve --parent g_B`, D-V2-126): what your approval would mint must be
+within that node, and guarded authority (declassify, native code) is never approved that way — a person approves it.
 
 ## [agents.effects] The effect kinds
 

@@ -148,8 +148,10 @@ skip branch, §11.2).
   pp_ID --parent g_ID` delegates, under the APPROVER's node, the node's authority joined with the ask — the Guard's mint gate and
   `⊑` bound it, so a proposer's own approval is DL0802 — and `grants reject pp_ID --reason` keeps the reason for the proposer.
   Hypothesis 5's rest witnessed: the proposer's node is unchanged by an approval (a new node, re-run), and a rejection's reason
-  reaches the agent in `--json`. **Next: step 4, auto-approval** (item 4) — measured while step 3 was built: the boundary is to
-  be asked of what an approval MINTS (the join), not of the ask alone, since the minted node carries its proposer's authority.
+  reaches the agent in `--json`. **Step 4 built** (the same run, `a7c409c`, D-V2-126): `grants auto-approve --parent g_B` — the
+  standing boundary is a NODE, asked of what each approval MINTS (the join): every pending proposal whose mint is `⊑` B is
+  approved under B by the broker's own check, each other one left pending with what `grants diff` finds it adds; never with
+  the owner code, so guarded authority is approved by a person; revoking B revokes all it approved. **P9-03 complete.**
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

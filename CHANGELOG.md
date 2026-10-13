@@ -11,6 +11,22 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a busy broker no longer kills a healthy monitor, 2026-10-13
+
+- **Fixed (DEADMAN-BUSY-1): a monitor's dead-man fired while the broker daemon, not the monitor, was busy.** The daemon
+  answers one request at a time; while it was held on one (for example, one waiting for the audit chain another writer held),
+  the beats a healthy `delulu monitor watch` sent in time waited behind it, and its dead-man revoked the monitor's node and
+  every run under it. A beat is now judged by when it reached the daemon, and a monitor waiting on the daemon beats from a
+  thread of its own. A dead, killed or stopped monitor is still quarantined as before (D-V2-127).
+
+## Unreleased — `delulu grants auto-approve`, 2026-10-13
+
+- **New (P9-03): `delulu grants auto-approve --parent g_ID [--ttl D]`** — the operator's standing delegation is a node:
+  every pending proposal whose mint is within it is approved under it, each other one left pending with its code and what
+  `grants diff` finds it adds beyond the node. It never takes the owner code (`--owner` is refused, `DELULU_GUARD_OWNER` is
+  not read): guarded authority is approved by a person, one proposal at a time. Revoking the node revokes everything it
+  approved. Exit 0 when nothing is left pending, 1 when something is (D-V2-126).
+
 ## Unreleased — proposals filed, approved and rejected, 2026-10-13
 
 - **New (P9-03): `delulu grants propose REPORT --node g_ID`** files the proposal with the broker as the request of the node the

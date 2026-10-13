@@ -2930,6 +2930,74 @@ refused and (c) stays the owner's.
 8. **Next (P9-03 step 4):** auto-approval within the operator's standing boundary (`V2_P9_DESIGN.md` item 4 — a proposal is
    auto-approvable exactly when `grants diff BOUNDARY` over what it would mint adds nothing, D-V2-119), then P9-04.
 
+## D-V2-126 — P9-03 step 4: auto-approval is the operator's standing delegation — a node — which approves the proposals whose mint it bounds, never guarded authority — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **The boundary is a node.** `grants auto-approve --parent g_B [--ttl D]` offers every pending proposal to the broker for
+   approval under B, exactly as `grants approve` would: the tree's own `⊑` decides, against B, what each would MINT (the
+   proposer's authority joined with its ask, D-V2-125), and the Guard's mint gate applies. The study's "a proposal is
+   auto-approvable when it is `⊑` BOUNDARY and P9-02 finds nothing" is this one check: in the node domain, `grants diff
+   B MINT` finds nothing exactly when the mint is `⊑` B (budget aside: an approval inherits B's budget where the mint names
+   none — `attenuate`'s own rule). Why a node and not a grant FILE: what an approval mints is a node — a file would have to
+   be translated into the node domain, where `console` is the `Write` effect, so a file granting `fs.write` would approve a
+   console nobody wrote; and a node is the operator's delegation in the tree it governs, with its own TTL, its own audit
+   record and its own revocation — **revoking B revokes everything it auto-approved** (each approval is B's child).
+2. **What is left pending, and why.** Each proposal the broker refuses stays pending, listed with its code and message and
+   what `grants diff` finds its mint adds beyond B (`within::diff_nodes`) — so the operator reads, per proposal, the
+   categories that kept it from the standing delegation. The broker decides; the findings explain.
+3. **Never guarded authority.** `auto-approve` takes no owner code — `--owner` is refused (exit 2, saying why) and
+   `DELULU_GUARD_OWNER`, which `grants delegate` and `grants approve` read, is not read: guarded authority (declassify,
+   native code by default) is approved by a person, one proposal at a time (`grants approve pp_ID --owner CODE`). A proposal
+   within B that carries guarded authority stays pending with the Guard's DL1410.
+4. **Exit codes.** 0 when nothing is left pending (nothing to approve is not a failure), 1 when anything is, 2 on a bad
+   invocation. One pass approves what it can; it is a command, run when the operator chooses (or by a scheduler the
+   operator owns) — no daemon-side automation, so nothing approves while nobody is running it.
+5. **Witnessed** — `within_cli`'s `auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guarded_authority`,
+   red first (no verb, exit 2): three agents' proposals for the guide's `./config` read against B (the read with the console,
+   and `Declassify S`): the one within B approved under B (`{Read, Write}`); one whose node holds `Net` left pending, DL0802,
+   with `effect_expansion Net` and `scope_expansion net=example.com`; one within B but guarded left pending, DL1410, though
+   `DELULU_GUARD_OWNER` held the code; `--owner` refused; a second pass approves nothing; nothing pending is exit 0; revoking
+   B revokes the approved node. `json_contract`'s broker-verbs sweep drives it. Mutants M337–M341 red, the control green.
+6. **P9-03 complete** with this step (`V2_P9_DESIGN.md` items 1–4 and hypothesis 5 witnessed). **Next: P9-04**, secrets bound
+   to endpoints (RW 2.11) — a language change (a request with headers), read against the code before it is built.
+
+## D-V2-127 — DEADMAN-BUSY-1: a dead-man counts its holder's silence, never the daemon's — a beat is judged by when it arrived, and a monitor waiting on the daemon beats from a thread of its own — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **The finding.** `11c9d94`'s push run read `monitor_cli` red on Ubuntu (`38353462220`, job `115150876593`): two healthy
+   monitors revoked by their own dead-men (2,000 ms, the default floor) — in one, nothing at all reached the chain between the
+   arming (seq 5) and the firing (seq 6), not even the test program's lease redemption: the daemon served nothing for over two
+   seconds. Not reproduced in the VM (6 of 6 green, three with every CPU busy), and nothing this run had changed reaches the
+   monitor or the serve loop. **The class, witnessed deterministically on the code as it was:** the daemon is serial, and it
+   fired dead-men "before the next request is handled" (D-V2-106) — so while it was held on one request (here a request
+   waiting on an audit chain another writer holds, RW 4.53's wait), beats a healthy holder SENT in time waited in its queue,
+   and the dead-man fired as soon as the hold ended: `brokerd`'s `a_beat_sent_in_time_keeps_its_dead_man_though_a_held_
+   request_delays_its_answer` — 25 beats every 100 ms against a 1,000 ms dead-man, the daemon held 2 s — RED, every beat
+   answered DL1403. And a monitor waits on the daemon itself: its `List` queues behind the held request, and the beat it sends
+   once the answer comes is late however healthy it is — `monitor_cli`'s `a_monitor_waiting_on_a_held_daemon_is_not_revoked_by_
+   its_own_dead_man` — RED 2 of 2 with the daemon's half fixed. A false quarantine is the safe direction, but a dead-man that
+   reads the daemon's own unavailability as its holder's death quarantines every run of a healthy monitor whenever the daemon
+   is slow (RW 4.53 measured holds of seconds beside busy sandbox hosts).
+2. **The daemon's half.** Each whole request is stamped with the instant it ARRIVED — read on a thread of its own (RW 4.40),
+   which a held handler does not delay. Dead-men are fired as of the handled request's arrival (as of now on a wake with
+   nothing waiting); a beat — and a disarm — is judged by its arrival; a beat's next period starts when it is answered, since a
+   holder that waits for each answer cannot beat before it. D-V2-106's rules stand: a beat that ARRIVED after the deadline
+   rescues nothing, and a stream of requests cannot hold an unbeaten dead-man off — it fires at the first request that arrived
+   after its deadline (`a_busy_daemon_still_fires_an_unbeaten_dead_man` still green). The cost, bounded: a backlog delays a dead
+   holder's firing by the requests queued ahead of the first late one (at most `MAX_READERS`, 64). Arrival is stamped after a
+   request is read whole and before it is queued, so two readers can race by microseconds — the window a misfire needs went
+   from seconds to that.
+3. **The monitor's half.** While its watch is blocked inside a request to the daemon — and only then — a thread of the
+   monitor's own beats for it every quarter period, each beat on its own connection. Only then: a watch wedged anywhere else
+   goes silent, and its dead-man fires, as a dead, killed or stopped process's does (`a_stopped_monitor_is_a_dead_one_and_says_
+   so_when_it_resumes` still green). The thread ends before the watch disarms.
+4. **Witnessed:** both witnesses red first (above), green after — `monitor_cli` 20 passed, the daemon's dead-man tests 9 passed,
+   each three times more with all four CPUs busy. Mutants: M342 (fire as of now), M343 and M344 (a beat judged by when it was
+   handled), M345 (the beater never beats) red, the control green; **M346 (the beater beats whatever the watch is doing)
+   SURVIVES** — no witness reaches a watch wedged outside the daemon (`--death-after` is at least two polls, so a poll cannot
+   stand in for a wedge), recorded as RW 4.63, open.
+5. **Not changed:** the default period (`max(8 × poll, 2 s)`), the bounds, the records. A whole HOST stalled past the period
+   still fires the dead-man — nothing in software can tell that from a dead monitor, and the safe direction is the designed
+   one (P8-04: "a watchdog gone quiet is treated as one that fired").
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
