@@ -1644,6 +1644,14 @@ mod macos_tests {
     #[test]
     fn the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched() {
         let me = std::process::id();
+        // WITNESS (routine run 21): another test thread of this process touched more and freed it — as one did on `187494a`'s
+        // macOS runner — so the PEAK stands above what the process holds when this test starts.
+        let mut other = vec![0u8; 128 * 1024 * 1024];
+        for i in (0..other.len()).step_by(4096) {
+            other[i] = 1;
+        }
+        std::hint::black_box(&other);
+        drop(other);
         let before = super::peak_footprint(me).expect("macOS answers proc_pid_rusage for a process of this user");
         let mut v = vec![0u8; 64 * 1024 * 1024];
         for i in (0..v.len()).step_by(4096) {
