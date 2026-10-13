@@ -1651,14 +1651,20 @@ mod macos_tests {
             other[i] = 1;
         }
         std::hint::black_box(&other);
+        let held = super::peak_footprint(me);
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let held_later = super::peak_footprint(me);
         drop(other);
+        std::thread::sleep(std::time::Duration::from_millis(500));
         let before = super::peak_footprint(me).expect("macOS answers proc_pid_rusage for a process of this user");
+        eprintln!("FOOTPRINT-WITNESS held={held:?} held_later={held_later:?} before={before}");
         let mut v = vec![0u8; 64 * 1024 * 1024];
         for i in (0..v.len()).step_by(4096) {
             v[i] = 1;
         }
         std::hint::black_box(&v);
         let after = super::peak_footprint(me).expect("a second reading");
+        eprintln!("FOOTPRINT-WITNESS after={after}");
         assert!(after >= before + 48 * 1024 * 1024, "64 MiB touched moved the peak footprint only from {before} to {after}");
         drop(v);
         assert!(super::peak_footprint(me).expect("a third reading") >= after, "a PEAK never falls");
