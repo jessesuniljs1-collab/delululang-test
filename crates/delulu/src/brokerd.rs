@@ -466,9 +466,10 @@ fn fire_deadmen(
     state_dir: &Path,
     audit_lock: &RefCell<ChainLock>,
     failed: &Rc<Cell<bool>>,
+    as_of: std::time::Instant,
 ) {
     failed.set(false);
-    let fired = broker.fire_expired_deadmen(std::time::Instant::now());
+    let fired = broker.fire_expired_deadmen(as_of);
     if !fired.is_empty() {
         persist_adoption_revocations(broker, state_dir);
     }
@@ -560,6 +561,7 @@ fn handle(
     pid: u32,
     state_dir: &Path,
     req: Request,
+    arrived: std::time::Instant,
 ) -> (Response, bool) {
     // Version gate (spec §8, DL1406). Any mismatch is answered, never acted on.
     if req.version != WIRE_VERSION {
@@ -786,7 +788,8 @@ fn handle(
         }
         ReqBody::Beat { node, key } => {
             let node = GrantId::from_trusted(node);
-            match broker.beat_deadman(&node, &key, std::time::Instant::now()) {
+            // DEADMAN-BUSY-1 (D-V2-127): judged by when it arrived, not when this loop got to it.
+            match broker.beat_deadman_arrived(&node, &key, arrived, std::time::Instant::now()) {
                 Ok(_) => (Response::Ok, false),
                 Err(r) => {
                     if matches!(r, delulu_broker::DeadmanRefusal::Fired(_)) {
@@ -799,7 +802,7 @@ fn handle(
         ReqBody::DisarmDeadman { node, key } => {
             let node = GrantId::from_trusted(node);
             failed.set(false);
-            match broker.disarm_deadman_undoable(&node, &key, std::time::Instant::now()) {
+            match broker.disarm_deadman_undoable(&node, &key, arrived) {
                 // RW 4.61's rest (D-V2-115): from a disarm on the runs below outlive their monitor, and the chain must say when
                 // that began — undone, the dead-man armed as it stood.
                 Ok((_, undo)) if failed.get() => {
@@ -1415,7 +1418,9 @@ pub(crate) fn serve_inner(
     // `MAX_READERS` are reading or waiting to hand a request over at once, and a connection past that is
     // dropped at once, so a flood costs threads it cannot grow without bound.
     const MAX_READERS: usize = 64;
-    let (whole, requests) = std::sync::mpsc::sync_channel::<(Connection, Request)>(MAX_READERS);
+    // DEADMAN-BUSY-1 (D-V2-127): each whole request carries the instant it arrived — read on its own thread, which the
+    // handler being held on one request does not delay.
+    let (whole, requests) = std::sync::mpsc::sync_channel::<(Connection, Request, std::time::Instant)>(MAX_READERS);
     let stopping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let stopping = stopping.clone();
@@ -1453,7 +1458,7 @@ pub(crate) fn serve_inner(
                 })();
                 match read {
                     // The handler gone (the daemon stopping) drops the connection: the client fails closed.
-                    Ok(req) => drop(whole.send((conn, req))),
+                    Ok(req) => drop(whole.send((conn, req, std::time::Instant::now()))),
                     Err(why) => eprintln!("delulu broker: {why} (dropping connection)"),
                 }
                 // Counted until its request is handed over, not only while it reads: a reader waiting on a busy
@@ -1481,9 +1486,13 @@ pub(crate) fn serve_inner(
             },
         };
         let Some(next) = next else { break };
-        fire_deadmen(&mut broker, state_dir, &audit_lock, &failed);
-        let Some((mut conn, req)) = next else { continue };
-        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
+        // DEADMAN-BUSY-1 (D-V2-127): as of the request's ARRIVAL — a beat queued behind a request the daemon was held on
+        // arrived in time, and is handled after this; on a wake with nothing waiting, as of now. An unbeaten dead-man still
+        // fires at the first request that arrived after its deadline, so a stream of requests cannot hold one off.
+        let as_of = next.as_ref().map_or_else(std::time::Instant::now, |(_, _, arrived)| *arrived);
+        fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of);
+        let Some((mut conn, req, arrived)) = next else { continue };
+        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, arrived);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
@@ -2216,6 +2225,48 @@ mod tests {
         assert_eq!(fired.len(), 1, "an idle daemon must fire the dead-man by itself — no request arrived after the arming");
         assert!(took >= std::time::Duration::from_millis(300), "never before its period: {took:?}");
         eprintln!("measured: an idle daemon fired a 300 ms dead-man {} ms after it was armed", took.as_millis());
+    }
+
+    /// **A beat sent in time keeps its dead-man, though the daemon answers it late** (routine run 22: `11c9d94`'s push run
+    /// read `monitor_cli` red on Ubuntu — two healthy monitors revoked by their own dead-men, the daemon having served
+    /// nothing for over 2 s). The daemon is serial: one request held — here waiting on an audit chain another writer holds,
+    /// as RW 4.53 measured — holds every request queued behind it, and a holder's beats among them. Sent every 100 ms
+    /// against a 1,000 ms dead-man, they reached the daemon in time; the dead-man must not count against its holder the
+    /// time the daemon itself could not answer. An unbeaten dead-man still fires (the tests above), however busy the loop.
+    #[test]
+    fn a_beat_sent_in_time_keeps_its_dead_man_though_a_held_request_delays_its_answer() {
+        let state = temp_state("dmheld");
+        let handle = start_daemon(&state);
+        let node = issue(&state);
+        let key = arm(&state, &node, 1000);
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        // A request that records waits on the held chain — the daemon serves nothing else meanwhile.
+        let waiting = {
+            let state = state.clone();
+            std::thread::spawn(move || request(&state, ReqBody::Issue(spec(&["Write"]))))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        // The holder beats every 100 ms throughout, each beat on its own connection, as a monitor would.
+        let beats: Vec<_> = (0..25)
+            .map(|i| {
+                let (state, node, key) = (state.clone(), node.clone(), key.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(100 * i));
+                    request(&state, ReqBody::Beat { node, key })
+                })
+            })
+            .collect();
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        drop(held);
+        let answers: Vec<_> = beats.into_iter().map(|b| b.join().unwrap()).collect();
+        let _ = waiting.join();
+        let fired = deadman_revocations(&state, &node);
+        let after = request(&state, ReqBody::NodeState { node: node.clone() });
+        stop_daemon(&state, handle);
+        assert!(fired.is_empty(), "a holder that beat every 100 ms was revoked by its own dead-man: {fired:?}\n{answers:?}");
+        assert!(answers.iter().all(|a| matches!(a, Ok(Response::Ok))), "every beat kept it: {answers:?}");
+        assert!(matches!(after, Ok(Response::NodeState { .. })), "{after:?}");
     }
 
     /// **A busy daemon fires it too.** Eight clients ask for the whole tree back to back over a tree of 2,000

@@ -165,6 +165,21 @@ impl Broker {
     /// beats every poll, and the chain would fill with them; its arming and its end are what the chain
     /// keeps. A beat after the deadline fires the dead-man instead (`Fired`).
     pub fn beat_deadman(&mut self, node: &GrantId, key: &str, now: Instant) -> Result<Duration, DeadmanRefusal> {
+        self.beat_deadman_arrived(node, key, now, now)
+    }
+
+    /// A beat judged by when it ARRIVED (DEADMAN-BUSY-1, D-V2-127): the daemon reads each request whole on a thread of its
+    /// own and stamps it, so a beat sent in time and queued behind a request the daemon was held on still counts — the
+    /// daemon's own unavailability is never its holder's silence. A beat that arrived after the deadline still fires it
+    /// (D-V2-106). The next period starts at `now`, when the beat is answered: a holder that waits for each answer cannot
+    /// beat again before it.
+    pub fn beat_deadman_arrived(
+        &mut self,
+        node: &GrantId,
+        key: &str,
+        arrived: Instant,
+        now: Instant,
+    ) -> Result<Duration, DeadmanRefusal> {
         let Some(d) = self.deadmen.get(node) else {
             self.deadman_node_live(node)?;
             return Err(DeadmanRefusal::NotArmed);
@@ -172,7 +187,7 @@ impl Broker {
         if blake3::hash(key.as_bytes()) != d.key_hash {
             return Err(DeadmanRefusal::WrongKey);
         }
-        if now >= d.deadline {
+        if arrived >= d.deadline {
             return Err(match self.fire_deadman(node) {
                 Some(f) => DeadmanRefusal::Fired(f),
                 None => self.deadman_node_live(node).err().unwrap_or(DeadmanRefusal::NotArmed),

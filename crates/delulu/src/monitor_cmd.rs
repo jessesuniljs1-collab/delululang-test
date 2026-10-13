@@ -263,8 +263,17 @@ fn cmd_watch(rest: &[String]) -> i32 {
         eprintln!("error[DL1401]: {message}");
         1
     };
+    // DEADMAN-BUSY-1 (D-V2-127): whether the watch is blocked inside a request to the daemon — the one time it cannot beat
+    // for itself, and the beater below beats for it. Waiting on the daemon is not this monitor being dead.
+    let waiting = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ask = |body: ReqBody| -> std::io::Result<Response> {
+        waiting.store(true, std::sync::atomic::Ordering::SeqCst);
+        let answer = crate::brokerd::request(&state_dir, body);
+        waiting.store(false, std::sync::atomic::Ordering::SeqCst);
+        answer
+    };
     let list = || -> Result<Vec<crate::broker_ipc::NodeInfo>, String> {
-        match crate::brokerd::request(&state_dir, ReqBody::List) {
+        match ask(ReqBody::List) {
             Ok(Response::Listed { nodes }) => Ok(nodes),
             Ok(other) => Err(format!("unexpected answer to a listing: {other:?}")),
             Err(e) => Err(format!(
@@ -337,7 +346,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // the node was revoked by someone else (the operator's way to end a watch).
     let beat = || -> Result<(), (bool, String)> {
         let Some((key, _, period)) = &deadman else { return Ok(()) };
-        match crate::brokerd::request(&state_dir, ReqBody::Beat { node: o.node.clone(), key: key.clone() }) {
+        match ask(ReqBody::Beat { node: o.node.clone(), key: key.clone() }) {
             Ok(Response::Ok) => Ok(()),
             // Revoked or expired: whose doing it was is read from the chain, below — never from the words.
             Ok(Response::Error { code, .. }) if code == "DL1403" || code == "DL1402" => {
@@ -363,6 +372,24 @@ fn cmd_watch(rest: &[String]) -> i32 {
             )),
         }
     };
+    // DEADMAN-BUSY-1 (D-V2-127): while the watch is blocked inside a request to the daemon — a daemon held on another
+    // request answers nothing, this monitor's listing included — a thread of its own beats for it, every quarter period,
+    // each beat on its own connection; the daemon judges a beat by when it ARRIVED. Only then: a watch wedged anywhere
+    // else goes silent and its dead-man fires, as a dead or stopped process's does.
+    let beater_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let beater = deadman.as_ref().map(|(key, _, period)| {
+        let (state_dir, node, key) = (state_dir.clone(), o.node.clone(), key.clone());
+        let (waiting, stop) = (waiting.clone(), beater_stop.clone());
+        let every = (*period / 4).max(Duration::from_millis(10));
+        std::thread::spawn(move || {
+            while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                std::thread::sleep(every);
+                if waiting.load(std::sync::atomic::Ordering::SeqCst) && !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    let _ = crate::brokerd::request(&state_dir, ReqBody::Beat { node: node.clone(), key: key.clone() });
+                }
+            }
+        })
+    });
     eprintln!(
         "monitor: watching `{}` from {} — rules: {}",
         delulu_diag::terminal_line(&o.node),
@@ -506,10 +533,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 hashes.join(", ")
             );
             let last_ts = ev.records.last().map(|l| l.2).unwrap_or(0);
-            let resp = crate::brokerd::request(
-                &state_dir,
-                ReqBody::Quarantine { caller: o.node.clone(), target: run.clone(), why: why.clone() },
-            );
+            let resp = ask(ReqBody::Quarantine { caller: o.node.clone(), target: run.clone(), why: why.clone() });
             let after_ms = now_millis() - last_ts;
             let mut report = json!({
                 "target": run, "rule": ev.rule, "count": ev.records.len(), "window_ms": window_ms,
@@ -568,6 +592,10 @@ fn cmd_watch(rest: &[String]) -> i32 {
         std::thread::sleep(o.poll);
     }
     eprintln!("monitor: ended — {}", delulu_diag::terminal_line(&ended));
+    beater_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(b) = beater {
+        let _ = b.join();
+    }
     // The dead-man: disarmed on a clean end while the node lives (its revocation already ended it otherwise);
     // left armed on an error — this monitor has stopped watching, and the operator asked for that to quarantine.
     let mut disarmed_seq: Option<u64> = None;

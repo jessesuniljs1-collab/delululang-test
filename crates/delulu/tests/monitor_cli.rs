@@ -274,12 +274,17 @@ struct Monitor {
 }
 
 fn start_monitor(f: &Fixture, node: &str, rule: &str) -> Monitor {
+    start_monitor_with(f, node, rule, &[])
+}
+
+fn start_monitor_with(f: &Fixture, node: &str, rule: &str, extra: &[&str]) -> Monitor {
     use std::io::BufRead;
     let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .current_dir(&f.cwd)
         .env("DELULU_STATE_DIR", &f.state)
         .env("DELULU_NO_FIRST_RUN", "1")
         .args(["monitor", "watch", "--node", node, "--rule", rule, "--poll", "25", "--for", "120000", "--json"])
+        .args(extra)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -1152,6 +1157,37 @@ fn a_revoke_whose_record_was_lost_warns_and_exits_one_and_still_takes_effect() {
     assert!(se.contains("warning[DL1401]") && se.contains("IS in force"), "and it says why:\n{so}\n{se}");
     let states = node_states(&f);
     assert_eq!(states[&node].0, "revoked", "the revocation took effect: {states:?}");
+}
+
+/// **DEADMAN-BUSY-1, the monitor's half (routine run 22, D-V2-127).** `11c9d94`'s push run read two monitors here revoked by
+/// their own dead-men on Ubuntu, the daemon having served nothing for over 2 s. A monitor waits on the daemon too: with the
+/// daemon held 2.5 s by a request waiting on the audit chain, its `List` and its beats queue behind that request, and a
+/// beat sent only once an answer comes is late however healthy the monitor is. A monitor that was only waiting on the
+/// daemon is not dead: its 1,000 ms dead-man must leave its node live, and it ends cleanly when the operator ends it.
+#[test]
+fn a_monitor_waiting_on_a_held_daemon_is_not_revoked_by_its_own_dead_man() {
+    let f = setup("dmwait");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let (node, _) = delegate(&f, &["--holder-desc", "watched"]);
+    let m = start_monitor_with(&f, &node, "envelope", &["--death-after", "1000"]);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let log = delulu_broker::AuditLog::open(f.state.join("audit")).unwrap();
+    let held = log.take_lock().expect("the test holds the chain");
+    // A request that records waits on the held chain; the daemon answers nothing else meanwhile.
+    let waiting = {
+        let (cwd, state) = (f.cwd.clone(), f.state.clone());
+        std::thread::spawn(move || delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write", "--json"]))
+    };
+    std::thread::sleep(std::time::Duration::from_millis(2500));
+    drop(held);
+    let _ = waiting.join();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let states = node_states(&f);
+    assert_eq!(states[&node].0, "live", "a monitor that was only waiting on the daemon was revoked by its own dead-man: {states:?}");
+    let (v, seen) = stop_monitor(&f, &node, m);
+    assert!(v["ended"].as_str().is_some_and(|e| !e.contains("dead-man")), "{v:#}\n{seen:?}");
 }
 
 /// **P8-04's `break-glass` rule (D-V2-116): a monitor quarantines the run that breaks the glass, and no other.** Two runs
