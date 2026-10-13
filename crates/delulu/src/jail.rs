@@ -1639,34 +1639,63 @@ mod macos_tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
-    /// D-V2-90: the reading the host's memory ceiling rests on answers, and MOVES with what a process
-    /// touches — a reader that said a constant would let every guest past its budget.
+    const FOOTPRINT_MODE: &str = "DELULU_FOOTPRINT_TEST_MODE";
+
+    /// The child half of the footprint witness: a process of its own, so its peak is what IT touched. Read, touch 64 MiB,
+    /// read again, free, read a third time, and print the three.
     #[test]
-    fn the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched() {
-        let me = std::process::id();
-        // WITNESS (routine run 21): another test thread of this process touched more and freed it — as one did on `187494a`'s
-        // macOS runner — so the PEAK stands above what the process holds when this test starts.
-        let mut other = vec![0u8; 64 * 1024 * 1024];
-        for i in (0..other.len()).step_by(4096) {
-            other[i] = 1;
+    fn footprint_probe_child() {
+        if std::env::var_os(FOOTPRINT_MODE).is_none() {
+            return;
         }
-        std::hint::black_box(&other);
-        let held = super::peak_footprint(me);
-        std::thread::sleep(std::time::Duration::from_millis(1500));
-        let held_later = super::peak_footprint(me);
-        drop(other);
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        let me = std::process::id();
         let before = super::peak_footprint(me).expect("macOS answers proc_pid_rusage for a process of this user");
-        eprintln!("FOOTPRINT-WITNESS held={held:?} held_later={held_later:?} before={before}");
         let mut v = vec![0u8; 64 * 1024 * 1024];
         for i in (0..v.len()).step_by(4096) {
             v[i] = 1;
         }
         std::hint::black_box(&v);
         let after = super::peak_footprint(me).expect("a second reading");
-        eprintln!("FOOTPRINT-WITNESS after={after}");
-        assert!(after >= before + 48 * 1024 * 1024, "64 MiB touched moved the peak footprint only from {before} to {after}");
         drop(v);
-        assert!(super::peak_footprint(me).expect("a third reading") >= after, "a PEAK never falls");
+        let third = super::peak_footprint(me).expect("a third reading");
+        println!("FOOTPRINT before={before} after={after} third={third}");
+    }
+
+    /// D-V2-90: the reading the host's memory ceiling rests on answers, and MOVES with what a process
+    /// touches — a reader that said a constant would let every guest past its budget.
+    ///
+    /// Read in a CHILD process (routine run 21): this test process is shared by every unit test's thread, and the allocator
+    /// serves a new block from memory another thread freed — memory the footprint still counts — so touching 64 MiB moved
+    /// the peak only 39 MB on `187494a`'s macOS runner. Witnessed on a runner before this fix: a same-size block freed before
+    /// the first reading, and 64 MiB touched moved the peak from 69,878,912 to 69,911,744 (a block held and freed stays in
+    /// the footprint — 128 MiB measured so — so it is reuse, not a footprint that falls under its peak). That window is kept
+    /// open below, on purpose: this process's own memory no longer decides anything.
+    #[test]
+    fn the_host_reads_a_processes_peak_footprint_and_it_follows_what_is_touched() {
+        let mut other = vec![0u8; 64 * 1024 * 1024];
+        for i in (0..other.len()).step_by(4096) {
+            other[i] = 1;
+        }
+        std::hint::black_box(&other);
+        drop(other);
+        let exe = std::env::current_exe().unwrap();
+        let out = std::process::Command::new(exe)
+            .args(["--exact", "jail::macos_tests::footprint_probe_child", "--nocapture"])
+            .env(FOOTPRINT_MODE, "1")
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        let line = text.lines().find(|l| l.starts_with("FOOTPRINT ")).unwrap_or_else(|| {
+            panic!("the probe child printed no reading:\n{text}\n{}", String::from_utf8_lossy(&out.stderr))
+        });
+        let read = |key: &str| -> u64 {
+            line.split_whitespace()
+                .find_map(|w| w.strip_prefix(key))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(|| panic!("no `{key}` in {line:?}"))
+        };
+        let (before, after, third) = (read("before="), read("after="), read("third="));
+        assert!(after >= before + 48 * 1024 * 1024, "64 MiB touched moved the peak footprint only from {before} to {after}");
+        assert!(third >= after, "a PEAK never falls: {after} then {third}");
     }
 }
