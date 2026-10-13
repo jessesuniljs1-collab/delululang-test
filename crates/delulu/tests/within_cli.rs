@@ -933,3 +933,108 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// P9-03 step 4 (`V2_P9_DESIGN.md` item 4, D-V2-126): auto-approval is the operator's own STANDING DELEGATION — a node in the
+/// tree. `grants auto-approve --parent B` approves, under B, every pending proposal whose mint (the proposer's authority joined
+/// with its ask) is within B — the tree's own `⊑` decides — and leaves every other one pending with what `grants diff` finds
+/// it adds beyond B. It never carries the Guard's owner code — not as a flag, not from the environment — so guarded authority
+/// is approved by a person, one proposal at a time. And because the boundary is a node, revoking it revokes everything it
+/// approved.
+#[test]
+fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guarded_authority() {
+    let base = std::env::temp_dir().join(format!("dpa{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::copy(workspace_root().join("examples/guide/05_capabilities.delulu"), cwd.join("caps.delulu")).unwrap();
+    let go = |args: &[&str], owner_env: Option<&str>| -> Output {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_delulu"));
+        c.current_dir(&cwd).env("DELULU_STATE_DIR", &state).env("DELULU_NO_COLOR", "1").env_remove("DELULU_GUARD_OWNER");
+        if let Some(code) = owner_env {
+            c.env("DELULU_GUARD_OWNER", code);
+        }
+        c.args(args).output().expect("failed to run delulu")
+    };
+    let run = |args: &[&str]| go(args, None);
+    let o = run(&["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", out(&o));
+    let guard = BrokerGuard(state.clone());
+    let owner = {
+        let text = out(&o);
+        let tail = &text[text.find("gow1_").expect("broker start prints the owner code")..];
+        tail[..tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len())].to_string()
+    };
+    let delegate = |extra: &[&str]| -> Value {
+        let mut args = vec!["grants", "delegate", "--ttl", "1h", "--json", "--owner", &owner];
+        args.extend_from_slice(extra);
+        let o = run(&args);
+        assert!(o.status.success(), "delegate {extra:?}: {}", out(&o));
+        json_of(&o)
+    };
+    // The operator's root R, and the standing boundary B under it: the read of `./config` with the console, and `Declassify S`.
+    let root = delegate(&["--effects", "Read,Write,Net,Declassify", "--fs-read", "./config", "--net", "example.com", "--declassify", "S"])
+        ["parent"].as_str().unwrap().to_string();
+    let b = delegate(&["--parent", &root, "--effects", "Read,Write,Declassify", "--fs-read", "./config", "--declassify", "S"])["node"]
+        .as_str().unwrap().to_string();
+    // Three agents under R, each refused at the `./config` read; one report, filed for each node.
+    let a1 = delegate(&["--parent", &root, "--effects", "Write"]);
+    let a2 = delegate(&["--parent", &root, "--effects", "Write,Net", "--net", "example.com"])["node"].as_str().unwrap().to_string();
+    let a3 = delegate(&["--parent", &root, "--effects", "Write,Declassify", "--declassify", "S"])["node"].as_str().unwrap().to_string();
+    let o = run(&["run", "caps.delulu", "--lease", a1["token"].as_str().unwrap(), "--report-out", "r.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let file = |node: &str| -> String {
+        let o = run(&["grants", "propose", "r.json", "--node", node, "--json"]);
+        assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+        json_of(&o)["filed"]["id"].as_str().unwrap().to_string()
+    };
+    let (p1, p2, p3) = (file(a1["node"].as_str().unwrap()), file(&a2), file(&a3));
+    // The owner code is refused as a flag: guarded authority is approved by a person, one proposal at a time.
+    let o = run(&["grants", "auto-approve", "--parent", &b, "--owner", &owner, "--json"]);
+    assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    assert!(out(&o).contains("approved by a person, one proposal at a time"), "the refusal says why: {}", out(&o));
+    // ...and not taken from the environment either.
+    let o = go(&["grants", "auto-approve", "--parent", &b, "--json"], Some(&owner));
+    let v = json_of(&o);
+    assert_eq!(o.status.code(), Some(1), "a proposal left pending is exit 1: {v:#}");
+    let approved = v["approved"].as_array().unwrap_or_else(|| panic!("{v:#}"));
+    assert_eq!(approved.len(), 1, "{v:#}");
+    assert_eq!(approved[0]["proposal"], p1.as_str(), "{v:#}");
+    assert!(approved[0]["token"].is_string(), "{v:#}");
+    let n1 = approved[0]["node"].as_str().unwrap().to_string();
+    let pending = v["pending"].as_array().unwrap();
+    let left = |id: &str| pending.iter().find(|p| p["proposal"] == id).cloned().unwrap_or_else(|| panic!("{id} left pending: {v:#}"));
+    let (l2, l3) = (left(&p2), left(&p3));
+    assert_eq!(l2["code"], "DL0802", "beyond B: {l2:#}");
+    let found: Vec<(String, String)> = l2["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| (f["category"].as_str().unwrap().to_string(), f["grant"].as_str().unwrap().to_string()))
+        .collect();
+    assert_eq!(
+        found,
+        [("effect_expansion".to_string(), "Net".to_string()), ("scope_expansion".to_string(), "net=example.com".to_string())],
+        "what it adds beyond B, by category: {l2:#}"
+    );
+    assert_eq!(l3["code"], "DL1410", "within B, but guarded — the Guard's, not the boundary's: {l3:#}");
+    assert_eq!(l3["findings"], serde_json::json!([]), "{l3:#}");
+    let n = json_of(&run(&["grants", "inspect", &n1, "--json"]))["node"].clone();
+    assert_eq!((n["parent"].as_str(), &n["effects"]), (Some(b.as_str()), &serde_json::json!(["Read", "Write"])), "under B: {n:#}");
+    // A second pass approves nothing more, and says the same of what is left.
+    let o = run(&["grants", "auto-approve", "--parent", &b, "--json"]);
+    let v = json_of(&o);
+    assert_eq!((o.status.code(), v["approved"].as_array().map(Vec::len), v["pending"].as_array().map(Vec::len)), (Some(1), Some(0), Some(2)), "{v:#}");
+    // With nothing pending, there is nothing to leave: exit 0.
+    for id in [&p2, &p3] {
+        assert!(run(&["grants", "reject", id, "--reason", "not automatically"]).status.success());
+    }
+    let o = run(&["grants", "auto-approve", "--parent", &b, "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    // The standing delegation is one node: revoking it revokes what it approved.
+    assert!(run(&["grants", "revoke", &b]).status.success());
+    let n = json_of(&run(&["grants", "inspect", &n1, "--json"]))["node"].clone();
+    assert_eq!(n["state"], "revoked", "{n:#}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}

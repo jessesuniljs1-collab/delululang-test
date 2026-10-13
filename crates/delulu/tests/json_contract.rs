@@ -1040,6 +1040,9 @@ fn broker_verbs_emit_the_documented_envelope() {
     let again = f["filed"]["id"].as_str().unwrap_or("pp_missing").to_string();
     let r = step(&["grants", "reject", &again, "--reason", "sweep"], "grants");
     assert!(r["subcommand"] == "reject" && r["reason"] == "sweep", "{r}");
+    // P9-03 step 4 (D-V2-126): nothing is left pending, so the standing node approves nothing and leaves nothing (exit 0).
+    let aa = step(&["grants", "auto-approve", "--parent", &approver], "grants");
+    assert!(aa["subcommand"] == "auto-approve" && aa["approved"] == serde_json::json!([]) && aa["pending"] == serde_json::json!([]), "{aa}");
 
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");

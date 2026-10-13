@@ -1498,6 +1498,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (an approval delegates, under the approver's own node, the proposer's authority and what it asked —\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 bounded by ⊑, so a node cannot approve its own widening — and prints a lease token for the re-run;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a rejection's reason is kept for the proposer, in `grants proposals`)\n\
+     \x20 delulu grants    auto-approve --parent g_ID [--ttl 1h]   (approves, under the standing node g_ID, every pending proposal\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 whose mint is within it, and leaves each other one pending with what it adds beyond the node; never\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 guarded authority — it takes no owner code; exit 1 when one is left pending)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -6865,10 +6868,12 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "proposals" => cmd_grants_proposals(args, &state_dir, json),
         "approve" => cmd_grants_approve(args, &state_dir, json),
         "reject" => cmd_grants_reject(args, &state_dir, json),
+        // P9-03 step 4 (D-V2-126): the operator's standing delegation — a node — approves what it bounds.
+        "auto-approve" => cmd_grants_auto_approve(args, &state_dir, json),
         other => {
             eprintln!(
                 "error: unknown grants subcommand `{other}` (list | tree | inspect | revoke | delegate | certify | adopt | \
-                 renew | receipt | pubkey | diff | propose | proposals | approve | reject)"
+                 renew | receipt | pubkey | diff | propose | proposals | approve | reject | auto-approve)"
             );
             2
         }
@@ -7275,6 +7280,119 @@ fn cmd_grants_proposals(args: &[String], state_dir: &std::path::Path, json: bool
         }
     }
     0
+}
+
+/// `delulu grants auto-approve --parent g_ID [--ttl 1h] [--json]` (P9-03 step 4, D-V2-126): the operator's standing
+/// delegation is a NODE. Every pending proposal is offered to the broker for approval under it, as `grants approve` would
+/// offer it — so the tree's own `⊑` decides, against the node, what each one would mint — and each one refused stays
+/// pending, with its code and what `grants diff` finds its mint adds beyond the node. It takes no owner code, neither as a
+/// flag nor from `DELULU_GUARD_OWNER`: guarded authority is approved by a person, one proposal at a time. Exit 0 when nothing
+/// is left pending, 1 when something is, 2 on a bad invocation.
+fn cmd_grants_auto_approve(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{ReqBody, Response};
+    if args.iter().any(|a| a == "--owner" || a.starts_with("--owner=")) {
+        eprintln!(
+            "error: `grants auto-approve` takes no owner code: guarded authority is approved by a person, one proposal at a \
+             time — `delulu grants approve pp_ID --parent g_ID --owner CODE`"
+        );
+        return 2;
+    }
+    if let Some(code) = refuse_unlisted_flags("grants auto-approve", args, &["--json", "--state-dir", "--parent", "--ttl"]) {
+        return code;
+    }
+    let (mut parent, mut ttl) = (None, None);
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(v) = flag_value(args, &mut i, "--parent") {
+            parent = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
+            ttl = Some(v);
+        }
+        i += 1;
+    }
+    let Some(parent) = parent else {
+        eprintln!("error: `grants auto-approve` takes the standing node it approves under: --parent g_ID");
+        return 2;
+    };
+    let ttl_millis = match &ttl {
+        None => None,
+        Some(s) => match parse_ttl_millis(s) {
+            Some(d) => Some(now_millis() + d),
+            None => {
+                eprintln!("error: bad --ttl `{s}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+                return 2;
+            }
+        },
+    };
+    // The standing node's authority, for what each refused proposal adds beyond it — the broker decides; this explains.
+    let bound = match grants_rpc(state_dir, ReqBody::Inspect { node: parent.clone() }, json) {
+        Ok(Response::Inspected { node }) => crate::brokerd::spec_to_authority(&node.authority_spec()),
+        Ok(other) => {
+            eprintln!("error: unexpected inspect response: {other:?}");
+            return 2;
+        }
+        Err(code) => return code,
+    };
+    let proposals = match grants_rpc(state_dir, ReqBody::Proposals, json) {
+        Ok(Response::ProposalList { proposals }) => proposals,
+        Ok(other) => {
+            eprintln!("error: unexpected proposals response: {other:?}");
+            return 2;
+        }
+        Err(code) => return code,
+    };
+    let (mut approved, mut pending): (Vec<Json>, Vec<Json>) = (Vec::new(), Vec::new());
+    for p in proposals.iter().filter(|p| p.status == "pending") {
+        let body = ReqBody::ProposalApprove { id: p.id.clone(), under: parent.clone(), owner: None, ttl_millis };
+        let findings = || -> Vec<Json> {
+            p.mints
+                .as_ref()
+                .map(|m| crate::within::diff_nodes(&bound, &crate::brokerd::spec_to_authority(m)))
+                .unwrap_or_default()
+                .iter()
+                .map(|f| json!({ "category": f.category, "dimension": f.dimension, "grant": f.grant, "detail": f.detail }))
+                .collect()
+        };
+        match crate::brokerd::request(state_dir, body) {
+            Ok(Response::Delegated { node, token }) => approved.push(json!({ "proposal": p.id, "node": node, "token": token })),
+            Ok(Response::Error { code, message, .. }) => {
+                pending.push(json!({ "proposal": p.id, "code": code, "message": message, "findings": findings() }))
+            }
+            Ok(other) => {
+                eprintln!("error: unexpected approve response: {other:?}");
+                return 2;
+            }
+            Err(e) => {
+                let d = Diagnostic::error("DL1401", format!("broker unreachable: {}", broker_unreachable_detail(&e)));
+                print_diagnostics("grants", &[d], &SourceMap::new(), None, json);
+                return 1;
+            }
+        }
+    }
+    if json {
+        print_success_envelope(
+            "grants",
+            json!({ "subcommand": "auto-approve", "parent": parent, "approved": approved, "pending": pending }),
+        );
+    } else {
+        use delulu_diag::terminal_line;
+        for a in &approved {
+            let (id, node) = (a["proposal"].as_str().unwrap_or(""), a["node"].as_str().unwrap_or(""));
+            ok_line!("ok: approved `{}` — delegated `{}` ⊑ `{}`", terminal_line(id), terminal_line(node), terminal_line(&parent));
+            println!("{}", a["token"].as_str().unwrap_or(""));
+        }
+        for p in &pending {
+            let (id, code) = (p["proposal"].as_str().unwrap_or(""), p["code"].as_str().unwrap_or(""));
+            println!("pending: `{}` — {code}: {}", terminal_line(id), terminal_line(p["message"].as_str().unwrap_or("")));
+            for f in p["findings"].as_array().into_iter().flatten() {
+                println!("  {:<23} {}", f["category"].as_str().unwrap_or(""), terminal_line(f["grant"].as_str().unwrap_or("")));
+            }
+        }
+        if approved.is_empty() && pending.is_empty() {
+            println!("(no pending proposals)");
+        }
+    }
+    i32::from(!pending.is_empty())
 }
 
 /// The one positional of a proposal verb — its id — beside its value flags.
