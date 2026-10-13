@@ -2881,6 +2881,55 @@ refused and (c) stays the owner's.
    package under `examples/`. Mutants M318 (the refusal back), M319 (the package path ignores `--within`), M320 (a package's
    report read as a file) and M321 (the walk over the first module only) red, the control green.
 
+## D-V2-125 — P9-03 step 3: a proposal is a request filed with the broker against the refused run's node; its approval is a delegation under the approver's own node of that node's authority joined with the ask — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **What is filed.** `grants propose REPORT --node g_ID` files step 2's proposal — the refused call's own requirement
+   (D-V2-123) — with the broker as the request of `g_ID`, the node the refused run held (a `run --lease` run prints it).
+   Each line is converted as a lease's grant is (`authority_spec_from_grants`); a line with no form in a node — a sensor or a
+   compute device (a plugin and a computed scope propose nothing already) — is proposed but NOT filed, said in `not_filed`,
+   exit 1, because an approval could not carry it. The broker refuses (DL0904, no new code) a proposal that asks for nothing,
+   for what the node already holds, for a budget, or for a second envelope on a device the node has one for; and one from a
+   node that is not live (DL1403, DL1402; DL0904 for an unknown one). The record `proposal` carries what is asked and the
+   proposer's account — program, call, place, code — as data, each field bounded (512 bytes), never decided on. A proposal
+   still pending for the same node and the same ask is answered with its id (`deduped`).
+2. **Approval.** `grants approve pp_ID --parent g_ID [--ttl D] [--owner CODE]` delegates, under the APPROVER's node, the
+   proposer's authority joined with the ask (effects and scopes unioned, the node's budget kept, paths re-canonicalized —
+   `proposal::join`), through the Guard's mint gate (the owner code for guarded authority, as `grants delegate`) and
+   `attenuate`'s `⊑`. So **a proposer approving under its own node is refused DL0802** — its widening is not `⊑` it — and an
+   approver cannot grant past what it holds (DL0802). It is refused while the proposer's node is revoked or expired: a
+   quarantined run's ask cannot bring its authority back. **The proposer's node is never changed**: the approval is a NEW node
+   and a single-redemption lease token for the re-run (V2 §5). Records: the delegation's own `delegate`, then
+   `proposal_approve` (the approver, the proposal, the new node). The join, not the ask alone, because a re-run needs what its
+   node already allowed: a lease of the ask alone is refused at the first call the old node admitted.
+3. **What an approver reads.** `grants proposals` lists each proposal's ask, the proposer's account, and — while it is
+   pending and its node live — **what an approval would mint now** (`mints`, the join), so the approver reads the whole new
+   node and not only the ask: a proposal names its node, and an approval carries that node's authority with it.
+4. **Who may approve — no gate beyond the tree's.** An approval is a delegation, and a delegation is bounded by the node it
+   is made under: a node id is a capability (any client naming a live node can delegate under it, as `grants delegate
+   --parent` always could), so an approval grants nothing its approver could not already delegate, and a proposal that names
+   someone else's node gains its proposer nothing it could not take by naming that node itself. The Guard's owner code is
+   asked exactly where `grants delegate` asks it.
+5. **Rejection.** `grants reject pp_ID --reason ".."` — a reason is required, kept (bounded at 2 KiB) for the proposer in
+   `grants proposals --json`, recorded `proposal_reject`, a `deny` naming the proposer's node, as a Guard denial is. Not
+   owner-gated: a rejection grants nothing (the same-user threat model, spec §10). A rejected proposal asked again is a new one.
+6. **Lost records** (RW 4.61's rule, D-V2-115): a filing whose record was lost is withdrawn and refused DL1401; an approval's
+   node is withdrawn and the proposal pending again, refused; a rejection stays in force and says the chain lacks its record.
+   Daemon memory only, like the tree and the Guard's queue. OCSF: `proposal` and `proposal_approve` export as Base events,
+   `proposal_reject` as a Finding (a deny) — the mapping unchanged.
+7. **Witnessed** — `within_cli`'s `a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_reason_the_agent_
+   reads`, red first (`--node` a usage error, exit 2, after the lease run was refused as expected): a lease of the console only,
+   refused at the guide's `./config` read; the proposal filed against its node, answered again while pending; filing changes no
+   node; the proposer's own approval DL0802; the operator's under R a new node `{Read, Write}` under R; the proposer's node as
+   it was; the re-run past the read to the next refusal, the `./out` write; R's own lack of a write DL0802; a rejection whose
+   reason the agent reads back; a proposal whose node is revoked before approval mints nothing; a revoked node's ask not filed;
+   a sensor's proposed and NOT filed. `brokerd`'s `a_proposal_or_its_approval_whose_record_was_lost_does_not_happen`; seven
+   broker unit tests (`proposal.rs`), the Guard's mint gate among them; `json_contract`'s broker-verbs sweep drives `propose
+   --node`, `proposals`, `approve` (under another tree's node) and `reject`. **Mutants M322–M336 red, the control green** —
+   M331 (the lost filing kept) first SURVIVED: the witness filed the same ask again after the held chain, and the dedup
+   answered the leftover's id; it now reads the list before anything else is filed, and M331 is red.
+8. **Next (P9-03 step 4):** auto-approval within the operator's standing boundary (`V2_P9_DESIGN.md` item 4 — a proposal is
+   auto-approvable exactly when `grants diff BOUNDARY` over what it would mint adds nothing, D-V2-119), then P9-04.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — proposals filed, approved and rejected, 2026-10-13
+
+- **New (P9-03): `delulu grants propose REPORT --node g_ID`** files the proposal with the broker as the request of the node the
+  refused run held. It grants nothing. A grant a lease node cannot carry (a sensor, a compute device) is proposed and NOT
+  filed, said in `not_filed`, exit 1 (D-V2-125).
+- **New: `delulu grants proposals`** — each proposal: what it asks, the proposer's own account of its refusal (shown as data),
+  what an approval would mint now, and its answer.
+- **New: `delulu grants approve pp_ID --parent g_ID [--ttl D] [--owner CODE]`** — a delegation, under the approver's own node,
+  of the proposer's authority joined with what it asked, bounded by `⊑` and the Guard as `grants delegate` is: a node cannot
+  approve its own widening (DL0802), and a revoked or expired proposer's ask is not approved. The proposer's node is never
+  changed; the approval prints a new lease token, and the program is re-run under it.
+- **New: `delulu grants reject pp_ID --reason ".."`** — the reason is kept for the proposer, in `grants proposals --json`.
+
 ## Unreleased — `--within` and `grants propose` for a package, 2026-10-13
 
 - **New: `delulu authority DIR --within BOUNDARY` answers for a package directory** — the package's requirement list, the

@@ -105,7 +105,11 @@ the assistant's memory — which now also travels file by file in
   narrowest grant for the refused call, read from the report and the program's source: that call's own requirement, through
   every minting call (D-V2-123); and `authority DIR --within` and `grants propose` for a package directory (D-V2-124).
   `master` went red once (`187494a`, two witnesses that measured more than their subject) and was fixed the same run.
-  **Next: P9-03 step 3** (the store and approval), then P9-04.
+  **Routine run 22 (2026-10-13): P9-03 step 3** — a proposal is filed with the broker against the refused run's node, listed
+  with what an approval would mint, approved as a delegation under the APPROVER's own node of the node's authority joined
+  with the ask (a proposer's own approval DL0802; the proposer's node never changed; a re-run under the new lease), or
+  rejected with a reason the agent reads (D-V2-125).
+  **Next: P9-03 step 4** (auto-approval within the operator's standing boundary), then P9-04.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1318,6 +1322,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A count of a program's output is a baseline its watcher can pre-empt** (routine run 21, run 19's lesson again): the
   quarantine witness counted `REFUSED:` lines, and the monitor revoked the run between its third refusal and the line that
   said so. Count the event where it is recorded at the event (the trace), not where the program reports it afterwards.
+
+- **A witness of a withdrawal must look before anything can put the same thing back** (routine run 22, M331): the lost-record
+  witness filed the same ask again once the chain was free, and the store's dedup answered with the id of the proposal the
+  mutant had failed to withdraw — the list counted right and the mutant survived. Read the state straight after the operation
+  whose undoing is the subject, before any step that deduplicates, merges or reuses can paper over what was left behind.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

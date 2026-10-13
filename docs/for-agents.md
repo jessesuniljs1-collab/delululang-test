@@ -383,6 +383,13 @@ runtime or the program worded; `proposes` is `false` (exit 1) with a `reason` wh
 computes, a refusal a grant does not answer, a program changed since the run. It grants nothing: whoever holds the
 authority decides, and `grants diff` tells them what the proposal adds.
 
+**To ask for it, file it** (D-V2-125): a `run --lease` run prints the node it holds; `delulu grants propose FILE --node g_ID
+--json` files the proposal with the broker as that node's request — `filed.id` is its `pp_` id. Nothing is granted until an
+operator answers: `grants approve pp_ID --parent g_THEIRS` delegates, under THEIR node, your node's authority joined with
+the ask, and hands you a new lease token — re-run under it; your old node is never widened, and approving under your own
+node is refused (DL0802). Read the answer with `delulu grants proposals --json`: `status` is `pending`, `approved` (with
+`approved.node`) or `rejected` (with the operator's `reason` — propose narrower, or not at all).
+
 ## [agents.effects] The effect kinds
 
 There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`,

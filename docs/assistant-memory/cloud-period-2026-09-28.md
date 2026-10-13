@@ -235,3 +235,7 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   as `--within` decides; exit 1 when the change adds anything. Lease nodes next.
 - **P9-02 built the same run** (D-V2-120): `grants diff g_OLD g_NEW` compares two lease nodes by the lattice — each item a
   one-item authority carrying OLD's budget (an absent budget is the top, so a probe without it fails everything).
+- **Routine run 22 (2026-10-13): P9-03 step 3** (D-V2-125): proposals filed with the broker against the refused run's node;
+  an approval is a delegation under the APPROVER's own node of the node's authority joined with the ask (`⊑` and the Guard
+  bound it; the proposer's own approval is DL0802); a rejection keeps its reason. Lesson (M331): a witness of a withdrawal
+  reads the state before anything that deduplicates can answer with the leftover.

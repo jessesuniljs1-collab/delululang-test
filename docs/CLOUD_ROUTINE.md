@@ -174,7 +174,7 @@ another OS, and then takes about seven minutes itself (run 5).
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
    D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
-   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; the store and approval next), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; auto-approval next), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -249,7 +249,7 @@ the window CONTAINS that one path counts and another does not, and grow that unt
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
-Collect the edits, assert each anchor exactly once against the files as they are, then write. **A mutant's own `test` command is
+Collect the edits, assert each anchor exactly once against the files as they are, then write. **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
 part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
 subset's reason — read what a per-mutant command runs.
 **Enumerate a finding's class from its mechanism before fixing it** (run 19, RW 4.61: the red team named eight daemon handlers; `grep record_op` and reading each call against the handler that reaches it found four more). **A measurement over a corpus carries a control that must come out non-empty** (run 19: a wrong JSON path read all 23 corpus programs as pure; `scripts/authority-corpus.py` fails such a read). **A disk check reads the LAST write**: order a witness so the edit it is about is the last to persist (run 19: tightenings persisted after the loosenings would have rewritten the disk, and M244 would have lived).

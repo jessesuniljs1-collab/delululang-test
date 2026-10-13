@@ -143,6 +143,13 @@ skip branch, §11.2).
   3, the store and approval** (item 3 above); the rest of hypothesis 5 (the run's node unchanged by an approval; a rejection's
   reason reaching the agent) is witnessed there. **A package run's report is proposed for** since `9473789` (D-V2-124): the call
   found in the flattened text the run executed.
+  **Step 3 built** (routine run 22, `45877b7`, D-V2-125): `grants propose REPORT --node g_ID` files the proposal with the broker
+  as the request of the node the refused run held; `grants proposals` lists it with what an approval would mint; `grants approve
+  pp_ID --parent g_ID` delegates, under the APPROVER's node, the node's authority joined with the ask — the Guard's mint gate and
+  `⊑` bound it, so a proposer's own approval is DL0802 — and `grants reject pp_ID --reason` keeps the reason for the proposer.
+  Hypothesis 5's rest witnessed: the proposer's node is unchanged by an approval (a new node, re-run), and a rejection's reason
+  reaches the agent in `--json`. **Next: step 4, auto-approval** (item 4) — measured while step 3 was built: the boundary is to
+  be asked of what an approval MINTS (the join), not of the ask alone, since the minted node carries its proposer's authority.
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

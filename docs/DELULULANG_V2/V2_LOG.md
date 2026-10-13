@@ -5454,3 +5454,29 @@ became a `.dwx` row. Mutants M318–M321 red, the control green; clippy clean. *
 `json_contract`: Windows `38332620471` (`json_contract` 13, `within_cli` 12), macOS `38332623451` (14, 12), arm64 `38332625666` (14, 12) — 0 failed, the new test named, no compiler warning, no orphan `delulu`. **The full suite alone at `9473789`:** 2,247 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
 
 **`f3d4076`'s push runs** (the records of the red episode): CI `38332234517` success on every job (`miri-slow` and `heavy-gates` skipped on a push) — **`master` green again**, the two fixed witnesses green on Ubuntu and macOS — and `openshell` `38332234499` success; `actors_pingpong` arm64 MEASURED 2.95x (control 4.11x, bar 1.50x), the others NOT MEASURED.
+
+## 2026-10-13 — routine run 22: CI read green; P9-03 step 3 — the proposal store, approval under the approver's node (D-V2-125)
+
+**Verified first:** run 21's last push runs, at `ae84188` — CI `38333635019` success on every job (`miri-slow` and `heavy-gates`
+skipped on a push), `openshell` `38333634973` success; `actors_pingpong` arm64 MEASURED 2.88x (control 4.11x, bar 1.50x), Windows,
+Ubuntu and macOS NOT MEASURED (busy or 3 hardware threads); each test job's sandbox properties annotated as before. The Survey
+(`ok`, 1504 nodes, 14154 edges) and `doctor --check` (26 checks) passed at the start; no `origin/claude/*` branch holds a commit
+`master` lacks beyond the two run 15 recorded as superseded.
+
+**Run 21's open item (2), P9-03 step 3** (`45877b7`, D-V2-125): `grants propose REPORT --node g_ID` files the refused call's
+requirement with the broker as the request of the node the refused run held; `grants proposals` lists each with the
+proposer's account (data) and what an approval would mint; `grants approve pp_ID --parent g_ID` delegates, under the APPROVER's
+node, the node's authority joined with the ask — the Guard's mint gate and `⊑` bound it, with no new check; `grants reject pp_ID
+--reason` keeps the reason for the proposer. A new broker module, `proposal.rs`; four IPC requests; the daemon's lost-record rule
+(RW 4.61) for each. Two choices measured while it was built: the approval mints the JOIN (a lease of the ask alone is refused at
+the re-run's first call the old node admitted), and so `grants proposals` shows the join (`mints`) — a proposal names its node,
+and an approval carries that node's authority, so the approver reads the whole new node.
+
+**Witnessed:** `within_cli`'s `a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_reason_the_agent_reads`,
+red first (`--node` a usage error, exit 2, after the lease run's expected refusal); `brokerd`'s
+`a_proposal_or_its_approval_whose_record_was_lost_does_not_happen`; seven unit tests in `proposal.rs`; `json_contract`'s
+broker-verbs sweep drives the four forms (its advertised-verbs check refuses a verb it never drove). Mutants M322–M336 red, the
+control green. **M331 first survived:** the lost-record witness filed the same ask again once the chain was free and the dedup
+answered with the leftover's id; it now reads the list before anything else is filed (red). Clippy clean.
+**Read on the runners at `45877b7`** over `within_cli`, `json_contract` and `delulu`'s unit tests: Windows `38352400253` (205 passed), macOS `38352403113` (221), arm64 `38352405496` (239), and the broker's unit tests on Windows `38352408072` (`proposal`, 7) — 0 failed, every new test named, no compiler warning, no orphan `delulu`.
+**The full suite alone at `45877b7`:** 2,256 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
