@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sandboxed run's report records the host's refusal, 2026-10-13
+
+- **Fixed: `delulu run --sandbox --report-out F` recorded no diagnostic for a refused run** — the host wrote
+  `diagnostics: []` and the refusal reached only the guest's standard error. The host now records its own refusal of the
+  call that ended the run — its code and words, at the call the guest's request named — as the ordinary run's report does
+  since D-V2-121: the same code, message and span, in the same file (a package's flattened text named as the ordinary run
+  names it). A guest's own fault (an assertion) is the guest's word and stays out of the host's report (D-V2-122).
+
 ## Unreleased — a refused run's report records the refusal, 2026-10-12
 
 - **Fixed: `delulu run --report-out F` recorded no diagnostic for a refused run** — `diagnostics: []`, while the refusal

@@ -174,7 +174,7 @@ another OS, and then takes about seven minutes itself (run 5).
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
    D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
-   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121: a sandboxed run's report next, then `grants propose`), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; `grants propose` next), P9-04 endpoint-bound secrets, P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**

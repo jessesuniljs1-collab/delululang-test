@@ -128,7 +128,12 @@ skip branch, §11.2).
   4. **Auto-approval** (`grants auto-approve --within BOUNDARY`) is P9-02 already: a proposal is auto-approvable exactly when
      `grants diff BOUNDARY PROPOSAL` adds nothing (D-V2-119).
   **Step 1 built** (routine run 20, `c2dd5f0`, D-V2-121): the ordinary run's report records the refusal with its span; a
-  sandboxed run's report is next, then `grants propose`.
+  sandboxed run's report is next, then `grants propose`. **Step 1b built** (routine run 21, `ebf393c`, D-V2-122): a sandboxed
+  run's report records the HOST's refusal at the call the guest's request named, placed only inside the program the host sent;
+  the same code, message and span as the ordinary run's report. **Next: `grants propose`** — measured while 1b was built: the
+  requirement list keeps only each grant's FIRST call (`push` deduplicates by grant), so a refusal at a second call of the same
+  grant maps to no requirement's `at`; the walk must keep every minting call (`ScopeWalk.sites`), and the report records no
+  grant set, so a proposal is the refused call's own static requirement, not a difference from what the run held.
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

@@ -99,7 +99,9 @@ the assistant's memory — which now also travels file by file in
   **SECRET-HIDDEN-1** closed beside it (a secret read under a computed name was missing from `--grants`); and **P9-02's first
   slice** — `delulu grants diff OLD NEW` names what a change of grant set adds, by category (D-V2-119) — and its lease nodes
   (D-V2-120): **P9-02 built** (`secret_reach_expansion` waits for P9-04); P9-03 read against the code — its premise measured false
-  for DL0703 — and its step 1 built (D-V2-121). **Next: P9-03's step 2** (a sandboxed run's report), then `grants propose`.
+  for DL0703 — and its step 1 built (D-V2-121).
+  **Routine run 21 (2026-10-13):** P9-03 step 1b — a sandboxed run's report records the HOST's refusal at the call the guest's
+  request named, the ordinary run's code, message and span (D-V2-122). **Next: `grants propose`.**
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

@@ -5348,3 +5348,34 @@ Witnessed red first (`diagnostics: []`); the witness holds the report's span to 
 `within_cli`, `json_contract` and `schema_cli`: Windows `38314043269`, macOS `38314046573`, arm64 `38314049378` — each job green over its three targets (`within_cli` 8 passed on each), no orphan process. **The full suite alone at `c2dd5f0`:** 2,240 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
 
 **Next for P9-03:** a sandboxed run's report (written by its host), then `grants propose --from REPORT`.
+
+## 2026-10-13 — routine run 21: CI read green; P9-03 step 1b — a sandboxed run's report records the host's refusal at its call (D-V2-122)
+
+**Start (00:08 UTC).** `master` = `fc95094`, the session's branch the same; every `origin/claude/*` branch read after unshallowing —
+none holds a commit `master` lacks but the two run 10 recorded as superseded (`d3f0d52`, `7d6a22b`). `survey check` ok (1,504 nodes),
+`doctor --check` all checks passed. **`fc95094`'s push run** `38315802078` (CI) — success on every job (`miri-slow` and `heavy-gates`
+skipped on a push); `actors_pingpong` — arm64 MEASURED 2.97x (control 4.12x, bar 1.50x), macOS NOT MEASURED (3 hardware threads; 1.58x
+observed), Windows and Ubuntu NOT MEASURED (busy or SMT); sandbox properties as before (macOS's reads `not confined`). The nightly of
+2026-10-12 (`38234415113`) and the release dry run (`38248184651`) at `e95acf1`: success. `gh` is installed in this VM; CI was read
+with `curl` and the MCP tools.
+
+**P9-03 step 1b (`ebf393c`, D-V2-122)** — measured first: a sandboxed run of `05_capabilities` with `--grant console` wrote
+`diagnostics: []` (the refusal in `sandbox.denied` as prose and on the guest's standard error); the greeter package the same. The
+host now keeps its own refusal of a capability request with the span the request named, clears it on a later `Ok`, and at a
+failing goodbye its report records it as the ordinary run's report records a fault — same code, message, file, start and end. The
+span is the guest's word: placed only on character boundaries of the program the host sent (inside a character it panicked the
+renderer); another file's is omitted by the renderer (C83 — so the host's own file check was dropped as a wall no witness could
+fail). A guest's own fault stays out of the host's report. Witnessed red first (`within_cli`, a file and a package); a channel
+unit test and a guest unit test beside it; mutants M298–M306 red (M306's first form did not compile and was rewritten), the
+control green; clippy clean. **Read on the runners at `ebf393c`** over `within_cli`, `sandbox_run_cli`, `sandbox_modes_cli`,
+`sandbox_external_cli`, `schema_cli` and `delulu`'s unit tests: Windows `38327053568` (226 passed), macOS `38327056172` (241), arm64
+`38327058865` (262) — 0 failed, both new tests named, no compiler warning, no orphan `delulu` (Windows' one orphan is `vctip`, the
+MSVC toolchain's telemetry). **The full suite alone at `ebf393c`:** 2,243 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0,
+the tree unmoved, no daemon left.
+
+**Found while building it, for the next step:** `schema_cli` validates only reports of runs that SUCCEED — a refused run's report
+(which carries a diagnostic since D-V2-121) was never held to the `run-report` schema; both kinds validate by hand
+(`schema validate run-report`), and a witness for them goes with the next slice. And `grants propose` cannot map a refusal through
+the requirement list as it stands: `push` keeps each grant's FIRST call only (a refusal at a second call of the same grant matches
+no `at`), and the report records no grant set (`sandbox.granted` is the sandbox level) — so the walk must keep every minting call,
+and a proposal is the refused call's own static requirement.

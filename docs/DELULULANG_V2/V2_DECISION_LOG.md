@@ -2800,6 +2800,33 @@ refused and (c) stays the owner's.
    report's span is the very `at` `authority --within` names for `fs.read=./config` (48:18). Mutants M296 (the report ignores
    the fault) and M297 (the fault recorded before its span) red, the control green.
 
+## D-V2-122 — P9-03 step 1b: a sandboxed run's report records the HOST's refusal at the call the guest's request named — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **Measured first:** `run FILE --sandbox --grant console --report-out R` on `examples/guide/05_capabilities.delulu` wrote
+   `diagnostics: []` (`outcome: {exit: 1, ran: true}`, the refusal in `sandbox.denied` as prose and on the guest's standard
+   error), where the ordinary run's report names DL0703 at 48:18 since D-V2-121; the greeter package the same.
+2. **Whose words.** A sandboxed run's report is the HOST's (D-V2-21), and the host refuses each capability request itself —
+   so the refusal it records is its own: its code and its words (bounded and escaped as a `denied` entry is). The CALL is the
+   guest's word: `RootMethod`/`CapMethod` carry the span the guest's interpreter names. The host places it only on character
+   boundaries of the one program it sent (a span inside a character panicked the renderer — a guest could have ended its own
+   host's report), and a span naming another file is omitted by the renderer itself (C83). A lying guest can point only at
+   another place in the same program, whose static requirement is still the program's own — and a proposal built from it is
+   still approved under the approver's `⊑` (P9-03's later steps).
+3. **Which refusal.** The host keeps the refusal of the guest's LAST capability request and clears it when a later one is
+   answered `Ok`. A DeluluLang program ends at a fault, so the refusal still held when the guest says goodbye with a failing
+   exit is the one that ended the run; it is recorded only then. A guest that faulted on its own (an assertion) ended for a
+   reason the host never saw — its words stay its own (RW 4.31's rule), and the report records no diagnostic for it; a guest
+   whose channel failed was ended by something else. An egress or a device refusal is a value the program goes on with, and
+   is answered `Ok`.
+4. **The name.** The report names the program's file as the ordinary run does — the file as typed, or a package's flattened
+   text (`run_cmd::flattened_name`, now the one place that spells it) — so the two reports name one call alike.
+5. **Witnessed** — `within_cli`'s `a_sandboxed_refused_runs_report_records_the_hosts_refusal_at_the_ordinary_runs_call`, red
+   first: for `05_capabilities` and for the greeter package, the sandboxed report's code, message, file, start and end are the
+   ordinary report's; a clean sandboxed run's report carries none. A channel unit test (held at its call, cleared by an `Ok`,
+   kept by a goodbye, a channel error held too) and a guest unit test (hostile spans — inside a character, past the program,
+   backwards, another file — recorded unplaced; nothing for a clean exit or a failed channel). Mutants M298–M306 red, the
+   control green. Read on Windows, macOS and arm64 before `master` moved.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
