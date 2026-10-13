@@ -5438,3 +5438,19 @@ the test's block from memory the footprint already counted. The witness now read
 193 passed, both footprint tests named. Mutant M317 — the reader answers a constant — read RED on the runner as its own commit
 (`e879816`, `38331248991`: "from 1 to 1"), reverted in `995581e` (the tree byte for byte `fe621c6`'s). (`fe621c6`'s message names the
 first form wrongly as "`0e92a3e`'s parents"; it is `ba60f60`.)
+
+## 2026-10-13 — routine run 21 (continued): `authority DIR --within` and `grants propose` for a package (D-V2-124)
+
+**Run 20's open item (4), half of it** (`9473789`, D-V2-124): both P9 verbs refused a package in words. `authority DIR --within`
+now decides the requirement list `authority DIR --grants` names over every module, the counterexample's call named in its
+module's own file (relative to the package, as `authority DIR` names a module); `grants propose` finds a package run's refused
+call in the flattened text the run executed and proposes that call's requirement. A `.dwx` stays refused (a manifest, not
+calls). A first form read the package's own requirement list for a proposal and was removed before commit: no witness could
+tell it from the flattened text's (a proposal filters by the call's kind and literals).
+
+**Witnessed:** `within_cli`'s `a_package_is_checked_against_a_boundary_and_its_refusal_is_proposed_for`, red first (exit 2); P9-01's
+generated corpus walks every package under `examples/` (three: one requirement, two with none); the refusal table's package row
+became a `.dwx` row. Mutants M318–M321 red, the control green; clippy clean. **Read on the runners at `9473789`** over `within_cli` and
+`json_contract`: Windows `38332620471` (`json_contract` 13, `within_cli` 12), macOS `38332623451` (14, 12), arm64 `38332625666` (14, 12) — 0 failed, the new test named, no compiler warning, no orphan `delulu`. **The full suite alone at `9473789`:** 2,247 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+**`f3d4076`'s push runs** (the records of the red episode): CI `38332234517` success on every job (`miri-slow` and `heavy-gates` skipped on a push) — **`master` green again**, the two fixed witnesses green on Ubuntu and macOS — and `openshell` `38332234499` success; `actors_pingpong` arm64 MEASURED 2.95x (control 4.11x, bar 1.50x), the others NOT MEASURED.

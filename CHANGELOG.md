@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `--within` and `grants propose` for a package, 2026-10-13
+
+- **New: `delulu authority DIR --within BOUNDARY` answers for a package directory** — the package's requirement list, the
+  one `authority DIR --grants` names, decided against the boundary as for a file; the counterexample's call named in its
+  module's file. It refused a package before. A `.dwx` is still refused (D-V2-124).
+- **New: `delulu grants propose REPORT` reads a package run's report** — the refused call found in the flattened text the
+  run executed, and its requirement proposed (D-V2-124).
+
 ## Unreleased — `delulu grants propose REPORT`, 2026-10-13
 
 - **New (P9-03): `delulu grants propose REPORT`** — the narrowest grant for the call a refused run was refused at, read

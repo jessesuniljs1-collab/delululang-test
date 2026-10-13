@@ -20,6 +20,9 @@ scopes.
 
 ## P9-01 — `delulu authority <file> --within BOUNDARY`
 
+*For a package directory too since routine run 21 (D-V2-124): the requirement list `authority DIR --grants` names, the call
+named in its module's own file; a `.dwx` stays refused.*
+
 *The question OpenShell's prover asks of a policy, asked of a program* (study §4.8): BOUNDARY is a grant set in the `--grant`
 grammar; the answer is one of four — **within** (exit 0), **exceeds** (1, with a counterexample: the first requested scope
 the boundary does not cover and the source span of the call that requests it), **unsupported** (a dimension the program needs
@@ -138,7 +141,8 @@ skip branch, §11.2).
   documented for `grants` reaches every verb of it). Hypothesis 5's first half witnessed: a proposal is never wider than the
   refused call's requirement (mutants M309, the whole requirement list, and M310, any literal of the kind, red). **Next: step
   3, the store and approval** (item 3 above); the rest of hypothesis 5 (the run's node unchanged by an approval; a rejection's
-  reason reaching the agent) is witnessed there.
+  reason reaching the agent) is witnessed there. **A package run's report is proposed for** since `9473789` (D-V2-124): the call
+  found in the flattened text the run executed.
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.

@@ -2861,6 +2861,26 @@ refused and (c) stays the owner's.
    request for permits on a node's uses), approval minting through `attenuate` under the approver's own node, effective on
    the next run; auto-approval within a standing boundary is `grants diff BOUNDARY PROPOSAL` adding nothing (D-V2-119).
 
+## D-V2-124 — `authority DIR --within` and `grants propose` read a package; a `.dwx` stays refused — TAKEN (head chef, 2026-10-13, under the owner's delegation)
+
+1. **`authority DIR --within BOUNDARY`** decides the requirement list `authority DIR --grants` names — the same report and the
+   same walk over every module (`emit_authority`, shared by the manifest and the loose-directory paths) — through P9-01's
+   verdict; the counterexample's call is named in its module's own file, relative to the package, as `authority DIR` names
+   a module. Run 20 refused a package in words until it could be answered; it can.
+2. **`grants propose` for a package run's report** finds the refused call in the flattened text the run executed — the
+   run's diagnostic names it `DIR (flattened for execution)` (`run_cmd::flattened_name`) and its offsets index that text —
+   rebuilt by the run's own loader (`run_cmd::flattened_package`), and proposes the call's requirement read there. The
+   package's own requirement list (its manifest's scopes included) was built first and removed: a proposal filters by the
+   call's kind and literals, so a manifest's scopes — lines no call writes — never change it, and no witness could tell the
+   two apart (M222's rule: code no witness can fail is deleted).
+3. **A `.dwx` stays refused** for `--within`: it carries a manifest of effects and scopes, not the calls a counterexample
+   names; `authority FILE.dwx` answers from that manifest, and a boundary over it is a question for later.
+4. **Witnessed** — `within_cli`'s `a_package_is_checked_against_a_boundary_and_its_refusal_is_proposed_for`, red first (exit
+   2): the greeter within `console`, exceeding nothing with the call in `src/main.delulu`; a proposal of `console` from an
+   ordinary and a sandboxed run's report, at the place the run's diagnostic names. P9-01's generated corpus walks every
+   package under `examples/`. Mutants M318 (the refusal back), M319 (the package path ignores `--within`), M320 (a package's
+   report read as a file) and M321 (the walk over the first module only) red, the control green.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

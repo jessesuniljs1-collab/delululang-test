@@ -103,7 +103,9 @@ the assistant's memory — which now also travels file by file in
   **Routine run 21 (2026-10-13):** P9-03 step 1b — a sandboxed run's report records the HOST's refusal at the call the guest's
   request named, the ordinary run's code, message and span (D-V2-122); and step 2 — `delulu grants propose REPORT`, the
   narrowest grant for the refused call, read from the report and the program's source: that call's own requirement, through
-  every minting call (D-V2-123). **Next: P9-03 step 3** (the store and approval), then P9-04.
+  every minting call (D-V2-123); and `authority DIR --within` and `grants propose` for a package directory (D-V2-124).
+  `master` went red once (`187494a`, two witnesses that measured more than their subject) and was fixed the same run.
+  **Next: P9-03 step 3** (the store and approval), then P9-04.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

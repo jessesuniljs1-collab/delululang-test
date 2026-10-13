@@ -361,7 +361,7 @@ which is the property worth having in generated code.
 authority. This is the check to run in CI on every dependency bump.
 
 **Before you run a program someone else wrote — or one you generated — ask whether it stays inside
-the authority you mean to give it** (P9-01): `delulu authority <file> --within <grant>... --json`, the
+the authority you mean to give it** (P9-01): `delulu authority <file-or-package-dir> --within <grant>... --json`, the
 boundary in the `--grant` grammar (or `--within-file FILE`, one grant a line; an empty file is the
 empty boundary). `authority.within.result` is `within` (exit 0), or `exceeds`, `unsupported` or
 `inconclusive` (exit 1); each finding names the `--grant` line the program needs, why the boundary
