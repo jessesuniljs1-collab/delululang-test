@@ -508,6 +508,63 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
     out
 }
 
+/// P9-03 — what `grants propose` proposes for a refusal at `at` (`V2_P9_DESIGN.md`).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Proposal {
+    /// The `--grant` lines of the refused call's own requirement.
+    Lines(Vec<String>),
+    /// Nothing, and why; an empty reason is "no minting call is there" (the caller words it: the program changed).
+    Nothing(String),
+}
+
+/// P9-03: the static requirement of the capability-minting call at exactly `at`, as the requirement list names it — the
+/// narrowest grant for that call site (`V2_OPENSHELL_STUDY.md` §4.10), never a line the runtime or the program worded. Nothing
+/// when no minting call is there, when the call computes its scope (no static narrowest grant exists for it), or when its
+/// grant names data only the operator holds (a library's path, a plugin's artifact).
+pub(crate) fn propose(reqs: &[Requirement], sites: &[crate::cli::MintSite], at: Span) -> Proposal {
+    let Some(site) = sites.iter().find(|s| s.at.file == at.file && s.at.start == at.start && s.at.end == at.end) else {
+        return Proposal::Nothing(String::new());
+    };
+    let method = match site.kind {
+        "FsRead" => "fs_read",
+        "FsWrite" => "fs_write",
+        "Http" => "http",
+        "Secret" => "secret",
+        "Actuator" => "actuator",
+        "Sensor" => "sensor",
+        "Compute" => "compute",
+        "Console" => "console",
+        "Clock" => "clock",
+        "Rand" => "rand",
+        "Declassify" => "declassify",
+        other => {
+            return Proposal::Nothing(format!(
+                "the call mints `{other}`, whose grant names what only the operator holds (a library's or an artifact's path)"
+            ))
+        }
+    };
+    if site.hidden {
+        let shape = reqs.iter().find(|r| r.ask == Ask::Hidden { method }).map(|r| format!(" — its shape is `{}`", r.grant));
+        return Proposal::Nothing(format!(
+            "the call computes its scope, so no grant is the narrowest for it: the operator chooses the value{}",
+            shape.unwrap_or_default()
+        ));
+    }
+    let lines: Vec<String> = reqs
+        .iter()
+        .filter(|r| match &r.ask {
+            Ask::Mint { method: m, arg: None } => *m == method && site.lits.is_empty(),
+            Ask::Mint { method: m, arg: Some(a) } => *m == method && site.lits.contains(a),
+            _ => false,
+        })
+        .map(|r| r.grant.clone())
+        .collect();
+    if lines.is_empty() {
+        return Proposal::Nothing(format!("no requirement of the program names the call's `{}`", site.kind));
+    }
+    Proposal::Lines(lines)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

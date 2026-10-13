@@ -564,3 +564,163 @@ fn a_sandboxed_refused_runs_report_records_the_hosts_refusal_at_the_ordinary_run
     assert_eq!(read(&boxed)["diagnostics"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// P9-03 (`V2_P9_DESIGN.md`): `grants propose REPORT` — the narrowest grant for the call a refused run was refused at, read from
+/// the report's refusal (its code and the call's span, D-V2-121/D-V2-122) and the program's own source: that call's static
+/// requirement, never a line the runtime or the program worded. The same proposal from an ordinary and a sandboxed run's
+/// report; the right one at a SECOND call of a grant (the requirement list keeps each grant's first call only); nothing — said,
+/// exit 1 — for a computed scope, a clean run, another code, or a program that changed since the run.
+#[test]
+fn grants_propose_reads_the_refused_calls_own_requirement_from_the_report() {
+    let dir = std::env::temp_dir().join(format!("delulu-grants-propose-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let report = dir.join("report.json");
+    let r = report.to_str().unwrap().to_string();
+    let propose = |r: &str| -> (i32, Value) {
+        let o = delulu(&["grants", "propose", r, "--json"]);
+        (o.status.code().unwrap_or(-1), json_of(&o))
+    };
+    // The guide's refusal, from both kinds of report: the counterexample `authority --within` names.
+    let file = "examples/guide/05_capabilities.delulu";
+    let (_, v) = within(file, &["console".to_string()]);
+    assert_eq!(v["counterexample"]["grant"], "fs.read=./config");
+    for sandbox in [false, true] {
+        let mut args = vec!["run", file, "--grant", "console", "--report-out", &r];
+        if sandbox {
+            args.push("--sandbox");
+        }
+        assert_eq!(delulu(&args).status.code(), Some(1));
+        let (code, p) = propose(&r);
+        assert_eq!(code, 0, "sandbox={sandbox}: {p:#}");
+        assert_eq!(p["proposes"], true, "{p:#}");
+        assert_eq!(p["proposal"], serde_json::json!(["fs.read=./config"]), "the call's own requirement, nothing wider: {p:#}");
+        assert_eq!(p["refusal"]["code"], "DL0703");
+        assert_eq!(
+            (p["refusal"]["at"]["line"].as_u64(), p["refusal"]["at"]["column"].as_u64()),
+            (v["counterexample"]["at"]["line"].as_u64(), v["counterexample"]["at"]["column"].as_u64()),
+            "{p:#}"
+        );
+        assert_eq!(p["call"], "root.fs_read(\"./config\")", "{p:#}");
+    }
+    // A refusal at the SECOND call of a grant, beside one at another call of the same line: the first call of `./b` is never
+    // run, so the requirement list's `at` for `fs.read=./b` is not the refused call — and the proposal is still that line.
+    let twice = dir.join("twice.delulu");
+    std::fs::write(
+        &twice,
+        "module twice\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    let a = root.fs_read(\"./a\")\n    if false {\n        \
+         let early = root.fs_read(\"./b\")\n    }\n    let late = root.fs_read(\"./b\")\n    c.println(\"unreached\")\n}\n",
+    )
+    .unwrap();
+    let t = twice.to_str().unwrap();
+    let o = delulu(&["run", t, "--grant", "console", "--grant", "fs.read=./a", "--report-out", &r]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposal"]), (0, &serde_json::json!(["fs.read=./b"])), "{p:#}");
+    assert_eq!(p["refusal"]["at"]["line"], 9, "the refused call is the second `./b` one: {p:#}");
+    // A computed scope proposes nothing: there is no static narrowest grant for it.
+    let computed = dir.join("computed.delulu");
+    std::fs::write(
+        &computed,
+        "module computed\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    let p = \"./c\"\n    let r = root.fs_read(p)\n    c.println(\"unreached\")\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&["run", computed.to_str().unwrap(), "--grant", "console", "--report-out", &r]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposes"]), (1, &Value::Bool(false)), "{p:#}");
+    assert!(p["proposal"].as_array().is_some_and(Vec::is_empty), "{p:#}");
+    assert!(p["reason"].as_str().unwrap_or("").contains("computes its scope"), "{p:#}");
+    // A program changed since the run: its call is no longer at the report's span.
+    let o = delulu(&["run", t, "--grant", "console", "--grant", "fs.read=./a", "--report-out", &r]);
+    assert_eq!(o.status.code(), Some(1));
+    let src = std::fs::read_to_string(&twice).unwrap();
+    std::fs::write(&twice, format!("// edited after the run\n{src}")).unwrap();
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposes"]), (1, &Value::Bool(false)), "{p:#}");
+    assert!(p["reason"].as_str().unwrap_or("").contains("changed since the run"), "{p:#}");
+    // The report is input: offsets past the program's end are refused in words, never sliced.
+    let mut edited: Value = serde_json::from_str(&std::fs::read_to_string(&r).unwrap()).unwrap();
+    edited["diagnostics"][0]["spans"][0]["start"]["byte"] = serde_json::json!(1_000_000);
+    edited["diagnostics"][0]["spans"][0]["end"]["byte"] = serde_json::json!(1_000_007);
+    std::fs::write(&report, edited.to_string()).unwrap();
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposes"]), (1, &Value::Bool(false)), "{p:#}");
+    assert!(p["reason"].as_str().unwrap_or("").contains("changed since the run"), "{p:#}");
+    // A clean run's report records no refusal; a refusal a grant does not answer is not proposed for.
+    let o = delulu(&["run", "docs/book/samples/01_hello.delulu", "--grant", "console", "--report-out", &r]);
+    assert_eq!(o.status.code(), Some(0));
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposes"]), (1, &Value::Bool(false)), "{p:#}");
+    let mut other: Value = serde_json::from_str(&std::fs::read_to_string(&r).unwrap()).unwrap();
+    other["diagnostics"] = serde_json::json!([{ "code": "DL1403", "message": "revoked", "spans": [] }]);
+    std::fs::write(&report, other.to_string()).unwrap();
+    let (code, p) = propose(&r);
+    assert_eq!((code, &p["proposes"]), (1, &Value::Bool(false)), "{p:#}");
+    assert!(p["reason"].as_str().unwrap_or("").contains("DL1403"), "{p:#}");
+    // Not a run report at all is the caller's error.
+    std::fs::write(&report, "{\"command\": \"check\"}").unwrap();
+    assert_eq!(delulu(&["grants", "propose", &r, "--json"]).status.code(), Some(2));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// P9-03, generated rather than written (§11.2): one program that mints a capability of every kind a run can be refused at
+/// without a device (minting is pure — nothing is performed), run with ALL of its own required grants but one. The run is
+/// refused at the dropped grant's call, and `grants propose` names exactly the requirement of that call: the dropped line —
+/// and, for a call that asks for two hosts at once, both of its lines, which is that call's requirement and nothing wider.
+#[test]
+fn grants_propose_names_the_dropped_grants_call_for_every_kind() {
+    let dir = std::env::temp_dir().join(format!("delulu-grants-propose-kinds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["r", "w"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(
+        dir.join("mints.delulu"),
+        "module mints\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    let k = root.clock()\n    let n = root.rand()\n    \
+         let r = root.fs_read(\"./r\")\n    let w = root.fs_write(\"./w\")\n    let h = root.http([\"a.example\", \"b.example\"])\n    \
+         let s = root.secret(\"TOKEN\")\n    c.println(\"every mint granted\")\n}\n",
+    )
+    .unwrap();
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(&dir).args(args).env("DELULU_NO_COLOR", "1").output().unwrap()
+    };
+    let o = run(&["authority", "mints.delulu", "--json"]);
+    let required: Vec<String> = json_of(&o)["authority"]["required_grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g.as_str().unwrap().to_string())
+        .collect();
+    // A secret's line carries its value's placeholder; a run is given one.
+    let given = |g: &str| g.replace("=VALUE", "=hunter2");
+    assert_eq!(required.len(), 8, "{required:?}");
+    let all: Vec<String> = required.iter().map(|g| given(g)).collect();
+    let mut flags: Vec<&str> = Vec::new();
+    for g in &all {
+        flags.extend(["--grant", g]);
+    }
+    let o = run(&[&["run", "mints.delulu"], &flags[..]].concat());
+    assert_eq!(o.status.code(), Some(0), "every grant given, the program runs: {}", out(&o));
+    let mut proposed = 0;
+    for (i, dropped) in required.iter().enumerate() {
+        let mut flags: Vec<&str> = Vec::new();
+        for (j, g) in all.iter().enumerate() {
+            if j != i {
+                flags.extend(["--grant", g]);
+            }
+        }
+        let o = run(&[&["run", "mints.delulu", "--report-out", "r.json"], &flags[..]].concat());
+        assert_eq!(o.status.code(), Some(1), "{dropped} dropped: {}", out(&o));
+        let o = run(&["grants", "propose", "r.json", "--json"]);
+        let p = json_of(&o);
+        assert_eq!(o.status.code(), Some(0), "{dropped}: {p:#}");
+        let lines: Vec<&str> = p["proposal"].as_array().unwrap().iter().map(|l| l.as_str().unwrap()).collect();
+        let expected: Vec<&str> =
+            if dropped.starts_with("net=") { vec!["net=a.example", "net=b.example"] } else { vec![dropped.as_str()] };
+        assert_eq!(lines, expected, "{dropped} dropped — the refused call's own requirement: {p:#}");
+        proposed += 1;
+    }
+    assert_eq!(proposed, 8, "every requirement was dropped once");
+    let _ = std::fs::remove_dir_all(&dir);
+}

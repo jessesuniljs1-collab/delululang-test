@@ -143,6 +143,26 @@ fn every_kind_of_run_report_and_the_policy_preview_match_their_schemas() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// P9-03: a REFUSED run's report carries the refusal in `diagnostics` (D-V2-121; a sandboxed run's, the host's — D-V2-122), and
+/// it still matches the run-report schema. The table above runs only programs that succeed, so no refused report was ever held
+/// to the schema (found by routine run 21).
+#[test]
+fn a_refused_runs_report_matches_the_run_report_schema() {
+    let dir = scratch("refused");
+    std::fs::write(dir.join("refused.delulu"), "module r\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n").unwrap();
+    for (what, extra) in [("l0", vec![]), ("sandboxed", vec!["--sandbox"])] {
+        let report = dir.join(format!("{what}.refused.json"));
+        let mut args = vec!["run", "refused.delulu", "--report-out", report.to_str().unwrap()];
+        args.extend(extra);
+        let o = delulu(&dir, &args);
+        assert_eq!(o.status.code(), Some(1), "{what}: {}", String::from_utf8_lossy(&o.stderr));
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+        assert_eq!(v["diagnostics"][0]["code"], "DL0703", "{what}: the refusal is in the report: {v:#}");
+        assert_valid(&dir, "run-report", &format!("{what}-refused-report"), &v);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `toolchain --json` through the binary, and the schema listing itself.
 #[test]
 fn the_toolchain_description_and_the_schema_listing_are_valid() {

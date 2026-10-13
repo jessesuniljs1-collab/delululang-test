@@ -453,6 +453,15 @@ effects = [\"Write\"]
     // command succeeds (exit 0) and its success envelope is the one exercised.
     std::fs::write(pkg.join("old.grants"), "console\nfs.read=./data\n").unwrap();
     std::fs::write(pkg.join("new.grants"), "# narrower\nfs.read=./data/sub\n").unwrap();
+    // P9-03: a refused run's report for `grants propose`, written by a real run (never a faked report): `console` ungranted.
+    std::fs::create_dir_all(pkg.join("refusal")).unwrap();
+    std::fs::write(
+        pkg.join("refusal").join("refused.delulu"),
+        "module refused\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n",
+    )
+    .unwrap();
+    let refused = run_in(&pkg, &["run", "refusal/refused.delulu", "--report-out", "refusal/report.json"]);
+    assert_eq!(refused.status.code(), Some(1), "fixture refused run: {}", String::from_utf8_lossy(&refused.stderr));
 
     // (subcommand, argv, cwd, the `command` field the envelope must carry)
     let dpx_s = dpx.display().to_string();
@@ -474,6 +483,7 @@ effects = [\"Write\"]
         ("authority-artifact", vec!["authority", &dwx_s, "--json"], Cwd::Pkg, "authority"),
         ("authority-diff", vec!["authority", "--diff", "delulu.lock", ".", "--json"], Cwd::Pkg, "authority"),
         ("grants-diff", vec!["grants", "diff", "old.grants", "new.grants", "--json"], Cwd::Pkg, "grants"),
+        ("grants-propose", vec!["grants", "propose", "refusal/report.json", "--json"], Cwd::Pkg, "grants"),
         ("build", vec!["build", ".", "--json"], Cwd::Pkg, "build"),
         ("lock", vec!["lock", ".", "--json"], Cwd::Pkg, "lock"),
         ("fmt", vec!["fmt", "src", "--check", "--json"], Cwd::Pkg, "fmt"),
@@ -1005,6 +1015,17 @@ fn broker_verbs_emit_the_documented_envelope() {
     std::fs::write(cwd.join("new.grants"), "net=example.com\n").unwrap();
     let d = step(&["grants", "diff", "old.grants", "new.grants"], "grants");
     assert!(d["subcommand"] == "diff" && d["adds"] == false && d["findings"].is_array(), "{d}");
+
+    // ----- grants propose (P9-03): offline — a refused run's report, written by a real run, and the program's source ---
+    std::fs::write(
+        cwd.join("refused.delulu"),
+        "module refused\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n",
+    )
+    .unwrap();
+    let refused = go(&["run", "refused.delulu", "--report-out", "refused.json"]);
+    assert_eq!(refused.status.code(), Some(1), "the fixture's refused run: {}", String::from_utf8_lossy(&refused.stderr));
+    let p = step(&["grants", "propose", "refused.json"], "grants");
+    assert!(p["subcommand"] == "propose" && p["proposal"] == serde_json::json!(["console"]), "{p}");
 
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");

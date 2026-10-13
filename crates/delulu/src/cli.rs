@@ -1490,6 +1490,9 @@ fn usage() -> &'static str {
      \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 effect, scope, special-use, device and budget reach; two grant files, one grant a line, or two\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 lease nodes through their broker; exit 1 when it adds any, 0 when none)\n\
+     \x20 delulu grants    propose <report.json>   (P9-03: the narrowest grant for the call a refused run was refused at, from\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 its `run --report-out` report and the program's source — that call's own requirement; it grants\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 nothing; exit 1 when there is none to propose, and why)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -3615,12 +3618,27 @@ fn render_required_grants(report: &Json) -> String {
 /// asks for the scope, so the walk keeps the first call site of each literal, of each kind's first
 /// hidden site, and of each kind's first minting call — the scopeless mints (`console`, `clock`, …)
 /// included. The report's fields are unchanged by it.
+///
+/// **And every call** (P9-03, routine run 21): `grants propose` reads the requirement of the very call a run was refused at,
+/// and the requirement list keeps each grant's FIRST call only — a refusal at a second call of the same grant matched no
+/// `at`. So the walk also keeps every minting call, in source order, with what it asks for ([`MintSite`]).
 pub(crate) struct ScopeWalk {
     pub(crate) found: BTreeMap<String, Vec<String>>,
     pub(crate) hidden: std::collections::BTreeSet<String>,
     pub(crate) lit_at: BTreeMap<(String, String), delulu_diag::Span>,
     pub(crate) hidden_at: BTreeMap<String, delulu_diag::Span>,
     pub(crate) mint_at: BTreeMap<String, delulu_diag::Span>,
+    pub(crate) sites: Vec<MintSite>,
+}
+
+/// One capability-minting call (P9-03): where it is, the kind it mints, the literal scopes it writes, and whether it asks for
+/// a scope the source does not show (a computed argument, a `Root` under another name — `ScopeWalk::hide`'s sites).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct MintSite {
+    pub(crate) at: delulu_diag::Span,
+    pub(crate) kind: &'static str,
+    pub(crate) lits: Vec<String>,
+    pub(crate) hidden: bool,
 }
 
 impl ScopeWalk {
@@ -3641,6 +3659,10 @@ impl ScopeWalk {
     fn hide(&mut self, kind: &str, at: delulu_diag::Span) {
         self.hidden.insert(kind.to_string());
         self.hidden_at.entry(kind.to_string()).or_insert(at);
+    }
+
+    fn site(&mut self, kind: &'static str, lits: Vec<String>, hidden: bool, at: delulu_diag::Span) {
+        self.sites.push(MintSite { at, kind, lits, hidden });
     }
 
     fn walk_block(&mut self, b: &delulu_syntax::ast::Block) {
@@ -3693,6 +3715,7 @@ impl ScopeWalk {
                 // call that needs `--grant declassify` (`05_secrets` reaches the effect that way alone).
                 if matches!(name.name.as_str(), "verify" | "expose") {
                     self.mint_at.entry("Declassify".to_string()).or_insert(*span);
+                    self.site("Declassify", Vec::new(), false, *span);
                     return;
                 }
                 let kind = match name.name.as_str() {
@@ -3717,6 +3740,7 @@ impl ScopeWalk {
                 };
                 self.mint_at.entry(kind.to_string()).or_insert(*span);
                 if matches!(name.name.as_str(), "console" | "clock" | "rand" | "declassify" | "plugin_host" | "foreign_load") {
+                    self.site(kind, Vec::new(), false, *span);
                     return;
                 }
                 // SECRET-HIDDEN-1 (routine run 20): a secret's NAME is reported by the checker, which
@@ -3727,31 +3751,45 @@ impl ScopeWalk {
                 // reads one under a computed name.
                 if name.name == "secret" {
                     match args.first().and_then(literal_str) {
-                        Some(s) if is_root => self.record(kind, &s, *span),
-                        Some(s) => self.note(kind, &s, *span),
-                        None => self.hide(kind, *span),
+                        Some(s) if is_root => {
+                            self.record(kind, &s, *span);
+                            self.site(kind, vec![s], false, *span);
+                        }
+                        Some(s) => {
+                            self.note(kind, &s, *span);
+                            self.site(kind, vec![s], false, *span);
+                        }
+                        None => {
+                            self.hide(kind, *span);
+                            self.site(kind, Vec::new(), true, *span);
+                        }
                     }
                     return;
                 }
                 if !is_root {
                     self.hide(kind, *span);
+                    self.site(kind, Vec::new(), true, *span);
                     return;
                 }
                 let Some(first) = args.first() else { return };
-                match first {
-                    List { items, .. } => {
-                        for it in items {
-                            match literal_str(it) {
-                                Some(s) => self.record(kind, &s, *span),
-                                None => self.hide(kind, *span),
-                            }
+                let (mut lits, mut hidden) = (Vec::new(), false);
+                let items: Vec<&delulu_syntax::ast::Expr> = match first {
+                    List { items, .. } => items.iter().collect(),
+                    other => vec![other],
+                };
+                for it in items {
+                    match literal_str(it) {
+                        Some(s) => {
+                            self.record(kind, &s, *span);
+                            lits.push(s);
+                        }
+                        None => {
+                            self.hide(kind, *span);
+                            hidden = true;
                         }
                     }
-                    other => match literal_str(other) {
-                        Some(s) => self.record(kind, &s, *span),
-                        None => self.hide(kind, *span),
-                    },
                 }
+                self.site(kind, lits, hidden, *span);
             }
             List { items, .. } => items.iter().for_each(|it| self.walk_expr(it)),
             Record { fields, .. } => fields.iter().for_each(|(_, v)| self.walk_expr(v)),
@@ -3799,6 +3837,7 @@ pub(crate) fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> Scope
         lit_at: BTreeMap::new(),
         hidden_at: BTreeMap::new(),
         mint_at: BTreeMap::new(),
+        sites: Vec::new(),
     };
     for m in modules {
         for item in &m.items {
@@ -6809,10 +6848,12 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "renew" => cmd_grants_renew(args, &state_dir, json),
         // P9-02: offline, between two grant files — no broker is asked.
         "diff" => cmd_grants_diff(args, &state_dir, json),
+        // P9-03: offline — a run's report and the program's source; nothing is granted or stored.
+        "propose" => cmd_grants_propose(args, json),
         other => {
             eprintln!(
                 "error: unknown grants subcommand `{other}` \
-                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey | diff)"
+                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey | diff | propose)"
             );
             2
         }
@@ -6932,6 +6973,133 @@ fn cmd_grants_diff(args: &[String], state_dir: &std::path::Path, json: bool) -> 
         }
     }
     code
+}
+
+/// `delulu grants propose REPORT [--json]` (P9-03, `V2_OPENSHELL_STUDY.md` §4.10, `V2_P9_DESIGN.md`): the narrowest grant for the
+/// call a refused run was refused at. The report (`run --report-out`) carries the refusal's code and the call's span (D-V2-121,
+/// D-V2-122); the program is read as it is now, and the proposal is that call's static requirement as `authority --grants`
+/// names it (`within::propose`) — never a grant line the runtime or the program worded. It proposes; it grants and stores
+/// nothing. Exit 0 with a proposal, 1 when there is none to make (said why), 2 on a bad invocation or a file that is not a run
+/// report.
+fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants propose", args, &["--json"]) {
+        return code;
+    }
+    let files: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
+    let [report_f] = files.as_slice() else {
+        eprintln!("error: `grants propose` takes one run report: <report.json> (`delulu run … --report-out <report.json>`)");
+        return 2;
+    };
+    if std::path::Path::new(report_f.as_str()).is_dir() {
+        eprintln!("error: `{report_f}` is a directory; `grants propose` reads one run report");
+        return 2;
+    }
+    let report: Json = match std::fs::read_to_string(report_f.as_str()) {
+        Ok(text) => match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error: `{report_f}` is not a run report — it is not JSON ({e})");
+                return 2;
+            }
+        },
+        Err(e) => {
+            eprintln!("error: {}", unreadable(report_f, &e));
+            return 2;
+        }
+    };
+    if report["command"] != "run" {
+        eprintln!("error: `{report_f}` is not a run report — its `command` is not `run` (`delulu run … --report-out FILE` writes one)");
+        return 2;
+    }
+    // Every answer, a proposal or none, has one shape: what was refused, where, and what is proposed or why nothing is.
+    let answer = |refusal: Json, program: Option<&str>, call: Option<String>, lines: &[String], reason: &str| -> i32 {
+        let proposes = !lines.is_empty();
+        if json {
+            print_success_envelope(
+                "grants",
+                json!({
+                    "subcommand": "propose",
+                    "report": report_f,
+                    "program": program,
+                    "refusal": refusal,
+                    "call": call,
+                    "proposes": proposes,
+                    "proposal": lines,
+                    "reason": reason,
+                }),
+            );
+        } else if proposes {
+            println!("proposal — {}:", delulu_diag::terminal_line(reason));
+            for l in lines {
+                println!("  --grant {}", delulu_diag::terminal_line(l));
+            }
+            println!("It grants nothing: approving it is a delegation under the approver's own node, effective on the next run.");
+        } else {
+            println!("no proposal: {}", delulu_diag::terminal_line(reason));
+        }
+        if proposes { 0 } else { 1 }
+    };
+    let d = &report["diagnostics"][0];
+    let Some(code) = d["code"].as_str() else {
+        return answer(Json::Null, None, None, &[], "the report records no refusal — the run was not refused at a call");
+    };
+    let refusal = |at: Json| json!({ "code": code, "message": d["message"], "at": at });
+    if code != "DL0703" {
+        return answer(
+            refusal(Json::Null),
+            None,
+            None,
+            &[],
+            &format!("the run was refused `{code}`, which a grant does not answer — a proposal answers a missing grant (DL0703)"),
+        );
+    }
+    let span = &d["spans"][0];
+    let (Some(file), Some(start), Some(end)) = (span["file"].as_str(), span["start"]["byte"].as_u64(), span["end"]["byte"].as_u64())
+    else {
+        return answer(refusal(Json::Null), None, None, &[], "the report does not place the refusal at a call, so no call's requirement can be read");
+    };
+    if file.ends_with(" (flattened for execution)") {
+        return answer(
+            refusal(Json::Null),
+            Some(file),
+            None,
+            &[],
+            "the refusal is in a package's flattened text — `grants propose` reads a single file today, as `authority --within` does",
+        );
+    }
+    let (map, id, src) = match load(file) {
+        Ok(x) => x,
+        Err(c) => return c,
+    };
+    // The report is input: its offsets are checked against the program as it is now before anything reads them.
+    let changed = "the program changed since the run (or the report was edited): no capability-minting call is at the refused call's place";
+    let (start, end) = (start as usize, end as usize);
+    if start > end || !src.is_char_boundary(start) || !src.is_char_boundary(end) {
+        return answer(refusal(Json::Null), Some(file), None, &[], changed);
+    }
+    let (line, column) = map.position(id, start as u32);
+    let at = json!({ "line": line, "column": column });
+    let checked = check_source(id, &src);
+    if errors(&checked.diagnostics) > 0 {
+        return answer(refusal(at), Some(file), None, &[], "the program does not check as it is now, so its requirements cannot be read");
+    }
+    let (_, opts) = parse_opts(&[]);
+    let authority =
+        source_authority_report(file, &map, &checked, manifest_scopes(file), &manifest_python_allowlist(file), &opts);
+    let walk = requested_scopes(&[&checked.module]);
+    let (reqs, _) = requirements(&authority, &walk);
+    let call = Some(src[start..end].to_string());
+    match crate::within::propose(&reqs, &walk.sites, delulu_diag::Span::new(id, start as u32, end as u32)) {
+        crate::within::Proposal::Lines(lines) => answer(
+            refusal(at),
+            Some(file),
+            call,
+            &lines,
+            &format!("the narrowest grant for the refused call ({code} at {file}:{line}:{column}) — that call's own requirement, read from the source"),
+        ),
+        crate::within::Proposal::Nothing(why) if why.is_empty() => answer(refusal(at), Some(file), None, &[], changed),
+        crate::within::Proposal::Nothing(why) => answer(refusal(at), Some(file), call, &[], &why),
+    }
 }
 
 /// `grants diff g_OLD g_NEW`: each node's authority from the broker that holds it, compared by the lattice.
