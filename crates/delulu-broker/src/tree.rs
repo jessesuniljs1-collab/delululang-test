@@ -157,6 +157,8 @@ pub struct Broker {
     /// P8-04 step 5 (D-V2-106): dead-men armed on nodes — each a FUTURE self-revocation the daemon
     /// performs if its holder stops beating (`deadman.rs`). Daemon memory only, like the tree itself.
     pub(crate) deadmen: HashMap<GrantId, crate::deadman::Deadman>,
+    /// P9-03 (D-V2-125): proposals filed by holders whose runs were refused (`proposal.rs`). Daemon memory only.
+    pub(crate) proposals: crate::proposal::ProposalState,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -202,6 +204,7 @@ impl Broker {
             guard: crate::guard::GuardState::new(),
             strict_anchor: None,
             deadmen: HashMap::new(),
+            proposals: crate::proposal::ProposalState::default(),
         }
     }
 

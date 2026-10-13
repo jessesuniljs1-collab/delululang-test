@@ -181,6 +181,51 @@ pub(crate) fn guard_digest(broker: &Broker) -> String {
     }
 }
 
+/// An authority → its wire form (the inverse of [`spec_to_authority`]; holder and TTL blank).
+pub(crate) fn authority_spec_of(a: &Authority) -> AuthoritySpec {
+    let names = |s: &std::collections::BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>();
+    AuthoritySpec {
+        effects: a.effects.iter().map(|e| e.name().to_string()).collect(),
+        fs_read: names(&a.scopes.fs_read),
+        fs_write: names(&a.scopes.fs_write),
+        net: names(&a.scopes.net),
+        secrets: names(&a.scopes.secrets),
+        declassify: names(&a.scopes.declassify),
+        foreign_c: names(&a.scopes.foreign_c),
+        foreign_python: names(&a.scopes.foreign_python),
+        device: a.scopes.device.values().map(|d| d.to_grant_string()).collect(),
+        budget: a.scopes.budget.map(|b| b.to_grant_string()),
+        ..Default::default()
+    }
+}
+
+/// One proposal → its wire form (P9-03, D-V2-125). The claim's fields are copied as DATA.
+fn proposal_wire(broker: &Broker, p: &delulu_broker::Proposal) -> crate::broker_ipc::ProposalWire {
+    use delulu_broker::ProposalStatus;
+    let (status, approved_node, under, reason) = match &p.status {
+        ProposalStatus::Pending => ("pending", None, None, None),
+        ProposalStatus::Approved { node, under } => {
+            ("approved", Some(node.as_str().to_string()), Some(under.as_str().to_string()), None)
+        }
+        ProposalStatus::Rejected { reason } => ("rejected", None, None, Some(reason.clone())),
+    };
+    crate::broker_ipc::ProposalWire {
+        id: p.id.clone(),
+        node: p.node.as_str().to_string(),
+        asks: authority_spec_of(&p.asks),
+        program: p.claim.program.clone(),
+        call: p.claim.call.clone(),
+        at: p.claim.at.clone(),
+        code: p.claim.code.clone(),
+        created_millis: p.created_millis,
+        status: status.to_string(),
+        approved_node,
+        under,
+        reason,
+        mints: broker.proposal_mints(p).as_ref().map(authority_spec_of),
+    }
+}
+
 fn guard_request_wire(r: &delulu_broker::GuardRequest) -> crate::broker_ipc::GuardRequestWire {
     let status = match &r.status {
         delulu_broker::ReqStatus::Pending => "pending".to_string(),
@@ -1099,6 +1144,66 @@ fn handle(
         ReqBody::GuardPermits => {
             let permits = broker.guard_permits().iter().map(guard_permit_wire).collect();
             (Response::GuardPermitList { permits }, false)
+        }
+        // P9-03 step 3 (D-V2-125): a proposal is filed, approved as a delegation under the approver's node, or rejected.
+        ReqBody::Propose { node, asks, program, call, at, code } => {
+            let node = GrantId::from_trusted(node);
+            let claim = delulu_broker::Claim { program, call, at, code };
+            failed.set(false);
+            match broker.propose(&node, spec_to_authority(&asks), claim) {
+                // RW 4.61's rule: an approval of it would approve something the chain never saw asked.
+                Ok((id, _)) if failed.get() => {
+                    broker.withdraw_unrecorded_proposal(&id);
+                    (unrecorded_undone("the proposal", "nothing filed — propose again once the chain is free"), false)
+                }
+                Ok((id, deduped)) => (Response::Proposed { id, deduped }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::Proposals => {
+            let proposals = broker.proposals().iter().map(|p| proposal_wire(broker, p)).collect();
+            (Response::ProposalList { proposals }, false)
+        }
+        ReqBody::ProposalApprove { id, under, owner, ttl_millis } => {
+            let under = GrantId::from_trusted(under);
+            failed.set(false);
+            match broker.approve_proposal(&id, &under, owner.as_deref(), ttl_millis) {
+                // RW 4.61's rule: a node the chain did not see approved is withdrawn, and the proposal is pending again.
+                Ok(Some((node, _))) if failed.get() => {
+                    broker.withdraw_unrecorded_proposal_approval(&id, &node);
+                    let what = format!("the approval of `{}`", delulu_diag::terminal_line(&id));
+                    (unrecorded_undone(&what, "no node minted — the proposal is pending again"), false)
+                }
+                Ok(Some((node, token))) => (Response::Delegated { node: node.to_string(), token: token.into_string() }, false),
+                Ok(None) => (
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such pending proposal `{}`", delulu_diag::terminal_line(&id)),
+                        requires_human: false,
+                    },
+                    false,
+                ),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::ProposalReject { id, reason } => {
+            failed.set(false);
+            if !broker.reject_proposal(&id, &reason) {
+                return (
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such pending proposal `{}`", delulu_diag::terminal_line(&id)),
+                        requires_human: false,
+                    },
+                    false,
+                );
+            }
+            // A rejection is the safe direction — in force, and said.
+            if failed.get() {
+                let what = format!("the rejection of `{}`", delulu_diag::terminal_line(&id));
+                return (unrecorded_in_force(&what, "the proposal IS rejected"), false);
+            }
+            (Response::Ok, false)
         }
         ReqBody::GuardPermitRevoke { owner, id } => {
             failed.set(false);
@@ -2826,6 +2931,70 @@ mod tests {
         assert!(matches!(&permits, Ok(Response::GuardPermitList { permits }) if permits.is_empty()), "no permit: {permits:?}");
         assert!(matches!(asked_use, Ok(Response::Decision { allow: false, .. })), "{asked_use:?}");
         assert!(matches!(permitted_use, Ok(Response::Decision { allow: false, .. })), "{permitted_use:?}");
+    }
+
+    /// P9-03 step 3 (D-V2-125) under RW 4.61's rule: with the chain held, a proposal is not filed (an approval of it would
+    /// approve something the chain never saw asked) and an approval mints no node — the node withdrawn, the proposal pending
+    /// again — while a rejection, the safe direction, stays in force and says the chain lacks its record.
+    #[test]
+    fn a_proposal_or_its_approval_whose_record_was_lost_does_not_happen() {
+        let state = temp_state("lostproposal");
+        let handle = start_daemon(&state);
+        let wide = |e: &[&str], read: &[&str]| AuthoritySpec {
+            effects: e.iter().map(|s| s.to_string()).collect(),
+            fs_read: read.iter().map(|s| s.to_string()).collect(),
+            holder_kind: "process".into(),
+            ..Default::default()
+        };
+        let Ok(Response::Issued { node: root }) = request(&state, ReqBody::Issue(wide(&["Read", "Write"], &["/a", "/b", "/c"]))) else {
+            panic!("issue")
+        };
+        let Ok(Response::Issued { node: agent }) =
+            request(&state, ReqBody::Attenuate { parent: root.clone(), authority: wide(&["Write"], &[]), owner: None })
+        else {
+            panic!("attenuate")
+        };
+        let propose = |path: &str| ReqBody::Propose {
+            node: agent.clone(),
+            asks: wide(&["Read"], &[path]),
+            program: "p.delulu".into(),
+            call: "root.fs_read(..)".into(),
+            at: "p.delulu:3:5".into(),
+            code: "DL0703".into(),
+        };
+        let approve = |id: &str| ReqBody::ProposalApprove { id: id.to_string(), under: root.clone(), owner: None, ttl_millis: None };
+        // The baseline, with the chain free: two proposals filed, one of them approved.
+        let Ok(Response::Proposed { id: kept, .. }) = request(&state, propose("/a")) else { panic!("propose") };
+        let Ok(Response::Proposed { id: other, .. }) = request(&state, propose("/b")) else { panic!("propose") };
+        let baseline = request(&state, approve(&other));
+        let Ok(Response::Listed { nodes }) = request(&state, ReqBody::List) else { panic!("list") };
+        let count = nodes.len();
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let approved = request(&state, approve(&kept));
+        let filed = request(&state, propose("/c"));
+        drop(held);
+        // Read before anything else is filed: a later filing of the same ask would be answered with a leftover's id.
+        let after_filing = request(&state, ReqBody::Proposals);
+        let Ok(Response::Proposed { id: rejected_id, .. }) = request(&state, propose("/c")) else { panic!("propose") };
+        let held = log.take_lock().expect("the test holds the chain again");
+        let rejected = request(&state, ReqBody::ProposalReject { id: rejected_id.clone(), reason: "not /c".into() });
+        drop(held);
+        let list = request(&state, ReqBody::Proposals);
+        let Ok(Response::Listed { nodes }) = request(&state, ReqBody::List) else { panic!("list") };
+        stop_daemon(&state, handle);
+        assert!(matches!(baseline, Ok(Response::Delegated { .. })), "the baseline: an approval delegates: {baseline:?}");
+        assert_unrecorded("an approval", &approved, "pending again");
+        assert_eq!(nodes.len(), count, "no node is left that the chain did not see approved");
+        assert_unrecorded("a proposal", &filed, "nothing filed");
+        let Ok(Response::ProposalList { proposals: listed }) = after_filing else { panic!("{after_filing:?}") };
+        assert!(listed.iter().all(|p| p.asks.fs_read != ["/c"]), "a proposal the chain never saw asked is not filed: {listed:?}");
+        let Ok(Response::ProposalList { proposals }) = list else { panic!("{list:?}") };
+        let status = |id: &str| proposals.iter().find(|p| p.id == id).map(|p| (p.status.clone(), p.reason.clone()));
+        assert_eq!(status(&kept), Some(("pending".to_string(), None)), "the approval undone: {proposals:?}");
+        assert_eq!(status(&rejected_id), Some(("rejected".to_string(), Some("not /c".to_string()))), "{proposals:?}");
+        assert_unrecorded("a rejection", &rejected, "IS rejected");
+        assert_eq!(proposals.len(), 3, "the proposal filed under a held chain is not on the list: {proposals:?}");
     }
 
     /// RW 4.61's rest (D-V2-115), F5b: a dead-man's arming whose record was lost is not armed — `armed at seq N` named no

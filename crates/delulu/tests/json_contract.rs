@@ -1026,6 +1026,20 @@ fn broker_verbs_emit_the_documented_envelope() {
     assert_eq!(refused.status.code(), Some(1), "the fixture's refused run: {}", String::from_utf8_lossy(&refused.stderr));
     let p = step(&["grants", "propose", "refused.json"], "grants");
     assert!(p["subcommand"] == "propose" && p["proposal"] == serde_json::json!(["console"]), "{p}");
+    // ----- grants proposals (P9-03 step 3, D-V2-125): filed against a node, approved under an approver's own node — one
+    // holding the proposer's guarded authority and the console, so the owner code goes with it — and a second one rejected ---
+    let ap = step(&["grants", "delegate", "--effects", "Write,Declassify", "--declassify", "S", "--owner", &owner], "grants");
+    let approver = ap["parent"].as_str().unwrap_or("g_missing").to_string();
+    let f = step(&["grants", "propose", "refused.json", "--node", &node], "grants");
+    let filed = f["filed"]["id"].as_str().unwrap_or("pp_missing").to_string();
+    let ps = step(&["grants", "proposals"], "grants");
+    assert!(ps["subcommand"] == "proposals" && ps["proposals"].is_array(), "{ps}");
+    let a = step(&["grants", "approve", &filed, "--parent", &approver, "--owner", &owner], "grants");
+    assert!(a["subcommand"] == "approve" && a["token"].is_string(), "{a}");
+    let f = step(&["grants", "propose", "refused.json", "--node", &node], "grants");
+    let again = f["filed"]["id"].as_str().unwrap_or("pp_missing").to_string();
+    let r = step(&["grants", "reject", &again, "--reason", "sweep"], "grants");
+    assert!(r["subcommand"] == "reject" && r["reason"] == "sweep", "{r}");
 
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");

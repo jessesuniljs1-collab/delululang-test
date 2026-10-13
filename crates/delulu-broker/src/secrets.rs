@@ -465,8 +465,9 @@ impl Broker {
         Ok(store.insert_derived(mapped, source))
     }
 
-    /// The authority of a LIVE node, or the liveness denial (DL1403/DL1402/DL0904 unknown).
-    fn live_authority(&self, node_id: &GrantId) -> Result<crate::authority::Authority, Denial> {
+    /// The authority of a LIVE node — itself and every ancestor — or the liveness denial (DL1403/DL1402/DL0904 unknown).
+    /// Also P9-03's (D-V2-125): a proposal is filed and approved only for a live node.
+    pub(crate) fn live_authority(&self, node_id: &GrantId) -> Result<crate::authority::Authority, Denial> {
         let Some(eff) = self.effective_state(node_id) else {
             return Err(Denial::UnknownNode { node: node_id.clone() });
         };

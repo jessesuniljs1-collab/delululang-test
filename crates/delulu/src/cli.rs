@@ -1490,9 +1490,14 @@ fn usage() -> &'static str {
      \x20 delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 effect, scope, special-use, device and budget reach; two grant files, one grant a line, or two\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 lease nodes through their broker; exit 1 when it adds any, 0 when none)\n\
-     \x20 delulu grants    propose <report.json>   (P9-03: the narrowest grant for the call a refused run was refused at, from\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 its `run --report-out` report and the program's source — that call's own requirement; it grants\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 nothing; exit 1 when there is none to propose, and why)\n\
+     \x20 delulu grants    propose <report.json> [--node g_ID]   (P9-03: the narrowest grant for the call a refused run was\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 refused at, from its `run --report-out` report and the program's source — that call's own requirement;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 exit 1 when there is none to propose, and why; with `--node`, FILED with the broker as the request of\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 that node — the one the refused run held — and nothing is granted until it is approved)\n\
+     \x20 delulu grants    proposals | approve <pp_ID> --parent g_ID [--ttl 1h] [--owner CODE] | reject <pp_ID> --reason \"..\"\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (an approval delegates, under the approver's own node, the proposer's authority and what it asked —\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 bounded by ⊑, so a node cannot approve its own widening — and prints a lease token for the re-run;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a rejection's reason is kept for the proposer, in `grants proposals`)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -6670,7 +6675,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
         eprintln!(
             "error: `grants` needs a subcommand: list | tree | inspect <g_ID> | revoke <g_ID> | \
-             certify | adopt | pubkey | \
+             certify | adopt | pubkey | diff | propose | proposals | approve <pp_ID> | reject <pp_ID> | \
              delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--device DEV:..] [--budget mem=N,cpu=S] [--ttl 1h] [--multi]"
         );
         return 2;
@@ -6854,12 +6859,16 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "renew" => cmd_grants_renew(args, &state_dir, json),
         // P9-02: offline, between two grant files — no broker is asked.
         "diff" => cmd_grants_diff(args, &state_dir, json),
-        // P9-03: offline — a run's report and the program's source; nothing is granted or stored.
-        "propose" => cmd_grants_propose(args, json),
+        // P9-03: a run's report and the program's source; nothing is granted. With `--node`, filed with the broker.
+        "propose" => cmd_grants_propose(args, &state_dir, json),
+        // P9-03 step 3 (D-V2-125): the proposals, and their approval under the approver's node or their rejection.
+        "proposals" => cmd_grants_proposals(args, &state_dir, json),
+        "approve" => cmd_grants_approve(args, &state_dir, json),
+        "reject" => cmd_grants_reject(args, &state_dir, json),
         other => {
             eprintln!(
-                "error: unknown grants subcommand `{other}` \
-                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey | diff | propose)"
+                "error: unknown grants subcommand `{other}` (list | tree | inspect | revoke | delegate | certify | adopt | \
+                 renew | receipt | pubkey | diff | propose | proposals | approve | reject)"
             );
             2
         }
@@ -6987,11 +6996,26 @@ fn cmd_grants_diff(args: &[String], state_dir: &std::path::Path, json: bool) -> 
 /// names it (`within::propose`) — never a grant line the runtime or the program worded. It proposes; it grants and stores
 /// nothing. Exit 0 with a proposal, 1 when there is none to make (said why), 2 on a bad invocation or a file that is not a run
 /// report.
-fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
-    if let Some(code) = refuse_unlisted_flags("grants propose", args, &["--json"]) {
+fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants propose", args, &["--json", "--node", "--state-dir"]) {
         return code;
     }
-    let files: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
+    // `--node g_ID` (D-V2-125): the node the refused run held — the proposal is filed with the broker as its request.
+    let (mut files, mut node): (Vec<&String>, Option<String>) = (Vec::new(), None);
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(v) = flag_value(args, &mut i, "--node") {
+            node = Some(v);
+        } else if flag_value(args, &mut i, "--state-dir").is_some() || args[i].starts_with("--") {
+        } else {
+            files.push(&args[i]);
+        }
+        i += 1;
+    }
+    if node.as_deref().is_some_and(|n| n.is_empty() || n.starts_with("--")) || args.last().is_some_and(|a| a == "--node") {
+        eprintln!("error: `--node` names the lease node the refused run held (g_…)");
+        return 2;
+    }
     let [report_f] = files.as_slice() else {
         eprintln!("error: `grants propose` takes one run report: <report.json> (`delulu run … --report-out <report.json>`)");
         return 2;
@@ -7017,9 +7041,21 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
         eprintln!("error: `{report_f}` is not a run report — its `command` is not `run` (`delulu run … --report-out FILE` writes one)");
         return 2;
     }
-    // Every answer, a proposal or none, has one shape: what was refused, where, and what is proposed or why nothing is.
+    // Every answer, a proposal or none, has one shape: what was refused, where, and what is proposed or why nothing is —
+    // and, with `--node`, whether it was filed with the broker (D-V2-125). A broker's refusal to file is its diagnostic.
     let answer = |refusal: Json, program: Option<&str>, call: Option<String>, lines: &[String], reason: &str| -> i32 {
         let proposes = !lines.is_empty();
+        let filed = match node.as_deref().filter(|_| proposes) {
+            None => Filing::NotAsked,
+            Some(n) => match file_proposal(n, lines, program, call.as_deref(), &refusal, state_dir, json) {
+                Ok(f) => f,
+                Err(code) => return code,
+            },
+        };
+        let filed_json = match &filed {
+            Filing::Filed { id, deduped } => json!({ "id": id, "node": node, "deduped": deduped }),
+            _ => Json::Null,
+        };
         if json {
             print_success_envelope(
                 "grants",
@@ -7032,6 +7068,8 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
                     "proposes": proposes,
                     "proposal": lines,
                     "reason": reason,
+                    "filed": filed_json,
+                    "not_filed": match &filed { Filing::NotFiled(why) => json!(why), _ => Json::Null },
                 }),
             );
         } else if proposes {
@@ -7039,11 +7077,23 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
             for l in lines {
                 println!("  --grant {}", delulu_diag::terminal_line(l));
             }
-            println!("It grants nothing: approving it is a delegation under the approver's own node, effective on the next run.");
+            match &filed {
+                Filing::NotAsked => println!(
+                    "It grants nothing: approving it is a delegation under the approver's own node, effective on the next run."
+                ),
+                Filing::Filed { id, deduped } => {
+                    println!(
+                        "{} `{id}` with the broker — nothing is granted until it is answered: `delulu grants approve {id} \
+                         --parent <the approver's node>` (a new lease for the re-run) or `delulu grants reject {id} --reason \"..\"`",
+                        if *deduped { "already filed as" } else { "filed as" }
+                    );
+                }
+                Filing::NotFiled(why) => println!("NOT filed: {}", delulu_diag::terminal_line(why)),
+            }
         } else {
             println!("no proposal: {}", delulu_diag::terminal_line(reason));
         }
-        if proposes { 0 } else { 1 }
+        if proposes && !matches!(filed, Filing::NotFiled(_)) { 0 } else { 1 }
     };
     let d = &report["diagnostics"][0];
     let Some(code) = d["code"].as_str() else {
@@ -7113,6 +7163,229 @@ fn cmd_grants_propose(args: &[String], json: bool) -> i32 {
         ),
         crate::within::Proposal::Nothing(why) if why.is_empty() => answer(refusal(at), Some(file), None, &[], changed),
         crate::within::Proposal::Nothing(why) => answer(refusal(at), Some(file), call, &[], &why),
+    }
+}
+
+/// What became of a proposal `grants propose --node` was asked to file (D-V2-125).
+enum Filing {
+    NotAsked,
+    Filed { id: String, deduped: bool },
+    NotFiled(String),
+}
+
+/// File `lines` with the broker as `node`'s proposal (P9-03 step 3, D-V2-125): each line is converted as a lease's grant is
+/// (`authority_spec_from_grants`), and one with no form in a node — a sensor, a compute device, a plugin, a special-use
+/// reach — is not filed, said, since an approval could not carry it. The claim (program, call, place, code) is data.
+fn file_proposal(
+    node: &str,
+    lines: &[String],
+    program: Option<&str>,
+    call: Option<&str>,
+    refusal: &Json,
+    state_dir: &std::path::Path,
+    json: bool,
+) -> Result<Filing, i32> {
+    let mut grants = Grants::default();
+    for line in lines {
+        let mut one = Grants::default();
+        let carried = one.add(line).is_ok() && {
+            let s = authority_spec_from_grants(&one, "");
+            !(s.effects.is_empty() && s.fs_read.is_empty() && s.fs_write.is_empty() && s.net.is_empty()
+                && s.secrets.is_empty() && s.foreign_c.is_empty() && s.foreign_python.is_empty() && s.device.is_empty())
+        };
+        if !carried {
+            return Ok(Filing::NotFiled(format!(
+                "`{line}` has no form in a lease node (a node carries no sensor, compute, plugin or special-use reach), so \
+                 an approval could not carry it — the operator grants it on the run itself, `--grant {line}`"
+            )));
+        }
+        let _ = grants.add(line);
+    }
+    let at = match (refusal["at"]["line"].as_u64(), refusal["at"]["column"].as_u64()) {
+        (Some(l), Some(c)) => format!("{}:{l}:{c}", program.unwrap_or("")),
+        _ => String::new(),
+    };
+    let body = crate::broker_ipc::ReqBody::Propose {
+        node: node.to_string(),
+        asks: authority_spec_from_grants(&grants, program.unwrap_or("")),
+        program: program.unwrap_or("").to_string(),
+        call: call.unwrap_or("").to_string(),
+        at,
+        code: refusal["code"].as_str().unwrap_or("").to_string(),
+    };
+    match grants_rpc(state_dir, body, json)? {
+        crate::broker_ipc::Response::Proposed { id, deduped } => Ok(Filing::Filed { id, deduped }),
+        other => {
+            eprintln!("error: unexpected propose response: {other:?}");
+            Err(2)
+        }
+    }
+}
+
+/// `delulu grants proposals [--json]` (P9-03 step 3, D-V2-125): every proposal the broker holds, pending and decided — what
+/// each asks for, the proposer's own account of its refusal (data), and its answer: the approved node, or the reason.
+fn cmd_grants_proposals(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants proposals", args, &["--json", "--state-dir"]) {
+        return code;
+    }
+    let proposals = match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Proposals, json) {
+        Ok(crate::broker_ipc::Response::ProposalList { proposals }) => proposals,
+        Ok(other) => {
+            eprintln!("error: unexpected proposals response: {other:?}");
+            return 2;
+        }
+        Err(code) => return code,
+    };
+    if json {
+        let items: Vec<Json> = proposals
+            .iter()
+            .map(|p| {
+                json!({
+                    "id": p.id, "node": p.node, "status": p.status,
+                    "asks": serde_json::to_value(&p.asks).expect("a spec serializes"),
+                    "program": p.program, "call": p.call, "at": p.at, "code": p.code,
+                    "created_millis": p.created_millis,
+                    "approved": p.approved_node.as_ref().map(|n| json!({ "node": n, "under": p.under })),
+                    "reason": p.reason,
+                    "mints": p.mints.as_ref().map(|m| serde_json::to_value(m).expect("a spec serializes")),
+                })
+            })
+            .collect();
+        print_success_envelope("grants", json!({ "subcommand": "proposals", "count": items.len(), "proposals": items }));
+    } else if proposals.is_empty() {
+        println!("(no proposals)");
+    } else {
+        use delulu_diag::terminal_line;
+        for p in &proposals {
+            let asks = crate::brokerd::spec_to_authority(&p.asks).render_compact();
+            println!("{}  {}  for `{}`  asks {}", terminal_line(&p.id), terminal_line(&p.status), terminal_line(&p.node), terminal_line(&asks));
+            if !p.call.is_empty() {
+                println!("    the proposer says: {} at {} ({})", terminal_line(&p.call), terminal_line(&p.at), terminal_line(&p.code));
+            }
+            if let Some(m) = &p.mints {
+                let mints = crate::brokerd::spec_to_authority(m).render_compact();
+                println!("    an approval mints: {}", terminal_line(&mints));
+            }
+            if let Some(n) = &p.approved_node {
+                println!("    approved: `{}` under `{}`", terminal_line(n), terminal_line(p.under.as_deref().unwrap_or("")));
+            }
+            if let Some(r) = &p.reason {
+                println!("    rejected: {}", terminal_line(r));
+            }
+        }
+    }
+    0
+}
+
+/// The one positional of a proposal verb — its id — beside its value flags.
+fn proposal_id(args: &[String], value_flags: &[&str]) -> Option<String> {
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if value_flags.contains(&a) {
+            i += 2;
+            continue;
+        }
+        if !a.starts_with("--") {
+            return Some(a.to_string());
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `delulu grants approve pp_ID --parent g_ID [--ttl 1h] [--owner CODE] [--json]` (P9-03 step 3, D-V2-125): a delegation,
+/// under the approver's own node, of the proposer's authority joined with what it asked — `⊑` and the Guard's mint gate
+/// bound it as they bound `grants delegate`. Prints the new node and a lease token: the program is re-run under it.
+fn cmd_grants_approve(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants approve", args, &["--json", "--state-dir", "--parent", "--ttl", "--owner"]) {
+        return code;
+    }
+    let value_flags = ["--state-dir", "--parent", "--ttl", "--owner"];
+    let (mut parent, mut ttl) = (None, None);
+    let mut owner: Option<String> = std::env::var("DELULU_GUARD_OWNER").ok();
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(v) = flag_value(args, &mut i, "--parent") {
+            parent = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
+            ttl = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--owner") {
+            owner = Some(v);
+        }
+        i += 1;
+    }
+    let (Some(id), Some(parent)) = (proposal_id(args, &value_flags), parent) else {
+        eprintln!("error: `grants approve` takes a proposal id and the approver's own node: <pp_ID> --parent g_ID");
+        return 2;
+    };
+    let ttl_millis = match &ttl {
+        None => None,
+        Some(s) => match parse_ttl_millis(s) {
+            Some(d) => Some(now_millis() + d),
+            None => {
+                eprintln!("error: bad --ttl `{s}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+                return 2;
+            }
+        },
+    };
+    let body = crate::broker_ipc::ReqBody::ProposalApprove { id: id.clone(), under: parent.clone(), owner, ttl_millis };
+    match grants_rpc(state_dir, body, json) {
+        Ok(crate::broker_ipc::Response::Delegated { node, token }) => {
+            if json {
+                print_success_envelope(
+                    "grants",
+                    json!({ "subcommand": "approve", "proposal": id, "parent": parent, "node": node, "token": token, "ttl_millis": ttl_millis }),
+                );
+            } else {
+                ok_line!("ok: approved `{id}` — delegated `{node}` ⊑ `{parent}`, single-redemption");
+                eprintln!("hand the token to the agent; it re-runs with: delulu run <file> --lease <token>");
+                println!("{token}");
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected approve response: {other:?}");
+            2
+        }
+        Err(code) => code,
+    }
+}
+
+/// `delulu grants reject pp_ID --reason ".." [--json]` (P9-03 step 3, D-V2-125): the proposal answered no, its reason kept
+/// for the proposer to read in `grants proposals` — it may propose narrower.
+fn cmd_grants_reject(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("grants reject", args, &["--json", "--state-dir", "--reason"]) {
+        return code;
+    }
+    let mut reason = None;
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(v) = flag_value(args, &mut i, "--reason") {
+            reason = Some(v);
+        }
+        i += 1;
+    }
+    let (Some(id), Some(reason)) = (proposal_id(args, &["--state-dir", "--reason"]), reason.filter(|r| !r.trim().is_empty()))
+    else {
+        eprintln!("error: `grants reject` takes a proposal id and a reason for its proposer: <pp_ID> --reason \"..\"");
+        return 2;
+    };
+    let body = crate::broker_ipc::ReqBody::ProposalReject { id: id.clone(), reason: reason.clone() };
+    match grants_rpc(state_dir, body, json) {
+        Ok(crate::broker_ipc::Response::Ok) => {
+            if json {
+                print_success_envelope("grants", json!({ "subcommand": "reject", "proposal": id, "reason": reason }));
+            } else {
+                ok_line!("ok: rejected `{id}` — its proposer reads the reason in `delulu grants proposals`");
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected reject response: {other:?}");
+            2
+        }
+        Err(code) => code,
     }
 }
 

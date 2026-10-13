@@ -23,8 +23,8 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 306 |
-| Rust lines | 166120 |
+| Rust files | 307 |
+| Rust lines | 167155 |
 | Rust files outside `src/` (test/bench targets) | 139 |
 | Markdown documents | 253 |
 | Markdown lines | 74335 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1504 / 14154 |
+| Nodes / edges in this map | 1505 / 14186 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 43468 lines
+- **Modules:** 44 files, 43946 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -100,13 +100,13 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/boundary.rs` | 739 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 856 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 600 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
-| `src/broker_ipc.rs` | 454 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
+| `src/broker_ipc.rs` | 490 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 688 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 3840 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 4009 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 10826 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 11099 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 11787 lines
+- **Modules:** 18 files, 12187 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -172,16 +172,17 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/cert.rs` | 1778 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/deadman.rs` | 430 | P8-04 step 5 — a dead-man FOR A NODE, held by the broker: what happens when a monitor dies |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
-| `src/diag.rs` | 457 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
+| `src/diag.rs` | 465 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
 | `src/guard.rs` | 1832 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 781 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
-| `src/lib.rs` | 81 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
+| `src/lib.rs` | 84 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/ocsf.rs` | 333 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
-| `src/secrets.rs` | 772 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
+| `src/proposal.rs` | 385 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
+| `src/secrets.rs` | 773 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
-| `src/tree.rs` | 1188 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
+| `src/tree.rs` | 1191 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 738 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`
@@ -409,7 +410,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL04xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime` |
-| `DL07xx` | 3 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
+| `DL07xx` | 3 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL08xx` | 3 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime` |
 | `DL09xx` | 7 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL10xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-registry` |

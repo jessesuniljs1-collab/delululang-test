@@ -790,3 +790,146 @@ fn a_package_is_checked_against_a_boundary_and_its_refusal_is_proposed_for() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// P9-03 step 3 (`V2_P9_DESIGN.md` item 3, D-V2-125): the store and its approval. A lease run refused at a call files its
+/// proposal with the broker against the node it ran under; the proposal is a REQUEST — nothing is granted by filing it. An
+/// approval is a delegation under the APPROVER's own node of the proposer's authority joined with what it asked: the
+/// proposer's own node cannot approve its widening (DL0802 — a program cannot relax its own authority), an approver cannot
+/// grant past its own node (DL0802 again), the proposer's node is unchanged, and the program is RE-RUN under the new node,
+/// where it passes the call it was refused at. A rejection's reason reaches the proposer in `--json`; a proposal from a
+/// revoked node is neither filed nor, once filed, approved — a quarantined run's ask cannot bring its authority back.
+#[test]
+fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_reason_the_agent_reads() {
+    // Short: a broker's socket path is bounded (104 bytes on macOS).
+    let base = std::env::temp_dir().join(format!("dpp{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::copy(workspace_root().join("examples/guide/05_capabilities.delulu"), cwd.join("caps.delulu")).unwrap();
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&cwd)
+            .env("DELULU_STATE_DIR", &state)
+            .env("DELULU_NO_COLOR", "1")
+            .env_remove("DELULU_GUARD_OWNER")
+            .args(args)
+            .output()
+            .expect("failed to run delulu")
+    };
+    let o = run(&["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", out(&o));
+    let guard = BrokerGuard(state.clone());
+    // The operator's node R (no `./out` write), and the agent's lease under it: the console only.
+    let o = run(&["grants", "delegate", "--effects", "Read,Write,Net", "--fs-read", "./config", "--net", "example.com", "--ttl", "1h", "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let root = json_of(&o)["parent"].as_str().unwrap().to_string();
+    let o = run(&["grants", "delegate", "--parent", &root, "--effects", "Write", "--ttl", "1h", "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let (agent, token) = {
+        let v = json_of(&o);
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    let inspect = |node: &str| -> Value {
+        let o = run(&["grants", "inspect", node, "--json"]);
+        assert!(o.status.success(), "{}", out(&o));
+        json_of(&o)["node"].clone()
+    };
+    let proposals = || -> Vec<Value> {
+        let o = run(&["grants", "proposals", "--json"]);
+        assert!(o.status.success(), "{}", out(&o));
+        json_of(&o)["proposals"].as_array().cloned().unwrap_or_default()
+    };
+    let refused_code = |o: &Output| -> String { json_of(o)["diagnostics"][0]["code"].as_str().unwrap_or("").to_string() };
+    // The agent's run is refused at the config read; its proposal is that call's own requirement, filed against its node.
+    let o = run(&["run", "caps.delulu", "--lease", &token, "--report-out", "r1.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    // Read after the run: its redemption bound the node to the run's process (`holder_peer`) — the run's doing, not a proposal's.
+    let before = inspect(&agent);
+    let o = run(&["grants", "propose", "r1.json", "--node", &agent, "--json"]);
+    let p = json_of(&o);
+    assert_eq!(o.status.code(), Some(0), "{p:#}");
+    assert_eq!(p["proposal"], serde_json::json!(["fs.read=./config"]), "{p:#}");
+    let id = p["filed"]["id"].as_str().unwrap_or_else(|| panic!("filed with the broker: {p:#}")).to_string();
+    assert_eq!(p["filed"]["node"], agent.as_str(), "{p:#}");
+    // Filing it again while it is pending answers the same proposal.
+    let o = run(&["grants", "propose", "r1.json", "--node", &agent, "--json"]);
+    assert_eq!((json_of(&o)["filed"]["id"].as_str(), json_of(&o)["filed"]["deduped"].as_bool()), (Some(id.as_str()), Some(true)));
+    let listed = proposals();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    let entry = &listed[0];
+    assert_eq!((entry["id"].as_str(), entry["node"].as_str(), entry["status"].as_str()), (Some(id.as_str()), Some(agent.as_str()), Some("pending")));
+    assert_eq!(entry["asks"]["effects"], serde_json::json!(["Read"]), "it asks for the read and nothing else: {entry:#}");
+    assert!(entry["asks"]["fs_read"].as_array().is_some_and(|a| a.len() == 1 && a[0].as_str().unwrap().ends_with("config")), "{entry:#}");
+    assert_eq!(entry["call"], "root.fs_read(\"./config\")", "the proposer's account, kept as data: {entry:#}");
+    assert_eq!(entry["mints"]["effects"], serde_json::json!(["Read", "Write"]), "the approver reads the whole new node: {entry:#}");
+    // Filing granted nothing: the agent's node is as it was, and the same lease is refused at the same call.
+    assert_eq!(inspect(&agent), before, "filing a proposal changes no node");
+    // The proposer cannot approve its own widening: under its own node the approval is not ⊑ it.
+    let o = run(&["grants", "approve", &id, "--parent", &agent, "--json"]);
+    assert_eq!((o.status.code(), refused_code(&o).as_str()), (Some(1), "DL0802"), "{}", out(&o));
+    assert_eq!(proposals()[0]["status"], "pending", "a refused approval leaves it pending");
+    // The operator approves under R: a NEW node holding the agent's authority and the read, ⊑ R.
+    let o = run(&["grants", "approve", &id, "--parent", &root, "--json"]);
+    let a = json_of(&o);
+    assert_eq!(o.status.code(), Some(0), "{a:#}");
+    let (approved, token2) = (a["node"].as_str().unwrap().to_string(), a["token"].as_str().unwrap().to_string());
+    assert_ne!(approved, agent);
+    let n = inspect(&approved);
+    assert_eq!((n["parent"].as_str(), &n["effects"]), (Some(root.as_str()), &serde_json::json!(["Read", "Write"])), "{n:#}");
+    assert_eq!(inspect(&agent), before, "the proposer's node is never widened: the program is re-run");
+    let listed = proposals();
+    assert_eq!((listed[0]["status"].as_str(), listed[0]["approved"]["node"].as_str()), (Some("approved"), Some(approved.as_str())), "{listed:?}");
+    assert_eq!(listed[0]["mints"], Value::Null, "a decided proposal mints nothing more");
+    // A decided proposal is not decided again.
+    let o = run(&["grants", "approve", &id, "--parent", &root, "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    // Re-run under the new node: past the read it was refused at, to the next call it lacks — the `./out` write.
+    let o = run(&["run", "caps.delulu", "--lease", &token2, "--report-out", "r2.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let o = run(&["grants", "propose", "r2.json", "--node", &approved, "--json"]);
+    let p = json_of(&o);
+    assert_eq!(p["proposal"], serde_json::json!(["fs.write=./out"]), "the read passed; the write is next: {p:#}");
+    let id2 = p["filed"]["id"].as_str().unwrap().to_string();
+    // R holds no write: an approver cannot grant past its own node.
+    let o = run(&["grants", "approve", &id2, "--parent", &root, "--json"]);
+    assert_eq!((o.status.code(), refused_code(&o).as_str()), (Some(1), "DL0802"), "{}", out(&o));
+    // Rejected, with a reason the agent reads back.
+    let o = run(&["grants", "reject", &id2, "--reason", "writes stay with the operator", "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let rejected = proposals().into_iter().find(|p| p["id"] == id2.as_str()).unwrap();
+    assert_eq!((rejected["status"].as_str(), rejected["reason"].as_str()), (Some("rejected"), Some("writes stay with the operator")), "{rejected:#}");
+    let o = run(&["grants", "reject", &id2, "--reason", "again", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "a decided proposal is not rejected again: {}", out(&o));
+    // A proposal filed from a node that is revoked before its approval mints nothing; one from a revoked node is not filed.
+    let o = run(&["grants", "propose", "r2.json", "--node", &approved, "--json"]);
+    let id3 = json_of(&o)["filed"]["id"].as_str().unwrap().to_string();
+    assert_ne!(id3, id2, "a rejected proposal is not the pending one");
+    let o = run(&["grants", "revoke", &approved, "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let count = || json_of(&run(&["grants", "list", "--json"]))["count"].as_u64();
+    let nodes = count();
+    let o = run(&["grants", "approve", &id3, "--parent", &root, "--json"]);
+    assert_eq!((o.status.code(), refused_code(&o).as_str()), (Some(1), "DL1403"), "{}", out(&o));
+    assert_eq!(count(), nodes, "nothing minted for a revoked node's proposal");
+    assert_eq!(proposals().into_iter().find(|p| p["id"] == id3.as_str()).unwrap()["status"], "pending");
+    let o = run(&["grants", "propose", "r2.json", "--node", &approved, "--json"]);
+    assert_eq!((o.status.code(), refused_code(&o).as_str()), (Some(1), "DL1403"), "{}", out(&o));
+    // A grant a lease node cannot carry — a sensor — is proposed but NOT filed: an approval could not hold it.
+    std::fs::write(
+        cwd.join("sensor.delulu"),
+        "module sensor\n\nfn main(root: Root) ! {Write, Read} {\n    let c = root.console()\n    let t = root.sensor(\"bay0/temp\")\n    \
+         c.println(\"unreached\")\n}\n",
+    )
+    .unwrap();
+    let o = run(&["run", "sensor.delulu", "--grant", "console", "--report-out", "r3.json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let filed = proposals().len();
+    let o = run(&["grants", "propose", "r3.json", "--node", &agent, "--json"]);
+    let p = json_of(&o);
+    assert_eq!((o.status.code(), &p["proposal"], &p["filed"]), (Some(1), &serde_json::json!(["sensor=bay0/temp"]), &Value::Null), "{p:#}");
+    assert!(p["not_filed"].as_str().unwrap_or("").contains("no form in a lease node"), "{p:#}");
+    assert_eq!(proposals().len(), filed, "nothing filed");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}

@@ -103,6 +103,9 @@ pub enum Denial {
     /// configured trust anchor. Carries the pinned anchor pubkey (hex) so the message can name the
     /// exact `grants adopt` path. Not `requires_human`: it is resolved mechanically, by adopting a cert.
     StrictRootRequiresAnchor { anchor: String },
+    /// DL0904 — P9-03 (D-V2-125): a proposal that cannot be filed for `node` — it asks for nothing, for what the node
+    /// already holds, for a budget, or for a second envelope on a device. `detail` says which.
+    Proposal { node: GrantId, detail: String },
 }
 
 impl Denial {
@@ -115,6 +118,7 @@ impl Denial {
             Denial::OutOfScope { .. }
             | Denial::NotRevocable { .. }
             | Denial::DeadGuardPattern { .. }
+            | Denial::Proposal { .. }
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
             Denial::TokenInvalid { .. } => "DL1407",
@@ -239,6 +243,10 @@ impl Denial {
                     "lease `{}` does not grant `{arg}` in scope `{dimension}` (capability scope violation)",
                     node.as_str()
                 ),
+            ),
+            Denial::Proposal { node, detail } => Diagnostic::error(
+                "DL0904",
+                format!("the proposal for `{}` was NOT filed: {detail}", node.as_str()),
             ),
             Denial::DeadGuardPattern { label, why } => Diagnostic::error(
                 "DL0904",

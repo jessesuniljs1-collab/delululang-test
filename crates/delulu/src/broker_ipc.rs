@@ -113,6 +113,28 @@ pub struct GuardRequestWire {
     pub status: String,
 }
 
+/// One proposal on the wire (P9-03, D-V2-125). `asks` is the authority asked for; `program`, `call`, `at` and `code` the
+/// proposer's account, displayed as data. `status` is `"pending"`, `"approved"` (with `approved_node` and `under`) or
+/// `"rejected"` (with `reason`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ProposalWire {
+    pub id: String,
+    pub node: String,
+    pub asks: AuthoritySpec,
+    pub program: String,
+    pub call: String,
+    pub at: String,
+    pub code: String,
+    pub created_millis: i64,
+    pub status: String,
+    pub approved_node: Option<String>,
+    pub under: Option<String>,
+    pub reason: Option<String>,
+    /// What approving it would mint now — the node's authority joined with `asks` — while it is pending and its node live.
+    #[serde(default)]
+    pub mints: Option<AuthoritySpec>,
+}
+
 /// One broker-held permit on the wire (Stage 5 phase 5l).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct GuardPermitWire {
@@ -242,6 +264,16 @@ pub enum ReqBody {
     GuardPermits,
     /// Revoke a permit (owner-gated).
     GuardPermitRevoke { owner: Option<String>, id: String },
+    /// P9-03 step 3 (D-V2-125): file a proposal — what `node`'s refused call needed. A request, never a grant. `program`,
+    /// `call`, `at` and `code` are the proposer's account of its refusal: data, shown and recorded, never decided on.
+    Propose { node: String, asks: AuthoritySpec, program: String, call: String, at: String, code: String },
+    /// Every proposal, pending and decided (read).
+    Proposals,
+    /// Approve a proposal: a delegation under `under` — the approver's own node — of the proposer's authority joined with
+    /// what it asked, bounded by `⊑` and the Guard's mint gate (`owner` for guarded authority). Answered `Delegated`.
+    ProposalApprove { id: String, under: String, owner: Option<String>, ttl_millis: Option<i64> },
+    /// Reject a proposal; `reason` is kept for the proposer to read.
+    ProposalReject { id: String, reason: String },
 }
 
 /// The versioned request envelope.
@@ -334,6 +366,10 @@ pub enum Response {
     GuardPendingList { requests: Vec<GuardRequestWire> },
     /// The broker-held permits.
     GuardPermitList { permits: Vec<GuardPermitWire> },
+    /// A proposal was filed (or the same pending one answered — `deduped`). Carries its id (D-V2-125).
+    Proposed { id: String, deduped: bool },
+    /// Every proposal, in the order filed (D-V2-125).
+    ProposalList { proposals: Vec<ProposalWire> },
 }
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.
