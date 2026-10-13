@@ -488,6 +488,8 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// going after the list stops, so a truncated report still says how many there were.
     denied: Vec<String>,
     denied_total: u64,
+    /// P9-03: the refusal the guest's LAST capability request met, if it met one ([`Refusal`]).
+    refusal: Option<Refusal>,
     /// Requests answered so far — [`ReqBody::Confined`] is accepted only as the first.
     answered: u64,
     /// What the guest reported applying to itself, each word one of [`SELF_APPLIED`].
@@ -518,6 +520,19 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
 /// How many refusals a report keeps. Past this the count still rises but nothing more is stored.
 pub const MAX_DENIED_RECORDED: usize = 64;
 
+/// P9-03 (`V2_P9_DESIGN.md`): a refusal the host answered to one of the guest's capability requests — the host's own code and
+/// words, and the call the request named. The span is the GUEST's word: its interpreter names the call, so a report checks it
+/// against the program the host sent before it places it (`guest.rs`). A lying guest can point only at another place in the
+/// same program, whose static requirement is still the program's own.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refusal {
+    pub code: String,
+    pub message: String,
+    pub file: u32,
+    pub start: u32,
+    pub end: u32,
+}
+
 impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn new(sink: S) -> Self {
         HostChannel {
@@ -526,6 +541,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             root: None,
             denied: Vec::new(),
             denied_total: 0,
+            refusal: None,
             answered: 0,
             self_applied: Vec::new(),
             generation: None,
@@ -605,6 +621,12 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
         (&self.denied, self.denied_total)
     }
 
+    /// P9-03: the refusal the guest's last capability request met, if it met one. A guest's program ends at a fault, so the
+    /// refusal still held when the guest says goodbye with a failing exit is the one that ended the run.
+    pub fn refusal(&self) -> Option<&Refusal> {
+        self.refusal.as_ref()
+    }
+
     /// Record one refusal. Called on the way out, so no refusal path can forget: a rule that has to
     /// be remembered at every `return` is a rule that dies in one branch (the skip-branch lesson).
     fn note_denied(&mut self, what: &str) {
@@ -662,6 +684,26 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 };
                 self.note_denied(&what);
             }
+        }
+        // P9-03: the host's own refusal of a capability request, with the call the request named — kept until the guest's
+        // next capability request is answered `Ok`, which a program that faulted never makes. An egress or device refusal
+        // is a value the program goes on with, and is answered `Ok`.
+        match (&req.body, &resp) {
+            (
+                ReqBody::RootMethod { file, start, end, .. } | ReqBody::CapMethod { file, start, end, .. },
+                Response::Fault { code, message } | Response::Error { code, message },
+            ) => {
+                self.refusal = Some(Refusal {
+                    code: code.clone(),
+                    // Bounded and escaped as a `denied` entry is: an error can quote what the guest sent.
+                    message: shown(message, MAX_DENIED_CHARS),
+                    file: *file,
+                    start: *start,
+                    end: *end,
+                });
+            }
+            (ReqBody::RootMethod { .. } | ReqBody::CapMethod { .. }, Response::Ok(_)) => self.refusal = None,
+            _ => {}
         }
         // PS-B-02: an egress refusal reaches the guest as a VALUE (`Err(Refused)`), so the match above
         // never sees it — and a report of what the host refused that omits the network would be the
@@ -1577,6 +1619,41 @@ mod tests {
         sink.cap_method(c, "println", &[Value::str("from the guest".to_string())], span).expect("the host performs it");
         let out = crate::prim::take_capture().unwrap_or_default();
         assert!(out.contains("from the guest"), "the host performed the effect: {out:?}");
+    }
+
+    /// P9-03: the host keeps its own refusal of a capability request, with the call the request named, until a later
+    /// capability request is answered `Ok` — so the one it holds at a failing goodbye is the refusal that ended the run. A
+    /// goodbye does not clear it; a channel error is held as a fault is.
+    #[test]
+    fn the_host_keeps_its_last_refusal_at_its_call_until_a_capability_request_is_answered() {
+        let root = crate::value::RootVal { console: true, ..Default::default() };
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_root(std::rc::Rc::new(root));
+        let at = |seq: u64, body: ReqBody| Request { version: CHANNEL_VERSION.into(), seq, body };
+        let read = |start: u32, end: u32| ReqBody::RootMethod {
+            method: "fs_read".into(),
+            args: vec![WireValue::Str("./config".into())],
+            file: 0,
+            start,
+            end,
+        };
+        assert!(host.refusal().is_none(), "nothing refused yet");
+        let r = host.answer(&at(1, read(40, 64)));
+        assert!(matches!(&r, Response::Fault { code, .. } if code == "DL0703"), "{r:?}");
+        let held = host.refusal().cloned().expect("the refusal is held");
+        assert_eq!((held.code.as_str(), held.file, held.start, held.end), ("DL0703", 0, 40, 64), "{held:?}");
+        assert!(held.message.contains("./config"), "the host's own words: {held:?}");
+        // A capability request answered `Ok` clears it: the program went on, so that refusal did not end it.
+        let r = host.answer(&at(2, ReqBody::RootMethod { method: "console".into(), args: vec![], file: 0, start: 70, end: 84 }));
+        assert!(matches!(r, Response::Ok(_)), "{r:?}");
+        assert!(host.refusal().is_none(), "cleared by the answered request: {:?}", host.refusal());
+        // Refused again, then a goodbye: the goodbye leaves it.
+        let _ = host.answer(&at(3, read(90, 99)));
+        let r = host.answer(&at(4, ReqBody::Done { exit: 1 }));
+        assert!(matches!(r, Response::Ok(_)), "{r:?}");
+        assert_eq!(host.refusal().map(|r| (r.code.as_str(), r.start, r.end)), Some(("DL0703", 90, 99)));
+        // A channel error is the host's refusal too, held at its call.
+        let _ = host.answer(&at(5, ReqBody::CapMethod { cap: 99, method: "now_ms".into(), args: vec![], file: 0, start: 5, end: 9 }));
+        assert_eq!(host.refusal().map(|r| (r.code.as_str(), r.start)), Some(("DL1401", 5)));
     }
 
     /// A run that granted nothing mints nothing: the refusal is explicit, never an empty default.

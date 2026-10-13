@@ -105,7 +105,7 @@ pub(crate) fn load_package_for_run(
     // The flattened program gets its own file in the map, so a diagnostic from it can still be
     // rendered with a real snippet rather than pointing into a file whose offsets no longer apply.
     let mut map = ws.source_map;
-    let fid = map.add_file(format!("{dir} (flattened for execution)"), flat_src.clone());
+    let fid = map.add_file(flattened_name(dir), flat_src.clone());
     let flat = check_source(fid, &flat_src);
     let flat_src_out = flat_src;
 
@@ -137,6 +137,12 @@ pub(crate) fn load_package_for_run(
     }
 
     Ok((map, flat, flat_src_out))
+}
+
+/// The name a package's flattened text is reported under — by the ordinary run's diagnostics and, for a sandboxed run, by
+/// its host's report (P9-03), so the two name one call alike.
+pub(crate) fn flattened_name(dir: &str) -> String {
+    format!("{dir} (flattened for execution)")
 }
 
 /// The flattened text of a package that would run — resolved, checked clean and flattened with no

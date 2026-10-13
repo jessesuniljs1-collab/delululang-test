@@ -529,3 +529,38 @@ fn a_refused_runs_report_records_the_refusal_at_the_call_the_verdict_names() {
     assert_eq!(r["diagnostics"], serde_json::json!([]), "{r:#}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// P9-03's next step (`V2_P9_DESIGN.md`): a SANDBOXED run's report records the refusal too. Its report is written by the host,
+/// which refused the call itself, and the call is the span the guest's request named — the same call, in the same file, as
+/// the ordinary run's report (step 1) records: for a file and for a package's flattened text alike. Before, the host wrote
+/// `diagnostics: []` for a refused run and the refusal reached only the guest's standard error, in prose.
+#[test]
+fn a_sandboxed_refused_runs_report_records_the_hosts_refusal_at_the_ordinary_runs_call() {
+    let dir = std::env::temp_dir().join(format!("delulu-sandbox-refusal-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (plain, boxed) = (dir.join("plain.json"), dir.join("sandboxed.json"));
+    let read = |p: &Path| -> Value { serde_json::from_str(&std::fs::read_to_string(p).expect("a report is written")).unwrap() };
+    for (target, grants) in [("examples/guide/05_capabilities.delulu", &["--grant", "console"][..]), ("examples/greeter", &[][..])] {
+        let mut args = vec!["run", target];
+        args.extend_from_slice(grants);
+        let o = delulu(&[&args[..], &["--report-out", plain.to_str().unwrap()]].concat());
+        assert_eq!(o.status.code(), Some(1), "{target}: {}", out(&o));
+        let o = delulu(&[&args[..], &["--sandbox", "--report-out", boxed.to_str().unwrap()]].concat());
+        assert_eq!(o.status.code(), Some(1), "{target}: {}", out(&o));
+        let (p, s) = (read(&plain), read(&boxed));
+        let (pd, sd) = (&p["diagnostics"][0], &s["diagnostics"][0]);
+        assert_eq!(pd["code"], "DL0703", "{target}: the ordinary run's refusal: {p:#}");
+        assert_eq!(sd["code"], pd["code"], "{target}: the host's refusal is in its report: {s:#}");
+        assert_eq!(sd["message"], pd["message"], "{target}: {s:#}");
+        let (ps, ss) = (&pd["spans"][0], &sd["spans"][0]);
+        assert_eq!((&ss["file"], &ss["start"], &ss["end"]), (&ps["file"], &ps["start"], &ps["end"]), "{target}: the same call: {s:#}\n{p:#}");
+        assert_eq!(s["diagnostics"].as_array().map(Vec::len), Some(1), "{target}: {s:#}");
+        assert_eq!(s["summary"]["errors"], 1, "{target}: {s:#}");
+    }
+    // A clean sandboxed run's report still carries none.
+    let o = delulu(&["run", "docs/book/samples/01_hello.delulu", "--sandbox", "--grant", "console", "--report-out", boxed.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    assert_eq!(read(&boxed)["diagnostics"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(&dir);
+}

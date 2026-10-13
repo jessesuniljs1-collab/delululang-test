@@ -974,12 +974,14 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         Err(code) => return code,
     };
     let root = Rc::new(crate::cli::build_root(&grants));
+    // P9-03: the report names the program's calls as the ordinary run's does — the file, or a package's flattened text.
+    let source = if is_package { crate::run_cmd::flattened_name(file) } else { file.to_string() };
     let served = spawn_and_serve_custody(
         &program,
         root,
         limits,
         profile,
-        opts.report_out.as_deref(),
+        opts.report_out.as_deref().map(|path| ReportTo { path, source: &source }),
         isolation,
         custody.map(|c| Box::new(c) as Box<dyn delulu_runtime::Custody>),
         custody_record,
@@ -1117,10 +1119,18 @@ pub fn spawn_and_serve_with(
     fixed_clock_ms: Option<i64>,
     limits: crate::jail::Limits,
     profile: crate::policy::Profile,
-    report_out: Option<&str>,
+    report_out: Option<ReportTo<'_>>,
     isolation: Isolation,
 ) -> io::Result<i32> {
     serve_under(program, root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None, None)
+}
+
+/// Where a sandboxed run's report goes (`--report-out`), and the name its program's calls are reported under — the file as
+/// the operator named it, or a package's flattened text as the ordinary run names it (P9-03).
+#[derive(Clone, Copy)]
+pub struct ReportTo<'a> {
+    pub path: &'a str,
+    pub source: &'a str,
 }
 
 /// P8-01: a sandboxed run's devices — the plan checked before the guest exists, and the broker it
@@ -1172,7 +1182,7 @@ fn spawn_and_serve_custody(
     root: Rc<RootVal>,
     limits: crate::jail::Limits,
     profile: crate::policy::Profile,
-    report_out: Option<&str>,
+    report_out: Option<ReportTo<'_>>,
     isolation: Isolation,
     custody: Option<Box<dyn delulu_runtime::Custody>>,
     custody_record: Option<serde_json::Value>,
@@ -1189,7 +1199,7 @@ fn serve_under(
     fixed_clock_ms: Option<i64>,
     limits: crate::jail::Limits,
     profile: crate::policy::Profile,
-    report_out: Option<&str>,
+    report_out: Option<ReportTo<'_>>,
     isolation: Isolation,
     custody: Option<Box<dyn delulu_runtime::Custody>>,
     custody_record: Option<serde_json::Value>,
@@ -1477,6 +1487,7 @@ fn serve_under(
         _ => None,
     };
     let denied = evidence.denied;
+    let host_refusal = evidence.refusal;
     // PS-E-01: a guest that never confirmed its boundary was never sent the program, so it never ran —
     // and (the red-team pass, F1) neither did one that confirmed and then never took the program.
     let confirmed = evidence.confirmed;
@@ -1594,7 +1605,7 @@ fn serve_under(
     if let Some(s) = &stop {
         eprintln!("error: {}", s.message);
     }
-    if let Some(path) = report_out {
+    if let Some(ReportTo { path, source }) = report_out {
         let exit = if refused { 2 } else { served.as_ref().copied().unwrap_or(1) };
         let mut outcome = serde_json::json!({ "ran": sent, "exit": exit });
         if let Some(s) = &stop {
@@ -1604,7 +1615,8 @@ fn serve_under(
             "command": "run",
             "schema": 1,
             "delulu_version": env!("CARGO_PKG_VERSION"),
-            "diagnostics": [],
+            // P9-03: the host's refusal that ended the run, at its call — as the ordinary run's report records its fault.
+            "diagnostics": host_refusal_diagnostics(program, source, served.as_ref().ok().copied(), host_refusal.as_ref()),
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
             "sandbox": with_image(policy.to_json_with(backend, &applied, &denied.0, denied.1)),
             "outcome": outcome,
@@ -2035,6 +2047,37 @@ struct Evidence {
     denied: (Vec<String>, u64),
     /// What the guest reported applying to itself before its program ran (RW 4.23).
     own: Vec<&'static str>,
+    /// P9-03: the refusal the guest's last capability request met, if it met one.
+    refusal: Option<delulu_runtime::channel::Refusal>,
+}
+
+/// P9-03 (`V2_P9_DESIGN.md`): a sandboxed run's `diagnostics` — the host's refusal that ended the run, as the ordinary run's
+/// report records its fault: the host's code and words, at the call the guest's request named. Only for a guest that said
+/// goodbye with a failing exit while its last capability request stood refused: a guest that faulted on its own (an
+/// assertion) ended for a reason the host never saw, and its words stay its own (RW 4.31); one whose channel failed was
+/// ended by something else. The span is placed only where it lies in the one program the host sent, on character
+/// boundaries — a guest's word, checked: a span inside a character would have panicked the renderer.
+fn host_refusal_diagnostics(
+    program: &str,
+    source: &str,
+    exit: Option<i32>,
+    refusal: Option<&delulu_runtime::channel::Refusal>,
+) -> Vec<serde_json::Value> {
+    let (Some(r), Some(exit)) = (refusal, exit) else { return Vec::new() };
+    if exit == 0 {
+        return Vec::new();
+    }
+    let mut map = delulu_diag::SourceMap::new();
+    map.add_file(source.to_string(), program.to_string());
+    let code = delulu_diag::static_code(&r.code).unwrap_or("DL1401");
+    let mut d = delulu_diag::Diagnostic::error(code, r.message.clone());
+    // A span naming a file other than the program's is omitted by the renderer itself (C83); one inside a character would
+    // panic it.
+    let placed = r.start <= r.end && program.is_char_boundary(r.start as usize) && program.is_char_boundary(r.end as usize);
+    if placed {
+        d = d.with_span(delulu_diag::Span::new(r.file, r.start, r.end), "refused by the host here");
+    }
+    delulu_diag::envelope("run", std::slice::from_ref(&d), None, &map)["diagnostics"].as_array().cloned().unwrap_or_default()
 }
 
 /// Connect to the guest, have it confirm its boundary, tell it what to run, and serve it until it is
@@ -2097,6 +2140,7 @@ fn converse(
     }
     let (list, total) = host.denied();
     evidence.denied = (list.to_vec(), total);
+    evidence.refusal = host.refusal().cloned();
     served
 }
 
@@ -2773,6 +2817,40 @@ pub(crate) fn channel_tag() -> String {
 
 #[cfg(test)]
 mod tests {
+    /// P9-03: a sandboxed run's report places the host's refusal at the call the guest named only where that call lies in the
+    /// program the host sent, on character boundaries — a guest's span inside a character panicked the renderer (a hostile
+    /// guest could have ended its own host's report). And it records a refusal only for a failing goodbye.
+    #[test]
+    fn a_host_refusal_is_placed_only_inside_the_program_and_only_for_a_failing_goodbye() {
+        use delulu_runtime::channel::Refusal;
+        // `é` is two bytes, 21 and 22: offset 22 is inside it.
+        let program = "fn main(root: Root) {\u{e9}\n    let c = root.console()\n}\n";
+        let at = |file: u32, start: u32, end: u32| Refusal { code: "DL0703".into(), message: "not granted".into(), file, start, end };
+        let call = program.find("root.console()").unwrap() as u32;
+        let good = at(0, call, call + 14);
+        let d = super::host_refusal_diagnostics(program, "p.delulu", Some(1), Some(&good));
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(d[0]["code"], "DL0703");
+        let s = &d[0]["spans"][0];
+        assert_eq!((s["file"].as_str(), s["start"]["line"].as_u64(), s["start"]["col"].as_u64()), (Some("p.delulu"), Some(2), Some(13)), "{d:?}");
+        for (why, bad) in [
+            ("starting inside a character", at(0, 22, call)),
+            ("ending inside a character", at(0, 21, 22)),
+            ("past the program", at(0, call, program.len() as u32 + 1)),
+            ("backwards", at(0, call + 14, call)),
+            ("another file", at(3, call, call + 14)),
+        ] {
+            let d = super::host_refusal_diagnostics(program, "p.delulu", Some(1), Some(&bad));
+            assert_eq!(d.len(), 1, "{why}: the refusal is still recorded: {d:?}");
+            assert_eq!(d[0]["code"], "DL0703", "{why}");
+            assert_eq!(d[0]["spans"], serde_json::json!([]), "{why}: not placed: {d:?}");
+        }
+        // Only for a failing goodbye: a clean exit, or a channel that failed, records none.
+        assert!(super::host_refusal_diagnostics(program, "p.delulu", Some(0), Some(&good)).is_empty());
+        assert!(super::host_refusal_diagnostics(program, "p.delulu", None, Some(&good)).is_empty());
+        assert!(super::host_refusal_diagnostics(program, "p.delulu", Some(1), None).is_empty());
+    }
+
     use super::*;
 
     /// RUNDIR-PERM-1: the run's own directory is made its user's alone by the host, and a directory already
