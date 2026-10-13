@@ -2773,3 +2773,21 @@ directory, or have the laptop session read §11.
   — a request with headers (`V2_P9_DESIGN.md`); (3) RW 4.63, RW 4.53's rest, RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a
   boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-127, option (c). **Keep the closing entry current; from 2026-10-16 a
   run only refreshes it and stops.**
+
+### 2026-10-13 — routine run 22 (last): `44f5b7f`'s push run read green — `master` green again
+- Session: `https://claude.ai/code/session_01XEfaGaikkQiMYt3Z72178T`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (and the harness branch `claude/zealous-keller-ekmk5a`, the same commit)   Pull request: none   Merged: n/a
+- Base: `44f5b7f`
+- Commits: this entry's commit — the record of the read
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check`
+  all checks passed
+- Verified: `44f5b7f`'s CI `38362909613` — success on every job, Ubuntu's test job included (`miri-slow` and `heavy-gates`
+  skipped on a push). **`master` green again** after `11c9d94` and `76f83a2` (DEADMAN-BUSY-1, D-V2-127).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read THIS commit's push run (records only); (2) **P9-04 step (a)** — a request with headers
+  (`V2_P9_DESIGN.md`); (3) RW 4.63, RW 4.53's rest, RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`.
+  **For the owner:** D-V2-115 to D-V2-127, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it
+  and stops.**

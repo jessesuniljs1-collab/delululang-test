@@ -5548,3 +5548,9 @@ which nothing follows it; the grant grammar is `secret:NAME=VALUE | secret:NAME=
 the daemon the bytes are the broker's (invariant 23), so the host's egress client would ask the broker at send time, naming the
 destination. Build order proposed there: a request with headers first, then a secret in a header position, the audience in the
 grant, the broker's audience dimension, and `authority`'s per-secret destinations.
+
+## 2026-10-13 — routine run 22 (last): `44f5b7f`'s push run read green — `master` green again
+
+CI `38362909613` at `44f5b7f` — success on every job (`miri-slow` and `heavy-gates` skipped on a push), Ubuntu's test job among
+them: the red of `11c9d94` and `76f83a2` (DEADMAN-BUSY-1's two halves, D-V2-127) is over. The run's records end here; its
+postscript commit's own push run is the next run's to read.
