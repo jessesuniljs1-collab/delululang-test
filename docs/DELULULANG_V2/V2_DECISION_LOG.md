@@ -2997,6 +2997,14 @@ refused and (c) stays the owner's.
 5. **Not changed:** the default period (`max(8 × poll, 2 s)`), the bounds, the records. A whole HOST stalled past the period
    still fires the dead-man — nothing in software can tell that from a dead monitor, and the safe direction is the designed
    one (P8-04: "a watchdog gone quiet is treated as one that fired").
+6. **The arming's half** (found by `76f83a2`'s push run, the same run): `an_idle_daemon_fires_an_unbeaten_dead_man_without_any_
+   request` saw a 300 ms dead-man fire 201 ms after the arming's ANSWER on Ubuntu. Measured between the daemon's own records
+   instead — the arming's and the firing's — with the arming written under a 200 ms hold of the chain: it fired 99 ms after its
+   arming record, red 2 of 2. The deadline was decided before the record was written, and the write can wait on the chain, so
+   the wait ate the holder's first period, though a holder cannot beat before it holds the key. The first period now starts
+   when the arming is answered, its record written (`start_deadman_period`, never earlier than the deadline it replaces):
+   fired 301–302 ms after the arming, 3 of 3. The test measures from the records, under the hold. Mutants M347 (the restart
+   removed) and M348 (it moves nothing) red, the control green. `eb7b8f8`.
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

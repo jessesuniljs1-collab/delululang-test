@@ -17,7 +17,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   answers one request at a time; while it was held on one (for example, one waiting for the audit chain another writer held),
   the beats a healthy `delulu monitor watch` sent in time waited behind it, and its dead-man revoked the monitor's node and
   every run under it. A beat is now judged by when it reached the daemon, and a monitor waiting on the daemon beats from a
-  thread of its own. A dead, killed or stopped monitor is still quarantined as before (D-V2-127).
+  thread of its own; and its first period starts when the arming is answered, not before its record was written. A dead,
+  killed or stopped monitor is still quarantined as before (D-V2-127).
 
 ## Unreleased — `delulu grants auto-approve`, 2026-10-13
 

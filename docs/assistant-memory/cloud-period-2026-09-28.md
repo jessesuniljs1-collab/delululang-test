@@ -242,4 +242,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   auto-approve --parent g_B` — the standing boundary is a node (revoking it revokes all it approved), never the owner code.
   **P9-03 complete.** **And DEADMAN-BUSY-1** (D-V2-127): `11c9d94`'s push run read two monitors revoked by their own
   dead-men on Ubuntu while the daemon was silent 2 s — a beat is now judged by when it ARRIVED, and a monitor waiting on the
-  daemon beats from a thread of its own; witnessed by holding the audit chain under one request.
+  daemon beats from a thread of its own; witnessed by holding the audit chain under one request. Its arming half the same
+  run (`76f83a2`'s push run): the first period starts when the arming is answered. Lesson: time a daemon by its own records,
+  never by when its answer reached the client.

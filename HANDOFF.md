@@ -917,7 +917,8 @@ spells the same thing?**
   (and every run under it) whenever one request held it for a period: beats sent in time sat in its queue, and a monitor
   waiting on its own listing could not beat at all. Seen as a CI red (two monitors on Ubuntu, the daemon silent for over
   2 s), witnessed deterministically by holding the audit chain under one request. Fixed: a beat is judged by when it
-  ARRIVED (stamped on the reader thread), and a monitor waiting on the daemon beats from a thread of its own. A watchdog
+  ARRIVED (stamped on the reader thread), a monitor waiting on the daemon beats from a thread of its own, and the first
+  period starts when the arming is answered (its record could wait on the chain first — `76f83a2`). A watchdog
   judged by a serial server measures the server too — ask whose time each second of the period is.
 
 ### 11.5 Operational traps, recorded because each one cost time
@@ -1344,6 +1345,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   chain, RW 4.53). Holding the chain under one request turned the once-seen red into a deterministic one in two witnesses
   (the daemon's and the monitor's), and each fix was read against its own. Read what the failing run's records say did NOT
   happen in the window — here not even a lease redemption — before deciding what the window held.
+
+- **Time a daemon by its own records, never by when its answer reached you** (routine run 22): the idle dead-man test took
+  "armed" when the arming's answer came back, and the daemon answers only once the arming's record is written — a slow
+  write moved the test's clock. Measured between the arming's and the firing's records it was red for a reason that was the
+  PRODUCT's (the period began before the record was written): a measurement moved to the right instants can turn a "flaky
+  test" into a defect.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

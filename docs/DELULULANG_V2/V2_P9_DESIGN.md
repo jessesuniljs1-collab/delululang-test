@@ -155,7 +155,32 @@ skip branch, §11.2).
   5. **Hypotheses to witness when built:** a proposal is never wider than the refused call's requirement (mutants: propose the
      kind's placeholder, or the whole `--grants` list); the refused run's node is unchanged by an approval (re-run, never widened
      live — V2 §5); a rejection's reason reaches the agent in `--json`.
-- **P9-04** secrets bound to endpoints (§4.11, RW 2.11): the language has no request a secret can ride on; the broker's
-  `secret_map` (D-V2-115) is the nearest existing shape.
+- **P9-04** secrets bound to endpoints (§4.11, RW 2.11). **Read against the code by routine run 22 (2026-10-13) — measured,
+  before it is built:**
+  1. **There is no request a secret can ride on.** `Cap[Http]` has one method, `get(url)` (`prim_table.rs`: `http.get`, arity
+     1), answering `Result[Str, NetErr]`; the egress client's `PinnedRequest` carries a URL, host, port and pinned addresses —
+     no header, no method. P9-04's language change begins as a REQUEST: a header-carrying form beside `get` (with P9-05 a
+     method), new primitive rows, `PRIM_TABLE_VERSION` 5 → 6, conformance anchors positive and negative.
+  2. **Where a secret can go today.** `Secret[_]` has `map` (a whitelisted transform — broker-side under the daemon, D-V2-115),
+     `verify`, and `expose`, the only reader, which the checker admits only with `Cap[Declassify]` and which returns a plain
+     `Str` that may then go anywhere — a URL's query included. So an API key reaches a host today only by being declassified,
+     after which nothing follows it. P9-04 is the first path that SENDS a secret without declassifying it: the header
+     position, its bytes resolved by the host at send time.
+  3. **The grant grammar is `secret:NAME=VALUE | secret:NAME=env:VAR`** (`broker.rs`'s `GrantForm`), not the study's
+     `secret=NAME@…`. An audience is a new form of that line — e.g. `secret:NAME@HOST[:PORT][/PATH]=VALUE` — whose parse must
+     refuse every spelling that could read two ways (a name holding `@`, a value holding `@`), and whose host is compared as
+     `net`'s is (`host_allowed`, the egress client's own strict parse, every redirect hop re-checked).
+  4. **Custody.** Under the daemon a run's secrets are names only (invariant 23) and the bytes are the broker's (`expose`,
+     `secret_map`), so the host's egress client would ask the broker at send time — an expose-class operation naming the
+     destination, refused (the study's `credential_endpoint_mismatch`, a DeluluLang twin) when the destination is outside the
+     audience; the broker's `secrets` dimension is names only today, so the audience joins the lattice there and in
+     `grants diff` (`secret_reach_expansion`, waiting since D-V2-119).
+  5. **The static half.** `authority` reporting, per secret, every destination a program can send it to needs the walk that
+     maps mint literals (`ScopeWalk`, D-V2-123) to follow a secret into a request's header argument and the request's URL
+     literal; a computed URL or a secret reached through a value is reported as such, never guessed.
+  **Build order, proposed:** (a) the request with headers, no secret in it — the egress client carrying them; (b) a `Secret[Str]` in a header position, resolved by the
+  host at send time, embedded custody first; (c) the audience in the grant line and the refusal at a destination outside it,
+  each redirect hop re-checked; (d) the broker's audience dimension and `secret_reach_expansion`; (e) `authority`'s
+  per-secret destinations. Each a slice, each witnessed red first.
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
   broker's set inclusion alike; three places to change in step.

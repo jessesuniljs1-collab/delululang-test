@@ -5530,3 +5530,21 @@ SURVIVES** — no witness reaches a watch wedged outside the daemon: RW 4.63, op
 Linux (`check-other-os.sh`). `e074330`.
 **Read on the runners at `e074330`** over `monitor_cli` and `delulu`'s unit tests: Ubuntu `38357155428` (233 passed), Windows `38357158233` (198), macOS `38357161227` (214), arm64 `38357164145` (233) — 0 failed, both new witnesses named on each, no compiler warning, no orphan `delulu`. **The full suite alone at
 `e074330`:** at `e074330`, 2,258 passed and 1 failed — the runtime's thread-stack gate, red for a thread no list named, the beater (`ae9dffe` lists it; `delulu-runtime`'s library then 262 passed); at `ae9dffe`, with these records in the tree, 2,259 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-13 — routine run 22 (continued): `76f83a2` red on Ubuntu — DEADMAN-BUSY-1's arming half; P9-04 read against the code
+
+**`76f83a2`'s push runs:** CI `38359276890` **failure** — `test (ubuntu-24.04)` only: `brokerd`'s `an_idle_daemon_fires_an_unbeaten_dead_man_without_any_request` (DEADMAN-BUSY-1's arming half); every other job green, Windows' and macOS' test jobs among them; `openshell` `38359276774` success. The red test (`an_idle_daemon_fires_an_unbeaten_dead_man_without_any_request`, "never before
+its period: 201.8 ms") took its clock from the arming's ANSWER, which comes only once the arming's record is written. Moved to
+the daemon's own records (the arming's and the firing's), with the arming written under a 200 ms hold of the chain, it read red
+2 of 2 — fired 99 ms after the arming RECORD: the product's, not the test's. The deadline was decided before the record could
+wait on the chain; the first period now starts when the arming is answered (D-V2-127 item 6, `eb7b8f8`): green 3 of 3 (301–302
+ms after the arming); mutants M347 and M348 red, the control green; the daemon's dead-man tests and `monitor_cli` green, twice
+more with every CPU busy; clippy clean; Windows and macOS linted from Linux. **Read on the runners at `eb7b8f8`** over `delulu`'s
+unit tests and `monitor_cli`: Ubuntu `38361582689` (233 passed), Windows `38361586297` (198), macOS `38361590312` (214), arm64 `38361593590` (233) — 0 failed, the idle test named on each, no compiler warning, no orphan `delulu`. **The full suite alone at `eb7b8f8`, with these records:** 2,259 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+**P9-04 read against the code** (`V2_P9_DESIGN.md`): `Cap[Http]` has one method, `get(url)`, and the egress client's request no
+header — there is no request a secret can ride on; a `Secret` leaves a program only through `expose`, behind `Declassify`, after
+which nothing follows it; the grant grammar is `secret:NAME=VALUE | secret:NAME=env:VAR`, not the study's `secret=NAME@…`; under
+the daemon the bytes are the broker's (invariant 23), so the host's egress client would ask the broker at send time, naming the
+destination. Build order proposed there: a request with headers first, then a secret in a header position, the audience in the
+grant, the broker's audience dimension, and `authority`'s per-secret destinations.

@@ -2749,3 +2749,27 @@ directory, or have the laptop session read §11.
   secrets bound to endpoints, read against the code first; (3) RW 4.63 (a seam to witness a wedged watch), RW 4.53's rest (the
   daemon's waits on the chain), RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:**
   D-V2-115 to D-V2-127, option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-13 — routine run 22 (closing): `76f83a2` red on Ubuntu — DEADMAN-BUSY-1's arming half fixed; P9-04 read against the code
+- Session: `https://claude.ai/code/session_01XEfaGaikkQiMYt3Z72178T`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-keller-ekmk5a`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `76f83a2`
+- Commits: (1) `eb7b8f8` DEADMAN-BUSY-1, the arming's half: the first period starts at its answer; (2) this entry's commit — the
+  records and P9-04's reading
+- Files and folders: (1) M `crates/delulu-broker/src/deadman.rs` (`start_deadman_period`), `crates/delulu/src/brokerd.rs` (the
+  arming's answer starts the period; the idle test measures from the records), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4 DEADMAN-BUSY-1; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P9 line), `docs/assistant-memory/cloud-period-2026-09-28.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-127 item 6), `V2_P9_DESIGN.md` (P9-04 read against the code),
+  `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Added, deleted, renamed: nothing. **Authorship:** the
+  owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `76f83a2`'s push runs — CI `38359276890` **failure** — `test (ubuntu-24.04)` only: `brokerd`'s `an_idle_daemon_fires_an_unbeaten_dead_man_without_any_request` (DEADMAN-BUSY-1's arming half); every other job green, Windows' and macOS' test jobs among them; `openshell` `38359276774` success. `eb7b8f8`: the records' measurement red first; mutants M347 and M348 red, the control
+  green; read on the runners — Ubuntu `38361582689` (233 passed), Windows `38361586297` (198), macOS `38361590312` (214), arm64 `38361593590` (233) — 0 failed, the idle test named on each, no compiler warning, no orphan `delulu`; the full suite alone — 2,259 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — time a daemon by its own records, never by when its answer reached you.
+- Open / next, in order: (1) **read THIS commit's push run** — `master` was red on `11c9d94` and `76f83a2` (DEADMAN-BUSY-1's two
+  halves), and this is meant to end it; if Ubuntu's test job is red again, that is the next run's only task; (2) **P9-04 step (a)**
+  — a request with headers (`V2_P9_DESIGN.md`); (3) RW 4.63, RW 4.53's rest, RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a
+  boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-127, option (c). **Keep the closing entry current; from 2026-10-16 a
+  run only refreshes it and stops.**
