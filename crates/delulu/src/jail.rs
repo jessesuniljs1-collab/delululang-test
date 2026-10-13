@@ -1646,7 +1646,7 @@ mod macos_tests {
         let me = std::process::id();
         // WITNESS (routine run 21): another test thread of this process touched more and freed it — as one did on `187494a`'s
         // macOS runner — so the PEAK stands above what the process holds when this test starts.
-        let mut other = vec![0u8; 128 * 1024 * 1024];
+        let mut other = vec![0u8; 64 * 1024 * 1024];
         for i in (0..other.len()).step_by(4096) {
             other[i] = 1;
         }
