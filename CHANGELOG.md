@@ -13,6 +13,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
 
+- **Fixed (MAP-HANDLE-1, D-V2-132): `Secret.map` under `--broker daemon` or `--lease` ran its function over an EMPTY
+  string** — the secret's bytes are the broker's and never in the program's process — so `s.map(f).expose(d)` printed
+  `f("")`, a made-up value, and exposed it with no broker gate or record. It is now refused (DL0904) before the function
+  runs, naming the ways out: `expose` under `Declassify` (through the broker), then transform; or embedded custody.
+
 - **Added (P9-04 (b)/(c), D-V2-131): `Cap[Http].get_with_secret(url, headers, header, secret)`** sends a `Secret[Str]` as one
   header's value — with no `Declassify`, because the program never reads the bytes — and only to the secret's
   **audience**, a new form of the secret grant: `--grant secret:NAME@HOST[:PORT][,HOST[:PORT]…]=VALUE` (or `=env:VAR`).

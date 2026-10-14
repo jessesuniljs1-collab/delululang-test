@@ -256,3 +256,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   resolution and on every hop; none is the bottom (sent nowhere); hop records name the secret, never its bytes; `grants diff`
   `secret_reach_expansion`; a daemon/leased run refuses DL0904 until P9-04 (d). `PRIM_TABLE_VERSION` 7; the period's third
   entrenched edit. Lesson (M383/M383b): a check built as two walls is falsified as two — `scripts/mutants.py` takes `edits`.
+  **MAP-HANDLE-1** the same run (D-V2-132): under the daemon `Secret.map` ran over `""` (a handle's `reveal()`) and the
+  result was exposed with no broker gate — refused in words now. Search key: every reader of a stand-in value asks where
+  the bytes are.

@@ -5714,3 +5714,21 @@ sent from a guest; unchanged), and `--engine wasm` refuses `http` itself DL1201 
 **Clippy** clean (workspace, all targets, `-D warnings`); **the other OSes linted from Linux** — macOS (arm64 and x86-64), Windows, arm64 Linux and musl linted from Linux after the last code edit (`scripts/check-other-os.sh`, clippy `-D warnings`, exit 0).
 **Read on the runners at `91a1eb7`:** `egress_cli`, `broker_cli`, `within_cli` on Windows `38626954263` (25 passed), macOS `38626958695` (26), arm64 `38626962999` (26); `delulu-runtime`'s library on Windows `38626966826` (274 passed, 1 ignored), macOS `38626971957` (275, 1), arm64 `38626976826` (275, 1); `delulu-check`'s `a_secret_rides…` on Windows `38626992133`, macOS `38626999206`, arm64 `38627003325` (1 each) — 0 failed, every new test named, no compiler warning, no orphan `delulu`
 **The full suite alone at `91a1eb7`:** 2,283 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left
+
+## 2026-10-14 — routine run 24 (continued): MAP-HANDLE-1 — `Secret.map` of a broker-held secret ran over an empty string (D-V2-132); `91a1eb7` and `d61dd70` read
+
+**Found** while reading the broker's secret path for P9-04 (d) (read-only, the suite running): the interpreter's `Secret.map`
+hands its function `s.reveal()`, and a daemon or leased run's secret is a HANDLE whose `reveal()` is `""`. **Witnessed on
+`48ef512`'s binary** (before any edit): `s.map(fn(x: Str) -> Str { x + "!" }).expose(d)` printed `hunter2!` embedded and `!`
+under `--broker daemon`, exit 0 — and the mapped value, a LOCAL secret, was exposed with no broker gate and no `expose` record.
+**The class enumerated** (every `reveal()`): `map` was the only call a handle could reach. **Fixed** (`interp.rs`): refused
+DL0904 before the function runs, naming the ways out; `--engine wasm` refuses secrets itself (DL1205, unchanged). **Witness**
+`broker_cli`'s `a_broker_held_secret_is_never_mapped_over_bytes_it_does_not_hold` (control embedded `hunter2!`; daemon refused,
+nothing printed; the way out — `expose` then transform under the daemon — `hunter2!`); M401 (the refusal disabled) red, the
+control green; clippy clean; Windows and macOS linted from Linux. `f4c428c`. **Read on the runners:** `broker_cli` on Windows `38629378991` (5 passed), macOS `38629384172` (6), arm64 `38629387987` (6) — 0 failed, both broker-held-secret witnesses named, no compiler warning, no orphan `delulu`
+**The full suite alone at `f4c428c`:** 2,284 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left
+**Records corrected beside it:** `V2_P9_DESIGN.md` said `map` was "broker-side under the daemon" — the broker's `secret_map`
+exists and no program reaches it; RW 4.49's third item (`record_device_refusal` answering `Recorded` for a lost record) was
+closed by routine run 18 (D-V2-111) and the row never said so.
+
+**Push runs read.** `91a1eb7`'s CI `38628412194` and `d61dd70`'s CI `38628780402` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `openshell` `38628412189` success. `actors_pingpong` at `d61dd70`: arm64 MEASURED 3.00x (control 4.11x); macOS NOT MEASURED (3 hardware threads); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work).

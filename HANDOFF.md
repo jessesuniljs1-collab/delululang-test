@@ -934,6 +934,13 @@ spells the same thing?**
   period starts when the arming is answered (its record could wait on the chain first — `76f83a2`). A watchdog
   judged by a serial server measures the server too — ask whose time each second of the period is.
 
+- **2026-10-14 — MAP-HANDLE-1** (routine run 24, D-V2-132): under the broker daemon or a lease, `Secret.map` ran its function
+  over the EMPTY string — a handle carries no bytes, and `reveal()` of one is `""` — so `s.map(f).expose(d)` printed `f("")`
+  where embedded custody printed `f(bytes)`, then exposed that local result with no broker gate or record. Found by reading
+  the broker's secret path for P9-04 (d), not by any test: no witness had ever mapped a broker-held secret. Refused in words
+  now. **The search key: a value that stands in for bytes held elsewhere answers every reader that does not ask where the
+  bytes are — list each reader (`grep reveal`) and ask it.**
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background

@@ -161,7 +161,9 @@ skip branch, §11.2).
      1), answering `Result[Str, NetErr]`; the egress client's `PinnedRequest` carries a URL, host, port and pinned addresses —
      no header, no method. P9-04's language change begins as a REQUEST: a header-carrying form beside `get` (with P9-05 a
      method), new primitive rows, `PRIM_TABLE_VERSION` 5 → 6, conformance anchors positive and negative.
-  2. **Where a secret can go today.** `Secret[_]` has `map` (a whitelisted transform — broker-side under the daemon, D-V2-115),
+  2. **Where a secret can go today.** `Secret[_]` has `map` (an arbitrary pure function, run in the program's process — so under the daemon, where the bytes are
+     the broker's, it is refused since routine run 24: MAP-HANDLE-1, D-V2-132; the broker's whitelisted `secret_map` exists and
+     no program can reach it),
      `verify`, and `expose`, the only reader, which the checker admits only with `Cap[Declassify]` and which returns a plain
      `Str` that may then go anywhere — a URL's query included. So an API key reaches a host today only by being declassified,
      after which nothing follows it. P9-04 is the first path that SENDS a secret without declassifying it: the header

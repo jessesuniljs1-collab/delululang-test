@@ -75,7 +75,8 @@ running summary.
   `authority --grants`), DEADMAN-BUSY-1 (run 22, D-V2-127 — a healthy monitor's runs quarantined whenever the daemon was held on
   one request: a beat is now judged by when it arrived), RW 4.62 (run 23, D-V2-129 — a refused operation listed in the trace as if it
   had happened; every refusal after a dispatch is now recorded), RW 4.64 (the same run — the WASM engine's trace of a refused
-  operation, now identical to the interpreter's) — and whatever the later entries add.
+  operation, now identical to the interpreter's), MAP-HANDLE-1 (run 24, D-V2-132 — under the daemon `Secret.map` ran over an
+  empty string and its made-up result was exposed with no broker gate; refused in words now) — and whatever the later entries add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), multi-edit mutants in `scripts/mutants.py` (run 24), the `scripts/hooks/pre-commit` map check, the repeated-heading gate in
@@ -85,9 +86,9 @@ running summary.
   took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **Three entrenched edits:** `DELULU_CORE.md` v0.3
   (D-V2-49, run 1) and `tests/conformance/witnesses.toml` — the anchors `ref.prim.http.get_with` (D-V2-128, run 23) and
   `ref.prim.http.get_with_secret` (D-V2-131, run 24), each in `ENTRENCHED_CHANGE_RECORD.md`. **No `DL` code was added. No `.md` file was deleted.**
-- **Size, at run 23's last records** (`git diff --name-status cfbfbdc..87c0e2f`): 259 commits; 163 files — 41 added, 122
-  modified, **0 deleted, 0 renamed**; +41,048 / −4,326 lines. Commits by `Claude` (92, runs 1–9) and by
-  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (167, from run 10). (At run 19's start: 207
+- **Size, at run 24's last code** (`git diff --name-status cfbfbdc..f4c428c`): 263 commits; 165 files — 41 added, 124
+  modified, **0 deleted, 0 renamed**; +42,373 / −4,502 lines. Commits by `Claude` (92, runs 1–9) and by
+  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (171, from run 10). (At run 19's start: 207
   commits, 139 files.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
@@ -99,7 +100,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-131); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-132); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2942,3 +2943,28 @@ directory, or have the laptop session read §11.
   4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-131
   (D-V2-128 and D-V2-131 with the period's second and third entrenched edits; D-V2-131 changes what a secret NAME may hold),
   option (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-14 — routine run 24 (continued): MAP-HANDLE-1 — `Secret.map` of a broker-held secret is refused, never run over bytes it does not hold (D-V2-132)
+- Session: `https://claude.ai/code/session_01Lxo11erVVd6HiYqFKAznFG`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-carson-tidpo3`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `d61dd70`
+- Commits: (1) `f4c428c` MAP-HANDLE-1: Secret.map of a broker-held secret is refused, never run over bytes it does not hold;
+  (2) this entry's commit — the records
+- Files and folders: (1) M `crates/delulu-runtime/src/interp.rs` (the refusal), `crates/delulu/tests/broker_cli.rs` (the
+  witness), `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (§11.4 the finding), `docs/REMAINING_WORK.md` (4.49's third
+  item marked closed by D-V2-111), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-132), `V2_P9_DESIGN.md` (the `map` claim corrected), `docs/CLOUD_SYNC_LOG.md` (this entry; the
+  closing entry), `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: the defect witnessed on `48ef512`'s binary (`!` for `hunter2!`); M401 red, the control green; clippy clean; Windows
+  and macOS linted; read on the runners — `broker_cli` on Windows `38629378991` (5 passed), macOS `38629384172` (6), arm64 `38629387987` (6) — 0 failed, both broker-held-secret witnesses named, no compiler warning, no orphan `delulu`; the full suite alone — 2,284 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left. Push runs: `91a1eb7`'s CI `38628412194` and `d61dd70`'s CI `38628780402` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `openshell` `38628412189` success. `actors_pingpong` at `d61dd70`: arm64 MEASURED 3.00x (control 4.11x); macOS NOT MEASURED (3 hardware threads); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 — MAP-HANDLE-1 and its search key (every reader of a stand-in value asks where
+  the bytes are); `docs/assistant-memory/cloud-period-2026-09-28.md` a line.
+- Open / next, in order: (1) read THIS commit's push run and `f4c428c`'s; (2) **P9-04 step (d)** — the broker's audience
+  dimension (a lease node's secret carries its audience, `⊑` per secret by inclusion of origins; the host asks the broker for
+  the bytes at send time naming the destination; `grants diff` between nodes) — and with it whether the language should reach
+  the broker's whitelisted `secret_map`; then (e); (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two
+  items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-132, option (c). **The closing entry is current;
+  from 2026-10-16 a run only refreshes it and stops.**

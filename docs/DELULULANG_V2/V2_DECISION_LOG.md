@@ -3190,6 +3190,31 @@ recorded`, `within_cli`'s `grants_diff_names_what_a_change_adds_and_nothing_it_d
 
 **Falsified:** mutants M380–M400 (`scripts/mutants.py`) red but one: the origin judged against the audience before resolution removed (M380), the empty audience let through (M381), the per-hop origin rule ignored for the secret (M382), both walls removed at once (M383b), the hop's `secret` name dropped (M384), `audience` answered as something other than `Refused` (M385), a path let into an audience (M386), the secret's header unchecked (M387), the grant line split at its last `@` (M388), the audience not stored (M389), `Secret.map` dropping it (M390), the mint dropping it (M391), a broker handle sent (M392), a custody op asked for one (M393), the actor boundary dropping a secret's (M394) or a root's (M395), `grants diff` ignoring it (M396) or calling it `scope_expansion` (M397), the checker taking a `Str` for the secret (M398), the schema's hop `secret` mistyped (M399), `PinnedRequest`'s `Debug` printing values (M400) — and **M383, the per-hop audience check alone, survives on the first wall by design** (D-V2-131 item 3); the control green
 
+## D-V2-132 — MAP-HANDLE-1: `Secret.map` of a broker-held secret is refused in words, never run over bytes this process does not hold — TAKEN (head chef, 2026-10-14, under the owner's delegation)
+
+**Context.** Found by routine run 24 while reading the broker's secret path for P9-04 (d): the interpreter's `Secret.map` handed
+its function `s.reveal()` — and a daemon or leased run's secret is a broker HANDLE, whose `reveal()` is the empty string
+(invariant 23: no bytes before `expose`). **Witnessed on `48ef512`'s binary:** `s.map(fn(x: Str) -> Str { x + "!" }).expose(d)`
+printed `hunter2!` with embedded custody and `!` under `--broker daemon` — a fabricated value, VERIFY-FABRICATED-1's shape, two
+custody modes answering one program differently (HTTP-SCHEME-1's lesson) and not even failing closed. Worse, the result was a
+LOCAL secret, so its `expose` ran with no broker gate (the node's `Declassify` effect and `secrets` scope) and wrote no `expose`
+record. The broker's own `secret_map` (whitelisted `trim`, `upper`, `lower`) exists, and the language never
+reaches it: `V2_P9_DESIGN.md`'s "`map` (a whitelisted transform — broker-side under the daemon)" described an operation no program
+can call. **The class, enumerated** (every `reveal()` in the tree): `Secret.map` was the only call that could reach a handle —
+`expose`'s is routed through custody first, an actor message keeps a handle a handle, and `get_with_secret` (D-V2-131) refuses a
+handle before revealing anything.
+
+**Decision.** `Secret.map` of a broker-held secret is refused DL0904 before its function runs, in words that name the two ways
+out — `expose` under `Declassify` (through the broker, gated and recorded) and transform the result, or embedded custody — and the
+first is taken by the witness. **Not chosen:** compiling a closure into the broker's whitelist (the function is arbitrary pure
+code; three named operations cannot express it, and recognizing `fn(x) { x.trim() }` would be a second language for one
+receiver); running the closure in the broker (a second interpreter holding the bytes). **Left open:** whether the language should
+reach the broker's whitelist at all (a `Secret` method per whitelisted op), recorded with P9-04 (d).
+
+**Witnessed:** `broker_cli`'s `a_broker_held_secret_is_never_mapped_over_bytes_it_does_not_hold` — the control (embedded:
+`hunter2!`), the refusal under the daemon (exit 1, nothing printed, DL0904), and the way out (`expose` then transform under the
+daemon: `hunter2!`). **Falsified:** mutant M401 (the refusal disabled) red, the control green.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
