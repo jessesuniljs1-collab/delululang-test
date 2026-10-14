@@ -539,7 +539,7 @@
     {"id":"file:crates/delulu/tests/snapshots/atlas_chain/plugin_shout__rigged.json","kind":"other","name":"plugin_shout__rigged.json","path":"crates/delulu/tests/snapshots/atlas_chain/plugin_shout__rigged.json","lines":97},
     {"id":"file:crates/delulu/tests/snapshots/atlas_chain/plugin_shout__rigged__src__shout.json","kind":"other","name":"plugin_shout__rigged__src__shout.json","path":"crates/delulu/tests/snapshots/atlas_chain/plugin_shout__rigged__src__shout.json","lines":97},
     {"id":"file:crates/delulu/tests/snapshots/atlas_chain/plugin_shout__src__shout.json","kind":"other","name":"plugin_shout__src__shout.json","path":"crates/delulu/tests/snapshots/atlas_chain/plugin_shout__src__shout.json","lines":65},
-    {"id":"file:deny.toml","kind":"other","name":"deny.toml","path":"deny.toml","lines":117},
+    {"id":"file:deny.toml","kind":"other","name":"deny.toml","path":"deny.toml","lines":125},
     {"id":"file:docs/design/models/Broker.cfg","kind":"other","name":"Broker.cfg","path":"docs/design/models/Broker.cfg","lines":22},
     {"id":"file:docs/design/models/Broker.tla","kind":"other","name":"Broker.tla","path":"docs/design/models/Broker.tla","lines":219},
     {"id":"file:docs/design/models/BrokerBug.cfg","kind":"other","name":"BrokerBug.cfg","path":"docs/design/models/BrokerBug.cfg","lines":21},

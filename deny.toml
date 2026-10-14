@@ -30,6 +30,14 @@
 # `cargo update -p rustls` also re-unified errno, quinn-udp, rustix, tempfile and winapi-util onto
 # windows-sys 0.61.2 (from 0.52.0), within their own ranges. No source line changed.
 #
+# On 2026-10-14 **wasmtime 48.0.5 -> 48.0.6** (routine run 24) closed RUSTSEC-2026-0353 to -0359 and -0361 to -0364,
+# published that evening and read red on `4f3084b`'s push run (a records-only commit). Eight are in the component model,
+# which this tree does not enable (0353-0358, 0361-0363); 0359 (dropping a long chain of recursive types) and 0364
+# (exception tags) sit behind the WebAssembly 3.0 proposals D-V2-68 refuses on both engines. Upgraded anyway: a refused
+# feature is a reason the advisory is unreachable, never a reason to keep the code. `cargo update -p wasmtime --precise
+# 48.0.6` moved only the 29 crates of the Wasmtime, Cranelift and Pulley release (versions and checksums; no crate added or
+# removed). No source line changed.
+#
 # Every `ignore` below carries a FALSIFIABLE reason. If the reason stops being true, the entry is
 # wrong and must be removed — that is the only property that makes an ignore list honest.
 
