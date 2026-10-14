@@ -5654,3 +5654,24 @@ window — a check of the same source; best of seven interleaved rounds each; ra
 absolute ceiling. Green 5 of 5 with every CPU busy; mutant M374 (verify re-checks ten times) red, the control green; clippy clean.
 The class enumerated: the only speed claim in absolute time (four other absolute time assertions are ceilings of 8–60 s on things
 that must end). `76f54a0`. **Read on the runners** (`delulu-check`'s library, the ratio printed): `delulu-check`'s library — Ubuntu `38590951265` (248 passed; ratio 1.90, 1.70 ms a verify), Windows `38590955781` (248; 2.02, 2.19 ms), macOS `38590961151` (248; 1.91, 1.16 ms), arm64 `38590966445` (248; 1.98, 1.77 ms).
+
+## 2026-10-14 — routine run 23 (continued): `6971d9c`'s push run read green — `master` green again; RW 4.64 closed — both engines trace a refusal the same
+
+**`6971d9c`'s push run** (CI `38591853430`): success on every job (`miri-slow` and `heavy-gates` skipped on a push) — the
+supply-chain red of `fa2d34e` and the Ubuntu red of `5fa3261` are over; RW 4.62 and D-V2-130 are on `master`.
+
+**RW 4.64** (opened by RW 4.62 the same run). **Witnessed first:** a new two-engine test, `delulu-wasm`'s
+`refusal_trace_parity` — one program on both engines, under the crate's own kind of denying fake custody where the case is the
+custody's — read the WASM engine's trace `[]` against the interpreter's two records for a refused `println` (it checked custody
+before tracing), and one record against two for `rand.int(5, 5)` (D-V2-129's own divergence). **Fixed** (`host.rs`): console,
+clock and rand are traced at dispatch (reading the guest's string performs nothing), then the custody decides and
+`push_refusal_trace` follows a refusal; a hostile path (an embedded NUL; on Windows a device name) is refused after the
+`read_text` record; `rand.int`'s `hi <= lo` writes its refusal. The two traces are byte-identical in five cases (console, clock
+and rand refused by the custody; `hi <= lo`; a NUL path, granted `.` so nothing is created or read). Mutants M375–M379 (each
+refusal record removed) red, the control green. The WASM crate's tests (91 and the rest), `cli`, `guard_e2e`, `json_contract` and
+`core_invariance` green; clippy clean; the five other targets linted. **The two-engine differential** (release, 50,000
+programs): — 50,000 programs, `two_engine_differential_gate` ok in 145 s. **The disk filled once** (`No space left on device` linking a test, 28 GB of `target/` after the lockfile
+moved every crate's hash — run 6's trap): the incremental caches and the test executables built before the lockfile moved were
+deleted, 13 GB free, and the targets re-run green. `b3e17fc`.
+**Read on the runners at `b3e17fc`** (`delulu-wasm`'s library and `refusal_trace_parity`): `delulu-wasm`'s library and `refusal_trace_parity` on Windows `38595321024` (86 + 2 passed), macOS `38595325757` (91 + 2), arm64 `38595333185` (91 + 2) — 0 failed, both witnesses named, no compiler warning, no orphan `delulu`
+**The full suite alone at `b3e17fc`:** 2,270 passed and 4 failed, 16 ignored (163 binaries) — the four were `doctor_cli` (three) and the Survey's `freshness`, a stale map: `scripts/suite.sh` was edited (this run's loop engineering) after the map was built and before the suite started, which `TREE-MOVED` cannot see; the map rebuilt, both targets green (11 and 5 passed). `suite.sh` now refuses to start on a stale map, witnessed refusing.

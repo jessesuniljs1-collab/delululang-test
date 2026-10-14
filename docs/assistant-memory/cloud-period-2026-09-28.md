@@ -249,4 +249,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   judged before anything is resolved, never `Host` or another header the client owns, sent only to the URL's origin; hop
   records carry the names, never a value; a `Map` crosses the sandbox channel; `PRIM_TABLE_VERSION` 6. The period's second
   entrenched edit (the conformance anchor). Lesson (M351): a witness of a normalizing comparison spells the colliding pair both
-  ways round.
+  ways round. The same run: RW 4.62/4.64 (D-V2-129 — a refusal follows its dispatch in the trace, both engines alike), D-V2-130
+  (a speed witness bounded against a control timed on the same machine), rustls 0.23.46 for RUSTSEC-2026-0346 to -0349.

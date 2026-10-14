@@ -284,7 +284,9 @@ before any by-hand run after one (run 8: a stand-in check read an unquoted host 
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
-`TREE-MOVED:`. Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
+`TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a
+full disk after a lockfile change, and four tests of another to a script edited between the map's build and the suite's
+start, which `TREE-MOVED` cannot see). Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
 stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported — and the NEXT slice's witness too (run 16 appended one to a
 test file and compiled it mid-suite; restored in time, but `TREE-MOVED` cannot see an edit that is undone). While the suite runs, a fix may be COMMITTED (a commit

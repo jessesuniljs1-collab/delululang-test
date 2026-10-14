@@ -3097,7 +3097,9 @@ was refused DL1410, nothing was written, and the trace's only record was `write_
 **Witnessed:** `guard_e2e`'s `a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace` (a guarded write, a guarded
 `expose` — `detail` exactly `DL1410` — and a guarded read under both engines, identical) and `cli`'s
 `an_operation_its_effect_refuses_is_followed_by_its_refusal_in_the_trace` (DL0904, both engines); mutants M368–M373 red, the
-control green. `7c653e0`.
+control green. `7c653e0`. **RW 4.64, its residual, closed the same run** (`b3e17fc`): the WASM engine traces console, clock
+and rand at dispatch, then the custody's refusal; a hostile path after its `read_text` record; and writes the refusal after
+`rand.int`'s `hi <= lo` — each witnessed against the interpreter's trace on one program (`refusal_trace_parity`), red first.
 
 ## D-V2-130 — A speed claim is bounded against a control measured on the same machine in the same window: the DIR verify witness asserts verify ≤ 5 × one check of the same source, never an absolute 5 ms — TAKEN (head chef, 2026-10-14, under the owner's delegation)
 

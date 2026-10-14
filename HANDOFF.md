@@ -115,7 +115,9 @@ the assistant's memory — which now also travels file by file in
   headers: judged by the egress client before anything is resolved (RFC 9110 tokens, no line break in a value, no name in two
   cases, bounds, never `Host` or the other headers the client owns) and sent only to the URL's own origin; each hop records the
   header names, never a value; a `Map` crosses the sandbox channel; `PRIM_TABLE_VERSION` 6 (D-V2-128). The conformance anchor
-  is the period's second entrenched edit (`ENTRENCHED_CHANGE_RECORD.md`).
+  is the period's second entrenched edit (`ENTRENCHED_CHANGE_RECORD.md`). The same run: RW 4.62 and RW 4.64 — a refused
+  operation is in the trace after its dispatch, identically on both engines (D-V2-129); the DIR verify timing witness bounded
+  against a control timed on the same machine (D-V2-130, after a runner-measuring red); rustls 0.23.46 (RUSTSEC-2026-0346–0349).
   **Next: P9-04 steps (b) and (c) together** (a `Secret[Str]` in a header position only with its audience — alone, (b) would be
   a declassification without `Declassify`), then (d)–(e), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team

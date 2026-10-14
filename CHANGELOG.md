@@ -17,7 +17,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   the operation's DISPATCH; when it was then refused — by the broker's custody (a revoked lease, a guarded or sealed use),
   by the broker's refusal of `expose` or `verify`, or by the effect itself (a path outside the capability) — nothing
   followed it. Now the next record is `<method>.refused`, with the same effect and the code and its words (the code alone
-  where a secret was involved). Both engines write it (D-V2-129).
+  where a secret was involved). Both engines write it (D-V2-129) — and the WASM engine now traces a refused console, clock
+  or rand use, and a refused path, at dispatch as the interpreter does, so the two traces are identical (RW 4.64).
 - **Security (dependencies): `rustls` 0.23.45 → 0.23.46** for RUSTSEC-2026-0346, -0347, -0348 and -0349 (published
   2026-10-14). No source change.
 
