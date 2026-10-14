@@ -5554,3 +5554,54 @@ grant, the broker's audience dimension, and `authority`'s per-secret destination
 CI `38362909613` at `44f5b7f` — success on every job (`miri-slow` and `heavy-gates` skipped on a push), Ubuntu's test job among
 them: the red of `11c9d94` and `76f83a2` (DEADMAN-BUSY-1's two halves, D-V2-127) is over. The run's records end here; its
 postscript commit's own push run is the next run's to read.
+
+## 2026-10-14 — routine run 23: CI read green; P9-04 step (a) — `http.get_with`, a request with headers (D-V2-128)
+
+**Start.** `date -u` 2026-10-14 13:59. The closing entry exists (run 19) and is kept current below. `master` at `b7a5c3b`
+(run 22's last record); every `origin/claude/*` branch read after `git fetch --unshallow` — none holds a commit `master`
+lacks but the two run 10 recorded as superseded (`7d6a22b`, `d3f0d52`). `survey check` ok (1,505 nodes), `doctor --check`
+all checks passed. `gh` present at `/usr/local/bin/gh`, not needed (the REST API answers `curl`).
+
+**CI read since run 22's last record:** `b7a5c3b`'s push run `38365143257` — success on every job (`miri-slow`, `heavy-gates`
+skipped on a push); the nightlies `38380513605` (2026-10-13) and `38534326546` (2026-10-14) — success on every job,
+`miri-slow` on all three crates and `heavy-gates` included. `actors_pingpong`: arm64 MEASURED 2.93x (control 4.11x) on the push
+run and 2.91x (4.12x) on the nightly; Ubuntu and Windows NOT MEASURED (the machine never gave 3x perfectly parallel work); macOS
+NOT MEASURED (3 hardware threads). Sandbox properties as before on every OS (macOS: reads not confined). **`master` green.**
+
+**P9-04 step (a)** (`V2_P9_DESIGN.md`'s build order; D-V2-128). **Witnessed absent first:** on the current binary a program
+calling `h.get_with(url, headers)` was refused `DL0405` (`Cap[Http]` has no method `get_with`); and a `Map` could not cross the
+sandbox channel (`WireValue::from_value` refused every kind it did not name). **Built:** `Cap[Http].get_with(url: Str, headers:
+Map[Str, Str]) -> Result[Str, NetErr] ! {Net}` — the checker's arm, `PRIM_TABLE` 82 → 83 rows, `PRIM_TABLE_VERSION` 5 → 6; the
+runtime's arm (the map's entries in its own order); the egress client's `check_headers` (each rule a refusal: an RFC 9110 token
+for a name; printable ASCII, space and tab for a value, no whitespace at its ends; no two names differing only in case; 32 / 128 B
+/ 8 KiB / 16 KiB; none of `RESERVED_HEADERS` — `Host`, the framing and connection headers, `Proxy-*`, `Accept-Encoding`) before
+anything is resolved; the origin rule (headers only on hops to the URL's own host and port); the hop record's header NAMES;
+`custody_op_for` and the trace (`Net`, the URL only); `WireValue::Map` (a key twice refused, a capability inside reminted); the
+`run-report` schema's optional hop `headers`; the conformance anchor with four witnesses (an entrenched edit, recorded); the
+generated reference (354 of 354 anchors covered). The operator's egress note now names "the request to `URL`", `get` and
+`get_with` alike.
+
+**Witnesses** (each falsified): `egress`'s `a_programs_headers_are_checked_before_anything_is_resolved` (20 spellings and every
+reserved name in two cases, each refused by its OWN rule, nothing resolved or sent), `headers_that_follow_the_rules_are_sent_
+lower_cased_in_the_order_given` (and each bound exactly), `the_headers_go_to_the_origin_the_program_named_and_to_no_other` (six
+hops: same origin, same origin spelled with its port, another host, another port, back — 2, 2, 2, 0, 0, 2 headers; no value in
+the record), and over real TLS `a_programs_headers_arrive_over_tls_and_the_host_header_stays_the_checked_one` (one `User-Agent`
+— the program's replaces the client's — one `Host`, the checked one); `channel`'s `a_map_crosses_and_one_that_names_a_key_twice_
+is_refused`, `a_capability_inside_a_map_the_host_returns_is_reminted`, `a_guests_request_with_a_refused_header_is_refused_by_the_
+host_and_recorded`; `egress_cli`'s `a_request_with_headers_leaves_as_tls_at_l0_and_from_a_guest_and_the_report_names_them` (and
+the report validates as `run-report`) and `a_refused_header_connects_nowhere_and_says_why_to_the_operator`; `monitor_cli`'s
+`a_request_with_headers_answers_to_the_daemons_custody` and its sandboxed twin (the chain's `use allow` and the `deny` citing it,
+reason `header`). **Mutants M349–M367:** every one RED, the control green — M349 (the value rule off), M350 (the reserved list
+compared case-sensitively), M352 (the edge rule), M353 (an empty name), M354 (the total bound), M355 (the count bound off by
+one), M356 (headers on every hop), M357 (the port not compared), M358 (names not lower-cased), M359 (the transport sends none),
+M360 (the record keeps values), M361 (a map's capabilities not reminted), M362 and M367 (a key twice accepted, host and guest),
+M363 (the primitive drops the map), M364 (`custody_op_for` without `get_with`), M365 (the trace's effect), M366 (the schema
+without `headers`). **M351 SURVIVED its first run** — the duplicate check compared the WRITTEN name, and the witness's colliding
+pair put the lower-case spelling second, which both forms catch; the witness now spells the pair both ways round, and M351 is red.
+Clippy clean; macOS, Windows, arm64 and musl linted from Linux (`check-other-os.sh`). `bee695f`.
+
+**Read on the runners at `bee695f`:** `delulu-runtime`'s library — Windows `38581940557 (268 passed)`, macOS `38581945945 (269)`, arm64 `38581950457 (269)`;
+`delulu`'s `egress_cli`, `monitor_cli` and `schema_cli` — Windows `38581958301 (31 passed)`, macOS `38581962693 (32)`, arm64 `38581967281 (33)`.
+0 failed on every read, every new test named on each, no compiler warning, no orphan `delulu` (Windows' only orphan is `vctip`, the MSVC toolchain's telemetry).
+
+**The full suite alone at `bee695f`:** 2,270 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.

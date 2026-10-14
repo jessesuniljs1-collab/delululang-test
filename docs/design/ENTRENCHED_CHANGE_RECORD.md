@@ -218,3 +218,44 @@ kept, each with a line saying it was repaired in v0.3. P17-T3 (§6's faithfulnes
 git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
 cargo run -p delulu-survey -- build
 ```
+
+---
+
+## 2026-10-14 — `tests/conformance/witnesses.toml`: the anchor `ref.prim.http.get_with`
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml` — four `[[witness]]` rows for the new anchor `ref.prim.http.get_with`, after `ref.prim.http.get`'s two, with a three-line comment. No existing row is touched. |
+| Entrenched by | `.github/CODEOWNERS:37` → `@PENDING-PUBLIC-project-lead` |
+| Campaign | V2 P9-04 step (a), `REMAINING_WORK.md` 2.11; decision D-V2-128 |
+| Approved by | **The owner's delegation of 2026-09-28** (`docs/CLOUD_ROUTINE.md`, *The authority a run has*): *"any file or folder is allowed to modified or created or even deleted"* — the routine names the conformance witnesses among the entrenched files a run may edit, recorded here. Taken by the head chef in routine run 23, **for the owner's review** on his return. |
+
+**Why**
+
+The coverage law (invariant 42) gives every `PRIM_TABLE` row an anchor, and `release_requires_full_coverage` demands an
+accepting and a rejecting witness for each. P9-04 step (a) adds the row `http.get_with`; without these rows the reference
+would carry an uncovered anchor (353 of 354) and the gate that requires 100% would refuse a release. The rows name the
+table's own two witnesses, as every primitive has (`every_listed_primitive_resolves`, `every_listed_primitive_rejects_a_five_
+argument_call`), and the egress client's two — the headers it must send and every header it must refuse.
+
+**Why this is not an RFC**
+
+A witness row maps an existing test to an anchor; it changes no rule, no diagnostic and no behaviour. The behaviour it covers —
+a new primitive — is the language change, taken as D-V2-128 under the same delegation (`PRIM_TABLE_VERSION` 5 → 6, additive:
+every version-5 primitive still exists and means the same thing). `COVERED_FLOOR` in `crates/delulu-conform/` is untouched.
+
+**Verified before the change**
+
+1. The four named tests exist and pass at `bee695f` (`cargo test -p delulu-check --lib prim_table`, 28 passed;
+   `cargo test -p delulu-runtime --lib egress::`, 35 passed).
+2. `cargo test -p delulu-conform` green; `delulu-conform --reference` regenerated `docs/reference/` (354 of 354 anchors, 100.0%)
+   and `--check-reference` says in sync.
+
+**How to revert**
+
+```
+git checkout bee695f^ -- tests/conformance/witnesses.toml
+```
+— together with D-V2-128's code, or the release gate refuses the uncovered anchor.

@@ -3006,6 +3006,70 @@ refused and (c) stays the owner's.
    fired 301–302 ms after the arming, 3 of 3. The test measures from the records, under the hold. Mutants M347 (the restart
    removed) and M348 (it moves nothing) red, the control green. `eb7b8f8`.
 
+## D-V2-128 — P9-04 step (a): a request with headers is `Cap[Http].get_with(url, headers: Map[Str, Str])`, its headers judged before anything is resolved and sent only to the origin the program named — TAKEN (head chef, 2026-10-14, under the owner's delegation)
+
+**Context.** P9-04 (secrets bound to endpoints, `V2_OPENSHELL_STUDY.md` §4.11, RW 2.11) was read against the code by routine run
+22: `Cap[Http]` had one method, `get(url)`, and the egress client's request no header — there was no request a secret could ride
+on. Its proposed build order begins with **(a) the request with headers, no secret in it**. Witnessed absent first on the
+current binary: a program calling `h.get_with(url, headers)` was refused `DL0405` ("type `Cap[Http]` has no method
+`get_with`"); and a `Map` could not cross the sandbox channel at all (`WireValue::from_value` refused it as "a value of a kind
+that does not cross"), so no guest could have handed its host a header map.
+
+**Decision.**
+1. **The surface.** `Cap[Http].get_with(url: Str, headers: Map[Str, Str]) -> Result[Str, NetErr] ! {Net}` — arity 2, a
+   `PRIM_TABLE` row, `PRIM_TABLE_VERSION` 5 → 6 (additive; bumped by the constant's own rule), the conformance anchor
+   `ref.prim.http.get_with` with the table's two witnesses and the egress client's two (an entrenched edit,
+   `ENTRENCHED_CHANGE_RECORD.md`). **The HTTP method stays in the NAME** (`get`, `get_with`): what a program can do to a host is
+   then readable from its calls alone, which P9-05's method dimension can decide statically. The URL stays argument one, so
+   every place that decides a fetch on its URL — the custody gate, the refusal note, `fetch_allowed` — reads it where it reads
+   `get`'s. **Step (b)'s shape is NOT decided here**: a `Secret[Str]` cannot sit in a `Map[Str, Str]`, so (b) adds its own
+   method (for example `get_with_secret(url, headers, name, secret)`) rather than changing this one's arity; recorded so (a)'s
+   programs never change.
+2. **The headers' rules** (`egress::check_headers`), each a REFUSAL, never a normalization — a header written one way and read
+   another by the server is a request nobody checked: a name is an RFC 9110 token (so `:authority`, a space, a colon, a line
+   break and non-ASCII are refused); a value is printable ASCII, space and tab only — no CR, LF or NUL (request splitting) — with
+   no whitespace at either end (servers strip it); two names that differ only in case are refused (a header name has no case);
+   at most 32 headers, a name ≤ 128 bytes, a value ≤ 8 KiB, all ≤ 16 KiB. **Names the client owns are refused**
+   (`RESERVED_HEADERS`): `Host` — a program's would carry the request to ANOTHER SITE served from the checked address, the
+   net allowlist walked past by a header; `Content-Length`, `Transfer-Encoding`, `TE`, `Trailer`, `Expect` (framing);
+   `Connection`, `Keep-Alive`, `Upgrade` (the connection); `Proxy-Authorization`, `Proxy-Connection` (there is no proxy);
+   `Accept-Encoding` (no decoder is compiled in, so a coded body would be bytes the program cannot read and the "bytes counted
+   are the bytes delivered" claim would need a caveat). `User-Agent` and `Accept` are the program's to set: a request header
+   REPLACES the client's default (witnessed over real TLS — one line of each).
+3. **What the program and the operator learn.** A refused header answers the opaque `Err(Refused)` like every policy refusal;
+   the operator gets the machine-readable reason `header` with the rule in words (stderr, `egress.records[].reason`, a guest's
+   `sandbox.denied`) — the rule, never the value. Nothing is resolved or connected for a refused header.
+4. **The origin rule.** The headers go only to the ORIGIN the URL names — host and port, the scheme being `https` always (both
+   in `parse_target`'s canonical spelling, so equality is safe): a redirect to another host, or to another port of the same
+   host, drops them; a hop back to the named origin carries them again. What a program addressed to one server is never handed
+   to the next — the rule step (c) applies to a secret's audience, applied first to everything a program says.
+5. **The record.** Each hop records the NAMES of the headers it carried (`egress.records[].hops[].headers`, lower-case, absent
+   when none — so a plain `get`'s report is unchanged); a value is recorded nowhere — not in the record, not in the trace
+   (whose `detail` for `get_with` is the URL only: a value may be a credential the program declassified), not in the audit
+   chain. The `run-report` schema gains the optional field.
+6. **Custody.** `get_with` is `Op::Net` on the URL's host in `custody_op_for`, exactly as `get`: under the daemon its use is
+   `use allow` on the run's node, and an egress refusal (a refused header included) is the `deny` citing it (RW 4.46). A
+   `get_with` the gate did not know would be a request no revocation could stop and no chain could see.
+7. **The channel.** `WireValue::Map` (entries in the map's ascending order): a key is a `Bool`, `Int` or `Str`; a key sent
+   twice is refused rather than resolved by whichever came last; a capability inside a map the host returns is reminted like
+   any other (the catch-all would have sent the encoder's placeholder handle 0 — another capability). `/3` is not bumped: an
+   older guest cannot check a `get_with` program, so it fails closed at its own check.
+
+**Witnessed** (each red first or falsified): the program refused DL0405 on the old binary; `egress`'s
+`a_programs_headers_are_checked_before_anything_is_resolved` (each case refused by its OWN rule — 19 spellings and every
+reserved name in two cases — with nothing resolved, nothing sent), `headers_that_follow_the_rules_are_sent_lower_cased_in_the_
+order_given` (and the bounds exactly), `the_headers_go_to_the_origin_the_program_named_and_to_no_other` (six hops), and over
+real TLS `a_programs_headers_arrive_over_tls_and_the_host_header_stays_the_checked_one`; the channel's three; `egress_cli`'s two
+(L0 and a guest: the request leaves as TLS with the report naming its headers and matching `run-report`; a `Host` header
+connects nowhere and says `header`); `monitor_cli`'s two (the daemon's custody records the `allow` and the `deny`, plainly and
+in a guest). Mutants M349–M367 (below in `V2_LOG.md`).
+
+**Not done here** (P9-04's next slices): (b) a `Secret[Str]` in a header position, resolved by the host at send time, and (c) the
+audience in the grant line and the refusal at a destination outside it — **as one slice**: a secret sent to any allowlisted host
+would be a declassification without `Cap[Declassify]` (today `expose`, behind it, is the only way a secret's bytes leave), so (b)
+alone would widen what a program holding a secret and `net` can do; (d) the broker's audience dimension and
+`secret_reach_expansion`; (e) `authority`'s per-secret destinations.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

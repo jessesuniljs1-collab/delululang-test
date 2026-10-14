@@ -182,5 +182,20 @@ skip branch, §11.2).
   host at send time, embedded custody first; (c) the audience in the grant line and the refusal at a destination outside it,
   each redirect hop re-checked; (d) the broker's audience dimension and `secret_reach_expansion`; (e) `authority`'s
   per-secret destinations. Each a slice, each witnessed red first.
+  **Step (a) built** (routine run 23, `bee695f`, D-V2-128): `Cap[Http].get_with(url, headers: Map[Str, Str])` — the method in
+  the NAME (so what a program does to a host stays readable from its calls, which P9-05 can decide statically), the URL
+  argument one. The egress client judges the headers before anything is resolved (an RFC 9110 token per name; printable ASCII,
+  space and tab per value, no whitespace at its ends; no two names differing only in case; bounds; none of `RESERVED_HEADERS`
+  — `Host` above all, which would move the request to another site on the checked address) and sends them only to the
+  URL's own ORIGIN, host and port: a redirect elsewhere drops them — step (c)'s audience rule applied first to everything a
+  program says. Each hop records the header NAMES; a value is recorded nowhere. A `Map` crosses the sandbox channel now.
+  **Next: steps (b) and (c) as ONE slice** — measured while (a) was built: today a secret leaves a program only through
+  `expose`, which needs `Cap[Declassify]`; a `Secret[Str]` in a header sent to any allowlisted host would be a
+  declassification WITHOUT it — a program holding a secret and `net` could send the secret's bytes to every host it may
+  reach. So (b) never lands without (c)'s audience: the secret's grant names where it may go, and a request outside it is
+  refused before a byte is sent. A `Secret[Str]` cannot sit in a `Map[Str, Str]`, so (b) is a method of its own (for example
+  `get_with_secret(url, headers, name, secret)`), the host resolving the bytes at send time — embedded custody first; under
+  the daemon the bytes are the broker's (item 4), so the host asks the broker at send time, naming the destination. A guest
+  holds no secret today (`guest.rs`'s `CARRIED`), so (b) is L0 first.
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
   broker's set inclusion alike; three places to change in step.

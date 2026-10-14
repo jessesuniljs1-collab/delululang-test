@@ -111,7 +111,13 @@ the assistant's memory — which now also travels file by file in
   rejected with a reason the agent reads (D-V2-125).
   And **P9-03 step 4** the same run — `delulu grants auto-approve --parent g_B`: the operator's standing delegation is a node,
   approving every pending proposal whose mint it bounds and never guarded authority (D-V2-126): **P9-03 complete**.
-  **Next: P9-04** (secrets bound to endpoints — a language change, read against the code first), then P9-05.
+  **Routine run 23 (2026-10-14): P9-04 step (a)** — `Cap[Http].get_with(url, headers: Map[Str, Str])`, a request with
+  headers: judged by the egress client before anything is resolved (RFC 9110 tokens, no line break in a value, no name in two
+  cases, bounds, never `Host` or the other headers the client owns) and sent only to the URL's own origin; each hop records the
+  header names, never a value; a `Map` crosses the sandbox channel; `PRIM_TABLE_VERSION` 6 (D-V2-128). The conformance anchor
+  is the period's second entrenched edit (`ENTRENCHED_CHANGE_RECORD.md`).
+  **Next: P9-04 steps (b) and (c) together** (a `Secret[Str]` in a header position only with its audience — alone, (b) would be
+  a declassification without `Declassify`), then (d)–(e), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1351,6 +1357,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   write moved the test's clock. Measured between the arming's and the firing's records it was red for a reason that was the
   PRODUCT's (the period began before the record was written): a measurement moved to the right instants can turn a "flaky
   test" into a defect.
+
+- **A witness of a normalizing comparison spells the colliding pair BOTH ways round** (routine run 23, M351): the header check
+  refuses two names that differ only in case, and its witness gave `Accept` then `accept` — the second already in the canonical
+  form, so a mutant comparing the WRITTEN name to the stored lower-case one refused it just the same and survived. With
+  `x-api-key` then `X-Api-Key` it is red. For every check that compares through a normalization (case, a path's resolution, a
+  host's spelling), put the NON-canonical spelling where the comparison reads it, and the canonical one where it stores.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

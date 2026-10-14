@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a request with headers, 2026-10-14
+
+- **New (P9-04 step (a)): `Cap[Http].get_with(url, headers)`** — a GET carrying headers (`headers` is a `Map[Str, Str]`).
+  Every check `get` makes still holds, and the headers are held to rules of their own before anything is resolved: each
+  name an HTTP token, each value printable ASCII with no line break and no whitespace at its ends, no two names that differ
+  only in case, at most 32 (a name up to 128 bytes, a value up to 8 KiB, 16 KiB in all) — and none of the headers the
+  runtime owns (`Host`, `Content-Length`, `Transfer-Encoding`, `TE`, `Trailer`, `Expect`, `Connection`, `Keep-Alive`,
+  `Upgrade`, `Proxy-Authorization`, `Proxy-Connection`, `Accept-Encoding`). A refused header is `Err(Refused)` to the
+  program and reason `header` to the operator; nothing is connected. The headers go only to the host and port the URL
+  names — a redirect elsewhere drops them — and the run report lists, per hop, the NAMES of the headers it carried, never
+  a value. A sandboxed guest's headers cross to its host, which sends them. The primitive table's version is now 6: a
+  `.dpx` built against version 5 is refused with DL1503 and rebuilt (D-V2-128).
+- **Changed:** the operator's note for a request that was not delivered reads `note: the request to `URL` was not
+  delivered: …`, for `get` and `get_with` alike.
+
 ## Unreleased — a busy broker no longer kills a healthy monitor, 2026-10-13
 
 - **Fixed (DEADMAN-BUSY-1): a monitor's dead-man fired while the broker daemon, not the monitor, was busy.** The daemon

@@ -245,3 +245,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   daemon beats from a thread of its own; witnessed by holding the audit chain under one request. Its arming half the same
   run (`76f83a2`'s push run): the first period starts when the arming is answered. Lesson: time a daemon by its own records,
   never by when its answer reached the client.
+- **Routine run 23 (2026-10-14): P9-04 step (a)** (D-V2-128): `Cap[Http].get_with(url, headers: Map[Str, Str])` — headers
+  judged before anything is resolved, never `Host` or another header the client owns, sent only to the URL's origin; hop
+  records carry the names, never a value; a `Map` crosses the sandbox channel; `PRIM_TABLE_VERSION` 6. The period's second
+  entrenched edit (the conformance anchor). Lesson (M351): a witness of a normalizing comparison spells the colliding pair both
+  ways round.
