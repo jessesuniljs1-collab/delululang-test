@@ -308,6 +308,14 @@ impl HostState {
         });
     }
 
+    /// RW 4.62: the record that follows a traced operation the host then REFUSED — `<op>.refused`, the
+    /// dispatch's effect, and the refusal in `detail` as `CODE: message`, exactly as the interpreter's
+    /// `trace_refusal` writes it, so the two engines' traces stay identical. Reads the refusal just set.
+    fn push_refusal_trace(&mut self, effect: &str, op: &str, cap_kind: &str, file: i32, start: i32, end: i32) {
+        let detail = self.refused.clone();
+        self.push_trace(effect, &format!("{op}.refused"), cap_kind, detail, file, start, end);
+    }
+
     /// The `read_text` record, with the two additive filesystem fields the interpreter's record
     /// carries (REMAINING_WORK 6.13): where the path pointed, and the scope it was resolved in.
     #[allow(clippy::too_many_arguments)]
@@ -766,6 +774,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 || !delulu_runtime::prim::contains_on_disk(&scope, &resolved)
             {
                 caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
+                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                 return 0;
             }
             // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
@@ -777,6 +786,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 None => resolved.to_string_lossy().to_string(),
             };
             if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                 return 0;
             }
             // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the

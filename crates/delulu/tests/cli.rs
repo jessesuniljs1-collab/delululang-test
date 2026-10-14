@@ -1514,6 +1514,52 @@ fn a_filesystem_trace_record_names_the_resolved_path_and_the_scope_root() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// RW 4.62 (routine run 23): an operation the trace recorded at its dispatch and the EFFECT then refused — here
+/// a read outside its capability, DL0904, with no broker anywhere — is followed by `read_text.refused`, the
+/// dispatch's effect, and the refusal in words. Before, the trace's last record was a read that never happened.
+/// Both engines write the same two records.
+#[test]
+fn an_operation_its_effect_refuses_is_followed_by_its_refusal_in_the_trace() {
+    let dir = std::env::temp_dir().join(format!("delulu_cli_rw462_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::write(dir.join("outside.txt"), "not yours").unwrap();
+    std::fs::write(
+        dir.join("m.delulu"),
+        "module m\n\nfn main(root: Root) ! {Read} {\n    let fr = root.fs_read(\"./data\")\n    \
+         match fr.read_text(\"../outside.txt\") {\n        Ok(v) => {}\n        Err(e) => {}\n    }\n}\n",
+    )
+    .unwrap();
+    let mut traces = Vec::new();
+    for engine in ["interp", "wasm"] {
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args(["run", "m.delulu", "--grant", "fs.read=./data", "--trace-effects", "--engine", engine])
+            .output()
+            .expect("run delulu");
+        assert_eq!(o.status.code(), Some(1), "{engine}: refused: {}", stderr(&o));
+        let records: Vec<Value> = stderr(&o)
+            .lines()
+            .filter(|l| l.starts_with('{'))
+            .map(|l| serde_json::from_str(l).expect("one JSON record per line"))
+            .collect();
+        assert_eq!(records.len(), 2, "{engine}: the dispatch, then its refusal: {records:#?}");
+        assert_eq!(records[0]["op"], "read_text", "{engine}: {records:#?}");
+        assert_eq!(records[1]["op"], "read_text.refused", "{engine}: {records:#?}");
+        assert_eq!(records[1]["effect"], "Read", "{engine}: the dispatch's effect — the trace stays inside the row");
+        assert_eq!(records[1]["cap_kind"], "FsRead", "{engine}");
+        assert_eq!(records[1]["seq"], 1, "{engine}");
+        assert_eq!(
+            records[1]["detail"], "DL0904: path `../outside.txt` escapes the granted scope",
+            "{engine}: the code and its words"
+        );
+        traces.push(records);
+    }
+    assert_eq!(traces[0], traces[1], "both engines write the same trace");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// PS-0-06 (D-NE-29): the characterization tests C-01, C-02 and C-11 flipped. On Windows a
 /// reserved device name, a trailing dot or space, a stream name, and a drive-relative grant are
 /// refused (DL0904 / a bad grant) and nothing is written — before, `NUL` wrote to the null device,

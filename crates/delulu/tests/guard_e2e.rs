@@ -273,3 +273,108 @@ fn broker_start_dangerously_bypass_guard_prints_the_banner() {
     let _ = delulu_in(&cwd, &state, &["broker", "stop"]);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// The records `--trace-out FILE` wrote, one JSON object a line.
+fn trace_records(path: &Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| l.starts_with('{'))
+        .map(|l| serde_json::from_str(l).expect("one JSON record a line"))
+        .collect()
+}
+
+/// **RW 4.62: a use the custody REFUSES is followed by its refusal in the trace** (routine run 23). The trace
+/// records an operation at its dispatch (spec §6.1); a custody denial is a fault, and before this fix nothing
+/// followed the dispatch record — the trace listed an operation that never happened (routine run 21 read a
+/// `println` listed that never printed). Now `<method>.refused` follows it, with the dispatch's effect (so the
+/// trace stays inside the row) and the code and its words — the code ALONE where a secret was involved. Three
+/// shapes: a guarded write (the custody gate), a guarded `expose` (the broker's refusal, a secret involved), and
+/// a guarded read under both engines (the WASM engine's trace is held identical to the interpreter's).
+#[test]
+fn a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace() {
+    let base = std::env::temp_dir().join(format!("dl462_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(cwd.join("data")).unwrap();
+    std::fs::create_dir_all(cwd.join("out")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(cwd.join("data/in.txt"), "42").unwrap();
+    std::fs::write(
+        cwd.join("w.delulu"),
+        "module w\n\nfn main(root: Root) ! {Write} {\n    let fw = root.fs_write(\"./out\")\n    \
+         match fw.write_text(\"x.txt\", \"hi\") {\n        Ok(_) => {}\n        Err(e) => {}\n    }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        cwd.join("e.delulu"),
+        "module e\n\nfn main(root: Root) ! {Write, Declassify} {\n    let c = root.console()\n    \
+         let k = root.secret(\"API_KEY\")\n    let d = root.declassify()\n    c.println(k.expose(d))\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        cwd.join("r.delulu"),
+        "module r\n\nfn main(root: Root) ! {Read, Write} {\n    let c = root.console()\n    let fr = root.fs_read(\"./data\")\n    \
+         match fr.read_text(\"in.txt\") {\n        Ok(v) => c.println(v)\n        Err(e) => c.println(\"no\")\n    }\n}\n",
+    )
+    .unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_KEY", "s3cr3t-value"]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let owner = extract_owner_code(&format!("{}{}", stdout(&o), stderr(&o))).expect("owner code");
+    for rule in ["fs_read:*", "fs_write:*"] {
+        let o = delulu_in(&cwd, &state, &["guard", "policy", "set", rule, "guarded", "--owner", &owner]);
+        assert!(o.status.success(), "policy set {rule}: {}", stderr(&o));
+    }
+    let token_for = |args: &[&str]| -> String {
+        let mut a = vec!["grants", "delegate"];
+        a.extend_from_slice(args);
+        a.extend_from_slice(&["--multi", "--owner", &owner, "--json"]);
+        let o = delulu_in(&cwd, &state, &a);
+        assert!(o.status.success(), "delegate: {}", stderr(&o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+        v["token"].as_str().unwrap().to_string()
+    };
+    let traced = |file: &str, token: &str, out: &str, engine: &str| -> Vec<serde_json::Value> {
+        let o = delulu_in(
+            &cwd,
+            &state,
+            &["run", file, "--lease", token, "--no-prompt", "--engine", engine, "--trace-effects", "--trace-out", out],
+        );
+        assert_eq!(o.status.code(), Some(1), "{file} ({engine}) is refused: {}\n{}", stdout(&o), stderr(&o));
+        assert!(stderr(&o).contains("DL1410"), "{file} ({engine}): {}", stderr(&o));
+        trace_records(&cwd.join(out))
+    };
+
+    // A guarded write: the custody gate refuses it.
+    let t = traced("w.delulu", &token_for(&["--effects", "Write", "--fs-write", "./out"]), "w.jsonl", "interp");
+    assert_eq!(t.len(), 2, "the dispatch, then its refusal: {t:#?}");
+    assert_eq!((t[0]["op"].as_str(), t[0]["effect"].as_str()), (Some("write_text"), Some("Write")), "{t:#?}");
+    assert_eq!((t[1]["op"].as_str(), t[1]["effect"].as_str()), (Some("write_text.refused"), Some("Write")), "{t:#?}");
+    assert_eq!(t[1]["cap_kind"], "FsWrite", "{t:#?}");
+    assert!(t[1]["detail"].as_str().is_some_and(|d| d.starts_with("DL1410: guard:")), "the code and its words: {t:#?}");
+    assert_eq!(t[1]["span"], t[0]["span"], "at the same call: {t:#?}");
+    assert!(!cwd.join("out/x.txt").exists(), "and nothing was written");
+
+    // A guarded `expose`: the broker's refusal, and a secret involved — the code alone.
+    let t = traced("e.delulu", &token_for(&["--effects", "Write,Declassify", "--secret", "API_KEY", "--declassify", "API_KEY"]), "e.jsonl", "interp");
+    assert_eq!(t.len(), 2, "{t:#?}");
+    assert_eq!((t[0]["op"].as_str(), t[0]["effect"].as_str()), (Some("expose"), Some("Declassify")), "{t:#?}");
+    assert_eq!((t[1]["op"].as_str(), t[1]["effect"].as_str()), (Some("expose.refused"), Some("Declassify")), "{t:#?}");
+    assert_eq!(t[1]["detail"], "DL1410", "a secret's refusal is its code alone, as its dispatch is opaque: {t:#?}");
+
+    // A guarded read, under both engines: the same two records, byte for byte.
+    let token = token_for(&["--effects", "Read,Write", "--fs-read", "./data"]);
+    let interp = traced("r.delulu", &token, "ri.jsonl", "interp");
+    let wasm = traced("r.delulu", &token, "rw.jsonl", "wasm");
+    assert_eq!(interp.len(), 2, "{interp:#?}");
+    assert_eq!(interp[1]["op"], "read_text.refused", "{interp:#?}");
+    assert!(interp[1]["detail"].as_str().is_some_and(|d| d.starts_with("DL1410: guard:")), "{interp:#?}");
+    assert_eq!(interp, wasm, "the two engines' traces are identical");
+
+    let _ = delulu_in(&cwd, &state, &["broker", "stop"]);
+    let _ = std::fs::remove_dir_all(&base);
+}

@@ -1298,7 +1298,7 @@ impl Interp {
         for a in args {
             argvals.push(self.eval_expr(a, env)?);
         }
-        self.trace_dispatch(&recvv, name, &argvals, span);
+        let dispatched = self.trace_dispatch(&recvv, name, &argvals, span);
         // Custody gate (Stage 5 phase 5f): authorize the effectful op through the trait BEFORE
         // performing it. Embedded custody always allows (the in-process `prim` scope check remains the
         // enforcement — criterion 11); daemon custody round-trips synchronous ops to the broker and
@@ -1320,6 +1320,11 @@ impl Interp {
                     let device = arg.as_deref().unwrap_or("<device>");
                     self.trace_actuate_refusal(device, "command.revoked", &d.message, span);
                     return Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(d.message)])));
+                }
+                // RW 4.62: the trace recorded this operation at its dispatch; the custody refused it, and
+                // the trace says so — never a dispatched operation with nothing after it.
+                if let Some(t) = &dispatched {
+                    self.trace_refusal(t, &name.name, d.code, &d.message, span);
                 }
                 return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
             }
@@ -1474,6 +1479,12 @@ impl Interp {
             Value::Map(m) => prim::call_map_method(m, &name.name, &argvals, span),
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
+        // RW 4.62: an operation the trace recorded at its dispatch and that then FAULTED — a daemon's refusal of
+        // `expose` or `verify`, the effect's own refusal (a path outside the capability, a host outside the
+        // allowlist) — is followed by its refusal record, as a custody denial is above.
+        if let (Some(t), Err(f)) = (&dispatched, &result) {
+            self.trace_refusal(t, &name.name, f.code, &f.message, span);
+        }
         // RW 4.46: the custody allowed this fetch's host and its chain recorded `use allow`; what the egress
         // client then refused is said to it, as an envelope's refusal is (`call_actuator`).
         if let Some(url) = fetch_allowed {
@@ -1494,15 +1505,17 @@ impl Interp {
     /// (receiver kind, method) pair is effectful. Secret redaction: if the receiver or any
     /// argument is a `Secret`, `detail` is always `trace::OPAQUE` — the raw value never reaches
     /// the trace, regardless of what a human-useful detail would otherwise show.
-    fn trace_dispatch(&self, recvv: &Value, name: &Ident, argvals: &[Value], span: delulu_diag::Span) {
-        let Some(sink) = &self.trace else { return };
+    /// Record an effectful operation at its DISPATCH (spec §6.1) — and say what was recorded, so a refusal
+    /// that follows can be recorded after it ([`Self::trace_refusal`], RW 4.62). `None`: nothing was.
+    fn trace_dispatch(&self, recvv: &Value, name: &Ident, argvals: &[Value], span: delulu_diag::Span) -> Option<Dispatched> {
+        let sink = self.trace.as_ref()?;
         let cap_kind = match recvv {
             Value::Cap(c) => Some(c.kind.name()),
             Value::Secret(_) => Some("Secret"),
             _ => None,
         };
-        let Some(kind) = cap_kind else { return };
-        let Some(effect) = trace::effect_for(kind, &name.name) else { return };
+        let kind = cap_kind?;
+        let effect = trace::effect_for(kind, &name.name)?;
         let involves_secret =
             matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
         let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(recvv, kind, &name.name, argvals) };
@@ -1527,6 +1540,28 @@ impl Interp {
             span: Some((span.file, span.start, span.end)),
             resolved_path,
             scope_root,
+            ..self.trace_attrib_record()
+        });
+        Some(Dispatched { effect, cap_kind: kind, involves_secret })
+    }
+
+    /// RW 4.62: the record that follows a dispatched operation that was REFUSED — by the custody (a revoked
+    /// lease, a guarded or sealed use), by the broker (`expose`, `verify`), or by the effect itself. The
+    /// dispatch record says the program ATTEMPTED it (E-Refuse); this one says it did not happen, and why:
+    /// `op` is `<method>.refused`, the effect the dispatch carried (so the trace stays inside the row), and
+    /// `detail` the code and its words — the code alone where a secret was involved (redaction outranks
+    /// explanation, as at the dispatch). An actuator's refusals keep their own records (`command.revoked`,
+    /// `command.refused`): those are values the program is told, not faults.
+    fn trace_refusal(&self, d: &Dispatched, method: &str, code: &str, message: &str, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        let detail = if d.involves_secret { code.to_string() } else { format!("{code}: {message}") };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: d.effect.to_string(),
+            op: format!("{method}.refused"),
+            cap_kind: d.cap_kind.to_string(),
+            detail: Some(detail),
+            span: Some((span.file, span.start, span.end)),
             ..self.trace_attrib_record()
         });
     }
@@ -2304,6 +2339,13 @@ impl Interp {
         };
         Ok(Value::Bool(b))
     }
+}
+
+/// What [`Interp::trace_dispatch`] recorded for one operation (RW 4.62): enough to record its refusal after it.
+struct Dispatched {
+    effect: &'static str,
+    cap_kind: &'static str,
+    involves_secret: bool,
 }
 
 /// A human-useful summary of the operation's primary argument for the trace `detail` field

@@ -4,6 +4,11 @@
 //! and `Root` capability-minting) are never traced — see `effect_for` below, the single mapping
 //! table that decides which (receiver kind, method) pairs are effectful.
 //!
+//! A record is a DISPATCH — the program attempted the operation (E-Refuse emits the label). When the
+//! operation is then refused — by the custody, by the broker, or by the effect itself — the next record is
+//! its refusal (RW 4.62): `op` `<method>.refused`, the dispatch's effect (so the trace stays inside the
+//! row), `detail` the code and its words, or the code alone where a secret was involved.
+//!
 //! Redaction (spec §6.1): any traced operation whose receiver or argument is a `Secret` value
 //! records `detail = Some(OPAQUE)` — never the secret's contents, never a value derived from
 //! `expose`. That decision is made at the call site in `interp.rs` (it is the only place that

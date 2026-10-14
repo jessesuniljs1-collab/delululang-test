@@ -427,6 +427,11 @@ is not there, so you get an ordinary `Err` and a plausible-looking "not found". 
 `examples/guide/05_capabilities.delulu` had it wrong until 2026-09-18 — the CI gate now asserts that
 the guide's read *succeeds*, not merely that it runs. Under `--trace-effects` a filesystem record
 also carries `resolved_path` and `scope_root`, so the trace shows where the path actually pointed.
+A trace record is a DISPATCH — the program attempted the operation. When it is then refused (the
+custody: a revoked lease, a guarded or sealed use; the broker's `expose`/`verify`; or the effect itself,
+a path outside its capability), the next record says so: `op` is `<method>.refused`, with the same
+`effect`, and `detail` is the code and its words (the code alone where a secret was involved). Read a
+dispatch with no `.refused` after it as performed.
 
 ## [agents.tests] Running tests
 
