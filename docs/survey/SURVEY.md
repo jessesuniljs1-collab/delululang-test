@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 307 |
-| Rust lines | 168395 |
-| Rust files outside `src/` (test/bench targets) | 139 |
+| Rust files | 308 |
+| Rust lines | 168546 |
+| Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 253 |
 | Markdown lines | 75210 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1505 / 14310 |
+| Nodes / edges in this map | 1506 / 14331 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -382,7 +382,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 7059 lines
+- **Modules:** 8 files, 7069 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -391,7 +391,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/codegen.rs` | 2506 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 878 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 138 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 1541 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/host.rs` | 1551 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 838 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 664 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 

@@ -575,10 +575,6 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
                 return;
             }
-            // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5).
-            if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
-                return;
-            }
             let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
                 caller.data_mut().refused = Some("guest exports no `memory`".into());
                 return;
@@ -607,8 +603,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 String::from_utf8_lossy(&data[header_end..body_end]).to_string()
             };
             // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
-            // `trace_detail`) before performing the effect.
+            // `trace_detail`) at DISPATCH — before the custody decides, as the interpreter records it (RW 4.64:
+            // reading the guest's string performs nothing, so the order costs nothing and the traces agree).
             caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
+            // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
+            // followed in the trace by its refusal (D-V2-129).
+            if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
+                caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
+                return;
+            }
             let out = &mut caller.data_mut().output;
             out.push_str(&s);
             out.push('\n');
@@ -643,11 +646,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
                 return 0;
             }
-            // Custody gate (Stage 5 phase 5f, epoch class). Recorded refusal, never an Err (trap 5).
+            // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
+            // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
+            caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
             if !caller.data_mut().custody_allows(CustodyOp::Clock, None) {
+                caller.data_mut().push_refusal_trace("Clock", "now_ms", "Clock", file, start, end);
                 return 0;
             }
-            caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
             // The clock read happens host-side: fixed for deterministic replay, else the wall clock —
             // the same source the interpreter uses, so a fixed clock gives byte-identical output.
             caller.data().fixed_clock_ms.unwrap_or_else(wall_clock_ms)
@@ -682,13 +687,16 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
                 return 0;
             }
-            // Custody gate (Stage 5 phase 5f, epoch class). Recorded refusal, never an Err (trap 5).
+            // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
+            // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
+            caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
             if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
+                caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
                 return 0;
             }
-            caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
             if hi <= lo {
                 caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
+                caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
                 return lo;
             }
             // Advance the PRNG one step (host-side), then map exactly as the interpreter does:
@@ -758,14 +766,16 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
                 return 0;
             };
-            if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
-                return 0;
-            }
             // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
-            // Like the interpreter, it also names where the path pointed and the scope (RW 6.13).
+            // Like the interpreter, it also names where the path pointed and the scope (RW 6.13). At DISPATCH:
+            // a hostile spelling is refused after it, as the interpreter refuses it (RW 4.64).
             let pointed = normalize(&scope.join(&rel));
             caller.data_mut().push_fs_read_trace(&rel, &pointed, &scope, file, start, end);
+            if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
+                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
+                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                return 0;
+            }
             // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
             // The symlink half of that sentence was a comment and not a check until C84 — the
             // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.
