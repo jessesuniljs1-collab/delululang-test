@@ -284,3 +284,41 @@ fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
     assert!(accepter.join().unwrap(), "the way out sends the request: {}{}", stdout(&o), stderr(&o));
     let _ = std::fs::remove_dir_all(&base);
 }
+
+
+/// MAP-HANDLE-1 (routine run 24): under the daemon a run's secret is a broker HANDLE, with no bytes in the program's process —
+/// and `Secret.map`'s function runs in that process. It was handed the empty string, and `s.map(f).expose(d)` printed `f("")`
+/// (here `!`) where embedded custody prints `f(bytes)` (`hunter2!`): a fabricated value, then exposed with no broker gate and no
+/// record. Now refused in words (DL0904) before the function runs — and the way out it names is taken: `expose` under
+/// `Declassify`, then the transform, prints the real value through the broker.
+#[test]
+fn a_broker_held_secret_is_never_mapped_over_bytes_it_does_not_hold() {
+    let base = std::env::temp_dir().join(format!("delulu_bmap_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let head = "module m\n\nfn main(root: Root) ! {Declassify, Write} {\n    let out = root.console()\n    let s = root.secret(\"API_KEY\")\n    let d = root.declassify()\n";
+    std::fs::write(cwd.join("mapped.delulu"), format!("{head}    let m = s.map(fn(x: Str) -> Str {{ x + \"!\" }})\n    out.println(m.expose(d))\n}}\n")).unwrap();
+    std::fs::write(cwd.join("exposed.delulu"), format!("{head}    out.println(s.expose(d) + \"!\")\n}}\n")).unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_KEY", "hunter2"]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    // The control: embedded custody maps over the real bytes.
+    let o = delulu_in(&cwd, &state, &["run", "mapped.delulu", "--grant", "console", "--grant", "declassify", "--grant", "secret:API_KEY=hunter2", "--no-prompt"]);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "hunter2!\n"), "{}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let daemon = |file: &str| {
+        delulu_in(&cwd, &state, &["run", file, "--broker", "daemon", "--grant", "console", "--grant", "declassify", "--grant", "secret:API_KEY=broker", "--no-prompt"])
+    };
+    let o = daemon("mapped.delulu");
+    assert_eq!(o.status.code(), Some(1), "refused, never a fabricated value: stdout {:?}\n{}", stdout(&o), stderr(&o));
+    assert!(stdout(&o).is_empty(), "nothing printed — `!` was f(\"\"): {:?}", stdout(&o));
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("broker-held secret"), "{}", stderr(&o));
+    // The way out it names: expose under Declassify through the broker, then transform.
+    let o = daemon("exposed.delulu");
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "hunter2!\n"), "{}", stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}

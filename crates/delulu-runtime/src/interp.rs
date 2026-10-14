@@ -1278,6 +1278,21 @@ impl Interp {
                     return Ok(v);
                 }
                 Value::Secret(s) => {
+                    // MAP-HANDLE-1 (routine run 24): a broker-held secret (a daemon or leased run's handle) has no bytes in
+                    // this process (invariant 23), and the closure runs here — so it was handed the EMPTY string and its
+                    // result became a local secret: `s.map(f).expose(d)` printed f("") where embedded custody printed f(bytes),
+                    // a fabricated value (VERIFY-FABRICATED-1's shape), then exposed with no broker gate or record. Refused in
+                    // words instead, before the closure runs.
+                    if s.handle_name().is_some() {
+                        return Err(Escape::Fault(Fault::at(
+                            "DL0904",
+                            "`Secret.map` of a broker-held secret: under the broker daemon its bytes are the broker's and never \
+                             enter this process before `expose`, and the function would run here on none of them — expose it \
+                             under `Declassify` and transform the result, or run with embedded custody (a run without \
+                             `--broker daemon` or `--lease`, the secret granted with `--grant secret:NAME=VALUE`)",
+                            span,
+                        )));
+                    }
                     let f = self.eval_expr(&args[0], env)?;
                     let Value::Closure(clo) = f else {
                         return Err(Escape::Fault(Fault::at("DL0907", "Secret.map expects a function", span)));
