@@ -5675,3 +5675,8 @@ moved every crate's hash — run 6's trap): the incremental caches and the test 
 deleted, 13 GB free, and the targets re-run green. `b3e17fc`.
 **Read on the runners at `b3e17fc`** (`delulu-wasm`'s library and `refusal_trace_parity`): `delulu-wasm`'s library and `refusal_trace_parity` on Windows `38595321024` (86 + 2 passed), macOS `38595325757` (91 + 2), arm64 `38595333185` (91 + 2) — 0 failed, both witnesses named, no compiler warning, no orphan `delulu`
 **The full suite alone at `b3e17fc`:** 2,270 passed and 4 failed, 16 ignored (163 binaries) — the four were `doctor_cli` (three) and the Survey's `freshness`, a stale map: `scripts/suite.sh` was edited (this run's loop engineering) after the map was built and before the suite started, which `TREE-MOVED` cannot see; the map rebuilt, both targets green (11 and 5 passed). `suite.sh` now refuses to start on a stale map, witnessed refusing.
+
+## 2026-10-14 — routine run 23 (last): `87c0e2f`'s push run read green
+
+CI `38598988825` at `87c0e2f` — success on every job (`miri-slow` and `heavy-gates` skipped on a push): `master` green at the run's end, with P9-04 step (a), RW 4.62, RW 4.64, D-V2-130 and rustls 0.23.46 on it. `actors_pingpong`: arm64 MEASURED 2.93x (control 4.12x); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work); macOS NOT MEASURED (3 hardware threads). The run's records end here; its postscript commit's own push run is the next run's
+to read.

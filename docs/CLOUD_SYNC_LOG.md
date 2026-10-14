@@ -85,9 +85,10 @@ running summary.
   took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **Two entrenched edits:** `DELULU_CORE.md` v0.3
   (D-V2-49, run 1) and `tests/conformance/witnesses.toml` — the anchor `ref.prim.http.get_with` (D-V2-128, run 23), each in
   `ENTRENCHED_CHANGE_RECORD.md`. **No `DL` code was added. No `.md` file was deleted.**
-- **Size, at run 19's start** (`git diff --name-status cfbfbdc..e95acf1`): 207 commits; 139 files — 35 added, 104
-  modified, **0 deleted, 0 renamed**; +31,482 / −3,538 lines. Commits by `Claude` (92, runs 1–9) and by
-  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
+- **Size, at run 23's last records** (`git diff --name-status cfbfbdc..87c0e2f`): 259 commits; 163 files — 41 added, 122
+  modified, **0 deleted, 0 renamed**; +41,048 / −4,326 lines. Commits by `Claude` (92, runs 1–9) and by
+  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (167, from run 10). (At run 19's start: 207
+  commits, 139 files.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
 **P9** (P9-04's steps (b)–(e) — (b) and (c) as one slice, a secret in a header only with its audience — and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
@@ -2887,3 +2888,20 @@ directory, or have the laptop session read §11.
   header position only with its audience in the grant; (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a
   boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-130, option (c). **The closing entry is current; from 2026-10-16 a
   run only refreshes it and stops.**
+
+### 2026-10-14 — routine run 23 (last): `87c0e2f`'s push run read green; the closing entry's size brought up to date
+- Session: `https://claude.ai/code/session_01X1KXZB4JUGcKCDjQqrCkgQ`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (and the harness branch `claude/zealous-keller-r6to2u`, the same commit)   Pull request: none   Merged: n/a
+- Base: `87c0e2f`
+- Commits: this entry's commit — the record of the read
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry's size), `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check`
+  all checks passed
+- Verified: `87c0e2f`'s CI `38598988825` — success on every job (`miri-slow` and `heavy-gates` skipped on a push): `master` green at the run's end, with P9-04 step (a), RW 4.62, RW 4.64, D-V2-130 and rustls 0.23.46 on it. `actors_pingpong`: arm64 MEASURED 2.93x (control 4.12x); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work); macOS NOT MEASURED (3 hardware threads).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read THIS commit's push run (records only); (2) **P9-04 steps (b) and (c), as ONE slice** — a
+  `Secret[Str]` in a header position only with its audience in the grant (`V2_P9_DESIGN.md`); (3) RW 4.63, RW 4.53's rest, RW
+  4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-130 (D-V2-128 with the
+  period's second entrenched edit), option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
