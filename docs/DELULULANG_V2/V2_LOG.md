@@ -5680,3 +5680,37 @@ deleted, 13 GB free, and the targets re-run green. `b3e17fc`.
 
 CI `38598988825` at `87c0e2f` — success on every job (`miri-slow` and `heavy-gates` skipped on a push): `master` green at the run's end, with P9-04 step (a), RW 4.62, RW 4.64, D-V2-130 and rustls 0.23.46 on it. `actors_pingpong`: arm64 MEASURED 2.93x (control 4.12x); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work); macOS NOT MEASURED (3 hardware threads). The run's records end here; its postscript commit's own push run is the next run's
 to read.
+## 2026-10-14 — routine run 24: CI read green; P9-04 steps (b) and (c) — a secret in a request, only to its grant's audience (D-V2-131)
+
+**Start.** `date -u` 19:11 (budget to about 22:10). `master` at `48ef512`, the harness branch `claude/zealous-carson-tidpo3` the
+same commit. Survey `ok` (1,506 nodes, 14,340 edges) and `doctor --check` all checks passed. Every `origin/claude/*` branch read
+after `git fetch --unshallow`: two hold a commit `master` lacks (`7d6a22b`, `d3f0d52`), both superseded since run 10 — nothing
+stranded. `gh` is installed with its `GH_TOKEN` refused ("invalid"), as run 10 found; CI read through the REST API (`curl`).
+
+**CI read.** `48ef512`'s push run (CI `38601952201`, run 23's last records): success on every job (`miri-slow`, `heavy-gates`
+skipped on a push). `actors_pingpong`: arm64 MEASURED 2.96x (control 4.12x); Ubuntu and Windows NOT MEASURED (never 3x perfectly
+parallel work); macOS NOT MEASURED (3 hardware threads). Sandbox properties: Linux x86-64 and arm64 — egress, filesystem (reads
+confined to the system paths), host loss and the privilege floor established; Windows — filesystem writes only its own
+container folder, reads none of the operator's files; macOS — filesystem confinement absent (reads not confined), as recorded
+since run 12. No nightly since run 23's reads (`38534326546`, success).
+
+**P9-04 steps (b) and (c), as one slice (D-V2-131).** Witnessed absent first on `48ef512`'s binary: `get_with_secret` refused
+DL0405; `--grant secret:API_TOKEN@127.0.0.1:9=…` read as a secret NAMED `API_TOKEN@127.0.0.1:9` (the program's
+`root.secret("API_TOKEN")` faulted DL0703). Built: `Cap[Http].get_with_secret(url, headers, header, secret: Secret[Str])` (`Net`,
+no `Declassify`); the grant line `secret:NAME@HOST[:PORT][,…]=VALUE`, each member parsed by the egress client's own URL parser; the
+egress client's `request_with_secret` — the secret's header held to every header rule over the whole set, the URL's origin judged
+against the audience before anything is resolved (reason `audience`, the program told `Refused`), and the secret carried on a hop
+only where the program's headers are AND the hop's origin is in the audience (two walls); a secret granted with no audience is
+sent nowhere; each hop records the secret's NAME (`secret` — the `run-report` schema's new optional hop field), never its bytes;
+`Secret.map` and the actor boundary carry the audience; under the daemon or a lease a secret is a broker handle, refused DL0904
+in words that name the way out (taken by the witness) with NO custody op asked (HTTP-SCHEME-1's rule — the chain holds no `use`
+for a request never made); `grants diff` between grant files reports `secret_reach_expansion`. `PRIM_TABLE_VERSION` 7; the anchor
+`ref.prim.http.get_with_secret` (four witnesses — the period's third entrenched edit, recorded); the reference regenerated (355 of
+355 anchors). Also checked by hand: a `--sandbox` guest faults DL1401 at `root.secret` (no secret crosses the channel — nothing is
+sent from a guest; unchanged), and `--engine wasm` refuses `http` itself DL1201 (unchanged, before and after).
+**The Survey was asked after the first edits, not before** — `impact mod:crates/delulu-runtime/src/egress.rs` (155 nodes) and
+`query doc:docs/design/STAGE1_SPECIFICATION.md` (not entrenched) — recorded as a lapse of the routine's order, not hidden.
+**Falsified:** mutants M380–M400 (`scripts/mutants.py`) red but one: the origin judged against the audience before resolution removed (M380), the empty audience let through (M381), the per-hop origin rule ignored for the secret (M382), both walls removed at once (M383b), the hop's `secret` name dropped (M384), `audience` answered as something other than `Refused` (M385), a path let into an audience (M386), the secret's header unchecked (M387), the grant line split at its last `@` (M388), the audience not stored (M389), `Secret.map` dropping it (M390), the mint dropping it (M391), a broker handle sent (M392), a custody op asked for one (M393), the actor boundary dropping a secret's (M394) or a root's (M395), `grants diff` ignoring it (M396) or calling it `scope_expansion` (M397), the checker taking a `Str` for the secret (M398), the schema's hop `secret` mistyped (M399), `PinnedRequest`'s `Debug` printing values (M400) — and **M383, the per-hop audience check alone, survives on the first wall by design** (D-V2-131 item 3); the control green
+**Clippy** clean (workspace, all targets, `-D warnings`); **the other OSes linted from Linux** — macOS (arm64 and x86-64), Windows, arm64 Linux and musl linted from Linux after the last code edit (`scripts/check-other-os.sh`, clippy `-D warnings`, exit 0).
+**Read on the runners at `91a1eb7`:** `egress_cli`, `broker_cli`, `within_cli` on Windows `38626954263` (25 passed), macOS `38626958695` (26), arm64 `38626962999` (26); `delulu-runtime`'s library on Windows `38626966826` (274 passed, 1 ignored), macOS `38626971957` (275, 1), arm64 `38626976826` (275, 1); `delulu-check`'s `a_secret_rides…` on Windows `38626992133`, macOS `38626999206`, arm64 `38627003325` (1 each) — 0 failed, every new test named, no compiler warning, no orphan `delulu`
+**The full suite alone at `91a1eb7`:** 2,283 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left

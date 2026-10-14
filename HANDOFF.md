@@ -118,8 +118,13 @@ the assistant's memory — which now also travels file by file in
   is the period's second entrenched edit (`ENTRENCHED_CHANGE_RECORD.md`). The same run: RW 4.62 and RW 4.64 — a refused
   operation is in the trace after its dispatch, identically on both engines (D-V2-129); the DIR verify timing witness bounded
   against a control timed on the same machine (D-V2-130, after a runner-measuring red); rustls 0.23.46 (RUSTSEC-2026-0346–0349).
-  **Next: P9-04 steps (b) and (c) together** (a `Secret[Str]` in a header position only with its audience — alone, (b) would be
-  a declassification without `Declassify`), then (d)–(e), then P9-05.
+  **Routine run 24 (2026-10-14): P9-04 steps (b) and (c), as one slice** — `Cap[Http].get_with_secret(url, headers, header,
+  secret)` sends a `Secret[Str]` as one header's value (no `Declassify`: the program never reads it) only to the AUDIENCE its
+  grant names, `secret:NAME@HOST[:PORT][,…]=VALUE`: refused before anything is resolved outside it, and judged again on every
+  hop that would carry it; a secret granted with no audience is sent nowhere; each hop records the secret's name, never its
+  bytes; `grants diff` reports `secret_reach_expansion` between grant files (D-V2-131, `PRIM_TABLE_VERSION` 7, the period's
+  third entrenched edit). A daemon or leased run refuses (DL0904) until the broker holds the audience.
+  **Next: P9-04 step (d)** (the broker's audience dimension), then (e), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1373,6 +1378,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   form, so a mutant comparing the WRITTEN name to the stored lower-case one refused it just the same and survived. With
   `x-api-key` then `X-Api-Key` it is red. For every check that compares through a normalization (case, a path's resolution, a
   host's spelling), put the NON-canonical spelling where the comparison reads it, and the canonical one where it stores.
+
+- **A check built as two walls is falsified as two** (routine run 24, M383/M383b): the egress client judges a secret's audience
+  before anything is resolved AND on every hop that would carry it; the second is implied by the first today and kept so that
+  loosening either rule alone cannot send a secret where its grant never pointed. A mutant removing the per-hop check survives
+  on the first wall — by design, and recorded so; one removing both is red. `scripts/mutants.py` takes several edits in one
+  mutant for this. (Run 13's M123 lesson, made a tool; run 18's M222 the limit: a wall no double mutant reaches is dead code.)
 
 ### 11.6 If you are an assistant with memory, keep it current
 

@@ -3117,6 +3117,79 @@ verify that re-checks ten times) is red, the control green; with every CPU busy 
 enumerated:** it was the repository's only speed claim asserted in absolute time — the four other absolute time assertions
 (`guest.rs`, `budget_cli`, `sandbox_devices_cli`, `microvm_cli`) are 8–60 s ceilings on something that must END, not speeds.
 
+## D-V2-131 — P9-04 steps (b) and (c), as one slice: a secret leaves in a request only as one header's value, through `Cap[Http].get_with_secret(url, headers, header, secret)`, and only to the AUDIENCE its grant names (`secret:NAME@HOST[:PORT][,…]=VALUE`) — judged before anything is resolved and again on every hop that would carry it — TAKEN (head chef, 2026-10-14, under the owner's delegation)
+
+**Context.** P9-04 step (a) (D-V2-128) gave `http` a request with headers; its build order put (b), a `Secret[Str]` in a header
+position, and (c), the audience in the grant and the refusal outside it, next — **as one slice**, because (b) alone would send a
+secret's bytes to every host a program's `net` grant reaches: a declassification without `Declassify`. **Witnessed absent first**
+on the binary at `48ef512`: a program calling `h.get_with_secret(url, hs, "Authorization", tok)` was refused DL0405 (no such
+method), and the grant `--grant secret:API_TOKEN@127.0.0.1:9=…` was read as a secret NAMED `API_TOKEN@127.0.0.1:9` — the
+program's `root.secret("API_TOKEN")` faulted DL0703 (the audience form did not exist; an `@` was part of the name).
+
+**Decision.**
+1. **The surface.** `Cap[Http].get_with_secret(url: Str, headers: Map[Str, Str], header: Str, secret: Secret[Str]) ->
+   Result[Str, NetErr] ! {Net}` — arity 4, a `PRIM_TABLE` row (84), `PRIM_TABLE_VERSION` 6 → 7 (additive, bumped by the
+   constant's own rule), the anchor `ref.prim.http.get_with_secret` with the table's two witnesses and the egress client's two
+   (the period's third entrenched edit, `ENTRENCHED_CHANGE_RECORD.md`). Its effect is `Net`, never `Declassify`: the program
+   never reads the bytes — the host resolves them at send time. The secret stands in exactly one position; the header map stays
+   `Map[Str, Str]` (a `Secret[Str]` cannot sit in it, DL0401), and a secret is not a header's NAME (DL0602) — so a secret can
+   ride in no header where its audience would not be judged. The URL stays argument one, as `get`'s and `get_with`'s.
+2. **The grant line.** `secret:NAME@HOST[:PORT][,HOST[:PORT]…]=VALUE` (and `=env:VAR`). The line is split at its FIRST `=`
+   (the value may hold `=` and `@`) and the head at its FIRST `@` (so a name holds no `@`; a member with a second `@` is
+   refused by its own parse as userinfo, never read as another host). Each member is parsed by the egress client's own URL
+   parser (`egress::parse_audience` hands `https://MEMBER` to `parse_target`), so an audience and a request are judged in ONE
+   spelling: lower-case LDH or a canonical address literal, the port 443 unless named, every rewritable spelling refused rather
+   than normalized; a path, query or fragment is refused (a path in an audience waits for P9-05's path scopes — refused, not
+   ignored), a wildcard is refused (an audience names hosts exactly), duplicates are folded. **No audience is the bottom:** a
+   secret granted without `@` is sent nowhere (refused `audience`), so every existing grant keeps exactly its old meaning for
+   `expose` and `verify` and gains no reach. A later grant of the same name replaces the earlier, audience and all — as it
+   replaces the value. **Changed meaning, recorded:** a secret NAME holding `@` was accepted before (never documented, never
+   tested); it now reads as NAME@AUDIENCE — a program asking for the old name faults DL0703 (closed, in words).
+3. **Where the bytes may go — two walls.** The egress client (`request_with_secret`) holds the secret's header to every rule a
+   program's header is (`check_headers`, over the whole set: not `Host`, no second name differing only in case — both ways
+   round — no byte that would begin another header, and a reason that never quotes the bytes); then the URL's origin (host and
+   port, parsed) must be a member of the audience, or the request is refused BEFORE anything is resolved — reason `audience`,
+   the program told the opaque `Refused`. On each hop the secret rides only where the program's headers do (the origin it
+   named — a redirect to another host or port drops it, D-V2-128's rule) AND that hop's origin is in the audience. The second
+   condition is implied by the first wall today and is kept as a second wall, so that loosening either rule alone cannot send a
+   secret where its grant never pointed: mutant M383 (the per-hop audience check removed) survives on the first wall by design;
+   M383b (both removed) is red.
+4. **What is recorded.** Each hop that carried the secret names it — `secret: "API_TOKEN"` (the grant name) beside the header
+   NAMES — in the egress record, the run report (the `run-report` schema's optional hop `secret`) and nowhere its bytes; the
+   trace's detail for the call is `«opaque»` (an argument is a secret — the existing redaction rule). `SecretHeader`'s own
+   `Debug` omits the bytes, and `PinnedRequest`'s derived `Debug` — which would have printed every header's value, a secret's
+   included, had anything ever formatted it (nothing did) — is replaced by one that prints the names (mutant M400 red).
+   **Honest limit:** the bytes are copied into the request's buffers (as `expose` copies them) and those copies are not zeroed;
+   `SecretVal`'s zeroization bounds exposure in this process, it does not end it (its own comment, P17-F).
+5. **Where the audience lives.** `Grants.secret_audiences` and `RootVal.secret_audiences` (by name); a minted `SecretVal`
+   carries `SecretAudience { name, to }`; `Secret.map` carries it to its result (a value derived from the bytes goes where they
+   may go, and nowhere else); an actor boundary carries both the root's and a secret's (`RootMsg.secret_audiences`,
+   `MsgValue::SecretLocal(bytes, audience)` — owned, so the message stays `Send`).
+6. **Where it is not yet.** **The daemon** (`--broker daemon`, `--lease`): a run's secret is a broker HANDLE, its bytes the
+   broker's, and the broker's lattice has no audience dimension — P9-04 step (d). `get_with_secret` of a handle is refused
+   DL0904 in words that name the way out that works (embedded custody, the secret granted with its audience — taken by the
+   witness), and **no custody op is asked for it** (HTTP-SCHEME-1's rule: a `use allow` for a request never made would be a
+   record of nothing — witnessed: the chain holds the run's `issue` and no `use`). A lease's grants carry no audience
+   (`grants_from_lease`). **A guest** holds no secret (DL1401 at `root.secret`, unchanged — nothing is sent from one).
+   **`--engine wasm`** has no `http` at all (DL1201, unchanged). **`authority`** still lists `secret:NAME=VALUE` for a
+   secret a program sends — the per-secret destinations are step (e).
+7. **`grants diff` between two grant files** decides a secret's REACH now: every origin NEW's audience names for a secret OLD
+   grants must be in OLD's — else `secret_reach_expansion` (the category reserved since D-V2-119), naming the origin; an
+   audience where OLD had none is reach (none is the bottom); a narrower or absent one adds nothing. Between two lease NODES
+   it waits for (d), with the broker's dimension.
+
+**Witnessed:** the egress client's four (`a_secret_goes_only_to_its_audience_on_the_origins_hops`,
+`a_secret_outside_its_audience_is_refused_before_anything_is_resolved` — another host, another port, a sub-domain, an address
+the name resolves to, no audience; nothing resolved, nothing sent — `a_secrets_header_is_held_to_every_header_rule`,
+`an_audience_is_spelled_as_the_request_is_compared`), the grant line's (`a_secrets_audience_is_parsed_from_its_grant_line_and_
+nothing_else_is`), the actor boundary's, the checker's (`a_secret_rides_only_in_get_with_secrets_secret_position`), and three
+at the command line — `egress_cli`'s `a_secret_is_sent_to_its_audience_and_nowhere_else` (over TLS on loopback, through
+`Secret.map`; the report schema-valid; the trace read; no byte of the secret in report, trace, stdout or stderr; another port
+and no audience connect nowhere; a guest sends nothing), `broker_cli`'s `a_broker_held_secret_is_not_sent_and_no_use_is_
+recorded`, `within_cli`'s `grants_diff_names_what_a_change_adds_and_nothing_it_does_not` (secret reach both ways round).
+
+**Falsified:** mutants M380–M400 (`scripts/mutants.py`) red but one: the origin judged against the audience before resolution removed (M380), the empty audience let through (M381), the per-hop origin rule ignored for the secret (M382), both walls removed at once (M383b), the hop's `secret` name dropped (M384), `audience` answered as something other than `Refused` (M385), a path let into an audience (M386), the secret's header unchecked (M387), the grant line split at its last `@` (M388), the audience not stored (M389), `Secret.map` dropping it (M390), the mint dropping it (M391), a broker handle sent (M392), a custody op asked for one (M393), the actor boundary dropping a secret's (M394) or a root's (M395), `grants diff` ignoring it (M396) or calling it `scope_expansion` (M397), the checker taking a `Str` for the secret (M398), the schema's hop `secret` mistyped (M399), `PinnedRequest`'s `Debug` printing values (M400) — and **M383, the per-hop audience check alone, survives on the first wall by design** (D-V2-131 item 3); the control green
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -101,7 +101,7 @@ skip branch, §11.2).
 - **P9-02** `grants diff` findings (study §4.9) reads P9-01's verdict between two authorities. **Built** (routine run 20):
   between two grant FILES (D-V2-119), as the note below predicted — P9-01's mint for each NEW line, the device lattice for an
   actuator's envelope, a compute envelope's own terms; and between two lease NODES (D-V2-120) — the lattice, each item asked as a
-  one-item authority carrying OLD's budget. `secret_reach_expansion` waits for P9-04. *The note, from P9-01's build:* between two GRANT SETS the lattice is too coarse for the same reason it was for
+  one-item authority carrying OLD's budget. `secret_reach_expansion` between grant files built with P9-04 (c) (D-V2-131); between nodes it waits for P9-04 (d). *The note, from P9-01's build:* between two GRANT SETS the lattice is too coarse for the same reason it was for
   P9-01 (no `console`, `net.special`, sensor, compute or plugin dimension), so the diff is most likely P9-01's verdict with NEW's
   lines as the requests and OLD as the boundary — each finding's category read from the dimension (absent in OLD: an effect
   expansion; present: a scope expansion; `net.special`: special-use reach; a device: device reach) — plus the device lattice
@@ -197,5 +197,16 @@ skip branch, §11.2).
   `get_with_secret(url, headers, name, secret)`), the host resolving the bytes at send time — embedded custody first; under
   the daemon the bytes are the broker's (item 4), so the host asks the broker at send time, naming the destination. A guest
   holds no secret today (`guest.rs`'s `CARRIED`), so (b) is L0 first.
+  **Steps (b) and (c) built** (routine run 24, `91a1eb7`, D-V2-131): `Cap[Http].get_with_secret(url, headers, header,
+  secret: Secret[Str])` — `Net`, no `Declassify`; the grant `secret:NAME@HOST[:PORT][,…]=VALUE`, each member parsed by the egress
+  client's own URL parser (no path — P9-05's; no wildcard; none is the bottom: sent nowhere); the URL's origin judged against the
+  audience before anything is resolved (reason `audience`), and again on every hop that would carry it, beside the origin rule
+  (two walls — M383 survives on the first by design, M383b red); each hop records the secret's NAME, never its bytes; `Secret.map`
+  and an actor boundary carry the audience; `grants diff` between grant files reports `secret_reach_expansion`. **Not yet:** a
+  daemon or leased run (a handle — refused DL0904 with no custody op asked; the broker's audience dimension is (d)), a guest (no
+  secret crosses the channel), `--engine wasm` (no `http`), `authority`'s per-secret destinations ((e)). **Next: (d)** — the
+  broker holds the audience beside the secret's name (a lease node's `secrets` dimension gains it, `⊑` per secret by inclusion of
+  origins), the host asks the broker for the bytes at send time naming the destination (an expose-class op judged against the
+  node's audience, recorded), `grants diff` between two nodes reports `secret_reach_expansion`; then (e).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
   broker's set inclusion alike; three places to change in step.

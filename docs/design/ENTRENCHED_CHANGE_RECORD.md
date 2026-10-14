@@ -259,3 +259,42 @@ every version-5 primitive still exists and means the same thing). `COVERED_FLOOR
 git checkout bee695f^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-128's code, or the release gate refuses the uncovered anchor.
+## 2026-10-14 — `tests/conformance/witnesses.toml`: the anchor `ref.prim.http.get_with_secret`
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml` — four `[[witness]]` rows for the new anchor `ref.prim.http.get_with_secret`, after `ref.prim.http.get_with`'s four, with a three-line comment. No existing row is touched. |
+| Entrenched by | `.github/CODEOWNERS:37` → `@PENDING-PUBLIC-project-lead` |
+| Campaign | V2 P9-04 steps (b) and (c), `REMAINING_WORK.md` 2.11; decision D-V2-131 |
+| Approved by | **The owner's delegation of 2026-09-28** (`docs/CLOUD_ROUTINE.md`, *The authority a run has*): *"any file or folder is allowed to modified or created or even deleted"* — the routine names the conformance witnesses among the entrenched files a run may edit, recorded here. Taken by the head chef in routine run 24, **for the owner's review** on his return. |
+
+**Why**
+
+The coverage law (invariant 42) gives every `PRIM_TABLE` row an anchor, and `release_requires_full_coverage` demands an
+accepting and a rejecting witness for each. P9-04 steps (b) and (c) add the row `http.get_with_secret`; without these rows the
+reference would carry an uncovered anchor (354 of 355) and the gate that requires 100% would refuse a release. The rows name the
+table's own two witnesses (`every_listed_primitive_resolves`, `every_listed_primitive_rejects_a_five_argument_call`) and the
+egress client's two — the secret sent on exactly the hops its audience and its origin allow, and refused before anything is
+resolved outside its audience.
+
+**Why this is not an RFC**
+
+A witness row maps an existing test to an anchor; it changes no rule, no diagnostic and no behaviour. The behaviour it covers —
+a new primitive and the grant form it reads — is the language change, taken as D-V2-131 under the same delegation
+(`PRIM_TABLE_VERSION` 6 → 7, additive: every version-6 primitive still exists and means the same thing). `COVERED_FLOOR` in
+`crates/delulu-conform/` is untouched.
+
+**Verified before the change**
+
+1. The four named tests exist and pass (`cargo test -p delulu-check --lib prim_table`; `cargo test -p delulu-runtime --lib
+   egress::`, 40 passed).
+2. `delulu-conform --reference` regenerated `docs/reference/` (355 of 355 anchors, 100.0%).
+
+**How to revert**
+
+```
+git checkout 91a1eb7^ -- tests/conformance/witnesses.toml
+```
+— together with D-V2-131's code, or the release gate refuses the uncovered anchor.

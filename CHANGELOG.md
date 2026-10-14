@@ -11,6 +11,24 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
+
+- **Added (P9-04 (b)/(c), D-V2-131): `Cap[Http].get_with_secret(url, headers, header, secret)`** sends a `Secret[Str]` as one
+  header's value — with no `Declassify`, because the program never reads the bytes — and only to the secret's
+  **audience**, a new form of the secret grant: `--grant secret:NAME@HOST[:PORT][,HOST[:PORT]…]=VALUE` (or `=env:VAR`).
+  The URL's host and port must be in the audience, or the request is refused before anything is resolved (the program is
+  told `Refused`; the operator `[egress: audience]` and `reason: "audience"` in the run report); a secret granted with no
+  `@` is sent nowhere. The secret's header is held to every header rule; a redirect to another host or port drops it with
+  the other headers; `Secret.map` keeps the audience; the report's hop names the secret it carried (`secret`), never its
+  bytes. Not yet under `--broker daemon` or `--lease` (refused DL0904, naming the way out — P9-04 (d)), in a `--sandbox`
+  guest (no secret crosses the channel), or under `--engine wasm` (no `http`). `PRIM_TABLE_VERSION` 7: a `.dpx` built
+  against 6 is refused DL1503 and rebuilt.
+- **Changed: a secret's name can no longer hold `@`.** In `secret:NAME@…=VALUE` everything after the first `@` is the
+  audience; a grant that relied on an `@` inside a name now names a different secret (the program's `root.secret` faults
+  DL0703, in words).
+- **Added: `delulu grants diff` reports `secret_reach_expansion`** when NEW lets a secret OLD grants be sent to a host or
+  port OLD's audience for it does not name (between two grant files; two lease nodes wait for P9-04 (d)).
+
 ## Unreleased — a refused operation says so in the trace; rustls 0.23.46, 2026-10-14
 
 - **Fixed (RW 4.62): `--trace-effects` listed an operation that was refused as if it had happened.** A trace record is

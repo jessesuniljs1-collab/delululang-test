@@ -251,3 +251,8 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   entrenched edit (the conformance anchor). Lesson (M351): a witness of a normalizing comparison spells the colliding pair both
   ways round. The same run: RW 4.62/4.64 (D-V2-129 — a refusal follows its dispatch in the trace, both engines alike), D-V2-130
   (a speed witness bounded against a control timed on the same machine), rustls 0.23.46 for RUSTSEC-2026-0346 to -0349.
+- **Routine run 24 (2026-10-14): P9-04 steps (b) and (c)** (D-V2-131): `Cap[Http].get_with_secret(url, headers, header, secret)`
+  — a secret in one header, no `Declassify`, sent only to its grant's audience (`secret:NAME@HOST[:PORT]=…`), judged before
+  resolution and on every hop; none is the bottom (sent nowhere); hop records name the secret, never its bytes; `grants diff`
+  `secret_reach_expansion`; a daemon/leased run refuses DL0904 until P9-04 (d). `PRIM_TABLE_VERSION` 7; the period's third
+  entrenched edit. Lesson (M383/M383b): a check built as two walls is falsified as two — `scripts/mutants.py` takes `edits`.
