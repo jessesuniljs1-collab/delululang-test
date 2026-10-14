@@ -83,6 +83,9 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "http", method: "get", arity: 1 },
     // P9-04 (a), D-V2-128: a GET carrying headers — `get_with(url, headers: Map[Str, Str])`.
     PrimEntry { receiver: "http", method: "get_with", arity: 2 },
+    // P9-04 (b)/(c), D-V2-131: a secret in one header, sent only to its grant's audience —
+    // `get_with_secret(url, headers: Map[Str, Str], header: Str, secret: Secret[Str])`.
+    PrimEntry { receiver: "http", method: "get_with_secret", arity: 4 },
     // Cap[Clock].
     PrimEntry { receiver: "clock", method: "now_ms", arity: 0 },
     // Root device mints + Cap[Actuator]/Cap[Sensor] (Stage 10 phase 10e, Track D).
@@ -193,7 +196,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            83,
+            84,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

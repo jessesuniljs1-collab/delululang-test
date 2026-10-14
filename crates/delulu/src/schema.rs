@@ -546,7 +546,9 @@ fn defs() -> Value {
             ],
             // P9-04 (a), D-V2-128: the NAMES of the program's headers sent on this hop (`get_with`) — never
             // a value; absent when it sent none, and on a hop to another origin, where they are dropped.
-            &[("headers", str_list.clone())],
+            // P9-04 (b)/(c), D-V2-131: the grant NAME of the secret this hop carried (`get_with_secret`) — never its
+            // bytes; absent on a hop that carried none.
+            &[("headers", str_list.clone()), ("secret", t("string"))],
         ),
         "egress_record": obj(
             &[("url", t("string")), ("delivered", t("boolean")), ("hops", arr(r("egress_hop")))],

@@ -241,6 +241,24 @@ mod tests {
         assert!(e.contains(&"DL0602".to_string()), "{e:?}");
     }
 
+    /// P9-04 (b)/(c), D-V2-131: `get_with_secret` takes the secret as a `Secret[Str]` — the one position a secret
+    /// may stand in a request — and nothing else in that position, while the header map stays `Map[Str, Str]`, so a
+    /// secret cannot ride in a plain header (where no audience would be judged). Its effect is `Net`, never
+    /// `Declassify`: the program never reads the bytes.
+    #[test]
+    fn a_secret_rides_only_in_get_with_secrets_secret_position() {
+        let head = "module m\nfn f(h: Cap[Http], s: Secret[Str], hs: Map[Str, Str]) -> Result[Str, NetErr] ! {Net} { ";
+        let ok = check(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, \"Authorization\", s) }}\n"));
+        assert!(!ok.has_errors(), "{:?}", ok.diagnostics);
+        assert!(ok.result.facts["f"].effects.contains(&Effect::Net) && !ok.result.facts["f"].effects.contains(&Effect::Declassify));
+        let plain = errors(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, \"Authorization\", \"plain\") }}\n"));
+        assert!(!plain.is_empty(), "a Str is not a secret: {plain:?}");
+        let as_name = errors(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, s, s) }}\n"));
+        assert!(as_name.contains(&"DL0602".to_string()), "a secret is not a header's NAME: {as_name:?}");
+        let in_map = errors("module m\nfn f(s: Secret[Str]) ! {} { let hs = Map()\n hs.insert(\"Authorization\", s)\n let n: Map[Str, Str] = hs }\n");
+        assert!(!in_map.is_empty(), "a secret cannot sit in a Map[Str, Str]: {in_map:?}");
+    }
+
     #[test]
     fn stringifying_a_secret_is_dl0604() {
         let e = errors("module m\nfn f(s: Secret[Str]) -> Str { str(s) }\n");

@@ -6447,6 +6447,9 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // Daemon mode strips local secret VALUES and keeps only broker-handle names (invariant 23);
         // the names come from the lease's `secrets` scope.
         secrets: info.secrets.iter().map(|n| (n.clone(), String::new())).collect(),
+        // P9-04 (c): a lease's node has no audience dimension yet (P9-04 (d)), so a leased secret is sent
+        // nowhere — and a leased run's secrets are broker handles, which `get_with_secret` refuses in words.
+        secret_audiences: HashMap::new(),
         foreign_c,
         foreign_python: info.foreign_python.clone(),
         // A lease can never confer native emission in v1.x: the broker has no `exec.native`

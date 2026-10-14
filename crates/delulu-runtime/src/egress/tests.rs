@@ -505,6 +505,158 @@ fn the_headers_go_to_the_origin_the_program_named_and_to_no_other() {
     assert!(!rec.to_json().to_string().contains("headers"), "{}", rec.to_json());
 }
 
+// ----- a secret in a header (P9-04 (b)/(c), D-V2-131) ---------------------------------------------
+
+const SECRET_BYTES: &str = "tok_8f2c-never-in-a-record";
+
+fn aud(members: &[&str]) -> Vec<Audience> {
+    members.iter().map(|m| parse_audience(m).unwrap_or_else(|e| panic!("`{m}`: {e}"))).collect()
+}
+
+/// The secret goes where its audience and the origin rule BOTH allow, and nowhere else: a same-origin redirect
+/// carries it (the origin spelled with its port too), a redirect to another host does not, and — the second
+/// wall — neither does a redirect to another PORT of the same host even though the audience names that port:
+/// the program addressed one origin. Back at the origin it is carried again. Each hop's record names the secret
+/// it carried, never its bytes.
+#[test]
+fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let allow = ["a.example.com", "b.example.com"];
+    let t = FakeTransport::answering(vec![
+        redirect(302, "/next"),
+        redirect(302, "https://a.example.com:443/same-origin-spelled-with-its-port"),
+        redirect(302, "https://b.example.com/elsewhere"),
+        redirect(302, "https://a.example.com:8443/another-port-in-the-audience"),
+        redirect(302, "https://a.example.com/back"),
+        ok("done"),
+    ]);
+    let mut p = policy(&allow, &[]);
+    p.max_redirects = 6;
+    let to = aud(&["a.example.com", "a.example.com:8443", "b.example.com"]);
+    let secret = SecretHeader { header: "Authorization", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+    let given = hs(&[("Accept", "application/json")]);
+    let (rec, body) = request_with_secret(&p, "https://a.example.com/start", &given, Some(&secret), &r, &t);
+    assert_eq!(body.as_deref(), Some("done"), "{:?}", rec.outcome);
+    let carried: Vec<(String, Vec<(String, String)>)> = t.sent.borrow().iter().map(|s| (s.url.clone(), s.headers.clone())).collect();
+    let with = hs(&[("accept", "application/json"), ("authorization", SECRET_BYTES)]);
+    assert_eq!(
+        carried,
+        [
+            ("https://a.example.com/start".to_string(), with.clone()),
+            ("https://a.example.com/next".to_string(), with.clone()),
+            ("https://a.example.com:443/same-origin-spelled-with-its-port".to_string(), with.clone()),
+            ("https://b.example.com/elsewhere".to_string(), Vec::new()),
+            ("https://a.example.com:8443/another-port-in-the-audience".to_string(), Vec::new()),
+            ("https://a.example.com/back".to_string(), with.clone()),
+        ]
+    );
+    let named: Vec<Option<&str>> = rec.hops.iter().map(|h| h.secret.as_deref()).collect();
+    assert_eq!(named, [Some("API_TOKEN"), Some("API_TOKEN"), Some("API_TOKEN"), None, None, Some("API_TOKEN")]);
+    let json = rec.to_json().to_string();
+    assert!(json.contains("\"secret\":\"API_TOKEN\"") && json.contains("\"authorization\""), "{json}");
+    assert!(!json.contains(SECRET_BYTES), "the record never holds the secret's bytes: {json}");
+    assert!(!format!("{secret:?}").contains(SECRET_BYTES), "nor does the carrier's own Debug");
+    let pinned = PinnedRequest { url: "https://a.example.com/", host: "a.example.com", port: 443, addrs: &[], headers: &with };
+    let shown = format!("{pinned:?}");
+    assert!(shown.contains("authorization") && !shown.contains(SECRET_BYTES), "nor a pinned request's: {shown}");
+}
+
+/// Outside its audience, a secret is refused BEFORE anything is resolved or sent — another host, another port of
+/// the audience's host, a sub-domain of it, an address the audience's name might resolve to, and a secret whose
+/// grant named no audience at all. The program is told `Refused`; the operator `audience`; the bytes appear in no
+/// record or reason.
+#[test]
+fn a_secret_outside_its_audience_is_refused_before_anything_is_resolved() {
+    let cases: [(&str, &str, Vec<Audience>, &str); 5] = [
+        ("another host", "https://evil.example.net/x", aud(&["api.example.com"]), "outside the audience"),
+        ("another port", "https://api.example.com:8443/x", aud(&["api.example.com"]), "outside the audience"),
+        ("a sub-domain", "https://v2.api.example.com/x", aud(&["api.example.com"]), "outside the audience"),
+        ("an address it resolves to", &format!("https://{PUBLIC}/x"), aud(&["api.example.com"]), "outside the audience"),
+        ("no audience", "https://api.example.com/x", Vec::new(), "names no audience"),
+    ];
+    let allow = ["api.example.com", "evil.example.net", "*.api.example.com", PUBLIC];
+    for (label, url, to, rule) in cases {
+        let r = FakeResolver::with(&[("api.example.com", &[PUBLIC]), ("evil.example.net", &[PUBLIC]), ("v2.api.example.com", &[PUBLIC])]);
+        let t = FakeTransport::answering(vec![ok("must not arrive")]);
+        let secret = SecretHeader { header: "X-Api-Key", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+        let (rec, body) = request_with_secret(&policy(&allow, &[]), url, &[], Some(&secret), &r, &t);
+        assert_eq!(body, None, "{label}");
+        assert!(matches!(&rec.outcome, Err(Reason::Audience(why)) if why.contains(rule)), "{label}: {:?}", rec.outcome);
+        assert_eq!(rec.outcome.as_ref().unwrap_err().answer(), Answer::Refused, "{label}: the program is told `Refused`");
+        assert_eq!(rec.outcome.as_ref().unwrap_err().code(), "audience", "{label}");
+        assert!(r.asked.borrow().is_empty(), "{label}: nothing is resolved");
+        assert!(t.sent.borrow().is_empty(), "{label}: nothing is sent");
+        assert!(rec.hops.is_empty(), "{label}");
+        assert!(!rec.to_json().to_string().contains(SECRET_BYTES), "{label}: {}", rec.to_json());
+    }
+    // The same request inside the audience is sent — so each refusal above is the audience's, not the URL's.
+    let r = FakeResolver::with(&[("api.example.com", &[PUBLIC])]);
+    let t = FakeTransport::answering(vec![ok("{}")]);
+    let to = aud(&["api.example.com"]);
+    let secret = SecretHeader { header: "X-Api-Key", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
+    let (rec, body) = request_with_secret(&policy(&allow, &[]), "https://api.example.com/x", &[], Some(&secret), &r, &t);
+    assert_eq!(body.as_deref(), Some("{}"), "{:?}", rec.outcome);
+    assert_eq!(t.sent.borrow()[0].headers, hs(&[("x-api-key", SECRET_BYTES)]));
+}
+
+/// The secret's header is a header: held to every rule a program's is, over the whole set — it cannot be `Host`,
+/// cannot repeat a plain header's name in another case (both ways round, M351's lesson), and bytes that would begin
+/// another header are refused — with a reason that never quotes them.
+#[test]
+fn a_secrets_header_is_held_to_every_header_rule() {
+    let to = aud(&["api.example.com"]);
+    let cases: [(&str, &str, &str, Headers, &str); 5] = [
+        ("Host", "Host", SECRET_BYTES, Vec::new(), "`Host`"),
+        ("a plain name, then the secret's in another case", "X-Api-Key", SECRET_BYTES, hs(&[("x-api-key", "1")]), "differ only in case"),
+        ("the other way round", "x-api-key", SECRET_BYTES, hs(&[("X-Api-Key", "1")]), "differ only in case"),
+        ("a line break in the bytes", "Authorization", "8f2c\r\nHost: evil.example.net", Vec::new(), "printable ASCII"),
+        ("not a token", "Author ization", SECRET_BYTES, Vec::new(), "not an HTTP token"),
+    ];
+    for (label, header, value, plain, rule) in cases {
+        let r = FakeResolver::with(&[("api.example.com", &[PUBLIC])]);
+        let t = FakeTransport::answering(vec![ok("must not arrive")]);
+        let secret = SecretHeader { header, name: "API_TOKEN", value, audience: &to };
+        let (rec, _) = request_with_secret(&policy(&["api.example.com"], &[]), "https://api.example.com/x", &plain, Some(&secret), &r, &t);
+        assert!(matches!(&rec.outcome, Err(Reason::Header(why)) if why.contains(rule)), "{label}: {:?}", rec.outcome);
+        assert!(t.sent.borrow().is_empty() && r.asked.borrow().is_empty(), "{label}");
+        let explain = rec.outcome.as_ref().unwrap_err().explain();
+        assert!(!explain.contains("8f2c") && !explain.contains("evil.example.net"), "{label}: the reason never quotes the bytes: {explain}");
+    }
+}
+
+/// An audience member is spelled as a URL's host is compared — and every other spelling is refused rather than
+/// normalized, so the audience and the request can never be judged in two spellings.
+#[test]
+fn an_audience_is_spelled_as_the_request_is_compared() {
+    for (member, host, port) in [
+        ("api.example.com", "api.example.com", 443),
+        ("api.example.com:8443", "api.example.com", 8443),
+        ("93.184.215.14", "93.184.215.14", 443),
+        ("[2001:db8::1]:444", "[2001:db8::1]", 444),
+    ] {
+        assert_eq!(parse_audience(member), Ok(Audience { host: host.to_string(), port }), "`{member}`");
+    }
+    for (member, says) in [
+        ("", "empty"),
+        ("api.example.com/repos", "path scopes"),
+        ("api.example.com?x", "path scopes"),
+        ("*.example.com", "wildcard"),
+        ("API.example.com", "lower case"),
+        ("api.example.com.", "ends in a dot"),
+        ("user@api.example.com", "a second `@`"),
+        ("api.example.com:0", "port"),
+        ("api.example.com:08443", "port"),
+        ("127.1", "dotted-quad"),
+        ("[2001:DB8::1]", "canonical"),
+        ("exam ple.com", "space"),
+    ] {
+        match parse_audience(member) {
+            Ok(a) => panic!("`{member}` must be refused, got {a:?}"),
+            Err(e) => assert!(e.contains(says), "`{member}`: {e}"),
+        }
+    }
+}
+
 #[test]
 fn a_redirect_loop_is_cut_off() {
     let r = FakeResolver::with(&[("a.example.com", &[PUBLIC])]);

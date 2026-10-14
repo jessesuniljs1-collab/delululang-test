@@ -220,3 +220,67 @@ fn daemon_lifecycle_run_expose_stop_fail_closed() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// P9-04 (b)/(c), D-V2-131: under the daemon a run's secret is a broker HANDLE — its bytes are the broker's, and the
+/// broker does not yet judge an audience (P9-04 (d)). So `get_with_secret` of one is refused in words (DL0904,
+/// naming the way out), nothing connects, and the chain holds no `use` of the host — a use for a request that was
+/// never made would be a record of nothing (HTTP-SCHEME-1's rule). The way out it names is taken: the same program
+/// with embedded custody and the secret granted with its audience sends it.
+#[test]
+fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
+    let base = std::env::temp_dir().join(format!("delulu_bsec_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    let program = format!(
+        "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
+         let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+         match h.get_with_secret(\"https://127.0.0.1:{port}/probe\", hs, \"Authorization\", tok) {{\n        \
+         Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+    );
+    std::fs::write(cwd.join("send.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", "hunter2-8f2c"]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
+    let args = ["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt"];
+    let mut daemon_args = args.to_vec();
+    daemon_args.extend(["--broker", "daemon"]);
+    let o = delulu_in(&cwd, &state, &daemon_args);
+    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("broker-held secret"), "{}", stderr(&o));
+    assert!(stderr(&o).contains("without `--broker daemon`"), "the refusal names its way out: {}", stderr(&o));
+    assert!(!stdout(&o).contains("delivered") && !stderr(&o).contains("8f2c"), "{}{}", stdout(&o), stderr(&o));
+    // The chain: the run's node was issued (so the chain was read), and no use of the host was recorded.
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let records = v["records"].as_array().expect("records");
+    assert!(records.iter().any(|r| r["action"] == "issue"), "the run's issue is in the chain: {v}");
+    assert!(!records.iter().any(|r| r["action"] == "use"), "no use for a request never made: {v}");
+    drop(guard);
+    assert!(l.accept().is_err(), "nothing connected");
+    // The way out the refusal names: embedded custody, the secret granted to the run with its audience.
+    // Accepted and hung up at once, so the client is told so rather than waiting out its deadline.
+    let accepter = std::thread::spawn(move || {
+        let started = std::time::Instant::now();
+        loop {
+            match l.accept() {
+                Ok(_) => return true,
+                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(_) => return false,
+            }
+        }
+    });
+    let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=embedded-8f2c");
+    let o = delulu_in(&cwd, &state, &["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt"]);
+    assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
+    assert!(accepter.join().unwrap(), "the way out sends the request: {}{}", stdout(&o), stderr(&o));
+    let _ = std::fs::remove_dir_all(&base);
+}

@@ -372,7 +372,8 @@ some of its kind — never `within`, because the answer is a claim about every r
 
 `delulu grants diff <old.grants> <new.grants> --json` (P9-02) is the same question asked of a CHANGE of
 grant set: each finding names what NEW adds — `effect_expansion`, `scope_expansion`,
-`special_use_reach` or `device_reach_expansion` — with no severity grade; exit 1 when it adds anything.
+`special_use_reach`, `device_reach_expansion` or `secret_reach_expansion` (a secret whose audience names an
+origin OLD's does not, D-V2-131) — with no severity grade; exit 1 when it adds anything.
 `delulu grants diff g_OLD g_NEW --json` asks it of two lease nodes, through their broker, and adds
 `budget_expansion`.
 
@@ -678,6 +679,13 @@ overstate it downstream:
   case, at most 32 — and never `Host`, the framing and connection headers, `Proxy-*` or
   `Accept-Encoding` (reason `header`, nothing connected). They go only to the URL's own host and port;
   a redirect elsewhere drops them. The report names the headers each hop carried, never a value.
+  `http.get_with_secret(url, headers, header, secret)` (P9-04 (b)/(c), D-V2-131) sends a `Secret[Str]` as
+  one header's value — no `Declassify`, because the program never reads it — and ONLY to the secret's
+  audience: `--grant secret:NAME@HOST[:PORT][,…]=VALUE`. A URL whose host and port are outside it, or a
+  secret granted with no audience, is refused before anything is resolved (reason `audience`, nothing
+  connected); each hop's report record names the secret it carried (`secret`), never its bytes. Not yet
+  under `--broker daemon`/`--lease` (DL0904, P9-04 (d)), in a `--sandbox` guest (DL1401: no secret
+  crosses the channel), or under `--engine wasm`.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

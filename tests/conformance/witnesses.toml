@@ -2029,6 +2029,33 @@ file = "crates/delulu-runtime/src/egress/tests.rs"
 test = "a_programs_headers_are_checked_before_anything_is_resolved"
 kind = "negative"
 
+# P9-04 (b)/(c), D-V2-131 (routine run 24, under the owner's delegation — ENTRENCHED_CHANGE_RECORD.md): a secret
+# in one header, sent only to its grant's audience. The table's own two witnesses, plus the egress client's: the
+# secret sent on exactly the hops its audience and origin allow, and refused before anything is resolved outside it.
+[[witness]]
+anchor = "ref.prim.http.get_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.get_with_secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.get_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_goes_only_to_its_audience_on_the_origins_hops"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.get_with_secret"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_secret_outside_its_audience_is_refused_before_anything_is_resolved"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.clock.now_ms"
 file = "crates/delulu-check/src/prim_table.rs"

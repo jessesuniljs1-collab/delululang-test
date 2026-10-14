@@ -2066,6 +2066,16 @@ impl<'a> Checker<'a> {
                     self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
                     Some((Type::result(Type::Str, net), Some(Effect::Net), None))
                 }
+                // P9-04 (b)/(c), D-V2-131: one `Secret[Str]` sent as the value of one header, without
+                // `Declassify` — because the program never reads the bytes and the host sends them only to
+                // the audience the secret's grant names. The URL stays argument ONE (as `get_with`'s).
+                "get_with_secret" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    self.expect_arg(args, 2, &Type::Str, span);
+                    self.expect_arg(args, 3, &Type::Secret(Box::new(Type::Str)), span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
                 _ => None,
             },
             Type::Cap(ResourceKind::Clock) => match method {

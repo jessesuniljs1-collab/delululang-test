@@ -77,7 +77,8 @@ pub enum MsgValue {
     /// its own identical globals).
     Closure { params: Vec<String>, body: Block, scopes: Vec<Vec<(String, MsgValue)>> },
     Cap { kind: ResourceKind, scope: CapScope },
-    SecretLocal(String),
+    /// A local secret's bytes and, P9-04 (c), its grant name and audience — owned, so the message stays `Send`.
+    SecretLocal(String, Option<(String, Vec<crate::egress::Audience>)>),
     SecretHandle(String),
     Root(RootMsg),
     Actor { id: ActorId, actor: String },
@@ -99,6 +100,9 @@ pub struct RootMsg {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: Vec<(String, String)>,
+    /// P9-04 (c): each secret's audience, carried with it — a root that crossed and lost it would send its
+    /// secrets nowhere (closed), but a rule that holds on one side of a boundary is a rule nobody can state.
+    pub secret_audiences: Vec<(String, Vec<crate::egress::Audience>)>,
     pub foreign_load: bool,
     pub python_allowlist: Vec<String>,
     pub broker_secrets: Vec<String>,
@@ -855,7 +859,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
         Value::Cap(c) => MsgValue::Cap { kind: c.kind, scope: c.scope.clone() },
         Value::Secret(s) => match s.handle_name() {
             Some(h) => MsgValue::SecretHandle(h.to_string()),
-            None => MsgValue::SecretLocal(s.reveal()),
+            None => MsgValue::SecretLocal(s.reveal(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
         },
         Value::Root(r) => MsgValue::Root(RootMsg {
             console: r.console,
@@ -867,6 +871,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             rand: r.rand,
             declassify: r.declassify,
             secrets: r.secrets.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            secret_audiences: r.secret_audiences.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
             foreign_load: r.foreign_load,
             python_allowlist: r.python_allowlist.clone(),
             broker_secrets: r.broker_secrets.clone(),
@@ -968,7 +973,10 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
             Value::Closure(Rc::new(Closure { params, body, env, home: None }))
         }
         MsgValue::Cap { kind, scope } => Value::Cap(Rc::new(CapVal { kind, scope })),
-        MsgValue::SecretLocal(s) => Value::Secret(Rc::new(SecretVal::new(s))),
+        MsgValue::SecretLocal(s, aud) => Value::Secret(Rc::new(SecretVal::bound(
+            s,
+            aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
+        ))),
         MsgValue::SecretHandle(h) => Value::Secret(Rc::new(SecretVal::handle(h))),
         MsgValue::Root(r) => {
             let root = crate::value::RootVal {
@@ -984,6 +992,7 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
                 rand: r.rand,
                 declassify: r.declassify,
                 secrets: r.secrets.into_iter().collect(),
+                secret_audiences: r.secret_audiences.into_iter().collect(),
                 foreign_load: r.foreign_load,
                 python_allowlist: r.python_allowlist,
                 broker_secrets: r.broker_secrets,
@@ -1287,5 +1296,32 @@ mod boundary_authority_tests {
         assert_eq!(r.computes[0].memory_bytes, 1 << 20, "and arrive with its BOUNDS intact — the");
         assert_eq!(r.computes[0].kernel_ms, (0.0, 50.0), "envelope is what limits the holder");
         assert_eq!(r.computes[0].kernels.len(), 1, "including the enumerated kernel list");
+    }
+
+    /// P9-04 (c), D-V2-131: a secret's audience crosses an actor boundary with it — on a `Root` (the audience of each
+    /// secret it may mint) and on a minted `Secret` (where its bytes may go). A crossing that dropped it would fail
+    /// closed (sent nowhere); one that kept the bytes and lost where they may go would be a rule that holds on one
+    /// side of a boundary only. Driven through the real conversions, both directions.
+    #[test]
+    fn a_secrets_audience_survives_the_crossing_into_an_actor_and_back() {
+        use super::{msg_to_value, value_to_msg};
+        use crate::egress::Audience;
+        use crate::value::{RootVal, SecretAudience, SecretVal, Value};
+        use std::rc::Rc;
+        let to = vec![Audience { host: "api.example.com".to_string(), port: 443 }];
+        let mut root = RootVal::default();
+        root.secrets.insert("K".to_string(), "v".to_string());
+        root.secret_audiences.insert("K".to_string(), to.clone());
+        let back = msg_to_value(value_to_msg(&Value::Root(Rc::new(root)), None).unwrap(), &crate::value::Scope::root());
+        let Value::Root(r) = back else { panic!("a Root must come back as a Root") };
+        assert_eq!(r.secret_audiences.get("K"), Some(&to), "a root's secret audiences cross");
+        let secret = SecretVal::bound("v".to_string(), Some(Rc::new(SecretAudience { name: "K".to_string(), to: to.clone() })));
+        let back = msg_to_value(value_to_msg(&Value::Secret(Rc::new(secret)), None).unwrap(), &crate::value::Scope::root());
+        let Value::Secret(s) = back else { panic!("a Secret must come back as a Secret") };
+        let a = s.audience().expect("a minted secret's audience crosses");
+        assert_eq!((a.name.as_str(), &a.to), ("K", &to));
+        let plain = msg_to_value(value_to_msg(&Value::Secret(Rc::new(SecretVal::new("v".to_string()))), None).unwrap(), &crate::value::Scope::root());
+        let Value::Secret(s) = plain else { panic!() };
+        assert!(s.audience().is_none(), "and none is not invented for a secret granted without one");
     }
 }

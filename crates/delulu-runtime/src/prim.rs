@@ -460,7 +460,14 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 return Ok(Value::Secret(Rc::new(SecretVal::handle(name))));
             }
             match root.secrets.get(&name) {
-                Some(v) => Ok(Value::Secret(Rc::new(SecretVal::new(v.clone())))),
+                // P9-04 (c): the secret carries where its grant lets it be sent.
+                Some(v) => {
+                    let audience = root
+                        .secret_audiences
+                        .get(&name)
+                        .map(|to| Rc::new(crate::value::SecretAudience { name: name.clone(), to: to.clone() }));
+                    Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience))))
+                }
                 None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"), span)),
             }
         }
@@ -636,25 +643,47 @@ pub fn call_cap_method_pinned(
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") => {
+        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             // P9-04 (a), D-V2-128: `get_with`'s headers, in the map's own order (ascending by name). The
             // checker admits only a `Map[Str, Str]`; anything else here is its bug, said as one.
-            let headers: Vec<(String, String)> = if method == "get_with" {
+            let headers: Vec<(String, String)> = if method != "get" {
                 let Some(Value::Map(m)) = args.get(1) else {
-                    return Err(Fault::at("DL0907", "http.get_with expects a Map[Str, Str] of headers (checker bug)", span));
+                    return Err(Fault::at("DL0907", format!("http.{method} expects a Map[Str, Str] of headers (checker bug)"), span));
                 };
                 let mut hs = Vec::new();
                 for (k, v) in m.borrow().iter() {
                     match (k, v) {
                         (crate::value::MapKey::Str(name), Value::Str(value)) => hs.push((name.clone(), value.to_string())),
-                        _ => return Err(Fault::at("DL0907", "http.get_with expects a Map[Str, Str] of headers (checker bug)", span)),
+                        _ => return Err(Fault::at("DL0907", format!("http.{method} expects a Map[Str, Str] of headers (checker bug)"), span)),
                     }
                 }
                 hs
             } else {
                 Vec::new()
+            };
+            // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in. A broker-held secret (a daemon
+            // run's handle) carries no bytes here and its audience is not yet the broker's to judge (P9-04
+            // (d)), so it is refused, in words — never sent unjudged, never silently dropped from the request.
+            let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" {
+                let header = str_arg(args, 2, span)?;
+                let Some(Value::Secret(s)) = args.get(3) else {
+                    return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
+                };
+                if s.handle_name().is_some() {
+                    return Err(Fault::at(
+                        "DL0904",
+                        "`http.get_with_secret` of a broker-held secret: under the broker daemon the secret's bytes are the \
+                         broker's, and a request that carries them waits for the broker to judge their audience (V2 P9-04 \
+                         step (d)) — make the request with embedded custody (a run without `--broker daemon` or `--lease`), \
+                         the secret granted to it with its audience (`--grant secret:NAME@HOST=VALUE`)",
+                        span,
+                    ));
+                }
+                Some((header, s.clone()))
+            } else {
+                None
             };
             if !url.starts_with("https://") {
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
@@ -668,7 +697,18 @@ pub fn call_cap_method_pinned(
             // the host, pins, and follows redirects through the same check. For a sandboxed guest this
             // line runs in the HOST — `HostChannel::decide` performs the request here — so one
             // implementation serves L0 and every guest.
-            Ok(match crate::egress::get_for_program_with(&url, &headers, allow, special) {
+            let revealed = secret.as_ref().map(|(_, s)| s.reveal());
+            let audience = secret.as_ref().and_then(|(_, s)| s.audience().cloned());
+            let carried = match (&secret, &revealed) {
+                (Some((header, _)), Some(value)) => Some(crate::egress::SecretHeader {
+                    header,
+                    name: audience.as_ref().map(|a| a.name.as_str()).unwrap_or(""),
+                    value,
+                    audience: audience.as_ref().map(|a| a.to.as_slice()).unwrap_or(&[]),
+                }),
+                _ => None,
+            };
+            Ok(match crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special) {
                 crate::egress::Answer::Body(b) => Value::ok(Value::str(b)),
                 crate::egress::Answer::Refused => Value::err(net_err("Refused")),
                 crate::egress::Answer::Timeout => Value::err(net_err("Timeout")),

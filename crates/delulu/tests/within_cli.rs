@@ -404,6 +404,29 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     }
     let tighter = write("gpu-tighter.grants", &[&gpu.replace("memory_bytes=1048576", "memory_bytes=4096")]);
     assert_eq!(diff(&base_g, &tighter).0, 0, "a smaller ceiling adds nothing");
+    // P9-04 (c), D-V2-131: a secret's reach is its audience. Another host, another PORT of the same host, or any
+    // audience where OLD granted the secret with none (sent nowhere) is `secret_reach_expansion`, naming the origin;
+    // the same audience, a smaller one, or none at all adds nothing. Each pair both ways round where it differs.
+    let s_a = write("s-a.grants", &["secret:K@a.example.com=v"]);
+    for (why, new_line, origin) in [
+        ("another host", "secret:K@a.example.com,b.example.com=v", "b.example.com:443"),
+        ("another port", "secret:K@a.example.com,a.example.com:8443=v", "a.example.com:8443"),
+    ] {
+        let f = write("s-wider.grants", &[new_line]);
+        let (code, v) = diff(&s_a, &f);
+        assert_eq!((code, v["findings"].as_array().unwrap().len()), (1, 1), "{why}: {v:#}");
+        assert_eq!(v["findings"][0]["category"], "secret_reach_expansion", "{why}: {v:#}");
+        assert_eq!(v["findings"][0]["dimension"], "secret", "{why}: {v:#}");
+        assert!(v["findings"][0]["detail"].as_str().unwrap().contains(origin), "{why}: names `{origin}`: {v:#}");
+        assert_eq!(diff(&f, &s_a).0, 0, "{why}, the other way round, narrows");
+    }
+    let s_none = write("s-none.grants", &["secret:K=v"]);
+    let (code, v) = diff(&s_none, &s_a);
+    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("secret_reach_expansion")), "an audience where none was: {v:#}");
+    assert_eq!(diff(&s_a, &s_none).0, 0, "no audience is the bottom: sent nowhere");
+    assert_eq!(diff(&s_a, &s_a).0, 0, "the same audience adds nothing");
+    let (code, v) = diff(&s_none, &write("s-other.grants", &["secret:J@a.example.com=v"]));
+    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("scope_expansion")), "another secret is scope, as before: {v:#}");
     // The human answer names the same, and a lease node is refused by name until it is diffed (exit 2).
     let o = delulu(&["grants", "diff", &old, &new]);
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));

@@ -55,7 +55,9 @@ pub const DIR_VERSION: u32 = 1;
 /// DL1503, a clean version mismatch, and is rebuilt.
 /// 6 = V2 phase **P9-04 (a)** (D-V2-128): `Cap[Http].get_with(url, headers: Map[Str, Str])`, a GET
 /// carrying headers. Additive again, and bumped again for the same rule.
-pub const PRIM_TABLE_VERSION: u32 = 6;
+/// 7 = V2 phase **P9-04 (b)/(c)** (D-V2-131): `Cap[Http].get_with_secret(url, headers, header, secret)`,
+/// a secret in one header, sent only to its grant's audience. Additive; bumped for the same rule.
+pub const PRIM_TABLE_VERSION: u32 = 7;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

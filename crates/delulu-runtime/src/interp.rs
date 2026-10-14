@@ -1284,9 +1284,11 @@ impl Interp {
                     };
                     let inner = Value::str(s.reveal());
                     let mapped = self.call_closure(&clo, vec![inner])?;
-                    // Stage 1 supports Secret[Str].map(fn(Str) -> Str).
+                    // Stage 1 supports Secret[Str].map(fn(Str) -> Str). The result is derived from the secret's
+                    // bytes, so it goes where they may go (P9-04 (c)): the audience is carried, never dropped
+                    // and never widened.
                     return match mapped {
-                        Value::Str(x) => Ok(Value::Secret(Rc::new(crate::value::SecretVal::new(x.to_string())))),
+                        Value::Str(x) => Ok(Value::Secret(Rc::new(crate::value::SecretVal::bound(x.to_string(), s.audience().cloned())))),
                         _ => Err(Escape::Fault(Fault::at("DL0907", "Stage-1 Secret.map supports Str results only", span))),
                     };
                 }
@@ -2359,7 +2361,7 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
         // and the trace is printed and stored (P9-04 (a), D-V2-128).
-        ("Http", "get") | ("Http", "get_with") => args.first().map(|v| v.display()),
+        ("Http", "get") | ("Http", "get_with") | ("Http", "get_with_secret") => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2401,7 +2403,7 @@ pub(crate) fn custody_op_for(
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
             Some((CustodyOp::FsWrite, fs_arg(c)))
         }
-        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") => {
+        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no
@@ -2412,6 +2414,12 @@ pub(crate) fn custody_op_for(
                 Some(Value::Str(s)) => Some(host_of(s)),
                 _ => None,
             };
+            // P9-04 (b)/(c), HTTP-SCHEME-1's rule again: a broker-held secret is refused by the effect itself
+            // before anything is reached (`prim`, until P9-04 (d) gives the broker its audience) — so there is
+            // no use to authorize, and a `use allow` for a request never made would be a record of nothing.
+            if method == "get_with_secret" && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) {
+                return None;
+            }
             Some((CustodyOp::Net, host))
         }
         (ResourceKind::Clock, "now_ms") => Some((CustodyOp::Clock, None)),

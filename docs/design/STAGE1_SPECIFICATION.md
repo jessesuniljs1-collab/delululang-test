@@ -633,6 +633,7 @@ broker + WASM containment; the grant model and manifest format do not change.
 | `Cap[FsWrite]` | `write_text(p, s)` / `append_text(p, s)` | `-> Result[Unit, IoErr]` | `Write` | path under scope root |
 | `Cap[Http]` | `get(url: Str)` | `-> Result[Str, NetErr]` | `Net` | host in allowlist, https only |
 | `Cap[Http]` | `get_with(url: Str, headers: Map[Str, Str])` | `-> Result[Str, NetErr]` | `Net` | as `get`; each header held to the egress client's rules, sent only to the URL's origin (V2 P9-04 (a), D-V2-128) |
+| `Cap[Http]` | `get_with_secret(url: Str, headers: Map[Str, Str], header: Str, secret: Secret[Str])` | `-> Result[Str, NetErr]` | `Net` | as `get_with`; the secret sent as `header`'s value only when the URL's origin is in its grant's audience (`secret:NAME@HOST[:PORT]=…`), refused before resolution otherwise (V2 P9-04 (b)/(c), D-V2-131) |
 | `Cap[Clock]` | `now_ms()` | `-> Int` | `Clock` | — |
 | `Cap[Rand]` | `int(lo, hi)` / `float()` | `-> Int` / `-> Float` | `Rand` | — |
 | `Secret[T]` | `map(f: fn(T) -> U ! {})` | `-> Secret[U]` | — (f must be pure, DL0603) | — |

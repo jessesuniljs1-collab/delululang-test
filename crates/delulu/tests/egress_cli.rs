@@ -254,6 +254,98 @@ fn a_refused_header_connects_nowhere_and_says_why_to_the_operator() {
     }
 }
 
+/// The bytes the secret witnesses grant — a marker no report, trace or message may ever hold.
+const SECRET_BYTES: &str = "s3cr3t-8f2c-never-printed";
+
+/// A program that sends the secret `API_TOKEN` as the `Authorization` header to `url` (P9-04 (b)/(c), D-V2-131),
+/// through `Secret.map` — `"Bearer " + s` — so the derived secret's audience is the one under test.
+fn secret_sender(dir: &Path, url: &str) {
+    std::fs::write(
+        dir.join("send.delulu"),
+        format!(
+            "module fetch\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+             let out = root.console()\n    \
+             let h = root.http([\"127.0.0.1\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    \
+             let sent = tok.map(fn(s: Str) -> Str {{ \"Bearer \" + s }})\n    \
+             let hs = Map()\n    \
+             hs.insert(\"Accept\", \"text/plain\")\n    \
+             match h.get_with_secret(\"{url}\", hs, \"Authorization\", sent) {{\n        \
+             Ok(body) => out.println(\"delivered\")\n        \
+             Err(e) => out.println(\"not delivered\")\n    \
+             }}\n}}\n"
+        ),
+    )
+    .unwrap();
+}
+
+/// P9-04 (b)/(c): a secret leaves in a header — as TLS — to the host and port its grant's audience names, and the
+/// report says which secret each hop carried, never its bytes; the same request with the audience naming another
+/// PORT, or with no audience at all, connects nowhere and says why to the operator. `Secret.map`'s result carries
+/// the audience (a mapped secret granted with an audience is sent); a guest holds no secret, so nothing is sent from
+/// one. No byte of the secret reaches the report, the trace, stdout or stderr on any path.
+#[test]
+fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
+    let run = |dir: &Path, audience: &str, sandbox: bool| -> Output {
+        let grant = format!("secret:API_TOKEN{audience}={SECRET_BYTES}");
+        let mut args = vec!["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--report-out", "rep.json"];
+        // A sandboxed run refuses the trace flags (it does not apply them yet) — the trace is read at L0.
+        args.extend(if sandbox { ["--sandbox"].as_slice() } else { ["--trace-effects", "--trace-out", "trace.txt"].as_slice() });
+        delulu(dir, &args)
+    };
+    let leaked = |dir: &Path, o: &Output| {
+        let mut all = out(o);
+        for f in ["rep.json", "trace.txt"] {
+            all.push_str(&std::fs::read_to_string(dir.join(f)).unwrap_or_default());
+        }
+        all.contains("8f2c")
+    };
+    // Inside the audience: sent.
+    let dir = tmp("secret-in");
+    let (port, seen) = listen(Duration::from_secs(20));
+    secret_sender(&dir, &format!("https://127.0.0.1:{port}/probe"));
+    let o = run(&dir, &format!("@127.0.0.1:{port}"), false);
+    let first = seen.join().unwrap().unwrap_or_else(|| panic!("nothing connected:\n{}", out(&o)));
+    assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "TLS, got {first:02x?}:\n{}", out(&o));
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let v = report(&dir);
+    let hop = &v["egress"]["records"][0]["hops"][0];
+    assert_eq!(hop["secret"], "API_TOKEN", "the hop names the secret it carried: {v}");
+    assert_eq!(hop["headers"], serde_json::json!(["accept", "authorization"]), "{v}");
+    assert!(!leaked(&dir, &o), "the secret's bytes are nowhere:\n{}\n{v}", out(&o));
+    // And the trace that was searched is there: the request is in it, its detail redacted.
+    let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
+    assert!(trace.contains("\"get_with_secret\"") && trace.contains("«opaque»"), "{trace}");
+    let o = delulu(&dir, &["schema", "validate", "run-report", "rep.json", "--json"]);
+    let check: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON");
+    assert_eq!(check["validate"]["valid"], true, "a hop's `secret` is a field the schema holds: {}", check["validate"]["errors"]);
+    // Outside it — the audience names another port of the same host — and with none: nothing connects.
+    for (label, audience_of) in [("another port", Some(1u16)), ("no audience", None)] {
+        let dir = tmp("secret-out");
+        let (port, seen) = listen(Duration::from_secs(3));
+        secret_sender(&dir, &format!("https://127.0.0.1:{port}/probe"));
+        let audience = audience_of.map(|d| format!("@127.0.0.1:{}", port.wrapping_add(d).max(1))).unwrap_or_default();
+        let o = run(&dir, &audience, false);
+        assert_eq!(o.status.code(), Some(0), "{label}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stdout).contains("not delivered"), "{label}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("[egress: audience]"), "{label}:\n{}", out(&o));
+        let v = report(&dir);
+        assert_eq!(v["egress"]["records"][0]["reason"], "audience", "{label}: {v}");
+        assert_eq!(v["egress"]["records"][0]["hops"], serde_json::json!([]), "{label}: no hop was made: {v}");
+        assert!(!leaked(&dir, &o), "{label}: the secret's bytes are nowhere:\n{}", out(&o));
+        assert!(seen.join().unwrap().is_none(), "{label}: nothing connected");
+    }
+    // A guest holds no secret (the channel carries none), so a sandboxed run sends nothing — refused in words.
+    let dir = tmp("secret-guest");
+    let (port, seen) = listen(Duration::from_secs(3));
+    secret_sender(&dir, &format!("https://127.0.0.1:{port}/probe"));
+    let o = run(&dir, &format!("@127.0.0.1:{port}"), true);
+    assert_ne!(o.status.code(), Some(0), "{}", out(&o));
+    assert!(out(&o).contains("DL1401") && out(&o).contains("secret"), "{}", out(&o));
+    assert!(!out(&o).contains("8f2c"), "{}", out(&o));
+    assert!(seen.join().unwrap().is_none(), "a guest sent nothing");
+}
+
 /// `--json` keeps the operator's prose off stderr — the same records are in the report.
 #[test]
 fn under_json_the_reason_is_in_the_report_and_not_in_prose() {

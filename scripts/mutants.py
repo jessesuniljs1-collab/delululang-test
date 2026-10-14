@@ -12,7 +12,10 @@ green — the proof that the restore took.
 usage: scripts/mutants.py SPEC.json [NAME ...]
   SPEC.json: {"test": ["cargo", "test", "-q", "-p", "delulu", "--test", "monitor_cli"],
               "mutants": {"M1": {"file": "crates/…/x.rs", "old": "exact text, once", "new": "replacement",
-                                 "test": [optional per-mutant command]}, …}}
+                                 "test": [optional per-mutant command]},
+                          "M2": {"edits": [{"file": …, "old": …, "new": …}, …], …}, …}}
+             A mutant with `edits` makes several (every anchor checked before any file is written) — for a check
+             built as two walls, where only removing BOTH shows the witness can fail at all (routine run 24).
   NAME …   : run only these mutants (default: all, in the file's order)
 Exit 0 when every mutant is RED and the control is green; 1 otherwise (a SURVIVED or BUILD-ERROR is a question about the
 witness or the mutant — routine run 11: read what the mutated code returns before recording a survivor).
@@ -53,20 +56,32 @@ def main():
     ok = True
     for name in names:
         m = spec['mutants'][name]
-        path = m['file']
-        original = open(path, 'rb').read()
-        text = original.decode('utf-8')
-        n = text.count(m['old'])
-        if n != 1:
-            print(f'{name}: ANCHOR-NOT-UNIQUE ({n} matches in {path}) — not run')
+        edits = m.get('edits') or [{'file': m['file'], 'old': m['old'], 'new': m['new']}]
+        # Every anchor is checked against the files as they are before any is written (routine run 18's rule for patch
+        # scripts): edits to one file apply in order, each to the text the one before it left.
+        originals, texts, bad = {}, {}, None
+        for e in edits:
+            path = e['file']
+            if path not in originals:
+                originals[path] = open(path, 'rb').read()
+                texts[path] = originals[path].decode('utf-8')
+            n = texts[path].count(e['old'])
+            if n != 1:
+                bad = f'{name}: ANCHOR-NOT-UNIQUE ({n} matches in {path}) — not run'
+                break
+            texts[path] = texts[path].replace(e['old'], e['new'])
+        if bad:
+            print(bad)
             ok = False
             continue
-        open(path, 'wb').write(text.replace(m['old'], m['new']).encode('utf-8'))
+        for path, text in texts.items():
+            open(path, 'wb').write(text.encode('utf-8'))
         try:
             code, built, totals, failed = run(m.get('test', spec['test']))
         finally:
-            open(path, 'wb').write(original)
-            os.utime(path, None)  # a NEW mtime, so cargo rebuilds from the restored source
+            for path, original in originals.items():
+                open(path, 'wb').write(original)
+                os.utime(path, None)  # a NEW mtime, so cargo rebuilds from the restored source
         if not built:
             verdict = 'BUILD-ERROR (not a falsification — the mutant does not compile)'
             ok = False

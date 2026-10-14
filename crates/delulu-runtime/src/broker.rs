@@ -150,6 +150,11 @@ pub struct Grants {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: HashMap<String, String>,
+    /// P9-04 (c), D-V2-131: the audience a `secret:NAME@HOST[:PORT][,…]=VALUE` line names, by secret name
+    /// — the origins `http.get_with_secret` may send that secret to, and no others. A secret granted
+    /// without one has no entry, and is sent nowhere. A later grant of the same name replaces the
+    /// earlier one, audience included, as it replaces the value.
+    pub secret_audiences: HashMap<String, Vec<crate::egress::Audience>>,
     /// `foreign.c` grants: logical lib name → the concrete binary path/name the human chose
     /// (Stage 4, spec §4.1). The path is grant data, never program data.
     pub foreign_c: HashMap<String, String>,
@@ -219,7 +224,12 @@ pub const GRANT_FORMS: &[GrantForm] = &[
     },
     GrantForm { key: "sensor", form: "sensor=DEVICE", example: "sensor=arm0/angle", grants: "reading DEVICE (`Read` under its scope)" },
     GrantForm { key: "plugin", form: "plugin=PATH", example: "plugin=./plugins", grants: "loading a plugin artifact from under PATH" },
-    GrantForm { key: "secret:", form: "secret:NAME=VALUE | secret:NAME=env:VAR", example: "secret:TOKEN=abc", grants: "the secret NAME, held by the runtime" },
+    GrantForm {
+        key: "secret:",
+        form: "secret:NAME[@HOST[:PORT][,HOST[:PORT]...]]=VALUE | …=env:VAR",
+        example: "secret:TOKEN@api.example.com=abc",
+        grants: "the secret NAME, held by the runtime; sent in a request only to the hosts after `@` (none named: sent nowhere)",
+    },
 ];
 
 /// The fuzz property for the `--grant` parser (RW 5.4, V2 P7): whatever an operator — or a script
@@ -243,15 +253,39 @@ impl Grants {
     /// Parse one `--grant` argument. Returns an error string on malformed input.
     pub fn add(&mut self, spec: &str) -> Result<(), String> {
         if let Some(rest) = spec.strip_prefix("secret:") {
-            let (name, source) = rest.split_once('=').ok_or_else(|| {
+            let (head, source) = rest.split_once('=').ok_or_else(|| {
                 format!("grant `{spec}` needs a value: `--grant {spec}=VALUE` or `--grant {spec}=env:VAR`")
             })?;
+            // P9-04 (c), D-V2-131: `NAME@AUDIENCE` — split at the FIRST `@`, so a name never holds one, and
+            // an audience member holding a second is refused by its own parse (as userinfo), never read
+            // as another host. The value is everything after the first `=`, `@` and all.
+            let (name, audience) = match head.split_once('@') {
+                None => (head, None),
+                Some((name, members)) => {
+                    let mut to: Vec<crate::egress::Audience> = Vec::new();
+                    for member in members.split(',') {
+                        let a = crate::egress::parse_audience(member)
+                            .map_err(|e| format!("bad grant `secret:{head}=…` — its audience is refused: {e}"))?;
+                        if !to.contains(&a) {
+                            to.push(a);
+                        }
+                    }
+                    (name, Some(to))
+                }
+            };
+            if name.is_empty() {
+                return Err("bad grant `secret:…` — the secret's name is empty (use secret:NAME=VALUE)".to_string());
+            }
             let value = if let Some(var) = source.strip_prefix("env:") {
                 std::env::var(var).map_err(|_| format!("env var `{var}` for secret `{name}` is not set"))?
             } else {
                 source.to_string()
             };
             self.secrets.insert(name.to_string(), value);
+            match audience {
+                Some(to) => self.secret_audiences.insert(name.to_string(), to),
+                None => self.secret_audiences.remove(name),
+            };
             return Ok(());
         }
         match spec.split_once('=') {
@@ -422,6 +456,7 @@ impl Grants {
             rand: self.rand,
             declassify: self.declassify,
             secrets: self.secrets.clone(),
+            secret_audiences: self.secret_audiences.clone(),
             // `Cap[ForeignLoad]` is available to mint iff at least one foreign lib OR any Python
             // allowlist pattern is granted (both `root.foreign` and `root.python` consume it); the
             // per-lib/per-import authority decision is enforced separately (spec §4.1/§5.1).
@@ -574,6 +609,41 @@ mod tests {
         }
         assert!(Grants::default().add("nosuch").unwrap_err().starts_with("unknown grant"));
         assert!(Grants::default().add("console").is_ok());
+    }
+
+    /// P9-04 (c), D-V2-131: a secret's audience in its grant line. Split at the FIRST `@` and the first `=`, so the
+    /// name holds neither and the value may hold both; each member spelled as a URL's host is compared, the port
+    /// 443 unless named; no audience is no entry (sent nowhere); a later grant of the name replaces the earlier,
+    /// audience and all. Every spelling that could be read two ways is refused, never guessed.
+    #[test]
+    fn a_secrets_audience_is_parsed_from_its_grant_line_and_nothing_else_is() {
+        use crate::egress::Audience;
+        let a = |h: &str, p: u16| Audience { host: h.to_string(), port: p };
+        let mut g = Grants::default();
+        g.add("secret:K@api.example.com,b.example.com:8443,api.example.com=v@lue=with=signs").unwrap();
+        assert_eq!(g.secrets["K"], "v@lue=with=signs", "the value is everything after the first `=`, `@` and all");
+        assert_eq!(g.secret_audiences["K"], [a("api.example.com", 443), a("b.example.com", 8443)], "deduplicated, in order");
+        g.add("secret:P=plain").unwrap();
+        assert!(!g.secret_audiences.contains_key("P"), "no audience is no entry");
+        g.add("secret:K=replaced").unwrap();
+        assert!(!g.secret_audiences.contains_key("K"), "a later grant of the name replaces its audience too");
+        g.add("secret:K@c.example.com=again").unwrap();
+        assert_eq!(g.secret_audiences["K"], [a("c.example.com", 443)]);
+        assert_eq!(g.build_root().secret_audiences["K"], [a("c.example.com", 443)], "the root carries it");
+        for (spec, says) in [
+            ("secret:@api.example.com=v", "name is empty"),
+            ("secret:K@=v", "empty"),
+            ("secret:K@api.example.com,=v", "empty"),
+            ("secret:K@api.example.com/repos/x=v", "path scopes"),
+            ("secret:K@*.example.com=v", "wildcard"),
+            ("secret:K@API.example.com=v", "lower case"),
+            ("secret:K@a@api.example.com=v", "second `@`"),
+            ("secret:K@api.example.com:0=v", "port"),
+            ("secret:K@api.example.com", "needs a value"),
+        ] {
+            let e = Grants::default().add(spec).expect_err(spec);
+            assert!(e.contains(says), "`{spec}`: {e}");
+        }
     }
 
     /// P2 (D-V2-27): the loading grant. A grant is a path spelling too, so every hostile form the

@@ -46,6 +46,13 @@
 //!    only to the ORIGIN the program named: a redirect to another host or port drops them, so what a
 //!    program addressed to one server is never handed to the next. Their names are recorded per hop;
 //!    their values never are, anywhere.
+//! 9. **A secret in a header** (`get_with_secret`, P9-04 (b)/(c), D-V2-131) goes only to its
+//!    AUDIENCE — the hosts and ports its grant names (`--grant secret:NAME@HOST[:PORT]=VALUE`). The
+//!    URL's origin is judged against the audience before anything is resolved, and every hop that would
+//!    carry the secret is judged again, beside the origin rule above: two walls, so a change to either
+//!    cannot alone send the bytes somewhere the grant never named. A secret granted with no audience is
+//!    sent nowhere. The record names the secret (its grant name) on each hop that carried it, never its
+//!    bytes.
 //!
 //! # What the program learns, and what only the host learns
 //!
@@ -167,6 +174,10 @@ pub enum Reason {
     /// A request header the program gave was refused before anything was resolved (P9-04 (a)); the
     /// payload names the rule, never the value.
     Header(&'static str),
+    /// A secret was to be sent to an origin outside the audience its grant names (P9-04 (c),
+    /// D-V2-131) — `credential_endpoint_mismatch`'s twin. Refused before anything is resolved, so its
+    /// bytes reach no one; the payload names the rule, never the secret's value.
+    Audience(&'static str),
 }
 
 /// What the program is told — `NetErr`'s three variants, and a body.
@@ -201,6 +212,7 @@ impl Reason {
             Reason::HostMismatch => "host-mismatch",
             Reason::NoClient => "no-client",
             Reason::Header(_) => "header",
+            Reason::Audience(_) => "audience",
         }
     }
 
@@ -227,6 +239,7 @@ impl Reason {
             Reason::HostMismatch => "the client would have reached a host other than the one checked".into(),
             Reason::NoClient => "this build has no network client (built without the `net` feature)".into(),
             Reason::Header(why) => format!("a request header is refused: {why}"),
+            Reason::Audience(why) => format!("a secret is not sent: {why}"),
         }
     }
 
@@ -243,7 +256,8 @@ impl Reason {
             | Reason::TooManyRedirects
             | Reason::HostMismatch
             | Reason::NoClient
-            | Reason::Header(_) => Answer::Refused,
+            | Reason::Header(_)
+            | Reason::Audience(_) => Answer::Refused,
             Reason::Timeout => Answer::Timeout,
             Reason::RedirectWithoutLocation => Answer::Other("redirect without a location".into()),
             Reason::BodyTooLarge => Answer::Other("response too large".into()),
@@ -385,6 +399,46 @@ fn parse_host(h: &str) -> Result<Option<IpAddr>, Reason> {
     Ok(None)
 }
 
+/// One origin a secret may be sent to (P9-04 (c), D-V2-131): a host in exactly the spelling
+/// [`parse_target`] compares and connects (lower-case LDH, a canonical dotted quad, or `[v6]`), and a
+/// port — 443 unless the grant names another. Compared by equality with each hop's parsed host and
+/// port, so the audience and the request are judged in one spelling: there is no second one to walk past.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Audience {
+    pub host: String,
+    pub port: u16,
+}
+
+impl std::fmt::Display for Audience {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.host, self.port)
+    }
+}
+
+/// Parse one member of a secret's audience, `HOST[:PORT]`, by the URL parser's own rules (it is
+/// handed to [`parse_target`] as the authority of an `https://` URL), and refuse what that parse would
+/// accept around the authority: a path, a query, a fragment (a path in an audience waits for P9-05's
+/// path scopes, and is refused rather than ignored), a wildcard (an audience names hosts exactly), and
+/// userinfo. A spelling refused for a URL is refused here in the same words.
+pub fn parse_audience(entry: &str) -> Result<Audience, String> {
+    if entry.is_empty() {
+        return Err("an audience member is empty (write HOST or HOST:PORT)".to_string());
+    }
+    if entry.contains(['/', '?', '#']) {
+        return Err(format!(
+            "`{entry}`: an audience names a host and port only — a path in an audience waits for path scopes (P9-05), and is refused rather than ignored"
+        ));
+    }
+    if entry.contains('*') {
+        return Err(format!("`{entry}`: an audience names each host exactly; a wildcard is refused"));
+    }
+    match parse_target(&format!("https://{entry}")) {
+        Ok(t) => Ok(Audience { host: t.host, port: t.port }),
+        Err(Reason::Userinfo) => Err(format!("`{entry}`: a second `@` — an audience member is HOST[:PORT], and a secret's name holds no `@`")),
+        Err(r) => Err(format!("`{entry}`: {}", r.explain().trim_start_matches("the URL is refused rather than normalized: "))),
+    }
+}
+
 /// Resolve a redirect's `Location` against the URL that answered it (RFC 3986 §5.2, the four forms
 /// a server sends). The result is only a candidate: it goes back through [`parse_target`] and the
 /// whole check, so this function decides nothing.
@@ -427,7 +481,6 @@ pub trait Resolver {
 
 /// One request, already checked: the URL, the checked host it must be sent as, and the addresses it
 /// may be connected to — and no others.
-#[derive(Debug)]
 pub struct PinnedRequest<'a> {
     pub url: &'a str,
     pub host: &'a str,
@@ -436,6 +489,20 @@ pub struct PinnedRequest<'a> {
     /// The program's headers for THIS hop — checked by [`check_headers`], lower-case names, and empty on
     /// a hop to another origin than the program named.
     pub headers: &'a [(String, String)],
+}
+
+impl std::fmt::Debug for PinnedRequest<'_> {
+    // A header's value may be a secret's bytes (P9-04 (b)/(c)): the NAMES only, here as in every record.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(n, _)| n.as_str()).collect();
+        f.debug_struct("PinnedRequest")
+            .field("url", &self.url)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("addrs", &self.addrs)
+            .field("headers", &names)
+            .finish()
+    }
 }
 
 /// What came back on one hop.
@@ -514,6 +581,9 @@ pub struct HopRecord {
     /// The NAMES of the program's headers sent on this hop, lower-case — never their values. Empty when
     /// it sent none, and on a hop to another origin, where they are dropped.
     pub headers: Vec<String>,
+    /// The grant NAME of the secret this hop carried (P9-04 (b)/(c)) — never its bytes. `None` on a hop
+    /// that carried no secret.
+    pub secret: Option<String>,
 }
 
 /// One `http.get`, start to finish.
@@ -544,6 +614,10 @@ impl EgressRecord {
                 // Only where the program sent some, so a report of a plain `get` is what it always was.
                 if !h.headers.is_empty() {
                     j["headers"] = serde_json::json!(h.headers);
+                }
+                // The same rule: only on a hop that carried one.
+                if let Some(name) = &h.secret {
+                    j["secret"] = serde_json::json!(name);
                 }
                 j
             })
@@ -669,8 +743,20 @@ pub fn get_for_program(url: &str, allow: &[String], special: &[String]) -> Answe
 /// Serve one `http.get_with` for a program (P9-04 (a)): [`get_for_program`] with the program's headers,
 /// which [`request_with`] checks before anything is resolved.
 pub fn get_for_program_with(url: &str, headers: &[(String, String)], allow: &[String], special: &[String]) -> Answer {
+    get_for_program_with_secret(url, headers, None, allow, special)
+}
+
+/// Serve one `http.get_with_secret` for a program (P9-04 (b)/(c)): [`get_for_program_with`] carrying one
+/// secret in one header, sent only inside its audience ([`request_with_secret`]).
+pub fn get_for_program_with_secret(
+    url: &str,
+    headers: &[(String, String)],
+    secret: Option<&SecretHeader<'_>>,
+    allow: &[String],
+    special: &[String],
+) -> Answer {
     let policy = EgressPolicy::for_capability(allow, special);
-    let (rec, body) = request_with(&policy, url, headers, &SystemResolver, system_transport());
+    let (rec, body) = request_with_secret(&policy, url, headers, secret, &SystemResolver, system_transport());
     let answer = match (&rec.outcome, body) {
         (Ok(_), Some(b)) => Answer::Body(b),
         (Err(r), _) => r.answer(),
@@ -755,27 +841,93 @@ pub fn request_with(
     resolver: &dyn Resolver,
     transport: &dyn Transport,
 ) -> (EgressRecord, Option<String>) {
+    request_with_secret(policy, url, headers, None, resolver, transport)
+}
+
+/// A secret one request carries in one header (P9-04 (b)/(c), D-V2-131): the header's name as the
+/// program wrote it, the secret's grant name (what the record says was sent), its bytes, and the
+/// audience its grant names — empty when the grant named none, and then it is sent nowhere.
+pub struct SecretHeader<'a> {
+    pub header: &'a str,
+    pub name: &'a str,
+    pub value: &'a str,
+    pub audience: &'a [Audience],
+}
+
+impl std::fmt::Debug for SecretHeader<'_> {
+    // The bytes are never formatted, here or anywhere.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretHeader").field("header", &self.header).field("name", &self.name).field("audience", &self.audience).finish()
+    }
+}
+
+/// [`request_with`] carrying, beside the program's headers, one secret in one header. The secret's header
+/// is held to every rule a program's header is ([`check_headers`], over the whole set — so it cannot
+/// repeat a plain header's name in another case, nor be `Host`); then the URL's origin must be in the
+/// secret's audience, or the request is refused before anything is resolved. On each hop the secret is
+/// sent only where the program's headers are (the origin it named) AND that origin is in its audience:
+/// the second condition is implied by the first today, and is checked anyway, so that neither rule can
+/// be loosened alone into sending a secret where its grant never pointed.
+pub fn request_with_secret(
+    policy: &EgressPolicy,
+    url: &str,
+    headers: &[(String, String)],
+    secret: Option<&SecretHeader<'_>>,
+    resolver: &dyn Resolver,
+    transport: &dyn Transport,
+) -> (EgressRecord, Option<String>) {
     let started = Instant::now();
     let deadline = started + policy.deadline;
     let mut rec = EgressRecord { url: url.to_string(), hops: Vec::new(), outcome: Err(Reason::Protocol) };
-    let headers = match check_headers(headers) {
+    let mut given: Vec<(String, String)> = headers.to_vec();
+    if let Some(s) = secret {
+        given.push((s.header.to_string(), s.value.to_string()));
+    }
+    let mut headers = match check_headers(&given) {
         Ok(h) => h,
         Err(reason) => {
             rec.outcome = Err(reason);
             return (rec, None);
         }
     };
+    // The secret's header, checked with the rest, is kept apart from them: it rides only where its
+    // audience allows.
+    let secret_header: Option<(String, String)> = if secret.is_some() { headers.pop() } else { None };
+    let headers = headers;
     // The origin the program named. A URL that does not parse has none, and its first hop refuses it.
     let origin = parse_target(url).ok().map(|t| (t.host, t.port));
+    if let Some(s) = secret {
+        if s.audience.is_empty() {
+            rec.outcome = Err(Reason::Audience(
+                "its grant names no audience — grant it as `secret:NAME@HOST[:PORT]=VALUE` to say where it may be sent",
+            ));
+            return (rec, None);
+        }
+        // A URL that does not parse is refused by its first hop, in its own words, and nothing is sent.
+        if let Some((host, port)) = &origin {
+            if !s.audience.iter().any(|a| a.host == *host && a.port == *port) {
+                rec.outcome = Err(Reason::Audience("the URL's host and port are outside the audience its grant names"));
+                return (rec, None);
+            }
+        }
+    }
     let mut current = url.to_string();
     let mut redirects = 0u32;
     loop {
-        let send = match &origin {
-            Some((host, port)) => parse_target(&current).is_ok_and(|t| t.host == *host && t.port == *port),
-            None => false,
+        let here = parse_target(&current).ok().map(|t| (t.host, t.port));
+        let send = match (&origin, &here) {
+            (Some(o), Some(h)) => o == h,
+            _ => false,
         };
-        let hop_headers: &[(String, String)] = if send { &headers } else { &[] };
-        match hop(policy, &current, hop_headers, resolver, transport, deadline, &mut rec) {
+        let carry_secret = send
+            && secret.is_some_and(|s| here.as_ref().is_some_and(|(h, p)| s.audience.iter().any(|a| a.host == *h && a.port == *p)));
+        let mut hop_headers: Vec<(String, String)> = if send { headers.clone() } else { Vec::new() };
+        let mut secret_name: Option<&str> = None;
+        if let (true, Some(sh), Some(s)) = (carry_secret, &secret_header, secret) {
+            hop_headers.push(sh.clone());
+            secret_name = Some(s.name);
+        }
+        match hop(policy, &current, &hop_headers, secret_name, resolver, transport, deadline, &mut rec) {
             Err(reason) => {
                 rec.outcome = Err(reason);
                 return (rec, None);
@@ -820,10 +972,12 @@ fn remaining(deadline: Instant) -> Result<Duration, Reason> {
 }
 
 /// One hop: the full check, the pinned request, and what it came back with.
+#[allow(clippy::too_many_arguments)]
 fn hop(
     policy: &EgressPolicy,
     url: &str,
     headers: &[(String, String)],
+    secret: Option<&str>,
     resolver: &dyn Resolver,
     transport: &dyn Transport,
     deadline: Instant,
@@ -874,6 +1028,7 @@ fn hop(
         peer: None,
         status: None,
         headers: headers.iter().map(|(n, _)| n.clone()).collect(),
+        secret: secret.map(str::to_string),
     });
     let req = PinnedRequest { url: &t.url, host: &t.host, port: t.port, addrs: &pinned, headers };
     let got = transport.fetch(&req, policy.max_body, remaining(deadline)?)?;

@@ -368,8 +368,17 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
             "net.special" => one.net_special.iter().try_for_each(|h| {
                 if old.net_special.contains(h) { Ok(()) } else { Err(format!("OLD does not grant `{h}` as special-use reach")) }
             }),
+            // P9-04 (c), D-V2-131: a secret's REACH is its audience — every origin NEW lets it be sent to must be one OLD
+            // names for it too. No audience is the bottom (sent nowhere), so one is reach a secret without one never had.
             "secret" => one.secrets.keys().try_for_each(|n| {
-                if old.secrets.contains_key(n) { Ok(()) } else { Err(format!("OLD grants no secret `{n}`")) }
+                if !old.secrets.contains_key(n) {
+                    return Err(format!("OLD grants no secret `{n}`"));
+                }
+                let old_to = old.secret_audiences.get(n).map(Vec::as_slice).unwrap_or(&[]);
+                match one.secret_audiences.get(n).into_iter().flatten().find(|a| !old_to.contains(a)) {
+                    Some(a) => Err(format!("NEW lets the secret `{n}` be sent to `{a}`, which OLD's audience for it does not name")),
+                    None => Ok(()),
+                }
             }),
             "foreign.c" => one.foreign_c.keys().try_for_each(|l| {
                 if old.foreign_c.contains_key(l) { Ok(()) } else { Err(format!("OLD grants no foreign library `{l}`")) }
@@ -438,6 +447,8 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
             };
             let category = match dimension.as_str() {
                 "net.special" => "special_use_reach",
+                // Every name NEW grants is one OLD grants: what failed is where the secret may go.
+                "secret" if one.secrets.keys().all(|n| old.secrets.contains_key(n)) => "secret_reach_expansion",
                 "actuator" | "sensor" | "compute" => "device_reach_expansion",
                 _ if granted_any => "scope_expansion",
                 _ => "effect_expansion",

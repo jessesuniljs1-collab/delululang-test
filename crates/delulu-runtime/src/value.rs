@@ -718,6 +718,19 @@ pub struct CapVal {
 /// program-process memory scan finds nothing pre-`expose` (criterion 6).
 pub struct SecretVal {
     inner: SecretInner,
+    /// P9-04 (c), D-V2-131: where this secret may be SENT — its grant name and the audience its grant
+    /// line names (`--grant secret:NAME@HOST[:PORT]=VALUE`). `None` for a secret granted with no
+    /// audience, which `get_with_secret` sends nowhere. Carried through `Secret.map` (a value derived
+    /// from the secret's bytes goes where they may go, and nowhere else) and across an actor boundary.
+    audience: Option<Rc<SecretAudience>>,
+}
+
+/// A secret's grant name and the origins its grant lets it be sent to (P9-04 (c)). Authority data,
+/// minted from the operator's grant and never from the program.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SecretAudience {
+    pub name: String,
+    pub to: Vec<crate::egress::Audience>,
 }
 
 enum SecretInner {
@@ -730,12 +743,22 @@ enum SecretInner {
 impl SecretVal {
     /// An in-process (embedded-mode) secret carrying its bytes.
     pub fn new(v: String) -> SecretVal {
-        SecretVal { inner: SecretInner::Local(RefCell::new(v)) }
+        SecretVal { inner: SecretInner::Local(RefCell::new(v)), audience: None }
+    }
+
+    /// An in-process secret carrying its bytes and the audience its grant names (P9-04 (c)).
+    pub fn bound(v: String, audience: Option<Rc<SecretAudience>>) -> SecretVal {
+        SecretVal { inner: SecretInner::Local(RefCell::new(v)), audience }
     }
 
     /// A daemon-mode handle: an opaque reference to a broker-held secret `name` — NO bytes here.
     pub fn handle(name: impl Into<String>) -> SecretVal {
-        SecretVal { inner: SecretInner::Handle(name.into()) }
+        SecretVal { inner: SecretInner::Handle(name.into()), audience: None }
+    }
+
+    /// Where this secret may be sent (P9-04 (c)): `None` when its grant named no audience.
+    pub fn audience(&self) -> Option<&Rc<SecretAudience>> {
+        self.audience.as_ref()
     }
 
     /// The broker secret name, if this is a daemon-mode handle (else `None`). Used by the
@@ -828,6 +851,9 @@ pub struct RootVal {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: HashMap<String, String>,
+    /// P9-04 (c), D-V2-131: each secret's audience, by name, as the grant line named it — a secret
+    /// absent here was granted with none, and is sent nowhere.
+    pub secret_audiences: HashMap<String, Vec<crate::egress::Audience>>,
     /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` — true iff any `foreign.c` lib or
     /// `foreign.python` pattern was granted (spec §4.1/§5.1). The per-lib gate is enforced separately
     /// when `root.foreign(load)` binds; the per-import gate is the allowlist checked at `py.import`.

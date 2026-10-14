@@ -302,8 +302,22 @@ and none of the headers the runtime sends itself (`Host`, the framing and connec
 `Proxy-*`, `Accept-Encoding`). They go only to the host and port your URL names: a redirect elsewhere
 drops them. The run report lists, for each hop, the NAMES of the headers it carried — never a value.
 
-Secrets have no string form and no equality. **Two** operations get information out, and **both
-carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
+**A request can carry a secret — only to where its grant says.** `client.get_with_secret(url, headers,
+"Authorization", token)` sends the `Secret[Str]` `token` as that header's value; your program never reads
+it, so this needs no `Declassify`. The grant names the secret's **audience**:
+`--grant secret:API_TOKEN@api.example.com=VALUE` (or `=env:VAR`; several hosts with commas, a port after
+a colon — `@api.example.com,uploads.example.com:8443`). The host and port of your URL must be in it, or
+the request is refused before anything is resolved (`[egress: audience]` on stderr; the program gets
+`Refused`); a secret granted with no `@` is sent nowhere. A redirect to another host or port drops the
+secret with the other headers. `token.map(fn(s: Str) -> Str { "Bearer " + s })` keeps the audience. The
+run report names, for each hop, which secret it carried — never its bytes. Trust the audience with the
+secret: what a server in it does with the bytes, echoing them back included, is the server's. Not yet:
+a `--broker daemon` or `--lease` run (its secrets are the broker's, which does not judge an audience yet —
+refused DL0904, naming the way out), a `--sandbox` guest (it holds no secret), or `--engine wasm` (no
+`http` at all).
+
+Secrets have no string form and no equality. **Two** operations get information out to your program,
+and **both carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
 its type: `expose` yields the whole value and also needs `Cap[Declassify]`; `verify` yields one bit,
 constant-time, and needs no capability. `verify` is usually the one you want — but it is not free,
 and a function calling it must declare `!{Declassify}`.
