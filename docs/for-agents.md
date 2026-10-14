@@ -668,6 +668,11 @@ overstate it downstream:
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
+  `http.get_with(url, headers)` (a `Map[Str, Str]`, P9-04 (a)) sends headers under the same checks: each
+  name an HTTP token, each value printable ASCII with no line break, no two names that differ only in
+  case, at most 32 — and never `Host`, the framing and connection headers, `Proxy-*` or
+  `Accept-Encoding` (reason `header`, nothing connected). They go only to the URL's own host and port;
+  a redirect elsewhere drops them. The report names the headers each hop carried, never a value.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

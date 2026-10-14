@@ -2002,6 +2002,33 @@ file = "crates/delulu-check/src/prim_table.rs"
 test = "every_listed_primitive_rejects_a_five_argument_call"
 kind = "negative"
 
+# P9-04 (a), D-V2-128 (routine run 23, under the owner's delegation — ENTRENCHED_CHANGE_RECORD.md): the
+# request with headers. The table's own two witnesses, as every primitive has, plus the egress client's:
+# a header it must send, and every header it must refuse.
+[[witness]]
+anchor = "ref.prim.http.get_with"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.get_with"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.get_with"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "headers_that_follow_the_rules_are_sent_lower_cased_in_the_order_given"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.get_with"
+file = "crates/delulu-runtime/src/egress/tests.rs"
+test = "a_programs_headers_are_checked_before_anything_is_resolved"
+kind = "negative"
+
 [[witness]]
 anchor = "ref.prim.clock.now_ms"
 file = "crates/delulu-check/src/prim_table.rs"

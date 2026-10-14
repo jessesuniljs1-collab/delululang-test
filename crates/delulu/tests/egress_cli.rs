@@ -176,6 +176,84 @@ fn a_refused_request_says_why_to_the_operator_and_nothing_to_the_program() {
     }
 }
 
+/// A program that fetches `url` with `headers` through `get_with` (P9-04 (a), D-V2-128).
+fn fetcher_with(dir: &Path, hosts: &str, url: &str, headers: &[(&str, &str)]) {
+    let inserts: String = headers.iter().map(|(n, v)| format!("    hs.insert(\"{n}\", \"{v}\")\n")).collect();
+    std::fs::write(
+        dir.join("fetch.delulu"),
+        format!(
+            "module fetch\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+             let out = root.console()\n    \
+             let h = root.http([\"{hosts}\"])\n    \
+             let hs = Map()\n{inserts}    \
+             match h.get_with(\"{url}\", hs) {{\n        \
+             Ok(body) => out.println(\"delivered\")\n        \
+             Err(e) => out.println(\"not delivered\")\n    \
+             }}\n}}\n"
+        ),
+    )
+    .unwrap();
+}
+
+/// P9-04 (a): a request WITH HEADERS leaves as TLS at L0 and from a guest — whose map of headers crosses
+/// the channel for the host to send — and the report names the headers each hop carried, never a value.
+#[test]
+fn a_request_with_headers_leaves_as_tls_at_l0_and_from_a_guest_and_the_report_names_them() {
+    for sandbox in [false, true] {
+        let dir = tmp(if sandbox { "hdr-guest" } else { "hdr-l0" });
+        let (port, seen) = listen(Duration::from_secs(20));
+        fetcher_with(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/probe"), &[("X-Api-Version", "7"), ("Accept", "text/plain")]);
+        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
+        if sandbox {
+            args.push("--sandbox");
+        }
+        let o = delulu(&dir, &args);
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stdout).contains("not delivered"), "sandbox={sandbox}:\n{}", out(&o));
+        let v = report(&dir);
+        assert_eq!(v["egress"]["requests"], 1, "sandbox={sandbox}: {v}");
+        let hop = &v["egress"]["records"][0]["hops"][0];
+        assert_eq!(hop["headers"], serde_json::json!(["accept", "x-api-version"]), "sandbox={sandbox}: the names, in the map's order: {v}");
+        assert!(!v.to_string().contains("text/plain"), "sandbox={sandbox}: no header value in the report: {v}");
+        // And the report, `headers` and all, is still a `run-report` (a field the schema had never seen is a field
+        // nothing would have held to it — routine run 21's lesson).
+        let o = delulu(&dir, &["schema", "validate", "run-report", "rep.json", "--json"]);
+        let check: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON");
+        assert_eq!(check["validate"]["valid"], true, "sandbox={sandbox}: {}\n{v}", check["validate"]["errors"]);
+    }
+}
+
+/// A header the egress client refuses (here `Host`, which would carry the request to another site on
+/// the checked address) is refused before anything connects: the program is told `Refused`, the
+/// operator why — on stderr, in the report, and for a guest in `denied[]`.
+#[test]
+fn a_refused_header_connects_nowhere_and_says_why_to_the_operator() {
+    for sandbox in [false, true] {
+        let dir = tmp(if sandbox { "hdr-refused-guest" } else { "hdr-refused-l0" });
+        let (port, seen) = listen(Duration::from_secs(3));
+        fetcher_with(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/probe"), &[("Host", "evil.example.net")]);
+        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
+        if sandbox {
+            args.push("--sandbox");
+        }
+        let o = delulu(&dir, &args);
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stdout).contains("not delivered"), "sandbox={sandbox}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("[egress: header]"), "sandbox={sandbox}:\n{}", out(&o));
+        let v = report(&dir);
+        let rec = &v["egress"]["records"][0];
+        assert_eq!(rec["reason"], "header", "sandbox={sandbox}: {v}");
+        assert_eq!(rec["hops"], serde_json::json!([]), "sandbox={sandbox}: no hop was made: {v}");
+        if sandbox {
+            let denied = v["sandbox"]["denied"].as_array().expect("denied[]");
+            assert!(denied.iter().any(|d| d.as_str().is_some_and(|s| s.contains("header"))), "sandbox={sandbox}: {v}");
+        }
+        assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}: nothing connected for a refused header");
+    }
+}
+
 /// `--json` keeps the operator's prose off stderr — the same records are in the report.
 #[test]
 fn under_json_the_reason_is_in_the_report_and_not_in_prose() {

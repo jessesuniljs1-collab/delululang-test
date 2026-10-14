@@ -44,6 +44,8 @@ struct Sent {
     host: String,
     port: u16,
     addrs: Vec<SocketAddr>,
+    /// The headers it was asked to send, as given.
+    headers: Vec<(String, String)>,
 }
 
 /// A transport that plays a script of answers and records what it was asked to send.
@@ -66,6 +68,7 @@ impl Transport for FakeTransport {
             host: req.host.to_string(),
             port: req.port,
             addrs: req.addrs.to_vec(),
+            headers: req.headers.to_vec(),
         });
         self.script.borrow_mut().pop_front().unwrap_or(Err(Reason::Connect))
     }
@@ -351,6 +354,157 @@ fn every_redirect_hop_is_checked_like_a_first_request() {
     }
 }
 
+/// A request's headers, as a program's map hands them over.
+type Headers = Vec<(String, String)>;
+
+fn hs(pairs: &[(&str, &str)]) -> Headers {
+    pairs.iter().map(|(n, v)| (n.to_string(), v.to_string())).collect()
+}
+
+/// P9-04 (a), D-V2-128: a program's headers are judged BEFORE anything is resolved or sent, and every
+/// rule refuses rather than normalizes — each case below is a header some server would read as a
+/// different request from the one the program's text says (a second header begun by a line break, a
+/// `Host` that moves the request to another site on the checked address, a name in two cases).
+#[test]
+fn a_programs_headers_are_checked_before_anything_is_resolved() {
+    let long_value = "v".repeat(MAX_HEADER_VALUE + 1);
+    let long_name = "n".repeat(MAX_HEADER_NAME + 1);
+    let many: Vec<(String, String)> = (0..=MAX_HEADERS).map(|i| (format!("x-h{i}"), "1".to_string())).collect();
+    let big: Vec<(String, String)> = (0..3).map(|i| (format!("x-big{i}"), "b".repeat(MAX_HEADER_VALUE - 10))).collect();
+    const VALUE: &str = "printable ASCII";
+    const EDGE: &str = "begins or ends with whitespace";
+    const TOKEN: &str = "not an HTTP token";
+    let mut cases: Vec<(&str, Headers, &str)> = vec![
+        ("CRLF in a value", hs(&[("x-a", "1\r\nHost: evil.example.net")]), VALUE),
+        ("LF in a value", hs(&[("x-a", "1\nx-b: 2")]), VALUE),
+        ("CR in a value", hs(&[("x-a", "1\r")]), VALUE),
+        ("NUL in a value", hs(&[("x-a", "1\u{0}2")]), VALUE),
+        ("DEL in a value", hs(&[("x-a", "1\u{7f}")]), VALUE),
+        ("non-ASCII in a value", hs(&[("x-a", "caf\u{e9}")]), VALUE),
+        ("a leading space", hs(&[("x-a", " 1")]), EDGE),
+        ("a trailing tab", hs(&[("x-a", "1\t")]), EDGE),
+        ("an empty name", hs(&[("", "1")]), TOKEN),
+        ("a space in a name", hs(&[("x a", "1")]), TOKEN),
+        ("a colon in a name", hs(&[("x-a:", "1")]), TOKEN),
+        ("a pseudo-header", hs(&[(":authority", "evil.example.net")]), TOKEN),
+        ("a line break in a name", hs(&[("x-a\r\nhost", "evil")]), TOKEN),
+        ("a non-ASCII name", hs(&[("x-\u{e9}", "1")]), TOKEN),
+        // Both ways round: the comparison must be made on the lower-cased name the SECOND spelling becomes,
+        // not on how it was written (mutant M351 compared the written name, and the first order alone let it live).
+        ("two cases of one name", hs(&[("Accept", "a"), ("accept", "b")]), "differ only in case"),
+        ("two cases of one name, the other way", hs(&[("x-api-key", "a"), ("X-Api-Key", "b")]), "differ only in case"),
+        ("too long a name", vec![(long_name, "1".into())], "longer than 128 bytes"),
+        ("too long a value", vec![("x-a".into(), long_value)], "longer than 8 KiB"),
+        ("too many", many, "more than 32 headers"),
+        ("too large together", big, "larger than 16 KiB"),
+    ];
+    for (name, why) in RESERVED_HEADERS {
+        let upper = name.to_ascii_uppercase();
+        let leaked: &'static str = Box::leak(upper.into_boxed_str());
+        cases.push((leaked, hs(&[(leaked, "x")]), why));
+        cases.push((name, hs(&[("x-before", "1"), (name, "x")]), why));
+    }
+    for (label, headers, rule) in cases {
+        let r = FakeResolver::with(&[("api.example.com", &[PUBLIC])]);
+        let t = FakeTransport::answering(vec![ok("must not arrive")]);
+        let (rec, body) = request_with(&policy(&["api.example.com"], &[]), "https://api.example.com/v1", &headers, &r, &t);
+        assert_eq!(body, None, "{label}");
+        assert!(
+            matches!(rec.outcome, Err(Reason::Header(why)) if why.contains(rule)),
+            "{label}: refused by the rule `{rule}`, got {:?}",
+            rec.outcome
+        );
+        assert!(r.asked.borrow().is_empty(), "{label}: nothing is resolved for a refused header");
+        assert!(t.sent.borrow().is_empty(), "{label}: nothing is sent");
+        assert!(rec.hops.is_empty(), "{label}");
+        assert_eq!(rec.outcome.as_ref().unwrap_err().answer(), Answer::Refused, "{label}: the program is told `Refused`");
+    }
+}
+
+/// The accepted forms: every `tchar` a name may hold, an empty value, a tab and a space INSIDE a value,
+/// a name the client would otherwise default (`User-Agent`, `Accept`), and exactly the bounds.
+#[test]
+fn headers_that_follow_the_rules_are_sent_lower_cased_in_the_order_given() {
+    let r = FakeResolver::with(&[("api.example.com", &[PUBLIC])]);
+    let t = FakeTransport::answering(vec![ok("{}")]);
+    let given = hs(&[
+        ("X-Api-Version", "7"),
+        ("Accept", "application/json"),
+        ("User-Agent", "probe/1"),
+        ("x-!#$%&'*+-.^_`|~09az", "a\tb c"),
+        ("x-empty", ""),
+    ]);
+    let (rec, body) = request_with(&policy(&["api.example.com"], &[]), "https://api.example.com/v1", &given, &r, &t);
+    assert_eq!(body.as_deref(), Some("{}"), "{:?}", rec.outcome);
+    let sent = t.sent.borrow();
+    assert_eq!(
+        sent[0].headers,
+        hs(&[
+            ("x-api-version", "7"),
+            ("accept", "application/json"),
+            ("user-agent", "probe/1"),
+            ("x-!#$%&'*+-.^_`|~09az", "a\tb c"),
+            ("x-empty", ""),
+        ]),
+        "names lower-cased, values as written, in the order given"
+    );
+    assert_eq!(rec.hops[0].headers, ["x-api-version", "accept", "user-agent", "x-!#$%&'*+-.^_`|~09az", "x-empty"]);
+    // At the bounds exactly: accepted.
+    let at: Vec<(String, String)> = (0..MAX_HEADERS).map(|i| (format!("x-{i}"), "1".to_string())).collect();
+    let t = FakeTransport::answering(vec![ok("{}")]);
+    let (rec, _) = request_with(&policy(&["api.example.com"], &[]), "https://api.example.com/v1", &at, &r, &t);
+    assert!(rec.outcome.is_ok(), "{MAX_HEADERS} headers are allowed: {:?}", rec.outcome);
+    let t = FakeTransport::answering(vec![ok("{}")]);
+    let one = vec![("n".repeat(MAX_HEADER_NAME), "v".repeat(MAX_HEADER_VALUE))];
+    let (rec, _) = request_with(&policy(&["api.example.com"], &[]), "https://api.example.com/v1", &one, &r, &t);
+    assert!(rec.outcome.is_ok(), "a name and a value at their bounds are allowed: {:?}", rec.outcome);
+}
+
+/// What a program addressed to one origin is never handed to the next: a redirect to another host, or
+/// to another PORT of the same host, drops the program's headers; a hop back to the origin it named
+/// carries them again. Each hop's record names what it carried.
+#[test]
+fn the_headers_go_to_the_origin_the_program_named_and_to_no_other() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let allow = ["a.example.com", "b.example.com"];
+    let t = FakeTransport::answering(vec![
+        redirect(302, "/next"),
+        redirect(302, "https://a.example.com:443/same-origin-spelled-with-its-port"),
+        redirect(302, "https://b.example.com/elsewhere"),
+        redirect(302, "https://a.example.com:8443/another-port"),
+        redirect(302, "https://a.example.com/back"),
+        ok("done"),
+    ]);
+    let mut p = policy(&allow, &[]);
+    p.max_redirects = 6;
+    let given = hs(&[("Authorization", "Bearer declassified"), ("Accept", "application/json")]);
+    let (rec, body) = request_with(&p, "https://a.example.com/start", &given, &r, &t);
+    assert_eq!(body.as_deref(), Some("done"), "{:?}", rec.outcome);
+    let carried: Vec<(String, usize)> = t.sent.borrow().iter().map(|s| (s.url.clone(), s.headers.len())).collect();
+    assert_eq!(
+        carried,
+        [
+            ("https://a.example.com/start".to_string(), 2),
+            ("https://a.example.com/next".to_string(), 2),
+            ("https://a.example.com:443/same-origin-spelled-with-its-port".to_string(), 2),
+            ("https://b.example.com/elsewhere".to_string(), 0),
+            ("https://a.example.com:8443/another-port".to_string(), 0),
+            ("https://a.example.com/back".to_string(), 2),
+        ]
+    );
+    let named: Vec<usize> = rec.hops.iter().map(|h| h.headers.len()).collect();
+    assert_eq!(named, [2, 2, 2, 0, 0, 2], "each hop's record names what it carried");
+    // The record names headers, never their values — in the record and in what the report carries.
+    let json = rec.to_json().to_string();
+    assert!(json.contains("\"authorization\""), "{json}");
+    assert!(!json.contains("declassified") && !json.contains("application/json"), "no value in the record: {json}");
+    // A plain `get` sends none and its record says nothing of headers.
+    let t = FakeTransport::answering(vec![ok("x")]);
+    let (rec, _) = get_with(&policy(&allow, &[]), "https://a.example.com/", &r, &t);
+    assert!(t.sent.borrow()[0].headers.is_empty());
+    assert!(!rec.to_json().to_string().contains("headers"), "{}", rec.to_json());
+}
+
 #[test]
 fn a_redirect_loop_is_cut_off() {
     let r = FakeResolver::with(&[("a.example.com", &[PUBLIC])]);
@@ -518,6 +672,8 @@ mod real_transport {
         sni: Option<String>,
         host: Option<String>,
         path: String,
+        /// The request's whole head, as it arrived (P9-04 (a): the headers a program sent).
+        head: String,
         /// The handshake never produced a request — the client refused the certificate, or never sent.
         no_request: bool,
     }
@@ -582,7 +738,7 @@ mod real_transport {
                         k.eq_ignore_ascii_case("host").then(|| v.trim().to_string())
                     });
                     let path = text.split_whitespace().nth(1).unwrap_or("").to_string();
-                    log.lock().unwrap().push(Seen { sni, host, path: path.clone(), no_request: false });
+                    log.lock().unwrap().push(Seen { sni, host, path: path.clone(), head: text.clone(), no_request: false });
                     let _ = tls.write_all(&respond(&path));
                     let _ = tls.flush();
                     tls.conn.send_close_notify();
@@ -621,6 +777,32 @@ mod real_transport {
         assert_eq!(seen[0].host.as_deref(), Some(format!("pinned.test:{}", s.port).as_str()), "Host header");
         assert_eq!(seen[0].path, "/greet");
         assert_eq!(rec.hops[0].peer.as_deref(), Some("127.0.0.1"), "and the peer is the pinned address");
+    }
+
+    /// P9-04 (a), D-V2-128, end to end over real TLS: the program's headers arrive as it wrote them
+    /// (lower-case names), one of each — a `User-Agent` it set REPLACES the client's rather than joining
+    /// it — and the `Host` header is still the checked host's.
+    #[test]
+    fn a_programs_headers_arrive_over_tls_and_the_host_header_stays_the_checked_one() {
+        let s = serve(&["pinned.test"], |_| http("200 OK", "with headers"), Duration::from_secs(5));
+        let r = FakeResolver::with(&[("pinned.test", &["127.0.0.1"])]);
+        let t = ReqwestTransport::with_roots(s.roots.clone());
+        let url = format!("https://pinned.test:{}/h", s.port);
+        let given = hs(&[("X-Api-Version", "7"), ("User-Agent", "probe/1"), ("Accept", "application/json")]);
+        let (rec, body) = request_with(&loopback_policy("pinned.test"), &url, &given, &r, &t);
+        assert_eq!(body.as_deref(), Some("with headers"), "{:?}", rec.outcome);
+        let seen = s.seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        let lines: Vec<String> = seen[0].head.lines().map(|l| l.to_ascii_lowercase()).collect();
+        let count = |prefix: &str| lines.iter().filter(|l| l.starts_with(prefix)).count();
+        assert!(lines.contains(&"x-api-version: 7".to_string()), "{lines:?}");
+        assert!(lines.contains(&"user-agent: probe/1".to_string()), "{lines:?}");
+        assert!(lines.contains(&"accept: application/json".to_string()), "{lines:?}");
+        assert_eq!(count("user-agent:"), 1, "the program's User-Agent replaces the client's: {lines:?}");
+        assert_eq!(count("accept:"), 1, "{lines:?}");
+        assert_eq!(count("host:"), 1, "{lines:?}");
+        assert_eq!(seen[0].host.as_deref(), Some(format!("pinned.test:{}", s.port).as_str()), "Host header");
+        assert_eq!(rec.hops[0].headers, ["x-api-version", "user-agent", "accept"]);
     }
 
     /// Verification is ON in the configuration a release uses: the platform's trust store refuses a
@@ -674,7 +856,7 @@ mod real_transport {
         let t = ReqwestTransport::with_roots(s.roots.clone());
         let addrs = [SocketAddr::new(ip("127.0.0.1"), s.port)];
         let url = format!("https://localhost:{}/", s.port);
-        let req = PinnedRequest { url: &url, host: "pinned.test", port: s.port, addrs: &addrs };
+        let req = PinnedRequest { url: &url, host: "pinned.test", port: s.port, addrs: &addrs, headers: &[] };
         let got = t.fetch(&req, 1024, Duration::from_secs(5));
         assert_eq!(got, Err(Reason::Connect), "an unpinned host is not resolved");
         std::thread::sleep(Duration::from_millis(200));

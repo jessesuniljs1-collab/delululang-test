@@ -636,9 +636,26 @@ pub fn call_cap_method_pinned(
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
-        (ResourceKind::Http, "get") => {
+        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
+            // P9-04 (a), D-V2-128: `get_with`'s headers, in the map's own order (ascending by name). The
+            // checker admits only a `Map[Str, Str]`; anything else here is its bug, said as one.
+            let headers: Vec<(String, String)> = if method == "get_with" {
+                let Some(Value::Map(m)) = args.get(1) else {
+                    return Err(Fault::at("DL0907", "http.get_with expects a Map[Str, Str] of headers (checker bug)", span));
+                };
+                let mut hs = Vec::new();
+                for (k, v) in m.borrow().iter() {
+                    match (k, v) {
+                        (crate::value::MapKey::Str(name), Value::Str(value)) => hs.push((name.clone(), value.to_string())),
+                        _ => return Err(Fault::at("DL0907", "http.get_with expects a Map[Str, Str] of headers (checker bug)", span)),
+                    }
+                }
+                hs
+            } else {
+                Vec::new()
+            };
             if !url.starts_with("https://") {
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
@@ -651,7 +668,7 @@ pub fn call_cap_method_pinned(
             // the host, pins, and follows redirects through the same check. For a sandboxed guest this
             // line runs in the HOST — `HostChannel::decide` performs the request here — so one
             // implementation serves L0 and every guest.
-            Ok(match crate::egress::get_for_program(&url, allow, special) {
+            Ok(match crate::egress::get_for_program_with(&url, &headers, allow, special) {
                 crate::egress::Answer::Body(b) => Value::ok(Value::str(b)),
                 crate::egress::Answer::Refused => Value::err(net_err("Refused")),
                 crate::egress::Answer::Timeout => Value::err(net_err("Timeout")),

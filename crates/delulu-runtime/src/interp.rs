@@ -2315,7 +2315,9 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
         ("Console", "println") | ("Console", "print") => args.first().map(|v| v.display()),
         ("FsRead", "read_text") | ("FsRead", "list_dir") => args.first().map(|v| v.display()),
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
-        ("Http", "get") => args.first().map(|v| v.display()),
+        // The URL only, for `get_with` too: a header's value may be a credential the program declassified,
+        // and the trace is printed and stored (P9-04 (a), D-V2-128).
+        ("Http", "get") | ("Http", "get_with") => args.first().map(|v| v.display()),
         // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
         // scope rather than its arguments — an audit of `Actuate`, the most physically
         // consequential effect in the language, that cannot say which actuator moved is not an
@@ -2357,7 +2359,7 @@ pub(crate) fn custody_op_for(
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
             Some((CustodyOp::FsWrite, fs_arg(c)))
         }
-        (ResourceKind::Http, "get") => {
+        (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
                 // itself before anything is reached (`prim`: the scheme refusal, a VALUE), so there is no

@@ -632,6 +632,7 @@ broker + WASM containment; the grant model and manifest format do not change.
 | `Cap[FsRead]` | `narrow(p: Str)` | `-> Cap[FsRead]` | — (attenuation) | sub-path of scope |
 | `Cap[FsWrite]` | `write_text(p, s)` / `append_text(p, s)` | `-> Result[Unit, IoErr]` | `Write` | path under scope root |
 | `Cap[Http]` | `get(url: Str)` | `-> Result[Str, NetErr]` | `Net` | host in allowlist, https only |
+| `Cap[Http]` | `get_with(url: Str, headers: Map[Str, Str])` | `-> Result[Str, NetErr]` | `Net` | as `get`; each header held to the egress client's rules, sent only to the URL's origin (V2 P9-04 (a), D-V2-128) |
 | `Cap[Clock]` | `now_ms()` | `-> Int` | `Clock` | — |
 | `Cap[Rand]` | `int(lo, hi)` / `float()` | `-> Int` / `-> Float` | `Rand` | — |
 | `Secret[T]` | `map(f: fn(T) -> U ! {})` | `-> Secret[U]` | — (f must be pure, DL0603) | — |

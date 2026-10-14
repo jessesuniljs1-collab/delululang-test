@@ -704,6 +704,51 @@ fn a_sandboxed_guests_egress_refusal_is_recorded_the_same_way() {
     egress_refusals_are_recorded("egress-sb", &["--sandbox"]);
 }
 
+/// **P9-04 (a), D-V2-128: a request WITH HEADERS answers to the same custody as `get`.** Under the daemon, the
+/// custody gate allows the use of the granted host (`use allow`, the run's node) and the egress client then refuses
+/// the request for its `Host` header — a `deny` citing that `allow`, with the reason `header`. A `get_with` the
+/// gate did not know would be a request no revocation could stop and no chain could see: the `allow` record is the
+/// witness that it was asked. `extra` runs it in a guest too.
+fn a_request_with_headers_is_gated_and_recorded(tag: &str, extra: &[&str]) {
+    let f = setup(tag);
+    std::fs::write(
+        f.cwd.join("fetch.delulu"),
+        "module fetch\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    \
+         let h = root.http([\"example.com\"])\n    let hs = Map()\n    hs.insert(\"Host\", \"evil.example.net\")\n    \
+         match h.get_with(\"https://example.com/a\", hs) {\n        \
+         Ok(body) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }\n}\n",
+    )
+    .unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let mut args =
+        vec!["run", "fetch.delulu", "--broker", "daemon", "--grant", "console", "--grant", "net=example.com", "--no-prompt"];
+    args.extend_from_slice(extra);
+    let o = delulu_in(&f.cwd, &f.state, &args);
+    let (so, se) = (stdout(&o), stderr(&o));
+    assert!(o.status.success(), "a refused request is a value:\n{so}\n{se}");
+    assert_eq!(so, "not delivered\n", "{se}");
+    assert!(se.contains("[egress: header]"), "the operator was told why: {se}");
+    let uses: Vec<serde_json::Value> = use_records(&f).into_iter().filter(|r| r["target"] == "example.com").collect();
+    let allows: Vec<&serde_json::Value> = uses.iter().filter(|r| r["decision"] == "allow").collect();
+    let denies: Vec<&serde_json::Value> = uses.iter().filter(|r| r["decision"] == "deny").collect();
+    assert_eq!(allows.len(), 1, "the custody gate was asked about the request's host: {uses:#?}");
+    assert_eq!(denies.len(), 1, "and the egress client's refusal is in the chain: {uses:#?}");
+    assert_eq!(denies[0]["authority"]["reason"], "header", "{:#?}", denies[0]);
+    assert_eq!(denies[0]["authority"]["overrides_seq"], allows[0]["seq"], "{uses:#?}");
+}
+
+#[test]
+fn a_request_with_headers_answers_to_the_daemons_custody() {
+    a_request_with_headers_is_gated_and_recorded("hdr", &[]);
+}
+
+#[test]
+fn a_sandboxed_guests_request_with_headers_answers_to_the_daemons_custody() {
+    a_request_with_headers_is_gated_and_recorded("hdr-sb", &["--sandbox"]);
+}
+
 /// **Every refusal is recorded, however many requests came before it** (routine run 18's red team, F1/F2). The first
 /// form of D-V2-112 read a fetch's refusal from the run's egress log, which keeps its first 64 records only — so the
 /// 65th request on was refused with no `deny` in the chain, and a `special-use` monitor could be walked past by

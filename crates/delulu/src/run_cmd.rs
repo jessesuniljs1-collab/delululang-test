@@ -473,14 +473,15 @@ pub(crate) fn write_nofollow(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     f.write_all(bytes)
 }
 
-/// PS-B-02: tell the operator, on stderr, about every `http.get` that did not deliver — the reason
+/// PS-B-02: tell the operator, on stderr, about every `http` request that did not deliver — the reason
 /// the PROGRAM is deliberately not told (it sees only `NetErr`). Human prose, so it is withheld under
 /// `--json`, where the same records are in the run report's `egress` object.
 pub(crate) fn print_egress_notes(log: &delulu_runtime::egress::EgressLog) {
     for r in &log.records {
         if let Err(reason) = &r.outcome {
             eprintln!(
-                "note: `http.get` of `{}` was not delivered: {} [egress: {}]",
+                // `get` and `get_with` alike (P9-04 (a)): the request is named by its URL.
+                "note: the request to `{}` was not delivered: {} [egress: {}]",
                 r.url.escape_debug(),
                 reason.explain(),
                 reason.code()

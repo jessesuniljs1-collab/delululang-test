@@ -113,6 +113,10 @@ pub enum WireValue {
     List(Vec<WireValue>),
     Record { name: String, fields: Vec<(String, WireValue)> },
     Variant { name: String, fields: Vec<WireValue> },
+    /// A `Map[K, V]` (P9-04 (a), D-V2-128 — `http.get_with`'s headers cross from a guest), as its entries
+    /// in the map's own ascending order. A key is `Bool`, `Int` or `Str` (D-V2-29); a key sent twice is
+    /// refused on the way in rather than letting the second silently replace the first.
+    Map(Vec<(WireValue, WireValue)>),
     /// A capability, by host-minted handle plus its KIND. The guest needs the kind to type-check its
     /// own use of the value; it never learns the scope, which is the part that names a resource.
     Cap { handle: Handle, kind: String },
@@ -146,6 +150,12 @@ impl WireValue {
                 name: name.to_string(),
                 fields: fields.iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?,
             },
+            Value::Map(m) => WireValue::Map(
+                m.borrow()
+                    .iter()
+                    .map(|(k, x)| Ok((WireValue::from_value(&k.to_value(), cap)?, WireValue::from_value(x, cap)?)))
+                    .collect::<Result<Vec<_>, Untransferable>>()?,
+            ),
             Value::Cap(c) => WireValue::Cap { handle: cap(c), kind: c.kind.name().to_string() },
             Value::Closure(_) => return Err(Untransferable("a closure")),
             Value::Root(_) => return Err(Untransferable("the root")),
@@ -184,10 +194,30 @@ impl WireValue {
                     fields.into_iter().map(|x| x.into_value(cap)).collect::<Result<Vec<_>, _>>()?,
                 ),
             },
+            WireValue::Map(entries) => {
+                let mut m = std::collections::BTreeMap::new();
+                for (k, x) in entries {
+                    let key = wire_map_key(k)?;
+                    if m.insert(key, x.into_value(cap)?).is_some() {
+                        return Err(Untransferable("a map that names one key twice"));
+                    }
+                }
+                Value::Map(std::rc::Rc::new(std::cell::RefCell::new(m)))
+            }
             WireValue::Cap { handle, .. } => {
                 Value::Cap(cap(handle).ok_or(Untransferable("an unknown capability handle"))?)
             }
         })
+    }
+}
+
+/// A wire value as a `Map` key: `Bool`, `Int` or `Str`, as the checker admits (D-V2-29), and nothing else.
+fn wire_map_key(k: WireValue) -> Result<crate::value::MapKey, Untransferable> {
+    match k {
+        WireValue::Bool(b) => Ok(crate::value::MapKey::Bool(b)),
+        WireValue::Int(i) => Ok(crate::value::MapKey::Int(i)),
+        WireValue::Str(s) => Ok(crate::value::MapKey::Str(s)),
+        _ => Err(Untransferable("a map key that is not a Bool, an Int or a Str")),
     }
 }
 
@@ -219,6 +249,16 @@ impl WireValue {
                     fields.into_iter().map(WireValue::into_guest_value).collect::<Result<Vec<_>, _>>()?,
                 ),
             },
+            WireValue::Map(entries) => {
+                let mut m = std::collections::BTreeMap::new();
+                for (k, x) in entries {
+                    let key = wire_map_key(k)?;
+                    if m.insert(key, x.into_guest_value()?).is_some() {
+                        return Err(Untransferable("a map that names one key twice"));
+                    }
+                }
+                Value::Map(std::rc::Rc::new(std::cell::RefCell::new(m)))
+            }
             plain => plain.into_value(&mut |_| None)?,
         })
     }
@@ -917,6 +957,11 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 name,
                 fields: fields.into_iter().map(|x| self.walk(x, minted, next)).collect(),
             },
+            // A capability inside a map's value is reminted like any other, in the encoder's order;
+            // leaving a map to the catch-all would send the placeholder handle 0 — another capability.
+            WireValue::Map(entries) => WireValue::Map(
+                entries.into_iter().map(|(k, x)| (self.walk(k, minted, next), self.walk(x, minted, next))).collect(),
+            ),
             plain => plain,
         }
     }
@@ -1355,6 +1400,97 @@ mod tests {
         assert_eq!(WireValue::from_value(&root, &mut no_caps()), Err(Untransferable("the root")));
     }
 
+    fn a_map(entries: Vec<(crate::value::MapKey, Value)>) -> Value {
+        Value::Map(std::rc::Rc::new(std::cell::RefCell::new(entries.into_iter().collect())))
+    }
+
+    /// P9-04 (a), D-V2-128: a `Map` crosses — `http.get_with`'s headers travel from a guest to the host —
+    /// and comes back the same; a key sent twice, or a key no map can hold, is refused on the way in
+    /// rather than resolved by whichever entry came last.
+    #[test]
+    fn a_map_crosses_and_one_that_names_a_key_twice_is_refused() {
+        use crate::value::MapKey;
+        let v = a_map(vec![
+            (MapKey::Str("accept".into()), Value::Str("application/json".into())),
+            (MapKey::Str("x-api-version".into()), Value::Str("7".into())),
+        ]);
+        let wire = WireValue::from_value(&v, &mut no_caps()).expect("a map of plain data crosses");
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &wire).unwrap();
+        let back: WireValue = read_frame(&mut &buf[..]).unwrap();
+        assert_eq!(wire, back);
+        assert_eq!(back.clone().into_value(&mut |_| None).expect("decodes").display(), v.display());
+        assert_eq!(back.into_guest_value().expect("and as the guest decodes").display(), v.display());
+
+        let twice = WireValue::Map(vec![
+            (WireValue::Str("accept".into()), WireValue::Str("a".into())),
+            (WireValue::Str("accept".into()), WireValue::Str("b".into())),
+        ]);
+        assert_eq!(twice.clone().into_value(&mut |_| None).err(), Some(Untransferable("a map that names one key twice")));
+        assert_eq!(twice.into_guest_value().err(), Some(Untransferable("a map that names one key twice")));
+        for key in [WireValue::Float(1.0), WireValue::Unit, WireValue::List(vec![]), WireValue::Cap { handle: 1, kind: "Clock".into() }] {
+            let odd = WireValue::Map(vec![(key.clone(), WireValue::Int(1))]);
+            assert_eq!(
+                odd.clone().into_value(&mut |_| None).err(),
+                Some(Untransferable("a map key that is not a Bool, an Int or a Str")),
+                "{key:?}"
+            );
+            assert_eq!(odd.into_guest_value().err(), Some(Untransferable("a map key that is not a Bool, an Int or a Str")), "{key:?}");
+        }
+    }
+
+    /// A capability inside a map the host sends back is reminted like any other: the guest receives a
+    /// handle the host minted for THAT capability — never the encoder's placeholder, which is another
+    /// capability's handle.
+    #[test]
+    fn a_capability_inside_a_map_the_host_returns_is_reminted() {
+        use crate::value::MapKey;
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let clock = std::rc::Rc::new(CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Clock });
+        let rand = std::rc::Rc::new(CapVal { kind: delulu_check::ResourceKind::Rand, scope: crate::value::CapScope::Rand });
+        let first = host.mint(clock.clone());
+        let v = a_map(vec![(MapKey::Int(1), Value::Cap(clock)), (MapKey::Int(2), Value::Cap(rand))]);
+        let Response::Ok(WireValue::Map(entries)) = host.encode_result(v) else { panic!("a map crosses back") };
+        let handles: Vec<Handle> = entries
+            .iter()
+            .map(|(_, x)| match x {
+                WireValue::Cap { handle, .. } => *handle,
+                other => panic!("a capability, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(handles.len(), 2);
+        assert!(handles.iter().all(|h| *h != 0 && *h != first), "fresh handles, not the placeholder: {handles:?}");
+        assert_ne!(handles[0], handles[1]);
+        assert_eq!(host.resolve(handles[1]).map(|c| c.kind), Some(delulu_check::ResourceKind::Rand), "each handle names its own capability");
+    }
+
+    /// A guest's `get_with` is performed by the HOST with the guest's headers — and a header the host
+    /// refuses is the opaque `Refused` to the guest, with its reason in the host's `denied[]`, before
+    /// anything is resolved.
+    #[test]
+    fn a_guests_request_with_a_refused_header_is_refused_by_the_host_and_recorded() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let h = host.mint(std::rc::Rc::new(CapVal {
+            kind: delulu_check::ResourceKind::Http,
+            scope: crate::value::CapScope::Net { allow: vec!["example.com".into()], special: Vec::new() },
+        }));
+        let url = format!("https://example.com/headers-{}", std::process::id());
+        let headers = WireValue::Map(vec![(WireValue::Str("Host".into()), WireValue::Str("evil.example.net".into()))]);
+        let resp = host.answer(&Request {
+            version: CHANNEL_VERSION.to_string(),
+            seq: 1,
+            body: ReqBody::CapMethod { cap: h, method: "get_with".into(), args: vec![WireValue::Str(url.clone()), headers], file: 0, start: 0, end: 1 },
+        });
+        let Response::Ok(WireValue::Variant { name, fields }) = &resp else { panic!("a value, not a fault: {resp:?}") };
+        assert_eq!(name, "Err");
+        assert!(matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()), "{resp:?}");
+        let (denied, _) = host.denied();
+        assert!(
+            denied.iter().any(|d| d.contains(&url) && d.contains("header") && d.contains("Host")),
+            "the refusal and its reason are in denied[]: {denied:?}"
+        );
+    }
+
     /// An unknown handle is a refusal, never a capability conjured from a number.
     #[test]
     fn an_unknown_capability_handle_is_refused() {
@@ -1780,7 +1916,7 @@ mod tests {
 
     /// A small arbitrary `WireValue`, bounded in depth so the generator cannot run away.
     fn random_wire(next: &mut impl FnMut() -> u64, depth: u32) -> WireValue {
-        match next() % if depth == 0 { 6 } else { 9 } {
+        match next() % if depth == 0 { 6 } else { 10 } {
             0 => WireValue::Unit,
             1 => WireValue::Bool(next().is_multiple_of(2)),
             2 => WireValue::Int(next() as i64),
@@ -1792,6 +1928,7 @@ mod tests {
                 name: "R".into(),
                 fields: (0..next() % 3).map(|_| ("f".to_string(), random_wire(next, depth - 1))).collect(),
             },
+            8 => WireValue::Map((0..next() % 3).map(|_| (random_wire(next, 0), random_wire(next, depth - 1))).collect()),
             _ => WireValue::Variant {
                 name: "V".into(),
                 fields: (0..next() % 3).map(|_| random_wire(next, depth - 1)).collect(),

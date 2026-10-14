@@ -294,6 +294,14 @@ trust store. A redirect goes through the same checks, and the response is size-b
 gets `Ok(body)` or `Err(NetErr)` — and when the answer is `Refused`, the reason is printed on stderr
 for you, not handed to the program. Plain `http://` is refused, always.
 
+**A request can carry headers:** `client.get_with(url, headers)`, where `headers` is a `Map[Str, Str]`
+(`let hs = Map()` then `hs.insert("Accept", "application/json")`). The same checks hold, and the
+headers are held to rules of their own before anything is resolved: each name an HTTP token, each
+value printable ASCII with no line break, no two names that differ only in case, at most 32 of them —
+and none of the headers the runtime sends itself (`Host`, the framing and connection headers,
+`Proxy-*`, `Accept-Encoding`). They go only to the host and port your URL names: a redirect elsewhere
+drops them. The run report lists, for each hop, the NAMES of the headers it carried — never a value.
+
 Secrets have no string form and no equality. **Two** operations get information out, and **both
 carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
 its type: `expose` yields the whole value and also needs `Cap[Declassify]`; `verify` yields one bit,

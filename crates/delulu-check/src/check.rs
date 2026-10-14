@@ -2058,6 +2058,14 @@ impl<'a> Checker<'a> {
             },
             Type::Cap(ResourceKind::Http) => match method {
                 "get" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::result(Type::Str, net), Some(Effect::Net), None)) }
+                // P9-04 (a), D-V2-128: the request with headers. The URL stays argument ONE, so every
+                // place that decides a fetch on its URL (the custody gate, the refusal note) reads it
+                // where it reads `get`'s; the headers are a `Map[Str, Str]`, judged by the egress client.
+                "get_with" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Map(Box::new(Type::Str), Box::new(Type::Str)), span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
                 _ => None,
             },
             Type::Cap(ResourceKind::Clock) => match method {

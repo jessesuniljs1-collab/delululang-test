@@ -250,7 +250,7 @@ pub fn effect_for(cap_kind: &str, method: &str) -> Option<&'static str> {
         ("Console", "readline") => Some("Read"),
         ("FsRead", "read_text") | ("FsRead", "list_dir") => Some("Read"),
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => Some("Write"),
-        ("Http", "get") => Some("Net"),
+        ("Http", "get") | ("Http", "get_with") => Some("Net"),
         ("Clock", "now_ms") => Some("Clock"),
         ("Rand", "int") | ("Rand", "float") => Some("Rand"),
         ("Secret", "expose") => Some("Declassify"),
@@ -368,6 +368,7 @@ mod tests {
         assert_eq!(effect_for("FsWrite", "write_text"), Some("Write"));
         assert_eq!(effect_for("FsWrite", "append_text"), Some("Write"));
         assert_eq!(effect_for("Http", "get"), Some("Net"));
+        assert_eq!(effect_for("Http", "get_with"), Some("Net"));
         assert_eq!(effect_for("Clock", "now_ms"), Some("Clock"));
         assert_eq!(effect_for("Rand", "int"), Some("Rand"));
         assert_eq!(effect_for("Rand", "float"), Some("Rand"));

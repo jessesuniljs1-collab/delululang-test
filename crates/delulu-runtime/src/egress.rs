@@ -38,6 +38,14 @@
 //!    would be.
 //! 7. **The body is bounded on what the program receives.** No decompressor is compiled in (the
 //!    refused features in `Cargo.toml`), so the bytes counted are the bytes delivered.
+//! 8. **A program's headers** (`get_with`, P9-04 (a), D-V2-128) are judged by [`check_headers`] before
+//!    anything is resolved: each name an HTTP token, each value printable ASCII with no line break, no
+//!    two names that differ only in case, a bound on their number and size — and none of the names the
+//!    client owns ([`RESERVED_HEADERS`]: `Host`, which would carry the request to another site on the
+//!    checked address, the framing and connection headers, `Proxy-*`, `Accept-Encoding`). They are sent
+//!    only to the ORIGIN the program named: a redirect to another host or port drops them, so what a
+//!    program addressed to one server is never handed to the next. Their names are recorded per hop;
+//!    their values never are, anywhere.
 //!
 //! # What the program learns, and what only the host learns
 //!
@@ -65,6 +73,32 @@ pub const DEFAULT_DEADLINE: Duration = Duration::from_secs(30);
 /// How many egress records a run keeps. Past this the counts still rise but nothing more is stored,
 /// so a program cannot make the host allocate without limit by making requests in a loop.
 pub const MAX_RECORDED: usize = 64;
+/// How many headers one request may carry (P9-04 (a)). A request to an API carries a handful; the bound
+/// is on what a program can make the host format and send on its behalf.
+pub const MAX_HEADERS: usize = 32;
+/// The longest header name accepted.
+pub const MAX_HEADER_NAME: usize = 128;
+/// The longest header value accepted.
+pub const MAX_HEADER_VALUE: usize = 8 * 1024;
+/// Every name and value of one request together.
+pub const MAX_HEADER_BYTES: usize = 16 * 1024;
+
+/// The header names a program may not set, lower-case, each with why: the egress client owns them, and a
+/// program's would re-route, re-frame or re-negotiate the request that was checked.
+pub const RESERVED_HEADERS: &[(&str, &str)] = &[
+    ("host", "`Host` names the checked host and is the client's to send; a program's would carry the request to another site served from the checked address"),
+    ("content-length", "`Content-Length` frames the request, and the client frames it"),
+    ("transfer-encoding", "`Transfer-Encoding` frames the request, and the client frames it"),
+    ("te", "`TE` negotiates the response's framing, which is the client's"),
+    ("trailer", "`Trailer` announces fields after the body, and a GET has none"),
+    ("expect", "`Expect` changes how the request is sent, which is the client's"),
+    ("connection", "`Connection` governs the connection, which is the client's"),
+    ("keep-alive", "`Keep-Alive` governs the connection, which is the client's"),
+    ("upgrade", "`Upgrade` would switch the connection to another protocol"),
+    ("proxy-authorization", "`Proxy-Authorization` is for a proxy, and there is none"),
+    ("proxy-connection", "`Proxy-Connection` is for a proxy, and there is none"),
+    ("accept-encoding", "`Accept-Encoding` asks for a content coding this client cannot decode; the body would arrive as bytes the program cannot read"),
+];
 
 /// The ceilings and the authority one request is held to.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -130,6 +164,9 @@ pub enum Reason {
     HostMismatch,
     /// This build has no network client (`--no-default-features`).
     NoClient,
+    /// A request header the program gave was refused before anything was resolved (P9-04 (a)); the
+    /// payload names the rule, never the value.
+    Header(&'static str),
 }
 
 /// What the program is told — `NetErr`'s three variants, and a body.
@@ -163,6 +200,7 @@ impl Reason {
             Reason::Protocol => "protocol",
             Reason::HostMismatch => "host-mismatch",
             Reason::NoClient => "no-client",
+            Reason::Header(_) => "header",
         }
     }
 
@@ -188,6 +226,7 @@ impl Reason {
             Reason::Protocol => "the server's answer is not HTTP/1.1 this client understands".into(),
             Reason::HostMismatch => "the client would have reached a host other than the one checked".into(),
             Reason::NoClient => "this build has no network client (built without the `net` feature)".into(),
+            Reason::Header(why) => format!("a request header is refused: {why}"),
         }
     }
 
@@ -203,7 +242,8 @@ impl Reason {
             | Reason::NoAddress
             | Reason::TooManyRedirects
             | Reason::HostMismatch
-            | Reason::NoClient => Answer::Refused,
+            | Reason::NoClient
+            | Reason::Header(_) => Answer::Refused,
             Reason::Timeout => Answer::Timeout,
             Reason::RedirectWithoutLocation => Answer::Other("redirect without a location".into()),
             Reason::BodyTooLarge => Answer::Other("response too large".into()),
@@ -393,6 +433,9 @@ pub struct PinnedRequest<'a> {
     pub host: &'a str,
     pub port: u16,
     pub addrs: &'a [SocketAddr],
+    /// The program's headers for THIS hop — checked by [`check_headers`], lower-case names, and empty on
+    /// a hop to another origin than the program named.
+    pub headers: &'a [(String, String)],
 }
 
 /// What came back on one hop.
@@ -468,6 +511,9 @@ pub struct HopRecord {
     /// The address actually connected to, when known.
     pub peer: Option<String>,
     pub status: Option<u16>,
+    /// The NAMES of the program's headers sent on this hop, lower-case — never their values. Empty when
+    /// it sent none, and on a hop to another origin, where they are dropped.
+    pub headers: Vec<String>,
 }
 
 /// One `http.get`, start to finish.
@@ -491,10 +537,15 @@ impl EgressRecord {
             .hops
             .iter()
             .map(|h| {
-                serde_json::json!({
+                let mut j = serde_json::json!({
                     "url": h.url, "host": h.host, "port": h.port, "addrs": h.addrs,
                     "peer": h.peer, "status": h.status,
-                })
+                });
+                // Only where the program sent some, so a report of a plain `get` is what it always was.
+                if !h.headers.is_empty() {
+                    j["headers"] = serde_json::json!(h.headers);
+                }
+                j
             })
             .collect();
         match &self.outcome {
@@ -612,8 +663,14 @@ pub fn note_refusal(url: &str, reason: Reason) {
 /// Serve one `http.get` for a program: the real resolver and transport, the default ceilings, the
 /// record logged. Called only from the primitive table.
 pub fn get_for_program(url: &str, allow: &[String], special: &[String]) -> Answer {
+    get_for_program_with(url, &[], allow, special)
+}
+
+/// Serve one `http.get_with` for a program (P9-04 (a)): [`get_for_program`] with the program's headers,
+/// which [`request_with`] checks before anything is resolved.
+pub fn get_for_program_with(url: &str, headers: &[(String, String)], allow: &[String], special: &[String]) -> Answer {
     let policy = EgressPolicy::for_capability(allow, special);
-    let (rec, body) = get_with(&policy, url, &SystemResolver, system_transport());
+    let (rec, body) = request_with(&policy, url, headers, &SystemResolver, system_transport());
     let answer = match (&rec.outcome, body) {
         (Ok(_), Some(b)) => Answer::Body(b),
         (Err(r), _) => r.answer(),
@@ -638,13 +695,87 @@ pub fn get_with(
     resolver: &dyn Resolver,
     transport: &dyn Transport,
 ) -> (EgressRecord, Option<String>) {
+    request_with(policy, url, &[], resolver, transport)
+}
+
+/// Judge a program's headers (P9-04 (a), D-V2-128) before anything is resolved: the names lower-cased
+/// for sending, in the order given. Every rule refuses rather than normalizes — a value with a space at
+/// its end is not trimmed, a name in two cases is not merged — because a header the program wrote one
+/// way and the server read another is a request nobody checked.
+pub fn check_headers(given: &[(String, String)]) -> Result<Vec<(String, String)>, Reason> {
+    if given.len() > MAX_HEADERS {
+        return Err(Reason::Header("more than 32 headers"));
+    }
+    let mut total = 0usize;
+    let mut out: Vec<(String, String)> = Vec::with_capacity(given.len());
+    for (name, value) in given {
+        // RFC 9110 §5.1: a field name is a `token` — `tchar`s, at least one.
+        let tchar = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+        if name.is_empty() || !name.bytes().all(tchar) {
+            return Err(Reason::Header("a header name is not an HTTP token (RFC 9110 §5.1)"));
+        }
+        if name.len() > MAX_HEADER_NAME {
+            return Err(Reason::Header("a header name is longer than 128 bytes"));
+        }
+        let lower = name.to_ascii_lowercase();
+        if let Some((_, why)) = RESERVED_HEADERS.iter().find(|(n, _)| *n == lower) {
+            return Err(Reason::Header(why));
+        }
+        // Printable ASCII, space and tab: no CR, LF or NUL, which would end the header and begin
+        // another (request splitting), and no byte past ASCII, which servers read differently.
+        if !value.bytes().all(|b| (0x20..=0x7e).contains(&b) || b == b'\t') {
+            return Err(Reason::Header(
+                "a header value holds a byte other than printable ASCII, space or tab (a line break would begin another header)",
+            ));
+        }
+        if value.starts_with([' ', '\t']) || value.ends_with([' ', '\t']) {
+            return Err(Reason::Header("a header value begins or ends with whitespace, which servers strip"));
+        }
+        if value.len() > MAX_HEADER_VALUE {
+            return Err(Reason::Header("a header value is longer than 8 KiB"));
+        }
+        if out.iter().any(|(n, _)| *n == lower) {
+            return Err(Reason::Header("two header names differ only in case, and a header name has no case"));
+        }
+        total += name.len() + value.len();
+        if total > MAX_HEADER_BYTES {
+            return Err(Reason::Header("the headers together are larger than 16 KiB"));
+        }
+        out.push((lower, value.clone()));
+    }
+    Ok(out)
+}
+
+/// [`get_with`] carrying the program's headers: checked first, then sent on each hop whose origin —
+/// host and port, the scheme being `https` always — is the one the program named, and on no other.
+pub fn request_with(
+    policy: &EgressPolicy,
+    url: &str,
+    headers: &[(String, String)],
+    resolver: &dyn Resolver,
+    transport: &dyn Transport,
+) -> (EgressRecord, Option<String>) {
     let started = Instant::now();
     let deadline = started + policy.deadline;
     let mut rec = EgressRecord { url: url.to_string(), hops: Vec::new(), outcome: Err(Reason::Protocol) };
+    let headers = match check_headers(headers) {
+        Ok(h) => h,
+        Err(reason) => {
+            rec.outcome = Err(reason);
+            return (rec, None);
+        }
+    };
+    // The origin the program named. A URL that does not parse has none, and its first hop refuses it.
+    let origin = parse_target(url).ok().map(|t| (t.host, t.port));
     let mut current = url.to_string();
     let mut redirects = 0u32;
     loop {
-        match hop(policy, &current, resolver, transport, deadline, &mut rec) {
+        let send = match &origin {
+            Some((host, port)) => parse_target(&current).is_ok_and(|t| t.host == *host && t.port == *port),
+            None => false,
+        };
+        let hop_headers: &[(String, String)] = if send { &headers } else { &[] };
+        match hop(policy, &current, hop_headers, resolver, transport, deadline, &mut rec) {
             Err(reason) => {
                 rec.outcome = Err(reason);
                 return (rec, None);
@@ -692,6 +823,7 @@ fn remaining(deadline: Instant) -> Result<Duration, Reason> {
 fn hop(
     policy: &EgressPolicy,
     url: &str,
+    headers: &[(String, String)],
     resolver: &dyn Resolver,
     transport: &dyn Transport,
     deadline: Instant,
@@ -741,8 +873,9 @@ fn hop(
         addrs: pinned.iter().map(|a| a.ip().to_string()).collect(),
         peer: None,
         status: None,
+        headers: headers.iter().map(|(n, _)| n.clone()).collect(),
     });
-    let req = PinnedRequest { url: &t.url, host: &t.host, port: t.port, addrs: &pinned };
+    let req = PinnedRequest { url: &t.url, host: &t.host, port: t.port, addrs: &pinned, headers };
     let got = transport.fetch(&req, policy.max_body, remaining(deadline)?)?;
     if let Some(h) = rec.hops.last_mut() {
         h.status = Some(got.status);
@@ -930,7 +1063,13 @@ pub(crate) mod real {
                 b = b.resolve_to_addrs(req.host, req.addrs);
             }
             let client = b.build().map_err(|e| classify(&e))?;
-            let resp = client.get(req.url).send().map_err(|e| classify(&e))?;
+            // The program's headers, already held to `check_headers`. A request header replaces the
+            // client's default of the same name (`User-Agent`, `Accept`); `Host` is never among them.
+            let mut rb = client.get(req.url);
+            for (name, value) in req.headers {
+                rb = rb.header(name.as_str(), value.as_str());
+            }
+            let resp = rb.send().map_err(|e| classify(&e))?;
             let status = resp.status().as_u16();
             let peer = resp.remote_addr();
             if (300..400).contains(&status) {
