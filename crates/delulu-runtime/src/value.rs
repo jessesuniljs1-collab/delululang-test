@@ -770,10 +770,14 @@ impl SecretVal {
         }
     }
 
-    /// The only in-process reader — reached solely through `Secret.expose(Cap[Declassify])`
-    /// (§6.4/R-2) in EMBEDDED mode. A daemon handle carries no bytes (they never entered this
-    /// process), so `reveal` yields the empty string for a handle; the interpreter routes a handle's
-    /// `expose` through `Custody::expose` instead of ever calling this.
+    /// The in-process reader, in EMBEDDED mode, reached from exactly three places: `Secret.expose
+    /// (Cap[Declassify])` (§6.4/R-2), the only one that hands the bytes to the PROGRAM; `Secret.map`,
+    /// which hands them to a pure function whose result stays a secret; and `http.get_with_secret`
+    /// (P9-04 (b)/(c), D-V2-131), which hands them to the egress client to send to the secret's
+    /// audience only — never to the program. A daemon handle carries no bytes (they never entered this
+    /// process), so `reveal` yields the empty string for a handle — and each of the three refuses or
+    /// reroutes a handle BEFORE calling this (`expose` through `Custody::expose`; `map` and
+    /// `get_with_secret` refused, MAP-HANDLE-1, D-V2-132). A fourth caller must do the same.
     pub fn reveal(&self) -> String {
         match &self.inner {
             SecretInner::Local(v) => v.borrow().clone(),

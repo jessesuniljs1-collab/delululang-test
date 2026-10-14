@@ -747,7 +747,8 @@ pub fn call_secret_method(secret: &SecretVal, method: &str, args: &[Value], span
             Some(Value::Secret(other)) => Ok(Value::Bool(secret.verify(other))),
             _ => Err(Fault::at("DL0907", "Secret.verify expects a Secret argument", span)),
         },
-        // The only reader: expose. Reaching here means the checker admitted Cap[Declassify].
+        // The only reader that hands the bytes to the PROGRAM (`get_with_secret` hands them to the egress client,
+        // `map` to a pure function whose result stays a secret). Reaching here means the checker admitted Cap[Declassify].
         "expose" => Ok(Value::str(secret.reveal())),
         _ => Err(Fault::at("DL0907", format!("unknown Secret method `{method}` (checker bug)"), span)),
     }

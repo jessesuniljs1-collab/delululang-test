@@ -309,6 +309,13 @@ your program learns anything about a secret's contents, it shows up in the effec
 Declassification is not forbidden; it is *visible*. You can always see, mechanically, every place a
 program learns something from a secret.
 
+A secret can also be **sent** without your program learning it: `http.get_with_secret(url, headers,
+"Authorization", token)` puts it in one request header, and the runtime sends it only to the hosts its
+grant names — `--grant secret:API_TOKEN@api.example.com=…` — refusing any other destination before a
+byte leaves (V2 P9-04, D-V2-131). Its effect is `Net`, not `Declassify`, because your program never
+reads the bytes. The grant's audience is a statement of trust: a server in it may do anything with the
+secret, answering it back included.
+
 > **This paragraph used to say "the only way to get the bytes out is `expose`", and that was
 > false.** `Secret.map` hands its closure the **plaintext** — gated only on *purity*, and purity is
 > not confidentiality — so a pure closure can compute any predicate about the plaintext and encode

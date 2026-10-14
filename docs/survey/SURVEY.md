@@ -24,10 +24,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 308 |
-| Rust lines | 169316 |
+| Rust lines | 169321 |
 | Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 253 |
-| Markdown lines | 75629 |
+| Markdown lines | 75636 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -303,7 +303,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 21889 lines
+- **Modules:** 24 files, 21894 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -324,12 +324,12 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/netclass.rs` | 273 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2282 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
-| `src/prim.rs` | 1545 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
+| `src/prim.rs` | 1546 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 332 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/sim.rs` | 395 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 100 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 544 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 1000 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 1004 | Runtime values, environments, and capability values (spec §7.1). |
 | `src/verified_adapter.rs` | 647 | P8-02: a device driver whose **logic is a Verified-class plugin** (`V2_P8_DESIGN.md`). |
 
 ### `delulu-survey`
