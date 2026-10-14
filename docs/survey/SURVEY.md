@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 307 |
-| Rust lines | 168370 |
+| Rust lines | 168395 |
 | Rust files outside `src/` (test/bench targets) | 139 |
 | Markdown documents | 253 |
 | Markdown lines | 75062 |
@@ -191,7 +191,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 15512 lines
+- **Modules:** 18 files, 15537 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -199,7 +199,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/check.rs` | 3791 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 186 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1479 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
-| `src/dir.rs` | 864 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
+| `src/dir.rs` | 889 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
 | `src/lib.rs` | 2000 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 561 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |

@@ -709,16 +709,41 @@ mod tests {
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
         let bytes = serialize(&c.module, &c.result);
 
-        let n = 200u32;
-        let start = std::time::Instant::now();
-        for _ in 0..n {
-            verify(&bytes).expect("verifies");
+        // D-V2-130 (routine run 23): the bound is RELATIVE to a control measured on the same machine in the same
+        // window — checking the same source once, the work a verify repeats (resolve and check) plus a parse. The
+        // first form asserted an absolute 5 ms, and that measured the RUNNER: `5fa3261`'s push run read 5.7 ms on
+        // Ubuntu for a commit that changed only the lockfile, and in the VM it was 2.2 ms quiet and 6.8–7.4 ms with
+        // every CPU busy (red 3 of 3) — the D-V2-47 lesson again. A pathological blowup in `verify` moves the ratio
+        // on any machine; a busy machine slows both sides alike. Each side is the BEST of several interleaved rounds,
+        // so a stall during one round is not read as the code's cost.
+        let (rounds, n) = (7u32, 30u32);
+        let mut best_verify = std::time::Duration::MAX;
+        let mut best_check = std::time::Duration::MAX;
+        for _ in 0..rounds {
+            let start = std::time::Instant::now();
+            for _ in 0..n {
+                verify(&bytes).expect("verifies");
+            }
+            best_verify = best_verify.min(start.elapsed() / n);
+            let start = std::time::Instant::now();
+            for _ in 0..n {
+                assert!(!check_source(0, src).has_errors());
+            }
+            best_check = best_check.min(start.elapsed() / n);
         }
-        let per = start.elapsed() / n;
-        // Comfortably fast: well under a millisecond per verify on a dev machine. The 5 ms ceiling is
-        // generous enough to stay green on a loaded CI box while still catching a pathological blowup.
-        assert!(per < std::time::Duration::from_millis(5), "verify per-load must be fast for per-load use: {per:?}");
-        eprintln!("dir::verify per-load ≈ {per:?} (build-order deviation 1b timing witness)");
+        let ratio = best_verify.as_secs_f64() / best_check.as_secs_f64().max(1e-9);
+        eprintln!(
+            "dir::verify per-load ≈ {best_verify:?}, checking the source ≈ {best_check:?}, ratio {ratio:.2} (build-order deviation 1b timing witness)"
+        );
+        // Measured (routine run 23, debug build): 2.1 quiet and 2.4–2.5 with every CPU busy — a verify deserializes
+        // the DIR, re-checks it and compares the projection, about twice one check. Five is more than twice that;
+        // a verify that re-did the work several times, or grew with the facts it compares, is far past it.
+        assert!(
+            ratio < 5.0,
+            "verify per-load must cost a small multiple of one check of the same code: {best_verify:?} against {best_check:?} (ratio {ratio:.2})"
+        );
+        // And an absolute ceiling that no machine excuses: a verify far past this is not per-load usable anywhere.
+        assert!(best_verify < std::time::Duration::from_millis(250), "verify per-load: {best_verify:?}");
     }
 
     #[test]
