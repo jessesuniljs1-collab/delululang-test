@@ -1358,6 +1358,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   PRODUCT's (the period began before the record was written): a measurement moved to the right instants can turn a "flaky
   test" into a defect.
 
+- **A speed claim in absolute time is a claim about the machine — bound it against a control timed in the same window**
+  (routine run 23, D-V2-130): the DIR verify witness's 5 ms went red on an Ubuntu runner for a lockfile-only commit; starved,
+  the VM read 7 ms. Now verify is held to a multiple of one check of the same source (best of interleaved rounds) — machine
+  load cancels, a real blowup does not. `actors_pingpong` taught it first (D-V2-47); grep the class before fixing one.
+- **`cargo update -p ONE` can move crates you did not name — read the lockfile's diff** (routine run 23): bumping `rustls` for
+  RUSTSEC-2026-0346 to -0349 also re-unified five crates (errno, rustix, tempfile, …) onto another `windows-sys` major, which
+  changes only Windows builds. Read every changed `name =` in the diff, then lint the other operating systems from Linux before the
+  push — the VM never compiles that code.
 - **A witness of a normalizing comparison spells the colliding pair BOTH ways round** (routine run 23, M351): the header check
   refuses two names that differ only in case, and its witness gave `Accept` then `accept` — the second already in the canonical
   form, so a mutant comparing the WRITTEN name to the stored lower-case one refused it just the same and survived. With

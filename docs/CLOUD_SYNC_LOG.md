@@ -73,7 +73,8 @@ running summary.
   and F3 (HIGH), RW 4.61 (D-V2-114, D-V2-115 — twelve daemon operations that answered success for a lost record), RW 4.60 (D-V2-117 — a
   report silent about devices that never started), SECRET-HIDDEN-1 (run 20 — a secret read under a computed name missing from
   `authority --grants`), DEADMAN-BUSY-1 (run 22, D-V2-127 — a healthy monitor's runs quarantined whenever the daemon was held on
-  one request: a beat is now judged by when it arrived) — and whatever the later entries add.
+  one request: a beat is now judged by when it arrived), RW 4.62 (run 23, D-V2-129 — a refused operation listed in the trace as if it
+  had happened; every refusal after a dispatch is now recorded) — and whatever the later entries add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), the `scripts/hooks/pre-commit` map check, the repeated-heading gate in
@@ -88,7 +89,7 @@ running summary.
   `jessesuniljs1-collab` through its no-reply address with Claude as co-author (115, from run 10).
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-04's steps (b)–(e) — (b) and (c) as one slice, a secret in a header only with its audience — and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23), RW 4.62 (a custody-refused operation reads as dispatched in the trace), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-04's steps (b)–(e) — (b) and (c) as one slice, a secret in a header only with its audience — and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23), RW 4.64 (the two engines' traces differ for a refused console, clock, rand or hostile-path operation), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -96,7 +97,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-128); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-130); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2827,3 +2828,36 @@ directory, or have the laptop session read §11.
   4.53's rest, RW 4.62, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-128
   (D-V2-128 with the period's second entrenched edit), option (c). **Keep the closing entry current; from 2026-10-16 a run only
   refreshes it and stops.**
+
+### 2026-10-14 — routine run 23 (continued): `fa2d34e` red on supply-chain — rustls 0.23.46; RW 4.62 closed (D-V2-129); `5fa3261` red on Ubuntu — the verify timing witness bounded against a control (D-V2-130)
+- Session: `https://claude.ai/code/session_01X1KXZB4JUGcKCDjQqrCkgQ`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-keller-r6to2u`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `fa2d34e`
+- Commits: (1) `5fa3261` rustls 0.23.45 -> 0.23.46: RUSTSEC-2026-0346 to -0349, read red on fa2d34e's push run; (2) `7c653e0`
+  RW 4.62: a refused operation is followed by its refusal in the trace; (3) `76f54a0` The DIR verify timing witness: bounded
+  against a control on the same machine; (4) this entry's commit — the records
+- Files and folders: (1) M `Cargo.lock` (rustls; five crates' `windows-sys` 0.52.0 → 0.61.2), `deny.toml` (why), `docs/survey/*`.
+  (2) M `crates/delulu-runtime/src/interp.rs` (`Dispatched`, `trace_refusal`), `crates/delulu-runtime/src/trace.rs` (the module's
+  rule), `crates/delulu-wasm/src/host.rs` (`push_refusal_trace`), `crates/delulu/tests/guard_e2e.rs` and `cli.rs` (the witnesses),
+  `docs/for-agents.md`, `docs/survey/*`. (3) M `crates/delulu-check/src/dir.rs` (the witness), `docs/survey/*`. (4) M `CHANGELOG.md`, `HANDOFF.md` (§11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 2 a
+  line — loop engineering), `docs/REMAINING_WORK.md` (4.62 closed; **4.64 added**), `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-129, D-V2-130), `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Added,
+  deleted, renamed: nothing. **Authorship:** the owner's account through its GitHub no-reply address, Claude as co-author.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `fa2d34e`'s push runs — CI `38584248231` **failure**, `supply-chain` only (RUSTSEC-2026-0346 to -0349 against
+  rustls 0.23.45, published that day), every other job green; `openshell` `38584248260` success. `5fa3261`: `cargo deny --all-features
+  check advisories` FAILED with the four, then ok (bans, licences, sources ok); Windows and macOS linted; its push run
+  ``38586917971``: **failure** — `test (ubuntu-24.04)` only (the DIR verify timing witness — the next entry); `supply-chain` green with rustls 0.23.46, every other job green. `7c653e0`: RW 4.62 witnessed red first (a guarded write traced as dispatched, nothing after,
+  nothing written); mutants M368–M373 red, the control green; clippy clean; the five other targets linted; read on the runners —
+  `guard_e2e` and `cli` on Windows `38587247926` (56 passed), macOS `38587253051` (55), arm64 `38587258506` (55) — 0 failed, both new witnesses named; the full suite alone — 2,272 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left. `76f54a0`: `5fa3261`'s CI `38586917971` read red on Ubuntu (the verify
+  witness, 5.7 ms against 5 ms; every other job green, `supply-chain` included); reproduced by starving the VM (red 3 of 3); fixed —
+  green 5 of 5 starved, M374 red; read on the runners — `delulu-check`'s library — Ubuntu `38590951265` (248 passed; ratio 1.90, 1.70 ms a verify), Windows `38590955781` (248; 2.02, 2.19 ms), macOS `38590961151` (248; 1.91, 1.16 ms), arm64 `38590966445` (248; 1.98, 1.77 ms).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL (the lockfile moved `windows-sys` for five crates — the
+  Windows suite is the first local build of them).
+- For the laptop's memory: `HANDOFF.md` §11.5 — `cargo update -p ONE` can move crates you did not name: read the lockfile's diff; and a
+  speed claim in absolute time is a claim about the machine — bound it against a control timed in the same window (D-V2-130).
+- Open / next, in order: (1) read THIS commit's push run; (2) **P9-04 steps (b) and (c), as ONE slice** — a `Secret[Str]` in a
+  header position only with its audience in the grant; (3) RW 4.64 (the WASM engine's refusal records — next, if this run's budget does not reach it), RW 4.63,
+  RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-130, option
+  (c). **Keep the closing entry current; from 2026-10-16 a run only refreshes it and stops.**

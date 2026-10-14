@@ -3070,6 +3070,51 @@ would be a declassification without `Cap[Declassify]` (today `expose`, behind it
 alone would widen what a program holding a secret and `net` can do; (d) the broker's audience dimension and
 `secret_reach_expansion`; (e) `authority`'s per-secret destinations.
 
+## D-V2-129 — RW 4.62: a trace record is a dispatch, and a refused operation is followed by its refusal — `<method>.refused`, the dispatch's effect, the code and its words — whoever refused it — TAKEN (head chef, 2026-10-14, under the owner's delegation)
+
+**Context.** `--trace-effects` records an operation at its DISPATCH (spec §6.1; `DELULU_CORE.md` v0.3's E-Refuse: the
+trace records the ATTEMPT). RW 4.62 (routine run 21): a custody denial that is a fault added nothing after it, so the trace
+listed a `println` that never printed. Witnessed first on the current binary (routine run 23): a leased write the Guard holds
+was refused DL1410, nothing was written, and the trace's only record was `write_text`.
+
+**Decision.**
+1. **The class, from the mechanism:** any FAULT between a recorded dispatch and the operation's end — the custody gate (a
+   revoked lease, a guarded or sealed use), the broker's refusal of a daemon `expose` or `verify`, and the effect's own refusal
+   (a path outside its capability, a host outside the allowlist) — is followed by a refusal record. RW 4.62 named the first;
+   reading the dispatch found the other two, which leave the same unpaired record.
+2. **The record:** `op` is `<method>.refused`; `effect` and `cap_kind` are the dispatch's, so the trace stays inside the row
+   (`--assert-trace` and `delulu test`'s `effects_traced` read only effects, deduplicated — neither moves); `span` is the
+   call's; `detail` is `CODE: message`, and the code ALONE where a secret was involved (its dispatch is opaque, and redaction
+   outranks explanation). An actuator's refusals keep their own records (`command.revoked`, `command.refused`): they are
+   values the program is told, not faults.
+3. **Both engines:** the WASM engine traces `read_text` at dispatch too and now writes the same refusal record (its escape
+   refusal and its custody refusal) — the two engines' traces stay byte-identical, witnessed. **Residual, RW 4.64:** the WASM
+   engine checks custody BEFORE it traces console, clock and rand and refuses a hostile path before it traces `read_text`, so
+   those refusals are in the interpreter's trace and not in the WASM engine's (predating this change); and it writes no
+   refusal after `rand.int`'s `hi <= lo` fault, which the interpreter now records (this change's own divergence).
+4. **Not changed:** a record's meaning (a dispatch), the trace's shape (one more `op` spelling), redaction, the trace bound.
+
+**Witnessed:** `guard_e2e`'s `a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace` (a guarded write, a guarded
+`expose` — `detail` exactly `DL1410` — and a guarded read under both engines, identical) and `cli`'s
+`an_operation_its_effect_refuses_is_followed_by_its_refusal_in_the_trace` (DL0904, both engines); mutants M368–M373 red, the
+control green. `7c653e0`.
+
+## D-V2-130 — A speed claim is bounded against a control measured on the same machine in the same window: the DIR verify witness asserts verify ≤ 5 × one check of the same source, never an absolute 5 ms — TAKEN (head chef, 2026-10-14, under the owner's delegation)
+
+**Context.** `5fa3261`'s push run (CI `38586917971`) was red on Ubuntu alone: `dir::tests::verify_is_comfortably_fast_for_per_load_
+use` read 5.7 ms per verify against an absolute 5 ms bound, for a commit that changed only the lockfile (rustls — `delulu-check`
+does not use it); the same test was green on `fa2d34e`. Reproduced in the VM by starving it (AGENTS.md's trap; D-V2-47): 2.2 ms
+quiet, then 6.8–7.4 ms with every CPU busy — red 3 of 3. The bound measured the machine.
+
+**Decision.** Each of seven rounds times 30 verifies and 30 checks of the same source (the work a verify repeats — resolve and
+check — plus a parse), interleaved; each side's best round is kept; the ratio must stay under 5 (measured 2.1 quiet, 2.0–2.6
+with every CPU busy: a verify deserializes, re-checks and compares, about twice one check), with an absolute 250 ms ceiling no
+machine excuses. The test prints all three numbers, so every green read is also a measurement. **Not a weakening:** a blowup
+the old bound let through on a fast machine (a 2× slower verify at 0.75 ms) is caught now on any machine; mutant M374 (a
+verify that re-checks ten times) is red, the control green; with every CPU busy the test is green 5 of 5. **The class,
+enumerated:** it was the repository's only speed claim asserted in absolute time — the four other absolute time assertions
+(`guest.rs`, `budget_cli`, `sandbox_devices_cli`, `microvm_cli`) are 8–60 s ceilings on something that must END, not speeds.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

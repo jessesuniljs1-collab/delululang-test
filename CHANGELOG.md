@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a refused operation says so in the trace; rustls 0.23.46, 2026-10-14
+
+- **Fixed (RW 4.62): `--trace-effects` listed an operation that was refused as if it had happened.** A trace record is
+  the operation's DISPATCH; when it was then refused — by the broker's custody (a revoked lease, a guarded or sealed use),
+  by the broker's refusal of `expose` or `verify`, or by the effect itself (a path outside the capability) — nothing
+  followed it. Now the next record is `<method>.refused`, with the same effect and the code and its words (the code alone
+  where a secret was involved). Both engines write it (D-V2-129).
+- **Security (dependencies): `rustls` 0.23.45 → 0.23.46** for RUSTSEC-2026-0346, -0347, -0348 and -0349 (published
+  2026-10-14). No source change.
+
 ## Unreleased — a request with headers, 2026-10-14
 
 - **New (P9-04 step (a)): `Cap[Http].get_with(url, headers)`** — a GET carrying headers (`headers` is a `Map[Str, Str]`).

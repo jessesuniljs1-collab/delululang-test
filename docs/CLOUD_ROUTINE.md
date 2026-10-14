@@ -106,7 +106,8 @@ first `doctor` builds the whole `delulu` crate) and do step 1's reading while th
 --offline`, which needs every platform's (run 1 lost a suite result to it). And, in the background,
 `cargo install cargo-deny --locked` (about four minutes; the VM has none): the supply-chain gate reds a
 push whenever RustSec publishes against the tree, whatever the commit changed (run 4), and the fix is
-witnessed with `cargo deny --all-features check advisories` before and after. The cross-OS targets
+witnessed with `cargo deny --all-features check advisories` before and after (run 23: `cargo update -p rustls` also moved five
+crates' `windows-sys` — read the lockfile's diff and lint the other OSes before pushing it). The cross-OS targets
 (installed with the toolchain above) — `scripts/check-other-os.sh` needs them for any change to code that runs on
 another OS, and then takes about seven minutes itself (run 5).
 

@@ -5605,3 +5605,52 @@ Clippy clean; macOS, Windows, arm64 and musl linted from Linux (`check-other-os.
 0 failed on every read, every new test named on each, no compiler warning, no orphan `delulu` (Windows' only orphan is `vctip`, the MSVC toolchain's telemetry).
 
 **The full suite alone at `bee695f`:** 2,270 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-14 — routine run 23 (continued): `fa2d34e` red on supply-chain — rustls 0.23.46 (RUSTSEC-2026-0346 to -0349)
+
+**`fa2d34e`'s push runs:** CI `38584248231` **failure** — `supply-chain` only (`cargo deny check advisories`): four advisories
+RustSec published that day against `rustls 0.23.45` — 0346 (`Debug` of client session values exposing TLS secrets), 0347 (data
+buffered for the outer server after an ECH rejection), 0348 (the `brotli` certificate decompressor, a feature this tree does not
+enable) and 0349 (a pre-authentication ServerHello pinning later key shares to a classical group). Every other job green;
+`openshell` `38584248260` success. A records commit's red, run 4's lesson exactly: the gate reads RustSec as it is on the day.
+**Witnessed in the VM** (`cargo install cargo-deny --locked`, 0.20.2): `cargo deny --all-features check advisories` FAILED with the
+four; `cargo update -p rustls` (0.23.45 → 0.23.46) — and it is ok, with bans, licences and sources ok. The update also re-unified
+errno, quinn-udp, rustix, tempfile and winapi-util onto `windows-sys` 0.61.2 (from 0.52.0, within their own ranges): read in the
+lockfile's diff, then Windows and macOS linted from Linux, and the egress client's TLS tests (35) green. `deny.toml` records it.
+`5fa3261`; its push run ``38586917971``: **failure** — `test (ubuntu-24.04)` only (the DIR verify timing witness — the next entry); `supply-chain` green with rustls 0.23.46, every other job green.
+
+## 2026-10-14 — routine run 23 (continued): RW 4.62 closed — a refused operation is followed by its refusal in the trace (D-V2-129)
+
+**Witnessed first** on the current binary: under the daemon, a leased write the Guard holds (`fs_write:*` guarded) was refused
+DL1410, no file was written, and `--trace-out` held one record — `write_text`. **The class, from the mechanism** (routine run 19's
+rule): any fault between the dispatch record and the operation's end leaves the same unpaired record — the custody gate, the
+broker's refusal of a daemon `expose`/`verify` (found by reading the dispatch: `expose_secret` faults after it), and the effect's
+own refusal (DL0904, a path outside the capability — with no broker at all). **Fixed** (`interp.rs`: `trace_dispatch` returns what
+it recorded; `trace_refusal` follows a custody denial and any faulted result): `<method>.refused`, the dispatch's effect and
+`cap_kind`, the call's span, `detail` the code and its words — the code alone where a secret was involved. The WASM engine, which
+traces `read_text` at dispatch too, writes the same record (`push_refusal_trace`), so the engines' traces stay byte-identical.
+**Witnesses:** `guard_e2e`'s `a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace` (a guarded write; a guarded
+`expose`, `detail` exactly `DL1410`; a guarded read under both engines, the traces equal) and `cli`'s `an_operation_its_effect_
+refuses_is_followed_by_its_refusal_in_the_trace` (DL0904 under both engines). Mutants M368 (no record after a custody denial),
+M369 (none after a faulted result), M370 (a secret's refusal carries its words), M371 (another effect label), M372 and M373 (the
+WASM engine's two records) — every one RED, the control green. The trace-reading targets (`cli`, `actuate_cli`, `estop_cli`,
+`json_contract`, `sandbox_modes_cli`, `plugin_load_cli`, `dead_man_cli`, `robotics_demo`, `satellite_demo`, `core_invariance`,
+`atlas_chain`) green unchanged. A false lead re-run before use: a `guard policy set fs_read:*` looked as if it dropped
+`fs_write:*` — the default policy never had it; the hand run had set it. **Residual, RW 4.64 (opened):** the WASM engine checks
+custody before it traces console, clock and rand and refuses a hostile path before tracing `read_text` (both predating this
+change), and writes no refusal after `rand.int`'s `hi <= lo` fault, which the interpreter now records (this change's own).
+Clippy clean; the five other targets linted from Linux. `7c653e0`.
+**Read on the runners at `7c653e0`** (`guard_e2e` and `cli`): Windows ``38587247926` (56 passed)`, macOS ``38587253051` (55)`, arm64 ``38587258506` (55)`. 0 failed on each, both new witnesses named, no compiler warning, no orphan `delulu`.
+**The full suite alone at `7c653e0`:** 2,272 passed, 0 failed, 16 ignored (162 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+## 2026-10-14 — routine run 23 (continued): `5fa3261` red on Ubuntu — the DIR verify timing witness measured the runner (D-V2-130)
+
+**`5fa3261`'s push run** (CI `38586917971`): **failure** — `test (ubuntu-24.04)` only, `delulu-check`'s `dir::tests::verify_is_
+comfortably_fast_for_per_load_use` ("verify per-load must be fast for per-load use: 5.745101ms" against 5 ms); 2,269 passed and 1
+failed in that job; `supply-chain` green again (rustls 0.23.46), every other job green. The commit changed only `Cargo.lock`, and
+`delulu-check` uses none of what moved; the test was green on `fa2d34e`. **Reproduced by starving the VM** (eight busy loops on four
+CPUs): 2.2 ms quiet, 6.8–7.4 ms loaded — red 3 of 3. **Fixed (D-V2-130):** the bound is relative to a control timed in the same
+window — a check of the same source; best of seven interleaved rounds each; ratio under 5 (2.1 quiet, 2.0–2.6 loaded), a 250 ms
+absolute ceiling. Green 5 of 5 with every CPU busy; mutant M374 (verify re-checks ten times) red, the control green; clippy clean.
+The class enumerated: the only speed claim in absolute time (four other absolute time assertions are ceilings of 8–60 s on things
+that must end). `76f54a0`. **Read on the runners** (`delulu-check`'s library, the ratio printed): `delulu-check`'s library — Ubuntu `38590951265` (248 passed; ratio 1.90, 1.70 ms a verify), Windows `38590955781` (248; 2.02, 2.19 ms), macOS `38590961151` (248; 1.91, 1.16 ms), arm64 `38590966445` (248; 1.98, 1.77 ms).
