@@ -86,9 +86,9 @@ running summary.
   took D-V2-52 to D-V2-55), every one TAKEN under the owner's delegation. **Three entrenched edits:** `DELULU_CORE.md` v0.3
   (D-V2-49, run 1) and `tests/conformance/witnesses.toml` — the anchors `ref.prim.http.get_with` (D-V2-128, run 23) and
   `ref.prim.http.get_with_secret` (D-V2-131, run 24), each in `ENTRENCHED_CHANGE_RECORD.md`. **No `DL` code was added. No `.md` file was deleted.**
-- **Size, at run 24's last code** (`git diff --name-status cfbfbdc..f4c428c`): 263 commits; 165 files — 41 added, 124
-  modified, **0 deleted, 0 renamed**; +42,373 / −4,502 lines. Commits by `Claude` (92, runs 1–9) and by
-  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (171, from run 10). (At run 19's start: 207
+- **Size, at run 24's last code** (`git diff --name-status cfbfbdc..bf51fe0`): 266 commits; 165 files — 41 added, 124
+  modified, **0 deleted, 0 renamed**; +42,522 / −4,532 lines. Commits by `Claude` (92, runs 1–9) and by
+  `jessesuniljs1-collab` through its no-reply address with Claude as co-author (174, from run 10). (At run 19's start: 207
   commits, 139 files.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
@@ -2967,4 +2967,32 @@ directory, or have the laptop session read §11.
   the bytes at send time naming the destination; `grants diff` between nodes) — and with it whether the language should reach
   the broker's whitelisted `secret_map`; then (e); (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two
   items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-132, option (c). **The closing entry is current;
+  from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-14 — routine run 24 (last): `4f3084b` red on supply-chain — wasmtime 48.0.6 (RUSTSEC-2026-0353 to -0364); the claims P9-04 (b)/(c) overtook corrected; P9-04 (d) read against the code
+- Session: `https://claude.ai/code/session_01Lxo11erVVd6HiYqFKAznFG`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (and the harness branch `claude/zealous-carson-tidpo3`, the same commits)   Pull request: none   Merged: n/a
+- Base: `4f3084b`
+- Commits: (1) `52193ba` The claims get_with_secret overtook: reveal() has three readers, the book a third way out; (2) `bf51fe0`
+  wasmtime 48.0.5 -> 48.0.6: RUSTSEC-2026-0353 to -0359 and -0361 to -0364, read red on 4f3084b's push run; (3) this entry's
+  commit — the records
+- Files and folders: (1) M `crates/delulu-runtime/src/value.rs`, `prim.rs` (comments), `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/survey/*`. (2) M `Cargo.lock` (the Wasmtime release: 29 lockfile entries), `deny.toml` (why), `docs/survey/*`. (3) M
+  `docs/DELULULANG_V2/V2_P9_DESIGN.md` (step (d) read against the code), `docs/CLOUD_ROUTINE.md` (step 5
+  two lines — loop engineering), `HANDOFF.md` (§11.5 the `pkill` trap), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`
+  (this entry; the closing entry's "as of"), `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `f4c428c`'s CI `38630746024` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `actors_pingpong` arm64 MEASURED 2.97x (control 4.12x), the others NOT MEASURED. `4f3084b`'s CI `38631973104` **failure** — `supply-chain` only (eleven Wasmtime advisories published
+  that evening), every other job green. `bf51fe0`: `cargo deny` failed with the eleven, then ok (advisories, bans, licences,
+  sources); the lockfile's diff read (only the Wasmtime release: 29 lockfile entries); `delulu-wasm`'s tests green; the two-engine
+  differential ok in 116 s; the five other targets linted; **`bf51fe0`'s push run** (CI `38636976623`): success on every job, `supply-chain` included — **`master` green again**; `actors_pingpong` arm64 MEASURED 2.98x (control 4.13x), macOS NOT MEASURED (3 hardware threads), Ubuntu and Windows NOT MEASURED. **The full suite alone at `bf51fe0`:** 2,284 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left. `52193ba`: comments and prose only — the runtime library (275 passed, 1 ignored) and the book gate (9)
+  green; clippy clean.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL (the lockfile moved the Wasmtime release — the laptop's
+  first build of it).
+- For the laptop's memory: `HANDOFF.md` §11.5 — `pkill -f PATTERN` matches the command that runs it; stop a job by PID.
+- Open / next, in order: (1) read THIS commit's push run (records and comments only); (2) **P9-04 step (d)** — its build order
+  is in `V2_P9_DESIGN.md` (a `secret_to` dimension of `NAME@host:port` pairs, a recorded `SendSecret` broker op guarded like
+  `Declassify`, the witnesses to write first); then (e); (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first
+  two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-132 (D-V2-128 and D-V2-131 with the period's
+  second and third entrenched edits; D-V2-131 changes what a secret NAME may hold), option (c). **The closing entry is current;
   from 2026-10-16 a run only refreshes it and stops.**

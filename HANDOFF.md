@@ -1386,6 +1386,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `x-api-key` then `X-Api-Key` it is red. For every check that compares through a normalization (case, a path's resolution, a
   host's spelling), put the NON-canonical spelling where the comparison reads it, and the canonical one where it stores.
 
+- **`pkill -f PATTERN` matches the command that runs it** (routine run 24): stopping a background lint with `pkill -f
+  check-other-os.sh` killed the very shell whose command line held that text (exit 144); the edits after it in the same command
+  never ran, and the lint's children survived. Stop a job by PID.
 - **A check built as two walls is falsified as two** (routine run 24, M383/M383b): the egress client judges a secret's audience
   before anything is resolved AND on every hop that would carry it; the second is implied by the first today and kept so that
   loosening either rule alone cannot send a secret where its grant never pointed. A mutant removing the per-hop check survives

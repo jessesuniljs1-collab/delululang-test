@@ -206,9 +206,40 @@ skip branch, §11.2).
   (two walls — M383 survives on the first by design, M383b red); each hop records the secret's NAME, never its bytes; `Secret.map`
   and an actor boundary carry the audience; `grants diff` between grant files reports `secret_reach_expansion`. **Not yet:** a
   daemon or leased run (a handle — refused DL0904 with no custody op asked; the broker's audience dimension is (d)), a guest (no
-  secret crosses the channel), `--engine wasm` (no `http`), `authority`'s per-secret destinations ((e)). **Next: (d)** — the
-  broker holds the audience beside the secret's name (a lease node's `secrets` dimension gains it, `⊑` per secret by inclusion of
-  origins), the host asks the broker for the bytes at send time naming the destination (an expose-class op judged against the
-  node's audience, recorded), `grants diff` between two nodes reports `secret_reach_expansion`; then (e).
+  secret crosses the channel), `--engine wasm` (no `http`), `authority`'s per-secret destinations ((e)). **Next: (d)**.
+  **Step (d), read against the code by routine run 24 (2026-10-14) — measured, before it is built:**
+  1. **The broker knows names only.** `Scopes.secrets` is a `BTreeSet<String>` (`authority.rs`); `⊑` is `is_subset`, `⊓` is
+     `name_intersect`; the wire's `AuthoritySpec.secrets` is a list of names, and `authority_spec_from_grants` (issue-then-run,
+     `run --broker daemon --grant secret:…`) drops the audience a grant line names. A daemon or leased run's secret is a handle,
+     refused by `get_with_secret` (DL0904, D-V2-131).
+  2. **The proof already covers the shape the dimension wants.** `docs/design/models/authority_algebra.py` §1 proves the set
+     laws (reflexive, transitive, antisymmetric, meet the GLB, idempotent, commutative, associative) for any exact-set ⊆
+     dimension, and its full conjunction lists each set dimension by name. An audience is a set of `(name, origin)` pairs:
+     spelled `NAME@host:port` (canonical — `parse_audience`'s spelling), it is one more exact-set dimension, **`secret_to`**,
+     beside `secrets` — `⊑` is inclusion, `⊓` intersection, a name with no pair is the bottom (sent nowhere). It joins the
+     conjunction in the model (one more name; the laws are uniform in the number) and `DELULU_Z3_MUTANT`'s list, and
+     `authority.rs`'s `attenuation_check`/`intersect` beside `secrets`. A pair whose name the node's `secrets` does not hold
+     is refused at the mint (it grants reach to nothing).
+  3. **Where the bytes go.** Under the daemon the program process performs the request itself (the interpreter's egress
+     client; the broker answers only the custody gate's `Net` op). So a send needs the bytes in that process at send time —
+     a new broker op, `SendSecret { node, name, origin, span }`: the node live, its `secrets` covering the name's source (a
+     `secret_map` derivative included), its `secret_to` holding `NAME@origin`; recorded (action `send`, target `NAME→origin`,
+     the span), the lost-record rule of D-V2-109/111 applying (a lost record refuses, never answers the bytes); the bytes
+     handed to the egress client only, after the client has judged everything else it can judge without them (headers,
+     scheme, the URL's own origin). Invariant 23 is then stated as it holds: no secret byte enters the program process
+     before an `expose` OR a recorded `send`, and a `send`'s bytes reach the egress client, never a program value. **The Guard:**
+     `send` takes `Declassify`'s class and tier by default (guarded — DL1410 without a permit), because it moves a secret's
+     bytes out of the broker; a looser tier is the operator's policy, never the default.
+  4. **What else moves with it:** `grants_from_lease` fills `secret_audiences` from the node's `secret_to`; `grants diff`
+     between two NODES reports `secret_reach_expansion` for a pair OLD lacks (`within.rs`'s `diff_nodes`, a dimension of its
+     own, not `scope_expansion`); `grants tree`/`inspect` print the pairs (escaped — AUDIT-TEXT-1); the OCSF export names a
+     `send` as HTTP Activity (4002) with the destination; a red-team pass on the new op (the guarantee: a secret's bytes reach
+     only an origin its node's `secret_to` names, and appear in no record).
+  5. **Witnesses to write first** (each red on the current binary): a leased run sends a secret to its node's audience (today
+     DL0904); a child delegated a narrower `secret_to` cannot send to the parent's other origin; revoking the node stops the
+     next send; the chain holds the `send` with its destination and no byte of the secret; a lost record refuses the send; the
+     model's mutant for the new dimension is red.
+  **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
+  `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
   broker's set inclusion alike; three places to change in step.

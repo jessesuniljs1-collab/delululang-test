@@ -266,6 +266,11 @@ commit's witness runs as the push runs it was waiting for).
 **A red witness that comes back green refutes the mechanism you guessed — have it PRINT its readings** (run 21: the first form of the
 macOS footprint witness read green; its second form printed every reading, which refuted the guess and named the real mechanism;
 the third was red at once). One dispatch per form, about three minutes each on a warm cache.
+**Stop a background job by its PID, never `pkill -f PATTERN`** (run 24): the pattern was in the stopping command's own line, so
+`pkill -f check-other-os.sh` killed the shell that ran it (exit 144) — the edits queued behind it in that command never ran, and
+the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A one-test witness log: `tail_lines` 40** — its
+`test result` line is the last test output before the cache save; run 24 asked 3,000 of three such runs and pulled every line of
+three ~550-line logs into the context (run 13's mistake, repeated).
 **A check built as two walls is falsified as two** (run 24, M383/M383b): a mutant that removes one wall survives on the other by
 design — record it so, then remove BOTH in one mutant (`scripts/mutants.py` takes `"edits": [...]` since run 24) to show the
 witness can fail at all. A wall no double mutant can reach is dead code (run 18, M222).

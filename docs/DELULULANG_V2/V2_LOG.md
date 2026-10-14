@@ -5732,3 +5732,35 @@ exists and no program reaches it; RW 4.49's third item (`record_device_refusal` 
 closed by routine run 18 (D-V2-111) and the row never said so.
 
 **Push runs read.** `91a1eb7`'s CI `38628412194` and `d61dd70`'s CI `38628780402` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `openshell` `38628412189` success. `actors_pingpong` at `d61dd70`: arm64 MEASURED 3.00x (control 4.11x); macOS NOT MEASURED (3 hardware threads); Ubuntu and Windows NOT MEASURED (never 3x perfectly parallel work).
+
+## 2026-10-14 — routine run 24 (last): `4f3084b` red on supply-chain — wasmtime 48.0.6; claims the slice overtook corrected; P9-04 (d) read against the code
+
+**Push runs.** `f4c428c`'s CI `38630746024` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `actors_pingpong` arm64 MEASURED 2.97x (control 4.12x), the others NOT MEASURED.
+
+**`4f3084b` red on supply-chain** (CI `38631973104`, a records-only commit; every other job green): eleven advisories RustSec
+published that evening against wasmtime 48.0.5 — RUSTSEC-2026-0353 to -0359 and -0361 to -0364. Eight are in the component
+model, which this tree does not enable; 0359 (dropping a long chain of recursive types) and 0364 (exception tags) sit behind the
+WebAssembly 3.0 proposals D-V2-68 refuses. **Witnessed** in the VM: `cargo deny --all-features check advisories` failed with the
+eleven on the old lockfile. **Fixed** (`bf51fe0`): `cargo update -p wasmtime --precise 48.0.6` — the lockfile's diff read: only
+the Wasmtime, Cranelift and Pulley release moved — 29 lockfile entries (versions and checksums, none added or removed; run 23's
+lesson); `cargo deny` then ok on advisories, bans, licences and sources; `delulu-wasm`'s tests green (91 and the rest); the
+two-engine differential (50,000 programs) ok in 116 s; the five other targets linted from Linux; `deny.toml` records why.
+**`bf51fe0`'s push run** (CI `38636976623`): success on every job, `supply-chain` included — **`master` green again**; `actors_pingpong` arm64 MEASURED 2.98x (control 4.13x), macOS NOT MEASURED (3 hardware threads), Ubuntu and Windows NOT MEASURED. **The full suite alone at `bf51fe0`:** 2,284 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left.
+
+**A sweep of what P9-04 (b)/(c) made false** (`52193ba`): `SecretVal::reveal`'s doc said it was "the only in-process reader —
+reached solely through `Secret.expose`" — it is reached from `expose`, `Secret.map` and `http.get_with_secret`, each refusing or
+rerouting a broker handle before it (the comment now says a fourth caller must do the same); `prim.rs`'s "the only reader:
+expose" — the only one that hands the bytes to the PROGRAM; the book's secrets section — a secret can also be SENT without the
+program learning it, and an audience is a statement of trust (a server in it may answer the secret back). Comments and prose;
+the runtime library (275 passed) and the book gate green.
+
+**P9-04 step (d), read against the code** (`V2_P9_DESIGN.md`): the broker knows secret NAMES only (`Scopes.secrets`, the wire's
+`AuthoritySpec.secrets`, and issue-then-run drops a grant line's audience); an audience is a set of `NAME@host:port` pairs, one
+more exact-set dimension (`secret_to`) whose laws `authority_algebra.py` §1 already proves for any such dimension; under the
+daemon the program process performs the request, so a send needs a recorded broker op handing the bytes to the egress client
+only (`SendSecret`, guarded like `Declassify` by default); the witnesses to write first are listed there.
+
+**Loop engineering:** `docs/CLOUD_ROUTINE.md` step 5 — stop a background job by PID, never `pkill -f PATTERN` (it killed its own
+shell this run, exit 144, and the lint's children lived on); a one-test witness log is read with `tail_lines` 40 (this run pulled
+three whole ~550-line logs into the context — run 13's mistake again); and the two-walls line with `scripts/mutants.py`'s
+multi-edit mutants. `HANDOFF.md` §11.5 the `pkill` trap.
