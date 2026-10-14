@@ -23,6 +23,13 @@
 # D-V2-68 refused the WebAssembly 3.0 proposals on both engines (witnessed: the plugin store had run a
 # `call_ref` module) — upgrade AND narrowing again.
 #
+# On 2026-10-14 **rustls 0.23.45 -> 0.23.46** (routine run 23) closed RUSTSEC-2026-0346 to -0349, published
+# that day and read red on `fa2d34e`'s push run: `Debug` of client session values printing TLS secrets, data
+# sent to the outer server after an ECH rejection, the `brotli` certificate decompressor (a feature this tree
+# does not enable), and a pre-authentication ServerHello pinning later key shares to a classical group.
+# `cargo update -p rustls` also re-unified errno, quinn-udp, rustix, tempfile and winapi-util onto
+# windows-sys 0.61.2 (from 0.52.0), within their own ranges. No source line changed.
+#
 # Every `ignore` below carries a FALSIFIABLE reason. If the reason stops being true, the entry is
 # wrong and must be removed — that is the only property that makes an ignore list honest.
 
