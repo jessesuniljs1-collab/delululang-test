@@ -19,7 +19,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   (`NAME@host:port`, only when there is one). A `--broker daemon` run's node now keeps the audience its `--grant
   secret:NAME@HOST=…` named (it was dropped). `grants diff g_OLD g_NEW` reports a wider audience as `secret_reach_expansion`.
   A `--secret-to` for a secret the delegation does not name, or one with a path, a wildcard or an upper-case host, is refused
-  in words. A daemon or leased run still cannot SEND the secret (DL0904) — the broker's send is next.
+  in words.
+- **Added (P9-04 (d), D-V2-134): a `--broker daemon` or `--lease` run can send a secret.** `http.get_with_secret` of a
+  broker-held secret asks the broker for the bytes for the one origin the request names — only if the run's node names
+  `NAME@host:port` for it — after everything else about the request has been judged; the bytes go to the run's network
+  client, never to a program value, and the audit chain records a `send` naming the secret and the destination, never the
+  bytes. A delegated (leased) holder's send is guarded like a declassification: `delulu guard request g_NODE --use
+  declassify:NAME@host:port --why "…"`, then a person's `guard approve` — a permit to expose the secret is not a permit to
+  send it. A request to another origin, or with a header no request may carry, is refused before the broker is asked.
 
 ## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
 

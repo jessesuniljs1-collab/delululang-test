@@ -3271,6 +3271,68 @@ same — one rule, one spelling).
 `["API_TOKEN@127.0.0.1:PORT"]`); `within_cli`'s `a_nodes_secret_carries_its_audience_and_a_wider_one_is_secret_reach` —
 `--secret-to` an unknown argument. **Falsified:** mutants M402–M421 (`scripts/mutants.py`), every one red: `⊑` without the dimension (M402), the meet as the union (M403), canonicalization keeping an orphan (M404) or `is_canonical` blind to one (M405), the JSON (M406), the compact rendering (M407) or the certificate parser (M408) dropping it, a pair with an empty name read as named (M409), a proposal's join dropping the ask's pairs (M410), the grant line's audience not carried into the node (M411), the wire → authority (M412), the node → wire (M413), the node → spec (M414) or the authority → wire (M415) conversion dropping it, `grants diff` blind to a pair (M416) or counting a pair of a secret OLD lacks twice (M417), `--secret-to` taking a name the delegation does not (M418) or a spelling the egress parser did not canonicalize (M419), the lease helper keeping an orphan (M420), and a lease's run given no audience (M421); the control green. The model's three mutants (§2c and the full conjunction) each end with obligations NOT discharged.
 
+## D-V2-134 — P9-04 step (d), its second half: the broker SENDS a secret — a recorded, Guard-gated `send` that hands a broker-held secret's bytes to the run's egress client for ONE origin its node's `secret_to` names, asked only after everything that can be judged without the bytes — TAKEN (head chef, 2026-10-15, under the owner's delegation)
+
+**Context.** After D-V2-133 a node's secret carries its audience, but a daemon or leased run's secret is a broker HANDLE with
+no bytes in the program's process, so `get_with_secret` of one was refused (DL0904, D-V2-131). Under the daemon the program
+process performs the request itself (the interpreter's egress client), so a send needs the bytes there at send time — and the
+broker, which holds them, must be the one that decides.
+
+**Decision.**
+1. **`Broker::send_secret_guarded(node, name, origin, store, span)`** and the wire's `SendSecret { node, name, origin, span }` →
+   `SecretBytes { bytes }`. The node must be live; its `secrets` must cover the name's SOURCE (a broker-side derivative is sent
+   on its source's pair) and its `secret_to` must hold `SOURCE@origin`; the store must hold the bytes. **No `Declassify`
+   effect** — the language sends a secret without one (D-V2-131); the audience is the authority.
+2. **The Guard** decides as for a declassification, because the bytes leave the broker — class `declassify`, guarded by
+   default, so a DELEGATED node's send is DL1410 until its owner approves; a root node (the principal's own, `run --broker
+   daemon`'s) is ungated, as for `expose`. Its axis token is the PAIR, `SOURCE@origin`: a permit names the destination
+   (`guard request --use declassify:API_TOKEN@api.example.com:443`), so a permit to expose the secret is not one to send it,
+   and one to send it to one origin is not one to send it to another. `declassify:*` still covers every send. No new Guard
+   class (the Guard is hardened, not redefined).
+3. **The record.** A guard event when the Guard is asked (as `verify_guarded`), then one `send` record — allow or deny —
+   naming the pair and the calling span, never a byte. The lost-record rule (D-V2-109/111): a `send` whose record could not be
+   written hands over nothing (DL1401). An `allow` `send` is written BEFORE the bytes leave the daemon.
+4. **The order in the run** (`Interp::send_broker_secret`): the custody's `Net` check of the host first (a request carrying a
+   secret is a use of its host like any other — the `use allow` RW 4.46's refusal record cites); then the effect's own
+   refusals in their own words (a scheme that is not `https`, a host outside the capability); then
+   `egress::prejudge_secret` — everything the egress client judges before resolution, asked BEFORE the bytes exist: every
+   header (the secret's with a stand-in value), the URL's strict parse, its origin in the handle's audience. A refusal there
+   asks the broker nothing (no `send` record) and is recorded and answered as the egress client's own (`egress::refuse_unsent`).
+   Only then is the broker asked, for that ONE origin; the request is made with a secret that holds the bytes and whose audience
+   is that origin alone; the egress client then judges the secret's real value and every hop as before. The bytes reach the
+   egress client and no program value.
+5. **A handle carries its audience** (`SecretVal::handle_bound`, from `root.secret_audiences` at the mint — a leased run's from
+   its node's `secret_to`, D-V2-133) and keeps it across an actor boundary (`MsgValue::SecretHandle`'s audience), as a local
+   secret does.
+6. **Criterion 6 restated as it holds** (`STAGE5_SPECIFICATION.md`): no secret byte is in the program process before an
+   `expose` or a recorded `send`, and a `send`'s bytes are handed to the egress client, never to a program value.
+
+**Two walls and one implied rule, recorded as such.** The broker's `secrets` check is implied by its `secret_to` check (a
+pair lives only beside its name, D-V2-133): M428 removes the first alone and survives by design; M428b removes both and is red.
+Narrowing the sent secret's audience to the one origin (M432) is implied by the egress client's per-hop origin rule — a
+redirect to another origin drops every header the program named, the secret's among them (D-V2-128, M382's witness) — so it
+survives too; it is kept so that what the egress client holds says exactly what the broker authorized. `prim`'s refusal of a
+handle that reaches the request table unanswered is unreachable today (the interpreter routes every handle first; a guest
+holds none; the WASM engine has no `http`) and is kept as the refusal in words of an internal wiring error.
+
+**Not yet:** the OCSF export names a `send` as a Base Event (the mapping's catch-all); HTTP Activity with the destination is a
+follow-up. Step (e) — `authority`'s per-secret destinations. Whether the language should reach the broker's whitelisted
+`secret_map` stays open.
+
+**Not chosen:** a `send` class of its own in the Guard (a vocabulary change the owner's — the pair as `declassify`'s token
+already makes a permit name the destination); requiring `Declassify` on the node (the language promises a send without it);
+asking the broker before judging the request (bytes would cross for a request that could never carry them); the broker
+performing the request itself (a second egress client, holding the bytes, that the operator's grants do not configure).
+
+**Witnessed red first** on `a97a953`'s source (the slice's tests against the code before it): the daemon run and the leased
+run both refused DL0904. **Falsified:** mutants M422–M438 (`scripts/mutants.py`): the `secret_to` check removed (M422), the pair
+built from a derived name rather than its source (M423), the Guard asked on the name (M424 — an expose permit then bought a
+send) or not at all (M425), the deny record (M426) or the allow record (M427) dropped, the node's liveness not asked (M429),
+the lost-record rule off (M430), the pre-judgement replaced by the URL's parse alone (M431), a handle minted without its
+audience (M436), the pre-judgement's audience check (M437) or header check (M438) removed, a handle's audience dropped at an
+actor boundary (M435) — each red; **M428** (the `secrets` check alone) and **M432** (the one-origin narrowing) survive by
+design, implied walls (item above); **M428b** (both broker checks) red; the controls green.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

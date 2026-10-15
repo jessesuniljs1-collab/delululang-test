@@ -175,7 +175,7 @@ another OS, and then takes about seven minutes itself (run 5).
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
    D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
-   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; step 4, D-V2-126 — `grants auto-approve`, the same run: **P9-03 complete**), **P9-04** endpoint-bound secrets (read against the code by run 22, `V2_P9_DESIGN.md`; step (a), a request with headers — `http.get_with`, D-V2-128 — built by run 23; steps (b) and (c) — `http.get_with_secret`, a secret only to its grant's audience, D-V2-131 — built by run 24; step (d)'s first half — the broker's `secret_to`, D-V2-133 — by run 25; **its second half next** — the broker's `send`, so a daemon or leased run can send one — then (e)), P9-05 method-and-path scopes.
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; step 4, D-V2-126 — `grants auto-approve`, the same run: **P9-03 complete**), **P9-04** endpoint-bound secrets (read against the code by run 22, `V2_P9_DESIGN.md`; step (a), a request with headers — `http.get_with`, D-V2-128 — built by run 23; steps (b) and (c) — `http.get_with_secret`, a secret only to its grant's audience, D-V2-131 — built by run 24; step (d) — the broker's `secret_to`, D-V2-133, and its `send`, D-V2-134 — by run 25; **step (e) next** — `authority`'s per-secret destinations — and the OCSF mapping of a `send`), P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -292,6 +292,10 @@ summary needs only `test result` lines and the witness's names); a macOS `all` r
 before any by-hand run after one (run 8: a stand-in check read an unquoted host from mutant M71's binary). **A new
 workflow cannot be dispatched until it is on `master`** (the API answers 404 for a file only a branch has — run 8): land
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
+**Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
+compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
+— the suite's tree never moves, and a slice's code is ready when its predecessor lands. **A variable set in a backgrounded
+`A && (B) &` list does not reach the next line** (run 25: `S=… && (…) &` then `cat $S/x` read `/x`) — set it on a line of its own.
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a
 full disk after a lockfile change, and four tests of another to a script edited between the map's build and the suite's

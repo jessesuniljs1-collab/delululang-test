@@ -5797,3 +5797,35 @@ normalizing it, so the audience does the same; the witness now asserts the refus
 binaries), cargo exit 0, the tree unmoved, no daemon left.
 **Next — step (d)'s second half:** the broker SENDS a secret for a daemon or leased run (`SendSecret`, the Guard on the pair,
 a `send` record), then (e).
+
+## 2026-10-15 — routine run 25 (continued): P9-04 step (d)'s second half — the broker sends a secret, for one origin its node names (D-V2-134)
+
+**Push runs read.** `a97a953` (the first half's records): CI `38723018372` — see the next entry; `ocsf` `38723018286` and
+`openshell` `38723018349` success. **The nightly at `41ce7c1`** (CI `38702203302`): success on every job — `heavy-gates`,
+`miri-slow` (syntax, check, broker), `miri`, `microvm`, `formal`, `fuzz` and the three test OSes.
+
+**The second half (D-V2-134)** — `6fe7076`. **Witnessed red first** on `a97a953`'s source: a `--broker daemon` run and a `--lease`
+run of `get_with_secret` both refused DL0904. Built: the broker's `send` (`Broker::send_secret_guarded`, the wire's
+`SendSecret` → `SecretBytes`): the node live, the source in `secrets`, `SOURCE@origin` in `secret_to`; the Guard on the PAIR (a
+delegated node's send DL1410 until `declassify:NAME@host:port` is approved — an expose permit does not buy it); a guard event,
+then a `send` record with the pair and the span, never a byte; a lost record hands over nothing (DL1401). The run
+(`Interp::send_broker_secret`): the host's custody check first; the effect's own refusals; then `egress::prejudge_secret` —
+headers, the URL's parse, the origin in the handle's audience, judged before the bytes exist (a refusal there asks the broker
+nothing, recorded as the egress client's own, `egress::refuse_unsent`); then the bytes for that ONE origin, sent with a secret
+whose audience is that origin alone. A handle carries its audience from the mint and across an actor boundary. `STAGE5`'s
+criterion 6 restated as it holds (no byte before an `expose` or a recorded `send`).
+**The witnesses' own mistake, caught by their first run:** the daemon witness expected the `send` record's span to name the
+file — a record's span is the interpreter's `FILE:START:END` (numeric), as an `expose` record's is.
+**Falsified:** M422–M438 (D-V2-134 lists each): all red but M428 and M432, implied walls that survive by design (M428b red);
+the controls green. **Verified:** clippy clean; Windows and macOS linted from Linux; read on the runners at `6fe7076` — `broker_cli`, `egress_cli`, `secret_verify_cli` and the binary's unit tests on Windows `38724166783`, macOS `38724169549` and arm64 `38724172459` — success; `delulu-broker`'s library on Windows `38724182113` — success; `delulu-runtime`'s library on macOS `38724178976` — success, and on Windows `38724174798` **red** — `compute::tests::queue_depth_refuses_work_past_the_granted_depth`, a race in code this slice does not touch (below), fixed in `df0fe6a` and read green there: Windows `38725247096` (274 passed, 0 failed, 1 ignored), arm64 `38725250746`, macOS `38725253078` (the test alone);
+**the full suite alone** — 2,290 passed, 0 failed, 16 ignored (163 binaries) at `df0fe6a`, cargo exit 0, no daemon left; it reported `TREE-MOVED` — a false alarm: its fingerprint compared `git status` and `git diff`, which the commit made during the suite (the routine allows one) changed while no file moved, and `doctor_cli`'s freshness check passed inside it; `scripts/suite.sh` now fingerprints the files themselves.
+**Next:** P9-04 (e) — `authority`'s per-secret destinations; the OCSF mapping of a `send` (HTTP Activity with the destination).
+
+**A race witness made certain** (`df0fe6a`): `compute::tests::queue_depth_refuses_work_past_the_granted_depth` was red once on
+the Windows runner (the witness run above) — four threads spawned one after another, each running a 4-element `burn` of a
+millisecond or two, had run one after another, so nothing was ever in flight beside anything and nothing was refused. Its window
+grown, never its patience (run 18's rule): a barrier releases all four at once, and a 64-element `burn` holds the one slot while
+the other three arrive. Green 6 of 6 in the VM with all four CPUs busy; M439 (the queue depth unenforced) red, the control green;
+read green on Windows, arm64 and macOS. **Loop engineering:** `scripts/suite.sh`'s fingerprint now hashes the files themselves
+(a commit during a suite read as `TREE-MOVED`); `docs/CLOUD_ROUTINE.md` step 5 — a slice written in a git worktree while the
+suite runs, and the backgrounded-variable trap.

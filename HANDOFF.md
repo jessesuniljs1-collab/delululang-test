@@ -127,7 +127,9 @@ the assistant's memory — which now also travels file by file in
   **Routine run 25 (2026-10-15): P9-04 step (d)'s first half** — the broker's `secret_to` dimension: a node's secret carries
   its audience (`NAME@host:port` pairs, inclusion, a pair only beside its name), `grants delegate --secret-to`, a daemon run's
   node keeping its grant line's audience, `grants diff` between nodes (`secret_reach_expansion`); the Z3 model 34 obligations
-  (D-V2-133). **Next: (d)'s second half** (the broker's `send`), then (e), then P9-05.
+  (D-V2-133); and **its second half** — the broker SENDS a secret for a daemon or leased run, for the one origin its node
+  names, after the request is judged without the bytes; Guard-gated on the pair (`declassify:NAME@host:port`), recorded as
+  `send`, a lost record handing over nothing (D-V2-134). **Next: P9-04 (e)** (`authority`'s per-secret destinations), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1402,6 +1404,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `AuthoritySpec { …, ..Default::default() }` or `brokerd::authority_spec_of`'s, which would have dropped the new dimension
   silently (and a second hand-written copy of `authority_spec_of` in `broker_client` had to be found by grep). Grep every
   `..Default::default()` literal of the type you extend; prefer one conversion per direction (both now call the one).
+- **A slice can be written in a git worktree while the suite runs** (routine run 25): the suite's tree stays frozen, and the
+  next slice's code — written but not compiled there — is `git diff`-applied once the suite reports. Step (d)'s second half was
+  written so, during the first half's suite, and compiled clean on its first build.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

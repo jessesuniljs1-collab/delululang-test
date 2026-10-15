@@ -242,7 +242,10 @@ skip branch, §11.2).
   **Step (d)'s first half built** (routine run 25, `db88e98`, D-V2-133): `Scopes.secret_to` — items 2 and 4 above but the
   send: the dimension in `⊑`, the meet, the wire, the certificate, a pair living only beside its name (canonicalization drops
   an orphan; the model's new §2c), `grants delegate --secret-to`, the issue-then-run node keeping its grant line's audience,
-  `grants_from_lease`, a proposal's join, `grants diff` between nodes. **Next: its second half** — item 3, the broker's `send`.
+  `grants_from_lease`, a proposal's join, `grants diff` between nodes. **Its second half built** (the same run, `6fe7076`,
+  D-V2-134): item 3 — the broker's `send` (the node's `secret_to`, the Guard on the pair, a `send` record; a lost record hands
+  over nothing), asked by the interpreter only after `egress::prejudge_secret` has judged everything it can without the bytes;
+  a handle carrying its audience. **Step (d) complete** but for the OCSF mapping of a `send` (a Base Event today). **Next: (e)**.
   **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
   `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the

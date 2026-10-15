@@ -17,9 +17,10 @@ set -uo pipefail
 out=${1:?usage: scripts/suite.sh OUTFILE [cargo test args…]}
 shift
 fingerprint() {
-    # Tracked changes, untracked files and their contents: what the map and the document gates read.
-    { git status --porcelain=v1 -uall; git diff; git ls-files --others --exclude-standard -z | xargs -0 -r sha256sum; } \
-        | sha256sum
+    # Every file the map and the document gates read — tracked and untracked — by its CONTENT, never by its diff
+    # against HEAD: a commit made while the suite runs (the routine allows one) moves `git status` and `git diff`
+    # and no file, and routine run 25's suite reported TREE-MOVED for exactly that. A deleted file hashes as missing.
+    git ls-files -z --cached --others --exclude-standard | sort -z | xargs -0 -r sha256sum 2>&1 | sha256sum
 }
 # Routine run 23: a full disk ends a suite mid-link (`No space left on device`), after a dependency change has
 # re-hashed every crate above it — run 6's trap, written down and still paid for. Refuse to start below the floor,

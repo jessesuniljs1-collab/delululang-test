@@ -262,3 +262,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
 - Run 25 (2026-10-15): **P9-04 (d)'s first half** (D-V2-133) — the broker's `secret_to` (`NAME@host:port`, an exact-set
   dimension, a pair only beside its name), `grants delegate --secret-to`, `grants diff` between nodes; Z3 34 obligations.
   Lesson: a literal ending `..Default::default()` drops a new field silently — grep them; one conversion per direction.
+  The same run, **(d)'s second half** (D-V2-134): the broker's `send` — a daemon or leased run sends a secret for one origin its
+  node names; Guard on the pair `declassify:NAME@host:port`; a `send` record; the request pre-judged without the bytes.

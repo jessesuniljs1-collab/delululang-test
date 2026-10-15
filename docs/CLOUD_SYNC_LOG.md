@@ -62,7 +62,7 @@ running summary.
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
   (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
   the runtime's own mint, the counterexample's call named); **P9-02** by the same run (D-V2-119, D-V2-120 — `delulu
-  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads), and step 4 the same run (D-V2-126 — `grants auto-approve`, the operator's standing node): **P9-03 complete**; **P9-04 step (a)** by run 23 (D-V2-128 — `http.get_with(url, headers)`, a request with headers judged before anything is resolved and sent only to the URL's origin); **P9-04 steps (b) and (c)** by run 24 (D-V2-131 — `http.get_with_secret`, a secret in one header sent only to the audience its grant names, `secret:NAME@HOST[:PORT]=…`, and `grants diff`'s `secret_reach_expansion`); **P9-04 step (d)'s first half** by run 25 (D-V2-133 — the broker's `secret_to`: a node's secret carries its audience, `grants delegate --secret-to`, `grants diff` between nodes; the Z3 model 34 obligations); (d)'s second half (the broker's send), (e) and P9-05 not yet built.
+  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads), and step 4 the same run (D-V2-126 — `grants auto-approve`, the operator's standing node): **P9-03 complete**; **P9-04 step (a)** by run 23 (D-V2-128 — `http.get_with(url, headers)`, a request with headers judged before anything is resolved and sent only to the URL's origin); **P9-04 steps (b) and (c)** by run 24 (D-V2-131 — `http.get_with_secret`, a secret in one header sent only to the audience its grant names, `secret:NAME@HOST[:PORT]=…`, and `grants diff`'s `secret_reach_expansion`); **P9-04 step (d)** by run 25 (D-V2-133 — the broker's `secret_to`: a node's secret carries its audience, `grants delegate --secret-to`, `grants diff` between nodes, the Z3 model 34 obligations; D-V2-134 — the broker's `send`: a daemon or leased run sends a secret for one origin its node names, Guard-gated on the pair, recorded); (e) and P9-05 not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -92,7 +92,7 @@ running summary.
   commits, 139 files.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-04's step (d)'s second half — the broker's send, so a daemon or leased run can send a secret (its first half, the dimension, by run 25) — and (e), and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-04's step (e) — `authority`'s per-secret destinations — and P9-05; P9-04 (d) built by run 25; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -100,7 +100,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-133); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-134); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -3035,4 +3035,44 @@ directory, or have the laptop session read §11.
   the broker's `send` (`SendSecret`, the node's `secret_to`, the Guard on `NAME@origin`, a `send` record; the interpreter asks for
   the bytes after judging everything it can without them) — under way in this run; then (e); (3) RW 4.63, RW 4.53's rest, RW
   4.57, RW 4.58's O2/O4, RW 4.49's first two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-133,
+  option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-15 — routine run 25 (continued): P9-04 step (d)'s second half — the broker sends a secret, for one origin its node names (D-V2-134); a race witness made certain
+- Session: `https://claude.ai/code/session_011TZbDxBVJVmBTVyDeiWhGb`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-carson-qm5vah`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `a97a953`
+- Commits: (1) `6fe7076` P9-04 (d), second half: the broker sends a secret - for one origin its node names, recorded; (2)
+  `df0fe6a` The queue_depth witness's overlap made certain: a barrier and a kernel that holds the slot; (3) this entry's commit
+  — the records and `scripts/suite.sh`'s fingerprint
+- Files and folders: (1) M `crates/delulu-broker/src/secrets.rs` (`send_secret_guarded`; its unit test),
+  `crates/delulu-runtime/src/actors.rs` (a handle's audience crosses; its test), `custody.rs` (`Custody::send_secret`),
+  `egress.rs` (`prejudge_secret`, `refuse_unsent`), `interp.rs` (`send_broker_secret`; the custody gate), `prim.rs`
+  (`headers_arg`, `answer_value`, the handle refusal after the scheme and allowlist; the mint's bound handle), `value.rs`
+  (`SecretVal::handle_bound`), `crates/delulu/src/broker_client.rs` (`send_secret`), `broker_ipc.rs` (`SendSecret`,
+  `SecretBytes`), `brokerd.rs` (the handler; the lost-record witness), `crates/delulu/tests/broker_cli.rs` (the daemon witness
+  rewritten; the leased witness), `docs/GETTING_STARTED.md`, `docs/for-agents.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/design/STAGE5_SPECIFICATION.md` (criterion 6), `docs/survey/*`. (2) M `crates/delulu-runtime/src/compute.rs` (the
+  test), `docs/survey/*`. (3) M `scripts/suite.sh` (the fingerprint — loop engineering), `CHANGELOG.md`, `HANDOFF.md` (where
+  things stand; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P9 line; step 5 two lines — loop engineering),
+  `docs/REMAINING_WORK.md` (2.11), `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `V2_DECISION_LOG.md` (D-V2-134), `V2_P9_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing
+  entry), `docs/survey/*`. Added, deleted, renamed: nothing. No entrenched file edited.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `a97a953`'s CI `38723018372` — success on every job (`formal` ran the 34-obligation model and its six mutants);
+  `ocsf` `38723018286` and `openshell` `38723018349` success; `actors_pingpong` arm64 MEASURED 2.97x (control 4.11x), the
+  others NOT MEASURED. The nightly `38702203302` at `41ce7c1` — success on every job, `heavy-gates` and `miri-slow` included.
+  `6fe7076`: the absence witnessed first (both new CLI witnesses red DL0904 on `a97a953`'s source); mutants M422–M438 red but
+  M428 and M432, implied walls (M428b red); M430 (the lost-record rule) red; clippy clean; Windows and macOS linted from Linux;
+  runner reads in the `V2_LOG.md` entry (one red, the race below). `df0fe6a`: green 6 of 6 with four CPUs busy, M439 red, read
+  green on Windows (274 passed), arm64 and macOS. The full suite alone at `df0fe6a` — 2,290 passed, 0 failed, 16 ignored (163
+  binaries), cargo exit 0 (its `TREE-MOVED` a false alarm from a commit, `suite.sh` fixed).
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a slice can be written in a git worktree while the suite runs;
+  `docs/assistant-memory/cloud-period-2026-09-28.md` a line.
+- Open / next, in order: (1) read THIS commit's push run (and `6fe7076`'s and `df0fe6a`'s, the same push); (2) the OCSF mapping
+  of a `send` (HTTP Activity with the destination) — under way; (3) **P9-04 step (e)** — `authority`'s per-secret destinations
+  (a binding-aware walk: a secret through a `let`, the URL literal's origin; a computed one reported as such); then P9-05;
+  (4) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two items; (5) a boundary over a `.dwx`. **For the
+  owner:** D-V2-115 to D-V2-134 (D-V2-134 chooses the Guard's `declassify` class for a send, with the pair as its token),
   option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
