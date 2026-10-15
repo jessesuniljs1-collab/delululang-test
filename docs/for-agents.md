@@ -378,6 +378,13 @@ origin OLD's does not, D-V2-131) — with no severity grade; exit 1 when it adds
 `budget_expansion`; between nodes `secret_reach_expansion` names a `NAME@host:port` pair NEW's node holds and OLD's
 does not (P9-04 (d), D-V2-133).
 
+`delulu authority FILE --json` names every place the program SENDS a secret (P9-04 (e), D-V2-135) — a
+`secret_destinations` array, present only when it sends one: `{"secret", "to", "at"}` per `http.get_with_secret`
+call, `secret` the grant name when the source shows it (`root.secret("NAME")`, a `let`-bound one, a `Secret.map` of
+it), `to` the URL literal's origin (`host:port`, the spelling an audience must name — `secret:NAME@host:port=…`).
+Either is `null` when the source does not show it (a computed URL, a secret passed in as a parameter, a name a `for`
+or a match arm rebinds) — never a guess.
+
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
 `proposal` is the `--grant` line(s) of that call's own requirement, read from the program's source, never a line the

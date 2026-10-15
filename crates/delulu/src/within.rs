@@ -538,6 +538,185 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
     out
 }
 
+/// P9-04 (e), D-V2-135: every place a program SENDS a secret (`http.get_with_secret`), with the secret and the
+/// destination as far as the source shows them — the static half of a secret's reach. `secret` is the grant name when
+/// the argument is `root.secret("NAME")` itself, a `let`-bound name for one, or a `Secret.map` of either; `to` is the
+/// URL literal's origin (`host:port`, the egress client's own parse and spelling — what an audience must name). Either
+/// is `null` when the source does not show it — a computed URL, a secret that arrives as a parameter, a field, a
+/// collection's element — and is never guessed: a name a later `let`, assignment, `for`, lambda parameter or match
+/// binding rebinds is forgotten from there on, so a stale binding cannot attribute a different value.
+pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: &SourceMap) -> Vec<Json> {
+    use delulu_syntax::ast::Item;
+    let mut w = SendWalk { map, vars: BTreeMap::new(), out: Vec::new() };
+    for m in modules {
+        for item in &m.items {
+            match item {
+                // Each body is a block, and a block's names end with it: a parameter, which no `let` in the body
+                // bound, is never attributed.
+                Item::Fn(f) => w.block(&f.body),
+                Item::Test(t) => w.block(&t.body),
+                Item::Actor(a) => {
+                    w.block(&a.ctor.body);
+                    for b in &a.behaviors {
+                        w.block(&b.body);
+                    }
+                    for f in &a.fns {
+                        w.block(&f.body);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    w.out
+}
+
+/// The walk behind [`secret_destinations`]: `vars` maps a name in scope to the secret it is known to hold (`None`: a
+/// name known NOT to be one the source shows), restored at each block's end.
+struct SendWalk<'a> {
+    map: &'a SourceMap,
+    vars: BTreeMap<String, Option<String>>,
+    out: Vec<Json>,
+}
+
+impl SendWalk<'_> {
+    fn block(&mut self, b: &delulu_syntax::ast::Block) {
+        let saved = self.vars.clone();
+        for s in &b.stmts {
+            self.stmt(s);
+        }
+        self.vars = saved;
+    }
+
+    fn stmt(&mut self, s: &delulu_syntax::ast::Stmt) {
+        use delulu_syntax::ast::{LValue, Stmt};
+        match s {
+            Stmt::Let { name, value, .. } => {
+                self.expr(value);
+                let held = self.secret_of(value);
+                self.vars.insert(name.name.clone(), held);
+            }
+            Stmt::Assign { target, value, .. } => {
+                self.expr(value);
+                if let LValue::Var(name) = target {
+                    let held = self.secret_of(value);
+                    self.vars.insert(name.name.clone(), held);
+                }
+            }
+            Stmt::While { cond, body, .. } => {
+                self.expr(cond);
+                self.block(body);
+            }
+            Stmt::For { var, iter, body, .. } => {
+                self.expr(iter);
+                let saved = self.vars.clone();
+                self.vars.insert(var.name.clone(), None);
+                self.block(body);
+                self.vars = saved;
+            }
+            Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => self.expr(e),
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+
+    /// The grant name of the secret `e` evaluates to, when the source shows it.
+    fn secret_of(&self, e: &delulu_syntax::ast::Expr) -> Option<String> {
+        use delulu_syntax::ast::Expr;
+        match e {
+            // Only `Root` has a `secret` method (the primitive table), so a literal `.secret("NAME")` is its mint under
+            // whatever name the receiver goes by — `requested_scopes`' rule.
+            Expr::Method { name, args, .. } if name.name == "secret" && args.len() == 1 => match &args[0] {
+                Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(s), .. } => Some(s.clone()),
+                _ => None,
+            },
+            // `Secret.map` keeps the secret's grant name (D-V2-131: a value derived from its bytes goes where they may).
+            Expr::Method { recv, name, .. } if name.name == "map" => self.secret_of(recv),
+            Expr::Var { path, .. } if path.segs.len() == 1 => self.vars.get(&path.segs[0].name).cloned().flatten(),
+            _ => None,
+        }
+    }
+
+    fn expr(&mut self, e: &delulu_syntax::ast::Expr) {
+        use delulu_syntax::ast::{Expr, Pattern};
+        match e {
+            Expr::Method { recv, name, args, span, .. } => {
+                self.expr(recv);
+                for a in args {
+                    self.expr(a);
+                }
+                if name.name == "get_with_secret" && args.len() == 4 {
+                    let to = match &args[0] {
+                        Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(u), .. } => {
+                            delulu_runtime::egress::parse_target(u).ok().map(|t| format!("{}:{}", t.host, t.port))
+                        }
+                        _ => None,
+                    };
+                    let secret = self.secret_of(&args[3]);
+                    self.out.push(json!({ "secret": secret, "to": to, "at": at_json(self.map, Some(*span)) }));
+                }
+            }
+            Expr::List { items, .. } => items.iter().for_each(|it| self.expr(it)),
+            Expr::Record { fields, .. } => fields.iter().for_each(|(_, v)| self.expr(v)),
+            Expr::Call { callee, args, .. } => {
+                self.expr(callee);
+                args.iter().for_each(|a| self.expr(a));
+            }
+            Expr::Field { recv, .. } => self.expr(recv),
+            Expr::Index { recv, index, .. } => {
+                self.expr(recv);
+                self.expr(index);
+            }
+            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Binary { lhs, rhs, .. } => {
+                self.expr(lhs);
+                self.expr(rhs);
+            }
+            Expr::If { cond, then_, else_, .. } => {
+                self.expr(cond);
+                self.block(then_);
+                if let Some(e) = else_ {
+                    self.expr(e);
+                }
+            }
+            Expr::Match { scrutinee, arms, .. } => {
+                self.expr(scrutinee);
+                for arm in arms {
+                    // Every name the pattern binds shadows, for the arm (a `Bind` that names a variant over-forgets:
+                    // the safe direction).
+                    fn binds(p: &Pattern, out: &mut Vec<String>) {
+                        match p {
+                            Pattern::Bind(i) => out.push(i.name.clone()),
+                            Pattern::Variant { fields, .. } => fields.iter().for_each(|f| binds(f, out)),
+                            Pattern::Wildcard(_) | Pattern::Lit(..) => {}
+                        }
+                    }
+                    let mut names = Vec::new();
+                    binds(&arm.pattern, &mut names);
+                    let saved = self.vars.clone();
+                    for n in names {
+                        self.vars.insert(n, None);
+                    }
+                    self.expr(&arm.body);
+                    self.vars = saved;
+                }
+            }
+            Expr::Lambda { params, body, .. } => {
+                let saved = self.vars.clone();
+                for p in params {
+                    self.vars.insert(p.name.name.clone(), None);
+                }
+                self.block(body);
+                self.vars = saved;
+            }
+            Expr::Try { inner, .. } => self.expr(inner),
+            Expr::Block(b) => self.block(b),
+            Expr::Spawn { args, .. } => args.iter().for_each(|a| self.expr(a)),
+            Expr::Recover { body, .. } => self.block(body),
+            Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
+        }
+    }
+}
+
 /// P9-03 — what `grants propose` proposes for a refusal at `at` (`V2_P9_DESIGN.md`).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Proposal {

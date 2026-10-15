@@ -336,6 +336,18 @@ fn defs() -> Value {
                 ("isolation", t("string")),
                 ("native_emission", obj(&[("requested", t("boolean")), ("via", t("string"))], &[])),
                 ("plugins", arr(r("plugin_load"))),
+                // P9-04 (e), D-V2-135: present only when the program sends a secret (`http.get_with_secret`).
+                ("secret_destinations", arr(obj(
+                    &[
+                        ("secret", nullable("string")),
+                        ("to", nullable("string")),
+                        ("at", json!({ "anyOf": [
+                            obj(&[("file", t("string")), ("line", t("integer")), ("column", t("integer"))], &[]),
+                            t("null"),
+                        ]})),
+                    ],
+                    &[],
+                ))),
                 // P9-01: present only when `--within` asked the question.
                 ("within", r("within")),
             ],

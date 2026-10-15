@@ -3549,7 +3549,17 @@ fn source_authority_report(
     stamp_plugins(&mut report, &checked.module, file, map);
     stamp_native_emission(&mut report, &checked.module);
     stamp_grants(&mut report, &[&checked.module]);
+    stamp_secret_destinations(&mut report, &[&checked.module], map);
     report
+}
+
+/// P9-04 (e), D-V2-135: where the program sends a secret, as far as its source shows (`within::secret_destinations`). Added
+/// only when it sends one, so every other report is byte-identical (criterion 11, the `plugins` rule).
+fn stamp_secret_destinations(report: &mut Json, modules: &[&delulu_syntax::ast::Module], map: &SourceMap) {
+    let sends = crate::within::secret_destinations(modules, map);
+    if let (false, Some(obj)) = (sends.is_empty(), report.as_object_mut()) {
+        obj.insert("secret_destinations".into(), json!(sends));
+    }
 }
 
 /// The authority report of a program held as TEXT (an embedded example): checked as `label`, with no
@@ -5644,6 +5654,7 @@ fn emit_authority(
     stamp_foreign_isolation(&mut report, opts);
     stamp_isolation(&mut report, opts);
     stamp_grants(&mut report, modules);
+    stamp_secret_destinations(&mut report, modules, map);
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
         return authority_within(map, modules, report, opts);

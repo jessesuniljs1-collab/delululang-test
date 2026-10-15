@@ -13,6 +13,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — a secret's audience in the grant tree, 2026-10-15
 
+- **Added (P9-04 (e), D-V2-135): `delulu authority FILE --json` names where a program sends each secret** — a
+  `secret_destinations` array (only when it sends one): for every `http.get_with_secret` call, the secret's grant name and
+  the destination's `host:port` as far as the source shows them, `null` when it does not (a computed URL, a secret passed
+  in as a parameter), never a guess. The audience to grant is read off it: `--grant secret:NAME@HOST:PORT=…`.
+
 - **Added (P9-04 (d), D-V2-133): a delegation says where a secret may go.** `delulu grants delegate --secret NAME --secret-to
   NAME@HOST[:PORT]` (repeatable — one origin a flag) gives the node's secret an audience; a child may name fewer origins, never
   another (DL0802, the intersection its repair); `grants inspect --json` and `grants list --json` show it as `secret_to`

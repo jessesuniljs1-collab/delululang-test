@@ -452,6 +452,101 @@ impl Drop for BrokerGuard {
     }
 }
 
+/// P9-04 (e), D-V2-135: `authority --json` names every place a program SENDS a secret, with the secret and the
+/// destination as far as its source shows — a `let`-bound `root.secret("NAME")` and a `Secret.map` of it keep the name, a
+/// URL literal gives its origin (`host:port`, the egress client's spelling); a computed URL, and a secret that arrives as a
+/// parameter or under a name a `for` rebinds, are `null`, never guessed. A program that sends none has no such key.
+#[test]
+fn authority_names_where_a_program_sends_each_secret_and_never_guesses() {
+    let dir = std::env::temp_dir().join(format!("delulu-sends-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("sends.delulu");
+    let program = r#"module sends
+
+fn relay(h: Cap[Http], t: Secret[Str]) -> Bool ! {Net} {
+    let hs = Map()
+    match h.get_with_secret("https://c.example.com/x", hs, "Authorization", t) {
+        Ok(b) => true
+        Err(e) => false
+    }
+}
+
+fn main(root: Root) ! {Net} {
+    let h = root.http(["api.example.com", "b.example.com", "c.example.com"])
+    let tok = root.secret("API_TOKEN")
+    let hs = Map()
+    let bearer = tok.map(fn(s: Str) -> Str { "Bearer " + s })
+    match h.get_with_secret("https://api.example.com/v1", hs, "Authorization", bearer) {
+        Ok(b) => {}
+        Err(e) => {}
+    }
+    let url = "https://b.example.com:8443/" + "x"
+    match h.get_with_secret(url, hs, "X-Key", root.secret("OTHER")) {
+        Ok(b) => {}
+        Err(e) => {}
+    }
+    for tok in [root.secret("LOOPED")] {
+        match h.get_with_secret("https://api.example.com/v3", hs, "X-Loop", tok) {
+            Ok(b) => {}
+            Err(e) => {}
+        }
+    }
+    if true {
+        let tok = root.secret("INNER")
+    }
+    var k = root.secret("FIRST")
+    k = root.secret("SECOND")
+    match h.get_with_secret("https://api.example.com/v4", hs, "X-After", tok) {
+        Ok(b) => {}
+        Err(e) => {}
+    }
+    match h.get_with_secret("https://api.example.com/v5", hs, "X-K", k) {
+        Ok(b) => {}
+        Err(e) => {}
+    }
+    let sent = relay(h, tok)
+}
+"#;
+    std::fs::write(&file, program).unwrap();
+    let f = file.to_string_lossy().to_string();
+    let o = delulu(&["authority", &f, "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let sends: Vec<(Value, Value, u64)> = v["authority"]["secret_destinations"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no secret_destinations: {v:#}"))
+        .iter()
+        .map(|s| (s["secret"].clone(), s["to"].clone(), s["at"]["line"].as_u64().unwrap_or(0)))
+        .collect();
+    assert_eq!(
+        sends,
+        vec![
+            (Value::Null, serde_json::json!("c.example.com:443"), 5),
+            (serde_json::json!("API_TOKEN"), serde_json::json!("api.example.com:443"), 16),
+            (serde_json::json!("OTHER"), Value::Null, 21),
+            // `for tok in …` rebinds `tok`: the outer `API_TOKEN` is not claimed for the loop's element.
+            (Value::Null, serde_json::json!("api.example.com:443"), 26),
+            // A block's `let` ends with the block; an assignment rebinds.
+            (serde_json::json!("API_TOKEN"), serde_json::json!("api.example.com:443"), 36),
+            (serde_json::json!("SECOND"), serde_json::json!("api.example.com:443"), 40),
+        ],
+        "a parameter's secret, a rebound name and a computed URL are null; a let-bound mint and its map keep the name: {v:#}"
+    );
+    // The closed schema admits the new key, and only in its shape.
+    let report = dir.join("report.json");
+    std::fs::write(&report, serde_json::to_string_pretty(&v["authority"]).unwrap()).unwrap();
+    let r = json_of(&delulu(&["schema", "validate", "authority", report.to_str().unwrap(), "--json"]));
+    assert_eq!(r["validate"]["valid"], true, "{}", r["validate"]["errors"]);
+    // A program that sends no secret has no such key — its report is what it was.
+    let plain = dir.join("plain.delulu");
+    std::fs::write(&plain, "module plain\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    let o = delulu(&["authority", &plain.to_string_lossy(), "--json"]);
+    let v = json_of(&o);
+    assert!(v["authority"].is_object() && v["authority"].get("secret_destinations").is_none(), "{}", out(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// P9-04 (d), D-V2-133: a node's secret carries its AUDIENCE — `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`,
 /// the broker's `secret_to` dimension of `NAME@host:port` pairs. `⊑` is inclusion: a child may name fewer origins for a
 /// secret, never another one (DL0802, the intersection its repair); `grants diff` between two nodes reports a pair OLD lacks as
