@@ -13,6 +13,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — a secret's audience in the grant tree, 2026-10-15
 
+- **Fixed (NET-WILDCARD-1, D-V2-136): a pattern `net` grant now means the same under `--broker daemon` as embedded.**
+  `--grant net=*.example.com` let an embedded run reach `api.example.com` and refused the same run under the daemon
+  (DL0904, "does not grant `api.example.com` in scope `net`"): the broker compared the host by exact string. It now reads the
+  pattern with the runtime's own matcher (a host strictly below the suffix, at a dot; never the apex).
+
 - **Added (P9-04 (e), D-V2-135): `delulu authority FILE --json` names where a program sends each secret** — a
   `secret_destinations` array (only when it sends one): for every `http.get_with_secret` call, the secret's grant name and
   the destination's `host:port` as far as the source shows them, `null` when it does not (a computed URL, a secret passed

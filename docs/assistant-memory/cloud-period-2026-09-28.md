@@ -265,4 +265,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   The same run, **(d)'s second half** (D-V2-134): the broker's `send` — a daemon or leased run sends a secret for one origin its
   node names; Guard on the pair `declassify:NAME@host:port`; a `send` record; the request pre-judged without the bytes.
   Then the OCSF mapping of a `send` (HTTP Activity) and **step (e)** (D-V2-135, `authority --json`'s `secret_destinations`):
-  **P9-04 complete**; P9-05 next.
+  **P9-04 complete**; P9-05 read against the code; **NET-WILDCARD-1** (D-V2-136): a pattern `net` grant refused under the
+  daemon (exact-string compare) — one host matcher now.

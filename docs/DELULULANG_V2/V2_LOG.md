@@ -5852,3 +5852,44 @@ red, M449 survived as an implied reset and was removed. clippy clean; `within_cl
 **The full suite alone at `b6128d1`:** 2,291 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left.
 **P9-04 is complete** — steps (a) to (e): a request with headers, a secret in a request only to its audience, the audience in
 the grant tree, the broker's send, and the static half. **Next: P9-05** (method-and-path network scopes).
+
+## 2026-10-15 — routine run 25 (continued): P9-05 read against the code; NET-WILDCARD-1 found and closed (D-V2-136)
+
+**Push runs read.** `3f03ab0`'s CI `38729124643` and `ocsf` `38729124578` — success; `0f73f09`'s `openshell` `38731264794` —
+success (its CI read in the run's last entry).
+**P9-05, read against the code** (`V2_P9_DESIGN.md`): every request is a GET (methods wait for the first non-GET primitive); a
+host is read in three places; the egress client already parses each hop's path; the broker sees hosts only; the grammar and the
+audience have no room for a path; the static half is P9-04 (e)'s walk generalized. Build order (a)–(d) proposed there.
+**NET-WILDCARD-1** (D-V2-136), found while reading: a pattern `net` grant was honored embedded and refused DL0904 under the
+daemon — the broker compared the host by exact string. Witnessed both ways in the VM, then by `broker_cli`'s new test (red on
+the old source); one matcher now (`delulu_broker::validate::host_matches`, `c69506f`); M450–M452 red. **A slip caught before
+`master`:** `c69506f` put the matcher after `validate.rs`'s test module, which clippy refuses (`items_after_test_module`) — the
+VM's clippy had been read through `| head`'s exit code (AGENTS.md's own trap), so the push to the harness branch carried it;
+moved in `016b522`, clippy re-read by cargo's own exit code (0). Read on the runners at `016b522`: `broker_cli` and
+`egress_cli` on Windows `38732093503` and macOS `38732097100`, `delulu-broker`'s library on Windows `38732100229` — success.
+**The full suite alone**, at `fa15654` (with F1's fix, below): 2,294 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left; an earlier one at `016b522`, run while the red-team pass loaded the VM, was red once on `satellite_demo`'s re-contact scenario and green 3 of 3 alone at once — load, per run 17's rule. F1's fix read on the runners: `broker_cli`, `guard_cli`, `guard_e2e`, `secret_verify_cli` on Windows `38734744376` and macOS `38734749233`, `delulu-broker`'s library on arm64 `38734752723` — success.
+
+## 2026-10-15 — routine run 25 (continued): the red-team pass on the broker's send — the guarantee held; F1 fixed (D-V2-137)
+
+**The pass.** One Sonnet 5.5 sous-chef (`claude-sonnet-5-5`), against a frozen copy of `0f73f09`'s binary in the scratchpad,
+briefed to break "a secret's bytes reach only an origin its node's `secret_to` names, reach no program value and appear in no
+record", ~21 minutes, 96 tool calls; it built a local test CA and a TLS server to see the bytes actually delivered.
+**The guarantee held.** About 40 origin spellings (ports with leading zeros, trailing dots, `127.1`, decimal and hex addresses,
+`[::ffff:127.0.0.1]`, userinfo, `#@`, upper-case scheme) — only the exact origin connected; ~14 `--secret-to` spellings
+refused at delegate time; raw-wire origins refused by the exact-string compare; a redirect to another origin dropped the secret
+even when the grant named both; `Secret.map` of a handle refused; an actor's send held to the audience; a revoked node's token
+DL1403 (and over the wire); six parallel runs against a one-use permit — exactly one send; the canary in no audit record, OCSF
+export, report, trace, `--json`, stdout, stderr, `grants list`, `broker.log` or `guard.json`; 15 invalid header and URL forms
+refused before the broker (0 `send` records, 0 connections). Each finding re-read before use:
+- **F1 (Medium) — fixed, D-V2-137**: a seal on a secret's name did not cover its sends (above).
+- **F2 (Low) — open, RW 4.65**: a send's DL1410 names the matched rule (`declassify:*`) as the thing to request, never the
+  pair the permit needs.
+- **F3 (Low, within the same-uid residual) — open, RW 4.66**: a raw `SendSecret` naming a node id returns the bytes to any
+  same-uid caller of the socket, as `Expose` does for a node with `Declassify` — but a node with only `secret_to` (no
+  `Declassify`) now yields bytes too; the broker cannot tell the run's egress client from another process (RW 4.27 H2).
+- **F4 (Low) — open, RW 4.67**: after a send, one copy of the plaintext stays in the program process's heap until exit (the
+  serialized request; `reveal()` and the header clones are not zeroized). Before the send: 0 copies, scanned every 50 ms.
+- *Informational:* a same-origin redirect loop re-sends the secret on each hop (bounded by the redirect limit) under one `send`
+  record; a secret whose VALUE breaks a header rule is refused after the broker's `send allow` (the request never left; the
+  program is told `Refused`).
+**The pass's own slip:** it stopped both test brokers once with `pkill -x delulu` (run 24's trap, in another form); restarted.

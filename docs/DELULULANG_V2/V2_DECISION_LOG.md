@@ -3365,6 +3365,39 @@ not rebinding), M447 (the origin without its port), M448 (the key on a report th
 per-function reset of the names) survived because a body is a block whose names already end with it — the reset was removed,
 not kept as a wall no witness can reach.
 
+## D-V2-136 — NET-WILDCARD-1: one host matcher — the broker's network use check reads a `net` pattern exactly as the runtime does — TAKEN (head chef, 2026-10-15, under the owner's delegation)
+
+**Context.** Found reading P9-05 against the code: with `--grant net=*.example.com` (or `net.special=`), an embedded run's
+request to `api.example.com` was allowed, and the same run under `--broker daemon` was refused DL0904 — the broker's `Op::Net`
+check compared the host with the node's `net` set by exact string (`scopes.net.contains(host)`), while the runtime's allowlist
+and egress client read `*.SUFFIX` as a pattern (`prim::host_matches`, C85). Fail-closed, never a hole; but the daemon refused
+what the grant grants, so a program that ran embedded failed under custody.
+
+**Decision.** The matcher moves into `delulu-broker` (`validate::host_matches`, C85's dot boundary, the apex not matched),
+and the broker's use check and `prim::host_matches` both call it — one matcher, where there were three and two had disagreed
+before (C85). `⊑` between `net` sets stays exact-string: a pattern does not imply a host beneath it (conservative, sound, and
+widening it later is additive). The guard's `net` class still matches its patterns by exact string (unchanged).
+
+**Witnessed** both ways on `0f73f09`'s binary; `broker_cli`'s `a_pattern_net_grant_is_honored_under_the_daemon_as_embedded`
+red on the old source (DL0904), green now; `validate`'s unit test (subdomains allowed; the apex, `evilexample.com`, a sibling's
+subdomain, an unnamed host refused). **Falsified:** M450 (exact string again), M451 (no dot boundary), M452 (`*` without its
+dot) red, the control green.
+
+## D-V2-137 — The red team's F1: a Guard rule or permit on a secret's NAME covers every send of it; a `declassify` pattern no use can match is refused — TAKEN (head chef, 2026-10-15, under the owner's delegation)
+
+**Context.** D-V2-134 gated a send on the pair `NAME@host:port`, and Guard rules match their token by exact string. The run's
+red-team pass (one Sonnet 5.5 sous-chef against a frozen binary of `0f73f09`) found: with `declassify:API_TOKEN` SEALED, a
+delegation of its declassification was refused DL1413, yet a pair permit (`declassify:API_TOKEN@127.0.0.1:PORT`) let the secret
+be sent; with `declassify:*` unset, the send needed no permit at all while `guard status` said the name was sealed; and
+`guard policy set` accepted `API_TOKEN@*`, `API_TOKEN@127.0.0.1`, `API_TOKEN@127.0.0.1:*` and `API_TOKEN*`, each matching
+nothing. Re-witnessed in the VM (a broker unit test: the name's permit did not cover a send).
+
+**Decision.** In the `declassify` class a rule or permit on the NAME covers a send's pair token (`guard::pattern_matches`): a
+seal on a secret refuses every send of it, and a permit to declassify it — more than one to send it to its audience — covers
+its sends. A pair names one destination exactly. `dead_pattern_reason` refuses a `declassify` pattern that no use's token can
+match: a glob other than `*`, or a pair without a name, a host and an exact port. This corrects D-V2-134 item 2's "a permit to
+expose the secret is not one to send it". **Falsified:** M453 (no name match) and M454 (dead patterns accepted) red.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

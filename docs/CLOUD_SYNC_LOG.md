@@ -76,7 +76,9 @@ running summary.
   one request: a beat is now judged by when it arrived), RW 4.62 (run 23, D-V2-129 — a refused operation listed in the trace as if it
   had happened; every refusal after a dispatch is now recorded), RW 4.64 (the same run — the WASM engine's trace of a refused
   operation, now identical to the interpreter's), MAP-HANDLE-1 (run 24, D-V2-132 — under the daemon `Secret.map` ran over an
-  empty string and its made-up result was exposed with no broker gate; refused in words now) — and whatever the later entries add.
+  empty string and its made-up result was exposed with no broker gate; refused in words now), NET-WILDCARD-1 (run 25, D-V2-136 —
+  a pattern `net` grant refused under the daemon that embedded custody honored), the red team's F1 (run 25, D-V2-137 — a Guard
+  seal on a secret's name did not cover its sends) — and whatever the later entries add.
 - **The loop's own tools:** `witness.yml` (one test target on one runner at any branch), `scripts/check-other-os.sh`
   (clippy for macOS, Windows, arm64 and musl from Linux), `scripts/ci-log-summary.py`, `scripts/mutants.py`,
   `scripts/suite.sh`, `scripts/authority-corpus.py` (run 19), multi-edit mutants in `scripts/mutants.py` (run 24), the `scripts/hooks/pre-commit` map check, the repeated-heading gate in
@@ -92,7 +94,7 @@ running summary.
   commits, 139 files; at run 24's last code, 266 and 165.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-05, method-and-path network scopes; P9-04 complete by run 25; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-05, method-and-path network scopes — read against the code by run 25, step (a) next; P9-04 complete by run 25; RW 4.65–4.67, the run-25 red team's open findings; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -100,7 +102,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-135); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-137); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -3122,3 +3124,39 @@ directory, or have the laptop session read §11.
   (3) proposing a secret's audience in `--grants`' lines from `secret_destinations`; (4) RW 4.63, RW 4.53's rest, RW 4.57, RW
   4.58's O2/O4, RW 4.49's first two items; (5) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-135, option (c).
   **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-15 — routine run 25 (last): P9-05 read against the code; NET-WILDCARD-1 (D-V2-136); the red-team pass — F1 fixed (D-V2-137), F2–F4 recorded
+- Session: `https://claude.ai/code/session_011TZbDxBVJVmBTVyDeiWhGb`   Model: Claude Opus 5.5 (no fallback notice); one sous-chef,
+  Sonnet 5.5 (`claude-sonnet-5-5`), the red-team pass
+- Branch: `master` (through the harness branch `claude/zealous-carson-qm5vah`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `0f73f09`
+- Commits: (1) `c69506f` NET-WILDCARD-1: a pattern net grant means the same under the daemon as embedded - one host matcher;
+  (2) `016b522` The one host matcher above the broker's validate tests, where clippy wants items; (3) `fa15654` The Guard's
+  rule on a secret's name covers its sends (the red team's F1, D-V2-137); (4) this entry's commit — the records
+- Files and folders: (1)–(2) M `crates/delulu-broker/src/validate.rs` (`host_matches`; the use check; its test),
+  `crates/delulu-runtime/src/prim.rs` (`host_matches` delegates), `crates/delulu/tests/broker_cli.rs` (the witness),
+  `docs/survey/*`. (3) M `crates/delulu-broker/src/guard.rs` (`pattern_matches`, `dead_pattern_reason`), `secrets.rs` (the
+  witness; the revised test), `crates/delulu/tests/broker_cli.rs` (the revised lease witness), `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-134's correction note), `docs/survey/*`. (4) M
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 two findings; §11.5 a lesson), `docs/CLOUD_ROUTINE.md` (step 4's P9 line; step 5 the
+  red-team brief — loop engineering), `docs/REMAINING_WORK.md` (2.12; rows 4.65–4.67 added),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-136,
+  D-V2-137), `V2_P9_DESIGN.md` (P9-05 read against the code), `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry),
+  `docs/survey/*`. Added, deleted, renamed: nothing. No entrenched file edited.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: NET-WILDCARD-1 witnessed both ways on `0f73f09`'s binary, its CLI witness red on the old source, M450–M452 red;
+  F1 re-witnessed (a broker unit test red), M453–M454 red; clippy clean (by cargo's own exit code); runner reads at `016b522`
+  (Windows `38732093503`, macOS `38732097100`, broker library `38732100229` — success) and at `fa15654` (in `V2_LOG.md`); the
+  full suite alone at `fa15654` — 2,294 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left. Push runs: `3f03ab0`'s CI `38729124643` and `ocsf` success, `0f73f09`'s
+  `openshell` success (its CI below). An earlier suite at `016b522`, run while the red-team pass loaded the VM, was red once on
+  `satellite_demo`'s re-contact scenario (a run exiting with nothing on stderr); green 3 of 3 alone at once, and in the suite
+  above — recorded as load, per run 17's rule, not as a finding.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: `HANDOFF.md` §11.4 — NET-WILDCARD-1 and F1, each with its search key; §11.5 — read clippy's exit
+  code from cargo.
+- Open / next, in order: (1) read THIS commit's push run and `0f73f09`'s CI; (2) **P9-05 step (a)** — path scopes in the
+  grammar and the egress client (`V2_P9_DESIGN.md`'s build order); (3) RW 4.65–4.67 (the red team's F2–F4); proposing a
+  secret's audience in `--grants`' lines; (4) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two items;
+  (5) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-137 (D-V2-137 changes what a `declassify` rule on a name
+  covers), option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**

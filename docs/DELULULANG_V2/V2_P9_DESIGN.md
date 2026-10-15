@@ -251,5 +251,30 @@ skip branch, §11.2).
   where it does not. **P9-04 complete. Next: P9-05.**
   **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
   `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
-- **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the
-  broker's set inclusion alike; three places to change in step.
+- **P9-05** method-and-path network scopes (§4.12, RW 2.12). **Read against the code by routine run 25 (2026-10-15) —
+  measured, before it is built:**
+  1. **Every request is a GET today.** `Cap[Http]` has `get`, `get_with` and `get_with_secret` — the method in the NAME since
+     D-V2-128, so what a program does to a host is readable from its calls. A method dimension has nothing to restrict until a
+     non-GET primitive exists; P9-05's method half lands WITH the first one (`post_with`, …), never before — a scope for a
+     method no program can call is a gate that cannot fail.
+  2. **A host is read in three places, and they disagreed.** The grant grammar (`net=HOST`, `*.SUFFIX` patterns —
+     `broker.rs`'s `Grants::add`), the runtime (`prim::host_allowed` and the egress client's per-hop allowlist, both
+     `prim::host_matches`, C85's dot boundary) and the broker (`validate.rs`'s `Op::Net` use check). The broker compared by
+     EXACT STRING, so a pattern grant was refused under the daemon that embedded custody allowed — **NET-WILDCARD-1**, found
+     reading this step and fixed beside it (`c69506f`/`016b522`: one matcher, `delulu_broker::validate::host_matches`). `⊑`
+     between `net` sets stays exact-string (a pattern does not imply a host under it — conservative, sound).
+  3. **Where a path would be judged.** The egress client parses every hop's URL (`parse_target`: the path is the text after the
+     authority) — the per-hop check a path scope needs is there already. The broker never sees a path: the custody's `Net` op
+     carries the HOST only (`custody_op_for`), and its records name the host. A path scope enforced by the broker needs the op's
+     argument to carry the path (and the record to name it — the OCSF HTTP Activity then gains `http_request.url.path`).
+  4. **The grammar.** `net=HOST` has no room for a path today, and a secret's audience REFUSES one (`parse_audience`: "a path in
+     an audience waits for path scopes (P9-05)"). The study's shape — `HOST[:METHODS]/PREFIX/**`, `*` one segment, `**` only
+     last, containment decided by the syntax — must refuse every spelling a URL parser would read another way (`%2F`, `..`,
+     `//`, a trailing dot), as the URL parse already does for a request.
+  5. **The static half** is P9-04 (e)'s walk again: a URL literal at each request call gives its path, a computed one is
+     `null` — `secret_destinations`' shape, generalized to every `http` call.
+  **Build order, proposed:** (a) path scopes in the grant grammar and the runtime — `net=HOST/PREFIX/**`, judged by the egress
+  client on every hop, refused when a spelling could read two ways; (b) the broker: the `Net` op's argument and record carry the
+  path, `Scopes.net` entries with a path, `⊑` as prefix containment — a new exact-set-plus-prefix order that joins the Z3 model
+  with mutants; (c) `grants diff`/`authority`: path reach (`scope_expansion` on a wider prefix) and the static walk; (d)
+  methods, with the first non-GET primitive. Each a slice, each witnessed red first.

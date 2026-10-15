@@ -947,6 +947,16 @@ spells the same thing?**
   now. **The search key: a value that stands in for bytes held elsewhere answers every reader that does not ask where the
   bytes are — list each reader (`grep reveal`) and ask it.**
 
+- **NET-WILDCARD-1** (routine run 25, D-V2-136): a pattern `net` grant (`*.example.com`) was honored embedded and refused
+  DL0904 under the daemon — the broker's use check compared the host by exact string while the runtime matched the pattern.
+  Fail-closed, but custody changed what a grant meant. One matcher now (`delulu_broker::validate::host_matches`). Search key:
+  every place a grant's string is compared with a use — is it the same comparison everywhere?
+
+- **A Guard rule on a secret's name did not cover its sends** (routine run 25's red team, F1, D-V2-137): a send is gated on
+  the pair `NAME@host:port` and rules matched by exact string, so `declassify:K` sealed sealed nothing of `K`'s sends. A rule or
+  permit on the name covers them now; a pattern no use can match is refused. Search key: every time a Guard token gains a new
+  shape, does every rule written for the old shape still reach it?
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -1405,6 +1415,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `AuthoritySpec { …, ..Default::default() }` or `brokerd::authority_spec_of`'s, which would have dropped the new dimension
   silently (and a second hand-written copy of `authority_spec_of` in `broker_client` had to be found by grep). Grep every
   `..Default::default()` literal of the type you extend; prefer one conversion per direction (both now call the one).
+- **Read clippy's exit code from cargo, never through a pipe** (routine run 25): `cargo clippy … | head; echo $?` printed `0`
+  — `head`'s — over an `items_after_test_module` error, and the commit reached the harness branch before a second clippy saw it.
+  AGENTS.md says it ("read cargo's own exit code, never a pipeline's"); the fix is `> FILE 2>&1; echo $?`, then read FILE.
 - **A slice can be written in a git worktree while the suite runs** (routine run 25): the suite's tree stays frozen, and the
   next slice's code — written but not compiled there — is `git diff`-applied once the suite reports. Step (d)'s second half was
   written so, during the first half's suite, and compiled clean on its first build.
