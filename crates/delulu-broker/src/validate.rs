@@ -189,7 +189,9 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
         let ok = match op {
             Op::FsRead => authority.scopes.fs_read.iter().any(|root| crate::path_is_within(arg, root)),
             Op::FsWrite => authority.scopes.fs_write.iter().any(|root| crate::path_is_within(arg, root)),
-            Op::Net => authority.scopes.net.contains(arg),
+            // NET-WILDCARD-1 (routine run 25): by the runtime's own matcher, `*.example.com` included — the exact-string
+            // `contains` refused every use of a pattern grant under the daemon that embedded custody allowed.
+            Op::Net => authority.scopes.net.iter().any(|pat| host_matches(arg, pat)),
             Op::Declassify => authority.scopes.declassify.contains(arg),
             Op::ForeignBind => authority.scopes.foreign_c.contains(arg),
             // RFC 0001 F1 (D12e). Until this arm existed, `Op::Actuate` fell through to `_ => true`
@@ -512,6 +514,30 @@ mod tests {
         Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
     }
 
+    /// NET-WILDCARD-1 (routine run 25): a node granted `*.example.com` may use a host beneath it — the runtime's reading of
+    /// the same grant — and nothing else: not the apex, not another registrable domain ending in the same letters (C85),
+    /// not a host the node never named. Before, the broker compared the host by exact string and refused every use.
+    #[test]
+    fn a_pattern_net_grant_is_read_by_the_runtimes_own_matcher() {
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000)));
+        let node = b.issue(
+            holder(),
+            Authority::new(eff(&["Net"]), Scopes { net: names(&["*.example.com", "plain.org"]), ..Default::default() }),
+            None,
+        );
+        for (host, allowed) in [
+            ("api.example.com", true),
+            ("a.b.example.com", true),
+            ("plain.org", true),
+            ("example.com", false),
+            ("evilexample.com", false),
+            ("api.plain.org", false),
+            ("other.net", false),
+        ] {
+            assert_eq!(b.check(&node, Op::Net, Some(host)).is_allow(), allowed, "{host}");
+        }
+    }
+
     /// P8-04: a device refusal is recorded only for a node the tree holds, and its reason is bounded
     /// on a character boundary — it is a store a person reads later, and a guest chose part of it.
     #[test]
@@ -734,5 +760,18 @@ mod tests {
         let d = b.check(&root, Op::FsRead, Some("./data/x"));
         assert!(matches!(d, Decision::Allow { audit_seq: None }));
         assert_eq!(b.next_audit_seq(), before, "epoch-class use consumes no audit seq");
+    }
+}
+
+/// Does the host `host` fall under the `net` pattern `pat` — the one host matcher, used by the broker's use check and by
+/// the runtime's allowlist and egress client alike (`delulu_runtime::prim::host_matches` calls it), so a grant means the
+/// same thing under every custody (NET-WILDCARD-1). A pattern is a host exactly, or `*.SUFFIX`: any host strictly below
+/// `SUFFIX` at a dot boundary — campaign finding C85: a bare `ends_with` let `*.example.com` match `evilexample.com`,
+/// another registrable domain. The apex (`example.com`) is not matched by `*.example.com`; narrowing is the safe direction.
+pub fn host_matches(host: &str, pat: &str) -> bool {
+    if let Some(suffix) = pat.strip_prefix("*.") {
+        host.len() > suffix.len() && host.ends_with(suffix) && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+    } else {
+        host == pat
     }
 }

@@ -402,6 +402,47 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
 }
 
 
+/// NET-WILDCARD-1 (routine run 25): a pattern `net` grant means the same under the daemon as embedded. A run granted
+/// `net.special=*.example.invalid` (`.invalid` never resolves — RFC 6761 — so nothing leaves the machine either way) was
+/// allowed its request embedded and refused DL0904 under `--broker daemon`, the broker comparing the host by exact string.
+/// Now both reach the egress client (which answers that the name resolves to nothing), and the chain holds `use allow`.
+#[test]
+fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
+    let base = std::env::temp_dir().join(format!("delulu_bwild_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Net, Write} {\n    let out = root.console()\n    let h = root.http([\"*.example.invalid\"])\n    \
+                   match h.get(\"https://api.example.invalid/\") {\n        Ok(b) => out.println(\"fetched\")\n        \
+                   Err(e) => out.println(\"not fetched\")\n    }\n}\n";
+    std::fs::write(cwd.join("wild.delulu"), program).unwrap();
+    let args = ["run", "wild.delulu", "--grant", "console", "--grant", "net.special=*.example.invalid", "--no-prompt"];
+    let o = delulu_in(&cwd, &state, &args);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "embedded: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let mut daemon = args.to_vec();
+    daemon.extend(["--broker", "daemon"]);
+    let o = delulu_in(&cwd, &state, &daemon);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "under the daemon: {}", stderr(&o));
+    assert!(!stderr(&o).contains("DL0904"), "{}", stderr(&o));
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let uses: Vec<(String, String)> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["target"] == "api.example.invalid")
+        .map(|r| (r["decision"].as_str().unwrap_or("").to_string(), r["target"].as_str().unwrap_or("").to_string()))
+        .collect();
+    assert!(uses.first().is_some_and(|(d, _)| d == "allow"), "the host's use is allowed and recorded: {v:#}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// MAP-HANDLE-1 (routine run 24): under the daemon a run's secret is a broker HANDLE, with no bytes in the program's process —
 /// and `Secret.map`'s function runs in that process. It was handed the empty string, and `s.map(f).expose(d)` printed `f("")`
 /// (here `!`) where embedded custody prints `f(bytes)` (`hunter2!`): a fabricated value, then exposed with no broker gate and no

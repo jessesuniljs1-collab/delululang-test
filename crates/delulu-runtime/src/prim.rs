@@ -348,21 +348,11 @@ pub(crate) fn host_allowed(url: &str, allow: &[String]) -> bool {
 /// Public because the egress client (PS-B-02) asks the same question of every redirect hop, and of
 /// the `net.special=` subset, and two matchers kept in step by hand is how C85 happened.
 pub fn host_matches(host: &str, pat: &str) -> bool {
-    if let Some(suffix) = pat.strip_prefix("*.") {
-        // Campaign finding C85 — the dot boundary is the whole point. A bare `ends_with` let
-        // `*.example.com` match `evilexample.com`, which is a different registrable domain
-        // owned by somebody else. The project's sibling matcher for Python imports
-        // (`python::allowlist_allows`) already requires the separator, which is what makes this
-        // an omission rather than a design choice: two namespace matchers, one correct.
-        //
-        // The apex (`example.com` itself) is deliberately NOT matched by `*.example.com`; that
-        // is the ordinary reading of the pattern, and narrowing is the safe direction.
-        host.len() > suffix.len()
-            && host.ends_with(suffix)
-            && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
-    } else {
-        host == pat
-    }
+    // NET-WILDCARD-1 (routine run 25): the broker's use check and this allowlist read a `net` pattern with ONE matcher
+    // (C85's dot boundary, the apex not matched — `delulu_broker::validate::host_matches`), so a grant means the same thing
+    // under embedded custody and under the daemon. Two matchers had already disagreed once (C85: two namespace matchers,
+    // one correct); the broker's exact-string check was the third.
+    delulu_broker::validate::host_matches(host, pat)
 }
 
 // ----- Root: mint capabilities (attenuation — no effect) -------------------
