@@ -318,7 +318,7 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
 
 /// P9-04 (d), D-V2-134: a LEASED run's send is the Guard's, as a declassification is — the bytes leave the broker — and
 /// its permit names the destination: a delegated node's send is DL1410 until the owner approves `declassify:NAME@origin`
-/// (a permit to expose the secret does not buy it); a child delegated a narrower audience cannot send to its parent's
+/// (one for another origin does not buy it; one on the NAME would, D-V2-137); a child delegated a narrower audience cannot send to its parent's
 /// other origin (refused before the broker is asked). The run then reaches its egress client with the bytes; this host's
 /// loopback is a special-use address a lease does not reach (PS-B-02), so the client refuses it — after the `send`.
 #[test]
@@ -369,12 +369,12 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
         let ap = delulu_in(&cwd, &state, &["guard", "approve", &req, "--owner", &owner]);
         assert!(ap.status.success(), "approve: {}", stderr(&ap));
     };
-    // Guarded by default; a permit to expose the secret is not a permit to send it.
+    // Guarded by default; a permit for the secret's other destination does not buy this one (D-V2-137: one on its NAME would).
     let o = run("a.delulu", &token);
     assert!(stderr(&o).contains("DL1410"), "a leased send is guarded: {}{}", stdout(&o), stderr(&o));
-    approve("declassify:API_TOKEN");
+    approve(&format!("declassify:{to_b}"));
     let o = run("a.delulu", &token);
-    assert!(stderr(&o).contains("DL1410"), "an expose permit does not buy a send: {}{}", stdout(&o), stderr(&o));
+    assert!(stderr(&o).contains("DL1410"), "another destination's permit does not buy this send: {}{}", stdout(&o), stderr(&o));
     approve(&format!("declassify:{to_a}"));
     let o = run("a.delulu", &token);
     assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));

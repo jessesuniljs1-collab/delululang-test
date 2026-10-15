@@ -239,6 +239,22 @@ pub fn dead_pattern_reason(class: GuardClass, pattern: &str) -> Option<String> {
     if pattern == "*" {
         return None;
     }
+    // D-V2-137 (the red team's F1): a `declassify` use's token is a secret's NAME (an `expose`) or `NAME@host:port` (a send,
+    // P9-04 (d)) — matched exactly, the name covering both. A glob, or a pair without its exact port, matches neither: it
+    // was stored as `sealed` and sealed nothing.
+    if class == GuardClass::Declassify {
+        let pair_ok = |p: &str| {
+            p.split_once('@').is_some_and(|(name, origin)| {
+                !name.is_empty() && origin.rsplit_once(':').is_some_and(|(host, port)| !host.is_empty() && port.parse::<u16>().is_ok())
+            })
+        };
+        if pattern.contains('*') || (pattern.contains('@') && !pair_ok(pattern)) {
+            return Some(format!(
+                "`{pattern}` matches no use: a `declassify` rule names a secret (`declassify:NAME`, every expose and send of \
+                 it), one destination of it exactly (`declassify:NAME@host:port`, as the refusal names it), or `*`"
+            ));
+        }
+    }
     if class == GuardClass::Effect && !effect_pattern_denotes(pattern) {
         return Some(format!(
             "`{pattern}` is not an effect name, so this rule would gate nothing. Use `*` or a real \
@@ -288,6 +304,9 @@ fn pattern_matches(class: GuardClass, pattern: &str, token: Option<&str>) -> boo
         // `C:/out/./x` are one rule rather than three that silently fail to be each other.
         // GUARD-SCOPE-1: and a path rule covers its SUBTREE, as a grant's scope does.
         Some(t) if class_is_path_valued(class) => path_within(t, pattern),
+        // D-V2-137 (the red team's F1): a send's token is `NAME@host:port` (P9-04 (d)); a rule or a permit on the NAME covers
+        // it — a seal on a secret seals its sends, and a permit to declassify it is more than one to send it to its audience.
+        Some(t) if class == GuardClass::Declassify => t == pattern || t.split_once('@').is_some_and(|(name, _)| name == pattern),
         Some(t) => t == pattern,
     }
 }

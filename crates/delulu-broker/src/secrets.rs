@@ -772,8 +772,8 @@ mod tests {
     }
 
     /// P9-04 (d), D-V2-134: a send hands the bytes over only for a pair the node's `secret_to` holds — the source's pair for
-    /// a derived name — is Guard-gated for a delegated node ON THE PAIR (a permit to expose the secret does not buy a send,
-    /// and one to send it to one origin does not buy another), ends with the node, and is recorded with the pair and the
+    /// a derived name — is Guard-gated for a delegated node ON THE PAIR (one to send it to one origin does not buy another;
+    /// a rule or permit on the NAME covers every send, D-V2-137), ends with the node, and is recorded with the pair and the
     /// span, allow or deny, never with a byte.
     #[test]
     fn a_send_hands_the_bytes_over_only_for_a_pair_the_node_holds() {
@@ -812,8 +812,9 @@ mod tests {
             let (id, _) = b.guard_request(&child, subset, "send".into()).unwrap();
             b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         };
-        approve(&mut b, "K");
-        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1410"), "an expose permit is not a send's");
+        // D-V2-137: a permit for another destination does not buy this one (a permit on the NAME would — see below).
+        approve(&mut b, "K@a.com:8443");
+        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1410"), "another origin's permit");
         approve(&mut b, "K@a.com:443");
         assert_eq!(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0.unwrap(), "hunter2-8f2c");
         b.revoke(&root, &child).unwrap();
@@ -822,6 +823,45 @@ mod tests {
         for r in sink.records() {
             let text = serde_json::to_string(&r.to_value()).unwrap();
             assert!(!text.contains("hunter2") && !text.contains("HUNTER2"), "a record holds the bytes: {text}");
+        }
+    }
+
+    /// The red team's F1 (routine run 25, D-V2-137): a Guard rule or permit on a secret's NAME covers every send of it — a
+    /// seal on `declassify:K` refused delegating `K`'s declassification and let `K` be sent, because a send is gated on the
+    /// pair `K@origin` and rules matched by exact string. A pair names one destination; a pair pattern that could never match
+    /// a send's token is refused when it is set.
+    #[test]
+    fn a_rule_on_a_secrets_name_covers_its_sends() {
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_owner_code("gow1_testowner");
+        let auth = || {
+            Authority::new(
+                eff(&["Net"]),
+                Scopes { net: names(&["a.com"]), secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() },
+            )
+        };
+        let root = b.issue(Holder::new("process", "app", "pid:1"), auth(), None);
+        let child = b.attenuate(&root, auth(), Holder::new("process", "agent", "pid:2"), None).unwrap();
+        let store = SecretStore::in_memory();
+        store.set("K", "hunter2-8f2c").unwrap();
+        let code = |r: Result<String, Denial>| r.map_err(|d| d.code()).err();
+        let approve = |b: &mut Broker, token: &str| {
+            let subset = crate::guard::GuardSubset::parse(&[format!("declassify:{token}")]).unwrap();
+            let (id, _) = b.guard_request(&child, subset, "send".into()).unwrap();
+            b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        };
+        // A permit on the name — the declassification itself, which is more than a send to the audience — covers it.
+        approve(&mut b, "K");
+        assert!(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0.is_ok(), "the name's permit covers a send");
+        // A seal on the name refuses every send of it, a pair's permit included.
+        b.guard_policy_set(Some("gow1_testowner"), crate::guard::GuardClass::Declassify, "K".into(), crate::guard::GuardTier::Sealed)
+            .unwrap();
+        approve(&mut b, "K@a.com:443");
+        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1413"), "sealed by name");
+        // A pair pattern no send's token can match is refused when it is set (`NAME@host:port` exactly, or the name).
+        for dead in ["K@*", "K@a.com", "K@a.com:*", "K*"] {
+            let r = b.guard_policy_set(Some("gow1_testowner"), crate::guard::GuardClass::Declassify, dead.into(), crate::guard::GuardTier::Sealed);
+            assert!(matches!(r, Err(Denial::DeadGuardPattern { .. })), "`{dead}` can never match a send: {r:?}");
         }
     }
 

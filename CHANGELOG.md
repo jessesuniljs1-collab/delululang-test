@@ -30,8 +30,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   `NAME@host:port` for it — after everything else about the request has been judged; the bytes go to the run's network
   client, never to a program value, and the audit chain records a `send` naming the secret and the destination, never the
   bytes. A delegated (leased) holder's send is guarded like a declassification: `delulu guard request g_NODE --use
-  declassify:NAME@host:port --why "…"`, then a person's `guard approve` — a permit to expose the secret is not a permit to
-  send it. A request to another origin, or with a header no request may carry, is refused before the broker is asked.
+  declassify:NAME@host:port --why "…"`, then a person's `guard approve` — a permit for one destination does not buy another;
+  a Guard rule or permit on the secret's NAME (`declassify:NAME`) covers every send of it, and a seal on it refuses them
+  all (D-V2-137). A request to another origin, or with a header no request may carry, is refused before the broker is asked.
   `delulu audit export --format ocsf` names an allowed `send` as HTTP Activity (4002), its destination the event's
   `dst_endpoint`.
 

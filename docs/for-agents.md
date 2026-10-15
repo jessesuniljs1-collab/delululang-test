@@ -696,7 +696,8 @@ overstate it downstream:
   `NAME@host:port` (`grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`, one origin a flag, a child
   never naming one its parent does not — DL0802), the request is judged before the broker is asked, and the
   chain records a `send` with the pair; a delegated node's send is guarded (DL1410) until a person approves
-  `declassify:NAME@host:port` — a permit to expose the secret is not one to send it. Not yet in a
+  `declassify:NAME@host:port` — one for another destination does not buy it; a rule or permit on the secret's NAME
+  (`declassify:NAME`) covers every send of it, and a seal on it refuses them all (D-V2-137). Not yet in a
   `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no

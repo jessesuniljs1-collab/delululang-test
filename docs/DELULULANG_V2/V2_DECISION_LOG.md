@@ -3288,7 +3288,9 @@ broker, which holds them, must be the one that decides.
    daemon`'s) is ungated, as for `expose`. Its axis token is the PAIR, `SOURCE@origin`: a permit names the destination
    (`guard request --use declassify:API_TOKEN@api.example.com:443`), so a permit to expose the secret is not one to send it,
    and one to send it to one origin is not one to send it to another. `declassify:*` still covers every send. No new Guard
-   class (the Guard is hardened, not redefined).
+   class (the Guard is hardened, not redefined). *(**Corrected the same run by D-V2-137**, after the red team's F1: a rule
+   or permit on the secret's NAME covers every send of it — a seal on a name had sealed nothing of its sends — and a pair
+   pattern that cannot match a send's token is refused; the pair still names one destination.)*
 3. **The record.** A guard event when the Guard is asked (as `verify_guarded`), then one `send` record — allow or deny —
    naming the pair and the calling span, never a byte. The lost-record rule (D-V2-109/111): a `send` whose record could not be
    written hands over nothing (DL1401). An `allow` `send` is written BEFORE the bytes leave the daemon.

@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 308 |
-| Rust lines | 170456 |
+| Rust lines | 170515 |
 | Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 253 |
-| Markdown lines | 76183 |
+| Markdown lines | 76187 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1506 / 14518 |
+| Nodes / edges in this map | 1506 / 14519 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 12494 lines
+- **Modules:** 18 files, 12553 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -173,14 +173,14 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/deadman.rs` | 456 | P8-04 step 5 — a dead-man FOR A NODE, held by the broker: what happens when a monitor dies |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 465 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
-| `src/guard.rs` | 1832 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
+| `src/guard.rs` | 1851 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 781 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 84 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
 | `src/ocsf.rs` | 351 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/proposal.rs` | 395 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
-| `src/secrets.rs` | 895 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
+| `src/secrets.rs` | 935 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1191 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 777 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
