@@ -3076,3 +3076,24 @@ directory, or have the laptop session read §11.
   (4) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two items; (5) a boundary over a `.dwx`. **For the
   owner:** D-V2-115 to D-V2-134 (D-V2-134 chooses the Guard's `declassify` class for a send, with the pair as its token),
   option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-15 — routine run 25 (continued): the OCSF export names a broker's `send` as HTTP Activity, its destination the endpoint
+- Session: `https://claude.ai/code/session_011TZbDxBVJVmBTVyDeiWhGb`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-carson-qm5vah`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `9ed939f`
+- Commits: (1) `b8da460` The OCSF export names a broker's send as HTTP Activity, its destination the endpoint; (2) this
+  entry's commit — the records
+- Files and folders: (1) M `crates/delulu-broker/src/ocsf.rs` (the class, the endpoint, the mapping table),
+  `crates/delulu/tests/audit_ocsf_cli.rs` (the seeded sends), `docs/DEPLOYMENT.md`, `docs/survey/*`. (2) M `CHANGELOG.md`,
+  `docs/CLOUD_ROUTINE.md` (step 4's P9 line), `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-134's follow-up),
+  `V2_P9_DESIGN.md`, `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: in the `V2_LOG.md` entry — witnessed red (class 0), OCSF 1.8.0 validation, M440/M441, Windows and macOS witness
+  runs, the full suite alone at `b8da460` (2,290 passed, 0 failed, 16 ignored). `9ed939f`'s `ocsf` and `openshell` success.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read `9ed939f`'s CI `38727198569` and THIS commit's push runs; (2) **P9-04 step (e)** —
+  `authority`'s per-secret destinations — under way; then P9-05; (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW
+  4.49's first two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-134, option (c). **The closing
+  entry is current; from 2026-10-16 a run only refreshes it and stops.**

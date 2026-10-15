@@ -245,7 +245,8 @@ skip branch, §11.2).
   `grants_from_lease`, a proposal's join, `grants diff` between nodes. **Its second half built** (the same run, `6fe7076`,
   D-V2-134): item 3 — the broker's `send` (the node's `secret_to`, the Guard on the pair, a `send` record; a lost record hands
   over nothing), asked by the interpreter only after `egress::prejudge_secret` has judged everything it can without the bytes;
-  a handle carrying its audience. **Step (d) complete** but for the OCSF mapping of a `send` (a Base Event today). **Next: (e)**.
+  a handle carrying its audience; the OCSF export names a `send` as HTTP Activity with its destination (`b8da460`). **Step (d)
+  complete. Next: (e)**.
   **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
   `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the

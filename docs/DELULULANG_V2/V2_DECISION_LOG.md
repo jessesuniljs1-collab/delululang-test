@@ -3315,8 +3315,11 @@ survives too; it is kept so that what the egress client holds says exactly what 
 handle that reaches the request table unanswered is unreachable today (the interpreter routes every handle first; a guest
 holds none; the WASM engine has no `http`) and is kept as the refusal in words of an internal wiring error.
 
-**Not yet:** the OCSF export names a `send` as a Base Event (the mapping's catch-all); HTTP Activity with the destination is a
-follow-up. Step (e) — `authority`'s per-secret destinations. Whether the language should reach the broker's whitelisted
+**The OCSF mapping, built the same run** (`b8da460`): an allowed `send` exports as HTTP Activity (4002), Get, its
+`dst_endpoint` the origin's host and port (the port after the LAST colon, so an IPv6 host stays whole), the secret named only
+in the message and the embedded record; a refused one stays a Detection Finding. Witnessed: the seeded chain's `send/allow`
+exported as class 0 before; validated against OCSF 1.8.0 (15 events, 0 problems); M440 (no port) and M441 (the pair as the
+hostname) red. **Not yet:** step (e) — `authority`'s per-secret destinations. Whether the language should reach the broker's whitelisted
 `secret_map` stays open.
 
 **Not chosen:** a `send` class of its own in the Guard (a vocabulary change the owner's — the pair as `declassify`'s token

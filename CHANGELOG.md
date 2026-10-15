@@ -27,6 +27,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   bytes. A delegated (leased) holder's send is guarded like a declassification: `delulu guard request g_NODE --use
   declassify:NAME@host:port --why "…"`, then a person's `guard approve` — a permit to expose the secret is not a permit to
   send it. A request to another origin, or with a header no request may carry, is refused before the broker is asked.
+  `delulu audit export --format ocsf` names an allowed `send` as HTTP Activity (4002), its destination the event's
+  `dst_endpoint`.
 
 ## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
 

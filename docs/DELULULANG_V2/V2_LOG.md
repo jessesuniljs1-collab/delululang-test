@@ -5829,3 +5829,14 @@ the other three arrive. Green 6 of 6 in the VM with all four CPUs busy; M439 (th
 read green on Windows, arm64 and macOS. **Loop engineering:** `scripts/suite.sh`'s fingerprint now hashes the files themselves
 (a commit during a suite read as `TREE-MOVED`); `docs/CLOUD_ROUTINE.md` step 5 — a slice written in a git worktree while the
 suite runs, and the backgrounded-variable trap.
+
+## 2026-10-15 — routine run 25 (continued): the OCSF export names a broker's `send` as HTTP Activity (D-V2-134's follow-up)
+
+**Push runs read.** `9ed939f`: `ocsf` `38727198688` and `openshell` `38727198636` success; its CI `38727198569` read in the
+next entry. **`b8da460`:** an allowed `send` exported as a Base Event (class 0, witnessed on the seeded chain); now HTTP
+Activity (4002), Get, `dst_endpoint` `{hostname, port}` from `NAME@host:port`, the secret named only in the message; a refused
+send stays a Detection Finding. `audit_ocsf_cli`'s seeded chain gains a send to the audience and one outside it. The corpus
+validates against OCSF 1.8.0 (`scripts/ocsf-validate.py`: 15 events, 0 problems; its self-test 16 of 16 mutations caught);
+M440 and M441 red, the control green; clippy clean; `audit_ocsf_cli` and `monitor_cli` on Windows `38727666655` and macOS
+`38727669814` — success; `docs/DEPLOYMENT.md`'s mapping paragraph. **The full suite alone at `b8da460`:** 2,290 passed, 0
+failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved.
