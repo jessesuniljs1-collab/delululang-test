@@ -122,7 +122,7 @@ false, but that when it is, this project finds out and says so.
   union of the rows of everything it calls (`ε_body ⊆ ε_declared`). The whole-program answer is
   `row(main)`.
 - **Authority is ordered, and `⊓` is a genuine greatest lower bound.** `G₁ ⊑ G₂` is one conjunction
-  over ten dimensions — effects, eight scope dimensions and a resource budget — where each must be
+  over eleven dimensions — effects, nine scope dimensions (each secret's audience among them) and a resource budget — where each must be
   narrower-or-equal
   (paths are descendants, host sets are subsets, numeric envelopes are ≤). That `⊓` is **never wider
   than either input**, and is in fact the *greatest* lower bound, is now verified **exhaustively over

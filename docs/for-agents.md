@@ -375,7 +375,8 @@ grant set: each finding names what NEW adds — `effect_expansion`, `scope_expan
 `special_use_reach`, `device_reach_expansion` or `secret_reach_expansion` (a secret whose audience names an
 origin OLD's does not, D-V2-131) — with no severity grade; exit 1 when it adds anything.
 `delulu grants diff g_OLD g_NEW --json` asks it of two lease nodes, through their broker, and adds
-`budget_expansion`.
+`budget_expansion`; between nodes `secret_reach_expansion` names a `NAME@host:port` pair NEW's node holds and OLD's
+does not (P9-04 (d), D-V2-133).
 
 **When a run is refused, ask for the narrowest grant, not a wider one** (P9-03): run with `--report-out FILE` —
 sandboxed or not, the report records the refusal and the call it was made at — then `delulu grants propose FILE --json`.
@@ -685,7 +686,10 @@ overstate it downstream:
   secret granted with no audience, is refused before anything is resolved (reason `audience`, nothing
   connected); each hop's report record names the secret it carried (`secret`), never its bytes. Not yet
   under `--broker daemon`/`--lease` (DL0904, P9-04 (d)), in a `--sandbox` guest (DL1401: no secret
-  crosses the channel), or under `--engine wasm`.
+  crosses the channel), or under `--engine wasm`. A lease node carries a secret's audience since D-V2-133 —
+  `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`, one origin a flag, a child never naming one
+  its parent does not (DL0802) — and a daemon run's node keeps the audience its grant line named; the
+  broker sending the bytes at send time is the step after.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image

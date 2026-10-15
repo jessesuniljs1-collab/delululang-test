@@ -452,6 +452,87 @@ impl Drop for BrokerGuard {
     }
 }
 
+/// P9-04 (d), D-V2-133: a node's secret carries its AUDIENCE — `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`,
+/// the broker's `secret_to` dimension of `NAME@host:port` pairs. `⊑` is inclusion: a child may name fewer origins for a
+/// secret, never another one (DL0802, the intersection its repair); `grants diff` between two nodes reports a pair OLD lacks as
+/// `secret_reach_expansion`; a secret with no pair is the bottom (sent nowhere). A pair for a secret the delegation does not
+/// name grants reach to nothing and is refused in words, and so is a spelling the egress client would refuse as a URL's
+/// (a path, a wildcard, an upper-case host — refused, never normalized).
+#[test]
+fn a_nodes_secret_carries_its_audience_and_a_wider_one_is_secret_reach() {
+    let base = std::env::temp_dir().join(format!("dga{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&cwd)
+            .env("DELULU_STATE_DIR", &state)
+            .env("DELULU_NO_COLOR", "1")
+            .args(args)
+            .output()
+            .expect("failed to run delulu")
+    };
+    let o = run(&["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", out(&o));
+    let guard = BrokerGuard(state.clone());
+    let delegate = |extra: &[&str]| -> Output {
+        let mut args = vec!["grants", "delegate", "--ttl", "1h", "--json", "--effects", "Net", "--net", "api.example.com"];
+        args.extend_from_slice(extra);
+        run(&args)
+    };
+    let node = |o: &Output| -> String {
+        assert!(o.status.success(), "delegate: {}", out(o));
+        json_of(o)["node"].as_str().unwrap().to_string()
+    };
+    // Canonical on the way in: the default port named (the egress client's spelling, compared at send time).
+    let old = node(&delegate(&["--secret", "K", "--secret-to", "K@api.example.com"]));
+    let o = run(&["grants", "inspect", &old, "--json"]);
+    assert_eq!(json_of(&o)["node"]["secret_to"], serde_json::json!(["K@api.example.com:443"]), "{}", out(&o));
+    let new = node(&delegate(&["--secret", "K", "--secret-to", "K@api.example.com", "--secret-to", "K@b.example.com:8443"]));
+    let bottom = node(&delegate(&["--secret", "K"]));
+    let diff = |a: &str, b: &str| -> (i32, Value) {
+        let o = run(&["grants", "diff", a, b, "--json"]);
+        (o.status.code().unwrap_or(-1), json_of(&o))
+    };
+    let (code, v) = diff(&old, &new);
+    assert_eq!(code, 1, "{v:#}");
+    let f = &v["findings"].as_array().unwrap_or_else(|| panic!("{v:#}"))[..];
+    assert_eq!(f.len(), 1, "{v:#}");
+    assert_eq!((f[0]["category"].as_str(), f[0]["grant"].as_str()), (Some("secret_reach_expansion"), Some("K@b.example.com:8443")), "{v:#}");
+    assert_eq!(diff(&new, &old).0, 0, "fewer origins add nothing");
+    assert_eq!(diff(&old, &bottom).0, 0, "no audience is the bottom: sent nowhere adds nothing");
+    let (code, v) = diff(&bottom, &old);
+    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("secret_reach_expansion")), "{v:#}");
+    // A secret OLD does not hold at all is that secret's `scope_expansion`, counted once — its pairs are not a second finding.
+    let other = node(&delegate(&["--secret", "J", "--secret-to", "J@api.example.com"]));
+    let (code, v) = diff(&old, &other);
+    let cats: Vec<&str> = v["findings"].as_array().unwrap().iter().map(|f| f["category"].as_str().unwrap()).collect();
+    assert_eq!((code, cats), (1, vec!["scope_expansion"]), "{v:#}");
+    // Under OLD: a pair OLD names is delegated; another origin is refused, the repair the intersection.
+    let child = node(&delegate(&["--parent", &old, "--secret", "K", "--secret-to", "K@api.example.com:443"]));
+    let o = run(&["grants", "inspect", &child, "--json"]);
+    assert_eq!(json_of(&o)["node"]["secret_to"], serde_json::json!(["K@api.example.com:443"]), "{}", out(&o));
+    let o = delegate(&["--parent", &old, "--secret", "K", "--secret-to", "K@b.example.com:8443"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert!(out(&o).contains("DL0802"), "{}", out(&o));
+    // Refused in words, before the broker: a pair for a secret not delegated, and spellings no URL could carry.
+    for (args, says) in [
+        (vec!["--secret", "K", "--secret-to", "J@api.example.com"], "`--secret J`"),
+        (vec!["--secret", "K", "--secret-to", "K"], "NAME@HOST"),
+        (vec!["--secret", "K", "--secret-to", "K@api.example.com/v1"], "path"),
+        (vec!["--secret", "K", "--secret-to", "K@*.example.com"], "wildcard"),
+        (vec!["--secret", "K", "--secret-to", "K@API.example.com"], "lower case"),
+    ] {
+        let o = delegate(&args);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {}", out(&o));
+        assert!(out(&o).contains(says), "{args:?} must say {says:?}: {}", out(&o));
+    }
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// P9-02 between two lease NODES: each node's authority comes from the broker that holds it and is compared by
 /// the lattice — effects, paths, hosts, a device's envelope and the budget (absent is the top of that dimension).
 #[test]

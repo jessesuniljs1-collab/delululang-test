@@ -126,7 +126,7 @@ which TLC reports as `null` rather than as an error you would notice. The parent
 
 ---
 
-## `authority_algebra.py` — the ten-dimension order, proved in Z3
+## `authority_algebra.py` — the eleven-dimension order, proved in Z3
 
 ```sh
 pip install z3-solver
@@ -134,9 +134,9 @@ python docs/design/models/authority_algebra.py
 ```
 
 Symbolic verification of what `attenuation_check` actually computes (`authority.rs`): the
-conjunction of six exact-set dimensions (the effect set among them), two path dimensions, the device
-dimension and — since PS-B-05 — the budget dimension. **26 obligations, all discharged**,
-`RESULT: every obligation discharged`.
+conjunction of seven exact-set dimensions (the effect set among them; `secret_to`, each secret's
+audience, since P9-04 (d), D-V2-133), two path dimensions, the device dimension and — since PS-B-05 —
+the budget dimension. **34 obligations, all discharged**, `RESULT: every obligation discharged`.
 
 Until PS-B-05 the full conjunction here modelled seven set dimensions while the obligation said "all
 nine dimensions at once"; the code has eight. The laws are uniform in that number, so nothing proved
@@ -147,7 +147,8 @@ was false, but the sentence claimed a dimension the model did not carry. It now 
 | Set dimensions (`authority.rs:151-158`) | reflexive, transitive, **antisymmetric**, meet is a lower bound, meet is the **GLB**, idempotent, commutative, associative |
 | Device (`device_scope.rs::within`/`::meet`) | reflexive, transitive, meet is a lower bound, meet is the **GLB**, antisymmetric on its fields |
 | Budget (`budget_scope.rs::within`/`::meet`, PS-B-05) | reflexive, transitive, antisymmetric on the value, meet is a lower bound, meet is the **GLB**, idempotent, commutative, associative — over unbounded integers, with absence as the top |
-| **The full conjunction** | reflexive, transitive, **meet ⊑ both operands — the no-widening law, all ten dimensions at once**, meet is the GLB, and **no budget under a budgeted parent is never ⊑** |
+| Secret audiences (`authority.rs` `secret_to` beside `secrets`, P9-04 (d)) | a pair lives only beside its secret's name: canonicalization is well-formed, never widens, is idempotent, keeps a well-formed authority, is monotone; the meet keeps well-formedness and is ⊑ both |
+| **The full conjunction** | reflexive, transitive, **meet ⊑ both operands — the no-widening law, all eleven dimensions at once**, meet is the GLB, **no budget under a budgeted parent is never ⊑**, and **a `secret_to` pair the parent lacks is never ⊑** |
 
 The last obligation is there because the four product laws hold for ANY product of lattices:
 deleting the budget from the model's conjunction left all four discharged (measured, PS-B-05). The
@@ -156,7 +157,9 @@ against the budget, by CI on every push (`DELULU_Z3_MUTANT=…`, step "The autho
 teeth"): a meet taking the maximum (2 obligations fail), an absent child passing under a present
 parent (4 fail), and the budget dropped from the conjunction (the asymmetry obligation fails). Each
 must end with obligations NOT discharged; an unknown mutant name exits 2 without that line, so a typo
-cannot pass as a caught mutant.
+cannot pass as a caught mutant. Three more are run against `secret_to` (P9-04 (d)): the audience
+dropped from the conjunction (its own obligation fails), its meet taken as the union (3 fail), and
+canonicalization keeping a pair whose secret is not held (1 fails) — six in all.
 
 The device model is faithful to the three asymmetries that are easy to get backwards: a **smaller
 heartbeat is narrower**, a **smaller ttl is narrower**, and an **unbounded rate under a bounded

@@ -38,8 +38,9 @@ says P15.
 
 ### 1.1 Capability attenuation — HELD
 
-`attenuation_check` tests all ten dimensions in **one conjunction** (effects + eight scope
-dimensions + the budget, which PS-B-05 added on 2026-09-25), so no dimension can be silently skipped
+`attenuation_check` tests all eleven dimensions in **one conjunction** (effects + nine scope
+dimensions + the budget, which PS-B-05 added on 2026-09-25; `secret_to`, each secret's audience, joined
+with P9-04 (d) on 2026-10-15), so no dimension can be silently skipped
 by an early return. `attenuate_core` is the
 **only** path that creates a child node, and it fails closed on a missing or dead parent *including
 ancestors*. Verified in P6; the device dimension's own lattice (`within` / `meet`) is tested from both
@@ -78,7 +79,7 @@ matters.
 
 ### 1.5 Authority lattice — HELD
 
-`⊑` is one conjunction over ten dimensions (nine when this was written; PS-B-05 added the budget);
+`⊑` is one conjunction over eleven dimensions (nine when this was written; PS-B-05 added the budget, P9-04 (d) `secret_to`);
 `⊓` (meet) is proved never wider than either input, is
 symmetric, drops non-overlapping dimensions rather than widening them, and preserves the
 `ttl ≥ heartbeat` invariant. Tested in `authority.rs` and `device_scope.rs`.

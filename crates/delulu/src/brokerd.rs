@@ -195,6 +195,7 @@ pub(crate) fn authority_spec_of(a: &Authority) -> AuthoritySpec {
         foreign_python: names(&a.scopes.foreign_python),
         device: a.scopes.device.values().map(|d| d.to_grant_string()).collect(),
         budget: a.scopes.budget.map(|b| b.to_grant_string()),
+        secret_to: names(&a.scopes.secret_to),
         ..Default::default()
     }
 }
@@ -384,6 +385,9 @@ pub(crate) fn spec_to_authority(spec: &AuthoritySpec) -> Authority {
             budget: spec.budget.as_deref().map(|s| {
                 delulu_broker::BudgetScope::parse(s).unwrap_or(delulu_broker::BudgetScope::SMALLEST)
             }),
+            // P9-04 (d), D-V2-133: kept as written. `Authority::new` canonicalizes, dropping a pair whose name `secrets`
+            // does not hold; a spelling no origin has matches no destination, so it is reach to nothing either way.
+            secret_to: spec.secret_to.iter().cloned().collect(),
         },
     )
 }
@@ -548,6 +552,7 @@ fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo 
         foreign_python: names(&n.authority.scopes.foreign_python),
         device: n.authority.scopes.device.values().map(|d| d.to_grant_string()).collect(),
         budget: n.authority.scopes.budget.map(|b| b.to_grant_string()),
+        secret_to: names(&n.authority.scopes.secret_to),
     }
 }
 

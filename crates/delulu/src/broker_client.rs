@@ -483,25 +483,11 @@ impl Custody for BrokerClientCustody {
     }
 }
 
-/// Project a broker `Authority` onto the wire `AuthoritySpec` (holder fields filled by the caller).
+/// Project a broker `Authority` onto the wire `AuthoritySpec` (holder fields filled by the caller) — the daemon's own
+/// conversion, so one function names every dimension (this was a second copy of it, which a new dimension must have
+/// found by hand: P9-04 (d)'s `secret_to`).
 fn authority_to_spec(a: &Authority) -> AuthoritySpec {
-    let s = &a.scopes;
-    let v = |set: &std::collections::BTreeSet<String>| -> Vec<String> { set.iter().cloned().collect() };
-    AuthoritySpec {
-        effects: a.effects.iter().map(|e| e.name().to_string()).collect(),
-        fs_read: v(&s.fs_read),
-        fs_write: v(&s.fs_write),
-        net: v(&s.net),
-        secrets: v(&s.secrets),
-        declassify: v(&s.declassify),
-        foreign_c: v(&s.foreign_c),
-        foreign_python: v(&s.foreign_python),
-        device: s.device.values().map(|d| d.to_grant_string()).collect(),
-        budget: s.budget.map(|b| b.to_grant_string()),
-        holder_kind: String::new(),
-        holder_desc: String::new(),
-        ttl_millis: None,
-    }
+    brokerd::authority_spec_of(a)
 }
 
 #[cfg(test)]

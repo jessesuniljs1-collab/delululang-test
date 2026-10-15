@@ -616,15 +616,15 @@ jobs:
 
       - uses: actions/setup-python@v6
         with: { python-version: "3.13" }
-      - name: The ten-dimension authority algebra (Z3, 26 obligations)
+      - name: The eleven-dimension authority algebra (Z3, 34 obligations)
         run: |
           python -m pip install z3-solver
           python docs/design/models/authority_algebra.py
       # PS-B-05: the model's teeth. Each named mutant must end with obligations NOT discharged — not
       # merely a failing exit, which an unknown mutant name (exit 2) would also produce.
-      - name: The authority algebra has teeth (3 Z3 mutants must each fail)
+      - name: The authority algebra has teeth (6 Z3 mutants must each fail)
         run: |
-          for m in budget-meet-max budget-absent-child-passes budget-dropped; do
+          for m in budget-meet-max budget-absent-child-passes budget-dropped secret-to-dropped secret-to-meet-union secret-to-keeps-orphans; do
             if DELULU_Z3_MUTANT=$m python docs/design/models/authority_algebra.py > z3-mutant.txt; then
               echo "::error::Z3 mutant $m was NOT caught — the model has lost its teeth"; exit 1
             fi

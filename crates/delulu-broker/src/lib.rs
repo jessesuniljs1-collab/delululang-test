@@ -45,7 +45,7 @@ pub use audit::{
     AuditError, AuditLog, AuditRecord, AuditSink, MemSink, QueryFilter, VerifiedStats,
     APPEND_LOCK_FILE, GENESIS_HASH, OBSERVABILITY_PHRASE,
 };
-pub use authority::{attenuation_check, Authority, Scopes};
+pub use authority::{attenuation_check, secret_to_name, Authority, Scopes};
 pub use budget_scope::BudgetScope;
 pub use deadman::{DeadmanRefusal, Fired};
 pub use device_scope::DeviceScope;

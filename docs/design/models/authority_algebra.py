@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The DeluluLang authority order, verified symbolically with Z3 across ALL ten dimensions.
+"""The DeluluLang authority order, verified symbolically with Z3 across ALL eleven dimensions.
 
     python docs/design/models/authority_algebra.py          # needs `pip install z3-solver`
 
@@ -9,7 +9,7 @@ the result to the whole conjunction `attenuation_check` actually computes:
 
     child ⊑ parent  ==  effects ⊆
                      ∧ fs_read, fs_write   path-descendant cover
-                     ∧ net, secrets, declassify, foreign_c, foreign_python   exact-set ⊆
+                     ∧ net, secrets, secret_to, declassify, foreign_c, foreign_python   exact-set ⊆
                      ∧ device             per-device interval containment
                      ∧ budget             componentwise ≤ on (memory, processor time); absent = TOP
 
@@ -21,6 +21,10 @@ Each dimension is modelled from the code, not from the prose:
   * budget          — `budget_scope.rs::within` / `::meet` (PS-B-05, D-V2-08's condition for a
                       budget joining the order): an ABSENT budget is the top, so an absent child
                       under a present parent is a WIDENING — the same asymmetry as the rate.
+  * secret_to       — `authority.rs` (P9-04 (d), D-V2-133): each secret's audience, a set of
+                      `NAME@host:port` pairs, ordered by inclusion like every exact-set dimension —
+                      plus the one rule the others lack, a pair lives only beside its NAME in
+                      `secrets` (`Scopes::canonicalized` drops an orphan), proved in §2c.
 
 Until PS-B-05 the full conjunction below modelled SEVEN set dimensions while its obligation said
 "all nine dimensions at once"; the code has eight (effects and seven scopes, the two path
@@ -60,6 +64,9 @@ MUTANTS = {
     "budget-meet-max": "the budget meet takes the componentwise MAXIMUM (a widening meet)",
     "budget-absent-child-passes": "an absent budget passes under a present one (the asymmetry backwards)",
     "budget-dropped": "the budget is left out of the full conjunction",
+    "secret-to-dropped": "the secret audience is left out of the full conjunction",
+    "secret-to-meet-union": "the secret audience's meet is the UNION (a widening meet)",
+    "secret-to-keeps-orphans": "canonicalization keeps a pair whose secret the authority does not hold",
 }
 MUTANT = os.environ.get("DELULU_Z3_MUTANT", "")
 if MUTANT and MUTANT not in MUTANTS:
@@ -261,15 +268,67 @@ prove("budget meet associates (x⊓y)⊓z = x⊓(y⊓z)",
       Implies(And(bldef, bl2def, brdef, br2def), beq(BL2, BR2)),
       b3 + bvars(BL) + bvars(BL2) + bvars(BR) + bvars(BR2))
 
+
+print()
+print("=" * 78)
+print("(2c) SECRET AUDIENCES — authority.rs `secret_to` beside `secrets` (P9-04 (d), D-V2-133)")
+print("     a pair (name i, origin k) is bit i of P[k]; K = 2 origins per name")
+print("=" * 78)
+
+K = 2
+
+def sa(n):
+    """An authority's (secrets, secret_to): N names, P[k] the names whose secret may go to origin k."""
+    return {"N": BitVec(f"{n}_N", W), "P": [BitVec(f"{n}_P{k}", W) for k in range(K)]}
+
+def savars(x):
+    return [x["N"]] + x["P"]
+
+def sa_wf(x):
+    """Every pair beside its name: the names the pairs mention are within `secrets`."""
+    held = x["P"][0]
+    for k in range(1, K):
+        held = held | x["P"][k]
+    return sub(held, x["N"])
+
+def sa_canon(x):
+    """`Scopes::canonicalized`: a pair whose name `secrets` lacks is dropped (`well_formed_secret_to`)."""
+    if MUTANT == "secret-to-keeps-orphans":
+        return {"N": x["N"], "P": list(x["P"])}
+    return {"N": x["N"], "P": [p & x["N"] for p in x["P"]]}
+
+def sa_le(x, y):
+    return And(sub(x["N"], y["N"]), *[sub(x["P"][k], y["P"][k]) for k in range(K)])
+
+def sa_meet(x, y):
+    pm = (lambda a, b: a | b) if MUTANT == "secret-to-meet-union" else (lambda a, b: a & b)
+    return {"N": x["N"] & y["N"], "P": [pm(x["P"][k], y["P"][k]) for k in range(K)]}
+
+def sa_eq(x, y):
+    return And(x["N"] == y["N"], *[x["P"][k] == y["P"][k] for k in range(K)])
+
+SX, SY = sa("SX"), sa("SY")
+prove("canon is well-formed            wf(canon x)", sa_wf(sa_canon(SX)), savars(SX))
+prove("canon never widens              canon x ⊑ x", sa_le(sa_canon(SX), SX), savars(SX))
+prove("canon idempotent                canon(canon x) = canon x", sa_eq(sa_canon(sa_canon(SX)), sa_canon(SX)), savars(SX))
+prove("canon keeps a well-formed x     wf x → canon x = x", Implies(sa_wf(SX), sa_eq(sa_canon(SX), SX)), savars(SX))
+prove("canon monotone                  x ⊑ y → canon x ⊑ canon y",
+      Implies(sa_le(SX, SY), sa_le(sa_canon(SX), sa_canon(SY))), savars(SX) + savars(SY))
+prove("meet keeps well-formedness      wf x ∧ wf y → wf(x⊓y)",
+      Implies(And(sa_wf(SX), sa_wf(SY)), sa_wf(sa_meet(SX, SY))), savars(SX) + savars(SY))
+prove("meet ⊑ both                     x⊓y ⊑ x ∧ x⊓y ⊑ y",
+      And(sa_le(sa_meet(SX, SY), SX), sa_le(sa_meet(SX, SY), SY)), savars(SX) + savars(SY))
+
 print()
 print("=" * 78)
 print("(3) THE FULL CONJUNCTION — attenuation_check, authority.rs")
 print("=" * 78)
 
-# The product order: ⊑ is the AND of every dimension. The code's eight set-like dimensions (effects
-# and seven scopes; the two path dimensions represented by the set laws), the device dimension and
-# the budget dimension: ten, as `attenuation_check` computes them.
-NSETS = 8
+# The product order: ⊑ is the AND of every dimension. The code's nine set-like dimensions (effects
+# and eight scopes; the two path dimensions represented by the set laws; `secret_to` the ninth, P9-04
+# (d)), the device dimension and the budget dimension: eleven, as `attenuation_check` computes them.
+NSETS = 9
+ST = 8   # the index of `secret_to` among the set dimensions
 
 def au(n):
     return {"sets": [BitVec(f"{n}_s{i}", W) for i in range(NSETS)], "dev": dev(n + "d"), "bud": bud(n + "b")}
@@ -279,13 +338,15 @@ def avars(x):
 
 def ale(p, q):
     budget = True if MUTANT == "budget-dropped" else bwithin(p["bud"], q["bud"])
-    return And(*[sub(p["sets"][i], q["sets"][i]) for i in range(NSETS)], within(p["dev"], q["dev"]), budget)
+    sets = [i for i in range(NSETS) if not (MUTANT == "secret-to-dropped" and i == ST)]
+    return And(*[sub(p["sets"][i], q["sets"][i]) for i in sets], within(p["dev"], q["dev"]), budget)
 
 def awf(x):
     return And(wf(x["dev"]), bwf(x["bud"]))
 
 A, B, C = au("A"), au("B"), au("C")
-Mset = [A["sets"][i] & B["sets"][i] for i in range(NSETS)]
+Mset = [(A["sets"][i] | B["sets"][i]) if (MUTANT == "secret-to-meet-union" and i == ST) else (A["sets"][i] & B["sets"][i])
+        for i in range(NSETS)]
 MD, mddef = dmeet(A["dev"], B["dev"], "AB")
 MB, mbdef = bmeet(A["bud"], B["bud"], "ABb")
 AM = {"sets": Mset, "dev": MD, "bud": MB}
@@ -294,7 +355,7 @@ prove("FULL reflexive   a ⊑ a", Implies(awf(A), ale(A, A)), avars(A))
 prove("FULL transitive  a⊑b ∧ b⊑c → a⊑c",
       Implies(And(awf(A), awf(B), awf(C), ale(A, B), ale(B, C)), ale(A, C)),
       avars(A) + avars(B) + avars(C))
-prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all ten dimensions at once",
+prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all eleven dimensions at once",
       Implies(And(awf(A), awf(B), dmeet_ok(A["dev"], B["dev"]), mddef, mbdef), And(ale(AM, A), ale(AM, B))),
       avars(A) + avars(B) + dvars(MD) + bvars(MB))
 prove("FULL meet is GLB c⊑a ∧ c⊑b → c ⊑ a⊓b",
@@ -307,6 +368,12 @@ prove("FULL meet is GLB c⊑a ∧ c⊑b → c ⊑ a⊓b",
 # order, which only holds if the budget is actually IN the conjunction.
 prove("FULL no budget under a budgeted parent is never ⊑ (the asymmetry reaches the product)",
       Implies(And(Not(A["bud"]["has"]), B["bud"]["has"]), Not(ale(A, B))),
+      avars(A) + avars(B))
+# The same teeth for `secret_to` (P9-04 (d)): measured as for the budget — a conjunction without the
+# audience discharges the four laws above — so this states the dimension's own refusal at the level of
+# the whole order: a pair the parent does not hold is never within it.
+prove("FULL a secret_to pair the parent lacks is never ⊑ (the audience reaches the product)",
+      Implies(Not(sub(A["sets"][ST], B["sets"][ST])), Not(ale(A, B))),
       avars(A) + avars(B))
 
 print()

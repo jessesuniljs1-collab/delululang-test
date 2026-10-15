@@ -1480,9 +1480,10 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `--measure-launcher FILE` binds the statement to that file's BLAKE3, refused for any other launcher)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--budget mem=N,cpu=S] [--multi] [--owner CODE]  (prints a lease token; a budget left\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 unnamed is the parent's, and a `run --lease` is held to it)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device DEV:dim=lo..hi,..].. [--ttl 1h] [--budget mem=N,cpu=S] [--multi] [--owner CODE]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a secret is sent only to the origins its `--secret-to` names — none is nowhere)\n\
      \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
@@ -6393,6 +6394,12 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
     device.sort();
     let mut secret_names: Vec<String> = grants.secrets.keys().cloned().collect();
     secret_names.sort();
+    // P9-04 (d), D-V2-133: each secret's audience travels with its name — `NAME@host:port`, the egress client's own
+    // canonical spelling (`Audience`'s `Display`) — where it was dropped, leaving the node a name with no reach.
+    let mut secret_to: Vec<String> =
+        grants.secret_audiences.iter().flat_map(|(n, to)| to.iter().map(move |a| format!("{n}@{a}"))).collect();
+    secret_to.sort();
+    secret_to.dedup();
     crate::broker_ipc::AuthoritySpec {
         effects: effects.into_iter().map(str::to_string).collect(),
         // GUARD-ALIAS-1: resolved, as the runtime spells a use.
@@ -6411,6 +6418,7 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
         // PS-B-05: grants carry no budget. A `--broker daemon` run puts its own on the root it issues
         // (`run_cmd`), which is the only caller that knows what the run is held to.
         budget: None,
+        secret_to,
         holder_kind: "process".to_string(),
         holder_desc: program.to_string(),
         ttl_millis: None,
@@ -6447,9 +6455,11 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // Daemon mode strips local secret VALUES and keeps only broker-handle names (invariant 23);
         // the names come from the lease's `secrets` scope.
         secrets: info.secrets.iter().map(|n| (n.clone(), String::new())).collect(),
-        // P9-04 (c): a lease's node has no audience dimension yet (P9-04 (d)), so a leased secret is sent
-        // nowhere — and a leased run's secrets are broker handles, which `get_with_secret` refuses in words.
-        secret_audiences: HashMap::new(),
+        // P9-04 (d), D-V2-133: the node's `secret_to` pairs, read back by the egress client's own parser. A pair that
+        // does not parse, or names a secret the node does not hold, is DROPPED — the safe direction: that origin is then
+        // outside the audience. (A leased run's secrets are still broker handles, which `get_with_secret` refuses in words
+        // until the broker sends one itself — P9-04 (d)'s second half.)
+        secret_audiences: secret_audiences_of(&info.secrets, &info.secret_to),
         foreign_c,
         foreign_python: info.foreign_python.clone(),
         // A lease can never confer native emission in v1.x: the broker has no `exec.native`
@@ -6482,6 +6492,26 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // Fail closed, and `--lease` refuses a local compute grant by name rather than dropping it.
         computes: Vec::new(),
     }
+}
+
+/// P9-04 (d), D-V2-133: a node's `secret_to` pairs as the runtime's per-secret audiences — each pair split at its first
+/// `@` (a secret's name holds none) and its origin read by the egress client's own parser. Dropped, never guessed: a pair
+/// whose name `secrets` lacks, or whose origin does not parse — that origin is then outside the audience.
+pub(crate) fn secret_audiences_of(secrets: &[String], pairs: &[String]) -> HashMap<String, Vec<delulu_runtime::egress::Audience>> {
+    let mut out: HashMap<String, Vec<delulu_runtime::egress::Audience>> = HashMap::new();
+    for pair in pairs {
+        let Some((name, member)) = pair.split_once('@') else { continue };
+        if !secrets.iter().any(|s| s == name) {
+            continue;
+        }
+        if let Ok(a) = delulu_runtime::egress::parse_audience(member) {
+            let to = out.entry(name.to_string()).or_default();
+            if !to.contains(&a) {
+                to.push(a);
+            }
+        }
+    }
+    out
 }
 
 /// `delulu secrets set NAME VALUE | list [--state-dir DIR]` (Stage 5 phase 5g, minimal v0.5 form —
@@ -7522,20 +7552,9 @@ fn grants_diff_nodes(old_id: &str, new_id: &str, state_dir: &std::path::Path, js
             eprintln!("error: unexpected inspect response for `{id}`: {resp:?}");
             return 2;
         };
-        let spec = crate::broker_ipc::AuthoritySpec {
-            effects: n.effects,
-            fs_read: n.fs_read,
-            fs_write: n.fs_write,
-            net: n.net,
-            secrets: n.secrets,
-            declassify: n.declassify,
-            foreign_c: n.foreign_c,
-            foreign_python: n.foreign_python,
-            device: n.device,
-            budget: n.budget,
-            ..Default::default()
-        };
-        auth.push(crate::brokerd::spec_to_authority(&spec));
+        // The node's own conversion, which names every dimension — a struct literal ending `..Default::default()`
+        // here dropped one silently the day it was added (P9-04 (d): `secret_to`).
+        auth.push(crate::brokerd::spec_to_authority(&n.authority_spec()));
     }
     let findings = crate::within::diff_nodes(&auth[0], &auth[1]);
     let code = if findings.is_empty() { 0 } else { 1 };
@@ -8099,6 +8118,8 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // PS-B-05: the resource budget the holder's runs are held to. Unnamed means "inherit the
     // parent's", never "unlimited" (the broker fills it in before the `⊑` check).
     let mut budget: Option<String> = None;
+    // P9-04 (d), D-V2-133: where each delegated secret may be sent — `NAME@HOST[:PORT]`, canonicalized below.
+    let mut secret_to: Vec<String> = Vec::new();
     let mut ttl: Option<String> = None;
     let mut parent: Option<String> = None;
     let mut multi = false;
@@ -8136,6 +8157,8 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 return 2;
             }
             secrets.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret-to") {
+            secret_to.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
             declassify.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--foreign-c") {
@@ -8207,6 +8230,36 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             return 2;
         }
     };
+    // P9-04 (d): each audience member is read by the egress client's own parser (`parse_audience` — the spelling a
+    // request's origin is compared in at send time) and sent in its canonical form, so the broker's exact-set `⊑`
+    // compares one spelling. A pair for a secret this delegation does not name would grant reach to nothing: refused
+    // in words here, and dropped by the broker's canonicalization if it ever arrived.
+    let secret_to = {
+        let mut out = Vec::with_capacity(secret_to.len());
+        for pair in &secret_to {
+            let Some((name, member)) = pair.split_once('@').filter(|(n, _)| !n.is_empty()) else {
+                eprintln!("error: bad --secret-to `{pair}`: write NAME@HOST[:PORT] — the secret's name, then one origin it may be sent to");
+                return 2;
+            };
+            if !secrets.iter().any(|s| s == name) {
+                eprintln!(
+                    "error: `--secret-to {pair}` names the secret `{name}`, which this delegation does not — add `--secret {name}` \
+                     (an audience is where a delegated secret may go)"
+                );
+                return 2;
+            }
+            match delulu_runtime::egress::parse_audience(member) {
+                Ok(a) => out.push(format!("{name}@{a}")),
+                Err(e) => {
+                    eprintln!("error: bad --secret-to `{pair}`: {e}");
+                    return 2;
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
     // normalized strings the embedded RootVal carries") — so the broker's path lattice sees exactly
@@ -8253,6 +8306,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 foreign_python: foreign_python.clone(),
                 device: device.clone(),
                 budget: budget.clone(),
+                secret_to: secret_to.clone(),
                 // Provenance honesty (DISC-1): this root is minted by whatever process invoked the
                 // CLI — the broker cannot verify a human typed it, so it must not be recorded as
                 // `human`. `holder` is DATA (never switched on, KIND_IS_DATA); this only affects what
@@ -8283,6 +8337,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         foreign_python,
         device,
         budget,
+        secret_to,
         holder_kind: "delegate".to_string(),
         holder_desc,
         ttl_millis,
@@ -11216,5 +11271,38 @@ mod plugin_why_tests {
         assert_eq!(loads.len(), 1, "one load call site found");
         assert_eq!(loads[0].path.as_deref(), Some("reader.dpx"), "the literal path is extracted");
         assert_eq!(loads[0].grant_effects, vec!["Read".to_string(), "Net".to_string()], "the grant effects are extracted");
+    }
+}
+
+#[cfg(test)]
+mod secret_to_tests {
+    use super::*;
+
+    /// P9-04 (d), D-V2-133: a grant line's audience reaches the node as `NAME@host:port` pairs, and a lease's pairs come
+    /// back as the same audiences — the round trip a `--broker daemon` run and a `run --lease` make. A pair that names a
+    /// secret the node does not hold, or an origin the egress client would refuse, comes back as no reach at all.
+    #[test]
+    fn a_secrets_audience_survives_the_trip_through_a_node() {
+        let mut g = Grants::default();
+        for line in ["secret:K@api.example.com,b.example.com:8443=v", "secret:P=v", "net=api.example.com"] {
+            g.add(line).unwrap();
+        }
+        let spec = authority_spec_from_grants(&g, "t");
+        assert_eq!(spec.secret_to, ["K@api.example.com:443", "K@b.example.com:8443"], "sorted, canonical, P sent nowhere");
+        assert_eq!(spec.secrets, ["K", "P"]);
+        let back = secret_audiences_of(&spec.secrets, &spec.secret_to);
+        assert_eq!(back.get("K"), g.secret_audiences.get("K"), "the same audience, in the egress client's own type");
+        assert!(!back.contains_key("P"), "no pair, no audience: the bottom");
+        let odd = ["J@api.example.com:443".to_string(), "K".to_string(), "K@API.example.com".to_string(), "K@x/y".to_string()];
+        assert!(secret_audiences_of(&["K".to_string()], &odd).is_empty(), "an orphan, a bare name and refused spellings: none");
+        // And the broker's own canonical form of that spec keeps every pair (each beside its name).
+        let auth = crate::brokerd::spec_to_authority(&spec);
+        assert_eq!(auth.scopes.secret_to.len(), 2);
+        assert_eq!(crate::brokerd::authority_spec_of(&auth).secret_to, spec.secret_to, "authority -> wire keeps them");
+        // A lease's node gives its run those audiences (beside broker-handle names, invariant 23).
+        let info = crate::broker_ipc::NodeInfo { secrets: spec.secrets.clone(), secret_to: spec.secret_to.clone(), ..Default::default() };
+        let leased = grants_from_lease(&info, HashMap::new());
+        assert_eq!(leased.secret_audiences.get("K"), g.secret_audiences.get("K"), "a leased run's grants carry the node's audience");
+        assert_eq!(leased.secrets.get("K").map(String::as_str), Some(""), "a name, never a value");
     }
 }

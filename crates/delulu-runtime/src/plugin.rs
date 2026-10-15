@@ -88,6 +88,8 @@ impl Grant {
                 // PS-B-05: names no budget, so the broker gives the plugin's node its HOST's — the
                 // plugin runs inside the host's process and can consume no more than the host may.
                 budget: None,
+                // P9-04 (d): a plugin grant names no audience, so its secrets are sent nowhere (the bottom).
+                secret_to: Default::default(),
             },
         }
     }
@@ -213,6 +215,8 @@ impl PluginArtifact {
                 // PS-B-05: names no budget, so the broker gives the plugin's node its HOST's — the
                 // plugin runs inside the host's process and can consume no more than the host may.
                 budget: None,
+                // P9-04 (d): a plugin grant names no audience, so its secrets are sent nowhere (the bottom).
+                secret_to: Default::default(),
             },
         }
     }

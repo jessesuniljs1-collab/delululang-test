@@ -113,6 +113,7 @@ pub fn join(held: &Authority, asks: &Authority) -> Authority {
             foreign_python: u(&h.foreign_python, &a.foreign_python),
             device,
             budget: h.budget,
+            secret_to: u(&h.secret_to, &a.secret_to),
         },
     }
     .canonicalized()
@@ -373,8 +374,17 @@ mod tests {
             scopes: Scopes { budget: Some(crate::BudgetScope { memory_bytes: 64, cpu_seconds: 2 }), ..read(&["./a"]).scopes },
             ..read(&["./a"])
         };
-        let asks = auth(&["Net"], Scopes { net: names(&["example.com"]), ..Default::default() });
+        let asks = auth(
+            &["Net"],
+            Scopes {
+                net: names(&["example.com"]),
+                secrets: names(&["K"]),
+                secret_to: names(&["K@example.com:443"]),
+                ..Default::default()
+            },
+        );
         let j = join(&held, &asks);
+        assert_eq!(j.scopes.secret_to, names(&["K@example.com:443"]), "P9-04 (d): an audience asked for is in the join");
         assert_eq!(j.effects, auth(&["Read", "Net"], Scopes::default()).effects);
         assert_eq!((&j.scopes.fs_read, &j.scopes.net), (&held.scopes.fs_read, &names(&["example.com"])));
         assert_eq!(j.scopes.budget, held.scopes.budget);

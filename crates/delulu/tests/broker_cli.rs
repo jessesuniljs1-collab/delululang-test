@@ -264,6 +264,13 @@ fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
     let records = v["records"].as_array().expect("records");
     assert!(records.iter().any(|r| r["action"] == "issue"), "the run's issue is in the chain: {v}");
     assert!(!records.iter().any(|r| r["action"] == "use"), "no use for a request never made: {v}");
+    // P9-04 (d), D-V2-133: the run's node keeps the audience its grant line named — the broker's `secret_to`, one
+    // `NAME@host:port` pair — where it was dropped on the way in (the node held the name alone).
+    let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list json");
+    let node = v["nodes"].as_array().expect("nodes").iter().find(|n| n["secrets"] == serde_json::json!(["API_TOKEN"])).cloned();
+    let to = node.as_ref().map(|n| n["secret_to"].clone());
+    assert_eq!(to, Some(serde_json::json!([format!("API_TOKEN@127.0.0.1:{port}")])), "the node keeps the audience: {v:#}");
     drop(guard);
     assert!(l.accept().is_err(), "nothing connected");
     // The way out the refusal names: embedded custody, the secret granted to the run with its audience.

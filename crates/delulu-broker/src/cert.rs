@@ -279,6 +279,9 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
             "foreign.python" => scopes.foreign_python = list()?,
             "net" => scopes.net = list()?,
             "secrets" => scopes.secrets = list()?,
+            // P9-04 (d): read as written — `Authority::canonicalized` (every node's ingest) drops a pair whose
+            // name the certificate's `secrets` does not hold, and an old build refuses the key whole (above).
+            "secret_to" => scopes.secret_to = list()?,
             "device" => {
                 for spec in list()? {
                     let d = device_scope::parse(&spec)
@@ -1730,6 +1733,7 @@ mod tests {
             .map(|d| (d.device.clone(), d))
             .collect(),
             budget: Some(crate::budget_scope::BudgetScope { memory_bytes: 268_435_456, cpu_seconds: 60 }),
+            secret_to: ["API_KEY@api.example.com:443".to_string()].into_iter().collect(),
         };
         // Exhaustive by construction: a new field breaks this pattern at compile time. (It did, for
         // `budget` at PS-B-05, which is how the dimension got its serialization decided.)
@@ -1743,6 +1747,7 @@ mod tests {
             foreign_python,
             device,
             budget,
+            secret_to,
         } = &scopes;
         for (what, empty) in [
             ("fs_read", fs_read.is_empty()),
@@ -1754,6 +1759,7 @@ mod tests {
             ("foreign_python", foreign_python.is_empty()),
             ("device", device.is_empty()),
             ("budget", budget.is_none()),
+            ("secret_to", secret_to.is_empty()),
         ] {
             assert!(!empty, "the fixture must populate `{what}`, or the round trip proves nothing");
         }
@@ -1771,7 +1777,7 @@ mod tests {
         // And the rendering a human reads must mention every non-empty dimension, since it is the
         // same hand-written list and feeds DL0802's repair text.
         let compact = original.render_compact();
-        for needle in ["fs.read", "fs.write", "net", "secrets", "declassify", "foreign.c", "foreign.python", "device", "budget"] {
+        for needle in ["fs.read", "fs.write", "net", "secrets", "secret_to", "declassify", "foreign.c", "foreign.python", "device", "budget"] {
             assert!(compact.contains(needle), "`render_compact` omits `{needle}`: {compact}");
         }
     }

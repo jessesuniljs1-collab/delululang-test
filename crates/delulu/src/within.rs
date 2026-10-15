@@ -500,6 +500,25 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
             }
         }
     }
+    // P9-04 (d), D-V2-133: a secret's REACH between nodes — each `NAME@host:port` pair NEW holds must be one OLD holds,
+    // the lattice's own inclusion. A pair for a secret OLD does not hold at all is that secret's `scope_expansion`,
+    // already named above, so it is not counted twice (the grant-file diff's rule, D-V2-131).
+    for pair in &n.secret_to {
+        let held = delulu_broker::secret_to_name(pair).is_some_and(|name| old.scopes.secrets.contains(name));
+        if held
+            && !covered(&|s: &mut Scopes| {
+                s.secret_to.insert(pair.clone());
+            })
+        {
+            let (name, origin) = pair.split_once('@').unwrap_or((pair.as_str(), ""));
+            push(
+                "secret_reach_expansion",
+                "secret",
+                pair.clone(),
+                format!("NEW's node lets the secret `{name}` be sent to `{origin}`, which OLD's audience for it does not name"),
+            );
+        }
+    }
     for (dev, scope) in &n.device {
         if !covered(&|s: &mut Scopes| {
             s.device.insert(dev.clone(), scope.clone());

@@ -50,6 +50,11 @@ pub struct AuthoritySpec {
     /// request that names no budget is byte-identical to one sent before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<String>,
+    /// P9-04 (d), D-V2-133: each secret's audience, `NAME@host:port` pairs in the egress client's canonical spelling
+    /// (`delulu_broker::Scopes::secret_to`). `#[serde(default)]` so a peer that predates it decodes as "no audience" — the
+    /// bottom, sent nowhere — and not written when empty, so a request naming none is byte-identical to one sent before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_to: Vec<String>,
     pub holder_kind: String,
     pub holder_desc: String,
     /// Absolute epoch-millis TTL deadline, or `None` for no expiry.
@@ -90,6 +95,10 @@ pub struct NodeInfo {
     /// when absent: `grants list --json` for an unbudgeted node is what it was before PS-B-05.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<String>,
+    /// P9-04 (d): the node's secret audiences, `NAME@host:port`. See [`AuthoritySpec::secret_to`]. Not written when empty:
+    /// `grants list --json` for a node whose secrets name no audience is what it was before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_to: Vec<String>,
 }
 
 /// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
@@ -160,6 +169,7 @@ impl NodeInfo {
             foreign_python: self.foreign_python.clone(),
             device: self.device.clone(),
             budget: self.budget.clone(),
+            secret_to: self.secret_to.clone(),
             holder_kind: String::new(),
             holder_desc: String::new(),
             ttl_millis: None,
