@@ -175,7 +175,7 @@ another OS, and then takes about seven minutes itself (run 5).
    against the simulator and `delulu device sim`; a real device stays environment-blocked and says so.
    **P9** — authority at the boundary (`V2_OPENSHELL_STUDY.md` §4.8–§4.12): P9-01 `authority --within` (**built**, run 20,
    D-V2-118 — each request decided by the runtime's own mint), P9-02 `grants diff` (**built**, run 20 —
-   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; step 4, D-V2-126 — `grants auto-approve`, the same run: **P9-03 complete**), **P9-04** endpoint-bound secrets (read against the code by run 22, `V2_P9_DESIGN.md`; step (a), a request with headers — `http.get_with`, D-V2-128 — built by run 23; steps (b) and (c) — `http.get_with_secret`, a secret only to its grant's audience, D-V2-131 — built by run 24; **step (d) next** — the broker's audience dimension, so a daemon or leased run can send one — then (e)), P9-05 method-and-path scopes.
+   two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; step 4, D-V2-126 — `grants auto-approve`, the same run: **P9-03 complete**), **P9-04** endpoint-bound secrets (read against the code by run 22, `V2_P9_DESIGN.md`; step (a), a request with headers — `http.get_with`, D-V2-128 — built by run 23; steps (b) and (c) — `http.get_with_secret`, a secret only to its grant's audience, D-V2-131 — built by run 24; step (d)'s first half — the broker's `secret_to`, D-V2-133 — by run 25; **its second half next** — the broker's `send`, so a daemon or leased run can send one — then (e)), P9-05 method-and-path scopes.
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
 4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
@@ -268,7 +268,8 @@ macOS footprint witness read green; its second form printed every reading, which
 the third was red at once). One dispatch per form, about three minutes each on a warm cache.
 **Stop a background job by its PID, never `pkill -f PATTERN`** (run 24): the pattern was in the stopping command's own line, so
 `pkill -f check-other-os.sh` killed the shell that ran it (exit 144) — the edits queued behind it in that command never ran, and
-the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A one-test witness log: `tail_lines` 40** — its
+the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A witness log's last ~62 lines are the cache save and git's cleanup** (run 25: `tail_lines` 62 returned none of three runs'
+test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A one-test witness log: `tail_lines` 40** — its
 `test result` line is the last test output before the cache save; run 24 asked 3,000 of three such runs and pulled every line of
 three ~550-line logs into the context (run 13's mistake, repeated).
 **A check built as two walls is falsified as two** (run 24, M383/M383b): a mutant that removes one wall survives on the other by

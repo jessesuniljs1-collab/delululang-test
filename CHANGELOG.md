@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a secret's audience in the grant tree, 2026-10-15
+
+- **Added (P9-04 (d), D-V2-133): a delegation says where a secret may go.** `delulu grants delegate --secret NAME --secret-to
+  NAME@HOST[:PORT]` (repeatable — one origin a flag) gives the node's secret an audience; a child may name fewer origins, never
+  another (DL0802, the intersection its repair); `grants inspect --json` and `grants list --json` show it as `secret_to`
+  (`NAME@host:port`, only when there is one). A `--broker daemon` run's node now keeps the audience its `--grant
+  secret:NAME@HOST=…` named (it was dropped). `grants diff g_OLD g_NEW` reports a wider audience as `secret_reach_expansion`.
+  A `--secret-to` for a secret the delegation does not name, or one with a path, a wildcard or an upper-case host, is refused
+  in words. A daemon or leased run still cannot SEND the secret (DL0904) — the broker's send is next.
+
 ## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
 
 - **Fixed (MAP-HANDLE-1, D-V2-132): `Secret.map` under `--broker daemon` or `--lease` ran its function over an EMPTY

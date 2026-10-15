@@ -3215,6 +3215,62 @@ reach the broker's whitelist at all (a `Secret` method per whitelisted op), reco
 `hunter2!`), the refusal under the daemon (exit 1, nothing printed, DL0904), and the way out (`expose` then transform under the
 daemon: `hunter2!`). **Falsified:** mutant M401 (the refusal disabled) red, the control green.
 
+## D-V2-133 — P9-04 step (d), its first half: the broker's `secret_to` dimension — each secret's audience a set of `NAME@host:port` pairs, ordered by inclusion, a pair living only beside its name; carried by every node, every delegation and `grants diff` between nodes — TAKEN (head chef, 2026-10-15, under the owner's delegation)
+
+**Context.** D-V2-131 gave a secret an audience in the grant line (`secret:NAME@HOST[:PORT]=…`) and the egress client the rule
+that sends it only there. The broker knew secret NAMES only (`Scopes.secrets`, the wire's `AuthoritySpec.secrets`), so the
+audience died at every node boundary: `run --broker daemon --grant secret:K@host=…` issued a node holding `K` with no reach
+(witnessed: `grants list --json` showed no audience), `grants delegate` could not say where a delegated secret may go, and
+`grants diff` between two nodes could not see a secret's reach at all (`secret_reach_expansion` waited since D-V2-119).
+`V2_P9_DESIGN.md`'s reading of step (d) (routine run 24) proposed the dimension and the broker op that sends; this decision is
+the dimension, the op is the second half.
+
+**Decision.**
+1. **`Scopes.secret_to: BTreeSet<String>`** — the eleventh dimension of `⊑`. Each member is `NAME@host:port` in the egress
+   client's canonical spelling (`parse_audience` then `Audience`'s `Display`: the port always named, an IPv6 host bracketed); `⊑`
+   is inclusion, `⊓` intersection — one more exact-set dimension. A secret with no pair is the bottom: sent nowhere.
+2. **A pair lives only beside its name.** `Scopes::canonicalized` — every node's ingest (`issue`, `attenuate`, `attenuate_core`)
+   — drops a pair whose name `secrets` does not hold (it grants reach to nothing, and keeping it would make two authorities that
+   grant the same thing unequal under `⊑`); `is_canonical` checks it. The broker parses no URL: a spelling no origin has is
+   compared by exact string and matches no destination — reach to nothing either way, the fail-closed direction.
+3. **Serialized only when non-empty** (`to_json`, the wire's `#[serde(default, skip_serializing_if = "Vec::is_empty")]`) — the
+   rule `device` and `budget` follow, so every authority without an audience keeps its canonical JSON, its chain hash and its
+   certificate bytes. A certificate's `secret_to` is read (`authority_from_json`); a build that predates it refuses the
+   certificate whole, as for any dimension it cannot see.
+4. **Where it enters.** `authority_spec_from_grants` carries a grant line's audience into the node (the issue-then-run path, a
+   proposal's ask); `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]` names one, each member read by the egress
+   client's own parser and sent canonical — a pair for a secret the delegation does not name, a path, a wildcard or an
+   upper-case host is refused in words (exit 2) before the broker sees it, never normalized; a proposal's join keeps both sides'
+   pairs; `grants_from_lease` gives a leased run's grants the node's audiences (each pair re-read by the egress parser; one
+   that does not parse is dropped — that origin is then outside the audience).
+5. **`grants diff g_OLD g_NEW`** reports a pair NEW holds and OLD does not as `secret_reach_expansion` (grant `NAME@host:port`),
+   asked of the lattice like every other item; a pair for a secret OLD does not hold at all is that secret's
+   `scope_expansion`, counted once (the grant-file diff's rule, D-V2-131).
+6. **One conversion per direction.** `grants_diff_nodes` built a node's authority from a struct literal ending
+   `..Default::default()`, and `broker_client::authority_to_spec` was a second copy of `brokerd::authority_spec_of`: a new
+   dimension is dropped SILENTLY by the first and must be found by hand in the second. The first now calls
+   `NodeInfo::authority_spec`, the second `authority_spec_of`.
+7. **The proof.** `authority_algebra.py` carries the dimension in the full conjunction (nine set-like dimensions, eleven in
+   all) and a new §2c for the one rule the other exact-set dimensions lack: canonicalization is well-formed, never widens, is
+   idempotent, keeps a well-formed authority and is monotone; the meet keeps well-formedness and is `⊑` both; and at the level of
+   the whole order, a pair the parent lacks is never `⊑` (the obligation that notices the dimension missing — the four product
+   laws do not). 34 obligations; three more mutants CI requires to fail (`secret-to-dropped`, `secret-to-meet-union`,
+   `secret-to-keeps-orphans`), six in all.
+
+**Not yet — the second half of step (d).** A daemon or leased run still cannot SEND a secret: its secret is a broker handle and
+`get_with_secret` refuses one (DL0904, D-V2-131) — the bytes must come from the broker at send time through a recorded op
+naming the destination (`SendSecret`, guarded like `Declassify` by default — `V2_P9_DESIGN.md` step (d) item 3). The node now
+holds what that op will judge.
+
+**Not chosen:** a structured pair type on the wire (two crates parse one string, as for `device` — the string is the contract);
+refusing a non-canonical pair at the broker (it has no URL parser to decide canonicity with; exact-string comparison already
+fails closed); normalizing an upper-case host at `--secret-to` (the egress client refuses it for a URL, so the audience does the
+same — one rule, one spelling).
+
+**Witnessed red first** on `41ce7c1`'s binary: `broker_cli`'s daemon run — its node's `secret_to` absent (`Null` where
+`["API_TOKEN@127.0.0.1:PORT"]`); `within_cli`'s `a_nodes_secret_carries_its_audience_and_a_wider_one_is_secret_reach` —
+`--secret-to` an unknown argument. **Falsified:** mutants M402–M421 (`scripts/mutants.py`), every one red: `⊑` without the dimension (M402), the meet as the union (M403), canonicalization keeping an orphan (M404) or `is_canonical` blind to one (M405), the JSON (M406), the compact rendering (M407) or the certificate parser (M408) dropping it, a pair with an empty name read as named (M409), a proposal's join dropping the ask's pairs (M410), the grant line's audience not carried into the node (M411), the wire → authority (M412), the node → wire (M413), the node → spec (M414) or the authority → wire (M415) conversion dropping it, `grants diff` blind to a pair (M416) or counting a pair of a secret OLD lacks twice (M417), `--secret-to` taking a name the delegation does not (M418) or a spelling the egress parser did not canonicalize (M419), the lease helper keeping an orphan (M420), and a lease's run given no audience (M421); the control green. The model's three mutants (§2c and the full conjunction) each end with obligations NOT discharged.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

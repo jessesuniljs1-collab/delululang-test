@@ -259,3 +259,6 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   **MAP-HANDLE-1** the same run (D-V2-132): under the daemon `Secret.map` ran over `""` (a handle's `reveal()`) and the
   result was exposed with no broker gate — refused in words now. Search key: every reader of a stand-in value asks where
   the bytes are.
+- Run 25 (2026-10-15): **P9-04 (d)'s first half** (D-V2-133) — the broker's `secret_to` (`NAME@host:port`, an exact-set
+  dimension, a pair only beside its name), `grants delegate --secret-to`, `grants diff` between nodes; Z3 34 obligations.
+  Lesson: a literal ending `..Default::default()` drops a new field silently — grep them; one conversion per direction.

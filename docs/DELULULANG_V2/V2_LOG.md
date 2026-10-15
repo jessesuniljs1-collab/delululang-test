@@ -5764,3 +5764,36 @@ only (`SendSecret`, guarded like `Declassify` by default); the witnesses to writ
 shell this run, exit 144, and the lint's children lived on); a one-test witness log is read with `tail_lines` 40 (this run pulled
 three whole ~550-line logs into the context — run 13's mistake again); and the two-walls line with `scripts/mutants.py`'s
 multi-edit mutants. `HANDOFF.md` §11.5 the `pkill` trap.
+
+## 2026-10-15 — routine run 25: CI read green; P9-04 step (d)'s first half — the broker's `secret_to` (D-V2-133)
+
+**CI read.** `41ce7c1`'s push run (CI `38640213195`): success on every job (`miri-slow` and `heavy-gates` skipped on a push);
+`actors_pingpong` arm64 MEASURED 2.95x (control 4.10x), macOS NOT MEASURED (3 hardware threads, 2.45x observed), Ubuntu and
+Windows NOT MEASURED (never 3x perfectly parallel work); each test job's sandbox properties as before (macOS's filesystem
+confinement absent — its reads, PS-E's residual). The nightly `38702203302` (07:56 UTC) still running at the run's start.
+**Start of run:** `survey check` ok (1,506 nodes, 14,421 edges), `doctor --check` 26 checks passed; z3 5.3.0 and cargo-deny
+installed (advisories ok); every `origin/claude/*` branch 0 commits ahead of `master` but two already recorded as superseded.
+
+**P9-04 step (d), its first half (D-V2-133)** — `db88e98`. A secret's audience died at every node boundary: **witnessed** on
+`41ce7c1`'s binary — a `run --broker daemon --grant secret:API_TOKEN@127.0.0.1:PORT=…` node showed no audience (`secret_to`
+`Null`), and `grants delegate --secret-to` was an unknown argument. Built: `Scopes.secret_to` (`NAME@host:port`, the egress
+client's canonical spelling; inclusion; the meet an intersection; a pair lives only beside its name — canonicalization drops an
+orphan; serialized only when non-empty, so no chain hash or certificate changes); the wire (`AuthoritySpec`, `NodeInfo`); the
+grant line's audience into the node; a lease's audiences back into its run's grants; a proposal's join; a certificate's
+authority; `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]` (the egress parser's own reading — an orphan, a path, a
+wildcard and an upper-case host refused in words); `grants diff` between nodes reports `secret_reach_expansion`; one conversion
+per direction (a literal ending `..Default::default()` and a second copy of `authority_spec_of` would each have dropped the
+dimension silently). The Z3 model: the ninth set dimension, a §2c for the pair-beside-its-name rule, a full-conjunction
+obligation that notices the dimension missing — **34 obligations**, three more CI mutants (six). Live documents that quoted
+"ten dimensions" or "26 obligations" updated (`MATHEMATICS.md`, `models/README.md`, `AUTHORITY_GUARD_CAPSTONE.md`,
+`QUESTIONS.md`, the book, `ci.yml`'s step names); historical records left as written.
+**Falsified:** M402–M421 all red, the control green (D-V2-133 lists each). **The witness's own mistake, caught by its first green
+run:** it assumed `--secret-to K@API.example.com` would be lowercased — the egress parser refuses an upper-case host rather than
+normalizing it, so the audience does the same; the witness now asserts the refusal.
+**Verified:** clippy clean; Windows and macOS (arm64) linted from Linux (`check-other-os.sh`, exit 0); read on the runners at
+`db88e98` — `within_cli`, `broker_cli` and the binary's unit tests on Windows `38720731643` (15, 5 and 181 passed), macOS
+`38720736853` (15 for `within_cli`), arm64 `38720741646` (6 and 15), `delulu-broker`'s library on Windows `38720745681` (success)
+— 0 failed, every new test named, no orphan `delulu`; **the full suite alone** — 2,287 passed, 0 failed, 16 ignored (163
+binaries), cargo exit 0, the tree unmoved, no daemon left.
+**Next — step (d)'s second half:** the broker SENDS a secret for a daemon or leased run (`SendSecret`, the Guard on the pair,
+a `send` record), then (e).

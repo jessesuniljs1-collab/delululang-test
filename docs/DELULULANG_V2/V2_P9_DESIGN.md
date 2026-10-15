@@ -239,6 +239,10 @@ skip branch, §11.2).
      DL0904); a child delegated a narrower `secret_to` cannot send to the parent's other origin; revoking the node stops the
      next send; the chain holds the `send` with its destination and no byte of the secret; a lost record refuses the send; the
      model's mutant for the new dimension is red.
+  **Step (d)'s first half built** (routine run 25, `db88e98`, D-V2-133): `Scopes.secret_to` — items 2 and 4 above but the
+  send: the dimension in `⊑`, the meet, the wire, the certificate, a pair living only beside its name (canonicalization drops
+  an orphan; the model's new §2c), `grants delegate --secret-to`, the issue-then-run node keeping its grant line's audience,
+  `grants_from_lease`, a proposal's join, `grants diff` between nodes. **Next: its second half** — item 3, the broker's `send`.
   **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
   `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the

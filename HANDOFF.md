@@ -124,7 +124,10 @@ the assistant's memory — which now also travels file by file in
   hop that would carry it; a secret granted with no audience is sent nowhere; each hop records the secret's name, never its
   bytes; `grants diff` reports `secret_reach_expansion` between grant files (D-V2-131, `PRIM_TABLE_VERSION` 7, the period's
   third entrenched edit). A daemon or leased run refuses (DL0904) until the broker holds the audience.
-  **Next: P9-04 step (d)** (the broker's audience dimension), then (e), then P9-05.
+  **Routine run 25 (2026-10-15): P9-04 step (d)'s first half** — the broker's `secret_to` dimension: a node's secret carries
+  its audience (`NAME@host:port` pairs, inclusion, a pair only beside its name), `grants delegate --secret-to`, a daemon run's
+  node keeping its grant line's audience, `grants diff` between nodes (`secret_reach_expansion`); the Z3 model 34 obligations
+  (D-V2-133). **Next: (d)'s second half** (the broker's `send`), then (e), then P9-05.
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's
@@ -1394,6 +1397,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   loosening either rule alone cannot send a secret where its grant never pointed. A mutant removing the per-hop check survives
   on the first wall — by design, and recorded so; one removing both is red. `scripts/mutants.py` takes several edits in one
   mutant for this. (Run 13's M123 lesson, made a tool; run 18's M222 the limit: a wall no double mutant reaches is dead code.)
+- **A struct literal ending `..Default::default()` drops a new field without a word** (routine run 25, P9-04 (d)): adding
+  `secret_to` to the wire, the compiler named every exhaustive literal — and said nothing about `grants_diff_nodes`'s
+  `AuthoritySpec { …, ..Default::default() }` or `brokerd::authority_spec_of`'s, which would have dropped the new dimension
+  silently (and a second hand-written copy of `authority_spec_of` in `broker_client` had to be found by grep). Grep every
+  `..Default::default()` literal of the type you extend; prefer one conversion per direction (both now call the one).
 
 ### 11.6 If you are an assistant with memory, keep it current
 

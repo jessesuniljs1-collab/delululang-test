@@ -46,7 +46,7 @@ ends. A run on or after 2026-10-16 that finds this section only updates its "as 
 and stops (`docs/CLOUD_ROUTINE.md` step 0). The dates may be extended by the owner; this section then stays the
 running summary.
 
-**As of:** `master` during routine run 24 (2026-10-14) — the newest entry under *Entries* names the last commit.
+**As of:** `master` during routine run 25 (2026-10-15) — the newest entry under *Entries* names the last commit.
 
 **What the period built** (each item's entry below has its commits, files, evidence and CI runs):
 - **Phases.** **P7** (verification depth) and **PS-D** (external launchers and the attestation seam) completed by run 1;
@@ -62,7 +62,7 @@ running summary.
   reaches**, `9000c57`'s push run `38278927092` read green. **P9** — in progress: P9-01's build order read against the code by run 19
   (`V2_P9_DESIGN.md`); **P9-01 built by run 20** (D-V2-118 — `delulu authority FILE --within BOUNDARY`, each request decided by
   the runtime's own mint, the counterexample's call named); **P9-02** by the same run (D-V2-119, D-V2-120 — `delulu
-  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads), and step 4 the same run (D-V2-126 — `grants auto-approve`, the operator's standing node): **P9-03 complete**; **P9-04 step (a)** by run 23 (D-V2-128 — `http.get_with(url, headers)`, a request with headers judged before anything is resolved and sent only to the URL's origin); **P9-04 steps (b) and (c)** by run 24 (D-V2-131 — `http.get_with_secret`, a secret in one header sent only to the audience its grant names, `secret:NAME@HOST[:PORT]=…`, and `grants diff`'s `secret_reach_expansion`); P9-04's (d)–(e) and P9-05 not yet built.
+  grants diff` between two grant files or two lease nodes; `secret_reach_expansion` waits for P9-04); P9-03 read against the code and its step 1 built (D-V2-121), step 1b by run 21 (D-V2-122 — a sandboxed run's report records the host's refusal at its call) and step 2 by the same run (D-V2-123 — `delulu grants propose REPORT`, the refused call's own requirement), both P9 verbs for a package directory (D-V2-124), and step 3 by run 22 (D-V2-125 — the proposal store: filed against the refused run's node, approved as a delegation under the approver's own node, rejected with a reason the agent reads), and step 4 the same run (D-V2-126 — `grants auto-approve`, the operator's standing node): **P9-03 complete**; **P9-04 step (a)** by run 23 (D-V2-128 — `http.get_with(url, headers)`, a request with headers judged before anything is resolved and sent only to the URL's origin); **P9-04 steps (b) and (c)** by run 24 (D-V2-131 — `http.get_with_secret`, a secret in one header sent only to the audience its grant names, `secret:NAME@HOST[:PORT]=…`, and `grants diff`'s `secret_reach_expansion`); **P9-04 step (d)'s first half** by run 25 (D-V2-133 — the broker's `secret_to`: a node's secret carries its audience, `grants delegate --secret-to`, `grants diff` between nodes; the Z3 model 34 obligations); (d)'s second half (the broker's send), (e) and P9-05 not yet built.
 - **Defects found and closed** (`HANDOFF.md` §11.4 has each; never to be re-softened): ADAPTER-SPELL-1, ATTEST-FIFO-1,
   CONFIRM-ORDER-1, GUEST-WAIT-1, RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1/PIPE-FLOOD-1, GUEST-SOCKET-1, GUEST-PROC-1,
   GUEST-DEV-1, GUEST-SYSCALL-1, HOST-DUMPABLE-1, GUEST-TIOCSTI-1, GUEST-SIGNAL-1, GUEST-PROCESS-1, LANDLOCK-TRUNCATE-1,
@@ -92,7 +92,7 @@ running summary.
   commits, 139 files.)
 
 **What stays open** (the newest entry's "Open / next" is the exact list; `docs/REMAINING_WORK.md` the whole one):
-**P9** (P9-04's steps (d) — the broker's audience dimension, so a daemon or leased run can send a secret — and (e), and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
+**P9** (P9-04's step (d)'s second half — the broker's send, so a daemon or leased run can send a secret (its first half, the dimension, by run 25) — and (e), and P9-05; P9-01 and P9-02 built by run 20, P9-03 by runs 20, 21 and 22, P9-04 step (a) by run 23, steps (b) and (c) by run 24), RW 4.57 (a killed run's nodes live under the daemon), RW 4.53 and 4.49 (the monitor's and the daemon's
 waits on the chain), RW 4.58's O2/O4, a real device for P8 (environment-blocked). PS-E's three residuals: E-03's H6 (macOS and
 Windows under the escaped-guest harness, twice stopped by a safety classifier — perhaps one for the owner at the laptop,
 RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
@@ -100,7 +100,7 @@ RW 4.27), macOS's launcher window (RW 4.28, no `fexecve`), macOS's reads.
 **The owner's, untouched by the period:** the final public repository (`HANDOFF.md` §1.1's decisions first), the licence,
 D-NE-7 (no tag, no release — the release workflow ran only its dry run and nightly), D-NE-27 (no kernel image), PS-C-05.
 **For his review:** D-V2-49 (the entrenched edit) and D-V2-59 (`hostile-agent` requires all five properties), both flagged
-when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-132); and P8-04's option
+when taken; the decisions each run's entry names "for the owner" (most recently D-V2-110 to D-V2-133); and P8-04's option
 (c), a revoke-only principal in the grant tree, kept for him (`V2_P8_DESIGN.md`).
 
 **Syncing the laptop** — the procedure above, from the baseline `cfbfbdc` (`Cloud handoff (10)`): a fast-forward is
@@ -2996,3 +2996,43 @@ directory, or have the laptop session read §11.
   two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-132 (D-V2-128 and D-V2-131 with the period's
   second and third entrenched edits; D-V2-131 changes what a secret NAME may hold), option (c). **The closing entry is current;
   from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-15 — routine run 25: CI read green; P9-04 step (d)'s first half — the broker's `secret_to`, a node's secret carries its audience (D-V2-133)
+- Session: `https://claude.ai/code/session_011TZbDxBVJVmBTVyDeiWhGb`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (through the harness branch `claude/zealous-carson-qm5vah`, read on the runners, then fast-forwarded)
+  Pull request: none   Merged: n/a
+- Base: `41ce7c1`
+- Commits: (1) `db88e98` P9-04 (d), first half: the broker's secret_to - a node's secret carries its audience; (2) this entry's
+  commit — the records
+- Files and folders: (1) M `.github/workflows/ci.yml` (the model's step names; three more mutants),
+  `crates/delulu-broker/src/authority.rs` (`Scopes.secret_to`, `secret_to_name`, the well-formedness rule, unit tests),
+  `cert.rs` (the parser; the exhaustive round trip), `lib.rs` (the export), `proposal.rs` (the join; its test),
+  `crates/delulu-runtime/src/plugin.rs` (a plugin grant names no audience), `crates/delulu/src/broker_client.rs` (one conversion),
+  `broker_ipc.rs` (`AuthoritySpec`/`NodeInfo.secret_to`), `brokerd.rs` (the conversions), `cli.rs` (`--secret-to`, the help,
+  `authority_spec_from_grants`, `grants_from_lease`, `secret_audiences_of`, `grants_diff_nodes`, unit test), `within.rs`
+  (`diff_nodes`), `crates/delulu/tests/broker_cli.rs`, `within_cli.rs` (the witnesses), `docs/GETTING_STARTED.md`,
+  `docs/MATHEMATICS.md`, `docs/QUESTIONS.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/AUTHORITY_GUARD_CAPSTONE.md`,
+  `docs/design/models/README.md`, `docs/design/models/authority_algebra.py` (§2c, the ninth set dimension, three mutants),
+  `docs/for-agents.md`, `docs/survey/*`. (2) M `CHANGELOG.md`, `HANDOFF.md` (where things stand; §11.5 a lesson),
+  `docs/CLOUD_ROUTINE.md` (step 4's P9 line; step 5 a line — loop engineering), `docs/REMAINING_WORK.md` (2.11),
+  `docs/assistant-memory/cloud-period-2026-09-28.md`, `docs/DELULULANG_V2/V2_LOG.md`, `V2_DECISION_LOG.md` (D-V2-133),
+  `V2_P9_DESIGN.md`, `V2_PHASE_STATUS.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry), `docs/survey/*`. Added,
+  deleted, renamed: nothing. No entrenched file edited. **Authorship:** the owner's account through its GitHub no-reply
+  address, Claude as co-author.
+- Survey and doctor: at the start `survey check` ok (1,506 nodes, 14,421 edges), `doctor --check` 26 checks passed; after the
+  last edit `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `41ce7c1`'s CI `38640213195` — success on every job; `actors_pingpong` arm64 MEASURED 2.95x (control 4.10x), the
+  others NOT MEASURED. `db88e98`: the absence witnessed first (the daemon run's node `secret_to` `Null`; `--secret-to` unknown);
+  mutants M402–M421 all red, the control green; the Z3 model 34 obligations, its three new mutants each caught; clippy clean;
+  Windows and macOS linted from Linux; read on the runners — Windows `38720731643` (`within_cli` 15, `broker_cli` 5, the binary's
+  181), macOS `38720736853` (`within_cli` 15), arm64 `38720741646` (`broker_cli` 6, `within_cli` 15), `delulu-broker`'s library
+  on Windows `38720745681` (success) — 0 failed, every new test named, no orphan `delulu`; the full suite alone — 2,287 passed,
+  0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left.
+- Redo on the laptop: nothing beyond the suite on Windows and in WSL (`pip install z3-solver` for the model).
+- For the laptop's memory: `HANDOFF.md` §11.5 — a literal ending `..Default::default()` drops a new field silently;
+  `docs/assistant-memory/cloud-period-2026-09-28.md` a line.
+- Open / next, in order: (1) read THIS commit's push run and the nightly `38702203302`; (2) **P9-04 step (d)'s second half** —
+  the broker's `send` (`SendSecret`, the node's `secret_to`, the Guard on `NAME@origin`, a `send` record; the interpreter asks for
+  the bytes after judging everything it can without them) — under way in this run; then (e); (3) RW 4.63, RW 4.53's rest, RW
+  4.57, RW 4.58's O2/O4, RW 4.49's first two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-133,
+  option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
