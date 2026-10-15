@@ -596,15 +596,24 @@ mod tests {
     /// cannot reach it: dispatch is synchronous, so a single-threaded program never has more than
     /// one kernel in flight. Testing the mechanism directly is the honest way to claim it exists
     /// while `ENFORCEMENT_NOTE` says plainly that a program cannot currently exceed it.
+    ///
+    /// **The overlap is made certain, not hoped for** (routine run 25): four threads spawned one after
+    /// another, each running a 4-element `burn` (a millisecond or two), were red once on a Windows
+    /// runner — they had run one after another, so nothing was ever in flight beside anything. A
+    /// barrier releases all four at once and a 64-element `burn` (tens of milliseconds) holds the one
+    /// slot while the other three arrive: the window is the state the witness needs, never a
+    /// throughput.
     #[test]
     fn queue_depth_refuses_work_past_the_granted_depth() {
-        let b = std::sync::Arc::new(broker(env(4096, (0.0, 60_000.0), 1)));
-        let buf = vec![1.0f64; 4];
+        let b = std::sync::Arc::new(broker(env(4096, (0.0, 600_000.0), 1)));
+        let buf = vec![1.0f64; 64];
         let refused = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let start = std::sync::Arc::new(std::sync::Barrier::new(4));
         let mut hs = Vec::new();
         for _ in 0..4 {
-            let (b, buf, refused) = (b.clone(), buf.clone(), refused.clone());
+            let (b, buf, refused, start) = (b.clone(), buf.clone(), refused.clone(), start.clone());
             hs.push(std::thread::spawn(move || {
+                start.wait();
                 if let Err(DispatchRefusal::Envelope(m)) = b.dispatch("gpu0", "burn", &buf) {
                     assert!(m.contains("queue_depth"), "the refusal names the term: {m}");
                     refused.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
