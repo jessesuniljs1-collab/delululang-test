@@ -491,6 +491,19 @@ impl Broker {
     }
 }
 
+/// Does the host `host` fall under the `net` pattern `pat` — the one host matcher, used by the broker's use check and by
+/// the runtime's allowlist and egress client alike (`delulu_runtime::prim::host_matches` calls it), so a grant means the
+/// same thing under every custody (NET-WILDCARD-1). A pattern is a host exactly, or `*.SUFFIX`: any host strictly below
+/// `SUFFIX` at a dot boundary — campaign finding C85: a bare `ends_with` let `*.example.com` match `evilexample.com`,
+/// another registrable domain. The apex (`example.com`) is not matched by `*.example.com`; narrowing is the safe direction.
+pub fn host_matches(host: &str, pat: &str) -> bool {
+    if let Some(suffix) = pat.strip_prefix("*.") {
+        host.len() > suffix.len() && host.ends_with(suffix) && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+    } else {
+        host == pat
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -760,18 +773,5 @@ mod tests {
         let d = b.check(&root, Op::FsRead, Some("./data/x"));
         assert!(matches!(d, Decision::Allow { audit_seq: None }));
         assert_eq!(b.next_audit_seq(), before, "epoch-class use consumes no audit seq");
-    }
-}
-
-/// Does the host `host` fall under the `net` pattern `pat` — the one host matcher, used by the broker's use check and by
-/// the runtime's allowlist and egress client alike (`delulu_runtime::prim::host_matches` calls it), so a grant means the
-/// same thing under every custody (NET-WILDCARD-1). A pattern is a host exactly, or `*.SUFFIX`: any host strictly below
-/// `SUFFIX` at a dot boundary — campaign finding C85: a bare `ends_with` let `*.example.com` match `evilexample.com`,
-/// another registrable domain. The apex (`example.com`) is not matched by `*.example.com`; narrowing is the safe direction.
-pub fn host_matches(host: &str, pat: &str) -> bool {
-    if let Some(suffix) = pat.strip_prefix("*.") {
-        host.len() > suffix.len() && host.ends_with(suffix) && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
-    } else {
-        host == pat
     }
 }
