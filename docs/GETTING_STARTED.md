@@ -311,11 +311,14 @@ the request is refused before anything is resolved (`[egress: audience]` on stde
 `Refused`); a secret granted with no `@` is sent nowhere. A redirect to another host or port drops the
 secret with the other headers. `token.map(fn(s: Str) -> Str { "Bearer " + s })` keeps the audience. The
 run report names, for each hop, which secret it carried — never its bytes. Trust the audience with the
-secret: what a server in it does with the bytes, echoing them back included, is the server's. Not yet:
-a `--broker daemon` or `--lease` run (its secrets are the broker's, which does not send one yet —
-refused DL0904, naming the way out), a `--sandbox` guest (it holds no secret), or `--engine wasm` (no
-`http` at all). A delegation already says where a secret may go: `delulu grants delegate --secret API_TOKEN
---secret-to API_TOKEN@api.example.com …` — a child may name fewer origins, never another one.
+secret: what a server in it does with the bytes, echoing them back included, is the server's. Under
+`--broker daemon` or `--lease` the bytes are the broker's: it hands them to the run's network client for
+the one origin the request names, only if the run's grant node names that origin for the secret, and
+records a `send` — so a delegation says where a secret may go: `delulu grants delegate --secret API_TOKEN
+--secret-to API_TOKEN@api.example.com …` (a child may name fewer origins, never another one). A leased
+run's send is guarded like a declassification: approve it per destination, `delulu guard request g_NODE
+--use declassify:API_TOKEN@api.example.com:443 --why "…"`. Not yet: a `--sandbox` guest (it holds no
+secret) or `--engine wasm` (no `http` at all).
 
 Secrets have no string form and no equality. **Two** operations get information out to your program,
 and **both carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in

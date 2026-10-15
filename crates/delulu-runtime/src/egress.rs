@@ -773,6 +773,39 @@ pub fn get_for_program_with_secret(
     answer
 }
 
+/// P9-04 (d), D-V2-134: what [`request_with_secret`] judges before anything is resolved, asked BEFORE a broker-held
+/// secret's bytes exist — so the broker is asked for them only for a request that would carry them: every header
+/// (the secret's with a stand-in value; its real value is judged when it arrives, before a byte is sent), the URL's
+/// own strict parse, and its origin in the secret's audience. Returns that origin — the one the broker is asked to
+/// send to, and the only one the bytes it answers may then go to.
+pub fn prejudge_secret(url: &str, headers: &[(String, String)], header: &str, audience: &[Audience]) -> Result<Audience, Reason> {
+    let mut given = headers.to_vec();
+    given.push((header.to_string(), "x".to_string()));
+    check_headers(&given)?;
+    let t = parse_target(url)?;
+    if audience.is_empty() {
+        return Err(Reason::Audience(
+            "its grant names no audience — grant it as `secret:NAME@HOST[:PORT]=VALUE` to say where it may be sent",
+        ));
+    }
+    if !audience.iter().any(|a| a.host == t.host && a.port == t.port) {
+        return Err(Reason::Audience("the URL's host and port are outside the audience its grant names"));
+    }
+    Ok(Audience { host: t.host, port: t.port })
+}
+
+/// A request refused before anything was resolved — by [`prejudge_secret`] — recorded and answered exactly as
+/// [`get_for_program_with_secret`] records and answers one it refuses: the run's evidence holds it, and a refusal after
+/// the custody allowed the host's use is said to the custody (RW 4.46).
+pub fn refuse_unsent(url: &str, reason: Reason) -> Answer {
+    let answer = reason.answer();
+    if answer == Answer::Refused {
+        LAST_REFUSAL.with(|c| c.set(Some(reason.code())));
+    }
+    log(EgressRecord::refused(url, reason));
+    answer
+}
+
 /// The whole check, every hop, with the resolver and transport given. Returns the record and, when
 /// the request delivered, the body — beside the record, so the record never holds a copy of it.
 pub fn get_with(

@@ -79,7 +79,8 @@ pub enum MsgValue {
     Cap { kind: ResourceKind, scope: CapScope },
     /// A local secret's bytes and, P9-04 (c), its grant name and audience — owned, so the message stays `Send`.
     SecretLocal(String, Option<(String, Vec<crate::egress::Audience>)>),
-    SecretHandle(String),
+    /// A broker-held secret's name and, P9-04 (d), its audience — a handle sent to another actor goes where it may go.
+    SecretHandle(String, Option<(String, Vec<crate::egress::Audience>)>),
     Root(RootMsg),
     Actor { id: ActorId, actor: String },
 }
@@ -858,7 +859,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
         }
         Value::Cap(c) => MsgValue::Cap { kind: c.kind, scope: c.scope.clone() },
         Value::Secret(s) => match s.handle_name() {
-            Some(h) => MsgValue::SecretHandle(h.to_string()),
+            Some(h) => MsgValue::SecretHandle(h.to_string(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
             None => MsgValue::SecretLocal(s.reveal(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
         },
         Value::Root(r) => MsgValue::Root(RootMsg {
@@ -977,7 +978,10 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
             s,
             aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
         ))),
-        MsgValue::SecretHandle(h) => Value::Secret(Rc::new(SecretVal::handle(h))),
+        MsgValue::SecretHandle(h, aud) => Value::Secret(Rc::new(SecretVal::handle_bound(
+            h,
+            aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
+        ))),
         MsgValue::Root(r) => {
             let root = crate::value::RootVal {
                 // Carried, like the actuator list beside it (D46): the envelope is what bounds the
@@ -1323,5 +1327,11 @@ mod boundary_authority_tests {
         let plain = msg_to_value(value_to_msg(&Value::Secret(Rc::new(SecretVal::new("v".to_string()))), None).unwrap(), &crate::value::Scope::root());
         let Value::Secret(s) = plain else { panic!() };
         assert!(s.audience().is_none(), "and none is not invented for a secret granted without one");
+        // P9-04 (d), D-V2-134: a broker HANDLE keeps its audience too — and stays a handle, with no bytes.
+        let handle = SecretVal::handle_bound("K", Some(Rc::new(SecretAudience { name: "K".to_string(), to: to.clone() })));
+        let back = msg_to_value(value_to_msg(&Value::Secret(Rc::new(handle)), None).unwrap(), &crate::value::Scope::root());
+        let Value::Secret(s) = back else { panic!() };
+        assert_eq!(s.handle_name(), Some("K"));
+        assert_eq!(s.audience().map(|a| a.to.clone()), Some(to), "a handle's audience crosses");
     }
 }

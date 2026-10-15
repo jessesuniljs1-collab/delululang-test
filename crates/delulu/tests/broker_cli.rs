@@ -221,13 +221,14 @@ fn daemon_lifecycle_run_expose_stop_fail_closed() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
-/// P9-04 (b)/(c), D-V2-131: under the daemon a run's secret is a broker HANDLE — its bytes are the broker's, and the
-/// broker does not yet judge an audience (P9-04 (d)). So `get_with_secret` of one is refused in words (DL0904,
-/// naming the way out), nothing connects, and the chain holds no `use` of the host — a use for a request that was
-/// never made would be a record of nothing (HTTP-SCHEME-1's rule). The way out it names is taken: the same program
-/// with embedded custody and the secret granted with its audience sends it.
+/// P9-04 (d), D-V2-134: under the daemon a run's secret is a broker HANDLE — its bytes are the broker's — and
+/// `get_with_secret` of one now asks the broker for them for the ONE origin the request names: the node's `secret_to`
+/// (D-V2-133) must hold `NAME@origin`, and the chain records a `send` naming the pair and the span, never a byte. The
+/// request then goes out (the listener sees it connect). A request to another origin, or with a header no request may
+/// carry, is refused before the broker is asked — no `send` record, nothing connected; and the run's node keeps the
+/// audience its grant line named.
 #[test]
-fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
+fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recorded() {
     let base = std::env::temp_dir().join(format!("delulu_bsec_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (cwd, state) = (base.join("work"), base.join("state"));
@@ -236,45 +237,48 @@ fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     l.set_nonblocking(true).unwrap();
     let port = l.local_addr().unwrap().port();
-    let program = format!(
-        "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
-         let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
-         match h.get_with_secret(\"https://127.0.0.1:{port}/probe\", hs, \"Authorization\", tok) {{\n        \
-         Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
-    );
-    std::fs::write(cwd.join("send.delulu"), program).unwrap();
+    let send = |file: &str, to_port: u16, header: &str| {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+             match h.get_with_secret(\"https://127.0.0.1:{to_port}/probe\", hs, \"{header}\", tok) {{\n        \
+             Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    };
+    send("send.delulu", port, "Authorization");
+    send("elsewhere.delulu", port.wrapping_add(1).max(1), "Authorization");
+    // A header name no request may carry (a space is not an HTTP token): judged before the bytes exist.
+    send("badheader.delulu", port, "Bad Header");
     let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", "hunter2-8f2c"]);
     assert!(o.status.success(), "secrets set: {}", stderr(&o));
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
-    let args = ["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt"];
-    let mut daemon_args = args.to_vec();
-    daemon_args.extend(["--broker", "daemon"]);
-    let o = delulu_in(&cwd, &state, &daemon_args);
-    assert_eq!(o.status.code(), Some(1), "{}{}", stdout(&o), stderr(&o));
-    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("broker-held secret"), "{}", stderr(&o));
-    assert!(stderr(&o).contains("without `--broker daemon`"), "the refusal names its way out: {}", stderr(&o));
-    assert!(!stdout(&o).contains("delivered") && !stderr(&o).contains("8f2c"), "{}{}", stdout(&o), stderr(&o));
-    // The chain: the run's node was issued (so the chain was read), and no use of the host was recorded.
+    let daemon = |file: &str| {
+        delulu_in(
+            &cwd,
+            &state,
+            &["run", file, "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt", "--broker", "daemon"],
+        )
+    };
     let audit_dir = state.join("audit").to_string_lossy().to_string();
-    let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
-    let records = v["records"].as_array().expect("records");
-    assert!(records.iter().any(|r| r["action"] == "issue"), "the run's issue is in the chain: {v}");
-    assert!(!records.iter().any(|r| r["action"] == "use"), "no use for a request never made: {v}");
-    // P9-04 (d), D-V2-133: the run's node keeps the audience its grant line named — the broker's `secret_to`, one
-    // `NAME@host:port` pair — where it was dropped on the way in (the node held the name alone).
-    let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list json");
-    let node = v["nodes"].as_array().expect("nodes").iter().find(|n| n["secrets"] == serde_json::json!(["API_TOKEN"])).cloned();
-    let to = node.as_ref().map(|n| n["secret_to"].clone());
-    assert_eq!(to, Some(serde_json::json!([format!("API_TOKEN@127.0.0.1:{port}")])), "the node keeps the audience: {v:#}");
-    drop(guard);
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
+    let sends = |rs: &[serde_json::Value]| rs.iter().filter(|r| r["action"] == "send").cloned().collect::<Vec<_>>();
+    // Another origin: refused before the broker is asked — no `send`, nothing connected.
+    let o = daemon("elsewhere.delulu");
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
+    assert!(sends(&records()).is_empty(), "the broker was asked nothing: {:#?}", records());
+    let o = daemon("badheader.delulu");
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
+    assert!(sends(&records()).is_empty(), "nor for a header no request may carry: {:#?}", records());
     assert!(l.accept().is_err(), "nothing connected");
-    // The way out the refusal names: embedded custody, the secret granted to the run with its audience.
-    // Accepted and hung up at once, so the client is told so rather than waiting out its deadline.
+    // The audience: the broker hands the bytes to the egress client, the request goes out, the chain says so.
     let accepter = std::thread::spawn(move || {
         let started = std::time::Instant::now();
         loop {
@@ -285,10 +289,115 @@ fn a_broker_held_secret_is_not_sent_and_no_use_is_recorded() {
             }
         }
     });
-    let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=embedded-8f2c");
-    let o = delulu_in(&cwd, &state, &["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt"]);
+    let o = daemon("send.delulu");
     assert_eq!(o.status.code(), Some(0), "{}{}", stdout(&o), stderr(&o));
-    assert!(accepter.join().unwrap(), "the way out sends the request: {}{}", stdout(&o), stderr(&o));
+    assert!(accepter.join().unwrap(), "the request went out: {}{}", stdout(&o), stderr(&o));
+    let rs = records();
+    let sent = sends(&rs);
+    assert_eq!(sent.len(), 1, "{rs:#?}");
+    assert_eq!((sent[0]["decision"].as_str(), sent[0]["target"].as_str()), (Some("allow"), Some(format!("API_TOKEN@127.0.0.1:{port}").as_str())));
+    // The calling span, in the form an `expose` record carries it (`FILE:START:END`, the interpreter's own).
+    assert!(sent[0]["span"].as_str().is_some_and(|s| s.split(':').count() == 3), "the send carries its span: {:#}", sent[0]);
+    // No byte of the secret in the chain, in what the program printed, or in what the run said.
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains("8f2c"), "the chain holds the bytes");
+    }
+    assert!(!stdout(&o).contains("8f2c") && !stderr(&o).contains("8f2c"), "{}{}", stdout(&o), stderr(&o));
+    // D-V2-133: the run's node keeps the audience its grant line named.
+    let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list json");
+    let node = v["nodes"].as_array().expect("nodes").iter().find(|n| n["secrets"] == serde_json::json!(["API_TOKEN"])).cloned();
+    let to = node.as_ref().map(|n| n["secret_to"].clone());
+    assert_eq!(to, Some(serde_json::json!([format!("API_TOKEN@127.0.0.1:{port}")])), "the node keeps the audience: {v:#}");
+    let o = delulu_in(&cwd, &state, &["audit", "verify", "--dir", &audit_dir]);
+    assert!(o.status.success(), "audit verify: {}", stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// P9-04 (d), D-V2-134: a LEASED run's send is the Guard's, as a declassification is — the bytes leave the broker — and
+/// its permit names the destination: a delegated node's send is DL1410 until the owner approves `declassify:NAME@origin`
+/// (a permit to expose the secret does not buy it); a child delegated a narrower audience cannot send to its parent's
+/// other origin (refused before the broker is asked). The run then reaches its egress client with the bytes; this host's
+/// loopback is a special-use address a lease does not reach (PS-B-02), so the client refuses it — after the `send`.
+#[test]
+fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach_its_parents_other_origin() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    // Short: a broker's socket lives in the state directory (macOS allows 103 bytes).
+    let base = std::env::temp_dir().join(format!("dls-{}-{}", std::process::id(), t % 1_000_000_000));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let (a, b) = (44301u16, 44302u16);
+    for (file, port) in [("a.delulu", a), ("b.delulu", b)] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
+             let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+             match h.get_with_secret(\"https://127.0.0.1:{port}/probe\", hs, \"Authorization\", tok) {{\n        \
+             Ok(x) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let text = format!("{}{}", stdout(&s), stderr(&s));
+    let owner = {
+        let i = text.find("gow1_").expect("the owner code is printed once at start");
+        let tail = &text[i..];
+        tail[..tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len())].to_string()
+    };
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", "hunter2-8f2c"]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let delegate = |extra: &[&str]| -> (String, String) {
+        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--net", "127.0.0.1", "--secret", "API_TOKEN", "--multi", "--json"];
+        args.extend_from_slice(extra);
+        let o = delulu_in(&cwd, &state, &args);
+        assert!(o.status.success(), "delegate {extra:?}: {}{}", stdout(&o), stderr(&o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    let (to_a, to_b) = (format!("API_TOKEN@127.0.0.1:{a}"), format!("API_TOKEN@127.0.0.1:{b}"));
+    let (node, token) = delegate(&["--secret-to", &to_a, "--secret-to", &to_b]);
+    let run = |file: &str, token: &str| delulu_in(&cwd, &state, &["run", file, "--lease", token, "--no-prompt"]);
+    let approve = |use_: &str| {
+        let q = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", use_, "--why", "send"]);
+        assert!(q.status.success(), "request: {}", stderr(&q));
+        let req = stdout(&q).trim().to_string();
+        let ap = delulu_in(&cwd, &state, &["guard", "approve", &req, "--owner", &owner]);
+        assert!(ap.status.success(), "approve: {}", stderr(&ap));
+    };
+    // Guarded by default; a permit to expose the secret is not a permit to send it.
+    let o = run("a.delulu", &token);
+    assert!(stderr(&o).contains("DL1410"), "a leased send is guarded: {}{}", stdout(&o), stderr(&o));
+    approve("declassify:API_TOKEN");
+    let o = run("a.delulu", &token);
+    assert!(stderr(&o).contains("DL1410"), "an expose permit does not buy a send: {}{}", stdout(&o), stderr(&o));
+    approve(&format!("declassify:{to_a}"));
+    let o = run("a.delulu", &token);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let q = delulu_in(&cwd, &state, &["audit", "query", "--action", "send", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&q)).expect("audit query json");
+    let allowed: Vec<&serde_json::Value> = v["records"].as_array().unwrap().iter().filter(|r| r["decision"] == "allow").collect();
+    assert_eq!(allowed.len(), 1, "one send, after the permit: {v:#}");
+    assert_eq!(allowed[0]["target"].as_str(), Some(to_a.as_str()));
+    // A child with the narrower audience cannot send to the parent's other origin — refused before the broker is asked.
+    let (_child, child_token) = delegate(&["--parent", &node, "--secret-to", &to_b]);
+    let before = v["records"].as_array().unwrap().len();
+    let o = run("a.delulu", &child_token);
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
+    assert!(stderr(&o).contains("audience"), "said to the operator: {}", stderr(&o));
+    let q = delulu_in(&cwd, &state, &["audit", "query", "--action", "send", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&q)).expect("audit query json");
+    assert_eq!(v["records"].as_array().unwrap().len(), before, "the broker was asked nothing: {v:#}");
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains("8f2c"), "the chain holds the bytes");
+    }
+    drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
 

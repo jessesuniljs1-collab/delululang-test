@@ -281,7 +281,9 @@ to be untrue.
 5. Token single-redemption: second `--lease` use → DL1407.
 6. Secrets: `expose` round-trips through the broker, appears in the audit log with span; secret
    bytes absent from program-process memory before `expose` (Stage-3 scan test, now stronger:
-   absent even from the host-process cap cache).
+   absent even from the host-process cap cache). *(V2 P9-04 (d), D-V2-134: or before a recorded
+   `send`, whose bytes the broker hands to the run's egress client for one origin its node's
+   `secret_to` names — never to a program value.)*
 7. Foreign worker: a C function that segfaults kills only the worker → `ForeignErr::WorkerDied`;
    worker process cannot connect to the broker socket (test asserts ECONNREFUSED/absence).
 8. MicroVM (Linux CI): `http.get` to a non-allowlisted host fails inside the guest although the

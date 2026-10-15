@@ -1476,6 +1476,15 @@ impl Interp {
             Value::Cap(c) if c.kind == ResourceKind::Compute => {
                 self.call_compute(c, &name.name, &argvals, span)
             }
+            // P9-04 (d), D-V2-134: a request carrying a broker-held secret — the bytes are asked of the broker for the one
+            // origin the request names, after everything that can be judged without them.
+            Value::Cap(c)
+                if c.kind == ResourceKind::Http
+                    && name.name == "get_with_secret"
+                    && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) =>
+            {
+                self.send_broker_secret(c, &argvals, span)
+            }
             // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
             // made before — so the local path is unchanged; a guest sends it to the host instead.
             Value::Cap(c) => self.effects.cap_method_pinned(c, &name.name, &argvals, span, fs_pin.as_deref()),
@@ -2175,6 +2184,47 @@ impl Interp {
         }
     }
 
+    /// P9-04 (d), D-V2-134: `http.get_with_secret` of a broker-held secret. The effect's own refusals answer first, in their
+    /// own words (a scheme that is not `https`, a host outside the capability's allowlist — `prim`); then everything the
+    /// egress client can judge without the bytes ([`crate::egress::prejudge_secret`]: the headers, the URL's parse, its
+    /// origin in the secret's audience) — a refusal there asks the broker nothing. Only then is the broker asked for the
+    /// bytes for that ONE origin (`Custody::send_secret`: the node's `secret_to`, the Guard on the pair, a `send` record),
+    /// and the request is made with a secret that holds them and whose audience is that origin alone — so a redirect to
+    /// another origin, even one the grant names, drops it. The bytes reach the egress client; no program value holds them.
+    fn send_broker_secret(&self, c: &CapVal, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let CapScope::Net { allow, .. } = &c.scope else {
+            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
+        };
+        let url = prim::str_arg(argvals, 0, span)?;
+        if !url.starts_with("https://") || !prim::host_allowed(&url, allow) {
+            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
+        }
+        let headers = prim::headers_arg(argvals, "get_with_secret", span)?;
+        let header = prim::str_arg(argvals, 2, span)?;
+        let Some(Value::Secret(s)) = argvals.get(3) else {
+            return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
+        };
+        let Some(handle) = s.handle_name() else {
+            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
+        };
+        let to = s.audience().map(|a| a.to.as_slice()).unwrap_or(&[]);
+        let origin = match crate::egress::prejudge_secret(&url, &headers, &header, to) {
+            Ok(o) => o,
+            Err(reason) => return Ok(prim::answer_value(crate::egress::refuse_unsent(&url, reason))),
+        };
+        let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+        let bytes = self
+            .custody
+            .borrow_mut()
+            .send_secret(handle, &origin.to_string(), Some(&span_str))
+            .map_err(|d| Fault::at(d.code, d.message, span))?;
+        let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
+        let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
+        let mut args = argvals.to_vec();
+        args[3] = Value::Secret(Rc::new(held));
+        self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None)
+    }
+
     fn expose_secret(&self, s: &Rc<SecretVal>, span: delulu_diag::Span) -> Result<Value, Fault> {
         match s.handle_name() {
             Some(name) => {
@@ -2429,12 +2479,8 @@ pub(crate) fn custody_op_for(
                 Some(Value::Str(s)) => Some(host_of(s)),
                 _ => None,
             };
-            // P9-04 (b)/(c), HTTP-SCHEME-1's rule again: a broker-held secret is refused by the effect itself
-            // before anything is reached (`prim`, until P9-04 (d) gives the broker its audience) — so there is
-            // no use to authorize, and a `use allow` for a request never made would be a record of nothing.
-            if method == "get_with_secret" && matches!(argvals.get(3), Some(Value::Secret(s)) if s.handle_name().is_some()) {
-                return None;
-            }
+            // P9-04 (d), D-V2-134: a request carrying a broker-held secret is a use of its host like any other — authorized
+            // here first; the broker is asked for the secret's bytes after that (`send_broker_secret`), naming the origin.
             Some((CustodyOp::Net, host))
         }
         (ResourceKind::Clock, "now_ms") => Some((CustodyOp::Clock, None)),

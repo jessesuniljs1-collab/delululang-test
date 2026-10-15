@@ -323,6 +323,25 @@ impl Custody for BrokerClientCustody {
         }
     }
 
+    fn send_secret(&mut self, name: &str, origin: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
+        // P9-04 (d), D-V2-134: the bytes cross HERE, to the egress client, for one origin — judged, Guard-gated and
+        // recorded daemon-side.
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::SendSecret {
+                node: self.node.as_str().to_string(),
+                name: name.to_string(),
+                origin: origin.to_string(),
+                span: span.map(str::to_string),
+            },
+        )?;
+        match resp {
+            Response::SecretBytes { bytes } => Ok(bytes),
+            Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
+            other => Err(dl1401(&format!("unexpected send response: {other:?}"))),
+        }
+    }
+
     fn refresh_epoch(&mut self) {
         let _ = self.refresh_cache();
     }

@@ -756,6 +756,12 @@ impl SecretVal {
         SecretVal { inner: SecretInner::Handle(name.into()), audience: None }
     }
 
+    /// A daemon-mode handle carrying the audience its grant names (P9-04 (d), D-V2-134): where the broker may be asked
+    /// to send it. The bytes stay the broker's; the broker judges the same audience from the node's `secret_to`.
+    pub fn handle_bound(name: impl Into<String>, audience: Option<Rc<SecretAudience>>) -> SecretVal {
+        SecretVal { inner: SecretInner::Handle(name.into()), audience }
+    }
+
     /// Where this secret may be sent (P9-04 (c)): `None` when its grant named no audience.
     pub fn audience(&self) -> Option<&Rc<SecretAudience>> {
         self.audience.as_ref()

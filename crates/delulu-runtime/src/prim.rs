@@ -338,7 +338,7 @@ pub fn host_of(url: &str) -> &str {
     hostport.split(':').next().unwrap_or(hostport)
 }
 
-fn host_allowed(url: &str, allow: &[String]) -> bool {
+pub(crate) fn host_allowed(url: &str, allow: &[String]) -> bool {
     let host = host_of(url);
     allow.iter().any(|pat| host_matches(host, pat))
 }
@@ -456,18 +456,20 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let name = str_arg(args, 0, span)?;
             // Daemon mode (Stage 5 phase 5g): a broker-held secret returns an opaque HANDLE — no
             // bytes cross into this process here (invariant 23); `expose` fetches them later.
+            // P9-04 (d), D-V2-134: the handle carries its grant's audience, as a local secret does — the egress client judges
+            // a request against it before the broker is asked for the bytes.
+            let audience = |name: &str| {
+                root.secret_audiences
+                    .get(name)
+                    .map(|to| Rc::new(crate::value::SecretAudience { name: name.to_string(), to: to.clone() }))
+            };
             if root.broker_secrets.iter().any(|n| n == &name) {
-                return Ok(Value::Secret(Rc::new(SecretVal::handle(name))));
+                let to = audience(&name);
+                return Ok(Value::Secret(Rc::new(SecretVal::handle_bound(name, to))));
             }
             match root.secrets.get(&name) {
                 // P9-04 (c): the secret carries where its grant lets it be sent.
-                Some(v) => {
-                    let audience = root
-                        .secret_audiences
-                        .get(&name)
-                        .map(|to| Rc::new(crate::value::SecretAudience { name: name.clone(), to: to.clone() }));
-                    Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience))))
-                }
+                Some(v) => Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience(&name))))),
                 None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"), span)),
             }
         }
@@ -646,41 +648,13 @@ pub fn call_cap_method_pinned(
         (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
             let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
-            // P9-04 (a), D-V2-128: `get_with`'s headers, in the map's own order (ascending by name). The
-            // checker admits only a `Map[Str, Str]`; anything else here is its bug, said as one.
-            let headers: Vec<(String, String)> = if method != "get" {
-                let Some(Value::Map(m)) = args.get(1) else {
-                    return Err(Fault::at("DL0907", format!("http.{method} expects a Map[Str, Str] of headers (checker bug)"), span));
-                };
-                let mut hs = Vec::new();
-                for (k, v) in m.borrow().iter() {
-                    match (k, v) {
-                        (crate::value::MapKey::Str(name), Value::Str(value)) => hs.push((name.clone(), value.to_string())),
-                        _ => return Err(Fault::at("DL0907", format!("http.{method} expects a Map[Str, Str] of headers (checker bug)"), span)),
-                    }
-                }
-                hs
-            } else {
-                Vec::new()
-            };
-            // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in. A broker-held secret (a daemon
-            // run's handle) carries no bytes here and its audience is not yet the broker's to judge (P9-04
-            // (d)), so it is refused, in words — never sent unjudged, never silently dropped from the request.
+            let headers = headers_arg(args, method, span)?;
+            // P9-04 (b)/(c), D-V2-131: the secret and the header it rides in.
             let secret: Option<(String, Rc<SecretVal>)> = if method == "get_with_secret" {
                 let header = str_arg(args, 2, span)?;
                 let Some(Value::Secret(s)) = args.get(3) else {
                     return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
                 };
-                if s.handle_name().is_some() {
-                    return Err(Fault::at(
-                        "DL0904",
-                        "`http.get_with_secret` of a broker-held secret: under the broker daemon the secret's bytes are the \
-                         broker's, and a request that carries them waits for the broker to judge their audience (V2 P9-04 \
-                         step (d)) — make the request with embedded custody (a run without `--broker daemon` or `--lease`), \
-                         the secret granted to it with its audience (`--grant secret:NAME@HOST=VALUE`)",
-                        span,
-                    ));
-                }
                 Some((header, s.clone()))
             } else {
                 None
@@ -691,6 +665,18 @@ pub fn call_cap_method_pinned(
             }
             if !host_allowed(&url, allow) {
                 return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
+            }
+            // P9-04 (d), D-V2-134: a broker-held secret (a daemon or leased run's handle) carries no bytes here — the
+            // interpreter asks the broker for them for one origin and hands this table a secret that holds them
+            // (`Interp::send_broker_secret`). A handle that still arrives here was never judged by the broker: refused in
+            // words, never sent unjudged, never silently dropped from the request.
+            if secret.as_ref().is_some_and(|(_, s)| s.handle_name().is_some()) {
+                return Err(Fault::at(
+                    "DL0904",
+                    "`http.get_with_secret` of a broker-held secret reached the request without the broker's answer \
+                     (internal wiring error) — nothing was sent",
+                    span,
+                ));
             }
             // PS-B-02 (NE-17 closed): the egress client. It re-checks all of the above on its own
             // strict parse, resolves once, refuses special-use addresses unless `net.special=` named
@@ -708,12 +694,7 @@ pub fn call_cap_method_pinned(
                 }),
                 _ => None,
             };
-            Ok(match crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special) {
-                crate::egress::Answer::Body(b) => Value::ok(Value::str(b)),
-                crate::egress::Answer::Refused => Value::err(net_err("Refused")),
-                crate::egress::Answer::Timeout => Value::err(net_err("Timeout")),
-                crate::egress::Answer::Other(m) => Value::err(Value::variant("Other", vec![Value::str(m)])),
-            })
+            Ok(answer_value(crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special)))
         }
         (ResourceKind::Clock, "now_ms") => {
             let ms = FIXED_CLOCK.with(|c| c.get()).unwrap_or_else(|| {
@@ -1041,7 +1022,35 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
 
 // ----- argument helpers ----------------------------------------------------
 
-fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fault> {
+/// What the program is told for an egress answer: `Result[Str, NetErr]`.
+pub(crate) fn answer_value(a: crate::egress::Answer) -> Value {
+    match a {
+        crate::egress::Answer::Body(b) => Value::ok(Value::str(b)),
+        crate::egress::Answer::Refused => Value::err(net_err("Refused")),
+        crate::egress::Answer::Timeout => Value::err(net_err("Timeout")),
+        crate::egress::Answer::Other(m) => Value::err(Value::variant("Other", vec![Value::str(m)])),
+    }
+}
+
+/// P9-04 (a), D-V2-128: an `http` method's headers, in the map's own order (ascending by name); none for `get`. The
+/// checker admits only a `Map[Str, Str]`; anything else here is its bug, said as one.
+pub(crate) fn headers_arg(args: &[Value], method: &str, span: Span) -> Result<Vec<(String, String)>, Fault> {
+    if method == "get" {
+        return Ok(Vec::new());
+    }
+    let bug = || Fault::at("DL0907", format!("http.{method} expects a Map[Str, Str] of headers (checker bug)"), span);
+    let Some(Value::Map(m)) = args.get(1) else { return Err(bug()) };
+    let mut hs = Vec::new();
+    for (k, v) in m.borrow().iter() {
+        match (k, v) {
+            (crate::value::MapKey::Str(name), Value::Str(value)) => hs.push((name.clone(), value.to_string())),
+            _ => return Err(bug()),
+        }
+    }
+    Ok(hs)
+}
+
+pub(crate) fn str_arg(args: &[Value], i: usize, span: Span) -> Result<String, Fault> {
     match args.get(i) {
         Some(Value::Str(s)) => Ok(s.to_string()),
         _ => Err(Fault::at("DL0907", format!("expected a Str argument at position {i}"), span)),

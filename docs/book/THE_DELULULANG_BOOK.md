@@ -314,7 +314,9 @@ A secret can also be **sent** without your program learning it: `http.get_with_s
 grant names — `--grant secret:API_TOKEN@api.example.com=…` — refusing any other destination before a
 byte leaves (V2 P9-04, D-V2-131). Its effect is `Net`, not `Declassify`, because your program never
 reads the bytes. The grant's audience is a statement of trust: a server in it may do anything with the
-secret, answering it back included.
+secret, answering it back included. Under the broker daemon the bytes are the broker's, and it hands them
+over for that one request only when the grant tree names the destination for the secret — recording a
+`send`, and waiting for a person's approval when the holder is a delegate (D-V2-133, D-V2-134).
 
 > **This paragraph used to say "the only way to get the bytes out is `expose`", and that was
 > false.** `Secret.map` hands its closure the **plaintext** — gated only on *purity*, and purity is

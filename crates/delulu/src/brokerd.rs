@@ -999,6 +999,27 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::SendSecret { node, name, origin, span } => {
+            let node = GrantId::from_trusted(node);
+            // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
+            secrets.refresh();
+            failed.set(false);
+            let (result, _warn) = broker.send_secret_guarded(&node, &name, &origin, secrets, span);
+            match result {
+                // The lost-record rule (D-V2-109/111): a `send` whose record was lost hands over no bytes.
+                Ok(_) if failed.get() => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: "broker could not append the send audit record — refused, nothing sent (fail closed, invariant 26)"
+                            .to_string(),
+                        requires_human: true,
+                    },
+                    false,
+                ),
+                Ok(bytes) => (Response::SecretBytes { bytes }, false),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::SecretMap { node, name, op, arg } => {
             let node = GrantId::from_trusted(node);
             // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
@@ -2444,6 +2465,42 @@ mod tests {
             }
             other => panic!("a refusal whose record was lost must not be answered as recorded: {other:?}"),
         }
+    }
+
+    /// P9-04 (d), D-V2-134, the lost-record rule (D-V2-109/111) for a send: the bytes leave the broker only with their `send`
+    /// record. With the chain free the node's secret is handed over for its audience's origin; with the chain held past the
+    /// daemon's wait, the same request is refused DL1401 and carries no byte.
+    #[test]
+    fn a_send_whose_record_was_lost_hands_over_no_bytes() {
+        let state = temp_state("lostsend");
+        SecretStore::load(state.join("secrets.json")).set("K", "hunter2-8f2c").unwrap();
+        let handle = start_daemon(&state);
+        let spec = AuthoritySpec {
+            effects: vec!["Net".to_string()],
+            net: vec!["a.com".to_string()],
+            secrets: vec!["K".to_string()],
+            secret_to: vec!["K@a.com:443".to_string()],
+            holder_kind: "process".to_string(),
+            holder_desc: "send".to_string(),
+            ..Default::default()
+        };
+        let Ok(Response::Issued { node }) = request(&state, ReqBody::Issue(spec)) else { panic!("issue") };
+        let send = || ReqBody::SendSecret { node: node.clone(), name: "K".into(), origin: "a.com:443".into(), span: None };
+        let free = request(&state, send());
+        let log = delulu_broker::AuditLog::open(audit_dir(&state)).unwrap();
+        let held = log.take_lock().expect("the test holds the chain");
+        let lost = request(&state, send());
+        drop(held);
+        stop_daemon(&state, handle);
+        assert!(matches!(&free, Ok(Response::SecretBytes { bytes }) if bytes == "hunter2-8f2c"), "with the chain free: {free:?}");
+        match lost {
+            Ok(Response::Error { code, message, .. }) => {
+                assert_eq!(code, "DL1401", "{message}");
+                assert!(message.contains("could not append") && !message.contains("8f2c"), "{message}");
+            }
+            other => panic!("a send whose record was lost must hand over nothing: {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&state);
     }
 
     /// RW 4.46's record keeps D-V2-111's rule: an egress refusal whose record was lost is not answered as recorded.

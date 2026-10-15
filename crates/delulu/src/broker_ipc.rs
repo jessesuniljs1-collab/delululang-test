@@ -237,6 +237,9 @@ pub enum ReqBody {
     /// `Secret.verify` of two broker-held secrets: the bit, computed broker-side, Guard-gated and
     /// audited (VERIFY-FABRICATED-1). No bytes cross.
     Verify { node: String, a: String, b: String, span: Option<String> },
+    /// P9-04 (d), D-V2-134: a broker-held secret's bytes for one request to `origin` (`host:port`), for the run's egress
+    /// client — the node's `secret_to` must hold `NAME@origin`; Guard-gated on that pair; recorded as `send` with `span`.
+    SendSecret { node: String, name: String, origin: String, span: Option<String> },
     /// A broker-side `Secret.map` whitelist op (phase 5g): apply `op` to the held bytes, returning a
     /// fresh handle name — bytes never cross.
     SecretMap { node: String, name: String, op: String, arg: Option<String> },
@@ -345,8 +348,11 @@ pub enum Response {
         guarded_classes: Vec<String>,
         guard_bypass: bool,
     },
-    /// The declassified bytes (phase 5g — the only response that carries secret material).
+    /// The declassified bytes (phase 5g — one of the two responses that carry secret material).
     Exposed { bytes: String },
+    /// P9-04 (d), D-V2-134: a secret's bytes for one request — the other response that carries secret material, and it
+    /// goes to the run's egress client, never to a program value.
+    SecretBytes { bytes: String },
     /// `Secret.verify`'s one bit.
     Verified { equal: bool },
     /// A fresh broker-held secret handle name from a broker-side `Secret.map` (phase 5g).

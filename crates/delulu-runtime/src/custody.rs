@@ -64,6 +64,18 @@ pub trait Custody {
         ))
     }
 
+    /// P9-04 (d), D-V2-134: a broker-held secret's bytes for ONE request to `origin` (`host:port`), handed to the run's
+    /// egress client and never to the program — the broker checks the node's audience (`secret_to`), asks the Guard on the
+    /// pair, and records a `send`. A custody that holds no broker secrets refuses: it has no bytes to give, and an answer
+    /// without them can only be made up.
+    fn send_secret(&mut self, name: &str, origin: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
+        let _ = (name, origin, span);
+        Err(CustodyDenial::new(
+            "DL0904",
+            "this custody holds no broker secrets, so it cannot send one (internal wiring error)",
+        ))
+    }
+
     /// Refresh the cached revocation-epoch snapshot (no-op for embedded). The daemon client refreshes
     /// lazily on the next epoch-class check when the cache is older than `--epoch-ms`.
     fn refresh_epoch(&mut self);

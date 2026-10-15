@@ -364,6 +364,74 @@ impl Broker {
         }
     }
 
+    /// P9-04 (d), D-V2-134: hand a broker-held secret's bytes to the run's EGRESS CLIENT, for one request to `origin`
+    /// (`host:port`, the egress client's canonical spelling) — never to the program, which learns nothing of them. The node
+    /// must be live, its `secrets` must cover the name's source, and its `secret_to` must hold `SOURCE@origin`, the audience
+    /// the grant tree carries (D-V2-133). No `Declassify` effect: the language sends a secret without one (D-V2-131), and
+    /// the audience is the authority. **The Guard** decides as for a declassification — the bytes leave the broker — on the
+    /// axis token `SOURCE@origin`, so a permit names the destination (`declassify:K@api.example.com:443`), and a permit to
+    /// expose `K` is not one to send it. As `verify_guarded`: a guard event when the Guard is asked, then one `send`
+    /// record — allow or deny — naming the pair and the span, never a byte.
+    pub fn send_secret_guarded(
+        &mut self,
+        node_id: &GrantId,
+        name: &str,
+        origin: &str,
+        store: &SecretStore,
+        span: Option<String>,
+    ) -> (Result<String, Denial>, Option<String>) {
+        use crate::guard::GuardVerdict;
+        let source = store.source_of(name);
+        let pair = format!("{}@{origin}", source.as_deref().unwrap_or(name));
+        let record = |b: &mut Broker, action: &str, decision: &str| {
+            let seq = b.consume_seq();
+            b.record_op(seq, action, Some(node_id.as_str().to_string()), Some(pair.clone()), None, decision, span.clone());
+        };
+        // 1. Authority: the node live, the secret in scope and in the store, the pair in its audience.
+        let checked = self.live_authority(node_id).and_then(|authority| {
+            let out = |dimension: &'static str, arg: &str| Denial::OutOfScope { node: node_id.clone(), dimension, arg: arg.to_string() };
+            let Some(source) = &source else { return Err(out("secrets.store", name)) };
+            if !authority.scopes.secrets.contains(source) {
+                return Err(out("secrets", name));
+            }
+            if !authority.scopes.secret_to.contains(&pair) {
+                return Err(out("secret_to", &pair));
+            }
+            store.get(name).ok_or_else(|| out("secrets.store", name))
+        });
+        let bytes = match checked {
+            Ok(b) => b,
+            Err(d) => {
+                record(self, "send", "deny");
+                return (Err(d), None);
+            }
+        };
+        // 2. The Guard, on the pair.
+        let mut note = None;
+        let event = match self.guard_verdict_use(node_id, crate::validate::Op::Declassify, Some(&pair)) {
+            GuardVerdict::Block(d) => {
+                record(self, "guard_block", "deny");
+                return (Err(d), None);
+            }
+            GuardVerdict::Ungated => None,
+            GuardVerdict::PermitUse => Some("guard_permit_use"),
+            GuardVerdict::BypassedUse { note: n } => {
+                note = Some(n);
+                Some("guard_bypassed_use")
+            }
+            GuardVerdict::Warn { note: n } => {
+                note = Some(n);
+                Some("guard_warn")
+            }
+        };
+        if let Some(event) = event {
+            record(self, event, "allow");
+        }
+        // 3. The send itself, recorded before the bytes leave (a lost record refuses them — the daemon's rule).
+        record(self, "send", "allow");
+        (Ok(bytes), note)
+    }
+
     fn expose_inner(&self, node_id: &GrantId, name: &str, store: &SecretStore) -> Result<String, Denial> {
         let authority = self.live_authority(node_id)?;
         // The Declassify effect gates byte-crossing (defense in depth; the checker bounds kind).
@@ -701,6 +769,60 @@ mod tests {
         assert_eq!(code(b.verify_guarded(&child, "A", "B", &store, None).0), Some("DL1410"), "B is not permitted yet");
         approve(&mut b, "B");
         assert!(b.verify_guarded(&child, "A", "B", &store, None).0.unwrap());
+    }
+
+    /// P9-04 (d), D-V2-134: a send hands the bytes over only for a pair the node's `secret_to` holds — the source's pair for
+    /// a derived name — is Guard-gated for a delegated node ON THE PAIR (a permit to expose the secret does not buy a send,
+    /// and one to send it to one origin does not buy another), ends with the node, and is recorded with the pair and the
+    /// span, allow or deny, never with a byte.
+    #[test]
+    fn a_send_hands_the_bytes_over_only_for_a_pair_the_node_holds() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_sink(Box::new(sink.clone()))
+            .with_owner_code("gow1_testowner");
+        let auth = || {
+            Authority::new(
+                eff(&["Net"]),
+                Scopes { net: names(&["a.com"]), secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() },
+            )
+        };
+        let root = b.issue(Holder::new("process", "app", "pid:1"), auth(), None);
+        let store = SecretStore::in_memory();
+        store.set("K", "hunter2-8f2c").unwrap();
+        store.set("OTHER", "nope").unwrap();
+        let code = |r: Result<String, Denial>| r.map_err(|d| d.code()).err();
+        assert_eq!(b.send_secret_guarded(&root, "K", "a.com:443", &store, Some("p.delulu:4:9".into())).0.unwrap(), "hunter2-8f2c");
+        let last = sink.records().last().cloned().unwrap();
+        assert_eq!((last.action.as_str(), last.decision.as_str(), last.target.as_deref()), ("send", "allow", Some("K@a.com:443")));
+        assert_eq!(last.span.as_deref(), Some("p.delulu:4:9"));
+        assert_eq!(code(b.send_secret_guarded(&root, "K", "b.com:443", &store, None).0), Some("DL0904"), "another origin");
+        assert_eq!(code(b.send_secret_guarded(&root, "K", "a.com:8443", &store, None).0), Some("DL0904"), "another port");
+        assert_eq!(code(b.send_secret_guarded(&root, "OTHER", "a.com:443", &store, None).0), Some("DL0904"), "not in scope");
+        let last = sink.records().last().cloned().unwrap();
+        assert_eq!((last.action.as_str(), last.decision.as_str()), ("send", "deny"));
+        // A derived name is sent on its source's pair.
+        let derived = store.insert_derived("HUNTER2", "K");
+        assert_eq!(b.send_secret_guarded(&root, &derived, "a.com:443", &store, None).0.unwrap(), "HUNTER2");
+        // A delegated node: guarded on the pair.
+        let child = b.attenuate(&root, auth(), Holder::new("process", "agent", "pid:2"), None).unwrap();
+        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1410"));
+        let approve = |b: &mut Broker, token: &str| {
+            let subset = crate::guard::GuardSubset::parse(&[format!("declassify:{token}")]).unwrap();
+            let (id, _) = b.guard_request(&child, subset, "send".into()).unwrap();
+            b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        };
+        approve(&mut b, "K");
+        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1410"), "an expose permit is not a send's");
+        approve(&mut b, "K@a.com:443");
+        assert_eq!(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0.unwrap(), "hunter2-8f2c");
+        b.revoke(&root, &child).unwrap();
+        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1403"), "it ends with the node");
+        // No record holds a byte of either secret.
+        for r in sink.records() {
+            let text = serde_json::to_string(&r.to_value()).unwrap();
+            assert!(!text.contains("hunter2") && !text.contains("HUNTER2"), "a record holds the bytes: {text}");
+        }
     }
 
     #[test]

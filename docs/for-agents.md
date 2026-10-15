@@ -684,12 +684,13 @@ overstate it downstream:
   one header's value — no `Declassify`, because the program never reads it — and ONLY to the secret's
   audience: `--grant secret:NAME@HOST[:PORT][,…]=VALUE`. A URL whose host and port are outside it, or a
   secret granted with no audience, is refused before anything is resolved (reason `audience`, nothing
-  connected); each hop's report record names the secret it carried (`secret`), never its bytes. Not yet
-  under `--broker daemon`/`--lease` (DL0904, P9-04 (d)), in a `--sandbox` guest (DL1401: no secret
-  crosses the channel), or under `--engine wasm`. A lease node carries a secret's audience since D-V2-133 —
-  `grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`, one origin a flag, a child never naming one
-  its parent does not (DL0802) — and a daemon run's node keeps the audience its grant line named; the
-  broker sending the bytes at send time is the step after.
+  connected); each hop's report record names the secret it carried (`secret`), never its bytes. Under
+  `--broker daemon`/`--lease` (P9-04 (d), D-V2-133/134) the broker sends it: your node's `secret_to` must name
+  `NAME@host:port` (`grants delegate --secret NAME --secret-to NAME@HOST[:PORT]`, one origin a flag, a child
+  never naming one its parent does not — DL0802), the request is judged before the broker is asked, and the
+  chain records a `send` with the pair; a delegated node's send is guarded (DL1410) until a person approves
+  `declassify:NAME@host:port` — a permit to expose the secret is not one to send it. Not yet in a
+  `--sandbox` guest (DL1401: no secret crosses the channel), or under `--engine wasm`.
   `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
   `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
   filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image
