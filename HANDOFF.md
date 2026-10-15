@@ -129,7 +129,8 @@ the assistant's memory — which now also travels file by file in
   node keeping its grant line's audience, `grants diff` between nodes (`secret_reach_expansion`); the Z3 model 34 obligations
   (D-V2-133); and **its second half** — the broker SENDS a secret for a daemon or leased run, for the one origin its node
   names, after the request is judged without the bytes; Guard-gated on the pair (`declassify:NAME@host:port`), recorded as
-  `send`, a lost record handing over nothing (D-V2-134). **Next: P9-04 (e)** (`authority`'s per-secret destinations), then P9-05.
+  `send`, a lost record handing over nothing (D-V2-134). And **step (e)**: `authority --json`'s `secret_destinations` — where a program sends each secret, as far as its source shows,
+  never guessed (D-V2-135). **P9-04 complete. Next: P9-05** (method-and-path network scopes).
 - **Before PS-E closed, its open items were:** E-03's H6 (macOS and Windows under the escaped-guest harness) and a red-team
   pass on the filter; E-01's `contained` set (attesters' claims as properties were built by routine run 11, D-V2-87; a
   macOS guest's memory ceiling — the host's sampler — by routine run 12, D-V2-90, so macOS's reads are its one gap); E-04's

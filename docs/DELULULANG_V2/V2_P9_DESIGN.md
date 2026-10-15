@@ -246,7 +246,9 @@ skip branch, §11.2).
   D-V2-134): item 3 — the broker's `send` (the node's `secret_to`, the Guard on the pair, a `send` record; a lost record hands
   over nothing), asked by the interpreter only after `egress::prejudge_secret` has judged everything it can without the bytes;
   a handle carrying its audience; the OCSF export names a `send` as HTTP Activity with its destination (`b8da460`). **Step (d)
-  complete. Next: (e)**.
+  complete.** **Step (e) built** (the same run, `b6128d1`, D-V2-135): `authority --json`'s `secret_destinations` — per
+  `get_with_secret` call, the secret's grant name and the URL literal's `host:port` as far as the source shows them, `null`
+  where it does not. **P9-04 complete. Next: P9-05.**
   **Left open beside (d):** whether the language should reach the broker's whitelisted `secret_map` (`trim`, `upper`,
   `lower`) at all — today no program can (MAP-HANDLE-1, D-V2-132).
 - **P9-05** method-and-path network scopes (§4.12, RW 2.12): `net` is host-scoped in the grammar, the egress client and the

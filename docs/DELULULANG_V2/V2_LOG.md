@@ -5840,3 +5840,15 @@ validates against OCSF 1.8.0 (`scripts/ocsf-validate.py`: 15 events, 0 problems;
 M440 and M441 red, the control green; clippy clean; `audit_ocsf_cli` and `monitor_cli` on Windows `38727666655` and macOS
 `38727669814` — success; `docs/DEPLOYMENT.md`'s mapping paragraph. **The full suite alone at `b8da460`:** 2,290 passed, 0
 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved.
+
+## 2026-10-15 — routine run 25 (continued): P9-04 step (e) — `authority --json` names where a program sends each secret (D-V2-135); P9-04 complete
+
+**Push runs read.** `9ed939f`'s CI `38727198569` — success on every job. `3f03ab0`: see the next entry.
+**Step (e)** — `b6128d1`: `secret_destinations` on `authority`'s report (D-V2-135) — per `get_with_secret` call, the secret's
+grant name and the URL literal's `host:port`, `null` where the source does not show them. Witnessed absent first on
+`3f03ab0`'s source; the witness covers five call shapes (a parameter's secret; a `let`-bound mint through `map`; a computed URL;
+a `for` rebinding the name; a block's `let` that ends with it and an assignment that rebinds) and the closed schema; M442–M448
+red, M449 survived as an implied reset and was removed. clippy clean; `within_cli` 16 passed. **Verified on the runners:** `within_cli` and `json_contract` on Windows `38729783946` and macOS `38729787305` — success.
+**The full suite alone at `b6128d1`:** 2,291 passed, 0 failed, 16 ignored (163 binaries), cargo exit 0, the tree unmoved, no daemon left.
+**P9-04 is complete** — steps (a) to (e): a request with headers, a secret in a request only to its audience, the audience in
+the grant tree, the broker's send, and the static half. **Next: P9-05** (method-and-path network scopes).

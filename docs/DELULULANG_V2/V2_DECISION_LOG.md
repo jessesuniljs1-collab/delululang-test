@@ -3336,6 +3336,33 @@ audience (M436), the pre-judgement's audience check (M437) or header check (M438
 actor boundary (M435) — each red; **M428** (the `secrets` check alone) and **M432** (the one-origin narrowing) survive by
 design, implied walls (item above); **M428b** (both broker checks) red; the controls green.
 
+## D-V2-135 — P9-04 step (e): `authority --json` names where a program sends each secret — `secret_destinations`, the secret and the destination as far as the source shows them, `null` where it does not, never a guess — TAKEN (head chef, 2026-10-15, under the owner's delegation)
+
+**Context.** After D-V2-131/133/134 a secret goes only where its audience says, and the operator writes that audience
+(`secret:NAME@HOST[:PORT]=…`, `grants delegate --secret-to`). Nothing read it off the program: `authority` named the secret
+and the hosts, never which secret goes to which host. `V2_P9_DESIGN.md` item 5: the walk must follow a secret into a request's
+argument and the request's URL literal; a computed URL or a secret reached through a value is reported as such.
+
+**Decision.**
+1. **`within::secret_destinations`**, stamped on `authority`'s report (one file and a package) as `secret_destinations` —
+   present only when the program sends a secret, so every other report is byte-identical (criterion 11, the `plugins` rule) —
+   one `{"secret", "to", "at"}` per `http.get_with_secret` call, in source order.
+2. **`secret`**: the grant name when the argument is a literal `.secret("NAME")` (only `Root` has the method, so the receiver's
+   name does not matter — `requested_scopes`' rule), a name a `let` or an assignment bound to one, or a `Secret.map` of either
+   (a value derived from the bytes goes where they may, D-V2-131). **`to`**: the URL literal's origin through the egress
+   client's own `parse_target` — `host:port`, the spelling an audience must name. **`null`** for either when the source does
+   not show it: a computed URL, a secret that arrives as a parameter, a field or an element, a name a `for`, a lambda
+   parameter or a match arm rebinds (all shadow, conservatively), a block's `let` once its block ends.
+3. **Not chosen:** proposing the audience in `--grants`' lines (`secret:NAME@host:port=…`) — it changes a contract several
+   verbs read (`--within`, `grants propose`, the corpus); a later slice can derive it from this field. A human line in the text
+   report — the JSON first, as for `requested_scopes`.
+
+**Witnessed red first** on `3f03ab0`'s source: no `secret_destinations` in the report. **Falsified:** M442 (a `let` not
+recorded), M443 (`map` not followed), M444 (a `for` not shadowing), M445 (a block's names leaking past it), M446 (an assignment
+not rebinding), M447 (the origin without its port), M448 (the key on a report that sends nothing) — each red; **M449** (a
+per-function reset of the names) survived because a body is a block whose names already end with it — the reset was removed,
+not kept as a wall no witness can reach.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

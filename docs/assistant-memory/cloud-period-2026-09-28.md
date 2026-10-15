@@ -264,3 +264,5 @@ Related: [[delulu-v2-execution]], [[testing-repo-autopush]], [[final-public-repo
   Lesson: a literal ending `..Default::default()` drops a new field silently — grep them; one conversion per direction.
   The same run, **(d)'s second half** (D-V2-134): the broker's `send` — a daemon or leased run sends a secret for one origin its
   node names; Guard on the pair `declassify:NAME@host:port`; a `send` record; the request pre-judged without the bytes.
+  Then the OCSF mapping of a `send` (HTTP Activity) and **step (e)** (D-V2-135, `authority --json`'s `secret_destinations`):
+  **P9-04 complete**; P9-05 next.
