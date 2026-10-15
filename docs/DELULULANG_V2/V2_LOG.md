@@ -5893,3 +5893,8 @@ refused before the broker (0 `send` records, 0 connections). Each finding re-rea
   record; a secret whose VALUE breaks a header rule is refused after the broker's `send allow` (the request never left; the
   program is told `Refused`).
 **The pass's own slip:** it stopped both test brokers once with `pkill -x delulu` (run 24's trap, in another form); restarted.
+
+## 2026-10-15 — routine run 25 (postscript): the last push runs read
+
+`0f73f09`'s CI `38731264861` — success on every job; `actors_pingpong` arm64 MEASURED 2.99x (control 4.11x). `22501f6`'s
+CI `38736592686` — success on every job (16; `miri-slow` and `heavy-gates` skipped on a push), arm64 `actors_pingpong` MEASURED 2.99x (control 4.12x), and `ocsf` `38736592620` success: **`master` green at the end of the run**.

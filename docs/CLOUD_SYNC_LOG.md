@@ -46,7 +46,7 @@ ends. A run on or after 2026-10-16 that finds this section only updates its "as 
 and stops (`docs/CLOUD_ROUTINE.md` step 0). The dates may be extended by the owner; this section then stays the
 running summary.
 
-**As of:** `master` during routine run 25 (2026-10-15) — the newest entry under *Entries* names the last commit.
+**As of:** `master` at the end of routine run 25 (2026-10-15) — the newest entry under *Entries* names the last commit.
 
 **What the period built** (each item's entry below has its commits, files, evidence and CI runs):
 - **Phases.** **P7** (verification depth) and **PS-D** (external launchers and the attestation seam) completed by run 1;
@@ -3160,3 +3160,21 @@ directory, or have the laptop session read §11.
   secret's audience in `--grants`' lines; (4) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW 4.49's first two items;
   (5) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-137 (D-V2-137 changes what a `declassify` rule on a name
   covers), option (c). **The closing entry is current; from 2026-10-16 a run only refreshes it and stops.**
+
+### 2026-10-15 — routine run 25 (postscript): `0f73f09`'s and `22501f6`'s push runs read
+- Session: `https://claude.ai/code/session_011TZbDxBVJVmBTVyDeiWhGb`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `22501f6`
+- Commits: (1) this entry's commit — the records
+- Files and folders: (1) M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry; the closing entry's "as of"),
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): `survey check` ok, `survey findings` 0 errors (14 warnings, as before), `doctor --check` all checks passed
+- Verified: `0f73f09`'s CI `38731264861` — success on every job (`miri-slow` and `heavy-gates` skipped on a push), arm64
+  `actors_pingpong` MEASURED 2.99x (control 4.11x); `22501f6`'s CI `38736592686` — success on every job (16; `miri-slow` and `heavy-gates` skipped on a push), arm64 `actors_pingpong` MEASURED 2.99x (control 4.12x), and `ocsf` `38736592620` success: **`master` green at the end of the run**.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next, in order: (1) read THIS commit's push run (records only); (2) **P9-05 step (a)** — path scopes in the grammar and
+  the egress client; (3) RW 4.65–4.67; proposing a secret's audience in `--grants`' lines; (4) RW 4.63, RW 4.53's rest, RW 4.57,
+  RW 4.58's O2/O4, RW 4.49's first two items; (5) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-137, option
+  (c). **From 2026-10-16 a run only refreshes the closing entry and stops** (`docs/CLOUD_ROUTINE.md` step 0), unless the owner
+  extends the dates.
