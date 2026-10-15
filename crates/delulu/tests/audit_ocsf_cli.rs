@@ -63,6 +63,7 @@ fn seeded(tag: &str) -> PathBuf {
                         fs_write: names(&["./out"]),
                         secrets: names(&["API_KEY"]),
                         net: names(&["example.com"]),
+                        secret_to: names(&["API_KEY@example.com:443"]),
                         ..Default::default()
                     },
                 ),
@@ -84,6 +85,9 @@ fn seeded(tag: &str) -> PathBuf {
         let store = SecretStore::in_memory();
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
+        // P9-04 (d), D-V2-134: a send to the secret's audience, and one outside it.
+        assert_eq!(b.send_secret_guarded(&root, "API_KEY", "example.com:443", &store, Some("app.delulu:4:9".into())).0.unwrap(), CANARY);
+        assert!(b.send_secret_guarded(&root, "API_KEY", "evil.example:443", &store, None).0.is_err());
         b.revoke(&root, &child).unwrap();
     }
     // The host's own records, appended the way `guest.rs` appends them: a new writer continuing the seq.
@@ -184,6 +188,8 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
         ("use/allow/Net", 4002),
         ("use/allow", 0),
         ("expose/allow", 0),
+        ("send/allow", 4002),
+        ("send/deny", 2004),
         ("revoke/allow", 3005),
         ("sandbox-launch/allow", 1007),
         ("sandbox-death/allow", 1007),
@@ -212,7 +218,11 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
     let write = events.iter().find(|e| e["class_uid"] == 1001).unwrap();
     assert_eq!((write["activity_id"].as_u64(), write["file"]["path"].as_str()), (Some(3), Some("./out/a.txt")), "a write updates the path it was decided on");
     assert_eq!(write["file"]["name"], "a.txt");
-    let net = events.iter().find(|e| e["class_uid"] == 4002).unwrap();
+    let send = events.iter().find(|e| e["class_uid"] == 4002 && e["unmapped"]["delulu"]["action"] == "send").unwrap();
+    assert_eq!(send["dst_endpoint"], serde_json::json!({ "hostname": "example.com", "port": 443 }), "a send names its origin");
+    assert_eq!((send["activity_id"].as_u64(), send["http_request"]["http_method"].as_str()), (Some(3), Some("GET")));
+    assert!(send["message"].as_str().is_some_and(|m| m.contains("API_KEY@example.com:443")), "by the secret's name: {send}");
+    let net = events.iter().find(|e| e["class_uid"] == 4002 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
     assert_eq!(net["dst_endpoint"]["hostname"], "example.com", "a network use names its host");
     assert_eq!(net["http_request"]["http_method"], "GET");
     let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();

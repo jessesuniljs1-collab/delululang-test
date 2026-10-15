@@ -32,6 +32,7 @@
 //! | `sandbox-death` (either decision) | Process Activity (1007), Terminate |
 //! | an allowed use whose record names `FsRead` / `FsWrite` | File System Activity (1001), Read / Update |
 //! | an allowed use whose record names `Net` | HTTP Activity (4002), Get |
+//! | an allowed `send` (P9-04 (d), D-V2-134: a secret's bytes handed to the run's egress client for one origin) | HTTP Activity (4002), Get — the origin as `dst_endpoint` |
 //! | everything else | Base Event (0), Other — the record's action as the activity's name |
 //!
 //! A use's class comes from the effect its record NAMES (`{"op": …}`, D-V2-80), never from its
@@ -110,6 +111,8 @@ fn class_of(rec: &AuditRecord) -> Class {
         "issue" | "delegate" | "attenuate" | "redeem" | "renew" | "adopt" => Class::UserAccess(1),
         "revoke" | "guard_permit_revoke" => Class::UserAccess(2),
         "sandbox-launch" => Class::Process(1),
+        // A `send` names its request's destination (`NAME@host:port`): a GET to that origin carrying the secret.
+        "send" => Class::Http(3),
         "use" | "guard_permit_use" | "guard_warn" => match use_op(rec) {
             Some("FsRead") => Class::File(2),
             Some("FsWrite") => Class::File(3),
@@ -248,6 +251,21 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
             let path = rec.target.clone().unwrap_or_default();
             let name = path.rsplit(['/', '\\']).next().unwrap_or(&path).to_string();
             obj.insert("file".into(), json!({ "name": name, "path": path, "type": "Unknown", "type_id": 0 }));
+            obj.insert("actor".into(), actor);
+        }
+        Class::Http(_) if rec.action == "send" => {
+            // `NAME@host:port`, the egress client's canonical spelling (an IPv6 host bracketed, so the port is after the
+            // LAST colon). The endpoint is the origin; the secret is named in the message and the record, never a byte.
+            let target = rec.target.as_deref().unwrap_or("");
+            let origin = target.split_once('@').map_or("", |(_, o)| o);
+            let mut endpoint = json!({ "hostname": origin });
+            if let Some((host, port)) = origin.rsplit_once(':') {
+                if let Ok(port) = port.parse::<u16>() {
+                    endpoint = json!({ "hostname": host, "port": port });
+                }
+            }
+            obj.insert("dst_endpoint".into(), endpoint);
+            obj.insert("http_request".into(), json!({ "http_method": "GET" }));
             obj.insert("actor".into(), actor);
         }
         Class::Http(_) => {

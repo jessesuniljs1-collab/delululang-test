@@ -24,10 +24,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 308 |
-| Rust lines | 170061 |
+| Rust lines | 170089 |
 | Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 253 |
-| Markdown lines | 76062 |
+| Markdown lines | 76064 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 12437 lines
+- **Modules:** 18 files, 12455 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -177,7 +177,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 781 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 84 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
-| `src/ocsf.rs` | 333 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
+| `src/ocsf.rs` | 351 | PS-E-06 — the audit chain, exported as OCSF 1.8.0 events, and still verifiable |
 | `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/proposal.rs` | 395 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
 | `src/secrets.rs` | 895 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
