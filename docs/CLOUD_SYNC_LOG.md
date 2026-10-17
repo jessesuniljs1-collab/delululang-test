@@ -3571,3 +3571,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   the banned-word guard, run with a probe token and a probe file, refused and pushed nothing (`ls-remote` showed no
   probe branch).
 - Open / next: unchanged — the launch (the entry before this one).
+
+### 2026-10-17 — the autosave refuses to carry history `origin` does not have (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `4681008`
+- Commits: (1) this entry's commit
+- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Found while writing the launch procedure:** after the launch `origin` is the public `DeluluLang` with a fresh history
+  (D-V2-153). A snapshot's parents are HEAD and the previous snapshot, so a laptop still on the development history would
+  have pushed all of it — the commits the fresh history exists to leave out — into the public repository.
+- **Fixed:** `fetch --prune` (the old repository's refs go once `origin` points elsewhere), and a snapshot only when HEAD
+  is on some branch of `origin`; otherwise `REFUSED … nothing pushed`. A `-State` directory parameter for tests.
+- **Falsified on throwaway repositories** (a bare origin with history A; a clone on an unrelated history B, edited): the
+  guarded script refused, exit 1, no remote branch; the previous script, same state, pushed (the witness); control —
+  HEAD on `master`, which origin has — a snapshot pushed. The task was re-installed with the guarded copy.
+- Open / next: unchanged — the release procedure in the 2.0 checklist on `launch/2.0.0`.

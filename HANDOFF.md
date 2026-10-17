@@ -597,8 +597,10 @@ wins, and you should update the memory to match.
   It pushes every local branch that is ahead of its upstream (a plain push, never a force; a diverged branch is only
   logged) and snapshots uncommitted work — tracked edits and new unignored files — to `autosave/laptop`, through a
   private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
-  so the branch only fast-forwards. It refuses a snapshot carrying the banned word (guard falsified with a probe token)
-  or a file over 50 MB. Log: `%LOCALAPPDATA%\DeluluLang\autosave.log`. **A snapshot is not a verified commit — never
+  so the branch only fast-forwards. It refuses a snapshot carrying the banned word (guard falsified with a probe token),
+  a file over 50 MB, or a HEAD on no branch of `origin` — after the launch `origin` is the public repository, and a
+  snapshot of a checkout still on the development history would publish all of it there (guard falsified on throwaway
+  repositories: the unguarded script pushed, the guarded one refused). Log: `%LOCALAPPDATA%\DeluluLang\autosave.log`. **A snapshot is not a verified commit — never
   merge it**; the next session recovers from it (`docs/CLOUD_ROUTINE.md` step 1). A laptop session re-runs `-Install`
   when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it.
 - **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
