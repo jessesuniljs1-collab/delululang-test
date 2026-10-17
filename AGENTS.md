@@ -7,6 +7,9 @@ you remember from elsewhere.
 
 ## Read first, in this order
 
+**In force since 2026-10-17:** the owner's commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md` —
+take DeluluLang to a public release; every outstanding decision is the head chef's (below, *The owner's delegation*).
+
 0. **Run the Survey and `doctor`** (`cargo run -p delulu-survey -- check`,
    `cargo run -p delulu -- doctor --check`) — the section below says when and why.
 1. `HANDOFF.md` — §0, §1, then §11.
@@ -24,9 +27,10 @@ authority; the host performs every effect under grants, a lease and the Guard.
 ## Hard rules — never break these
 
 - **Push only to `origin`** (`github.com/jessesuniljs1-collab/delululang-test`, a public TESTING
-  repository). Never force-push, never rewrite pushed history (documents cite commit hashes). **Never
-  create, add or push to the project's final public repository** — first put the four decisions in
-  `HANDOFF.md` §1.1 in front of the owner and wait for each.
+  repository). Never force-push, never rewrite pushed history (documents cite commit hashes). **The
+  project's final public repository** is created and pushed only under the owner's commission of 2026-10-17, once
+  `HANDOFF.md` §1.1's four items are resolved by recorded `D-V2-nn` decisions — and never by pushing this development
+  history there.
 - **Never put CI's skip token in a commit message** — it silently skips the push run.
 - **A word the owner banned** (named in `HANDOFF.md` §1's rule table) appears nowhere — no file, commit
   or product surface. Do not copy or restate the two existing rule lines that spell it.
@@ -35,7 +39,9 @@ authority; the host performs every effect under grants, a lease and the Guard.
   `crates/delulu-check/tests/laundering.rs`, `crates/delulu-conform/`, `tests/conformance/witnesses.toml`
   (CODEOWNERS "entrenched"); the licence; the final public repository; RW 4.19 (D23); D-NE-27 (never
   commit or ship a built GPL kernel image); D-NE-7 (publication — nothing is released without the
-  owner's `v*` tag). Before editing anything under `docs/design/`, check
+  owner's `v*` tag). **Since 2026-10-17 all of these are delegated to the head chef** (below): each change is a
+  `D-V2-nn` with its evidence, an entrenched edit is also recorded in `ENTRENCHED_CHANGE_RECORD.md`, and no built GPL
+  kernel image is committed or distributed until its obligations are met. Before editing anything under `docs/design/`, check
   `cargo run -p delulu-survey -- query doc:<path>` for ENTRENCHED.
 - **Never delete a `.md` file.** Move superseded documents to `docs/archive/`, never remove them.
 - **No new `DL` diagnostic codes** without the owner — refuse in words through existing paths.
@@ -45,13 +51,18 @@ authority; the host performs every effect under grants, a lease and the Guard.
   counts only once its result is READ and recorded. Never fabricate evidence; record failed runs.
 - **Decisions you take under the owner's delegation** are written as
   `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`, never as his rulings.
-- **The owner's delegation (2026-09-28, until he is back):** every DeluluLang decision is the head
-  chef's, and **any file or folder may be created, modified or deleted** — entrenched files included
-  (each edit recorded in `ENTRENCHED_CHANGE_RECORD.md`), new `DL` codes included (with a `D-V2-nn`) —
-  which supersedes, for this period, the owner-reserved-file, never-delete-a-`.md` and no-new-codes
-  rules above. **Four things stay his:** the final public repository, the licence, D-NE-7 (never a tag,
-  never a release) and D-NE-27. **PS-E is next** (from the study of NVIDIA OpenShell,
-  `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md`), then P8 and P9. The full terms: `docs/CLOUD_ROUTINE.md`.
+- **The owner's delegation (2026-10-17, standing):** his commission
+  `docs/design/DeluluLang_Autonomous_Development_Prompt.md` — *"You do not need to wait for my review or approval for
+  any outstanding project decisions"* — makes every DeluluLang decision the head chef's, the owner-reserved ones
+  included: the final public repository and its history, CODEOWNERS, `SECURITY.md`, the entrenched files, licence
+  compliance and the microVM image, the scheduled task, and the release itself once objective release criteria have
+  passed — and a new `DL` code where a refusal needs one, each with its `D-V2-nn`. Its own limits stay: never invent security contacts, keys, results or compliance claims; preserve this
+  development repository, its history and a backup; no microVM image until its GPL obligations are met; never
+  weaken a test. The order: audit → **P9-05** → the decisions → WSL and VS Code validation → the scheduled task →
+  release → a final report (`HANDOFF.md`, *The owner's commission of 2026-10-17*). Decisions are still written
+  `D-V2-nn — … — TAKEN (head chef, <date>, under the owner's delegation)`. Never delete a `.md` file still holds —
+  move it to `docs/archive/`. (The cloud period's delegation of 2026-09-28 ended with it; `docs/CLOUD_ROUTINE.md`
+  keeps its terms.)
 
 ## Run and check everything with the Survey and `doctor` (owner, 2026-09-28)
 

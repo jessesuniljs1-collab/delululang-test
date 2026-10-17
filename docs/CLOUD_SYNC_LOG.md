@@ -3261,3 +3261,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   restores the source and rebuilds.
 - Open / next: RW 7.19 — on Windows these two tests leave their temp directory behind (cause not confirmed). Otherwise the
   2026-10-17 entry's list stands.
+
+### 2026-10-17 — the owner's commission recorded: every outstanding decision delegated, the release included (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `2f1992d`
+- Commits: (1) this entry's commit — the first authored with the no-reply address
+- Files and folders: A `docs/design/DeluluLang_Autonomous_Development_Prompt.md` (the owner's file, as he wrote it),
+  `docs/assistant-memory/owner-release-delegation-2026-10-17.md`, `docs/assistant-memory/owner-pronouns.md`; M
+  `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/assistant-memory/MEMORY.md`,
+  `docs/assistant-memory/final-public-repo-gate.md`, `docs/assistant-memory/delulu-licensing-intent.md`,
+  `docs/assistant-memory/mutant-run-per-target.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **What** (`V2_LOG.md`, this date; `HANDOFF.md`'s opening section): the owner's commission — take DeluluLang public;
+  every outstanding decision, the owner-reserved ones included, is the head chef's; the release itself once objective
+  criteria pass; its own limits kept. The licence was already decided (Apache-2.0, D27, 2026-07-24) — the head chef had
+  told the owner otherwise earlier that day, and corrects it here. The repository now commits as
+  `227307678+jessesuniljs1-collab@users.noreply.github.com`.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: `2f1992d`'s push run `39028791103` — success on every job (`miri-slow` and `heavy-gates` skipped on a push).
+- Redo on the laptop: nothing.
+- For the laptop's memory: done on the laptop — `owner-release-delegation-2026-10-17.md` and `owner-pronouns.md` added;
+  `final-public-repo-gate.md` (superseded), `delulu-licensing-intent.md`, `mutant-run-per-target.md` and the index
+  updated; the same here, sanitized as this folder's README asks.
+- Open / next: the prompt's order — the audit, P9-05 step (a), then the decisions (each a `D-V2-nn`).

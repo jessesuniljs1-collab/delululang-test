@@ -8,6 +8,12 @@ metadata:
   modified: 2026-09-17T02:03:04.557Z
 ---
 
+**SUPERSEDED 2026-10-17 by [[owner-release-delegation-2026-10-17]]:** Jesse delegated all four decisions below, and
+the public release itself, to the head chef ("You do not need to wait for my review or approval"). The gate is now
+the head chef's to pass with evidence, recorded as D-V2-nn decisions. What still holds from the prompt: preserve the
+testing repo's history and a recoverable backup (never rewrite it), inspect remotes first, never invent contacts or
+keys. The list below stays as the checklist of what the public repo must leave behind.
+
 **Jesse's instruction, 2026-09-17:** *"before moving to real public repo later remind to make changes
 to these and remind me that time before even push happens. Do not push to new real repo (future)
 unless my decision on these are given."* He also asked for **no change to the items yet**.

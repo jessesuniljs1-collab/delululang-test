@@ -5,8 +5,9 @@
 **Roles.** The owner calls the main Claude Code session the **head chef** and its sub-agents
 **sous-chefs**. The head chef writes each agent's brief, verifies every result against the binary, and
 commits. The owner's standing delegation (2026-09-17 → now): *"whatever is good for DeluluLang, the
-production-ready language of the future"* — keep working phase by phase without asking, except on the
-owner-reserved items in AGENTS.md and at stop points he sets.
+production-ready language of the future"* — keep working phase by phase without asking, except at stop
+points he sets. **Since 2026-10-17 the owner-reserved items are delegated too**, up to and including the public release
+(AGENTS.md, *The owner's delegation*; his commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md`).
 
 ## Memory: there is no auto memory in a cloud session
 

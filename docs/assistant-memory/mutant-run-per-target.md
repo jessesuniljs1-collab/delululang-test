@@ -17,3 +17,9 @@ the same shape as [[delulu-proof-campaign]]'s rule.
 
 **How to apply:** in a mutant loop, invoke `--lib FILTER` and `--test T` as separate cargo commands,
 and treat an all-survive result as a harness bug to check before believing it.
+
+**And rebuild after restoring** (2026-10-17): `git checkout` of the mutated files leaves
+`target/debug/delulu` as the MUTANT build; the next run of a fixed test went red on the mutant's own
+leak and looked like a regression until `grep -c <mutant marker> target/debug/delulu.exe` found it.
+Put a unique marker string in every mutant, rebuild after restoring, and grep the binary for the marker
+before trusting any later run. (`delulu` is a bin crate: its unit tests run with `--bin delulu`, not `--lib`.)

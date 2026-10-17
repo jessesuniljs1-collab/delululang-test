@@ -13,6 +13,42 @@ the assistant's memory — which now also travels file by file in
 **Repository:** on the owner's laptop at `D:\nelan\DeluluLang` — a Rust workspace of 13 crates — and on GitHub, **publicly since
 2026-09-17**: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 
+## The owner's commission of 2026-10-17 — take DeluluLang public
+
+**What.** On 2026-10-17, back at the laptop, the owner put
+[`docs/design/DeluluLang_Autonomous_Development_Prompt.md`](docs/design/DeluluLang_Autonomous_Development_Prompt.md)
+in front of the head chef — *"let's cook this for entire world to use. update memory and other files"*. In its own
+words: *"You do not need to wait for my review or approval for any outstanding project decisions … Make the decisions
+yourself, execute the appropriate work, test it, and document the outcomes"*, and *"Once the required release criteria
+have actually passed, you are authorized to proceed with the appropriate public release without waiting for another
+approval from me."*
+
+**What it changes.** Every decision this file reserved to the owner is now the head chef's, taken on evidence and
+recorded as a `D-V2-nn`: the final public repository and its history (§1.1's four items), `SECURITY.md`'s
+`PENDING-PUBLIC` controls, the entrenched files (each edit also in `ENTRENCHED_CHANGE_RECORD.md`), rustfmt and a code of
+conduct, the root-issuance default (RW 4.5), RW 4.19 (D23), P8-04's option (c), a review of D-V2-49, D-V2-59 and
+D-V2-110 to D-V2-137, licence compliance and the microVM image (D-NE-27, PS-C-05), the scheduled task, versioning and
+the release (D-NE-7). Where §1 or §11.1 below reserves one of these to the owner, read this section first.
+
+**What it keeps** — the prompt's own limits, which outrank its autonomy: never invent security contact details, keys,
+verification results or compliance claims; preserve the development repository (`delululang-test`), its history and a
+recoverable backup — never destroy it to make a clean public one, so §1's never-rewrite-pushed-history rule stands for
+it; inspect remotes before any git operation; never distribute a microVM image until its GPL obligations are met;
+release only on objective readiness, never because CI is green; record honest blockers; never weaken a test to pass.
+
+**The licence is not open.** The owner decided it on 2026-07-24 — Apache-2.0, `NOTICE`, `TRADEMARK.md` (ruling D27,
+§11.1). On 2026-10-17 the head chef wrongly told him it was undecided, and the prompt took that over. What is open is a
+binary distribution's compliance (third-party notices) and the GPL microVM image.
+
+**The order** (the prompt's §1–§7): audit the state → **P9-05** → the decisions → the WSL microVM images, the WSL suite
+and the VS Code end-to-end test → the scheduled task → the release → an evidence-based final report. Progress:
+`docs/DELULULANG_V2/V2_LOG.md` (entries from 2026-10-17), `V2_PHASE_STATUS.md` (row 17, the release program) and
+`docs/CLOUD_SYNC_LOG.md`.
+
+**Commit identity.** From 2026-10-17 this repository commits as
+`227307678+jessesuniljs1-collab@users.noreply.github.com` (a repository-local `git config user.email`; account id
+227307678, read with `gh api user`), so no new commit carries the owner's personal address.
+
 ## Where things stand (2026-09-28)
 
 - **DeluluLang V2 is executing** — the active source of truth is `docs/DELULULANG_V2/` (start at
@@ -281,8 +317,8 @@ none of its crates a dependency — bind every run.
 | Rule | Why |
 | --- | --- |
 | **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). **In a cloud session (§0), `git push` reaches only the session's own branch: push there, open a pull request into `master`, and the owner merges.** | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
-| **The final public repository is gated on the owner's decisions — remind him first, then wait.** Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
-| **Never auto-decide the licence.** | Owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
+| **The final public repository is gated on the owner's decisions — remind him first, then wait.** **Since 2026-10-17 these decisions are delegated to the head chef** (the owner's commission, at the top of this file): resolve each §1.1 item with a recorded `D-V2-nn`, then act. Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
+| **Never auto-decide the licence.** | **Delegated 2026-10-17** (the commission at the top of this file): a change is now the head chef's, as a recorded decision that serves the owner's intent of 2026-07-24 (§11.1). Before that: owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
 | **Never claim execution that did not happen.** | "Prepared" and "green" are different words and this project keeps them different. See §8. |
@@ -531,6 +567,10 @@ wins, and you should update the memory to match.
 
 ### 11.1 Standing owner instructions — the ones that never expire
 
+- **The owner's commission of 2026-10-17 delegates every outstanding decision, the public release included**
+  (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`; its terms and limits are at the top of this file).
+  Where a bullet below reserves something to the owner, read it through that commission. The owner's pronouns are
+  he/his (stated 2026-10-17).
 - **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
   which held from the first commit and is why CI never ran before that date. The remote is for

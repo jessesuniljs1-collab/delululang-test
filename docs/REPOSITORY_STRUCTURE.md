@@ -576,6 +576,7 @@ See §4 for how to cite a bare `D<n>`.
 | `AI_NATIVE_DESIGN.md` | Why the language is shaped for machine consumers as much as human ones. |
 | `DeluluLang_PROMPT.md` | The original brief the project was built from. Historical. |
 | `DeluluLang_Fable_5.1_Master_Prompt.md`, `DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md` | The owner's two commissions of 2026-09-17 (the Next Evolution reassessment; the sandbox and VM isolation pass), kept verbatim where the owner placed them — the first with one banned word redacted in place. Their outcomes are `docs/archive/v1/NEXT_EVOLUTION_2026/`. |
+| `DeluluLang_Autonomous_Development_Prompt.md` | **The owner's commission of 2026-10-17, in force:** take DeluluLang to a public release — P9-05, every outstanding decision (the owner-reserved ones included), the machine-level validation, the scheduled task and the release, within its own limits. `HANDOFF.md`'s opening section carries its terms. |
 
 `LANGUAGE_SPECIFICATION.md`, the superseded pre-implementation draft, is no longer in this folder:
 phase V2-0 moved it to `docs/archive/v1/design/`.

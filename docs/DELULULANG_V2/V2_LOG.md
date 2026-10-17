@@ -5947,3 +5947,36 @@ word. The daemon runs with its working directory in the state directory (`broker
 the test removes it — not confirmed. CI's runners are discarded.
 
 **Also read:** `b4fb0a9`'s push run `39026595221` — success on every job (`miri-slow` and `heavy-gates` skipped on a push).
+
+## 2026-10-17 — the owner's commission: take DeluluLang public; every outstanding decision delegated
+
+**What.** The owner put `docs/design/DeluluLang_Autonomous_Development_Prompt.md` (his, 148 lines, committed here as he
+wrote it) in front of the head chef: *"my 32 michelin star head chef claude, let's cook this for entire world to use.
+update memory and other files"*. It delegates every outstanding decision — the owner-reserved ones included — and the
+public release once objective criteria have passed; it keeps its own limits (never invent contacts, keys, results or
+compliance claims; preserve this development repository and a backup; no microVM image until its GPL obligations are
+met). The terms: `HANDOFF.md`, *The owner's commission of 2026-10-17*. Its order: audit → P9-05 → the decisions → WSL
+and VS Code validation → the scheduled task → the release → a final report.
+
+**A correction first.** Asked earlier the same day what needed his decision, the head chef listed "the licence — still
+undecided". That was wrong: the owner chose Apache-2.0 on 2026-07-24 (ruling D27 — `LICENSE`, `NOTICE`,
+`TRADEMARK.md`, `GOVERNANCE.md`, `license = "Apache-2.0"` on every crate); the rule "owner-reserved" covered a *change*,
+and the answer read it as "undecided". The prompt's licence section was written from that answer. What is open is a
+binary distribution's compliance (third-party notices) and the GPL microVM image.
+
+**Recorded** in this commit: the prompt, with its row in `REPOSITORY_STRUCTURE.md` §5.3; `HANDOFF.md` (a section at the
+top, which §1's two rows and §11.1 now point to); `AGENTS.md` (the hard rules and the delegation); `CLAUDE.md`;
+`V2_PHASE_STATUS.md` (row 17, the release program); `docs/assistant-memory/` (two new files — the commission, and the
+owner's pronouns, he/his, which he stated the same day — and three updated); `docs/CLOUD_SYNC_LOG.md`. The laptop's
+memory has the same.
+
+**Commit identity.** From this commit the repository commits as `227307678+jessesuniljs1-collab@users.noreply.github.com`
+(a repository-local `git config user.email`; account id 227307678 read with `gh api user`) — the prompt's *"Use an
+appropriate verified GitHub noreply address for future public commits"*. Of the history before it, 459 commits name
+the owner's personal address, 189 the no-reply one and 105 Anthropic's; that history is preserved, as the prompt
+requires of the development repository.
+
+**Also read:** `2f1992d`'s push run `39028791103` — success on every job, `test (macos-latest)` among them (`miri-slow`
+and `heavy-gates` skipped on a push).
+
+**Next:** the prompt's §1 — the audit of the repository's state — then P9-05 step (a).

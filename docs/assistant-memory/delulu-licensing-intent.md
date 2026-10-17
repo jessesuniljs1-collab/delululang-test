@@ -17,6 +17,9 @@ The record below is kept because the *reasoning* stays useful; the decision itse
 
 Standing rule still in force for ANY FUTURE licensing change: never auto-decide it — licensing,
 philosophy, governance, public spec, and backward compatibility always need explicit owner approval.
+**2026-10-17: Jesse delegated licensing too** ([[owner-release-delegation-2026-10-17]]: "Choose and implement the most
+appropriate licence rather than asking me to pick one") — the intent below is the evidence any such choice must serve;
+Apache-2.0 (D27) matches it (sticky §4(d) attribution, patent grant), MIT/dual would weaken the attribution Jesse asked for.
 
 ## Jesse's stated intent (2026-07-24), preserved
 
