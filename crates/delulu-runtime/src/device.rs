@@ -286,13 +286,7 @@ impl DeviceBroker {
             // the lease is born beaten and its TTL begins counting from this instant on either.
             leases.insert(
                 env.device.clone(),
-                LeaseState {
-                    env: env.clone(),
-                    granted_at_us: 0,
-                    last_beat_us: 0,
-                    last_command_us: None,
-                    revoked: None,
-                },
+                LeaseState { env: env.clone(), granted_at_us: 0, last_beat_us: 0, last_command_us: None, revoked: None },
             );
         }
         let seed = match &profile {
@@ -694,10 +688,7 @@ fn revoke_lease(
     journal.push(DeviceEvent {
         op: "failstate.engaged".to_string(),
         device: device.to_string(),
-        detail: format!(
-            "{device}: `{}` fail-state engaged {engage_us} µs after detection",
-            fail.name()
-        ),
+        detail: format!("{device}: `{}` fail-state engaged {engage_us} µs after detection", fail.name()),
         at_ms,
     });
 }
@@ -708,10 +699,7 @@ fn revoke_lease(
 pub fn envelope_check(env: &ActuatorEnvelope, fields: &[(String, f64)]) -> Result<(), String> {
     for (fname, x) in fields {
         let Some((_, lo, hi)) = env.dims.iter().find(|(d, _, _)| d == fname) else {
-            return Err(format!(
-                "dimension `{fname}` is not bounded by the envelope for `{}`",
-                env.device
-            ));
+            return Err(format!("dimension `{fname}` is not bounded by the envelope for `{}`", env.device));
         };
         if !(*x >= *lo && *x <= *hi) {
             return Err(format!("`{fname}` = {x} is outside the envelope [{lo}, {hi}]"));
@@ -878,9 +866,7 @@ impl Approval {
             let c = rest.find(':').ok_or_else(|| format!("approval field `{k}` has no value"))?;
             let after = &rest[c + 1..];
             let a = after.find('"').ok_or_else(|| format!("approval field `{k}` is not a string"))?;
-            let b = after[a + 1..]
-                .find('"')
-                .ok_or_else(|| format!("approval field `{k}` is unterminated"))?;
+            let b = after[a + 1..].find('"').ok_or_else(|| format!("approval field `{k}` is unterminated"))?;
             Ok(after[a + 1..a + 1 + b].to_string())
         };
         let hash = field("approved_hash")?;
@@ -1003,11 +989,7 @@ mod tests {
         assert_eq!(b.read("arm0/elbow#angle_deg"), Some(0.0), "safe-park drove the joint home");
         // And the audit line says what happened, in the operator's words, without inventing an
         // overdue heartbeat that never occurred.
-        let line = b
-            .events()
-            .into_iter()
-            .find(|e| e.op == "lease.revoked")
-            .expect("the revocation is journaled");
+        let line = b.events().into_iter().find(|e| e.op == "lease.revoked").expect("the revocation is journaled");
         assert!(line.detail.contains("operator-revoke"), "{}", line.detail);
         assert!(line.detail.contains("audit seq 9"), "the reason travels: {}", line.detail);
         assert!(!line.detail.contains("overdue"), "an e-stop is not a missed beat: {}", line.detail);
@@ -1025,9 +1007,7 @@ mod tests {
             Profile::Sim { seed: 7 },
             std::slice::from_ref(&e),
             &[],
-            Some(Box::new(|_device| {
-                AuthorityState::Dead("the broker did not answer for `g_arm`: pipe closed".to_string())
-            })),
+            Some(Box::new(|_device| AuthorityState::Dead("the broker did not answer for `g_arm`: pipe closed".to_string()))),
         );
         let deadline = Instant::now() + Duration::from_secs(5);
         while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
@@ -1128,10 +1108,7 @@ mod tests {
         while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(2));
         }
-        assert_eq!(
-            b.revocation("arm0/elbow").expect("the aimed device stops").cause,
-            RevokeCause::Operator
-        );
+        assert_eq!(b.revocation("arm0/elbow").expect("the aimed device stops").cause, RevokeCause::Operator);
         assert!(
             b.revocation("arm1/gripper").is_none(),
             "a sibling device must not be collateral: e-stopping one robot is not e-stopping the fleet"
@@ -1154,10 +1131,7 @@ mod tests {
             Some(Box::new(|_device| AuthorityState::Live)),
         );
         std::thread::sleep(Duration::from_millis(400));
-        assert!(
-            b.revocation("arm0/elbow").is_none(),
-            "a live grant, repeatedly confirmed, must not lose the device"
-        );
+        assert!(b.revocation("arm0/elbow").is_none(), "a live grant, repeatedly confirmed, must not lose the device");
         b.shutdown();
     }
 
@@ -1308,10 +1282,7 @@ mod tests {
     #[test]
     fn a_mirror_of_a_device_the_simulator_does_not_have_reads_nothing() {
         let e = env("arm0/elbow", 10_000, 60_000);
-        let sensors = vec![
-            "arm9/ghost#angle_deg".to_string(),
-            "arm0/elbow#torque_nm".to_string(),
-        ];
+        let sensors = vec!["arm9/ghost#angle_deg".to_string(), "arm0/elbow#torque_nm".to_string()];
         let b = DeviceBroker::new(Profile::Sim { seed: 5 }, std::slice::from_ref(&e), &sensors);
         assert_eq!(b.read("arm9/ghost#angle_deg"), None, "no such simulated device");
         assert_eq!(
@@ -1336,11 +1307,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(b.revocation("arm0/elbow").is_some(), "the lease must have died");
-        assert_eq!(
-            b.read("arm0/elbow#angle_deg"),
-            Some(0.0),
-            "safe-park is a movement, not a label"
-        );
+        assert_eq!(b.read("arm0/elbow#angle_deg"), Some(0.0), "safe-park is a movement, not a label");
         b.shutdown();
     }
 

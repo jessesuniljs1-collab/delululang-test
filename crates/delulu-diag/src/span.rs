@@ -17,11 +17,7 @@ impl Span {
 
     /// The smallest span covering both `self` and `other` (same file assumed).
     pub fn to(self, other: Span) -> Span {
-        Span {
-            file: self.file,
-            start: self.start.min(other.start),
-            end: self.end.max(other.end),
-        }
+        Span { file: self.file, start: self.start.min(other.start), end: self.end.max(other.end) }
     }
 
     /// A zero-width span at this span's start (used for pure insertions).

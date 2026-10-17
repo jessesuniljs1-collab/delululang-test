@@ -33,11 +33,8 @@ fn run_program(src: &str, grants: &[&str]) -> Output {
         args.push("--grant".to_string());
         args.push((*g).to_string());
     }
-    let out = std::process::Command::new(delulu_bin())
-        .args(&args)
-        .current_dir(repo_root())
-        .output()
-        .expect("run the delulu binary");
+    let out =
+        std::process::Command::new(delulu_bin()).args(&args).current_dir(repo_root()).output().expect("run the delulu binary");
     let _ = std::fs::remove_dir_all(&dir);
     out
 }

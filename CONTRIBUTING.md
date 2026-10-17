@@ -142,7 +142,8 @@ cargo test --workspace                              # everything, incl. the core
 cargo run -p delulu-conform -- --coverage           # the coverage law
 cargo run -p delulu-conform -- --check-reference    # the reference must not be stale
 cargo run -p delulu -- fmt --check examples         # one style, no options
-cargo clippy --workspace --all-targets              # no new warnings
+cargo clippy --workspace --all-targets -- -D warnings  # no warnings at all
+cargo fmt --all                                     # the Rust is rustfmt's (rustfmt.toml); CI checks it
 ```
 
 **Or run one command instead:**

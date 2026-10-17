@@ -223,8 +223,7 @@ fn resolve_module(idx: &PathIndex, from: &str, name: &str) -> Option<String> {
     let dir = from.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
     let stem = file_stem(from);
     // A module file that is not a crate/dir root owns a subdirectory named after itself.
-    let base =
-        if stem == "lib" || stem == "main" || stem == "mod" { dir.to_string() } else { format!("{dir}/{stem}") };
+    let base = if stem == "lib" || stem == "main" || stem == "mod" { dir.to_string() } else { format!("{dir}/{stem}") };
 
     [format!("{base}/{name}.rs"), format!("{base}/{name}/mod.rs")].into_iter().find(|c| idx.exists(c))
 }
@@ -315,8 +314,7 @@ fn public_item(t: &str) -> Option<String> {
     let rest = rest.trim_start();
     for kw in ["fn ", "struct ", "enum ", "trait ", "const ", "type ", "static ", "macro_rules! "] {
         if let Some(after) = rest.strip_prefix(kw) {
-            let name: String =
-                after.trim_start().chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            let name: String = after.trim_start().chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
             if name.is_empty() {
                 return None;
             }
@@ -327,8 +325,7 @@ fn public_item(t: &str) -> Option<String> {
     // `pub async fn` / `pub unsafe fn` / `pub extern "C" fn`
     if let Some(i) = rest.find("fn ") {
         if rest[..i].split_whitespace().all(|w| matches!(w, "async" | "unsafe" | "extern" | "\"C\"")) {
-            let name: String =
-                rest[i + 3..].trim_start().chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            let name: String = rest[i + 3..].trim_start().chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
             if !name.is_empty() {
                 return Some(format!("fn {name}"));
             }
@@ -344,8 +341,8 @@ pub fn cited_paths(comment: &str) -> Vec<String> {
         let mut from = 0;
         while let Some(i) = comment[from..].find(root) {
             let start = from + i;
-            let before_ok = start == 0
-                || !comment[..start].ends_with(|c: char| c.is_alphanumeric() || c == '/' || c == '.' || c == '-');
+            let before_ok =
+                start == 0 || !comment[..start].ends_with(|c: char| c.is_alphanumeric() || c == '/' || c == '.' || c == '-');
             let raw: String = comment[start..]
                 .chars()
                 .take_while(|c| !c.is_whitespace() && !matches!(c, '`' | ',' | ')' | '(' | '"' | ';' | '\'' | '<' | '>'))
@@ -458,12 +455,12 @@ mod tests {
         let mut b = Builder::default();
         extract(&idx, &src, &mut b);
 
-        let notes: Vec<&str> =
-            b.findings.iter().filter(|f| f.severity == Severity::Note).map(|f| f.class.as_str()).collect();
+        let notes: Vec<&str> = b.findings.iter().filter(|f| f.severity == Severity::Note).map(|f| f.class.as_str()).collect();
         assert_eq!(notes, vec!["comment-cites-archived-path"]);
         assert!(
-            b.edges.iter().any(|e| e.kind == EdgeKind::References
-                && e.to == "doc:docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md"),
+            b.edges
+                .iter()
+                .any(|e| e.kind == EdgeKind::References && e.to == "doc:docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md"),
             "the reference points at the archived file: {:?}",
             b.edges.iter().map(|e| e.to.as_str()).collect::<Vec<_>>()
         );

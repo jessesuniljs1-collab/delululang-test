@@ -26,11 +26,7 @@ use crate::tree::GrantId;
 pub enum Denial {
     /// DL0802 — the requested authority is not `⊑` the holder's grant. Carries the exact,
     /// never-widening `intersection` (`requested ⊓ holder`) as the repair target.
-    Attenuation {
-        holder: GrantId,
-        requested: Box<Authority>,
-        intersection: Box<Authority>,
-    },
+    Attenuation { holder: GrantId, requested: Box<Authority>, intersection: Box<Authority> },
     /// DL1402 — the lease's TTL has passed (checked against the pluggable clock, ruling 3).
     Expired { node: GrantId, ttl_millis: i64, now_millis: i64 },
     /// DL1403 — the lease was revoked. Carries the revoking op's audit seq, so an agent's JSON
@@ -66,11 +62,7 @@ pub enum Denial {
     CertUntrusted { detail: String },
     /// DL1416 — a hop in a certificate chain is not `⊑` its parent. Carries the never-widening
     /// intersection, exactly as DL0802 does for a local delegation; `index` is the failing hop.
-    CertAttenuation {
-        index: usize,
-        requested: Box<Authority>,
-        intersection: Box<Authority>,
-    },
+    CertAttenuation { index: usize, requested: Box<Authority>, intersection: Box<Authority> },
     /// DL1417 — a certificate is outside its `not_before`/`not_after` window. Checked per hop: a
     /// chain is only as live as its shortest link.
     CertExpired { not_before: i64, not_after: i64, now_millis: i64 },

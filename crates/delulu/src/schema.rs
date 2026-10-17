@@ -32,7 +32,10 @@ pub const NAMES: &[(&str, &str)] = &[
     ("toolchain", "what `delulu toolchain --json` carries under `toolchain`"),
     ("edit", "what `delulu edit --json` carries under `edit`: the checked edit, or why it was refused"),
     ("chain", "what `delulu atlas chain --json` carries under `chain`: program to execution boundary, in ten links"),
-    ("openshell", "what `delulu sandbox policy --format openshell --json` carries under `openshell`: the policy, and where each grant went"),
+    (
+        "openshell",
+        "what `delulu sandbox policy --format openshell --json` carries under `openshell`: the policy, and where each grant went",
+    ),
 ];
 
 fn t(ty: &str) -> Value {
@@ -148,13 +151,7 @@ fn chain_payload() -> Value {
                 &[],
             ),
         ),
-        (
-            "authority",
-            obj(
-                &[("effects", strs()), ("required_grants", strs()), ("pure", t("boolean")), ("secrets", strs())],
-                &[],
-            ),
-        ),
+        ("authority", obj(&[("effects", strs()), ("required_grants", strs()), ("pure", t("boolean")), ("secrets", strs())], &[])),
         ("effects", arr(obj(&[("effect", t("string")), ("performed_by", strs())], &[]))),
         ("capabilities", arr(capability)),
         (
@@ -218,10 +215,7 @@ fn chain_payload() -> Value {
                     ("custody", t("string")),
                     (
                         "foreign",
-                        obj(
-                            &[("isolation", t("string")), ("calls", arr(r("foreign_call"))), ("boundaries", strs())],
-                            &[],
-                        ),
+                        obj(&[("isolation", t("string")), ("calls", arr(r("foreign_call"))), ("boundaries", strs())], &[]),
                     ),
                 ],
                 &[],
@@ -235,11 +229,18 @@ fn chain_payload() -> Value {
 fn defs() -> Value {
     let str_list = arr(t("string"));
     let used_at = arr(obj(&[("file", t("string")), ("line", t("integer"))], &[]));
-    let node_kinds =
-        ["package", "module", "function", "type", "effect", "resource", "foreign", "grant"];
+    let node_kinds = ["package", "module", "function", "type", "effect", "resource", "foreign", "grant"];
     let edge_kinds = [
-        "contains", "depends_on", "imports", "calls", "uses_type", "performs", "requires", "foreign",
-        "declassifies", "delegates",
+        "contains",
+        "depends_on",
+        "imports",
+        "calls",
+        "uses_type",
+        "performs",
+        "requires",
+        "foreign",
+        "declassifies",
+        "delegates",
     ];
     let limits = obj(&[("memory_bytes", t("integer")), ("cpu_seconds", t("integer"))], &[]);
     json!({
@@ -620,10 +621,7 @@ fn toolchain_payload() -> Value {
             ("effects", str_list.clone()),
             (
                 "grants",
-                arr(obj(
-                    &[("key", t("string")), ("form", t("string")), ("example", t("string")), ("grants", t("string"))],
-                    &[],
-                )),
+                arr(obj(&[("key", t("string")), ("form", t("string")), ("example", t("string")), ("grants", t("string"))], &[])),
             ),
             (
                 "primitives",
@@ -668,13 +666,7 @@ fn toolchain_payload() -> Value {
             ),
             (
                 "diagnostics",
-                obj(
-                    &[
-                        ("codes", arr(obj(&[("code", t("string")), ("title", t("string"))], &[]))),
-                        ("topics", str_list),
-                    ],
-                    &[],
-                ),
+                obj(&[("codes", arr(obj(&[("code", t("string")), ("title", t("string"))], &[]))), ("topics", str_list)], &[]),
             ),
         ],
         &[],
@@ -701,10 +693,7 @@ fn openshell_payload() -> Value {
     let policy = obj(
         &[
             ("version", json!({ "const": 1 })),
-            (
-                "filesystem_policy",
-                obj(&[("include_workdir", t("boolean")), ("read_only", strs()), ("read_write", strs())], &[]),
-            ),
+            ("filesystem_policy", obj(&[("include_workdir", t("boolean")), ("read_only", strs()), ("read_write", strs())], &[])),
             ("landlock", obj(&[("compatibility", en(&["hard_requirement"]))], &[])),
             ("process", obj(&[("run_as_user", s()), ("run_as_group", s())], &[])),
             ("network_policies", json!({ "type": "object", "additionalProperties": network_rule })),
@@ -763,13 +752,7 @@ pub fn document(name: &str) -> Option<Value> {
                     ("devices", arr(r("device_event"))),
                     // A sandboxed run's custody: the broker's node when one decided every use.
                     ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
-                    (
-                        "audit",
-                        obj(
-                            &[("required_grants", arr(t("string"))), ("unsupported_surface", nullable("string"))],
-                            &[],
-                        ),
-                    ),
+                    ("audit", obj(&[("required_grants", arr(t("string"))), ("unsupported_surface", nullable("string"))], &[])),
                 ],
             )
         }
@@ -901,9 +884,7 @@ fn check(doc: &Value, schema: &Value, v: &Value, at: &str, errors: &mut Vec<Stri
             match props.and_then(|p| p.get(k)) {
                 Some(s) => check(doc, s, x, &path, errors),
                 None => match schema.get("additionalProperties") {
-                    Some(Value::Bool(false)) => {
-                        errors.push(format!("{path}: a field the schema does not describe"))
-                    }
+                    Some(Value::Bool(false)) => errors.push(format!("{path}: a field the schema does not describe")),
                     Some(extra @ Value::Object(_)) => check(doc, extra, x, &path, errors),
                     _ => {}
                 },

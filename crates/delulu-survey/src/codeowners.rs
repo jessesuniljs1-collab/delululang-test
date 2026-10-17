@@ -118,20 +118,13 @@ pub fn extract(files: &[ScannedFile], b: &mut Builder) {
         let ids: Vec<String> = b
             .nodes
             .values()
-            .filter(|n| {
-                n.path.as_deref().is_some_and(|p| covers(pattern, p))
-                    || dir_id.as_deref().is_some_and(|d| d == n.id)
-            })
+            .filter(|n| n.path.as_deref().is_some_and(|p| covers(pattern, p)) || dir_id.as_deref().is_some_and(|d| d == n.id))
             .map(|n| n.id.clone())
             .collect();
         for id in ids {
             if let Some(n) = b.nodes.get_mut(&id) {
-                n.entrenched = Some(Entrenchment {
-                    owner: owner.clone(),
-                    pattern: pattern.to_string(),
-                    file: f.rel.clone(),
-                    line: lineno,
-                });
+                n.entrenched =
+                    Some(Entrenchment { owner: owner.clone(), pattern: pattern.to_string(), file: f.rel.clone(), line: lineno });
                 matched += 1;
             }
         }

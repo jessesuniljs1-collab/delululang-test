@@ -628,10 +628,7 @@ fn private_halves_here(pinned: &[String]) -> Vec<(String, PathBuf)> {
 
 fn mode_agreement(booted: &str, configured: &str) -> (Status, String) {
     if booted == configured {
-        return (
-            Status::Ok,
-            format!("the last broker start recorded `{booted}`, which matches the policy on disk"),
-        );
+        return (Status::Ok, format!("the last broker start recorded `{booted}`, which matches the policy on disk"));
     }
     (
         Status::Problem,
@@ -723,9 +720,7 @@ fn state_dir() -> Option<PathBuf> {
         return Some(PathBuf::from(d));
     }
     std::env::var_os("DELULU_HOME").map(PathBuf::from).or_else(|| {
-        std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(|h| PathBuf::from(h).join(".delulu"))
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".delulu"))
     })
 }
 
@@ -782,28 +777,25 @@ fn repository(r: &mut Report, root: &Path, check_only: bool) {
             "repository",
             "survey freshness",
             Status::Fixed,
-            format!(
-                "was behind the tree; regenerated {} — commit it with the change that caused it",
-                h.regenerated.join(", ")
-            ),
+            format!("was behind the tree; regenerated {} — commit it with the change that caused it", h.regenerated.join(", ")),
         );
     }
 
     for check in &h.integrity {
-        r.push(
-            "repository",
-            check.name,
-            if check.ok { Status::Ok } else { Status::Problem },
-            check.detail.clone(),
-        );
+        r.push("repository", check.name, if check.ok { Status::Ok } else { Status::Problem }, check.detail.clone());
     }
 
     let t = h.tally;
     r.regenerated = h.regenerated.clone();
     r.survey = Some((h.nodes, h.edges, [t.errors, t.warnings, t.notes]));
     // A discrepancy is a report, not a verdict: errors fail the run, the rest are for a reader.
-    let status =
-        if !t.is_healthy() { Status::Problem } else if t.warnings > 0 { Status::Note } else { Status::Ok };
+    let status = if !t.is_healthy() {
+        Status::Problem
+    } else if t.warnings > 0 {
+        Status::Note
+    } else {
+        Status::Ok
+    };
     r.push(
         "repository",
         "discrepancies",
@@ -844,12 +836,15 @@ fn envelope(r: &Report) -> String {
         if i > 0 {
             checks.push(',');
         }
-        checks.push_str(&serde_json::json!({
-            "section": c.section,
-            "name": c.name,
-            "status": c.status.word(),
-            "detail": c.detail,
-        }).to_string());
+        checks.push_str(
+            &serde_json::json!({
+                "section": c.section,
+                "name": c.name,
+                "status": c.status.word(),
+                "detail": c.detail,
+            })
+            .to_string(),
+        );
     }
 
     let mut root = serde_json::json!({

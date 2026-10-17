@@ -48,9 +48,7 @@ pub enum Op {
 impl Op {
     pub fn class(self) -> OpClass {
         match self {
-            Op::Declassify | Op::FsWrite | Op::Net | Op::ForeignBind | Op::PluginLoad | Op::Actuate => {
-                OpClass::Synchronous
-            }
+            Op::Declassify | Op::FsWrite | Op::Net | Op::ForeignBind | Op::PluginLoad | Op::Actuate => OpClass::Synchronous,
             Op::FsRead | Op::Clock | Op::Rand | Op::Console => OpClass::Epoch,
         }
     }
@@ -177,11 +175,7 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
     // 2. Effect present in the node's authority (defense in depth — the checker already bounds kind).
     if let Some(needed) = op.required_effect() {
         if !authority.effects.contains(&needed) {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "effects",
-                arg: needed.name().to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "effects", arg: needed.name().to_string() });
         }
     }
     // 3. Scope argument within the node's granted scope for this dimension.
@@ -209,11 +203,7 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
             Op::Clock | Op::Rand | Op::Console | Op::PluginLoad => true,
         };
         if !ok {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: op.scope_dimension(),
-                arg: arg.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: op.scope_dimension(), arg: arg.to_string() });
         }
     }
     Ok(())
@@ -375,15 +365,7 @@ impl Broker {
             payload["overrides_seq"] = serde_json::json!(s);
         }
         let seq = self.consume_seq();
-        self.record_op(
-            seq,
-            "use",
-            Some(node_id.as_str().to_string()),
-            Some(device.to_string()),
-            Some(payload),
-            "deny",
-            None,
-        );
+        self.record_op(seq, "use", Some(node_id.as_str().to_string()), Some(device.to_string()), Some(payload), "deny", None);
         Ok(seq)
     }
 
@@ -426,9 +408,8 @@ impl Broker {
             .map(|n| {
                 // Same inherited rule as the live path, so an epoch-class op cannot survive on a
                 // stale view of an ancestry that has since expired.
-                let eff = self
-                    .effective_state_inherited(&n.id, now)
-                    .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
+                let eff =
+                    self.effective_state_inherited(&n.id, now).unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
                 (n.id.clone(), SnapNode { eff, authority: n.authority.clone() })
             })
             .collect();
@@ -454,10 +435,7 @@ impl Snapshot {
     /// epoch-class ops against THIS reconstructed snapshot). It calls the exact same [`validate`]
     /// path the live broker uses, so the client duplicates no policy logic (playbook §1).
     pub fn from_entries(epoch: u64, entries: Vec<(GrantId, EffState, Authority)>) -> Snapshot {
-        let nodes = entries
-            .into_iter()
-            .map(|(id, eff, authority)| (id, SnapNode { eff, authority }))
-            .collect();
+        let nodes = entries.into_iter().map(|(id, eff, authority)| (id, SnapNode { eff, authority })).collect();
         Snapshot { epoch, nodes }
     }
 
@@ -561,10 +539,15 @@ mod tests {
         let mut b = broker_with_clock(Rc::new(ManualClock::new(1000)));
         let node = b.issue(
             holder(),
-            Authority::new(eff(&["Net"]), Scopes { net: names(&["api.example.com/v1/**", "*.cdn.org/assets/*"]), ..Default::default() }),
+            Authority::new(
+                eff(&["Net"]),
+                Scopes { net: names(&["api.example.com/v1/**", "*.cdn.org/assets/*"]), ..Default::default() },
+            ),
             None,
         );
-        for (host, allowed) in [("api.example.com", true), ("x.cdn.org", true), ("example.com", false), ("cdn.org", false), ("evil.com", false)] {
+        for (host, allowed) in
+            [("api.example.com", true), ("x.cdn.org", true), ("example.com", false), ("cdn.org", false), ("evil.com", false)]
+        {
             assert_eq!(b.check(&node, Op::Net, Some(host)).is_allow(), allowed, "{host}");
         }
     }
@@ -576,10 +559,7 @@ mod tests {
         let sink = crate::audit::MemSink::new();
         let mut b = broker_with_clock(Rc::new(ManualClock::new(1000))).with_sink(Box::new(sink.clone()));
         let ghost = GrantId::from_trusted("g_nobody".to_string());
-        assert!(matches!(
-            b.record_device_refusal(&ghost, "arm0/elbow", "out", None),
-            Err(Denial::UnknownNode { .. })
-        ));
+        assert!(matches!(b.record_device_refusal(&ghost, "arm0/elbow", "out", None), Err(Denial::UnknownNode { .. })));
         assert!(sink.is_empty(), "nothing is recorded about a node that does not exist");
 
         let node = b.issue(holder(), Authority::new(eff(&["Actuate"]), Scopes::default()), None);
@@ -630,11 +610,8 @@ mod tests {
     fn actuate_on_a_device_the_node_was_never_granted_is_refused() {
         let clock = Rc::new(ManualClock::new(1000));
         let mut b = broker_with_clock(clock);
-        let node = b.issue(
-            holder(),
-            device_auth(&["arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"]),
-            None,
-        );
+        let node =
+            b.issue(holder(), device_auth(&["arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"]), None);
         assert!(b.check(&node, Op::Actuate, Some("arm0/elbow")).is_allow(), "the granted device commands");
 
         let d = b.check(&node, Op::Actuate, Some("arm0/wrist"));
@@ -669,19 +646,14 @@ mod tests {
     fn a_child_cannot_widen_the_envelope_it_was_delegated() {
         let clock = Rc::new(ManualClock::new(1000));
         let mut b = broker_with_clock(clock);
-        let parent = b.issue(
-            holder(),
-            device_auth(&["sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]),
-            None,
-        );
+        let parent =
+            b.issue(holder(), device_auth(&["sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]), None);
         // The autonomy-grant shape from the satellite profile: a child may narrow the box…
-        let narrower =
-            device_auth(&["sat0/wheels:slew_deg=-0.2..0.2,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
+        let narrower = device_auth(&["sat0/wheels:slew_deg=-0.2..0.2,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
         assert!(b.attenuate(&parent, narrower, holder(), None).is_ok(), "narrowing the box attenuates");
 
         // …and may not widen it, however interesting circumstances become.
-        let wider =
-            device_auth(&["sat0/wheels:slew_deg=-40..40,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
+        let wider = device_auth(&["sat0/wheels:slew_deg=-40..40,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
         let err = b.attenuate(&parent, wider, holder(), None).unwrap_err();
         assert_eq!(err.code(), "DL0802");
         let inter = err.intersection().expect("DL0802 carries the intersection");
@@ -719,11 +691,8 @@ mod tests {
     fn epoch_op_passes_on_stale_snapshot_then_fails_after_refresh() {
         let clock = Rc::new(ManualClock::new(1000));
         let mut b = broker_with_clock(clock);
-        let root = b.issue(
-            holder(),
-            Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
-            None,
-        );
+        let root =
+            b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), None);
         // Snapshot taken BEFORE revocation: the child is Live in this frozen view.
         let stale = b.snapshot();
         assert!(stale.check(&root, Op::FsRead, Some("./data/x")).is_allow());
@@ -768,7 +737,10 @@ mod tests {
         let mut b = broker_with_clock(clock);
         let root = b.issue(
             holder(),
-            Authority::new(eff(&["Write", "Net"]), Scopes { fs_write: names(&["./out"]), net: names(&["a.com"]), ..Default::default() }),
+            Authority::new(
+                eff(&["Write", "Net"]),
+                Scopes { fs_write: names(&["./out"]), net: names(&["a.com"]), ..Default::default() },
+            ),
             None,
         );
         // A write outside the granted subtree.
@@ -785,7 +757,8 @@ mod tests {
     fn epoch_ops_do_not_consume_audit_seqs() {
         let clock = Rc::new(ManualClock::new(1000));
         let mut b = broker_with_clock(clock);
-        let root = b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), None);
+        let root =
+            b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), None);
         let before = b.next_audit_seq();
         // Epoch-class op against live state: allowed, but no record/seq consumed.
         let d = b.check(&root, Op::FsRead, Some("./data/x"));

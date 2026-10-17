@@ -407,10 +407,13 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             // `C:\Users\runneradmin\…`, one directory, and a lexical prefix test refused the
             // program DL0703. `contains_on_disk` resolves both sides, which is the containment the
             // lexical test was only ever an approximation of.
-            match root.fs_read.iter().find(|g| contains_on_disk(g, &want))
-            {
+            match root.fs_read.iter().find(|g| contains_on_disk(g, &want)) {
                 Some(_) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false })),
-                None => Err(Fault::at("DL0703", format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"),
+                    span,
+                )),
             }
         }
         "fs_write" => {
@@ -420,10 +423,13 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // On disk only, as `fs_read` above.
-            match root.fs_write.iter().find(|g| contains_on_disk(g, &want))
-            {
+            match root.fs_write.iter().find(|g| contains_on_disk(g, &want)) {
                 Some(_) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true })),
-                None => Err(Fault::at("DL0703", format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"),
+                    span,
+                )),
             }
         }
         "http" => {
@@ -485,7 +491,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             match root.secrets.get(&name) {
                 // P9-04 (c): the secret carries where its grant lets it be sent.
                 Some(v) => Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience(&name))))),
-                None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"),
+                    span,
+                )),
             }
         }
         "foreign_load" => {
@@ -505,10 +515,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 return Ok(Value::err(Value::variant("NotGranted", vec![])));
             }
             match crate::python::ensure_available() {
-                Ok(()) => Ok(Value::ok(cap(
-                    ResourceKind::Python,
-                    CapScope::Python { allowlist: root.python_allowlist.clone() },
-                ))),
+                Ok(()) => Ok(Value::ok(cap(ResourceKind::Python, CapScope::Python { allowlist: root.python_allowlist.clone() }))),
                 Err(reason) => Ok(Value::err(Value::variant("Unavailable", vec![Value::str(reason)]))),
             }
         }
@@ -536,7 +543,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let d = str_arg(args, 0, span)?;
             match root.computes.iter().find(|e| e.device == d) {
                 Some(e) => Ok(cap(ResourceKind::Compute, CapScope::Compute(e.clone()))),
-                None => Err(Fault::at("DL0703", format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                    span,
+                )),
             }
         }
         // P2 (D-V2-27): `root.plugin_host()` mints the capability that gates loading. Before P2 this
@@ -548,10 +559,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             } else {
                 Ok(cap(
                     ResourceKind::PluginHost,
-                    CapScope::PluginHost {
-                        roots: root.plugins.clone(),
-                        allow_hashes: root.plugins_allow.clone(),
-                    },
+                    CapScope::PluginHost { roots: root.plugins.clone(), allow_hashes: root.plugins_allow.clone() },
                 ))
             }
         }
@@ -725,9 +733,9 @@ pub fn call_cap_method_pinned(
             Ok(answer_value(crate::egress::get_for_program_with_secret(&url, &headers, carried.as_ref(), allow, special)))
         }
         (ResourceKind::Clock, "now_ms") => {
-            let ms = FIXED_CLOCK.with(|c| c.get()).unwrap_or_else(|| {
-                SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-            });
+            let ms = FIXED_CLOCK
+                .with(|c| c.get())
+                .unwrap_or_else(|| SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0));
             Ok(Value::Int(ms))
         }
         (ResourceKind::Rand, "int") => {
@@ -816,7 +824,12 @@ enum SortKey {
     Str(String),
 }
 
-pub fn call_list_method(list: &Rc<std::cell::RefCell<Vec<Value>>>, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+pub fn call_list_method(
+    list: &Rc<std::cell::RefCell<Vec<Value>>>,
+    method: &str,
+    args: &[Value],
+    span: Span,
+) -> Result<Value, Fault> {
     match method {
         "len" => Ok(Value::Int(list.borrow().len() as i64)),
         "get" => {
@@ -930,11 +943,7 @@ pub fn call_map_method(
     let key = |args: &[Value]| -> Result<MapKey, Fault> {
         let v = args.first().ok_or_else(|| Fault::at("DL0907", format!("Map.{method} expects a key"), span))?;
         MapKey::of(v).ok_or_else(|| {
-            Fault::at(
-                "DL0907",
-                format!("`{}` cannot be a Map key — only Str, Int and Bool can (checker bug)", v.display()),
-                span,
-            )
+            Fault::at("DL0907", format!("`{}` cannot be a Map key — only Str, Int and Bool can (checker bug)", v.display()), span)
         })
     };
     match method {
@@ -958,9 +967,7 @@ pub fn call_map_method(
         }),
         // `keys` and `values` iterate the SAME map in the SAME order, so a caller may zip them. That
         // is a promise the reference makes, and `keys_and_values_are_in_the_same_order` pins it.
-        "keys" => Ok(Value::List(Rc::new(std::cell::RefCell::new(
-            map.borrow().keys().map(MapKey::to_value).collect(),
-        )))),
+        "keys" => Ok(Value::List(Rc::new(std::cell::RefCell::new(map.borrow().keys().map(MapKey::to_value).collect())))),
         "values" => Ok(Value::List(Rc::new(std::cell::RefCell::new(map.borrow().values().cloned().collect())))),
         _ => Err(Fault::at("DL0907", format!("unknown Map method `{method}`"), span)),
     }
@@ -1005,9 +1012,7 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
         // into a program whose source is not allowed to write it.
         "parse_float" => Ok(match args.first() {
             Some(Value::Str(s)) => match delulu_syntax::num::float_from_text(s.trim()) {
-                delulu_syntax::num::FloatText::Value(f) => {
-                    Value::variant("Some", vec![Value::Float(f)])
-                }
+                delulu_syntax::num::FloatText::Value(f) => Value::variant("Some", vec![Value::Float(f)]),
                 _ => Value::variant("None", vec![]),
             },
             _ => Value::variant("None", vec![]),
@@ -1037,11 +1042,9 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
         },
         "assert_eq" => match (args.first(), args.get(1)) {
             (Some(a), Some(b)) if a.eq(b) => Ok(Value::Unit),
-            (Some(a), Some(b)) => Err(Fault::at(
-                "DL1707",
-                format!("assertion failed: `{}` != `{}`", a.display(), b.display()),
-                span,
-            )),
+            (Some(a), Some(b)) => {
+                Err(Fault::at("DL1707", format!("assertion failed: `{}` != `{}`", a.display(), b.display()), span))
+            }
             _ => Err(Fault::at("DL0907", "assert_eq expects two values", span)),
         },
         _ => return None,
@@ -1455,10 +1458,7 @@ mod containment_tests {
         let grant = base.join("grant");
         let fresh = grant.join("brand_new.txt");
         assert!(!fresh.exists());
-        assert!(
-            contains_on_disk(&grant, &fresh),
-            "a write must still be able to create its own file inside the grant"
-        );
+        assert!(contains_on_disk(&grant, &fresh), "a write must still be able to create its own file inside the grant");
         let deeper = grant.join("sub").join("deeper").join("out.txt");
         assert!(
             contains_on_disk(&grant, &deeper),
@@ -1482,7 +1482,11 @@ mod containment_tests {
         let real_key = fs::canonicalize(grant.join("secret").join("key.txt")).unwrap();
         assert_eq!(pin_fs(&grant, "secret/key.txt").as_deref(), Some(real_key.as_path()));
         assert_eq!(pin_fs(&grant, "../outside/o.txt"), None, "a lexical escape is not pinned");
-        assert_eq!(pin_fs(&grant, "secret/new.txt"), Some(real_key.parent().unwrap().join("new.txt")), "a file a write will create");
+        assert_eq!(
+            pin_fs(&grant, "secret/new.txt"),
+            Some(real_key.parent().unwrap().join("new.txt")),
+            "a file a write will create"
+        );
         #[cfg(unix)]
         let linked = std::os::unix::fs::symlink(grant.join("secret"), grant.join("alias")).is_ok()
             && std::os::unix::fs::symlink(base.join("outside"), grant.join("out")).is_ok();
@@ -1496,7 +1500,11 @@ mod containment_tests {
                 .is_ok_and(|o| o.status.success())
         });
         if linked {
-            assert_eq!(pin_fs(&grant, "alias/key.txt").as_deref(), Some(real_key.as_path()), "the alias is pinned where it lands");
+            assert_eq!(
+                pin_fs(&grant, "alias/key.txt").as_deref(),
+                Some(real_key.as_path()),
+                "the alias is pinned where it lands"
+            );
             assert_eq!(pin_fs(&grant, "out/o.txt"), None, "a link out of the grant is not pinned");
         }
         let spelled = disk_spelling(&real_key);
@@ -1554,10 +1562,36 @@ mod hostile_path_tests {
     #[test]
     fn windows_spellings_that_mean_something_else_are_refused() {
         for p in [
-            "CON", "con", "NUL", "nul.txt", "PRN", "AUX.log", "COM1", "com9.dat", "LPT1", "lpt3.txt",
-            "COM\u{b9}", "LPT\u{b2}.x", "CONIN$", "CONOUT$", "a/b/CON", r"a\NUL\b", "CON .txt",
-            "trail.", "space ", "dir./x", "x.txt:stream", "x.txt::$DATA", "C:foo", "c:", r"D:x\y",
-            r"\\?\C:\x", "//?/C:/x", r"\\.\PhysicalDrive0", "//./pipe/x", r"\\server\share\x",
+            "CON",
+            "con",
+            "NUL",
+            "nul.txt",
+            "PRN",
+            "AUX.log",
+            "COM1",
+            "com9.dat",
+            "LPT1",
+            "lpt3.txt",
+            "COM\u{b9}",
+            "LPT\u{b2}.x",
+            "CONIN$",
+            "CONOUT$",
+            "a/b/CON",
+            r"a\NUL\b",
+            "CON .txt",
+            "trail.",
+            "space ",
+            "dir./x",
+            "x.txt:stream",
+            "x.txt::$DATA",
+            "C:foo",
+            "c:",
+            r"D:x\y",
+            r"\\?\C:\x",
+            "//?/C:/x",
+            r"\\.\PhysicalDrive0",
+            "//./pipe/x",
+            r"\\server\share\x",
         ] {
             assert!(windows_hostile_path(p, false).is_some(), "`{p}` must be refused");
         }
@@ -1566,8 +1600,20 @@ mod hostile_path_tests {
     #[test]
     fn ordinary_names_still_pass() {
         for p in [
-            "a.txt", "sub/file.txt", "./x", "a/../b", "console.log", "nullable", "com10", "LPT0x",
-            "conx", r"C:\abs\file.txt", "D:/abs/file", "..", "a.b.c", "COMPANY.txt",
+            "a.txt",
+            "sub/file.txt",
+            "./x",
+            "a/../b",
+            "console.log",
+            "nullable",
+            "com10",
+            "LPT0x",
+            "conx",
+            r"C:\abs\file.txt",
+            "D:/abs/file",
+            "..",
+            "a.b.c",
+            "COMPANY.txt",
         ] {
             assert!(windows_hostile_path(p, false).is_none(), "`{p}` must pass: {:?}", windows_hostile_path(p, false));
         }

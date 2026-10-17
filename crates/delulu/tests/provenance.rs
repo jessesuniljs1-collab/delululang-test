@@ -83,7 +83,11 @@ fn pinned_pure_dependency_gaining_net_fails_dl1001_before_running() {
     );
     write(&ws, "app/src/main.delulu", "module app\nfn main(root: Root) { }\n");
     // The dependency has quietly gained a network-calling function.
-    write(&ws, "compress/delulu.toml", "[package]\nname=\"compress\"\nversion=\"0.2.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\"]\n");
+    write(
+        &ws,
+        "compress/delulu.toml",
+        "[package]\nname=\"compress\"\nversion=\"0.2.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\"]\n",
+    );
     write(&ws, "compress/src/lib.delulu", &format!("module compress\npub fn crush(data: Str) -> Str {{ data }}\n{NET_FN}"));
 
     let o = delulu(&["build", ws.join("app").to_str().unwrap(), "--json"]);
@@ -173,7 +177,13 @@ fn stale_authority_hash_under_matching_content_is_dl1002() {
     let corrupted: String = std::fs::read_to_string(&lock_path)
         .unwrap()
         .lines()
-        .map(|l| if l.trim_start().starts_with("authority_hash") { "authority_hash = \"blake3:0000\"".to_string() } else { l.to_string() })
+        .map(|l| {
+            if l.trim_start().starts_with("authority_hash") {
+                "authority_hash = \"blake3:0000\"".to_string()
+            } else {
+                l.to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     std::fs::write(&lock_path, corrupted).unwrap();
@@ -203,14 +213,22 @@ fn widening_ws(name: &str) -> PathBuf {
         "[package]\nname=\"app\"\nversion=\"0.1.0\"\nkind=\"bin\"\n[authority]\neffects=[]\n[dependencies]\nnetdep = { path = \"../netdep\", authority = { effects = [\"Net\", \"Write\"] } }\n",
     );
     write(&ws, "app/src/main.delulu", "module app\nfn main(root: Root) { }\n");
-    write(&ws, "netdep/delulu.toml", "[package]\nname=\"netdep\"\nversion=\"1.0.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\", \"Write\"]\n");
+    write(
+        &ws,
+        "netdep/delulu.toml",
+        "[package]\nname=\"netdep\"\nversion=\"1.0.0\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\", \"Write\"]\n",
+    );
     write(&ws, "netdep/src/lib.delulu", &format!("module netdep\n{NET_FN}"));
     ws
 }
 
 /// Widen `netdep`'s computed authority (add a Write fn) and set its version.
 fn widen_netdep(ws: &Path, version: &str) {
-    write(ws, "netdep/delulu.toml", &format!("[package]\nname=\"netdep\"\nversion=\"{version}\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\", \"Write\"]\n"));
+    write(
+        ws,
+        "netdep/delulu.toml",
+        &format!("[package]\nname=\"netdep\"\nversion=\"{version}\"\nkind=\"lib\"\n[authority]\neffects=[\"Net\", \"Write\"]\n"),
+    );
     write(ws, "netdep/src/lib.delulu", &format!("module netdep\n{NET_FN}{WRITE_FN}"));
 }
 
@@ -309,11 +327,7 @@ fn git_dependency_without_pinned_rev_is_dl1007() {
 #[test]
 fn authority_reports_a_package_that_has_dependencies() {
     let root = scratch("authority-with-deps");
-    write(
-        &root,
-        "lib/delulu.toml",
-        "[package]\nname=\"lib\"\nversion=\"0.1.0\"\n[authority]\neffects=[]\n",
-    );
+    write(&root, "lib/delulu.toml", "[package]\nname=\"lib\"\nversion=\"0.1.0\"\n[authority]\neffects=[]\n");
     write(&root, "lib/src/main.delulu", "module lib\n\npub fn fetchish(x: Int) -> Int {\n    x + 7\n}\n");
     write(
         &root,
@@ -342,10 +356,7 @@ fn authority_reports_a_package_that_has_dependencies() {
     );
     let text = stdout(&o);
     assert!(text.contains("lib"), "the dependency's module belongs in the report:\n{text}");
-    assert!(
-        text.contains("fetchish"),
-        "and so does what it contributes — a reviewer is judging the whole graph:\n{text}"
-    );
+    assert!(text.contains("fetchish"), "and so does what it contributes — a reviewer is judging the whole graph:\n{text}");
 
     // The machine surface carries the same answer (no discrimination between surfaces).
     let j = delulu(&["authority", &app.display().to_string(), "--json"]);
@@ -382,11 +393,7 @@ fn authority_still_answers_for_a_directory_with_no_manifest() {
         "module broken\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n",
     );
     let bad = delulu(&["authority", &root.join("broken").display().to_string()]);
-    assert!(
-        !bad.status.success(),
-        "an empty manifest is present-and-unreadable, which C50 refuses:\n{}",
-        stdout(&bad)
-    );
+    assert!(!bad.status.success(), "an empty manifest is present-and-unreadable, which C50 refuses:\n{}", stdout(&bad));
 }
 
 // ----- a lockfile must not be able to lie about what a dependency does (C52) --------------------
@@ -494,7 +501,11 @@ fn a_locked_build_refuses_a_stale_duplicated_or_unreadable_lockfile() {
     // 3. A recorded version that is not the package's version means the lock is stale, and
     //    `--locked` exists precisely to refuse a resolution that was never pinned.
     restore();
-    tamper_lock(&app, "name           = \"mathlib\"\nversion        = \"0.1.0\"", "name           = \"mathlib\"\nversion        = \"9.9.9\"");
+    tamper_lock(
+        &app,
+        "name           = \"mathlib\"\nversion        = \"0.1.0\"",
+        "name           = \"mathlib\"\nversion        = \"9.9.9\"",
+    );
     let o = delulu(&["build", app.to_str().unwrap(), "--locked"]);
     assert_ne!(o.status.code(), Some(0), "a stale locked version must not build: {}", stdout(&o));
 }

@@ -39,10 +39,7 @@ use super::cli::*;
 ///
 /// The third value is the flattened text itself: a sandboxed run hands exactly that to its guest, so
 /// the program a guest runs is the program an ordinary run would have run (P5, D-V2-42).
-pub(crate) fn load_package_for_run(
-    dir: &str,
-    opts: &Opts,
-) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
+pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
     // A directory that is not a package at all. Before D61 this said "is a directory — try `delulu
     // build`", which was right then and is wrong now: `run` DOES take a directory. What it must never
     // do is leak the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a directory` on
@@ -98,8 +95,7 @@ pub(crate) fn load_package_for_run(
     // by node id then reads one module's entry for another module's expression. The first attempt did
     // that and produced a nonsense reference-capability complaint about a correct program.
     let module_count = ws.modules.len();
-    let texts: Vec<&str> =
-        ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
+    let texts: Vec<&str> = ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
     let flat_src = delulu_check::flatten_sources(&entry_name, &texts);
 
     // The flattened program gets its own file in the map, so a diagnostic from it can still be
@@ -113,13 +109,7 @@ pub(crate) fn load_package_for_run(
         // The workspace accepted this program, so these are not the author's errors: flattening
         // collided. Say which name, and say that the program is CORRECT — the runner is what is
         // limited. Anything less would send someone hunting a bug in code the checker just approved.
-        let dup: Vec<String> = flat
-            .diagnostics
-            .iter()
-            .filter(|d| d.is_error())
-            .map(|d| d.message.clone())
-            .take(3)
-            .collect();
+        let dup: Vec<String> = flat.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.message.clone()).take(3).collect();
         eprintln!(
             "error: `{dir}` checks clean as a {module_count}-module program, but two of its modules \
              declare the same top-level name, and running it flattens them into one scope"
@@ -644,10 +634,7 @@ pub(crate) fn redeem_lease(
         )
     };
     let peer = format!("pid:{}", std::process::id());
-    let node = match crate::brokerd::request(
-        &state_dir,
-        crate::broker_ipc::ReqBody::Redeem { token: token.to_string(), peer },
-    ) {
+    let node = match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::Redeem { token: token.to_string(), peer }) {
         Ok(crate::broker_ipc::Response::Redeemed { node }) => node,
         Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return Err(fail(&code, message)),
         Ok(other) => return Err(fail("DL1401", format!("unexpected redeem response: {other:?}"))),
@@ -655,10 +642,7 @@ pub(crate) fn redeem_lease(
     };
     // Learn this run's OWN node's authority (its slice — never a parent's or a sibling's;
     // invariant 25 is upheld by what the ops expose, and this asks only about itself).
-    let info = match crate::brokerd::request(
-        &state_dir,
-        crate::broker_ipc::ReqBody::Inspect { node: node.clone() },
-    ) {
+    let info = match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::Inspect { node: node.clone() }) {
         Ok(crate::broker_ipc::Response::Inspected { node }) => node,
         Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return Err(fail(&code, message)),
         Ok(other) => return Err(fail("DL1401", format!("unexpected inspect response: {other:?}"))),
@@ -833,7 +817,8 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     if let Some(path) = &opts.report_out {
         let refused = RUN_STATE.with(|s| s.get().1);
         if !refused {
-            let text = serde_json::to_string_pretty(&run_report(&opts, code, &egress, &budget)).expect("the run report serializes");
+            let text =
+                serde_json::to_string_pretty(&run_report(&opts, code, &egress, &budget)).expect("the run report serializes");
             if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
                 eprintln!("error: cannot write the run report to `{path}`: {e}");
                 return if code == 0 { 2 } else { code };
@@ -956,7 +941,6 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         Err(code) => return code,
     };
 
-
     // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
     if file.ends_with(".dwx") {
         return run_dwx_artifact(&file, &opts);
@@ -1036,14 +1020,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // untouched programs are law). A hint may not change whether a program runs (invariant 45),
     // so this is a warning by construction, never a refusal.
     if module_requests_native(&checked.module) && !grants.exec_native {
-        let mut w = Diagnostic::warning(
-            "DL1906",
-            "`@jit` hint ignored: native-code emission was not granted (`--grant exec.native`)",
-        );
+        let mut w =
+            Diagnostic::warning("DL1906", "`@jit` hint ignored: native-code emission was not granted (`--grant exec.native`)");
         if manifest.as_ref().is_some_and(|m| !m.exec_native) {
-            w.message.push_str(
-                " — and the manifest does not declare the request (`[authority] exec.native = true`)",
-            );
+            w.message.push_str(" — and the manifest does not declare the request (`[authority] exec.native = true`)");
         }
         if !opts.json {
             let wmap = SourceMap::new();
@@ -1077,10 +1057,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 return Err(2);
             }
             if !opts.json {
-                eprintln!(
-                    "lease: held to the delegated budget, mem={} bytes, cpu={} s",
-                    held.memory_bytes, held.cpu_seconds
-                );
+                eprintln!("lease: held to the delegated budget, mem={} bytes, cpu={} s", held.memory_bytes, held.cpu_seconds);
             }
             Ok(())
         };
@@ -1181,7 +1158,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
             Ok(w) => w,
             Err(e) => {
-                let d = Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
+                let d =
+                    Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 return 1;
             }
@@ -1200,9 +1178,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         // Stage 5 phase 5f: the WASM host calls the SAME custody seam as the interpreter. A broker
         // denial inside a host callback is recorded in HostState and surfaced after the call —
         // never an Err across the wasm frame (playbook trap 5).
-        let wasm_custody: Option<delulu_wasm::CustodyHandle> = daemon_custody
-            .take()
-            .map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>)));
+        let wasm_custody: Option<delulu_wasm::CustodyHandle> =
+            daemon_custody.take().map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>)));
         let cfg = delulu_wasm::HostConfig {
             console: grants.console,
             clock: grants.clock,
@@ -1220,24 +1197,17 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         // Stage 7 phase 7h: a module with actors runs under the WASM engine's COOPERATIVE
         // single-threaded scheduler (spec §6.5 — identical semantics, no parallelism,
         // labeled in output). A module without actors takes the byte-identical v0.6 path.
-        let wasm_has_actors =
-            checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+        let wasm_has_actors = checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
         note_program_started();
         let run_result = if wasm_has_actors {
             eprintln!("engine: wasm (actors: cooperative single-threaded — semantics identical, parallelism absent)");
             let table = delulu_wasm::actor_table(&checked.module);
             delulu_wasm::run_main_actors(&wasm, &cfg, &table).map(|(output, report)| {
                 if report.dead_actors > 0 || report.dropped_sends > 0 {
-                    eprintln!(
-                        "actors: {} died; {} message(s) to dead actors dropped",
-                        report.dead_actors, report.dropped_sends
-                    );
+                    eprintln!("actors: {} died; {} message(s) to dead actors dropped", report.dead_actors, report.dropped_sends);
                 }
                 if opts.on_quiesce_report {
-                    eprintln!(
-                        "quiesce: {} surviving actor(s), {} turn(s) run",
-                        report.surviving_actors, report.total_turns
-                    );
+                    eprintln!("quiesce: {} surviving actor(s), {} turn(s) run", report.surviving_actors, report.total_turns);
                 }
                 output
             })
@@ -1276,8 +1246,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         // The trace ⊆ row law (spec §6.2, invariant 12): a violation is compiler-bug class (DL1101).
         if opts.assert_trace {
             if let Some(s) = &sink {
-                let allowed: std::collections::BTreeSet<String> =
-                    main_row.iter().map(|e| e.name().to_string()).collect();
+                let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
                 let violations = delulu_runtime::assert_trace(&allowed, &s.records());
                 if !violations.is_empty() {
                     let diags: Vec<Diagnostic> = violations
@@ -1358,9 +1327,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             Err(code) => return code,
         };
     // ACTOR-CUSTODY-1: an actor's worker performs its effects under the same custody as `main`.
-    let mut actor_custody: Option<
-        std::sync::Arc<dyn Fn() -> Box<dyn delulu_runtime::Custody> + Send + Sync>,
-    > = None;
+    let mut actor_custody: Option<std::sync::Arc<dyn Fn() -> Box<dyn delulu_runtime::Custody> + Send + Sync>> = None;
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
         let clients = c.same_node_clients();
@@ -1410,10 +1377,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 match delulu_runtime::compute::load_kernel(name, path, &env.formats) {
                     Ok(a) => arts.push(a),
                     Err(refusal) => {
-                        let d = Diagnostic::error(
-                            refusal.code(),
-                            format!("`{}`: {}", env.device, refusal.message()),
-                        );
+                        let d = Diagnostic::error(refusal.code(), format!("`{}`: {}", env.device, refusal.message()));
                         print_diagnostics("run", &[d], &map, None, opts.json);
                         return 1;
                     }
@@ -1427,19 +1391,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     };
     // Stage 7 (phase 7g): a module with actors gets the actor system. Gated on declaration —
     // a program with no actors takes the identical path to v0.6, byte for byte.
-    let has_actors =
-        checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+    let has_actors = checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
     let mut actor_trace: Option<std::sync::Arc<std::sync::Mutex<Vec<delulu_runtime::TraceRecord>>>> = None;
     let actor_system = if has_actors {
-        let threads = opts
-            .actors_threads
-            .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
+        let threads = opts.actors_threads.unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
         if sink.is_some() {
             actor_trace = Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())));
         }
-        let debug_set = opts
-            .debug_rcaps
-            .then(|| std::sync::Arc::new(checked.result.iso_moves.clone()));
+        let debug_set = opts.debug_rcaps.then(|| std::sync::Arc::new(checked.result.iso_moves.clone()));
         // Stage 10 (10c): the manifest's `[actors]` defaults. A decl-level `(mailbox = N)`
         // wins per actor; anything but the two known overflow values is warned about rather
         // than silently meaning `block` (the skip branch, made audible).
@@ -1514,10 +1473,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         }
         actor_abort = report.aborted;
         if report.dead_actors > 0 || report.dropped_sends > 0 {
-            eprintln!(
-                "actors: {} died; {} message(s) to dead actors dropped",
-                report.dead_actors, report.dropped_sends
-            );
+            eprintln!("actors: {} died; {} message(s) to dead actors dropped", report.dead_actors, report.dropped_sends);
         }
         // Stage 10 (10c): overflow drops are never silent — counted and reported whenever they
         // happened, and itemized per actor under `--trace-memory` (spec §3 B3, mailbox half).
@@ -1527,10 +1483,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         if opts.trace_memory {
             eprintln!("trace-memory: {} bounded mailbox(es)", report.mailbox.len());
             for m in &report.mailbox {
-                eprintln!(
-                    "  {}: bound {}, peak depth {}, overflow drops {}",
-                    m.actor, m.bound, m.peak, m.drops
-                );
+                eprintln!("  {}: bound {}, peak depth {}, overflow drops {}", m.actor, m.bound, m.peak, m.drops);
             }
             // 10d: collector accounting — cell COUNTS, deliberately not bytes (build-order D9:
             // a byte figure without a real size walk would be an invented number).
@@ -1540,10 +1493,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             );
         }
         if opts.on_quiesce_report {
-            eprintln!(
-                "quiesce: {} surviving actor(s), {} turn(s) run",
-                report.surviving_actors, report.total_turns
-            );
+            eprintln!("quiesce: {} surviving actor(s), {} turn(s) run", report.surviving_actors, report.total_turns);
         }
     }
     // RW 4.51: `main` and every actor are done, so nothing holds a plugin's callable any more — the
@@ -1640,8 +1590,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // and gets the dedicated exit code 3.
     if opts.assert_trace {
         if let Some(s) = &sink {
-            let allowed: std::collections::BTreeSet<String> =
-                main_row.iter().map(|e| e.name().to_string()).collect();
+            let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
             // Stage 7 (invariant 35 executable): actor-attributed records check against the
             // EXECUTING member's row AND the send site's row via the cause chain; main-line
             // records keep the original law byte-for-byte.
@@ -1660,7 +1609,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             if !violations.is_empty() {
                 let diags: Vec<Diagnostic> = violations
                     .iter()
-                    .map(|v| Diagnostic::error("DL1101", format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it")))
+                    .map(|v| {
+                        Diagnostic::error(
+                            "DL1101",
+                            format!(
+                                "effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it"
+                            ),
+                        )
+                    })
                     .collect();
                 print_diagnostics("run", &diags, &map, None, opts.json);
                 return 3;
@@ -1691,10 +1647,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
 /// decided BEFORE anything runs, for the same reason the isolation profile is: a hardware grant for
 /// an artifact nobody approved must never reach the point of moving something — `resolve_device_profile`
 /// is the DL1905 sign-off gate.
-pub(crate) fn device_terms(
-    file: &str,
-    opts: &Opts,
-) -> Result<(delulu_runtime::Profile, delulu_runtime::ClockMode), i32> {
+pub(crate) fn device_terms(file: &str, opts: &Opts) -> Result<(delulu_runtime::Profile, delulu_runtime::ClockMode), i32> {
     let device_profile = resolve_device_profile(file, opts)?;
     // A hardware run's own flags mean nothing without one, and a flag that is silently ignored reads exactly
     // like a flag that was applied: an operator who passed `--approved` or `--adapter-cmd` believes a sign-off
@@ -1936,11 +1889,7 @@ pub(crate) fn plan_devices(
 /// re-proved ([`load_dpx_driver`]) and checked against the driver interface before the transport is looked
 /// up — so a refused driver has started nothing and written nothing — and only then is the transport, the
 /// one part that touches the machine, resolved once (as a driver is) and started.
-fn verified_driver(
-    adapter: &str,
-    dpx: &str,
-    opts: &Opts,
-) -> Result<Box<dyn delulu_runtime::adapter::Adapter>, i32> {
+fn verified_driver(adapter: &str, dpx: &str, opts: &Opts) -> Result<Box<dyn delulu_runtime::adapter::Adapter>, i32> {
     // `verified_driver_flags` refused the run before anything if either were absent.
     let (Some(pin), Some(transport)) = (opts.adapter_signer.as_deref(), opts.adapter_transport.as_deref()) else {
         return Err(2);
@@ -1973,12 +1922,8 @@ fn verified_driver(
             return Err(1);
         }
     };
-    match delulu_runtime::verified_adapter::VerifiedAdapter::new(
-        adapter,
-        dir,
-        delulu_runtime::Limits::default(),
-        Box::new(line),
-    ) {
+    match delulu_runtime::verified_adapter::VerifiedAdapter::new(adapter, dir, delulu_runtime::Limits::default(), Box::new(line))
+    {
         Ok(a) => Ok(Box::new(a)),
         Err(r) => {
             let d = Diagnostic::error(r.code, r.message);

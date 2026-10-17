@@ -296,13 +296,7 @@ impl SandboxPolicy {
     /// from the guest's side both are "you may not"; telling them apart needs the code registry to say
     /// which codes are refusals, which is open work and is not pretended here. `denied_total` is
     /// larger than the list when a guest was refused more often than the bound keeps.
-    pub fn to_json_with(
-        self,
-        backend: &str,
-        guarantees: &[&str],
-        denied: &[String],
-        denied_total: u64,
-    ) -> serde_json::Value {
+    pub fn to_json_with(self, backend: &str, guarantees: &[&str], denied: &[String], denied_total: u64) -> serde_json::Value {
         let (posture, limitations) = Self::posture(guarantees);
         // "Fully enforced" means every question above is answered by something that was applied —
         // except identity separation where no launch applied it (everywhere but a Windows guest since
@@ -393,8 +387,18 @@ mod tests {
             SandboxPolicy::derive(0, Profile::Contained, None, Mode::Strict),
             SandboxPolicy::derive(1, Profile::Dev, None, Mode::Strict),
             SandboxPolicy::derive(1, Profile::Contained, None, Mode::Audit),
-            SandboxPolicy::derive(1, Profile::Contained, Some(Limits { memory_bytes: 1, cpu_seconds: 1, wall_seconds: None }), Mode::Strict),
-            SandboxPolicy::derive(1, Profile::Contained, Some(Limits { wall_seconds: Some(9), ..Limits::default() }), Mode::Strict),
+            SandboxPolicy::derive(
+                1,
+                Profile::Contained,
+                Some(Limits { memory_bytes: 1, cpu_seconds: 1, wall_seconds: None }),
+                Mode::Strict,
+            ),
+            SandboxPolicy::derive(
+                1,
+                Profile::Contained,
+                Some(Limits { wall_seconds: Some(9), ..Limits::default() }),
+                Mode::Strict,
+            ),
         ] {
             assert_ne!(a.hash(), other.hash(), "a different policy must hash differently: {other:?}");
         }

@@ -140,9 +140,7 @@ pub fn scan(advisories: &[Advisory], deps: &[(String, String)]) -> Vec<Hit> {
             }
         }
     }
-    hits.sort_by(|x, y| {
-        (&x.package, &x.version, &x.advisory_id).cmp(&(&y.package, &y.version, &y.advisory_id))
-    });
+    hits.sort_by(|x, y| (&x.package, &x.version, &x.advisory_id).cmp(&(&y.package, &y.version, &y.advisory_id)));
     hits
 }
 
@@ -202,10 +200,7 @@ mod tests {
 
     #[test]
     fn scan_is_stable_and_finds_every_match() {
-        let advisories = vec![
-            adv("DLSA-2", "b", &["2.0.0"], None),
-            adv("DLSA-1", "a", &["1.0.0"], Some("1.0.1")),
-        ];
+        let advisories = vec![adv("DLSA-2", "b", &["2.0.0"], None), adv("DLSA-1", "a", &["1.0.0"], Some("1.0.1"))];
         let deps = vec![
             ("a".to_string(), "1.0.0".to_string()),
             ("b".to_string(), "2.0.0".to_string()),

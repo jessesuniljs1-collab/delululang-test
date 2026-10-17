@@ -70,10 +70,7 @@ pub trait Custody {
     /// without them can only be made up.
     fn send_secret(&mut self, name: &str, origin: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
         let _ = (name, origin, span);
-        Err(CustodyDenial::new(
-            "DL0904",
-            "this custody holds no broker secrets, so it cannot send one (internal wiring error)",
-        ))
+        Err(CustodyDenial::new("DL0904", "this custody holds no broker secrets, so it cannot send one (internal wiring error)"))
     }
 
     /// Refresh the cached revocation-epoch snapshot (no-op for embedded). The daemon client refreshes
@@ -111,10 +108,7 @@ pub trait Custody {
     /// seq** — the number DL0801 carries when a retained plugin reference is later called.
     fn revoke_node(&mut self, target: &GrantId) -> Result<u64, CustodyDenial> {
         let _ = target;
-        Err(CustodyDenial::new(
-            "DL1401",
-            "this run has no grant tree — nothing to revoke (fail closed)",
-        ))
+        Err(CustodyDenial::new("DL1401", "this run has no grant tree — nothing to revoke (fail closed)"))
     }
 
     /// Is a node still live, and if not, which audit seq killed it? (R-6c.) **Fail-closed**: the
@@ -322,10 +316,7 @@ impl Custody for EmbeddedCustody {
     fn expose(&mut self, _name: &str, _span: Option<&str>) -> Result<String, CustodyDenial> {
         // Embedded secrets are local `SecretVal`s revealed in-process; the interpreter never routes
         // a local secret's `expose` through custody. Reaching here is a wiring bug, fail-closed.
-        Err(CustodyDenial::new(
-            "DL0904",
-            "embedded custody does not hold broker secrets (internal wiring error)",
-        ))
+        Err(CustodyDenial::new("DL0904", "embedded custody does not hold broker secrets (internal wiring error)"))
     }
 
     fn refresh_epoch(&mut self) {}

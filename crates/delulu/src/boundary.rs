@@ -115,7 +115,9 @@ impl<C: Read + Write> Opened<C> {
             unconfirmed(match e.kind() {
                 io::ErrorKind::UnexpectedEof => "it closed the channel first".to_string(),
                 _ if FrameTooSlow::is(&e) => format!("it {}", e.get_ref().map_or_else(String::new, |x| x.to_string())),
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => "it said nothing within the channel's deadline".to_string(),
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {
+                    "it said nothing within the channel's deadline".to_string()
+                }
                 _ => e.to_string(),
             })
         })?;
@@ -264,7 +266,11 @@ pub(crate) fn properties(
     let separate = row("identity") != "same OS user";
     let killed = guarantees.contains(&"killed with the host");
     let cases: [(&str, bool, String); 5] = [
-        ("filesystem_confinement", held("filesystem_writes") && held("filesystem_reads"), answer(&["filesystem_writes", "filesystem_reads"])),
+        (
+            "filesystem_confinement",
+            held("filesystem_writes") && held("filesystem_reads"),
+            answer(&["filesystem_writes", "filesystem_reads"]),
+        ),
         ("egress_confinement", held("network"), answer(&["network"])),
         (
             "privilege_floor",
@@ -421,7 +427,8 @@ mod tests {
             }
             let _ = rest(g);
         });
-        let mut host = HostChannel::new(LocalSink).with_generation(GEN).with_frame_deadline(std::time::Duration::from_millis(200));
+        let mut host =
+            HostChannel::new(LocalSink).with_generation(GEN).with_frame_deadline(std::time::Duration::from_millis(200));
         let said = open(conn, GEN).unwrap().confirm(&mut host, &NEED).err().expect("not confirmed").to_string();
         assert!(said.contains("did not send one whole frame within 200ms"), "{said}");
         t.join().unwrap();
@@ -495,7 +502,8 @@ mod tests {
             // performed if it were answered at all.
             let mut grants = delulu_runtime::broker::Grants::default();
             grants.add("console").unwrap();
-            let mut host = HostChannel::new(LocalSink).with_generation(GEN).with_root(std::rc::Rc::new(crate::cli::build_root(&grants)));
+            let mut host =
+                HostChannel::new(LocalSink).with_generation(GEN).with_root(std::rc::Rc::new(crate::cli::build_root(&grants)));
             let err = match open(conn, GEN).unwrap().confirm(&mut host, &NEED) {
                 Ok(_) => panic!("{name}: confirmed"),
                 Err(e) => e.to_string(),
@@ -523,7 +531,14 @@ mod tests {
         for (name, launch, guest_words, measured_by_host, confirmed, lacks) in [
             ("all three, filesystem and privilege absent", three, &["no sockets but the channel"][..], true, true, ""),
             ("no memory ceiling", no_memory, &["no sockets but the channel"][..], true, false, "resource_ceiling"),
-            ("nothing ends it with its host", unwatched, &["no sockets but the channel"][..], true, false, "host_loss_ends_guest"),
+            (
+                "nothing ends it with its host",
+                unwatched,
+                &["no sockets but the channel"][..],
+                true,
+                false,
+                "host_loss_ends_guest",
+            ),
             ("a socket of any kind", three, &["no TCP bind or connect"][..], true, false, "egress_confinement"),
             ("an external launcher's wall, unknown throughout", &[][..], &["no new programs"][..], false, true, ""),
         ] {
@@ -618,9 +633,18 @@ mod property_tests {
     fn each_platforms_words_answer_the_five_properties() {
         // Linux L1 with Landlock, as this VM's run reports it (no second identity here).
         let linux = [
-            "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
-            "no file writes", "reads only from the system paths", "no TCP bind or connect", "no new programs",
-            "no debugger", "no namespace or module tricks", "no sockets but the channel",
+            "memory ceiling",
+            "processor-time ceiling",
+            "no privilege escalation",
+            "no core dump",
+            "killed with the host",
+            "no file writes",
+            "reads only from the system paths",
+            "no TCP bind or connect",
+            "no new programs",
+            "no debugger",
+            "no namespace or module tricks",
+            "no sockets but the channel",
         ];
         let v = properties(&linux, true, None);
         assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
@@ -629,8 +653,13 @@ mod property_tests {
         // Linux on a kernel with no Landlock: its files are open, but its filter still refuses every new
         // socket (PS-E-03 H2), so its network is the channel alone.
         let old_kernel = [
-            "memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host",
-            "no new programs", "no sockets but the channel",
+            "memory ceiling",
+            "processor-time ceiling",
+            "no privilege escalation",
+            "no core dump",
+            "killed with the host",
+            "no new programs",
+            "no sockets but the channel",
         ];
         let v = properties(&old_kernel, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
@@ -640,8 +669,14 @@ mod property_tests {
         // writes but truncation" — and that is NOT writes denied: filesystem confinement is absent, and
         // `hostile-agent`, which requires it, refuses. H5 asked for "ABI >= 3" as a requirement; it already is.
         let before_abi3 = [
-            "no file writes but truncation", "reads only from the system paths", "no new programs", "no sockets but the channel",
-            "memory ceiling", "processor-time ceiling", "no privilege escalation", "killed with the host",
+            "no file writes but truncation",
+            "reads only from the system paths",
+            "no new programs",
+            "no sockets but the channel",
+            "memory ceiling",
+            "processor-time ceiling",
+            "no privilege escalation",
+            "killed with the host",
         ];
         let v = properties(&before_abi3, true, None);
         assert_eq!(state_of(&v, "filesystem_confinement"), "absent", "{v}");
@@ -660,8 +695,15 @@ mod property_tests {
         // (D-V2-60) a watcher outside the guest ends it with its host, claimed once the watcher is armed; a
         // run whose watcher did not arm says so.
         let macos = [
-            "deny by default", "no file writes", "no network but the channel", "no new programs", "no Mach services",
-            "no signals or process info beyond itself", "processor-time ceiling", "no core dump", "killed with the host",
+            "deny by default",
+            "no file writes",
+            "no network but the channel",
+            "no new programs",
+            "no Mach services",
+            "no signals or process info beyond itself",
+            "processor-time ceiling",
+            "no core dump",
+            "killed with the host",
             crate::jail::SAMPLED_MEMORY_CEILING,
         ];
         let v = properties(&macos, true, None);
@@ -680,7 +722,13 @@ mod property_tests {
         assert!(v["host_loss_ends_guest"]["why"].as_str().unwrap().contains("PS-E-02"), "{v}");
 
         // Windows L1: the Job Object and a per-run AppContainer — the identity is the privilege floor.
-        let windows = ["one process only", "memory ceiling", "processor-time ceiling", "killed with the host", crate::identity::WINDOWS_GUARANTEE];
+        let windows = [
+            "one process only",
+            "memory ceiling",
+            "processor-time ceiling",
+            "killed with the host",
+            crate::identity::WINDOWS_GUARANTEE,
+        ];
         let v = properties(&windows, true, None);
         assert!(states(&v).iter().all(|(_, s)| s == "established"), "{v}");
         assert!(v["privilege_floor"]["by"].as_str().unwrap().contains("AppContainer"), "{v}");
@@ -723,7 +771,10 @@ mod property_tests {
         };
         let v = properties(&[], false, Some(&a));
         assert!(states(&v).iter().all(|(_, s)| s == "unknown"), "{v}");
-        assert_eq!(v["egress_confinement"]["attested"], serde_json::json!({ "attester": "ci-image", "by": "runsc --network=none; no NIC" }));
+        assert_eq!(
+            v["egress_confinement"]["attested"],
+            serde_json::json!({ "attester": "ci-image", "by": "runsc --network=none; no NIC" })
+        );
         assert_eq!(v["privilege_floor"]["attested"]["by"], "the attester did not say how", "{v}");
         for p in ["filesystem_confinement", "host_loss_ends_guest", "resource_ceiling"] {
             assert!(v[p].get("attested").is_none(), "{p}: {v}");

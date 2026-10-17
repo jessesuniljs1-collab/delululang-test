@@ -99,16 +99,7 @@ pub fn extract(idx: &PathIndex, f: &ScannedFile, b: &mut Builder) {
 /// simply broken if it dangles — from a path mentioned in passing, which may be an example or a
 /// historical reference. Both are reported; only the first is an error.
 #[allow(clippy::too_many_arguments)]
-fn resolve(
-    idx: &PathIndex,
-    b: &mut Builder,
-    self_id: &str,
-    rel: &str,
-    dir: &str,
-    lineno: u32,
-    target: &str,
-    explicit: bool,
-) {
+fn resolve(idx: &PathIndex, b: &mut Builder, self_id: &str, rel: &str, dir: &str, lineno: u32, target: &str, explicit: bool) {
     let clean = target.split('#').next().unwrap_or(target);
     if clean.is_empty() {
         return; // a pure `#anchor` is intra-document
@@ -472,8 +463,8 @@ mod tests {
     /// The campaign ledger allocates finding ids as table rows.
     #[test]
     fn a_ledger_row_allocates_a_finding() {
-        let (n, desc) = finding_definition("| C69 | The audit chain's single-writer assumption | medium | CLOSED |")
-            .expect("a ledger row");
+        let (n, desc) =
+            finding_definition("| C69 | The audit chain's single-writer assumption | medium | CLOSED |").expect("a ledger row");
         assert_eq!(n, 69);
         assert!(desc.starts_with("The audit chain"), "the description comes from the row: {desc}");
     }
@@ -514,16 +505,12 @@ mod tests {
     /// `PRODUCTION_READINESS_REVIEW.md` that the note's only trigger was `C99`.
     #[test]
     fn a_finding_recorded_as_a_heading_is_defined_like_a_ledger_row() {
-        let (n, title) =
-            finding_heading_definition("### C88 · The effect row could be escaped entirely — CLOSED (D78)")
-                .expect("a `### C<n> · title` heading defines a finding");
+        let (n, title) = finding_heading_definition("### C88 · The effect row could be escaped entirely — CLOSED (D78)")
+            .expect("a `### C<n> · title` heading defines a finding");
         assert_eq!(n, 88);
         assert!(title.starts_with("The effect row"), "the heading text becomes the summary: {title}");
         // The later passes use `##` as well as `###`.
-        assert_eq!(
-            finding_heading_definition("## C70 · A normative runtime rule was false").map(|(n, _)| n),
-            Some(70)
-        );
+        assert_eq!(finding_heading_definition("## C70 · A normative runtime rule was false").map(|(n, _)| n), Some(70));
         // And the table row still defines one, because both records are real.
         assert_eq!(finding_definition("| C69 | the audit chain | high | CLOSED |").map(|(n, _)| n), Some(69));
     }

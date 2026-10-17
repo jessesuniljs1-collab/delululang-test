@@ -163,9 +163,11 @@ fn parse(rest: &[String]) -> Result<Opts, String> {
             "--rule" => rules.push(Rule::parse(&value()?)?),
             "--poll" => {
                 let v = value()?;
-                let ms: u64 = v.parse().ok().filter(|m| (10..=60_000).contains(m)).ok_or_else(|| {
-                    format!("`--poll {v}`: milliseconds between reads, 10 to 60000")
-                })?;
+                let ms: u64 = v
+                    .parse()
+                    .ok()
+                    .filter(|m| (10..=60_000).contains(m))
+                    .ok_or_else(|| format!("`--poll {v}`: milliseconds between reads, 10 to 60000"))?;
                 poll = Duration::from_millis(ms);
             }
             "--for" => {
@@ -605,7 +607,10 @@ fn cmd_watch(rest: &[String]) -> i32 {
             match crate::brokerd::request(&state_dir, ReqBody::DisarmDeadman { node: o.node.clone(), key: key.clone() }) {
                 Ok(Response::Recorded { seq }) => {
                     disarmed_seq = Some(seq);
-                    eprintln!("monitor: dead-man disarmed (seq {seq}) — the runs under `{}` outlive this monitor", delulu_diag::terminal_line(&o.node));
+                    eprintln!(
+                        "monitor: dead-man disarmed (seq {seq}) — the runs under `{}` outlive this monitor",
+                        delulu_diag::terminal_line(&o.node)
+                    );
                 }
                 Ok(Response::Error { code, message, .. }) => {
                     refused_any = true;
@@ -654,7 +659,11 @@ fn deadman_fired_at(recs: &[delulu_broker::audit::AuditRecord], node: &str) -> O
             r.action == "revoke"
                 && r.decision == "allow"
                 && r.target.as_deref() == Some(node)
-                && r.authority.as_ref().and_then(|a| a.get("why")).and_then(|w| w.as_str()).is_some_and(|w| w.starts_with("dead-man:"))
+                && r.authority
+                    .as_ref()
+                    .and_then(|a| a.get("why"))
+                    .and_then(|w| w.as_str())
+                    .is_some_and(|w| w.starts_with("dead-man:"))
         })
         .map(|r| r.seq)
 }
@@ -667,10 +676,7 @@ fn dead_man_fired(node: &str, seq: u64, period: Duration) -> String {
 }
 
 fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -678,7 +684,12 @@ mod tests {
     use super::*;
 
     fn node(id: &str, parent: Option<&str>) -> crate::broker_ipc::NodeInfo {
-        crate::broker_ipc::NodeInfo { id: id.into(), parent: parent.map(str::to_string), state: "live".into(), ..Default::default() }
+        crate::broker_ipc::NodeInfo {
+            id: id.into(),
+            parent: parent.map(str::to_string),
+            state: "live".into(),
+            ..Default::default()
+        }
     }
 
     /// The step-3 rule as the monitor sees it: every node under `g_M` maps to its run (the child of
@@ -749,7 +760,18 @@ mod tests {
         assert_eq!(Rule::parse("special-use"), Ok(Rule::SpecialUse));
         assert_eq!(Rule::parse("break-glass"), Ok(Rule::BreakGlass));
         assert_eq!(Rule::parse("denies=3/60000"), Ok(Rule::Denies { n: 3, ms: 60_000 }));
-        for bad in ["denies=0/100", "denies=3/0", "denies=3", "denies=x/1", "everything", "", "special", "special-use=1", "breakglass", "break-glass=1"] {
+        for bad in [
+            "denies=0/100",
+            "denies=3/0",
+            "denies=3",
+            "denies=x/1",
+            "everything",
+            "",
+            "special",
+            "special-use=1",
+            "breakglass",
+            "break-glass=1",
+        ] {
             assert!(Rule::parse(bad).is_err(), "`{bad}` must be refused");
         }
     }

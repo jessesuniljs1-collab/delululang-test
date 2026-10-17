@@ -60,8 +60,17 @@ fn an_external_guest_runs_under_the_hosts_grants_and_the_report_claims_nothing_u
     let launcher = self_launcher();
     let report = d.join("r.json");
     let args = [
-        "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
-        "--sandbox-backend", &launcher, "--report-out", report.to_str().unwrap(),
+        "run",
+        "w.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        &format!("fs.write={out}"),
+        "--sandbox",
+        "--sandbox-backend",
+        &launcher,
+        "--report-out",
+        report.to_str().unwrap(),
     ];
     let r = delulu(&d, &d.join("s"), &args);
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
@@ -84,7 +93,8 @@ fn an_external_guest_runs_under_the_hosts_grants_and_the_report_claims_nothing_u
     assert!(!launcher_named.contains("__guest"), "the launcher's ARGUMENTS are never recorded: {s}");
 
     // The host still decides: an effect the run did not grant is refused, and nothing happens.
-    std::fs::write(d.join("n.delulu"), "module n\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"never\")\n}\n").unwrap();
+    std::fs::write(d.join("n.delulu"), "module n\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"never\")\n}\n")
+        .unwrap();
     let r = delulu(&d, &d.join("s"), &["run", "n.delulu", "--sandbox", "--sandbox-backend", &launcher]);
     assert_ne!(r.status.code(), Some(0), "{}", text(&r));
     assert!(text(&r).contains("DL0703"), "an ungranted effect is refused by the host: {}", text(&r));
@@ -95,7 +105,8 @@ fn an_external_guest_runs_under_the_hosts_grants_and_the_report_claims_nothing_u
 #[test]
 fn a_backend_that_is_not_one_or_a_launcher_that_dies_fails_legibly() {
     let d = lab("refuse");
-    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
     let st = d.join("s");
     for (args, says) in [
         (vec!["--sandbox-backend", "external:x"], "describes a sandboxed run"),
@@ -130,7 +141,8 @@ fn a_backend_that_is_not_one_or_a_launcher_that_dies_fails_legibly() {
 fn the_launcher_is_told_the_guest_words_and_the_limits() {
     use std::os::unix::fs::PermissionsExt as _;
     let d = lab("env");
-    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
     let script = d.join("launch.sh");
     std::fs::write(
         &script,
@@ -145,7 +157,17 @@ fn the_launcher_is_told_the_guest_words_and_the_limits() {
     let r = delulu(
         &d,
         &d.join("s"),
-        &["run", "h.delulu", "--grant", "console", "--sandbox", "--limits", "mem=268435456,cpu=7,wall=30", "--sandbox-backend", &format!("external:{}", script.display())],
+        &[
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--limits",
+            "mem=268435456,cpu=7,wall=30",
+            "--sandbox-backend",
+            &format!("external:{}", script.display()),
+        ],
     );
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
     assert_eq!(std::fs::read_to_string(d.join("env.txt")).unwrap().trim(), "__guest --stdio-pipes|268435456|7|30");
@@ -166,7 +188,8 @@ fn blake3_of(p: &Path) -> String {
 }
 
 fn hello(d: &Path) {
-    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
 }
 
 /// The report and the launch record name the file the launcher's word resolved to, and its digest —
@@ -180,7 +203,17 @@ fn the_report_names_the_launchers_file_and_its_digest() {
     let r = delulu(
         &d,
         &d.join("s"),
-        &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &self_launcher(), "--report-out", report.to_str().unwrap()],
+        &[
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--sandbox-backend",
+            &self_launcher(),
+            "--report-out",
+            report.to_str().unwrap(),
+        ],
     );
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
@@ -208,7 +241,11 @@ fn a_pinned_launcher_runs_only_as_the_file_it_pins() {
     let launcher = self_launcher();
     let exe = Path::new(env!("CARGO_BIN_EXE_delulu"));
     let wrong = blake3::hash(b"not the launcher").to_hex().to_string();
-    let r = delulu(&d, &st, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &launcher, "--launcher-digest", &wrong]);
+    let r = delulu(
+        &d,
+        &st,
+        &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &launcher, "--launcher-digest", &wrong],
+    );
     assert_eq!(r.status.code(), Some(1), "refused in words, as an attester's refusal is: {}", text(&r));
     assert!(text(&r).contains("not the pinned launcher"), "{}", text(&r));
     assert!(text(&r).contains(&blake3_of(exe)) && text(&r).contains(&wrong), "both digests are named: {}", text(&r));
@@ -227,7 +264,20 @@ fn a_pinned_launcher_runs_only_as_the_file_it_pins() {
     assert!(!records.iter().any(|r| r["action"] == "sandbox-launch"), "and nothing was launched: {chain}");
 
     let right = blake3_of(exe);
-    let r = delulu(&d, &st, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &launcher, &format!("--launcher-digest={}", right.to_uppercase())]);
+    let r = delulu(
+        &d,
+        &st,
+        &[
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--sandbox-backend",
+            &launcher,
+            &format!("--launcher-digest={}", right.to_uppercase()),
+        ],
+    );
     assert_eq!(r.status.code(), Some(0), "the pinned file runs (a pin's case does not matter): {}", text(&r));
     assert!(String::from_utf8_lossy(&r.stdout).contains("hi"), "{}", text(&r));
 
@@ -260,9 +310,26 @@ fn a_launcher_the_pin_refuses_is_never_started() {
     let d = lab("never");
     hello(&d);
     let lnch = d.join("lnch");
-    script(&lnch, &format!("#!/bin/sh\ntouch {}/STARTED\nexec {} $DELULU_GUEST_ARGS\n", d.display(), env!("CARGO_BIN_EXE_delulu")));
+    script(
+        &lnch,
+        &format!("#!/bin/sh\ntouch {}/STARTED\nexec {} $DELULU_GUEST_ARGS\n", d.display(), env!("CARGO_BIN_EXE_delulu")),
+    );
     let run = |pin: &str| {
-        delulu(&d, &d.join("s"), &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &format!("external:{}", lnch.display()), "--launcher-digest", pin])
+        delulu(
+            &d,
+            &d.join("s"),
+            &[
+                "run",
+                "h.delulu",
+                "--grant",
+                "console",
+                "--sandbox",
+                "--sandbox-backend",
+                &format!("external:{}", lnch.display()),
+                "--launcher-digest",
+                pin,
+            ],
+        )
     };
     let r = run(&blake3::hash(b"another launcher").to_hex());
     assert_ne!(r.status.code(), Some(0), "{}", text(&r));
@@ -294,7 +361,17 @@ fn a_bare_launcher_name_never_means_a_file_in_the_working_directory() {
         .env("DELULU_NO_FIRST_RUN", "1")
         .env("DELULU_NO_COLOR", "1")
         .env("PATH", &path)
-        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", "external:lnch", "--report-out", report.to_str().unwrap()])
+        .args([
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--sandbox-backend",
+            "external:lnch",
+            "--report-out",
+            report.to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     assert!(!d.join("PLANTED-RAN").exists(), "the file planted in the working directory ran: {}", text(&r));
@@ -338,7 +415,17 @@ fn the_launcher_started_is_the_file_that_was_hashed() {
         .env("DELULU_STATE_DIR", d.join("s"))
         .env("DELULU_NO_FIRST_RUN", "1")
         .env("DELULU_NO_COLOR", "1")
-        .args(["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &format!("external:{}", lnch.display()), "--launcher-digest", &pin])
+        .args([
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--sandbox-backend",
+            &format!("external:{}", lnch.display()),
+            "--launcher-digest",
+            &pin,
+        ])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -361,7 +448,12 @@ fn the_launcher_started_is_the_file_that_was_hashed() {
     let out = host.wait_with_output().unwrap();
     assert!(swapped, "the host never held the launcher open before starting it, so nothing was hashed: {}", text(&out));
     let ran = std::fs::read_to_string(d.join("ran")).unwrap_or_default();
-    assert_eq!(ran.trim(), "A", "A was hashed and pinned; B was swapped in under its name and must not be what ran: {}", text(&out));
+    assert_eq!(
+        ran.trim(),
+        "A",
+        "A was hashed and pinned; B was swapped in under its name and must not be what ran: {}",
+        text(&out)
+    );
     assert_eq!(out.status.code(), Some(0), "{}", text(&out));
     let _ = std::fs::remove_dir_all(&d);
 }
@@ -381,7 +473,13 @@ fn holders(p: &Path) -> Vec<usize> {
     }
     #[link(name = "ntdll")]
     unsafe extern "system" {
-        fn NtQueryInformationFile(h: *mut std::ffi::c_void, io: *mut IoStatus, info: *mut std::ffi::c_void, len: u32, class: i32) -> i32;
+        fn NtQueryInformationFile(
+            h: *mut std::ffi::c_void,
+            io: *mut IoStatus,
+            info: *mut std::ffi::c_void,
+            len: u32,
+            class: i32,
+        ) -> i32;
     }
     const FILE_READ_ATTRIBUTES: u32 = 0x80;
     const FILE_PROCESS_IDS_USING_FILE_INFORMATION: i32 = 47;

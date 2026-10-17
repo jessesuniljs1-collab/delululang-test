@@ -227,11 +227,7 @@ impl PluginArtifact {
         self.manifest
             .get("exports")
             .and_then(|v| v.as_object())
-            .map(|o| {
-                o.iter()
-                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                    .collect()
-            })
+            .map(|o| o.iter().filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string()))).collect())
             .unwrap_or_default()
     }
 }
@@ -397,10 +393,7 @@ pub fn step1_container_api(art: &PluginArtifact, supported_api: u32) -> Result<P
     // dishonest, and this project does not get to pick that one.
     if let Some(auth) = art.manifest.get("authority") {
         for dim in ["device", "foreign_c", "foreign_python"] {
-            let declared = auth
-                .get(dim)
-                .and_then(|v| v.as_array())
-                .is_some_and(|xs| !xs.is_empty());
+            let declared = auth.get(dim).and_then(|v| v.as_array()).is_some_and(|xs| !xs.is_empty());
             if declared {
                 return Err(LoadRefusal::new(
                     "DL1508",
@@ -416,12 +409,8 @@ pub fn step1_container_api(art: &PluginArtifact, supported_api: u32) -> Result<P
         }
     }
     // Invariant 29: the class is *declared*. An unreadable declaration is refused, never guessed.
-    PluginClass::from_name(&art.class).ok_or_else(|| {
-        LoadRefusal::new(
-            "DL1508",
-            format!("plugin `{}` declares unknown class `{}`", art.name(), art.class),
-        )
-    })
+    PluginClass::from_name(&art.class)
+        .ok_or_else(|| LoadRefusal::new("DL1508", format!("plugin `{}` declares unknown class `{}`", art.name(), art.class)))
 }
 
 /// **Step 2** — the class check against the requested `C` (invariant 29). A `.dpx` whose declared
@@ -465,11 +454,7 @@ pub fn step3_ceiling(grant: &Authority, ceiling: &Authority) -> Result<(), LoadR
 /// **child node** with a **fresh `GrantId`** (the R-6c binding, invariant 28); a request wider than
 /// the holder's own grant is **DL0802**. Routed through [`Custody`], so it works identically in
 /// embedded and daemon custody.
-pub fn step4_holder(
-    custody: &mut dyn Custody,
-    authority: Authority,
-    plugin_name: &str,
-) -> Result<GrantId, LoadRefusal> {
+pub fn step4_holder(custody: &mut dyn Custody, authority: Authority, plugin_name: &str) -> Result<GrantId, LoadRefusal> {
     let holder = Holder::new("plugin", plugin_name, "");
     custody.attenuate(authority, holder).map_err(|d: CustodyDenial| LoadRefusal {
         code: d.code,
@@ -568,9 +553,7 @@ pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusa
 /// **subset** of the manifest's declared row. A code row that exceeds its manifest is the lie this
 /// check exists to catch.
 fn check_export_row(code: &Type, manifest: &Type, names: &dyn TypeNames) -> Result<(), String> {
-    let (Type::Fn { params: cp, ret: cr, row: crow }, Type::Fn { params: mp, ret: mr, row: mrow }) =
-        (code, manifest)
-    else {
+    let (Type::Fn { params: cp, ret: cr, row: crow }, Type::Fn { params: mp, ret: mr, row: mrow }) = (code, manifest) else {
         return Err("the manifest signature is not a function type".into());
     };
     if cp != mp || cr != mr {
@@ -581,8 +564,7 @@ fn check_export_row(code: &Type, manifest: &Type, names: &dyn TypeNames) -> Resu
         ));
     }
     if !crow.effects.is_subset(&mrow.effects) {
-        let extra: Vec<&str> =
-            crow.effects.difference(&mrow.effects).map(|e| e.name()).collect();
+        let extra: Vec<&str> = crow.effects.difference(&mrow.effects).map(|e| e.name()).collect();
         return Err(format!(
             "the verified code performs `{}`, which its manifest row `{mrow}` does not declare — the code exceeds what the manifest advertises",
             extra.join(", ")
@@ -606,9 +588,7 @@ fn check_export_row(code: &Type, manifest: &Type, names: &dyn TypeNames) -> Resu
 pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(), PluginErr> {
     let Some(export) = export else {
         // Couldn't tell: the plugin exports no such name. Refuse — never synthesize a stub.
-        return Err(PluginErr::NotGranted(format!(
-            "plugin exports no `{name}` — the verified code declares no such function"
-        )));
+        return Err(PluginErr::NotGranted(format!("plugin exports no `{name}` — the verified code declares no such function")));
     };
     let Type::Fn { params: ep, ret: er, row: erow } = export else {
         // Couldn't tell: the stored export type is malformed (not a function). A DIR that reaches
@@ -620,10 +600,7 @@ pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(),
         )));
     };
     let Type::Fn { params: fp, ret: fr, row: frow } = f else {
-        return Err(PluginErr::VerifyFailed(format!(
-            "`get` requires a function type; `{}` is not one",
-            f.show(&NoTypeNames)
-        )));
+        return Err(PluginErr::VerifyFailed(format!("`get` requires a function type; `{}` is not one", f.show(&NoTypeNames))));
     };
     if ep != fp || er != fr {
         return Err(PluginErr::VerifyFailed(format!(
@@ -655,10 +632,7 @@ pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(),
 /// never enters the type system.
 pub fn r_get_contained(grant: &Grant, f: &Type, name: &str) -> Result<(), PluginErr> {
     let Type::Fn { params, row: frow, .. } = f else {
-        return Err(PluginErr::VerifyFailed(format!(
-            "`get` requires a function type; `{}` is not one",
-            f.show(&NoTypeNames)
-        )));
+        return Err(PluginErr::VerifyFailed(format!("`get` requires a function type; `{}` is not one", f.show(&NoTypeNames))));
     };
     // R-1: the row the caller asks for must cover the WHOLE grant, not the advertised export row.
     let granted = grant.to_authority().effects;
@@ -783,12 +757,7 @@ impl HandleTable {
 /// same breath. The host's next observation is therefore deterministic — the plugin does not
 /// exist, its authority does not exist, and nothing can be resumed. Do not try to "recover" a
 /// fuel-exhausted plugin: there is nothing left to recover.
-pub fn kill_on_limit<I>(
-    custody: &mut dyn Custody,
-    grant_id: &GrantId,
-    instance: I,
-    limit: &str,
-) -> PluginErr {
+pub fn kill_on_limit<I>(custody: &mut dyn Custody, grant_id: &GrantId, instance: I, limit: &str) -> PluginErr {
     // The instance dies first and unconditionally — taking it by value means the caller cannot
     // keep a copy, and dropping it here means no engine state survives the refusal.
     drop(instance);
@@ -908,11 +877,7 @@ pub enum LoadedPlugin {
 /// - **Step 6** — the signature policy (spec §3.1): a present-but-invalid signature is **DL1510**,
 ///   an unsigned plugin under `require_signed` is **DL1511** (a *different* fault), and a valid
 ///   signature records the signer's identity in the audit log via [`Custody::note_plugin_signature`].
-pub fn load_verified(
-    art: &PluginArtifact,
-    grant: &Grant,
-    custody: &mut dyn Custody,
-) -> Result<LoadedPlugin, LoadRefusal> {
+pub fn load_verified(art: &PluginArtifact, grant: &Grant, custody: &mut dyn Custody) -> Result<LoadedPlugin, LoadRefusal> {
     let prepared = load_prepare(art, PluginClass::Verified, grant, custody)?;
     // Steps 5–6 together, so a refusal at either revokes the step-4 node in one place. Neither step
     // touches custody, so it is free for the note/revoke that follows.
@@ -1009,11 +974,7 @@ pub fn verify_plugin(art: &PluginArtifact) -> Result<VerifyReport, LoadRefusal> 
 /// "unlimited"**. `fuel` → a step budget; `mem_mb` → an allocation-accounting byte budget.
 pub(crate) fn effective_interp_limits(limits: &Limits) -> (u64, u64) {
     let steps = if limits.fuel > 0 { limits.fuel as u64 } else { DEFAULT_INTERP_STEPS };
-    let mem_bytes = if limits.mem_mb > 0 {
-        (limits.mem_mb as u64).saturating_mul(1024 * 1024)
-    } else {
-        DEFAULT_INTERP_MEM_BYTES
-    };
+    let mem_bytes = if limits.mem_mb > 0 { (limits.mem_mb as u64).saturating_mul(1024 * 1024) } else { DEFAULT_INTERP_MEM_BYTES };
     (steps, mem_bytes)
 }
 
@@ -1169,38 +1130,28 @@ pub fn sig_message(manifest: &serde_json::Value, payload: Option<&[u8]>) -> Vec<
 /// public key that is not a valid ed25519 point, and a signature that does not verify are all
 /// `Invalid` with a distinct reason — never silently treated as unsigned (that would let a tampered
 /// artifact through).
-pub fn verify_signature(
-    manifest: &serde_json::Value,
-    payload: Option<&[u8]>,
-    sig: Option<&[u8]>,
-) -> SignatureStatus {
+pub fn verify_signature(manifest: &serde_json::Value, payload: Option<&[u8]>, sig: Option<&[u8]>) -> SignatureStatus {
     let Some(sig) = sig else {
         return SignatureStatus::Unsigned;
     };
     if sig.len() != 96 {
         return SignatureStatus::Invalid {
-            reason: format!(
-                "signature section is {} bytes, not the expected 96 (32-byte key ‖ 64-byte signature)",
-                sig.len()
-            ),
+            reason: format!("signature section is {} bytes, not the expected 96 (32-byte key ‖ 64-byte signature)", sig.len()),
         };
     }
     let key_bytes: [u8; 32] = sig[..32].try_into().expect("32 bytes");
     let sig_bytes: [u8; 64] = sig[32..].try_into().expect("64 bytes");
     let vk = match ed25519_dalek::VerifyingKey::from_bytes(&key_bytes) {
         Ok(vk) => vk,
-        Err(_) => {
-            return SignatureStatus::Invalid {
-                reason: "the signing public key is not a valid ed25519 key".into(),
-            }
-        }
+        Err(_) => return SignatureStatus::Invalid { reason: "the signing public key is not a valid ed25519 key".into() },
     };
     let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
     let msg = sig_message(manifest, payload);
     match vk.verify_strict(&msg, &signature) {
         Ok(()) => SignatureStatus::Valid { signer: hex_lower(&key_bytes) },
         Err(_) => SignatureStatus::Invalid {
-            reason: "the signature does not verify over the plugin's bytes (tampered content, or a key that did not sign it)".into(),
+            reason: "the signature does not verify over the plugin's bytes (tampered content, or a key that did not sign it)"
+                .into(),
         },
     }
 }
@@ -1211,10 +1162,7 @@ pub fn verify_signature(
 ///   a broken signature means the artifact is not what it claims.
 /// - **DL1511** — an unsigned plugin under a `require_signed` grant (a policy refusal), distinct
 ///   from DL1510 so the diagnostic is honest about which fault occurred.
-pub fn step6_signature(
-    status: &SignatureStatus,
-    require_signed: bool,
-) -> Result<Option<String>, LoadRefusal> {
+pub fn step6_signature(status: &SignatureStatus, require_signed: bool) -> Result<Option<String>, LoadRefusal> {
     match status {
         SignatureStatus::Invalid { reason } => Err(LoadRefusal {
             code: DL_SIGNATURE_INVALID,
@@ -1274,17 +1222,13 @@ pub fn sign_detached(key_seed: &[u8; 32], data: &[u8]) -> Vec<u8> {
 /// honestly (wrong length, bad key, non-verifying) — never silently treated as unsigned.
 pub fn verify_detached(data: &[u8], sig96: &[u8]) -> SignatureStatus {
     if sig96.len() != 96 {
-        return SignatureStatus::Invalid {
-            reason: format!("signature is {} bytes, not the expected 96", sig96.len()),
-        };
+        return SignatureStatus::Invalid { reason: format!("signature is {} bytes, not the expected 96", sig96.len()) };
     }
     let key_bytes: [u8; 32] = sig96[..32].try_into().expect("32 bytes");
     let sig_bytes: [u8; 64] = sig96[32..].try_into().expect("64 bytes");
     let vk = match ed25519_dalek::VerifyingKey::from_bytes(&key_bytes) {
         Ok(vk) => vk,
-        Err(_) => {
-            return SignatureStatus::Invalid { reason: "not a valid ed25519 public key".into() }
-        }
+        Err(_) => return SignatureStatus::Invalid { reason: "not a valid ed25519 public key".into() },
     };
     let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
     match vk.verify_strict(data, &signature) {
@@ -1310,7 +1254,6 @@ fn hex_lower(bytes: &[u8]) -> String {
     }
     s
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1409,8 +1352,8 @@ mod tests {
     fn step4_refuses_a_grant_wider_than_the_holder_as_dl0802() {
         // R-7: no grantee exceeds its grantor — the Stage-5 tree doing its job.
         let mut c = host_custody(&["Read"]);
-        let e = step4_holder(&mut c, grant(&["Read", "Net"]).to_authority(), "greedy")
-            .expect_err("Net exceeds the holder's grant");
+        let e =
+            step4_holder(&mut c, grant(&["Read", "Net"]).to_authority(), "greedy").expect_err("Net exceeds the holder's grant");
         assert_eq!(e.code, "DL0802");
         assert_eq!(e.to_plugin_err().variant(), "NotGranted");
     }
@@ -1678,17 +1621,11 @@ mod tests {
     fn r_get_contained_allows_only_scalars_str_and_caps_across_the_boundary() {
         let g = grant(&[]);
         for ok in [Type::Int, Type::Float, Type::Bool, Type::Str, Type::Unit, Type::Cap(delulu_check::ResourceKind::FsRead)] {
-            assert!(
-                r_get_contained(&g, &fnty(vec![ok.clone()], Type::Str, &[]), "f").is_ok(),
-                "{ok:?} must be allowed to cross"
-            );
+            assert!(r_get_contained(&g, &fnty(vec![ok.clone()], Type::Str, &[]), "f").is_ok(), "{ok:?} must be allowed to cross");
         }
-        for bad in [
-            Type::List(Box::new(Type::Int)),
-            Type::Option(Box::new(Type::Int)),
-            Type::Secret(Box::new(Type::Str)),
-            Type::Root,
-        ] {
+        for bad in
+            [Type::List(Box::new(Type::Int)), Type::Option(Box::new(Type::Int)), Type::Secret(Box::new(Type::Str)), Type::Root]
+        {
             assert!(
                 r_get_contained(&g, &fnty(vec![bad.clone()], Type::Str, &[]), "f").is_err(),
                 "{bad:?} must not cross into an opaque module"
@@ -1806,13 +1743,11 @@ mod tests {
         // old reference is never silently re-bound to it.
         let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
         let mut c = host_custody(&["Read"]);
-        let LoadedPlugin::Verified { grant_id: first, .. } =
-            load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let LoadedPlugin::Verified { grant_id: first, .. } = load_verified(&art, &grant(&[]), &mut c).expect("loads");
         let old_ref = PluginRef::new(first.clone(), "shout");
         unload(&mut c, &first).expect("unload");
 
-        let LoadedPlugin::Verified { grant_id: second, .. } =
-            load_verified(&art, &grant(&[]), &mut c).expect("reloads");
+        let LoadedPlugin::Verified { grant_id: second, .. } = load_verified(&art, &grant(&[]), &mut c).expect("reloads");
         assert_ne!(first, second, "a reload mints a FRESH GrantId");
         // The new handle works...
         assert!(PluginRef::new(second, "shout").check_call(&c).is_ok(), "the new handle is live");
@@ -1842,8 +1777,7 @@ mod tests {
         c.set_holder(node_a.clone());
 
         // A granted {Read} tries to hand its child {Read, Net} — MORE than A holds. DL0802.
-        let e = load_verified(&art_read, &grant(&["Read", "Net"]), &mut c)
-            .expect_err("a sub-plugin may not exceed its parent");
+        let e = load_verified(&art_read, &grant(&["Read", "Net"]), &mut c).expect_err("a sub-plugin may not exceed its parent");
         assert_eq!(e.code, "DL0802", "R-7: no grantee exceeds its grantor, at any depth");
 
         // A conforming sub-plugin ({Read} ⊑ {Read}) loads.
@@ -1909,10 +1843,7 @@ mod tests {
         assert_eq!(out.display(), "hello!", "the plugin transformed the string");
 
         // It is re-runnable and deterministic — a fresh budget each call.
-        assert_eq!(
-            inst.call_export("shout", vec![Value::str("world")]).unwrap().display(),
-            "world!"
-        );
+        assert_eq!(inst.call_export("shout", vec![Value::str("world")]).unwrap().display(), "world!");
     }
 
     #[test]
@@ -1988,8 +1919,7 @@ mod tests {
         let code = "module p\npub fn spin(s: Str) -> Str { while true { let _k = 1 }\n s }\n";
         let mut c = host_custody(&[]);
         let verified = load_and_get_verified(code, json!({ "spin": "fn(Str) -> Str" }), &[], &grant(&[]), &mut c);
-        let inst =
-            VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits { fuel: 5_000, mem_mb: 0, wall_ms: 0 });
+        let inst = VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits { fuel: 5_000, mem_mb: 0, wall_ms: 0 });
         let e = inst.call_export("spin", vec![Value::str("x")]).expect_err("an infinite loop is killed");
         assert!(matches!(e, PluginRunError::Limit(_)), "a step-budget kill is a Limit: {e:?}");
         assert_eq!(e.code(), "DL1506");
@@ -2004,15 +1934,10 @@ mod tests {
         // §5.4: `mem_mb` maps to allocator accounting at value-construction sites. A doubling string
         // concatenation would blow real memory; the byte budget trips first — and is honestly
         // labeled, with generous fuel so the STEP counter is not what caught it.
-        let code =
-            "module p\npub fn grow(s: Str, n: Int) -> Str { if n <= 0 { s } else { grow(s + s, n - 1) } }\n";
+        let code = "module p\npub fn grow(s: Str, n: Int) -> Str { if n <= 0 { s } else { grow(s + s, n - 1) } }\n";
         let mut c = host_custody(&[]);
-        let verified =
-            load_and_get_verified(code, json!({ "grow": "fn(Str, Int) -> Str" }), &[], &grant(&[]), &mut c);
-        let inst = VerifiedInterpInstance::instantiate(
-            verified.as_ref(),
-            &Limits { fuel: 10_000_000, mem_mb: 1, wall_ms: 0 },
-        );
+        let verified = load_and_get_verified(code, json!({ "grow": "fn(Str, Int) -> Str" }), &[], &grant(&[]), &mut c);
+        let inst = VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits { fuel: 10_000_000, mem_mb: 1, wall_ms: 0 });
         let e = inst
             .call_export("grow", vec![Value::str("padpadpadpadpadpad"), Value::Int(40)])
             .expect_err("a runaway allocation is stopped");
@@ -2103,10 +2028,8 @@ mod tests {
         assert_eq!(signer.len(), 64, "identity = 32-byte key in hex");
 
         let records = sink.records();
-        let sig_rec = records
-            .iter()
-            .find(|r| r.action == "plugin-signature")
-            .expect("the signature identity landed in the audit log");
+        let sig_rec =
+            records.iter().find(|r| r.action == "plugin-signature").expect("the signature identity landed in the audit log");
         assert_eq!(
             sig_rec.authority.as_ref().and_then(|a| a.get("signed_by")).and_then(|v| v.as_str()),
             Some(signer.as_str()),
@@ -2127,10 +2050,10 @@ mod tests {
         assert_eq!(e.to_plugin_err().variant(), "NotGranted");
         // Refusal honesty: the node minted at step 4 is revoked (no live plugin node survives).
         let tree = c.broker().expect("tree");
-        let live = tree.nodes().iter().any(|n| {
-            n.holder.kind == "plugin"
-                && matches!(tree.effective_state(&n.id), Some(delulu_broker::EffState::Live))
-        });
+        let live = tree
+            .nodes()
+            .iter()
+            .any(|n| n.holder.kind == "plugin" && matches!(tree.effective_state(&n.id), Some(delulu_broker::EffState::Live)));
         assert!(!live, "a DL1511 refusal must revoke the plugin's node");
     }
 
@@ -2182,18 +2105,13 @@ mod tests {
             // require_signed — so the load's verdict is decided by steps 1, 5, 6: exactly what
             // verify runs. Any divergence is then a real verify/load bug.
             let mut c = host_custody(&["Read", "Write", "Net", "Clock"]);
-            load_verified(art, &grant(&[]), &mut c)
-                .map(|_| "ok".to_string())
-                .unwrap_or_else(|e| e.code.to_string())
+            load_verified(art, &grant(&[]), &mut c).map(|_| "ok".to_string()).unwrap_or_else(|e| e.code.to_string())
         }
 
         let mut corpus: Vec<(&str, PluginArtifact)> = Vec::new();
         corpus.push(("pure", verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[])));
         let eff = "module p\npub fn w(out: Cap[Console], s: Str) ! {Write} { out.println(s) }\n";
-        corpus.push((
-            "effectful_honest",
-            verified_artifact(eff, json!({ "w": "fn(Cap[Console], Str) ! {Write}" }), &["Write"]),
-        ));
+        corpus.push(("effectful_honest", verified_artifact(eff, json!({ "w": "fn(Cap[Console], Str) ! {Write}" }), &["Write"])));
         let mut tampered = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
         tampered.dir = Some(b"garbage dir bytes".to_vec());
         corpus.push(("tampered_dir", tampered));
@@ -2221,8 +2139,7 @@ mod tests {
             assert_eq!(v, l, "verify/load divergence on `{name}`: verify={v}, load={l}");
         }
         // The corpus really exercised both accept and several distinct refusals (not a vacuous pass).
-        let verdicts: std::collections::BTreeSet<String> =
-            corpus.iter().map(|(_, a)| verdict_verify(a)).collect();
+        let verdicts: std::collections::BTreeSet<String> = corpus.iter().map(|(_, a)| verdict_verify(a)).collect();
         for expected in ["ok", "DL1504", "DL1507", "DL1510"] {
             assert!(verdicts.contains(expected), "the corpus must exercise `{expected}`: {verdicts:?}");
         }
@@ -2238,10 +2155,7 @@ mod tests {
         art.wasm = Some(b"a corrupt, stale compilation cache".to_vec());
         art.wasm_cache_valid = false; // as the container reader flags a Verified cache mismatch
         let mut c = host_custody(&[]);
-        assert!(
-            load_verified(&art, &grant(&[]), &mut c).is_ok(),
-            "an invalid wasm cache must not fail a Verified load"
-        );
+        assert!(load_verified(&art, &grant(&[]), &mut c).is_ok(), "an invalid wasm cache must not fail a Verified load");
     }
 
     #[test]
@@ -2257,8 +2171,8 @@ mod tests {
         for dim in ["device", "foreign_c", "foreign_python"] {
             let mut art = artifact("contained", PLUGIN_API_SUPPORTED, &["Read"]);
             art.manifest["authority"] = json!({ "effects": ["Read"], dim: ["something"] });
-            let refusal = step1_container_api(&art, PLUGIN_API_SUPPORTED)
-                .expect_err(&format!("declaring authority.{dim} must be refused"));
+            let refusal =
+                step1_container_api(&art, PLUGIN_API_SUPPORTED).expect_err(&format!("declaring authority.{dim} must be refused"));
             assert_eq!(refusal.code, "DL1508", "dimension {dim}");
             assert!(refusal.message.contains(dim), "the refusal must name the dimension: {}", refusal.message);
         }

@@ -46,16 +46,9 @@ fn block_backpressure_sustains_a_lopsided_producer_at_bounded_depth() {
     let dir = scratch("block");
     let f = dir.join("pc.delulu");
     std::fs::write(&f, producer_consumer("8")).unwrap();
-    let o = delulu(
-        &["run", "pc.delulu", "--grant", "console", "--trace-memory"],
-        &dir,
-    );
+    let o = delulu(&["run", "pc.delulu", "--grant", "console", "--trace-memory"], &dir);
     assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
-    assert_eq!(
-        String::from_utf8_lossy(&o.stdout).trim(),
-        "500",
-        "block loses nothing: every message arrived"
-    );
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "500", "block loses nothing: every message arrived");
     let err = String::from_utf8_lossy(&o.stderr);
     let peak_line = err
         .lines()
@@ -82,18 +75,12 @@ fn drop_new_counts_and_reports_what_it_dropped() {
         "[package]\nname = \"m\"\n[authority]\neffects = [\"Async\", \"Write\"]\n[actors]\noverflow = \"drop-new\"\n",
     )
     .unwrap();
-    let o = delulu(
-        &["run", "pc.delulu", "--grant", "console", "--trace-memory"],
-        &dir,
-    );
+    let o = delulu(&["run", "pc.delulu", "--grant", "console", "--trace-memory"], &dir);
     assert!(o.status.success(), "drop-new outside abort mode is telemetry, not an error");
     let seen: i64 = String::from_utf8_lossy(&o.stdout).trim().parse().unwrap_or(-1);
     let err = String::from_utf8_lossy(&o.stderr);
     if seen < 500 {
-        assert!(
-            err.contains("dropped by mailbox overflow"),
-            "drops are never silent: {err}"
-        );
+        assert!(err.contains("dropped by mailbox overflow"), "drops are never silent: {err}");
     } else {
         // The consumer kept pace on this machine and nothing overflowed — a legal outcome;
         // the DL1902 test below forces the overflow deterministically either way.
@@ -115,15 +102,8 @@ fn a_drop_new_overflow_in_abort_mode_is_dl1902() {
         "[package]\nname = \"m\"\n[authority]\neffects = [\"Async\", \"Write\"]\n[actors]\noverflow = \"drop-new\"\n",
     )
     .unwrap();
-    let o = delulu(
-        &["run", "storm.delulu", "--grant", "console", "--on-actor-death", "abort"],
-        &dir,
-    );
-    let all = format!(
-        "{}{}",
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    );
+    let o = delulu(&["run", "storm.delulu", "--grant", "console", "--on-actor-death", "abort"], &dir);
+    let all = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     assert!(all.contains("DL1902"), "abort mode makes the drop an error: {all}");
 }
 
@@ -136,10 +116,7 @@ fn a_same_worker_send_past_the_bound_never_deadlocks() {
     let dir = scratch("selfsend");
     let src = "module m\n\nactor Chain(mailbox = 1) {\n  var n: Int\n  new() { self.n = 0 }\n  be seed(out: Cap[Console]) ! {Async, Write} {\n    var i = 0\n    while i < 50 {\n      self.tick()\n      i = i + 1\n    }\n    out.println(\"seeded 50\")\n  }\n  be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) ! {Async, Write} {\n  let c = spawn Chain()\n  c.seed(root.console())\n}\n";
     std::fs::write(dir.join("chain.delulu"), src).unwrap();
-    let o = delulu(
-        &["run", "chain.delulu", "--grant", "console", "--actors-threads=1", "--trace-memory"],
-        &dir,
-    );
+    let o = delulu(&["run", "chain.delulu", "--grant", "console", "--actors-threads=1", "--trace-memory"], &dir);
     assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "seeded 50");
     let err = String::from_utf8_lossy(&o.stderr);

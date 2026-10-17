@@ -60,7 +60,9 @@ impl Launcher {
                  looked up in PATH's absolute directories; a name with a separator is a path from the working directory)"
             ))
         })?;
-        let cannot = |e: io::Error| io::Error::other(format!("the external launcher `{}` cannot be read to be hashed: {e}", path.display()));
+        let cannot = |e: io::Error| {
+            io::Error::other(format!("the external launcher `{}` cannot be read to be hashed: {e}", path.display()))
+        };
         let mut open = std::fs::OpenOptions::new();
         open.read(true);
         // Never blocks: a name swapped for a FIFO after `resolve_driver` saw a file would hang the open.

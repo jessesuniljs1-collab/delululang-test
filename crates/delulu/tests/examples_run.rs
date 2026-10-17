@@ -62,12 +62,7 @@ fn every_example_checks_clean() {
     assert!(files.len() >= 7, "expected the example set, found {}", files.len());
     for f in &files {
         let o = delulu(&["check", &rel(f)]);
-        assert!(
-            o.status.success(),
-            "{} does not check clean:\n{}",
-            rel(f),
-            text(&o)
-        );
+        assert!(o.status.success(), "{} does not check clean:\n{}", rel(f), text(&o));
     }
 }
 
@@ -75,13 +70,7 @@ fn every_example_checks_clean() {
 fn no_example_that_checks_clean_fails_with_a_checker_bug_code() {
     // A generous grant set: the point is to reach as much of each program as possible, not to
     // model least privilege. Examples that still refuse for want of a grant or a file are fine.
-    let grants = [
-        "--grant", "console",
-        "--grant", "clock",
-        "--grant", "rand",
-        "--grant", "fs.read=.",
-        "--grant", "fs.write=.",
-    ];
+    let grants = ["--grant", "console", "--grant", "clock", "--grant", "rand", "--grant", "fs.read=.", "--grant", "fs.write=."];
     for f in &example_files() {
         let src = std::fs::read_to_string(f).expect("read example");
         if !src.contains("fn main(") {
@@ -141,10 +130,7 @@ fn the_capabilities_guide_actually_reads_and_writes() {
         .expect("run delulu");
     let out = text(&o);
     assert_eq!(o.status.code(), Some(0), "the example must run:\n{out}");
-    assert!(
-        out.contains("config: hello-from-config"),
-        "the guide's READ must succeed and show the file's contents:\n{out}"
-    );
+    assert!(out.contains("config: hello-from-config"), "the guide's READ must succeed and show the file's contents:\n{out}");
     assert!(out.contains("wrote log"), "and its WRITE must succeed:\n{out}");
     assert!(
         w.join("out").join("log.txt").is_file(),
@@ -216,10 +202,18 @@ fn the_plugin_example_builds_loads_and_prints_what_the_plugin_returns() {
     let dpx = work.join("shout.dpx");
 
     let build = delulu(&["plugin", "build", "examples/plugin_shout", "-o", dpx.to_str().unwrap()]);
-    assert!(build.status.success(), "the example plugin must build:
-{}", text(&build));
-    assert!(dpx.exists(), "the artifact must be written:
-{}", text(&build));
+    assert!(
+        build.status.success(),
+        "the example plugin must build:
+{}",
+        text(&build)
+    );
+    assert!(
+        dpx.exists(),
+        "the artifact must be written:
+{}",
+        text(&build)
+    );
 
     std::fs::copy(root().join("examples/plugin_shout/host.delulu"), work.join("host.delulu")).unwrap();
     let run = Command::new(env!("CARGO_BIN_EXE_delulu"))
@@ -230,12 +224,18 @@ fn the_plugin_example_builds_loads_and_prints_what_the_plugin_returns() {
         .output()
         .expect("run delulu");
     let got = text(&run);
-    assert!(run.status.success(), "the host program must run:
-{got}");
+    assert!(
+        run.status.success(),
+        "the host program must run:
+{got}"
+    );
     // The PLUGIN's output, not the host's. `shout` appends "!", so this string can only come from code
     // that arrived at run time and was re-verified on the way in.
-    assert!(got.contains("hello!"), "the plugin's own answer must appear:
-{got}");
+    assert!(
+        got.contains("hello!"),
+        "the plugin's own answer must appear:
+{got}"
+    );
 
     // And the refusal the README tells a reader to try, so the example's two claims are both gated.
     let ungranted = Command::new(env!("CARGO_BIN_EXE_delulu"))
@@ -246,10 +246,16 @@ fn the_plugin_example_builds_loads_and_prints_what_the_plugin_returns() {
         .output()
         .expect("run delulu");
     let refused = text(&ungranted);
-    assert!(!ungranted.status.success(), "without the grant it must not run:
-{refused}");
-    assert!(refused.contains("DL0703"), "and the refusal names the not-granted code:
-{refused}");
+    assert!(
+        !ungranted.status.success(),
+        "without the grant it must not run:
+{refused}"
+    );
+    assert!(
+        refused.contains("DL0703"),
+        "and the refusal names the not-granted code:
+{refused}"
+    );
     let _ = std::fs::remove_dir_all(&work);
 }
 

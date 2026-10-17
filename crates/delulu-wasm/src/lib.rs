@@ -16,18 +16,13 @@ mod host;
 pub mod limits;
 
 pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
-pub use artifact::{
-    embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
-};
-pub use dpx::{
-    augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine,
-    DIR_SECTION, DPX_VERSION, LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
-};
+pub use artifact::{embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION};
 pub use codegen::{compile_module, compile_module_with, uses_console, CompileError};
-pub use host::{
-    run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle,
-    HostConfig, WasmError,
+pub use dpx::{
+    augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,
+    LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
+pub use host::{run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, WasmError};
 
 use std::collections::HashMap;
 
@@ -51,11 +46,7 @@ pub fn compile_and_run_int(module: &Module, name: &str, args: &[i64]) -> Result<
 /// Contained plugin uses — so on Windows a Verified-on-WASM run inherits the honest
 /// `EnforcementUnsupported` refusal before any store exists (build-order deviation 7); the
 /// interpreter host (`delulu-runtime`) is unaffected and runs Verified plugins on every platform.
-pub fn verified_executable_wasm(
-    module: &Module,
-    cache: Option<&[u8]>,
-    cache_valid: bool,
-) -> Result<Vec<u8>, CompileError> {
+pub fn verified_executable_wasm(module: &Module, cache: Option<&[u8]>, cache_valid: bool) -> Result<Vec<u8>, CompileError> {
     if let (Some(w), true) = (cache, cache_valid) {
         return Ok(w.to_vec()); // a valid cache is used as-is
     }
@@ -210,7 +201,12 @@ mod tests {
             }
         }
         assert!(checked_count > 3000, "generator produced too few valid programs: {checked_count}");
-        assert!(mismatches.is_empty(), "WASM/interpreter divergence ({} cases):\n{}", mismatches.len(), mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n"));
+        assert!(
+            mismatches.is_empty(),
+            "WASM/interpreter divergence ({} cases):\n{}",
+            mismatches.len(),
+            mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n")
+        );
         // Prove the fault path was actually exercised (overflow / div-by-zero really occurred).
         assert!(both_faulted > 50, "the fault-parity path was barely exercised: both_faulted={both_faulted}");
         assert!(agreed_ok > 1000, "too few agreeing runs: agreed_ok={agreed_ok}");
@@ -304,9 +300,8 @@ mod tests {
         // Positive, negative, zero, and i64::MAX. (i64::MIN can't be a source literal — the parser
         // reads the magnitude first and 9223372036854775808 overflows i64 — so it's tested below.)
         for lit in ["0", "7", "42", "-1", "-9", "1000000", "-1000000", "9223372036854775807"] {
-            let src = format!(
-                "module m\nfn main(root: Root) ! {{Write}} {{ let out = root.console()\n out.println(str({lit})) }}\n"
-            );
+            let src =
+                format!("module m\nfn main(root: Root) ! {{Write}} {{ let out = root.console()\n out.println(str({lit})) }}\n");
             assert_eq!(main_console_parity(&src), format!("{lit}\n"), "str({lit}) mismatch");
         }
     }
@@ -315,7 +310,8 @@ mod tests {
     fn int_to_str_of_i64_min_matches() {
         // i64::MIN reached by computation (`i64::MIN+1 - 1`), the magnitude-overflow edge: the
         // formatter's unsigned-magnitude trick must still print it correctly on both engines.
-        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(str(-9223372036854775807 - 1)) }\n";
+        let src =
+            "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(str(-9223372036854775807 - 1)) }\n";
         assert_eq!(main_console_parity(src), "-9223372036854775808\n");
     }
 
@@ -784,8 +780,7 @@ mod tests {
         let art = WasmPluginEngine::new().read_artifact(&tc).expect("a bad cache does NOT fail the read");
         assert!(!art.wasm_cache_valid, "the corrupt cache is flagged invalid");
         let recompiled =
-            verified_executable_wasm(&checked.module, art.wasm.as_deref(), art.wasm_cache_valid)
-                .expect("recompiles from DIR");
+            verified_executable_wasm(&checked.module, art.wasm.as_deref(), art.wasm_cache_valid).expect("recompiles from DIR");
         assert!(
             wasmtime::Module::new(&wasmtime::Engine::default(), &recompiled).is_ok(),
             "the DIR-recompiled module validates — load succeeds"
@@ -826,12 +821,9 @@ mod tests {
         // (never a crash, never a silent no-op, never DL1506).
         let checked = check_source(0, "module p\npub fn answer() -> Int { 42 }\n");
         let wasm = compile_module(&checked.module).expect("compiles");
-        let e = crate::limits::run_contained_export(
-            &wasm,
-            "answer",
-            crate::limits::Effective { fuel: 1, mem_bytes: 1, wall_ms: 1 },
-        )
-        .expect_err("Windows refuses in-process enforcement");
+        let e =
+            crate::limits::run_contained_export(&wasm, "answer", crate::limits::Effective { fuel: 1, mem_bytes: 1, wall_ms: 1 })
+                .expect_err("Windows refuses in-process enforcement");
         assert!(matches!(e, crate::limits::TrapCause::EnforcementUnsupported(_)));
         assert!(!e.is_limit(), "an enforcement-unsupported refusal is never DL1506");
     }

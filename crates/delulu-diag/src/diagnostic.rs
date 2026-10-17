@@ -168,11 +168,7 @@ impl Diagnostic {
     }
 
     pub fn primary_span(&self) -> Option<Span> {
-        self.spans
-            .iter()
-            .find(|s| !s.secondary)
-            .or(self.spans.first())
-            .map(|s| s.span)
+        self.spans.iter().find(|s| !s.secondary).or(self.spans.first()).map(|s| s.span)
     }
 
     pub fn is_error(&self) -> bool {

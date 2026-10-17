@@ -56,10 +56,8 @@ fn shipped_markdown() -> Vec<PathBuf> {
             let p = e.path();
             if p.is_dir() {
                 let r = rel(&p);
-                if matches!(
-                    r.as_str(),
-                    "target" | "dist" | ".git" | "node_modules" | ".claude" | "docs/survey"
-                ) || r.ends_with("/node_modules")
+                if matches!(r.as_str(), "target" | "dist" | ".git" | "node_modules" | ".claude" | "docs/survey")
+                    || r.ends_with("/node_modules")
                 {
                     continue;
                 }
@@ -149,8 +147,7 @@ const DENIES_MACHINE_CHECKED: &[&str] = &[
 
 /// Phrases that deny a model-checked (category 3) result for leases and certificate adoption.
 /// Contradicted by `Custody.tla`, which models delegate -> mint -> redeem and adoption directly.
-const DENIES_CUSTODY_MODEL_CHECKED: &[&str] =
-    &["certificate adoption and federation are not model-checked"];
+const DENIES_CUSTODY_MODEL_CHECKED: &[&str] = &["certificate adoption and federation are not model-checked"];
 
 /// **The load-bearing test.** No shipped document may deny evidence this tree contains.
 #[test]
@@ -183,11 +180,7 @@ fn no_document_denies_evidence_the_tree_actually_contains() {
                 while let Some(i) = lower[from..].find(phrase) {
                     let at = from + i;
                     if !is_quoted(&lower, at) {
-                        violations.push(format!(
-                            "{}:{} states \"{phrase}\" as current, but {why}",
-                            rel(&file),
-                            n + 1
-                        ));
+                        violations.push(format!("{}:{} states \"{phrase}\" as current, but {why}", rel(&file), n + 1));
                     }
                     from = at + phrase.len();
                 }
@@ -225,10 +218,7 @@ fn a_machine_checked_claim_cannot_outlive_the_artifact_backing_it() {
         }
     }
     if ev.lean.is_empty() {
-        assert!(
-            claims.is_empty(),
-            "no Lean development is on disk, yet these documents still claim one: {claims:?}"
-        );
+        assert!(claims.is_empty(), "no Lean development is on disk, yet these documents still claim one: {claims:?}");
     } else {
         assert!(
             !claims.is_empty(),
@@ -274,22 +264,12 @@ fn every_cited_model_artifact_exists() {
                     continue;
                 }
                 let base = tok.rsplit('/').next().unwrap_or(tok);
-                let found = ["docs/design/models", "docs/design/models/lean"]
-                    .iter()
-                    .any(|d| root().join(d).join(base).exists());
+                let found = ["docs/design/models", "docs/design/models/lean"].iter().any(|d| root().join(d).join(base).exists());
                 if !found {
-                    missing.push(format!(
-                        "{}:{} cites `{tok}`, which is not in docs/design/models/",
-                        rel(&file),
-                        n + 1
-                    ));
+                    missing.push(format!("{}:{} cites `{tok}`, which is not in docs/design/models/", rel(&file), n + 1));
                 }
             }
         }
     }
-    assert!(
-        missing.is_empty(),
-        "a document cites a formal-model artifact that does not exist:\n  {}",
-        missing.join("\n  ")
-    );
+    assert!(missing.is_empty(), "a document cites a formal-model artifact that does not exist:\n  {}", missing.join("\n  "));
 }

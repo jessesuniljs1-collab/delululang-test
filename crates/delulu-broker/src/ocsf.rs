@@ -304,8 +304,7 @@ pub fn verify(text: &str, expected_start: Option<&str>) -> Result<Verified, Audi
         if line.trim().is_empty() {
             continue;
         }
-        let v: Value =
-            serde_json::from_str(line).map_err(|e| AuditError::corrupt(0, format!("line {n} is not JSON: {e}")))?;
+        let v: Value = serde_json::from_str(line).map_err(|e| AuditError::corrupt(0, format!("line {n} is not JSON: {e}")))?;
         let rec = v
             .get("unmapped")
             .and_then(|u| u.get("delulu"))

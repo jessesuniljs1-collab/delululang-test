@@ -11,11 +11,7 @@ fn workspace_root() -> PathBuf {
 }
 
 fn delulu(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .current_dir(workspace_root())
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(workspace_root()).args(args).output().expect("failed to run delulu")
 }
 
 /// `delulu`, on a host that is certainly NOT provisioned for the microVM: the image directory is one
@@ -307,22 +303,11 @@ fn run_foreign_exceeding_manifest_ceiling_is_dl1303() {
     // program is reaching for authority it never declared — refused even WITH a grant on the line.
     let manifest = "[package]\nname = \"fdemo\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"ForeignCall\", \"Write\"]\nforeign.c = []\n";
     let file = write_foreign_program("delulu_cli_foreign_ceiling", Some(manifest));
-    let o = delulu(&[
-        "run",
-        file.to_str().unwrap(),
-        "--grant",
-        "console",
-        "--grant",
-        "foreign.c=mathlib:whatever.dll",
-        "--json",
-    ]);
+    let o = delulu(&["run", file.to_str().unwrap(), "--grant", "console", "--grant", "foreign.c=mathlib:whatever.dll", "--json"]);
     let v: Value = serde_json::from_str(&stdout(&o)).expect("run --json must be valid JSON");
     let d = &v["diagnostics"][0];
     assert_eq!(d["code"], "DL1303");
-    assert!(
-        d["message"].as_str().unwrap().contains("authority manifest"),
-        "the ceiling message names the manifest: {d}"
-    );
+    assert!(d["message"].as_str().unwrap().contains("authority manifest"), "the ceiling message names the manifest: {d}");
     assert_eq!(o.status.code(), Some(1));
 }
 
@@ -601,10 +586,7 @@ fn explain_dl14xx_carries_the_spec_10_caveats() {
     assert!(o.status.success(), "{}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("--isolation process"), "the fallback command is shown: {out}");
-    assert!(
-        out.contains("Foreign workers bound blast radius, not foreign behavior"),
-        "§10 caveat verbatim: {out}"
-    );
+    assert!(out.contains("Foreign workers bound blast radius, not foreign behavior"), "§10 caveat verbatim: {out}");
     assert!(out.contains("Linux-first"), "{out}");
 
     let o = delulu(&["explain", "E-DL1403"]);
@@ -717,10 +699,7 @@ fn the_authority_report_says_out_loud_that_a_credential_can_leave() {
     let out = stdout(&o);
     assert!(out.contains("exposure:"), "the report must carry an exposure line:\n{out}");
     assert!(out.contains("API_KEY declassifiable"), "it must name the secret:\n{out}");
-    assert!(
-        out.contains("foreign code (outside the proof)"),
-        "it must name foreign reach as the egress:\n{out}"
-    );
+    assert!(out.contains("foreign code (outside the proof)"), "it must name foreign reach as the egress:\n{out}");
 }
 
 #[test]
@@ -858,11 +837,7 @@ fn a_morph_round_trip_is_byte_identical_and_the_authority_report_does_not_move()
 
     let a1 = delulu_with_morphs(&dir, &["authority", cf.to_str().unwrap()]);
     let a2 = delulu_with_morphs(&dir, &["authority", mf.to_str().unwrap()]);
-    assert_eq!(
-        stdout(&a1),
-        stdout(&a2),
-        "the authority report must be morph-invariant — the surface is not part of the program"
-    );
+    assert_eq!(stdout(&a1), stdout(&a2), "the authority report must be morph-invariant — the surface is not part of the program");
 }
 
 /// Campaign finding C82 — the identity law used to be false for the morphs aimed at agents.
@@ -1043,13 +1018,7 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
     let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
     let diags = v["diagnostics"].as_array().expect("diagnostics");
     let codes: Vec<&str> = diags.iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
-    assert_eq!(
-        codes,
-        vec!["DL0210"],
-        "one defect, one diagnostic — got {} diagnostics: {:?}",
-        codes.len(),
-        codes
-    );
+    assert_eq!(codes, vec!["DL0210"], "one defect, one diagnostic — got {} diagnostics: {:?}", codes.len(), codes);
     assert_eq!(v["summary"]["errors"], 1);
     // The invented call chain is gone, so the checker never sees a type it made up.
     assert!(
@@ -1062,15 +1031,10 @@ fn one_over_deep_expression_yields_exactly_one_diagnostic() {
     // diagnostic per overflow site, not one per file. Without this the "fix" would be a silencer.
     let g = dir.join("two.delulu");
     let one = format!("{}1{}", "(".repeat(200), ")".repeat(200));
-    std::fs::write(
-        &g,
-        format!("module two\n\nfn main(root: Root) {{\n    let a = {one}\n    let b = {one}\n}}\n"),
-    )
-    .unwrap();
+    std::fs::write(&g, format!("module two\n\nfn main(root: Root) {{\n    let a = {one}\n    let b = {one}\n}}\n")).unwrap();
     let o2 = delulu(&["check", g.to_str().unwrap(), "--json"]);
     let v2: Value = serde_json::from_str(&stdout(&o2)).expect("one envelope");
-    let codes2: Vec<&str> =
-        v2["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    let codes2: Vec<&str> = v2["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
     assert_eq!(codes2, vec!["DL0210", "DL0210"], "two sites report twice: {codes2:?}");
 
     // The second mechanism, with its own witness. Consuming the refused operand is not enough on
@@ -1097,8 +1061,7 @@ fn g(a: Int, b: Int, c: Int, d: Int, e: Int) -> Int {{ a }}
     .unwrap();
     let o4 = delulu(&["check", m.to_str().unwrap(), "--json"]);
     let v4: Value = serde_json::from_str(&stdout(&o4)).expect("one envelope");
-    let codes4: Vec<&str> =
-        v4["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    let codes4: Vec<&str> = v4["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
     assert_eq!(codes4, vec!["DL0210"], "one site, one report — got {codes4:?}");
 
     // And the control: nesting WITHIN the cap is still accepted. A guard that refused everything
@@ -1124,25 +1087,13 @@ fn each_nesting_class_reports_its_cap_once_per_site() {
     std::fs::create_dir_all(&dir).unwrap();
     let n = 200usize;
     let cases: &[(&str, &str, String)] = &[
-        (
-            "DL0211",
-            "type",
-            format!("module t\n\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n)),
-        ),
+        ("DL0211", "type", format!("module t\n\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n))),
         (
             "DL0212",
             "pattern",
-            format!(
-                "module p\n\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0\n_ => 1 }} }}\n",
-                "Some(".repeat(n),
-                ")".repeat(n)
-            ),
+            format!("module p\n\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0\n_ => 1 }} }}\n", "Some(".repeat(n), ")".repeat(n)),
         ),
-        (
-            "DL0213",
-            "block",
-            format!("module b\n\nfn f() {{ {}{} }}\n", "while true { ".repeat(n), "}".repeat(n)),
-        ),
+        ("DL0213", "block", format!("module b\n\nfn f() {{ {}{} }}\n", "while true { ".repeat(n), "}".repeat(n))),
     ];
     for (code, what, src) in cases {
         let f = dir.join(format!("{what}.delulu"));
@@ -1150,12 +1101,7 @@ fn each_nesting_class_reports_its_cap_once_per_site() {
         let o = delulu(&["check", f.to_str().unwrap(), "--json"]);
         assert_eq!(o.status.code(), Some(1), "the {what} case is still refused");
         let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
-        let n_code = v["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|d| d["code"] == *code)
-            .count();
+        let n_code = v["diagnostics"].as_array().unwrap().iter().filter(|d| d["code"] == *code).count();
         assert_eq!(n_code, 1, "one {code} for one over-deep {what}, got {n_code}: {}", v["diagnostics"]);
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -1242,10 +1188,7 @@ fn every_grant_kind_the_runtime_parses_is_derivable_from_the_report() {
              \x20   let gpu = root.compute(\"gpu0\")\n\
              \x20   out.println(\"ready\")\n}\n",
         ),
-        (
-            "foreign_c.delulu",
-            "module foreignc\n\nforeign \"c\" lib mathlib {\n  fn cos(x: Float) -> Float\n}\n",
-        ),
+        ("foreign_c.delulu", "module foreignc\n\nforeign \"c\" lib mathlib {\n  fn cos(x: Float) -> Float\n}\n"),
         (
             "py.delulu",
             "module pyuse\n\n\
@@ -1303,14 +1246,11 @@ fn main(root: Root) ! {Load} {
         let text = stdout(&human);
         for flag in v["authority"]["required_grants"].as_array().unwrap() {
             let flag = flag.as_str().unwrap();
-            assert!(
-                text.contains(&format!("--grant {flag}")),
-                "{name}: `--grants` must print `--grant {flag}`:\n{text}"
-            );
+            assert!(text.contains(&format!("--grant {flag}")), "{name}: `--grants` must print `--grant {flag}`:\n{text}");
         }
         // Never the word `granted` about a requirement: printing a list grants nothing.
         assert!(
-            !text.to_lowercase().contains("granted:") ,
+            !text.to_lowercase().contains("granted:"),
             "{name}: the human line must not read as a grant already made:\n{text}"
         );
     }
@@ -1319,17 +1259,8 @@ fn main(root: Root) ! {Load} {
     let jit = dir.join("jit.delulu");
     let jo = delulu(&["authority", jit.to_str().unwrap(), "--json"]);
     let jv: Value = serde_json::from_str(&stdout(&jo)).expect("one envelope");
-    assert_eq!(
-        jv["authority"][exec_native_field]["requested"], true,
-        "the hint is reported as a request: {}",
-        jv["authority"]
-    );
-    let jg: Vec<&str> = jv["authority"]["required_grants"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|x| x.as_str())
-        .collect();
+    assert_eq!(jv["authority"][exec_native_field]["requested"], true, "the hint is reported as a request: {}", jv["authority"]);
+    let jg: Vec<&str> = jv["authority"]["required_grants"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
     assert!(
         !jg.contains(&"exec.native"),
         "a hint must not appear as a REQUIREMENT — invariant 45, and the program runs without it: {jg:?}"
@@ -1342,9 +1273,7 @@ fn main(root: Root) ! {Load} {
         if key == "exec.native" {
             continue;
         }
-        let hit = all_grants.iter().any(|g| {
-            g == &key || g.starts_with(&format!("{key}=")) || g.starts_with(&format!("{key}:"))
-        });
+        let hit = all_grants.iter().any(|g| g == &key || g.starts_with(&format!("{key}=")) || g.starts_with(&format!("{key}:")));
         if !hit {
             missing.push(key);
         }
@@ -1570,9 +1499,8 @@ fn an_operation_its_effect_refuses_is_followed_by_its_refusal_in_the_trace() {
 fn windows_hostile_names_are_refused_at_the_primitive_table() {
     let base = std::env::temp_dir().join(format!("delulu_cli_hostile_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
-    for (i, name) in ["NUL", "CON", "com1.txt", "LPT\u{b9}", "trail.txt.", "space.txt ", "ads.txt:hidden", "sub/aux.log"]
-        .iter()
-        .enumerate()
+    for (i, name) in
+        ["NUL", "CON", "com1.txt", "LPT\u{b9}", "trail.txt.", "space.txt ", "ads.txt:hidden", "sub/aux.log"].iter().enumerate()
     {
         let dir = base.join(format!("c{i}"));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
@@ -1613,8 +1541,26 @@ fn windows_hostile_names_are_refused_at_the_primitive_table() {
 /// granted by `net.special=`. An ordinary host is unaffected.
 #[test]
 fn special_use_addresses_need_the_explicit_net_special_spelling() {
-    let base = ["run", "examples/demo.delulu", "--grant", "console", "--grant", "fs.read=./config", "--grant", "secret:API_KEY=k", "--grant"];
-    for g in ["net=169.254.169.254", "net=127.1", "net=2130706433", "net=0x7f.0.0.1", "net=[::ffff:127.0.0.1]", "net=LOCALHOST.", "net=metadata.google.internal"] {
+    let base = [
+        "run",
+        "examples/demo.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        "fs.read=./config",
+        "--grant",
+        "secret:API_KEY=k",
+        "--grant",
+    ];
+    for g in [
+        "net=169.254.169.254",
+        "net=127.1",
+        "net=2130706433",
+        "net=0x7f.0.0.1",
+        "net=[::ffff:127.0.0.1]",
+        "net=LOCALHOST.",
+        "net=metadata.google.internal",
+    ] {
         let mut args = base.to_vec();
         args.push(g);
         let o = delulu(&args);

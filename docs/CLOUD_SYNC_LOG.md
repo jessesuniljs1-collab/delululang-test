@@ -3351,3 +3351,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: the empty `DeluluLang` repository is the destination (`HANDOFF.md` §1.1).
 - Open / next: the remaining decisions (SECURITY.md and the repository's controls at its creation, rustfmt, a code of
   conduct, the root-issuance default, RW 4.19, P8-04 (c)); the WSL and editor checks; the scheduled task; the release.
+
+### 2026-10-17 — rustfmt adopted; the tree formatted once (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `6e0637e`
+- Commits: (1) this entry's commit
+- Files and folders: A `rustfmt.toml`; M 283 Rust source files (formatting only — `git diff --stat` in the commit), the two
+  test files' double-encoded characters, `.github/workflows/ci.yml` (the check), `CONTRIBUTING.md`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (7.9), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-145), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **What** (`V2_LOG.md`; D-V2-145): rustfmt adopted and enforced.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: in the commit message (clippy, the full suite after the reformat). CI read: `bfb5a84` `39036694401` and
+  `6e0637e` `39037513753` success on every job; the release dry run `39037514962` success on all four targets, the
+  notices and SBOM generated on each. This commit's own run: read in the next commit.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `cargo fmt --all` before every commit now — CI's `lints` job fails an unformatted tree.
+- Open / next: as the previous entry.

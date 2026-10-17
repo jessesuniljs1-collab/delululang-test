@@ -144,7 +144,9 @@ impl PluginManifest {
                     diags.push(
                         Diagnostic::error(
                             "DL1004",
-                            format!("`[plugin.authority] requires` entry `{req}` is not a `Cap[Kind]` with a known resource kind"),
+                            format!(
+                                "`[plugin.authority] requires` entry `{req}` is not a `Cap[Kind]` with a known resource kind"
+                            ),
                         )
                         .with_span(key_span(src, file, "requires"), "here"),
                     );
@@ -225,11 +227,8 @@ pub fn check_plugin_module(
         // The exported function must exist in the code.
         let Some(sig) = table.fns.get(name) else {
             diags.push(
-                Diagnostic::error(
-                    "DL1501",
-                    format!("manifest exports `{name}`, but the plugin code declares no such function"),
-                )
-                .with_span(line, "exported here"),
+                Diagnostic::error("DL1501", format!("manifest exports `{name}`, but the plugin code declares no such function"))
+                    .with_span(line, "exported here"),
             );
             continue;
         };
@@ -252,11 +251,8 @@ pub fn check_plugin_module(
         let (sig_ty, sig_diags) = parse_type_string(manifest_file, sig_str);
         if let Some(d) = sig_diags.iter().find(|d| d.is_error()) {
             diags.push(
-                Diagnostic::error(
-                    "DL1501",
-                    format!("export `{name}` signature string does not parse: {}", d.message),
-                )
-                .with_span(line, "in this signature string"),
+                Diagnostic::error("DL1501", format!("export `{name}` signature string does not parse: {}", d.message))
+                    .with_span(line, "in this signature string"),
             );
             continue;
         }
@@ -398,9 +394,7 @@ fn section_span(src: &str, file: FileId, section: &str) -> Span {
 }
 
 fn arr_of_str(v: Option<&toml::Value>) -> Vec<String> {
-    v.and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -512,10 +506,8 @@ summarize = "fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}"
     fn manifest_underselling_the_row_is_dl1501_too() {
         // Manifest claims a pure export; the code Reads. STILL a mismatch (head-chef reminder:
         // both directions) — an undersold row would let a host believe a lie.
-        let manifest = MANIFEST.replace(
-            "fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}",
-            "fn(Cap[FsRead], Str) -> Result[Str, IoErr]",
-        );
+        let manifest =
+            MANIFEST.replace("fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}", "fn(Cap[FsRead], Str) -> Result[Str, IoErr]");
         let diags = export_diags(&manifest, CODE);
         assert!(diags.iter().any(|d| d.code == "DL1501"), "{diags:?}");
     }
@@ -559,10 +551,8 @@ summarize = "fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}"
 
     #[test]
     fn generic_export_is_dl1501() {
-        let manifest = MANIFEST.replace(
-            "summarize = \"fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}\"",
-            "id = \"fn(Int) -> Int\"",
-        );
+        let manifest =
+            MANIFEST.replace("summarize = \"fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}\"", "id = \"fn(Int) -> Int\"");
         let code = "module m\npub fn id[T](x: T) -> T { x }\n";
         let diags = export_diags(&manifest, code);
         assert!(diags.iter().any(|d| d.code == "DL1501" && d.message.contains("monomorphic")), "{diags:?}");

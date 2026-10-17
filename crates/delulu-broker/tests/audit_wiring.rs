@@ -7,10 +7,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use delulu_broker::{
-    verify, AuditLog, Authority, Broker, Decision, Holder, ManualClock, MemSink, Op, Scopes,
-    SeqIdSource,
-};
+use delulu_broker::{verify, AuditLog, Authority, Broker, Decision, Holder, ManualClock, MemSink, Op, Scopes, SeqIdSource};
 use delulu_check::Effect;
 
 fn eff(names: &[&str]) -> BTreeSet<Effect> {
@@ -27,9 +24,8 @@ fn holder() -> Holder {
 /// state, so the test reads back what the broker wrote.
 fn broker_with_sink(clock: Rc<ManualClock>) -> (Broker, MemSink) {
     let sink = MemSink::new();
-    let b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
-        .with_sink(Box::new(sink.clone()))
-        .with_key([9u8; 32]);
+    let b =
+        Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock)).with_sink(Box::new(sink.clone())).with_key([9u8; 32]);
     (b, sink)
 }
 
@@ -39,19 +35,16 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
     let (mut b, sink) = broker_with_sink(clock);
 
     // 1. issue → one "issue" record.
-    let root = b.issue_root(
-        holder(),
-        Authority::new(
-            eff(&["Read", "Net", "Write"]),
-            Scopes {
-                fs_read: names(&["./data"]),
-                fs_write: names(&["./out"]),
-                net: names(&["a.com"]),
-                ..Default::default()
-            },
-        ),
-        None,
-    ).unwrap();
+    let root = b
+        .issue_root(
+            holder(),
+            Authority::new(
+                eff(&["Read", "Net", "Write"]),
+                Scopes { fs_read: names(&["./data"]), fs_write: names(&["./out"]), net: names(&["a.com"]), ..Default::default() },
+            ),
+            None,
+        )
+        .unwrap();
     assert_eq!(sink.len(), 1);
 
     // 2. attenuate (ok) → one "attenuate" allow record.
@@ -91,9 +84,7 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
 
     // 7. synchronous-class ALLOWED use → one "use" record carrying the SAME seq check() returned.
     let d = b.check(&root, Op::FsWrite, Some("./out/log.txt"));
-    let Decision::Allow { audit_seq: Some(use_seq) } = d else {
-        panic!("expected a synchronous allow with a seq")
-    };
+    let Decision::Allow { audit_seq: Some(use_seq) } = d else { panic!("expected a synchronous allow with a seq") };
     assert_eq!(sink.len(), 7);
 
     // 8. synchronous-class DENIED use (out of scope) → one record, decision "deny".
@@ -120,25 +111,10 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
     let actions: Vec<String> = sink.records().iter().map(|r| r.action.clone()).collect();
     assert_eq!(
         actions,
-        vec![
-            "issue",
-            "attenuate",
-            "attenuate",
-            "delegate",
-            "redeem",
-            "redeem",
-            "use",
-            "use",
-            "revoke",
-            "revoke",
-            "rotate_key"
-        ]
+        vec!["issue", "attenuate", "attenuate", "delegate", "redeem", "redeem", "use", "use", "revoke", "revoke", "rotate_key"]
     );
     let decisions: Vec<String> = sink.records().iter().map(|r| r.decision.clone()).collect();
-    assert_eq!(
-        decisions,
-        vec!["allow", "allow", "deny", "allow", "allow", "deny", "allow", "deny", "allow", "deny", "allow"]
-    );
+    assert_eq!(decisions, vec!["allow", "allow", "deny", "allow", "allow", "deny", "allow", "deny", "allow", "deny", "allow"]);
 
     // Ruling 5 made visible: the records carry the broker's own monotone seqs with NO renumbering
     // and no gaps — every seq-consuming op logged exactly once.
@@ -188,7 +164,9 @@ fn no_sink_means_no_records_and_chunk1_behavior() {
     // guarantee (head-chef ruling 4). Smoke-tested here; the full chunk-1 suite is the real proof.
     let clock = Rc::new(ManualClock::new(1_000));
     let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock));
-    let root = b.issue_root(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./d"]), ..Default::default() }), None).unwrap();
+    let root = b
+        .issue_root(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./d"]), ..Default::default() }), None)
+        .unwrap();
     assert!(b.check(&root, Op::FsRead, Some("./d/x")).is_allow());
     b.revoke(&root, &root).unwrap();
 }
@@ -202,14 +180,11 @@ fn broker_driven_daily_rotation_cross_links_and_verifies() {
     let day1 = 86_400_000 + 500;
     let clock = Rc::new(ManualClock::new(day1));
     let log = AuditLog::open(&dir).unwrap();
-    let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock.clone()))
-        .with_sink(Box::new(log));
+    let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock.clone())).with_sink(Box::new(log));
 
-    let root = b.issue_root(
-        holder(),
-        Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
-        None,
-    ).unwrap();
+    let root = b
+        .issue_root(holder(), Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), None)
+        .unwrap();
     assert!(b.check(&root, Op::FsWrite, Some("./out/a")).is_allow());
 
     // Cross the day boundary via the injected clock; the next record lands in a new day file whose

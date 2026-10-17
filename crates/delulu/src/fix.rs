@@ -76,9 +76,7 @@ impl Verdict {
                 "WIDENS what this program may do — applied only because you named it with \
                  `--accept-widening`"
             }
-            Verdict::Widening => {
-                "would widen what this program may do — a tool must not decide that for you"
-            }
+            Verdict::Widening => "would widen what this program may do — a tool must not decide that for you",
             Verdict::NeedsHuman => "needs a human decision; it carries no edit to apply",
             Verdict::NotExact => "is a suggestion, not a mechanical certainty",
             Verdict::Overlaps => "touches bytes another repair in this run already changed",
@@ -190,9 +188,7 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
     // The comparison is against the bytes rather than against a pragma on purpose: a pragma test
     // would silently miss any future translation `load` learns to do.
     if src != on_disk {
-        eprintln!(
-            "error: `{file}` is not stored as canonical DeluluLang, so `fix` will not write to it"
-        );
+        eprintln!("error: `{file}` is not stored as canonical DeluluLang, so `fix` will not write to it");
         eprintln!(
             "note: this file is translated to canonical text before it is analysed (a `//! morph:` \
              pragma does that), and the repairs describe that canonical text. Writing the repaired \
@@ -233,13 +229,7 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
                 }
                 chosen.push(r);
             }
-            decisions.push(Decision {
-                code: d.code,
-                id: r.id,
-                confidence: r.confidence.as_str(),
-                line,
-                verdict,
-            });
+            decisions.push(Decision { code: d.code, id: r.id, confidence: r.confidence.as_str(), line, verdict });
         }
     }
 
@@ -261,10 +251,7 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
     // count must not rise" — fixing a parse error legitimately reveals the type errors it was
     // masking, and a guard that punished that would block the most useful fixes there are.
     let broke_parsing = parse_errors(&src) == 0 && parse_errors(&out) > 0;
-    let applied = decisions
-        .iter()
-        .filter(|d| matches!(d.verdict, Verdict::Applied | Verdict::AppliedWidening))
-        .count();
+    let applied = decisions.iter().filter(|d| matches!(d.verdict, Verdict::Applied | Verdict::AppliedWidening)).count();
     let mut written = false;
 
     if broke_parsing {
@@ -322,13 +309,7 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
 /// The order of the tests is the policy, and it is deliberate: **the authority question is asked
 /// before the mechanical ones.** A repair that widens authority is reported as widening even if it
 /// would also have been skipped for being inexact, because that is the fact a reader needs.
-fn classify(
-    r: &Repair,
-    file: delulu_diag::FileId,
-    len: usize,
-    accept: &[String],
-    claimed: &[(u32, u32)],
-) -> Verdict {
+fn classify(r: &Repair, file: delulu_diag::FileId, len: usize, accept: &[String], claimed: &[(u32, u32)]) -> Verdict {
     if r.authority_widening && !accept.iter().any(|a| a == r.id) {
         return Verdict::Widening;
     }
@@ -338,9 +319,7 @@ fn classify(
     if r.confidence != Confidence::Exact {
         return Verdict::NotExact;
     }
-    if r.edits.iter().any(|e| {
-        e.file != file || e.start_byte > e.end_byte || e.end_byte as usize > len
-    }) {
+    if r.edits.iter().any(|e| e.file != file || e.start_byte > e.end_byte || e.end_byte as usize > len) {
         return Verdict::Unusable;
     }
     if r.edits.iter().any(|e| claimed.iter().any(|c| conflicts((e.start_byte, e.end_byte), *c))) {

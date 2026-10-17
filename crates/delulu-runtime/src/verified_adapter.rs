@@ -96,16 +96,10 @@ fn interface() -> [(&'static str, Type); 4] {
     let str_result = || Type::result(Type::Str, Type::Str);
     let pure = |params: Vec<Type>, ret: Type| Type::Fn { params, ret: Box::new(ret), row: Row::pure() };
     [
-        (
-            "encode_command",
-            pure(vec![Type::Str, Type::Map(Box::new(Type::Str), Box::new(Type::Float))], str_result()),
-        ),
+        ("encode_command", pure(vec![Type::Str, Type::Map(Box::new(Type::Str), Box::new(Type::Float))], str_result())),
         ("decode_command", pure(vec![Type::Str, Type::Str], Type::Option(Box::new(Type::Str)))),
         ("encode_read", pure(vec![Type::Str], str_result())),
-        (
-            "decode_read",
-            pure(vec![Type::Str, Type::Str], Type::result(Type::Option(Box::new(Type::Float)), Type::Str)),
-        ),
+        ("decode_read", pure(vec![Type::Str, Type::Str], Type::result(Type::Option(Box::new(Type::Float)), Type::Str))),
     ]
 }
 
@@ -196,9 +190,7 @@ impl VerifiedAdapter {
             return Err(self.poison(AdapterError::Closed));
         }
         match self.answers.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-            Ok(Answer::Fault(f)) => {
-                Err(self.poison(AdapterError::Protocol(format!("the driver's logic failed: {f}"))))
-            }
+            Ok(Answer::Fault(f)) => Err(self.poison(AdapterError::Protocol(format!("the driver's logic failed: {f}")))),
             Ok(a) => Ok(a),
             // Poisoned BEFORE returning: an answer that arrives late would otherwise be read as the
             // answer to the next question.
@@ -266,9 +258,9 @@ impl VerifiedAdapter {
             Answer::Reading(Ok(Some(x))) if x.is_finite() => Ok(Some(x)),
             // A non-finite reading is refused rather than propagated: NaN in a control loop silently
             // defeats every comparison it touches — whoever computed it.
-            Answer::Reading(Ok(Some(x))) => Err(self.poison(AdapterError::Protocol(format!(
-                "the driver read a non-finite value ({x}) for `{device}`"
-            )))),
+            Answer::Reading(Ok(Some(x))) => {
+                Err(self.poison(AdapterError::Protocol(format!("the driver read a non-finite value ({x}) for `{device}`"))))
+            }
             Answer::Reading(Ok(None)) => Ok(None),
             Answer::Reading(Err(r)) => Err(AdapterError::Refused(r)),
             _ => Err(self.poison(AdapterError::Protocol("the logic answered out of turn".into()))),
@@ -302,8 +294,7 @@ fn serve_logic(dir: delulu_check::Dir, limits: Limits, inbox: Receiver<Call>, ou
         let interp = Interp::new(&dir.module).with_max_depth(depth).with_plugin_budget(steps, mem_bytes);
         let answer = match call {
             Call::EncodeCommand { device, fields } => {
-                let map: BTreeMap<MapKey, Value> =
-                    fields.into_iter().map(|(d, x)| (MapKey::Str(d), Value::Float(x))).collect();
+                let map: BTreeMap<MapKey, Value> = fields.into_iter().map(|(d, x)| (MapKey::Str(d), Value::Float(x))).collect();
                 let args = vec![Value::str(device), Value::Map(Rc::new(RefCell::new(map)))];
                 run(&interp, "encode_command", args, read_frame)
             }
@@ -323,9 +314,8 @@ fn serve_logic(dir: delulu_check::Dir, limits: Limits, inbox: Receiver<Call>, ou
 
 fn run(interp: &Interp, export: &str, args: Vec<Value>, read: fn(&Value) -> Option<Answer>) -> Answer {
     match interp.call_with(export, args) {
-        Ok(v) => read(&v).unwrap_or_else(|| {
-            Answer::Fault(format!("`{export}` returned `{}`, which its type does not allow", v.display()))
-        }),
+        Ok(v) => read(&v)
+            .unwrap_or_else(|| Answer::Fault(format!("`{export}` returned `{}`, which its type does not allow", v.display()))),
         Err(f) => Answer::Fault(format!("`{export}`: {} {}", f.code, f.message)),
     }
 }
@@ -333,9 +323,7 @@ fn run(interp: &Interp, export: &str, args: Vec<Value>, read: fn(&Value) -> Opti
 fn plugin_err_text(e: &crate::plugin::PluginErr) -> String {
     use crate::plugin::PluginErr as E;
     match e {
-        E::NotGranted(m) | E::VerifyFailed(m) | E::BadArtifact(m) | E::LimitExceeded(m) | E::ApiMismatch(m) => {
-            m.clone()
-        }
+        E::NotGranted(m) | E::VerifyFailed(m) | E::BadArtifact(m) | E::LimitExceeded(m) | E::ApiMismatch(m) => m.clone(),
         E::Revoked(n) => format!("revoked ({n})"),
     }
 }
@@ -466,8 +454,7 @@ mod tests {
     #[test]
     fn a_verified_driver_commands_and_reads_through_the_hosts_transport() {
         let mut replies = vec!["OK", "ERR hard stop at 60", "VAL 21.5", "NODEV", "OK"].into_iter();
-        let (mut a, log, _) =
-            rig(LINE_DRIVER, Limits::default(), move |_| Ok(replies.next().expect("a reply").to_string()));
+        let (mut a, log, _) = rig(LINE_DRIVER, Limits::default(), move |_| Ok(replies.next().expect("a reply").to_string()));
         assert_eq!(a.command("arm0/elbow", &angle(10.5)), Ok(()));
         // The device's own refusal is a refusal, and the driver keeps working after it.
         assert_eq!(a.command("arm0/elbow", &angle(70.0)), Err(AdapterError::Refused("hard stop at 60".into())));
@@ -501,9 +488,8 @@ mod tests {
         assert_eq!(r.code, "DL1502", "{r}");
         assert!(r.message.contains("decode_read"), "{r}");
         // An export of another type.
-        let r = refusal(&driver_with(
-            "pub fn encode_command(device: Str, fields: Map[Str, Int]) -> Result[Str, Str] { Ok(device) }",
-        ));
+        let r =
+            refusal(&driver_with("pub fn encode_command(device: Str, fields: Map[Str, Int]) -> Result[Str, Str] { Ok(device) }"));
         assert_eq!(r.code, "DL1504", "{r}");
         assert!(r.message.contains("encode_command"), "{r}");
         // A driver that asks for a capability does not fit: its parameters are not the interface's.

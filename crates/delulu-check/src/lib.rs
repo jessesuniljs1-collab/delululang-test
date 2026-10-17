@@ -9,13 +9,13 @@ pub mod check;
 pub mod deps;
 pub mod dir;
 // RW 5.4 (V2 P7): the fuzz properties, one copy each — the cargo-fuzz targets and the suite call them.
+pub mod deprecation;
 #[doc(hidden)]
 pub mod fuzz;
 pub mod lockfile;
 pub mod manifest;
 pub mod package;
 pub mod plugin;
-pub mod deprecation;
 pub mod prim_table;
 
 /// The language edition this toolchain speaks (spec §2.2, invariant 43). Distinct from the
@@ -32,21 +32,16 @@ pub mod unify;
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts};
 pub use deps::{
-    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace,
-    PackageAuthority, ResolvedPackage, Workspace,
+    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace, PackageAuthority, ResolvedPackage,
+    Workspace,
 };
-pub use dir::{
-    deserialize as dir_deserialize, serialize as dir_serialize, verify as dir_verify, Dir, DirError,
-};
+pub use dir::{deserialize as dir_deserialize, serialize as dir_serialize, verify as dir_verify, Dir, DirError};
 pub use lockfile::{
-    authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law,
-    verify_locked, LockEntry, Lockfile,
+    authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law, verify_locked, LockEntry, Lockfile,
 };
 pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
 pub use package::{load_package, load_package_into, LoadedModules, ModuleUnit, Package};
-pub use plugin::{
-    check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED,
-};
+pub use plugin::{check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED};
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{ActorDef, DeclTable, FnSig, GKind, STD_ACTORS_SRC};
 pub use ty::{Effect, PluginClass, ResourceKind, Row, RowVar, Type, TypeDefId};
@@ -134,12 +129,7 @@ mod tests {
     }
 
     fn errors(src: &str) -> Vec<String> {
-        check(src)
-            .diagnostics
-            .iter()
-            .filter(|d| d.is_error())
-            .map(|d| d.code.to_string())
-            .collect()
+        check(src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
     }
 
     // ----- prelude-builtin collisions (HARDENING_CAMPAIGN C11) ---------------
@@ -153,11 +143,7 @@ mod tests {
         let c = check(
             "module m\ntype E = Bad\nfn parse_int(s: Str) -> Result[Int, E] { Ok(1) }\nfn use_it(s: Str) -> Int { match parse_int(s) { Ok(n) => n, Err(e) => 0 } }\n",
         );
-        let d = c
-            .diagnostics
-            .iter()
-            .find(|d| d.is_error() && d.code == "DL0302")
-            .expect("expected DL0302 at the definition");
+        let d = c.diagnostics.iter().find(|d| d.is_error() && d.code == "DL0302").expect("expected DL0302 at the definition");
         assert!(d.message.contains("prelude builtin"), "the message must name the cause: {d:?}");
     }
 
@@ -170,11 +156,7 @@ mod tests {
             let src = format!("module m\nfn {name}(x: Int) -> Int {{ x }}\n");
             let c = check(&src);
             assert!(c.has_errors(), "`{name}` must be refused as a declared name");
-            assert!(
-                c.diagnostics.iter().any(|d| d.code == "DL0302"),
-                "`{name}` should be DL0302, got {:?}",
-                c.diagnostics
-            );
+            assert!(c.diagnostics.iter().any(|d| d.code == "DL0302"), "`{name}` should be DL0302, got {:?}", c.diagnostics);
         }
     }
 
@@ -202,8 +184,7 @@ mod tests {
         }
         intercepted.sort_unstable();
         intercepted.dedup();
-        let mut declared: Vec<&str> =
-            crate::check::PRELUDE_BUILTINS.iter().copied().filter(|n| *n != "None").collect();
+        let mut declared: Vec<&str> = crate::check::PRELUDE_BUILTINS.iter().copied().filter(|n| *n != "None").collect();
         declared.sort_unstable();
         assert_eq!(
             intercepted, declared,
@@ -250,8 +231,11 @@ mod tests {
         let head = "module m\nfn f(h: Cap[Http], s: Secret[Str], hs: Map[Str, Str]) -> Result[Str, NetErr] ! {Net} { ";
         let ok = check(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, \"Authorization\", s) }}\n"));
         assert!(!ok.has_errors(), "{:?}", ok.diagnostics);
-        assert!(ok.result.facts["f"].effects.contains(&Effect::Net) && !ok.result.facts["f"].effects.contains(&Effect::Declassify));
-        let plain = errors(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, \"Authorization\", \"plain\") }}\n"));
+        assert!(
+            ok.result.facts["f"].effects.contains(&Effect::Net) && !ok.result.facts["f"].effects.contains(&Effect::Declassify)
+        );
+        let plain =
+            errors(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, \"Authorization\", \"plain\") }}\n"));
         assert!(!plain.is_empty(), "a Str is not a secret: {plain:?}");
         let as_name = errors(&format!("{head}h.get_with_secret(\"https://a.example.com/\", hs, s, s) }}\n"));
         assert!(as_name.contains(&"DL0602".to_string()), "a secret is not a header's NAME: {as_name:?}");
@@ -298,10 +282,7 @@ mod tests {
         for name in crate::check::CORE_EFFECT_NAMES {
             let src = format!("module m\neffect {name}\nfn g() -> Int {{ 1 }}\n");
             let e = errors(&src);
-            assert!(
-                e.contains(&"DL0302".to_string()),
-                "`effect {name}` must be DL0302 — it would be silently inert, got {e:?}"
-            );
+            assert!(e.contains(&"DL0302".to_string()), "`effect {name}` must be DL0302 — it would be silently inert, got {e:?}");
         }
     }
 
@@ -311,9 +292,7 @@ mod tests {
         // `Int`. It checked CLEAN. Both engines lower foreign params by name, so no secret ever
         // actually crossed (`DL0602` still refused the value, verified) — but the file read as
         // though one could, and that is not a state this language may accept.
-        let e = errors(
-            "module m\ntype Int = Secret[Str]\nforeign \"c\" lib l { fn f(x: Int) -> Float }\n",
-        );
+        let e = errors("module m\ntype Int = Secret[Str]\nforeign \"c\" lib l { fn f(x: Int) -> Float }\n");
         assert!(e.contains(&"DL0302".to_string()), "{e:?}");
     }
 
@@ -409,12 +388,8 @@ mod tests {
     #[test]
     fn other_unmarshallable_types_in_foreign_sig_are_dl1301() {
         // Cap, the lib handle itself, List, and user types are all unmarshallable.
-        for sig in [
-            "fn f(c: Cap[FsRead]) -> Int",
-            "fn f(m: l) -> Int",
-            "fn f(xs: List[Int]) -> Int",
-            "fn f(x: Int) -> List[Int]",
-        ] {
+        for sig in ["fn f(c: Cap[FsRead]) -> Int", "fn f(m: l) -> Int", "fn f(xs: List[Int]) -> Int", "fn f(x: Int) -> List[Int]"]
+        {
             let src = format!("module m\nforeign \"c\" lib l {{ {sig} }}\n");
             let e = errors(&src);
             assert!(e.contains(&"DL1301".to_string()), "expected DL1301 for `{sig}`: {e:?}");
@@ -625,9 +600,7 @@ mod tests {
         // Spec §4.4 / R-6a: `obj.call([closure])` is the no-callbacks rule, DL1302 — the spec wants
         // the R-6a diagnostic, not a bare type mismatch. A pure-closure list (`List[fn]`) is caught
         // by the Python-arg fence.
-        let e = errors(
-            "module m\nfn f(o: PyObj, g: fn(Int) -> Int) -> Result[PyObj, PyErr] ! {ForeignCall} { o.call([g]) }\n",
-        );
+        let e = errors("module m\nfn f(o: PyObj, g: fn(Int) -> Int) -> Result[PyObj, PyErr] ! {ForeignCall} { o.call([g]) }\n");
         assert!(e.contains(&"DL1302".to_string()), "{e:?}");
         assert!(!e.contains(&"DL0401".to_string()), "the R-6a diagnostic must replace the plain mismatch: {e:?}");
     }
@@ -852,9 +825,11 @@ mod tests {
         assert!(!c.has_errors(), "reference program should check clean: {:?}", c.diagnostics);
         // Authority report: main can Read and Write, nothing else.
         let report = authority_report("demo", &c.result, &ScopeInfo::default());
-        let effects: Vec<String> = report["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        let effects: Vec<String> =
+            report["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert_eq!(effects, vec!["Read", "Write"]);
-        let pure: Vec<String> = report["pure_functions"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        let pure: Vec<String> =
+            report["pure_functions"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(pure.contains(&"fib".to_string()) && pure.contains(&"apply".to_string()));
         assert_eq!(report["secrets"][0], "API_KEY");
     }
@@ -863,9 +838,7 @@ mod tests {
 
     #[test]
     fn write_through_a_box_receiver_is_dl1604() {
-        let e = errors(
-            "module m\ntype P { x: Int }\nfn f(p: box P) { p.x = 1 }\n",
-        );
+        let e = errors("module m\ntype P { x: Int }\nfn f(p: box P) { p.x = 1 }\n");
         assert!(e.contains(&"DL1604".to_string()), "{e:?}");
     }
 
@@ -1064,10 +1037,7 @@ fn f(p: P) -> Int { p.x }
 }
 ",
         );
-        assert!(
-            e.iter().any(|c| c == "DL1603" || c == "DL1604"),
-            "a write after the lift must be refused: {e:?}"
-        );
+        assert!(e.iter().any(|c| c == "DL1603" || c == "DL1604"), "a write after the lift must be refused: {e:?}");
     }
 
     /// And an AUTHOR-WRITTEN rcap is never lifted. `let xs: ref List[Int]` asked for write access;
@@ -1115,11 +1085,8 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         );
         // It points at the element that forbids the lift. The primary span is the binding; the
         // secondary one is the offending element, and a reader with ten elements needs that.
-        let blamed = d
-            .spans
-            .iter()
-            .find(|s| s.secondary)
-            .unwrap_or_else(|| panic!("the element must be pointed at: {:?}", d.spans));
+        let blamed =
+            d.spans.iter().find(|s| s.secondary).unwrap_or_else(|| panic!("the element must be pointed at: {:?}", d.spans));
         assert!(
             blamed.label.as_deref().unwrap_or("").contains("`ref`"),
             "and the label must name its capability: {:?}",
@@ -1149,11 +1116,7 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         let mut fixed = src.to_string();
         fixed.replace_range(e.start_byte as usize..e.end_byte as usize, &e.insert);
         let after = check(&fixed);
-        assert!(
-            !after.has_errors(),
-            "the repair must actually fix it — got {:?} for:\n{fixed}",
-            after.diagnostics
-        );
+        assert!(!after.has_errors(), "the repair must actually fix it — got {:?} for:\n{fixed}", after.diagnostics);
     }
 
     /// The control, and the reason the rule is not "reject `val` containers": a `val` container of
@@ -1461,9 +1424,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
     #[test]
     fn a_pyobj_behavior_param_is_dl1601_with_the_pinning_explanation() {
         // Acceptance criterion 11: PyObj is actor-pinned (invariant 36 — CPython affinity).
-        let c = check(
-            "module m\nactor A { var n: Int\nnew() { self.n = 0 }\nbe feed(p: PyObj) { } }\n",
-        );
+        let c = check("module m\nactor A { var n: Int\nnew() { self.n = 0 }\nbe feed(p: PyObj) { } }\n");
         let d = c.diagnostics.iter().find(|d| d.code == "DL1601").expect("DL1601 expected");
         assert!(d.message.contains("pinned"), "the pinning explanation: {}", d.message);
         assert!(d.message.contains("CPython"), "names the affinity: {}", d.message);
@@ -1472,18 +1433,14 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
     #[test]
     fn undecidable_param_sendability_is_dl1601() {
         // A bare generic parameter: sendability cannot be established — never guessed.
-        let e = errors(
-            "module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: T) { } }\n",
-        );
+        let e = errors("module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: T) { } }\n");
         assert!(e.contains(&"DL1601".to_string()), "{e:?}");
     }
 
     #[test]
     fn a_written_val_generic_param_is_sendable() {
         // The Promise pattern (spec §8): `val T` is sendable by annotation.
-        let c = check(
-            "module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: val T) { } }\n",
-        );
+        let c = check("module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: val T) { } }\n");
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
 
@@ -1529,9 +1486,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
 
     #[test]
     fn a_constructor_that_misses_a_field_is_refused() {
-        let e = errors(
-            "module m\nactor A { var x: Int\nlet y: Str\nnew(x: Int) { self.x = x } }\n",
-        );
+        let e = errors("module m\nactor A { var x: Int\nlet y: Str\nnew(x: Int) { self.x = x } }\n");
         assert!(e.contains(&"DL0405".to_string()), "{e:?}");
     }
 
@@ -1569,9 +1524,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
 
     #[test]
     fn spawn_without_async_in_the_row_is_dl0501() {
-        let e = errors(&format!(
-            "{COUNTER}fn go() {{\nlet a = spawn Counter(0, \"c\")\n}}\n"
-        ));
+        let e = errors(&format!("{COUNTER}fn go() {{\nlet a = spawn Counter(0, \"c\")\n}}\n"));
         assert!(e.contains(&"DL0501".to_string()), "{e:?}");
     }
 
@@ -1585,13 +1538,9 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             new(out: Cap[Console]) { self.out = out }\n\
             be log(msg: Str) ! {Write} { self.out.println(msg) }\n\
             }\n";
-        let e = errors(&format!(
-            "{src}fn go(l: Logger) ! {{Async}} {{ l.log(\"x\") }}\n"
-        ));
+        let e = errors(&format!("{src}fn go(l: Logger) ! {{Async}} {{ l.log(\"x\") }}\n"));
         assert!(e.contains(&"DL0501".to_string()), "{e:?}");
-        let c = check(&format!(
-            "{src}fn go(l: Logger) ! {{Async, Write}} {{ l.log(\"x\") }}\n"
-        ));
+        let c = check(&format!("{src}fn go(l: Logger) ! {{Async, Write}} {{ l.log(\"x\") }}\n"));
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
 
@@ -1605,9 +1554,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             }\n";
         let e = errors(&format!("{src}fn go(fs: Cap[FsRead]) ! {{Async}} {{ let a = spawn Loader(fs) }}\n"));
         assert!(e.contains(&"DL0501".to_string()), "{e:?}");
-        let c = check(&format!(
-            "{src}fn go(fs: Cap[FsRead]) ! {{Async, Read}} {{ let a = spawn Loader(fs) }}\n"
-        ));
+        let c = check(&format!("{src}fn go(fs: Cap[FsRead]) ! {{Async, Read}} {{ let a = spawn Loader(fs) }}\n"));
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
 
@@ -1752,9 +1699,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
     fn a_test_row_bounds_its_body_like_a_fn_row() {
         // Undeclared Write inside a test — DL0501 with the same widening repair as a fn,
         // and the message names the TEST honestly, not a phantom "function".
-        let c = check(
-            "module m\ntest \"writes\" {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n",
-        );
+        let c = check("module m\ntest \"writes\" {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n");
         let d = c.diagnostics.iter().find(|d| d.code == "DL0501").expect("DL0501 expected");
         assert!(d.message.contains("test \"writes\""), "honest wording: {}", d.message);
         assert!(
@@ -1762,28 +1707,20 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             "the agent-facing repair must be present"
         );
         // With the row declared, the same body checks clean.
-        let ok = check(
-            "module m\ntest \"writes\" ! {Write} {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n",
-        );
+        let ok = check("module m\ntest \"writes\" ! {Write} {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n");
         assert!(!ok.has_errors(), "{:?}", ok.diagnostics);
     }
 
     #[test]
     fn a_test_declaring_an_unperformed_effect_warns_dl0502() {
         let c = check("module m\ntest \"lazy\" ! {Write} {\n  assert(true)\n}\n");
-        assert!(
-            c.diagnostics.iter().any(|d| d.code == "DL0502" && d.message.contains("test \"lazy\"")),
-            "{:?}",
-            c.diagnostics
-        );
+        assert!(c.diagnostics.iter().any(|d| d.code == "DL0502" && d.message.contains("test \"lazy\"")), "{:?}", c.diagnostics);
     }
 
     #[test]
     fn assert_eq_on_a_secret_is_dl0605_r5_holds_in_tests() {
         // "Comparing secrets in tests is refused like everywhere else" (spec §2).
-        let e = errors(
-            "module m\nfn f(a: Secret[Str], b: Secret[Str]) { assert_eq(a, b) }\n",
-        );
+        let e = errors("module m\nfn f(a: Secret[Str], b: Secret[Str]) { assert_eq(a, b) }\n");
         assert!(e.contains(&"DL0605".to_string()), "{e:?}");
     }
 
@@ -1825,17 +1762,11 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
     /// construction).
     #[test]
     fn criterion7_seed_dl0501_slang_human_vs_frozen_machine_envelope() {
-        use delulu_diag::{
-            envelope, render_human, render_human_localized, Catalog, Palette, SourceMap,
-        };
+        use delulu_diag::{envelope, render_human, render_human_localized, Catalog, Palette, SourceMap};
         let src = "module m\nfn greet(out: Cap[Console], n: Str) { out.println(n) }\n";
         let c = check(src);
         let d = c.diagnostics.iter().find(|d| d.code == "DL0501").expect("DL0501");
-        assert!(
-            d.args.iter().any(|(k, v)| k == "fn" && v.contains("greet")),
-            "the site carries typed args: {:?}",
-            d.args
-        );
+        assert!(d.args.iter().any(|(k, v)| k == "fn" && v.contains("greet")), "the site carries typed args: {:?}", d.args);
 
         let mut map = SourceMap::new();
         map.add_file("m.delulu", src);
@@ -1888,12 +1819,7 @@ mod alias_declaration_tests {
     use super::check_source;
 
     fn errors(src: &str) -> Vec<String> {
-        check_source(0, src)
-            .diagnostics
-            .iter()
-            .filter(|d| d.is_error())
-            .map(|d| d.code.to_string())
-            .collect()
+        check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
     }
 
     const MAIN: &str = "\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n";
@@ -1925,10 +1851,7 @@ mod alias_declaration_tests {
             );
             // And with a use, which is the shape that used to crash rather than diagnose.
             let used = errors(&format!("{src}\nfn f(x: A) -> Int {{ 1 }}\n{MAIN}"));
-            assert!(
-                used.contains(&"DL0304".to_string()),
-                "{what}: using it must still diagnose, never abort: {used:?}"
-            );
+            assert!(used.contains(&"DL0304".to_string()), "{what}: using it must still diagnose, never abort: {used:?}");
         }
     }
 
@@ -2014,5 +1937,4 @@ mod alias_declaration_tests {
         // A function that is not `main` may take anything.
         assert!(codes("module m\nfn helper(n: Int) -> Int { n }\nfn main() {}\n").is_empty());
     }
-
 }

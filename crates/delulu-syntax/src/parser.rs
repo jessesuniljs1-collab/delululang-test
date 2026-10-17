@@ -274,12 +274,7 @@ impl Parser {
         } else {
             let found = self.peek().describe();
             let want = kind.describe();
-            self.error(
-                "DL0201",
-                format!("expected {want}, found {found}"),
-                self.span(),
-                format!("expected {want} here"),
-            );
+            self.error("DL0201", format!("expected {want}, found {found}"), self.span(), format!("expected {want} here"));
             false
         }
     }
@@ -447,8 +442,8 @@ impl Parser {
             while self.eat(&TokenKind::Term) {}
             // An import is `import …` or `pub import …`. A bare `pub` followed by anything else
             // (e.g. `pub fn`) is an item, not an import — that ends the import section.
-            let is_import = self.at(&TokenKind::KwImport)
-                || (self.at(&TokenKind::KwPub) && *self.peek_at(1) == TokenKind::KwImport);
+            let is_import =
+                self.at(&TokenKind::KwImport) || (self.at(&TokenKind::KwPub) && *self.peek_at(1) == TokenKind::KwImport);
             if !is_import {
                 break;
             }
@@ -475,7 +470,12 @@ impl Parser {
                         "move this import up to the import section",
                     );
                 } else if !p.at_eof() {
-                    p.error("DL0208", "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)", p.span(), "not an item");
+                    p.error(
+                        "DL0208",
+                        "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+                        p.span(),
+                        "not an item",
+                    );
                 }
                 p.recover_item();
             }
@@ -536,24 +536,21 @@ impl Parser {
     fn refuse_attrs_here(&mut self, attrs: &[Attribute], what: &str) {
         for a in attrs {
             self.diags.push(
-                Diagnostic::error(
-                    "DL1901",
-                    format!("attribute `@{}` is not permitted on {what}", a.name.name),
-                )
-                .with_span(a.span, "attributes apply to `fn`, `actor`, and the module header in v1.x")
-                .with_repair(Repair {
-                    id: "remove-unknown-attribute",
-                    confidence: Confidence::Exact,
-                    authority_widening: false,
-                    requires_human: false,
-                    edits: vec![Edit {
-                        file: a.span.file,
-                        start_byte: a.span.start,
-                        end_byte: a.span.end,
-                        insert: String::new(),
-                    }],
-                    reason: None,
-                }),
+                Diagnostic::error("DL1901", format!("attribute `@{}` is not permitted on {what}", a.name.name))
+                    .with_span(a.span, "attributes apply to `fn`, `actor`, and the module header in v1.x")
+                    .with_repair(Repair {
+                        id: "remove-unknown-attribute",
+                        confidence: Confidence::Exact,
+                        authority_widening: false,
+                        requires_human: false,
+                        edits: vec![Edit {
+                            file: a.span.file,
+                            start_byte: a.span.start,
+                            end_byte: a.span.end,
+                            insert: String::new(),
+                        }],
+                        reason: None,
+                    }),
             );
         }
     }
@@ -681,7 +678,12 @@ impl Parser {
             }
             _ => {
                 if public {
-                    self.error("DL0208", "expected an item after `pub`", self.span(), "expected `fn`, `type`, `effect`, or `let`");
+                    self.error(
+                        "DL0208",
+                        "expected an item after `pub`",
+                        self.span(),
+                        "expected `fn`, `type`, `effect`, or `let`",
+                    );
                 }
                 None
             }
@@ -889,10 +891,7 @@ impl Parser {
                 other => {
                     p.error(
                         "DL0201",
-                        format!(
-                            "expected an actor member (`let`/`var` field, `new`, `be`, or `fn`), found {}",
-                            other.describe()
-                        ),
+                        format!("expected an actor member (`let`/`var` field, `new`, `be`, or `fn`), found {}", other.describe()),
                         p.span(),
                         "not an actor member",
                     );
@@ -982,24 +981,16 @@ impl Parser {
     fn dl1608(&mut self, word: &str, span: Span) {
         let renamed = format!("{word}_");
         self.diags.push(
-            Diagnostic::error(
-                "DL1608",
-                format!("`{word}` is a keyword in v0.7 and can no longer be used as an identifier"),
-            )
-            .with_span(span, format!("rename to `{renamed}` (or run `delulu fmt --migrate 0.7`)"))
-            .with_repair(Repair {
-                id: "rename-v07-keyword",
-                confidence: Confidence::Exact,
-                authority_widening: false,
-                requires_human: false,
-                edits: vec![Edit {
-                    file: span.file,
-                    start_byte: span.start,
-                    end_byte: span.end,
-                    insert: renamed,
-                }],
-                reason: None,
-            }),
+            Diagnostic::error("DL1608", format!("`{word}` is a keyword in v0.7 and can no longer be used as an identifier"))
+                .with_span(span, format!("rename to `{renamed}` (or run `delulu fmt --migrate 0.7`)"))
+                .with_repair(Repair {
+                    id: "rename-v07-keyword",
+                    confidence: Confidence::Exact,
+                    authority_widening: false,
+                    requires_human: false,
+                    edits: vec![Edit { file: span.file, start_byte: span.start, end_byte: span.end, insert: renamed }],
+                    reason: None,
+                }),
         );
     }
 
@@ -1075,12 +1066,7 @@ impl Parser {
         let start = self.span();
         self.bump(); // `test` (identifier token used as a contextual keyword)
         if public {
-            self.error(
-                "DL0208",
-                "`test` blocks cannot be `pub`",
-                start,
-                "tests are not exported items — remove `pub`",
-            );
+            self.error("DL0208", "`test` blocks cannot be `pub`", start, "tests are not exported items — remove `pub`");
         }
         let (name, name_span) = match self.peek().clone() {
             TokenKind::Str(s) => {
@@ -1196,8 +1182,7 @@ impl Parser {
     /// decision no longer depends on name resolution, so the grammar stays context-free: what makes
     /// this a sum is a token, not whether some identifier happens to name an existing type.
     fn looks_like_variant(&self) -> bool {
-        matches!(self.peek(), TokenKind::Ident(_))
-            && matches!(self.peek_at(1), TokenKind::LParen | TokenKind::Pipe)
+        matches!(self.peek(), TokenKind::Ident(_)) && matches!(self.peek_at(1), TokenKind::LParen | TokenKind::Pipe)
     }
 
     fn parse_variant(&mut self) -> VariantDef {
@@ -1240,11 +1225,7 @@ impl Parser {
                 span,
                 "name an inner type with a `type` alias instead of nesting this far",
             );
-            return TypeExpr::Named {
-                path: Path { segs: vec![Ident { name: "<error>".into(), span }] },
-                args: Vec::new(),
-                span,
-            };
+            return TypeExpr::Named { path: Path { segs: vec![Ident { name: "<error>".into(), span }] }, args: Vec::new(), span };
         }
         self.type_depth += 1;
         let t = self.parse_type_prefixed();
@@ -1295,11 +1276,7 @@ impl Parser {
             let span = self.span();
             let found = self.peek().describe();
             self.error("DL0203", format!("expected a type, found {found}"), span, "type expected");
-            return TypeExpr::Named {
-                path: Path { segs: vec![Ident { name: "<error>".into(), span }] },
-                args: Vec::new(),
-                span,
-            };
+            return TypeExpr::Named { path: Path { segs: vec![Ident { name: "<error>".into(), span }] }, args: Vec::new(), span };
         }
         if self.at(&TokenKind::KwFn) {
             let start = self.span();
@@ -1497,11 +1474,7 @@ impl Parser {
             TokenKind::KwReturn => {
                 let start = self.span();
                 self.bump();
-                let value = if self.at(&TokenKind::Term) || self.at(&TokenKind::RBrace) {
-                    None
-                } else {
-                    Some(self.parse_expr())
-                };
+                let value = if self.at(&TokenKind::Term) || self.at(&TokenKind::RBrace) { None } else { Some(self.parse_expr()) };
                 let span = start.to(self.prev_span());
                 self.expect_term();
                 Some(Stmt::Return { value, span })
@@ -1532,9 +1505,7 @@ impl Parser {
 
     fn expr_to_lvalue(&self, e: Expr) -> Option<LValue> {
         match e {
-            Expr::Var { path, .. } if path.segs.len() == 1 => {
-                Some(LValue::Var(path.segs.into_iter().next().unwrap()))
-            }
+            Expr::Var { path, .. } if path.segs.len() == 1 => Some(LValue::Var(path.segs.into_iter().next().unwrap())),
             Expr::Field { recv, name, .. } => Some(LValue::Field(Box::new(self.expr_to_lvalue(*recv)?), name)),
             Expr::Index { recv, index, .. } => Some(LValue::Index(Box::new(self.expr_to_lvalue(*recv)?), *index)),
             _ => None,
@@ -1685,9 +1656,7 @@ impl Parser {
                 }
                 // At the top of the refused operand these end it: the statement, the argument
                 // list, or the enclosing block. Inside a group they are ordinary tokens.
-                TokenKind::Term | TokenKind::Comma | TokenKind::LBrace | TokenKind::RBrace
-                    if parens == 0 && brackets == 0 =>
-                {
+                TokenKind::Term | TokenKind::Comma | TokenKind::LBrace | TokenKind::RBrace if parens == 0 && brackets == 0 => {
                     break;
                 }
                 _ => {
@@ -1972,7 +1941,12 @@ impl Parser {
                 }
             }
             other => {
-                self.error("DL0202", format!("expected an expression, found {}", other.describe()), start, "expected an expression");
+                self.error(
+                    "DL0202",
+                    format!("expected an expression, found {}", other.describe()),
+                    start,
+                    "expected an expression",
+                );
                 // Produce a placeholder so callers keep making progress.
                 Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start }
             }
@@ -2016,11 +1990,7 @@ impl Parser {
             let arm_start = p.span();
             let pattern = p.parse_pattern();
             p.expect(TokenKind::FatArrow);
-            let body = if p.at(&TokenKind::LBrace) {
-                Expr::Block(p.parse_block())
-            } else {
-                p.parse_expr()
-            };
+            let body = if p.at(&TokenKind::LBrace) { Expr::Block(p.parse_block()) } else { p.parse_expr() };
             // An arm body is an expression; assignment is a statement. `x => n = 1` therefore
             // stops the expression parser dead at `=`, which nothing else consumes. Name the
             // real rule and hand back the exact edit rather than leaving the reader with
@@ -2271,11 +2241,8 @@ mod tests {
     #[test]
     fn a_deeply_nested_pattern_is_dl0212_not_a_stack_overflow() {
         let n = (MAX_PATTERN_DEPTH as usize) + 50;
-        let src = format!(
-            "module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n",
-            "Some(".repeat(n),
-            ")".repeat(n),
-        );
+        let src =
+            format!("module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n", "Some(".repeat(n), ")".repeat(n),);
         let (_, d) = parse_src(&src);
         assert!(d.iter().any(|x| x.code == "DL0212"), "expected DL0212, got {d:?}");
     }
@@ -2285,11 +2252,8 @@ mod tests {
     #[test]
     fn a_pattern_within_the_limit_still_parses_clean() {
         let n = 32;
-        let src = format!(
-            "module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n",
-            "Some(".repeat(n),
-            ")".repeat(n),
-        );
+        let src =
+            format!("module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n", "Some(".repeat(n), ")".repeat(n),);
         let (_, d) = parse_src(&src);
         assert!(
             !d.iter().any(|x| x.code == "DL0212"),
@@ -2305,11 +2269,7 @@ mod tests {
     #[test]
     fn deeply_nested_statement_blocks_are_dl0213_not_a_stack_overflow() {
         let n = (MAX_BLOCK_DEPTH as usize) + 50;
-        let src = format!(
-            "module m\nfn f() {{ {}{} }}\n",
-            "while true { ".repeat(n),
-            "}".repeat(n),
-        );
+        let src = format!("module m\nfn f() {{ {}{} }}\n", "while true { ".repeat(n), "}".repeat(n),);
         let (_, d) = parse_src(&src);
         assert!(d.iter().any(|x| x.code == "DL0213"), "expected DL0213, got {d:?}");
     }
@@ -2318,16 +2278,9 @@ mod tests {
     #[test]
     fn statement_blocks_within_the_limit_still_parse_clean() {
         let n = 32;
-        let src = format!(
-            "module m\nfn f() {{ {}{} }}\n",
-            "while true { ".repeat(n),
-            "}".repeat(n),
-        );
+        let src = format!("module m\nfn f() {{ {}{} }}\n", "while true { ".repeat(n), "}".repeat(n),);
         let (_, d) = parse_src(&src);
-        assert!(
-            !d.iter().any(|x| x.code == "DL0213"),
-            "32 levels of loop nesting must parse without a depth refusal, got {d:?}"
-        );
+        assert!(!d.iter().any(|x| x.code == "DL0213"), "32 levels of loop nesting must parse without a depth refusal, got {d:?}");
     }
 
     #[test]
@@ -2492,9 +2445,7 @@ mod tests {
 
     #[test]
     fn foreign_block_parses_round_trip() {
-        let m = parse_ok(
-            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float\n fn sqrt(x: Float) -> Float }\n",
-        );
+        let m = parse_ok("module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float\n fn sqrt(x: Float) -> Float }\n");
         assert_eq!(m.items.len(), 1);
         match &m.items[0] {
             Item::Foreign(fd) => {
@@ -2617,12 +2568,8 @@ mod tests {
         assert_eq!(actor.dotted(), "m.Counter");
         assert_eq!(args.len(), 2);
         // recover default target (iso) and explicit val
-        let Stmt::Let { value: Expr::Recover { target: None, .. }, .. } = &f.body.stmts[1] else {
-            panic!()
-        };
-        let Stmt::Let { value: Expr::Recover { target: Some(Rcap::Val), .. }, .. } = &f.body.stmts[2] else {
-            panic!()
-        };
+        let Stmt::Let { value: Expr::Recover { target: None, .. }, .. } = &f.body.stmts[1] else { panic!() };
+        let Stmt::Let { value: Expr::Recover { target: Some(Rcap::Val), .. }, .. } = &f.body.stmts[2] else { panic!() };
         // consume as a send argument
         let Stmt::Expr(Expr::Method { args: send_args, .. }) = &f.body.stmts[3] else { panic!() };
         assert!(matches!(&send_args[0], Expr::Consume { name, .. } if name.name == "xs"));
@@ -2676,9 +2623,7 @@ mod tests {
 
     #[test]
     fn dl1606_behavior_return_type_with_delete_repair() {
-        let (_, d) = parse_src(
-            "module m\nactor A { new() { }\nbe f(x: val Str) -> Int { } }\n",
-        );
+        let (_, d) = parse_src("module m\nactor A { new() { }\nbe f(x: val Str) -> Int { } }\n");
         let diag = d.iter().find(|x| x.code == "DL1606").expect("DL1606 expected: {d:?}");
         let repair = diag.repairs.first().expect("delete repair expected");
         assert_eq!(repair.edits[0].insert, "");
@@ -2800,29 +2745,31 @@ mod discard_binding_tests {
     /// `let ignored = expr` already discards, so all it bought was a worse name.
     #[test]
     fn let_underscore_binds_the_discard_name() {
-        let m = parse_ok("module m
+        let m = parse_ok(
+            "module m
 fn f() -> Int {
  let _ = 1
  2
 }
-");
+",
+        );
         let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
-        let Stmt::Let { name, .. } = &f.body.stmts[0] else {
-            panic!("expected a let, got {:?}", f.body.stmts[0])
-        };
+        let Stmt::Let { name, .. } = &f.body.stmts[0] else { panic!("expected a let, got {:?}", f.body.stmts[0]) };
         assert_eq!(name.name, "_");
     }
 
     /// Two discards in one scope must not collide — which is the point of allowing `_` at all.
     #[test]
     fn more_than_one_discard_in_a_scope_is_fine() {
-        let m = parse_ok("module m
+        let m = parse_ok(
+            "module m
 fn f() -> Int {
  let _ = 1
  let _ = 2
  3
 }
-");
+",
+        );
         let Item::Fn(f) = &m.items[0] else { panic!() };
         assert_eq!(f.body.stmts.len(), 3);
     }
@@ -2831,12 +2778,14 @@ fn f() -> Int {
     /// special case is a rule someone has to remember.
     #[test]
     fn var_underscore_parses_as_well() {
-        let m = parse_ok("module m
+        let m = parse_ok(
+            "module m
 fn f() -> Int {
  var _ = 1
  2
 }
-");
+",
+        );
         let Item::Fn(f) = &m.items[0] else { panic!() };
         let Stmt::Let { name, mutable, .. } = &f.body.stmts[0] else { panic!() };
         assert_eq!(name.name, "_");
@@ -2853,11 +2802,7 @@ fn f() -> Int {
         assert_eq!(tokens[0].kind, TokenKind::Underscore);
         // `_foo` is an ordinary identifier — only the bare one is the discard.
         let (tokens, _) = crate::lexer::lex(0, "_foo");
-        assert!(
-            matches!(tokens[0].kind, TokenKind::Ident(ref n) if n == "_foo"),
-            "got {:?}",
-            tokens[0].kind
-        );
+        assert!(matches!(tokens[0].kind, TokenKind::Ident(ref n) if n == "_foo"), "got {:?}", tokens[0].kind);
     }
 }
 

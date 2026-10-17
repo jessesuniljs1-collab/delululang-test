@@ -82,10 +82,7 @@ fn criterion5_publish_add_build_round_trip_from_a_clean_machine() {
 
     // --- a CLEAN machine: a fresh directory that has never seen this package ---
     let client_root = scratch("clean-client");
-    assert!(
-        std::fs::read_dir(&client_root).unwrap().next().is_none(),
-        "the resolving machine starts with nothing cached"
-    );
+    assert!(std::fs::read_dir(&client_root).unwrap().next().is_none(), "the resolving machine starts with nothing cached");
 
     let idx = c.json_body(&c.call("GET", "/index/widget", "", ""));
     let line = idx["lines"].as_array().and_then(|l| l.last()).expect("index line");
@@ -121,12 +118,7 @@ fn a_registry_outage_does_not_break_an_already_resolved_build() {
 
     let artifact = "widget 1.0.0 PERFORMS_WRITE";
     let sig = hex_lower(&delulu_runtime::sign_detached(&[9u8; 32], artifact.as_bytes()));
-    c.call(
-        "POST",
-        "/publish",
-        &json!({"name":"widget","version":"1.0.0","artifact":artifact,"signature":sig}).to_string(),
-        &tok,
-    );
+    c.call("POST", "/publish", &json!({"name":"widget","version":"1.0.0","artifact":artifact,"signature":sig}).to_string(), &tok);
 
     // The client resolves once and caches — this is the lockfile's job.
     let cache = scratch("outage-cache").join("index");
@@ -140,10 +132,7 @@ fn a_registry_outage_does_not_break_an_already_resolved_build() {
     // client's job is to not need the network at all once it has resolved.
     let dead = Client { addr: "127.0.0.1:1".parse().unwrap() };
     assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            dead.call("GET", "/index/widget", "", "")
-        }))
-        .is_err(),
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { dead.call("GET", "/index/widget", "", "") })).is_err(),
         "the outage simulation must genuinely be unreachable, or this test proves nothing"
     );
 
@@ -192,9 +181,5 @@ fn criterion5_a_doctored_index_line_never_reaches_a_client() {
     );
     assert!(resp2.contains("\"published\""), "{resp2}");
     let idx2 = c.json_body(&c.call("GET", "/index/backdoor", "", ""));
-    assert_eq!(
-        idx2["lines"][0]["effects"],
-        json!(["Net"]),
-        "the client is told what the artifact actually does"
-    );
+    assert_eq!(idx2["lines"][0]["effects"], json!(["Net"]), "the client is told what the artifact actually does");
 }

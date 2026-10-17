@@ -29,10 +29,7 @@ impl Atlas {
         // `mod::fn` → the function whose id ends with `/<mod>.<fn>`.
         let by_qual: Vec<&Node> = if let Some((m, f)) = query.split_once("::") {
             let suffix = format!("/{m}.{f}");
-            self.nodes
-                .iter()
-                .filter(|n| n.kind == NodeKind::Function && n.id.ends_with(&suffix))
-                .collect()
+            self.nodes.iter().filter(|n| n.kind == NodeKind::Function && n.id.ends_with(&suffix)).collect()
         } else {
             Vec::new()
         };
@@ -46,11 +43,7 @@ impl Atlas {
         }
         // A bare function name matching a function id `…​.<name>`.
         let suffix = format!(".{query}");
-        let by_fn: Vec<&Node> = self
-            .nodes
-            .iter()
-            .filter(|n| n.kind == NodeKind::Function && n.id.ends_with(&suffix))
-            .collect();
+        let by_fn: Vec<&Node> = self.nodes.iter().filter(|n| n.kind == NodeKind::Function && n.id.ends_with(&suffix)).collect();
         if !by_fn.is_empty() {
             return one_or_many(by_fn);
         }
@@ -250,18 +243,9 @@ impl Atlas {
             let _ = writeln!(out, "no function performs/requires `{}`", target.name);
             return out;
         }
-        let _ = writeln!(
-            out,
-            "`{}` — {} function(s) perform/require it:",
-            target.name,
-            origins.len()
-        );
+        let _ = writeln!(out, "`{}` — {} function(s) perform/require it:", target.name, origins.len());
         // Entry points: functions named `main` (bin) or any function if there is none.
-        let entries: Vec<&str> = self
-            .functions()
-            .filter(|n| n.name == "main")
-            .map(|n| n.id.as_str())
-            .collect();
+        let entries: Vec<&str> = self.functions().filter(|n| n.name == "main").map(|n| n.id.as_str()).collect();
         for &id in &origins {
             let name = self.node(id).map(|n| n.name.as_str()).unwrap_or(id);
             let _ = writeln!(out, "  - {name}  ({id})");
@@ -383,7 +367,9 @@ impl Atlas {
                     (Err(e), _) | (_, Err(e)) => return json!({ "command": "atlas", "verb": "path", "result": e }),
                 };
                 match self.shortest_path(&from.id, &to.id) {
-                    None => json!({ "command": "atlas", "verb": "path", "from": from.id, "to": to.id, "found": false, "hops": [] }),
+                    None => {
+                        json!({ "command": "atlas", "verb": "path", "from": from.id, "to": to.id, "found": false, "hops": [] })
+                    }
                     Some(path) => {
                         let hops: Vec<Value> = path
                             .iter()

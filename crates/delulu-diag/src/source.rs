@@ -70,11 +70,7 @@ impl SourceMap {
         let f = self.file(id);
         let idx = (line - 1) as usize;
         let start = f.line_starts[idx] as usize;
-        let end = f
-            .line_starts
-            .get(idx + 1)
-            .map(|&e| e as usize)
-            .unwrap_or(f.src.len());
+        let end = f.line_starts.get(idx + 1).map(|&e| e as usize).unwrap_or(f.src.len());
         f.src[start..end].trim_end_matches(['\n', '\r'])
     }
 }

@@ -10,10 +10,7 @@ use crate::span::Span;
 fn position_json(map: &SourceMap, span: Span) -> (Value, Value) {
     let (sl, sc) = map.position(span.file, span.start);
     let (el, ec) = map.position(span.file, span.end);
-    (
-        json!({ "line": sl, "col": sc, "byte": span.start }),
-        json!({ "line": el, "col": ec, "byte": span.end }),
-    )
+    (json!({ "line": sl, "col": sc, "byte": span.start }), json!({ "line": el, "col": ec, "byte": span.end }))
 }
 
 fn diagnostic_json(map: &SourceMap, d: &Diagnostic) -> Value {
@@ -85,17 +82,9 @@ fn diagnostic_json(map: &SourceMap, d: &Diagnostic) -> Value {
 
 /// Build the full envelope. `authority` is `Some` for `delulu authority`
 /// (and optionally for `check`); `None` omits the field entirely.
-pub fn envelope(
-    command: &str,
-    diagnostics: &[Diagnostic],
-    authority: Option<Value>,
-    map: &SourceMap,
-) -> Value {
+pub fn envelope(command: &str, diagnostics: &[Diagnostic], authority: Option<Value>, map: &SourceMap) -> Value {
     let errors = diagnostics.iter().filter(|d| d.is_error()).count();
-    let warnings = diagnostics
-        .iter()
-        .filter(|d| d.severity == crate::Severity::Warning)
-        .count();
+    let warnings = diagnostics.iter().filter(|d| d.severity == crate::Severity::Warning).count();
     let mut env = json!({
         "delulu_version": env!("CARGO_PKG_VERSION"),
         "schema": 1,
@@ -109,14 +98,8 @@ pub fn envelope(
     env
 }
 
-pub fn envelope_to_string(
-    command: &str,
-    diagnostics: &[Diagnostic],
-    authority: Option<Value>,
-    map: &SourceMap,
-) -> String {
-    serde_json::to_string_pretty(&envelope(command, diagnostics, authority, map))
-        .expect("envelope serialization cannot fail")
+pub fn envelope_to_string(command: &str, diagnostics: &[Diagnostic], authority: Option<Value>, map: &SourceMap) -> String {
+    serde_json::to_string_pretty(&envelope(command, diagnostics, authority, map)).expect("envelope serialization cannot fail")
 }
 
 #[cfg(test)]

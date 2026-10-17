@@ -7,12 +7,7 @@
 use delulu_check::check_source;
 
 fn codes(src: &str) -> Vec<String> {
-    check_source(0, src)
-        .diagnostics
-        .iter()
-        .filter(|d| d.is_error())
-        .map(|d| d.code.to_string())
-        .collect()
+    check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
 }
 
 fn rejects_with(src: &str, code: &str) {
@@ -30,10 +25,7 @@ fn accepts(src: &str) {
 #[test]
 fn f2_expose_without_declassify_row_is_rejected() {
     // A function that reveals a secret must declare `!{Declassify}`; omitting it is DL0501.
-    rejects_with(
-        "module m\nfn leak(d: Cap[Declassify], s: Secret[Str]) -> Str { s.expose(d) }\n",
-        "DL0501",
-    );
+    rejects_with("module m\nfn leak(d: Cap[Declassify], s: Secret[Str]) -> Str { s.expose(d) }\n", "DL0501");
 }
 
 #[test]
@@ -87,9 +79,7 @@ fn f4_effectful_lambda_into_map_in_pure_fn_is_rejected() {
 
 #[test]
 fn f4_pure_lambda_into_map_stays_pure() {
-    accepts(
-        "module m\nfn go() -> List[Int] { let xs = [1, 2, 3]\n xs.map(fn(x: Int) -> Int { x * 2 }) }\n",
-    );
+    accepts("module m\nfn go() -> List[Int] { let xs = [1, 2, 3]\n xs.map(fn(x: Int) -> Int { x * 2 }) }\n");
 }
 
 // ---- F-5: opaque types have no str / == / serialization -------------------------------------
@@ -112,10 +102,7 @@ fn f5_equality_on_secret_is_dl0605() {
 #[test]
 fn f5_record_containing_a_cap_is_opaque() {
     // A record that structurally contains a capability is itself opaque (propagated).
-    rejects_with(
-        "module m\ntype Holder { c: Cap[Console] }\nfn f(a: Holder, b: Holder) -> Bool { a == b }\n",
-        "DL0605",
-    );
+    rejects_with("module m\ntype Holder { c: Cap[Console] }\nfn f(a: Holder, b: Holder) -> Bool { a == b }\n", "DL0605");
 }
 
 // ---- The core non-escape guarantee: no effect without a capability ---------------------------
@@ -130,8 +117,5 @@ fn no_effect_without_a_capability_is_structural() {
 #[test]
 fn secret_cannot_flow_into_a_sink() {
     // Secret[Str] is not Str: passing it where Str is expected is the secret-non-flow error.
-    rejects_with(
-        "module m\nfn f(out: Cap[Console], s: Secret[Str]) ! {Write} { out.println(s) }\n",
-        "DL0602",
-    );
+    rejects_with("module m\nfn f(out: Cap[Console], s: Secret[Str]) ! {Write} { out.println(s) }\n", "DL0602");
 }

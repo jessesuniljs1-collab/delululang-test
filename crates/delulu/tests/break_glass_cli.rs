@@ -19,7 +19,8 @@ impl Host {
         for d in ["state", "home", "work"] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
         }
-        let hello = "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"started\")\n}\n";
+        let hello =
+            "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"started\")\n}\n";
         std::fs::write(dir.join("work").join("hello.delulu"), hello).unwrap();
         std::fs::write(dir.join("work").join("other.delulu"), hello.replace("started", "other")).unwrap();
         Host { dir }
@@ -50,7 +51,8 @@ impl Host {
     }
 
     fn ticket(&self, key: &str, what: &[&str], out: &str) {
-        let mut a = vec!["sandbox", "ticket", "--key", key, "--ttl", "15m", "--reason", "the pump controller is down", "--out", out];
+        let mut a =
+            vec!["sandbox", "ticket", "--key", key, "--ttl", "15m", "--reason", "the pump controller is down", "--out", out];
         a.extend_from_slice(what);
         let o = self.delulu(&a);
         assert!(o.status.success(), "ticket: {}", text(&o));
@@ -139,13 +141,19 @@ fn the_glass_is_broken_only_by_a_signed_ticket_once_for_one_program_and_then_the
     let o = h.delulu(&["run", "hello.delulu", "--grant", "console", "--break-glass", &t4]);
     assert_eq!(o.status.code(), Some(2), "{}", text(&o));
     assert!(text(&o).contains("does not verify"), "{}", text(&o));
-    assert!(ran(&h.delulu(&["run", "hello.delulu", "--grant", "console", "--break-glass", &t2])), "t2 was not spent by the wrong uses");
+    assert!(
+        ran(&h.delulu(&["run", "hello.delulu", "--grant", "console", "--break-glass", &t2])),
+        "t2 was not spent by the wrong uses"
+    );
 
     // A sandbox ticket cannot release the policy, and a ticket with `--sandbox` is a contradiction.
     let t5 = h.path("hello5.ticket");
     h.ticket(&key, &["--program", &h.path("work/hello.delulu")], &t5);
     assert_eq!(h.delulu(&["sandbox", "release", "--break-glass", &t5]).status.code(), Some(2));
-    assert_eq!(h.delulu(&["run", "hello.delulu", "--grant", "console", "--sandbox", "--break-glass", &t5]).status.code(), Some(2));
+    assert_eq!(
+        h.delulu(&["run", "hello.delulu", "--grant", "console", "--sandbox", "--break-glass", &t5]).status.code(),
+        Some(2)
+    );
 
     // doctor reads all of this back, and notices the private key left on the host.
     let o = h.delulu(&["doctor"]);

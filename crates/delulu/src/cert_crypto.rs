@@ -124,8 +124,7 @@ mod tests {
         let leaf = signed(&vehicle, "payload-key", &root.fingerprint(), auth(NARROW));
 
         let anchors: BTreeSet<String> = [public_key_hex(&ground)].into_iter().collect();
-        let got = verify_chain(&[root.clone(), leaf], &anchors, &Ed25519Verifier, 500)
-            .expect("a real chain verifies");
+        let got = verify_chain(&[root.clone(), leaf], &anchors, &Ed25519Verifier, 500).expect("a real chain verifies");
         assert_eq!(
             got.scopes.device.get("sat0/hga").and_then(|d| d.dims.get("slew_deg").copied()),
             Some((-5.0, 5.0)),

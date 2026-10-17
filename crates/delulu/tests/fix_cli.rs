@@ -313,14 +313,8 @@ fn a_file_that_is_not_delulu_source_is_refused_rather_than_called_clean() {
 
     let o = delulu(&["fix", p]);
     let out = format!("{}{}", String::from_utf8_lossy(&o.stdout), stderr(&o));
-    assert!(
-        !o.status.success(),
-        "`fix` on a non-source file must refuse; reporting success is C66's exact shape: {out}"
-    );
-    assert!(
-        !out.contains("nothing to repair"),
-        "a file `fix` cannot process is not a file with nothing to repair: {out}"
-    );
+    assert!(!o.status.success(), "`fix` on a non-source file must refuse; reporting success is C66's exact shape: {out}");
+    assert!(!out.contains("nothing to repair"), "a file `fix` cannot process is not a file with nothing to repair: {out}");
     assert!(out.contains("not a `.delulu` source file"), "the refusal must say why: {out}");
 
     // And the file is untouched — a refusal that edited something would be worse than the bug.
@@ -372,33 +366,20 @@ fn repair_ids_in_source() -> Vec<String> {
             }
         }
     }
-    assert!(
-        ids.len() >= 10,
-        "the registry scan found only {} ids — a gate that reads nothing passes everything",
-        ids.len()
-    );
+    assert!(ids.len() >= 10, "the registry scan found only {} ids — a gate that reads nothing passes everything", ids.len());
     ids
 }
 
 /// Repair ids no single-file `check` can provoke, each with the reason. Everything else must be
 /// exercised by the corpus below, so a new repair cannot be born unexamined.
 const REPAIRS_NOT_REACHABLE_FROM_ONE_FILE: &[(&str, &str)] = &[
-    (
-        "insert_dependency_pin",
-        "needs a PACKAGE with an unpinned dependency, not a single file (covered by `tooling.rs`)",
-    ),
-    (
-        "regenerate_manifest_export",
-        "needs a plugin manifest that disagrees with its code (covered by `plugin_cli.rs`)",
-    ),
+    ("insert_dependency_pin", "needs a PACKAGE with an unpinned dependency, not a single file (covered by `tooling.rs`)"),
+    ("regenerate_manifest_export", "needs a plugin manifest that disagrees with its code (covered by `plugin_cli.rs`)"),
     (
         "R-DL0802-attenuate-to-intersection",
         "built by the BROKER on a live attenuation denial, never by `check` (covered by `guard_e2e.rs`)",
     ),
-    (
-        "name-the-marshallable-type",
-        "needs a `foreign` block with an unmarshallable type in its signature",
-    ),
+    ("name-the-marshallable-type", "needs a `foreign` block with an unmarshallable type in its signature"),
     ("delete-behavior-return-type", "needs an actor behavior declared with a return type"),
     ("normalize-actor-rcap", "needs an actor-typed binding carrying a non-`tag` rcap"),
     ("consume-iso-send", "needs an `iso` value sent across an actor boundary without `consume`"),
@@ -457,11 +438,9 @@ fn a_repair_with_no_edits_says_a_human_must_decide_and_why() {
         let path = f.to_str().unwrap();
 
         let chk = delulu(&["check", path, "--json"]);
-        let cv: serde_json::Value =
-            serde_json::from_slice(&chk.stdout).unwrap_or_else(|e| panic!("{name}: check --json: {e}"));
+        let cv: serde_json::Value = serde_json::from_slice(&chk.stdout).unwrap_or_else(|e| panic!("{name}: check --json: {e}"));
         let fix = delulu(&["fix", path, "--dry-run", "--json"]);
-        let fv: serde_json::Value =
-            serde_json::from_slice(&fix.stdout).unwrap_or_else(|e| panic!("{name}: fix --json: {e}"));
+        let fv: serde_json::Value = serde_json::from_slice(&fix.stdout).unwrap_or_else(|e| panic!("{name}: fix --json: {e}"));
 
         let mut repairs_here = 0usize;
         for d in cv["diagnostics"].as_array().unwrap_or(&Vec::new()) {
@@ -482,10 +461,7 @@ fn a_repair_with_no_edits_says_a_human_must_decide_and_why() {
                     }
                     match r["reason"].as_str() {
                         Some(s) if s.len() > 20 => {}
-                        _ => bad.push(format!(
-                            "{name}: repair `{id}` has no edits and no usable `reason`: {}",
-                            r["reason"]
-                        )),
+                        _ => bad.push(format!("{name}: repair `{id}` has no edits and no usable `reason`: {}", r["reason"])),
                     }
                 } else if !r["reason"].is_null() {
                     bad.push(format!(
@@ -509,19 +485,13 @@ fn a_repair_with_no_edits_says_a_human_must_decide_and_why() {
                 let requires_human = r["requires_human"] == true;
                 let widening = r["authority_widening"] == true;
                 if verdict == "requires-human" && !requires_human {
-                    bad.push(format!(
-                        "{name}: `fix` says `{id}` requires a human and `check --json` says it does not"
-                    ));
+                    bad.push(format!("{name}: `fix` says `{id}` requires a human and `check --json` says it does not"));
                 }
                 if requires_human && !widening && verdict != "requires-human" {
-                    bad.push(format!(
-                        "{name}: `check --json` flags `{id}` requires_human and `fix` reached `{verdict}`"
-                    ));
+                    bad.push(format!("{name}: `check --json` flags `{id}` requires_human and `fix` reached `{verdict}`"));
                 }
                 if widening && verdict != "widens-authority" {
-                    bad.push(format!(
-                        "{name}: `check --json` flags `{id}` authority_widening and `fix` reached `{verdict}`"
-                    ));
+                    bad.push(format!("{name}: `check --json` flags `{id}` authority_widening and `fix` reached `{verdict}`"));
                 }
             }
         }

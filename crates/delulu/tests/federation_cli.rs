@@ -159,8 +159,18 @@ fn a_grant_certificate_carries_bounded_device_authority_across_a_broker_boundary
 
     // ----- ground: mint a contact-window certificate, entirely offline -------------------------
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "20m", "--key", &f.gk(), "--out", "pass1.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+        "--out",
+        "pass1.dlcert",
     ]);
     assert!(o.status.success(), "offline certify failed: {}", stderr(&o));
     let cert_text = std::fs::read_to_string(f.cwd.join("pass1.dlcert")).unwrap();
@@ -203,10 +213,8 @@ fn a_grant_certificate_carries_bounded_device_authority_across_a_broker_boundary
     assert!(text.contains("federated"), "and marked as federated in origin:\n{text}");
 
     // ----- the vehicle delegates onward to its own program ------------------------------------
-    let o = f.vehicle(&[
-        "grants", "delegate", "--parent", &node, "--effects", "Actuate,Write",
-        "--device", HGA, "--multi", "--json",
-    ]);
+    let o =
+        f.vehicle(&["grants", "delegate", "--parent", &node, "--effects", "Actuate,Write", "--device", HGA, "--multi", "--json"]);
     assert!(o.status.success(), "on-board delegate failed: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
     let token = v["token"].as_str().expect("token").to_string();
@@ -216,10 +224,7 @@ fn a_grant_certificate_carries_bounded_device_authority_across_a_broker_boundary
     assert!(o.status.success(), "a refusal is a value; the run exits 0: {}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("point COMMANDED"), "12° is inside the signed ±45° corridor:\n{out}");
-    assert!(
-        out.contains("slam REFUSED"),
-        "80° is OUTSIDE it — the ground's bound reached the actuator:\n{out}"
-    );
+    assert!(out.contains("slam REFUSED"), "80° is OUTSIDE it — the ground's bound reached the actuator:\n{out}");
 }
 
 /// Anomaly response attenuates; it never widens — across a chain, and caught at MINT time so an
@@ -230,23 +235,57 @@ fn a_chained_certificate_attenuates_and_a_widening_is_refused_at_mint() {
 
     // Ground → vehicle: both subsystems.
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA, "--device", WHEELS,
-        "--ttl", "20m", "--key", &f.gk(), "--out", "root.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--device",
+        WHEELS,
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+        "--out",
+        "root.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
 
     // Vehicle → payload: the autonomy corridor only, signed with the VEHICLE's key.
     let o = f.certify(&[
-        "--subject", "0".repeat(64).as_str(), "--effects", "Actuate", "--device", WHEELS,
-        "--ttl", "10m", "--key", &f.vk(), "--parent-cert", "root.dlcert", "--out", "leaf.dlcert",
+        "--subject",
+        "0".repeat(64).as_str(),
+        "--effects",
+        "Actuate",
+        "--device",
+        WHEELS,
+        "--ttl",
+        "10m",
+        "--key",
+        &f.vk(),
+        "--parent-cert",
+        "root.dlcert",
+        "--out",
+        "leaf.dlcert",
     ]);
     assert!(o.status.success(), "a narrowing chain must mint: {}", stderr(&o));
 
     // Asking for MORE than the parent holds is caught at mint, by code, with the intersection.
     let wider = "sat0/wheels:slew_deg=-40..40,heartbeat_ms=60000,ttl_ms=60000,fail=hold";
     let o = f.certify(&[
-        "--subject", "0".repeat(64).as_str(), "--effects", "Actuate", "--device", wider,
-        "--ttl", "10m", "--key", &f.vk(), "--parent-cert", "root.dlcert",
+        "--subject",
+        "0".repeat(64).as_str(),
+        "--effects",
+        "Actuate",
+        "--device",
+        wider,
+        "--ttl",
+        "10m",
+        "--key",
+        &f.vk(),
+        "--parent-cert",
+        "root.dlcert",
     ]);
     assert!(!o.status.success(), "a widening chain must not mint:\n{}", stdout(&o));
     let err = stderr(&o);
@@ -256,22 +295,38 @@ fn a_chained_certificate_attenuates_and_a_widening_is_refused_at_mint() {
     // A device the parent never held is the same refusal.
     let other = "sat0/thruster:burn_s=0..1,heartbeat_ms=60000,ttl_ms=60000,fail=hold";
     let o = f.certify(&[
-        "--subject", "0".repeat(64).as_str(), "--effects", "Actuate", "--device", other,
-        "--ttl", "10m", "--key", &f.vk(), "--parent-cert", "root.dlcert",
+        "--subject",
+        "0".repeat(64).as_str(),
+        "--effects",
+        "Actuate",
+        "--device",
+        other,
+        "--ttl",
+        "10m",
+        "--key",
+        &f.vk(),
+        "--parent-cert",
+        "root.dlcert",
     ]);
     assert!(!o.status.success(), "a device the parent never held must not mint");
 
     // Signing a child with the WRONG key is caught at mint too: only the holder may delegate onward.
     let o = f.certify(&[
-        "--subject", "0".repeat(64).as_str(), "--effects", "Actuate", "--device", WHEELS,
-        "--ttl", "10m", "--key", &f.gk(), "--parent-cert", "root.dlcert",
+        "--subject",
+        "0".repeat(64).as_str(),
+        "--effects",
+        "Actuate",
+        "--device",
+        WHEELS,
+        "--ttl",
+        "10m",
+        "--key",
+        &f.gk(),
+        "--parent-cert",
+        "root.dlcert",
     ]);
     assert!(!o.status.success(), "the ground does not hold what it delegated to the vehicle");
-    assert!(
-        stderr(&o).contains("Only the holder may delegate onward"),
-        "and the message says why: {}",
-        stderr(&o)
-    );
+    assert!(stderr(&o).contains("Only the holder may delegate onward"), "and the message says why: {}", stderr(&o));
 
     // The full two-hop chain adopts, and the holder gets the LEAF's authority (wheels only).
     let o = f.vehicle(&["broker", "start"]);
@@ -290,8 +345,18 @@ fn a_chained_certificate_attenuates_and_a_widening_is_refused_at_mint() {
 fn a_certificate_resists_tampering_replay_and_outliving_its_window() {
     let f = setup("attack");
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "20m", "--key", &f.gk(), "--out", "pass.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "20m",
+        "--key",
+        &f.gk(),
+        "--out",
+        "pass.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
 
@@ -320,17 +385,23 @@ fn a_certificate_resists_tampering_replay_and_outliving_its_window() {
     assert!(o.status.success(), "revoke: {}", stderr(&o));
     let o = f.vehicle(&["grants", "adopt", "pass.dlcert", "--anchor", &f.ground_pub]);
     assert!(!o.status.success(), "re-adoption must not undo a revocation:\n{}", stdout(&o));
-    assert!(
-        stderr(&o).contains("already been adopted"),
-        "and the refusal says exactly that: {}",
-        stderr(&o)
-    );
+    assert!(stderr(&o).contains("already been adopted"), "and the refusal says exactly that: {}", stderr(&o));
 
     // 4. EXPIRY. A certificate whose window has closed does not adopt. Expiry is the only bound
     //    that survives a partition, so it must be enforced by the RECEIVER's clock.
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
-        "--ttl", "1ms", "--key", &f.gk(), "--out", "stale.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate",
+        "--device",
+        HGA,
+        "--ttl",
+        "1ms",
+        "--key",
+        &f.gk(),
+        "--out",
+        "stale.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     std::thread::sleep(std::time::Duration::from_millis(20));
@@ -358,8 +429,18 @@ fn a_certificate_resists_tampering_replay_and_outliving_its_window() {
 fn a_revoked_certificate_stays_revoked_across_a_daemon_restart() {
     let f = setup("revoke_restart");
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "1h", "--key", &f.gk(), "--out", "pass.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--key",
+        &f.gk(),
+        "--out",
+        "pass.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
 
@@ -404,10 +485,7 @@ fn a_revoked_certificate_stays_revoked_across_a_daemon_restart() {
 fn the_ground_side_mints_credentials_with_no_broker_running() {
     let f = setup("offline");
     // `delulu(.., None, ..)` removes DELULU_STATE_DIR entirely; no daemon was ever started here.
-    let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
-        "--ttl", "20m", "--key", &f.gk(),
-    ]);
+    let o = f.certify(&["--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA, "--ttl", "20m", "--key", &f.gk()]);
     assert!(o.status.success(), "offline mint must not need a broker: {}", stderr(&o));
     assert!(stdout(&o).starts_with("dlcert1\n"), "the certificate goes to stdout:\n{}", stdout(&o));
     assert!(
@@ -450,8 +528,20 @@ fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
     // the sleep below still passes the deadline comfortably, and the test can still fail — if
     // expiry did not happen, the antenna would move after the sleep, which is asserted.
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "1h", "--uplink-ttl", "5s", "--key", &f.gk(), "--out", "m.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--uplink-ttl",
+        "5s",
+        "--key",
+        &f.gk(),
+        "--out",
+        "m.dlcert",
     ]);
     assert!(o.status.success(), "certify: {}", stderr(&o));
     let text = std::fs::read_to_string(f.cwd.join("m.dlcert")).unwrap();
@@ -478,10 +568,8 @@ fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
 
     // A child delegated with NO deadline of its own — the escape a per-node expiry rule would have
     // allowed, and the reason expiry is inherited.
-    let o = f.vehicle(&[
-        "grants", "delegate", "--parent", &node, "--effects", "Actuate,Write",
-        "--device", HGA, "--multi", "--json",
-    ]);
+    let o =
+        f.vehicle(&["grants", "delegate", "--parent", &node, "--effects", "Actuate,Write", "--device", HGA, "--multi", "--json"]);
     assert!(o.status.success(), "delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
     let token = v["token"].as_str().unwrap().to_string();
@@ -501,15 +589,14 @@ fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
         "after the uplink lease dies the antenna must NOT move — a child with no deadline of its \
          own must not outlive its root's lease:\n{combined}"
     );
-    assert!(
-        combined.contains("DL1402"),
-        "and the reason is an expired lease, by code:\n{combined}"
-    );
+    assert!(combined.contains("DL1402"), "and the reason is an expired lease, by code:\n{combined}");
 
     // ----- re-contact: one receipt on the ROOT restores the whole subtree ----------------------
-    let o = delulu(&f.cwd, None, &[
-        "grants", "receipt", "--for", &fingerprint, "--ttl", "1h", "--key", &f.gk(), "--out", "r1.dlrcpt",
-    ]);
+    let o = delulu(
+        &f.cwd,
+        None,
+        &["grants", "receipt", "--for", &fingerprint, "--ttl", "1h", "--key", &f.gk(), "--out", "r1.dlrcpt"],
+    );
     assert!(o.status.success(), "receipt: {}", stderr(&o));
     let o = f.vehicle(&["grants", "renew", "r1.dlrcpt", "--anchor", &f.ground_pub]);
     assert!(o.status.success(), "renew: {}", stderr(&o));
@@ -526,8 +613,20 @@ fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
 fn a_contact_receipt_grants_nothing_by_itself() {
     let f = setup("receipt");
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
-        "--ttl", "1h", "--uplink-ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--uplink-ttl",
+        "1h",
+        "--key",
+        &f.gk(),
+        "--out",
+        "m.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     let o = f.vehicle(&["broker", "start"]);
@@ -541,18 +640,18 @@ fn a_contact_receipt_grants_nothing_by_itself() {
 
     // A receipt for a credential this broker does not hold is refused — so a receipt for a
     // harmless grant cannot be replayed onto a powerful one.
-    let o = delulu(&f.cwd, None, &[
-        "grants", "receipt", "--for", &"a".repeat(64), "--ttl", "1h", "--key", &f.gk(), "--out", "wrong.dlrcpt",
-    ]);
+    let o = delulu(
+        &f.cwd,
+        None,
+        &["grants", "receipt", "--for", &"a".repeat(64), "--ttl", "1h", "--key", &f.gk(), "--out", "wrong.dlrcpt"],
+    );
     assert!(o.status.success(), "{}", stderr(&o));
     let o = f.vehicle(&["grants", "renew", "wrong.dlrcpt", "--anchor", &f.ground_pub]);
     assert!(!o.status.success(), "a receipt naming an unheld credential must not apply");
     assert!(stderr(&o).contains("no adopted certificate"), "{}", stderr(&o));
 
     // A receipt signed by a key that is not an anchor is refused.
-    let o = delulu(&f.cwd, None, &[
-        "grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &f.vk(), "--out", "self.dlrcpt",
-    ]);
+    let o = delulu(&f.cwd, None, &["grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &f.vk(), "--out", "self.dlrcpt"]);
     assert!(o.status.success(), "{}", stderr(&o));
     let o = f.vehicle(&["grants", "renew", "self.dlrcpt", "--anchor", &f.ground_pub]);
     assert!(!o.status.success(), "a vehicle must not be able to renew its own lease");
@@ -577,8 +676,18 @@ fn the_vehicles_chain_reconciles_into_the_grounds_without_merging() {
 
     // ----- the vehicle does some work, alone -----------------------------------------------------
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate,Write",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--key",
+        &f.gk(),
+        "--out",
+        "m.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     let o = f.vehicle(&["broker", "start"]);
@@ -589,8 +698,16 @@ fn the_vehicles_chain_reconciles_into_the_grounds_without_merging() {
         assert!(o.status.success(), "{}", stderr(&o));
         let node = stdout(&o).trim().to_string();
         let o = f.vehicle(&[
-            "grants", "delegate", "--parent", &node, "--effects", "Actuate,Write",
-            "--device", HGA, "--multi", "--json",
+            "grants",
+            "delegate",
+            "--parent",
+            &node,
+            "--effects",
+            "Actuate,Write",
+            "--device",
+            HGA,
+            "--multi",
+            "--json",
         ]);
         assert!(o.status.success(), "{}", stderr(&o));
         let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
@@ -661,8 +778,18 @@ fn a_tampered_bundle_is_reported_and_recorded_but_denies_nothing() {
 
     // Build a real bundle from a real chain.
     let o = f.certify(&[
-        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
-        "--ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+        "--subject",
+        &f.vehicle_pub,
+        "--effects",
+        "Actuate",
+        "--device",
+        HGA,
+        "--ttl",
+        "1h",
+        "--key",
+        &f.gk(),
+        "--out",
+        "m.dlcert",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     let o = f.vehicle(&["broker", "start"]);
@@ -701,9 +828,7 @@ fn a_tampered_bundle_is_reported_and_recorded_but_denies_nothing() {
 
     // And a dropped middle segment is caught when the expected start is supplied — which is why
     // omitting `--expect-start` is only right for a first contact.
-    let o = delulu(&f.cwd, None, &[
-        "audit", "reconcile", "v.bundle", "--dir", &ga, "--expect-start", &"9".repeat(64),
-    ]);
+    let o = delulu(&f.cwd, None, &["audit", "reconcile", "v.bundle", "--dir", &ga, "--expect-start", &"9".repeat(64)]);
     assert_eq!(o.status.code(), Some(1), "a segment that does not chain onto the expected head");
     assert!(stderr(&o).contains("does not chain onto"), "{}", stderr(&o));
 }

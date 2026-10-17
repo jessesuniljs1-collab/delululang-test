@@ -87,8 +87,7 @@ pub const STACK_BYTES_PER_DEPTH: usize = 80 * 1024;
 /// program that never recurses pays nothing for the difference.
 ///
 /// A thread that cannot get this much must lower its bound to match — see [`max_depth_for_stack`].
-pub const INTERPRETER_STACK_BYTES: usize =
-    DEFAULT_MAX_DEPTH as usize * STACK_BYTES_PER_DEPTH + NON_RECURSIVE_RESERVE;
+pub const INTERPRETER_STACK_BYTES: usize = DEFAULT_MAX_DEPTH as usize * STACK_BYTES_PER_DEPTH + NON_RECURSIVE_RESERVE;
 
 /// Stack that is *not* interpreter recursion: the frames already on the stack when the first
 /// DeluluLang call happens (the worker loop, the actor turn machinery, the host's own callers) plus
@@ -404,10 +403,7 @@ impl Interp {
     }
 
     /// Attach the checker's iso-move node set for `--debug-rcaps` verification (phase 7i).
-    pub fn with_debug_rcaps(
-        mut self,
-        moves: std::sync::Arc<std::collections::HashSet<NodeId>>,
-    ) -> Interp {
+    pub fn with_debug_rcaps(mut self, moves: std::sync::Arc<std::collections::HashSet<NodeId>>) -> Interp {
         self.debug_rcaps = Some(moves);
         self
     }
@@ -636,12 +632,7 @@ impl Interp {
     /// Attach the Stage-4 foreign runtime data (builder style): the checker's `root.foreign(load)`
     /// bind-site → lib map, the `--grant foreign.c=lib:path` binary paths, and the `--foreign-max-ret`
     /// return-size ceiling. Additive; a program with no foreign blocks is unaffected.
-    pub fn with_foreign(
-        mut self,
-        binds: HashMap<NodeId, String>,
-        grants: HashMap<String, String>,
-        max_ret: usize,
-    ) -> Interp {
+    pub fn with_foreign(mut self, binds: HashMap<NodeId, String>, grants: HashMap<String, String>, max_ret: usize) -> Interp {
         self.foreign_binds = binds;
         self.foreign_grants = grants;
         self.foreign_max_ret = max_ret;
@@ -1017,15 +1008,13 @@ impl Interp {
                 self.unary(*op, v, *span)
             }
             Expr::Binary { op, lhs, rhs, span, .. } => self.binary(*op, lhs, rhs, *span, env),
-            Expr::If { cond, then_, else_, .. } => {
-                match self.eval_expr(cond, env)? {
-                    Value::Bool(true) => self.exec_block_value(then_, env),
-                    _ => match else_ {
-                        Some(e) => self.eval_expr(e, env),
-                        None => Ok(Value::Unit),
-                    },
-                }
-            }
+            Expr::If { cond, then_, else_, .. } => match self.eval_expr(cond, env)? {
+                Value::Bool(true) => self.exec_block_value(then_, env),
+                _ => match else_ {
+                    Some(e) => self.eval_expr(e, env),
+                    None => Ok(Value::Unit),
+                },
+            },
             Expr::Match { scrutinee, arms, span, .. } => self.eval_match(scrutinee, arms, *span, env),
             Expr::Lambda { params, body, .. } => {
                 let v = Value::Closure(Rc::new(Closure {
@@ -1052,9 +1041,7 @@ impl Interp {
             // Stage 7: `consume`/`recover` are static disciplines — at runtime `consume x`
             // is x's value (the binding-kill is the checker's job) and a recover block just
             // evaluates (the environment restriction is the checker's job).
-            Expr::Consume { name, span, .. } => {
-                self.eval_var(&Path { segs: vec![name.clone()] }, *span, env)
-            }
+            Expr::Consume { name, span, .. } => self.eval_var(&Path { segs: vec![name.clone()] }, *span, env),
             Expr::Recover { body, .. } => self.exec_block_value(body, env),
             // T-Spawn at runtime (7g): mint an address, enqueue the Create (the constructor
             // runs as the new actor's first turn on ITS worker), yield the tag reference.
@@ -1074,11 +1061,8 @@ impl Interp {
                     msgs.push(self.value_to_msg_here(&v).map_err(Escape::Fault)?);
                 }
                 let (sender, sender_member) = self.sender_identity();
-                let cause = crate::actors::SendCause {
-                    sender,
-                    sender_member,
-                    send_span: Some((span.file, span.start, span.end)),
-                };
+                let cause =
+                    crate::actors::SendCause { sender, sender_member, send_span: Some((span.file, span.start, span.end)) };
                 // Stage 10 (10c): the declaration's `(mailbox = N)` rides along; the host
                 // resolves it against the manifest default (decl wins; nothing = unbounded).
                 let decl_bound = self.actors.get(name.as_str()).and_then(|d| d.mailbox);
@@ -1182,7 +1166,15 @@ impl Interp {
         }
     }
 
-    fn eval_method(&self, recv: &Expr, name: &Ident, args: &[Expr], span: delulu_diag::Span, node_id: NodeId, env: &Env) -> R<Value> {
+    fn eval_method(
+        &self,
+        recv: &Expr,
+        name: &Ident,
+        args: &[Expr],
+        span: delulu_diag::Span,
+        node_id: NodeId,
+        env: &Env,
+    ) -> R<Value> {
         let recvv = self.eval_expr(recv, env)?;
 
         // P3 (D-V2-29): the other closure-taking List methods. They are here, beside `map`, for the
@@ -1303,7 +1295,9 @@ impl Interp {
                     // bytes, so it goes where they may go (P9-04 (c)): the audience is carried, never dropped
                     // and never widened.
                     return match mapped {
-                        Value::Str(x) => Ok(Value::Secret(Rc::new(crate::value::SecretVal::bound(x.to_string(), s.audience().cloned())))),
+                        Value::Str(x) => {
+                            Ok(Value::Secret(Rc::new(crate::value::SecretVal::bound(x.to_string(), s.audience().cloned()))))
+                        }
                         _ => Err(Escape::Fault(Fault::at("DL0907", "Stage-1 Secret.map supports Str results only", span))),
                     };
                 }
@@ -1356,11 +1350,7 @@ impl Interp {
         match &recvv {
             Value::ActorRef { id, actor } => {
                 let Some(host) = &self.actors_host else {
-                    return Err(Escape::Fault(Fault::at(
-                        "DL0907",
-                        "behavior send without an actor system attached",
-                        span,
-                    )));
+                    return Err(Escape::Fault(Fault::at("DL0907", "behavior send without an actor system attached", span)));
                 };
                 let mut msgs = Vec::with_capacity(argvals.len());
                 for (a, v) in args.iter().zip(&argvals) {
@@ -1368,15 +1358,11 @@ impl Interp {
                     msgs.push(self.value_to_msg_here(v).map_err(Escape::Fault)?);
                 }
                 let (sender, sender_member) = self.sender_identity();
-                let cause = crate::actors::SendCause {
-                    sender,
-                    sender_member,
-                    send_span: Some((span.file, span.start, span.end)),
-                };
+                let cause =
+                    crate::actors::SendCause { sender, sender_member, send_span: Some((span.file, span.start, span.end)) };
                 // Stage 10 (10c): an overflow drop under `drop-new` is DL1902 in abort mode —
                 // telemetry-class otherwise (counted, reported at exit), per spec §10.
-                if host.send(*id, &name.name, msgs, cause) == crate::actors::SendOutcome::DroppedOverflow
-                    && host.abort_on_death()
+                if host.send(*id, &name.name, msgs, cause) == crate::actors::SendOutcome::DroppedOverflow && host.abort_on_death()
                 {
                     return Err(Escape::Fault(Fault::at(
                         "DL1902",
@@ -1430,8 +1416,7 @@ impl Interp {
                                 sender_member,
                                 send_span: Some((span.file, span.start, span.end)),
                             };
-                            if host.send(id, &name.name, msgs, cause)
-                                == crate::actors::SendOutcome::DroppedOverflow
+                            if host.send(id, &name.name, msgs, cause) == crate::actors::SendOutcome::DroppedOverflow
                                 && host.abort_on_death()
                             {
                                 return Err(Escape::Fault(Fault::at(
@@ -1473,9 +1458,7 @@ impl Interp {
             // comes from the run's bound adapter and `prim` has no way to reach it.
             Value::Cap(c) if c.kind == ResourceKind::Sensor => self.call_sensor(c, &name.name, span),
             // Stage 10 (10h): compute dispatch, same reason — the adapter lives on the run.
-            Value::Cap(c) if c.kind == ResourceKind::Compute => {
-                self.call_compute(c, &name.name, &argvals, span)
-            }
+            Value::Cap(c) if c.kind == ResourceKind::Compute => self.call_compute(c, &name.name, &argvals, span),
             // P9-04 (d), D-V2-134: a request carrying a broker-held secret — the bytes are asked of the broker for the one
             // origin the request names, after everything that can be judged without them.
             Value::Cap(c)
@@ -1542,17 +1525,16 @@ impl Interp {
         };
         let kind = cap_kind?;
         let effect = trace::effect_for(kind, &name.name)?;
-        let involves_secret =
-            matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
-        let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(recvv, kind, &name.name, argvals) };
+        let involves_secret = matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
+        let detail =
+            if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(recvv, kind, &name.name, argvals) };
         // REMAINING_WORK 6.13: a filesystem record also says where the path pointed — the same
         // resolution the custody gate authorizes (`fs_scope_arg`) — and the scope it was resolved
         // in. Never for a secret-involving call (redaction outranks explanation).
         let (resolved_path, scope_root) = match recvv {
-            Value::Cap(c) if !involves_secret && matches!(c.kind, ResourceKind::FsRead | ResourceKind::FsWrite) => match &c.scope {
-                CapScope::Fs { root, .. } => {
-                    (fs_scope_arg(&c.scope, argvals), Some(root.to_string_lossy().to_string()))
-                }
+            Value::Cap(c) if !involves_secret && matches!(c.kind, ResourceKind::FsRead | ResourceKind::FsWrite) => match &c.scope
+            {
+                CapScope::Fs { root, .. } => (fs_scope_arg(&c.scope, argvals), Some(root.to_string_lossy().to_string())),
                 _ => (None, None),
             },
             _ => (None, None),
@@ -1673,9 +1655,7 @@ impl Interp {
         // table refuses from a program is refused here too (D-NE-29) — this is the path that decides
         // which code runs.
         if let Some(why) = crate::prim::hostile_path(path, false) {
-            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
-                "the path `{path}` is refused: {why}"
-            )))));
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!("the path `{path}` is refused: {why}")))));
         }
         let mut found: Option<(std::path::PathBuf, &std::path::PathBuf)> = None;
         for root in roots {
@@ -1850,12 +1830,7 @@ impl Interp {
     /// custody answers for the RUN's node, which may hold more than the plugin's grant — so a plugin
     /// is never handed them. Every other dimension is bounded by the capability the HOST hands in,
     /// checked by the same primitive table on the same resolved paths, and now by the host's custody.
-    fn call_plugin_export(
-        &self,
-        f: &Rc<crate::plugin::PluginFn>,
-        args: Vec<Value>,
-        span: delulu_diag::Span,
-    ) -> R<Value> {
+    fn call_plugin_export(&self, f: &Rc<crate::plugin::PluginFn>, args: Vec<Value>, span: delulu_diag::Span) -> R<Value> {
         if let Err(e) = f.reference.check_call(&**self.custody.borrow()) {
             let code = crate::plugin::plugin_err_code(&e);
             return Err(Escape::Fault(Fault::at(
@@ -1919,24 +1894,23 @@ impl Interp {
     /// fails shape validation surfaces as a defined DL1306 fault: a bare `-> Str`/`-> Float` foreign
     /// signature has no `Result` channel for the program to catch, so the honest outcome is a clean
     /// abort — never UB, never a panic, never a silent truncation (criterion 8).
-    fn call_foreign(&self, handle: &Rc<ForeignHandle>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+    fn call_foreign(
+        &self,
+        handle: &Rc<ForeignHandle>,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, Fault> {
         let Some(sig) = handle.exec.sig(method) else {
             return Err(Fault::at("DL0907", format!("unknown foreign method `{method}` (checker bug)"), span));
         };
-        let fargs: Vec<FVal> = sig
-            .params
-            .iter()
-            .zip(args)
-            .map(|(k, v)| value_to_fval(*k, v))
-            .collect();
+        let fargs: Vec<FVal> = sig.params.iter().zip(args).map(|(k, v)| value_to_fval(*k, v)).collect();
         self.trace_foreign(&handle.name, method, span);
         match handle.exec.call(method, &fargs, self.foreign_max_ret) {
             Ok(fv) => Ok(fval_to_value(fv)),
-            Err(foreign::ForeignErr::BadReturn(reason)) => Err(Fault::at(
-                "DL1306",
-                format!("foreign return validation failed: {reason} (ForeignErr::BadReturn)"),
-                span,
-            )),
+            Err(foreign::ForeignErr::BadReturn(reason)) => {
+                Err(Fault::at("DL1306", format!("foreign return validation failed: {reason} (ForeignErr::BadReturn)"), span))
+            }
             // Stage 5 phase 5h headline (spec §5, criterion 7): the isolated worker died mid-call (a C
             // segfault / hard crash). The host process SURVIVED — it turned the worker's death into a
             // clean DL1409 fault instead of dying alongside it.
@@ -2005,7 +1979,13 @@ impl Interp {
     /// A `PyObj` operation (`attr`/`call`/`call_method`/`index`). Present only with the `python`
     /// feature (a `PyObj` value can exist only when the feature is on).
     #[cfg(feature = "python")]
-    fn call_pyobj(&self, obj: &crate::python::PyObjVal, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+    fn call_pyobj(
+        &self,
+        obj: &crate::python::PyObjVal,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, Fault> {
         self.trace_python(method, python_detail(method, args), span);
         crate::python::call_pyobj(obj, method, args, self.foreign_max_ret, span)
     }
@@ -2062,13 +2042,7 @@ impl Interp {
 
     /// `Cap[Compute].dispatch(kernel, buffer)` (10h, spec §7.1). The refusal channel is a VALUE,
     /// like every other device surface: an over-envelope kernel kills the dispatch, not the host.
-    fn call_compute(
-        &self,
-        cap: &Rc<CapVal>,
-        method: &str,
-        args: &[Value],
-        span: delulu_diag::Span,
-    ) -> Result<Value, Fault> {
+    fn call_compute(&self, cap: &Rc<CapVal>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
         if method != "dispatch" {
             return Err(Fault::at("DL0907", format!("unknown Compute method `{method}` (checker bug)"), span));
         }
@@ -2465,9 +2439,7 @@ pub(crate) fn custody_op_for(
     match (c.kind, method) {
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
         (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
-        (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
-            Some((CustodyOp::FsWrite, fs_arg(c)))
-        }
+        (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => Some((CustodyOp::FsWrite, fs_arg(c))),
         (ResourceKind::Http, "get") | (ResourceKind::Http, "get_with") | (ResourceKind::Http, "get_with_secret") => {
             let host = match argvals.first() {
                 // HTTP-SCHEME-1 (routine run 15): a URL that is not `https://` is refused by the effect
@@ -2573,10 +2545,8 @@ fn python_detail(method: &str, args: &[Value]) -> Option<String> {
 pub fn lower_foreign_sig(f: &ForeignFn) -> ForeignSig {
     let kind_of = |te: &TypeExpr| -> FKind {
         match te {
-            TypeExpr::Named { path, .. } => {
-                FKind::from_type_name(&path.segs.last().unwrap().name).unwrap_or(FKind::Unit)
-            }
-            TypeExpr::Fn { .. } => FKind::Unit, // fenced by DL1302 at check time
+            TypeExpr::Named { path, .. } => FKind::from_type_name(&path.segs.last().unwrap().name).unwrap_or(FKind::Unit),
+            TypeExpr::Fn { .. } => FKind::Unit,   // fenced by DL1302 at check time
             TypeExpr::Rcap { .. } => FKind::Unit, // fenced by DL1301 at check time (not marshallable)
         }
     };

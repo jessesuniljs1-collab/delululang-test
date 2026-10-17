@@ -151,8 +151,7 @@ fn the_same_program_reads_the_same_numbers_in_process_and_across_a_device_proces
     // In-process: the simulator the host drives itself.
     let inproc = r.run(&["--broker-profile", "sim", "--seed", "7", "--signoff", "signoff.json"]);
     assert!(inproc.status.success(), "{}", text(&inproc));
-    let inproc_lines: Vec<String> =
-        String::from_utf8_lossy(&inproc.stdout).lines().map(|l| l.trim().to_string()).collect();
+    let inproc_lines: Vec<String> = String::from_utf8_lossy(&inproc.stdout).lines().map(|l| l.trim().to_string()).collect();
     assert_eq!(inproc_lines[0], "COMMANDED");
     assert_eq!(inproc_lines[1], "READ 42.5", "the mirror reads the commanded pose: {inproc_lines:?}");
     assert!(inproc_lines[2].starts_with("READ "), "{inproc_lines:?}");
@@ -161,14 +160,20 @@ fn the_same_program_reads_the_same_numbers_in_process_and_across_a_device_proces
     // computing the frames, and the bench's own ±60 limit.
     let transport = format!("{} device sim --seed 7 --actuator {BENCH} --sensor arm0/strain", r.bin);
     let across = r.run(&[
-        "--broker-profile", "hw:bench", "--approved", "signoff.json",
-        "--adapter-dpx", "driver.dpx", "--adapter-signer", &public,
-        "--adapter-transport", &transport,
+        "--broker-profile",
+        "hw:bench",
+        "--approved",
+        "signoff.json",
+        "--adapter-dpx",
+        "driver.dpx",
+        "--adapter-signer",
+        &public,
+        "--adapter-transport",
+        &transport,
     ]);
     let out = text(&across);
     assert!(across.status.success(), "{out}");
-    let lines: Vec<String> =
-        String::from_utf8_lossy(&across.stdout).lines().map(|l| l.trim().to_string()).collect();
+    let lines: Vec<String> = String::from_utf8_lossy(&across.stdout).lines().map(|l| l.trim().to_string()).collect();
     assert_eq!(lines[0], "COMMANDED", "{out}");
     assert_eq!(lines[1], "READ 42.5", "the device process mirrors the commanded pose: {out}");
     assert_eq!(
@@ -194,26 +199,49 @@ fn a_command_outside_the_grant_never_reaches_the_device_process() {
 
     // The bench is WIDER than the grant here, so anything the device sees it would accept: a refusal
     // can only have come from the host. The grant stops at 95; the program asks for 200.
-    std::fs::write(
-        r.dir.join("over.delulu"),
-        PROGRAM.replace("angle_deg: 80.0", "angle_deg: 200.0"),
-    )
-    .unwrap();
+    std::fs::write(r.dir.join("over.delulu"), PROGRAM.replace("angle_deg: 80.0", "angle_deg: 200.0")).unwrap();
     let transport = format!(
         "{} device sim --seed 7 --actuator arm0/elbow:angle_deg=-400..400,heartbeat_ms=60000,ttl_ms=600000,fail=safe-park --sensor arm0/strain",
         r.bin
     );
     let mut a = r.args(&[
-        "--broker-profile", "hw:bench", "--approved", "signoff.json",
-        "--adapter-dpx", "driver.dpx", "--adapter-signer", &public,
-        "--adapter-transport", &transport,
+        "--broker-profile",
+        "hw:bench",
+        "--approved",
+        "signoff.json",
+        "--adapter-dpx",
+        "driver.dpx",
+        "--adapter-signer",
+        &public,
+        "--adapter-transport",
+        &transport,
     ]);
     a[1] = "over.delulu".into();
     // The sign-off binds the artifact's bytes, so the changed program needs its own simulation.
     let mut sim = a.clone();
-    sim.retain(|x| !["hw:bench", "--broker-profile", "--approved", "signoff.json", "--adapter-dpx", "driver.dpx", "--adapter-signer", &public, "--adapter-transport", &transport].contains(&x.as_str()));
-    sim.extend(["--broker-profile".to_string(), "sim".to_string(), "--seed".to_string(), "7".to_string(),
-                "--signoff".to_string(), "over-signoff.json".to_string()]);
+    sim.retain(|x| {
+        ![
+            "hw:bench",
+            "--broker-profile",
+            "--approved",
+            "signoff.json",
+            "--adapter-dpx",
+            "driver.dpx",
+            "--adapter-signer",
+            &public,
+            "--adapter-transport",
+            &transport,
+        ]
+        .contains(&x.as_str())
+    });
+    sim.extend([
+        "--broker-profile".to_string(),
+        "sim".to_string(),
+        "--seed".to_string(),
+        "7".to_string(),
+        "--signoff".to_string(),
+        "over-signoff.json".to_string(),
+    ]);
     let refs: Vec<&str> = sim.iter().map(String::as_str).collect();
     let o = r.delulu(&refs);
     assert!(o.status.success(), "the changed program must simulate: {}", text(&o));

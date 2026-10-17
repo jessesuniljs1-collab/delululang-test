@@ -3592,6 +3592,30 @@ runners give Build Level 2; Level 3 needs the build and its attestation in a reu
 3. **The rest** — the disclosure channel, review, signed commits, branch protection, the CODEOWNERS handle — is decided
    with the public repository's creation (the second part of this decision).
 
+## D-V2-145 — rustfmt is adopted: `rustfmt.toml` with the two options nearest the hand style, the tree formatted once, the check in CI — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** RW 7.9 and `ci.yml`'s own comment kept rustfmt out as an owner decision: it rewrites every file, and "this
+project's comments carry much of its value". The commission delegates it. A public language project is contributed to by
+people who run `cargo fmt` without thinking; an unformatted tree makes every first pull request a formatting argument.
+
+**Decision.**
+1. **Adopted**, with `rustfmt.toml`: `max_width = 130`, `use_small_heuristics = "Max"` — measured on the tree as it was
+   (2026-10-17): the default style disagreed 7,065 times, `max_width = 130` alone 4,461, both together 2,371. The rest of
+   the style is rustfmt's default (edition 2021).
+2. **Formatted once, in one commit**, before the public repository's history begins — so the public history has no
+   formatting churn in it. 283 files. **No comment's text changed** (the removed and added comment lines were compared
+   over the whole diff: rustfmt does not wrap comments; the only differences were three UTF-8 byte-order marks it
+   removed); and two test files' long-standing double-encoded characters (`â€”`, `Â§`) were corrected beside it.
+3. **Enforced**: `cargo fmt --all -- --check` in CI's `lints` job, `CONTRIBUTING.md` §6 says `cargo fmt --all`.
+4. **What it costs**: the `file:line` citations in dated records point at the formatting before this commit; they were
+   already snapshots of their date, and the Survey re-derives every live citation.
+5. **What it found.** Two gates read Rust *layout*, and the reformat moved it. `json_contract`'s sweep looked for the
+   literal `vec!["device"` and rustfmt broke that call across lines — a swept subcommand reported unswept; it now matches
+   with whitespace removed. `cli_contract`'s stderr-prefix gate read `eprintln!("…` only on one line — so it had never
+   seen any message long enough to be split; rustfmt joined one, the gate found its missing prefix, and taught to read the
+   next line too it found a second: **three user-facing error lines without `error:`** (`unknown command …` twice,
+   `refused — the source produced no errors …`), prefixed now. Witnessed: the strengthened gate red on the unfixed source.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

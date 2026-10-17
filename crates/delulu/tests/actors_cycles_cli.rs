@@ -1,4 +1,4 @@
-﻿//! Stage 10 phase 10d — the cycle collector, witnessed from the language (Track B1, spec §3).
+//! Stage 10 phase 10d — the cycle collector, witnessed from the language (Track B1, spec §3).
 //!
 //! The Stage-1/7 leak note said: cyclic `Rc` graphs leak, documented. This corpus is that note
 //! going from "documented" to "collected": a turn that manufactures cyclic garbage past the
@@ -38,33 +38,17 @@ fn a_turn_full_of_cyclic_garbage_is_collected_between_turns() {
     std::fs::write(dir.join("churn.delulu"), CHURN).unwrap();
     let o = delulu(&["run", "churn.delulu", "--grant", "console", "--trace-memory"], &dir);
     assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
-    assert_eq!(
-        String::from_utf8_lossy(&o.stdout).trim(),
-        "200",
-        "collection never changes what the program computes"
-    );
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "200", "collection never changes what the program computes");
     let err = String::from_utf8_lossy(&o.stderr);
     let line = err
         .lines()
         .find(|l| l.contains("cycle collector:"))
         .unwrap_or_else(|| panic!("--trace-memory reports the collector: {err}"));
-    let sweeps: u64 = line
-        .split("cycle collector: ")
-        .nth(1)
-        .and_then(|s| s.split(' ').next())
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let cells: u64 = line
-        .split(", ")
-        .nth(1)
-        .and_then(|s| s.split(' ').next())
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let sweeps: u64 =
+        line.split("cycle collector: ").nth(1).and_then(|s| s.split(' ').next()).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let cells: u64 = line.split(", ").nth(1).and_then(|s| s.split(' ').next()).and_then(|s| s.parse().ok()).unwrap_or(0);
     assert!(sweeps >= 1, "the sweep ran under pressure: {line}");
-    assert!(
-        cells >= 200,
-        "every manufactured cycle was broken (200 made, {cells} collected): {line}"
-    );
+    assert!(cells >= 200, "every manufactured cycle was broken (200 made, {cells} collected): {line}");
 }
 
 /// The safety half at the language level: state-reachable cyclic structure SURVIVES collection
@@ -95,8 +79,5 @@ fn a_non_actor_program_is_untouched_by_the_collector() {
     let o = delulu(&["run", "plain.delulu", "--grant", "console"], &dir);
     assert!(o.status.success());
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "1000");
-    assert!(
-        !String::from_utf8_lossy(&o.stderr).contains("cycle collector"),
-        "no actors → no collector surface at all"
-    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("cycle collector"), "no actors → no collector surface at all");
 }

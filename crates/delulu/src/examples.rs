@@ -90,8 +90,7 @@ pub(crate) fn describe() -> Value {
             Err(n) => json!({ "path": path, "summary": summary(src), "checks": false, "errors": n, "source": src }),
         })
         .collect();
-    let packages: Vec<Value> =
-        PACKAGES.iter().map(|(p, cmd)| json!({ "path": p, "check": cmd })).collect();
+    let packages: Vec<Value> = PACKAGES.iter().map(|(p, cmd)| json!({ "path": p, "check": cmd })).collect();
     json!({ "programs": programs, "packages": packages })
 }
 

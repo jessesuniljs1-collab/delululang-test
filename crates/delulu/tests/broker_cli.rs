@@ -95,11 +95,7 @@ fn broker_start_creates_a_state_dir_that_does_not_exist_yet() {
     assert!(!state.exists(), "precondition: the state dir must not exist yet");
     let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "start"]);
     let guard = DaemonGuard { state: state.clone() };
-    assert!(
-        o.status.success(),
-        "broker start must create a missing state dir, not fail to spawn into it:\n{}",
-        stderr(&o)
-    );
+    assert!(o.status.success(), "broker start must create a missing state dir, not fail to spawn into it:\n{}", stderr(&o));
     assert!(state.is_dir(), "and the directory exists afterwards");
     drop(guard);
     let _ = std::fs::remove_dir_all(&state);
@@ -181,7 +177,19 @@ fn daemon_lifecycle_run_expose_stop_fail_closed() {
     let o = delulu_in(
         &cwd,
         &state,
-        &["run", "exposer.delulu", "--broker", "daemon", "--grant", "declassify", "--grant", "console", "--grant", "secret:API_KEY=broker", "--no-prompt"],
+        &[
+            "run",
+            "exposer.delulu",
+            "--broker",
+            "daemon",
+            "--grant",
+            "declassify",
+            "--grant",
+            "console",
+            "--grant",
+            "secret:API_KEY=broker",
+            "--no-prompt",
+        ],
     );
     assert!(o.status.success(), "expose run failed: {}", stderr(&o));
     assert_eq!(stdout(&o), "hunter2\n", "bytes entered the program only via the broker expose");
@@ -266,7 +274,19 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
         delulu_in(
             &cwd,
             &state,
-            &["run", file, "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--no-prompt", "--broker", "daemon"],
+            &[
+                "run",
+                file,
+                "--grant",
+                "console",
+                "--grant",
+                "net.special=127.0.0.1",
+                "--grant",
+                &grant,
+                "--no-prompt",
+                "--broker",
+                "daemon",
+            ],
         )
     };
     let audit_dir = state.join("audit").to_string_lossy().to_string();
@@ -295,7 +315,19 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let o = delulu_in(
         &cwd,
         &state,
-        &["run", "offpath.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1/probe/**", "--grant", &grant, "--no-prompt", "--broker", "daemon"],
+        &[
+            "run",
+            "offpath.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1/probe/**",
+            "--grant",
+            &grant,
+            "--no-prompt",
+            "--broker",
+            "daemon",
+        ],
     );
     assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside every path"), "{}{}", stdout(&o), stderr(&o));
     assert!(sends(&records()).is_empty(), "the broker was asked nothing for a path outside the scope: {:#?}", records());
@@ -306,7 +338,9 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
         loop {
             match l.accept() {
                 Ok(_) => return true,
-                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
                 Err(_) => return false,
             }
         }
@@ -317,7 +351,10 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let rs = records();
     let sent = sends(&rs);
     assert_eq!(sent.len(), 1, "{rs:#?}");
-    assert_eq!((sent[0]["decision"].as_str(), sent[0]["target"].as_str()), (Some("allow"), Some(format!("API_TOKEN@127.0.0.1:{port}").as_str())));
+    assert_eq!(
+        (sent[0]["decision"].as_str(), sent[0]["target"].as_str()),
+        (Some("allow"), Some(format!("API_TOKEN@127.0.0.1:{port}").as_str()))
+    );
     // The calling span, in the form an `expose` record carries it (`FILE:START:END`, the interpreter's own).
     assert!(sent[0]["span"].as_str().is_some_and(|s| s.split(':').count() == 3), "the send carries its span: {:#}", sent[0]);
     // No byte of the secret in the chain, in what the program printed, or in what the run said.
@@ -374,7 +411,18 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
     let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
     assert!(o.status.success(), "secrets set: {}", stderr(&o));
     let delegate = |extra: &[&str]| -> (String, String) {
-        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--net", "127.0.0.1", "--secret", "API_TOKEN", "--multi", "--json"];
+        let mut args = vec![
+            "grants",
+            "delegate",
+            "--effects",
+            "Write,Net",
+            "--net",
+            "127.0.0.1",
+            "--secret",
+            "API_TOKEN",
+            "--multi",
+            "--json",
+        ];
         args.extend_from_slice(extra);
         let o = delulu_in(&cwd, &state, &args);
         assert!(o.status.success(), "delegate {extra:?}: {}{}", stdout(&o), stderr(&o));
@@ -422,7 +470,6 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
-
 
 /// NET-WILDCARD-1 (routine run 25): a pattern `net` grant means the same under the daemon as embedded. A run granted
 /// `net.special=*.example.invalid` (`.invalid` never resolves — RFC 6761 — so nothing leaves the machine either way) was
@@ -477,7 +524,8 @@ fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
     std::fs::create_dir_all(&cwd).unwrap();
     std::fs::create_dir_all(state.join("audit")).unwrap();
     let scope = "*.example.invalid/v1/**";
-    for (file, path) in [("in.delulu", "/v1/items?page=/v2"), ("out.delulu", "/v2/items"), ("twisted.delulu", "/v1/../v2/items")] {
+    for (file, path) in [("in.delulu", "/v1/items?page=/v2"), ("out.delulu", "/v2/items"), ("twisted.delulu", "/v1/../v2/items")]
+    {
         let program = format!(
             "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
              match h.get(\"https://api.example.invalid{path}\") {{\n        Ok(b) => out.println(\"fetched\")\n        \
@@ -497,7 +545,9 @@ fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
         let o = run("in.delulu", daemon);
         assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "daemon={daemon}: {}", stderr(&o));
         assert!(!stderr(&o).contains("DL0904"), "daemon={daemon}: {}", stderr(&o));
-        for (file, words) in [("out.delulu", "outside every path the grant names"), ("twisted.delulu", "refused under a path scope")] {
+        for (file, words) in
+            [("out.delulu", "outside every path the grant names"), ("twisted.delulu", "refused under a path scope")]
+        {
             let o = run(file, daemon);
             assert!(stderr(&o).contains("DL0904") && stderr(&o).contains(words), "daemon={daemon}, {file}: {}", stderr(&o));
             assert!(!stdout(&o).contains("fetched"), "daemon={daemon}, {file}: the program never got an answer: {}", stdout(&o));
@@ -511,7 +561,8 @@ fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
     let audit_dir = state.join("audit").to_string_lossy().to_string();
     let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
-    let allowed = v["records"].as_array().unwrap().iter().any(|r| r["target"] == "api.example.invalid" && r["decision"] == "allow");
+    let allowed =
+        v["records"].as_array().unwrap().iter().any(|r| r["target"] == "api.example.invalid" && r["decision"] == "allow");
     assert!(allowed, "the host's use is allowed and recorded under the daemon: {v:#}");
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
@@ -584,18 +635,52 @@ fn a_broker_held_secret_is_never_mapped_over_bytes_it_does_not_hold() {
     std::fs::create_dir_all(&cwd).unwrap();
     std::fs::create_dir_all(state.join("audit")).unwrap();
     let head = "module m\n\nfn main(root: Root) ! {Declassify, Write} {\n    let out = root.console()\n    let s = root.secret(\"API_KEY\")\n    let d = root.declassify()\n";
-    std::fs::write(cwd.join("mapped.delulu"), format!("{head}    let m = s.map(fn(x: Str) -> Str {{ x + \"!\" }})\n    out.println(m.expose(d))\n}}\n")).unwrap();
+    std::fs::write(
+        cwd.join("mapped.delulu"),
+        format!("{head}    let m = s.map(fn(x: Str) -> Str {{ x + \"!\" }})\n    out.println(m.expose(d))\n}}\n"),
+    )
+    .unwrap();
     std::fs::write(cwd.join("exposed.delulu"), format!("{head}    out.println(s.expose(d) + \"!\")\n}}\n")).unwrap();
     let o = delulu_in(&cwd, &state, &["secrets", "set", "API_KEY", "hunter2"]);
     assert!(o.status.success(), "secrets set: {}", stderr(&o));
     // The control: embedded custody maps over the real bytes.
-    let o = delulu_in(&cwd, &state, &["run", "mapped.delulu", "--grant", "console", "--grant", "declassify", "--grant", "secret:API_KEY=hunter2", "--no-prompt"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "run",
+            "mapped.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            "declassify",
+            "--grant",
+            "secret:API_KEY=hunter2",
+            "--no-prompt",
+        ],
+    );
     assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "hunter2!\n"), "{}", stderr(&o));
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     let daemon = |file: &str| {
-        delulu_in(&cwd, &state, &["run", file, "--broker", "daemon", "--grant", "console", "--grant", "declassify", "--grant", "secret:API_KEY=broker", "--no-prompt"])
+        delulu_in(
+            &cwd,
+            &state,
+            &[
+                "run",
+                file,
+                "--broker",
+                "daemon",
+                "--grant",
+                "console",
+                "--grant",
+                "declassify",
+                "--grant",
+                "secret:API_KEY=broker",
+                "--no-prompt",
+            ],
+        )
     };
     let o = daemon("mapped.delulu");
     assert_eq!(o.status.code(), Some(1), "refused, never a fabricated value: stdout {:?}\n{}", stdout(&o), stderr(&o));

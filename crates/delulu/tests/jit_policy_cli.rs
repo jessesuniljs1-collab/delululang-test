@@ -45,10 +45,7 @@ fn an_ungranted_jit_hint_warns_dl1906_and_the_program_still_runs() {
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "42", "output is the interpreter's");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("DL1906"), "the ignored hint is announced, not silent: {err}");
-    assert!(
-        err.contains("exec.native"),
-        "the warning names the grant that would change the answer"
-    );
+    assert!(err.contains("exec.native"), "the warning names the grant that would change the answer");
 }
 
 /// With the grant, the warning goes away — and nothing else changes, because there is no native
@@ -62,10 +59,7 @@ fn a_granted_jit_hint_runs_without_the_warning() {
     let o = delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant", "exec.native"]);
     assert!(o.status.success());
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "42");
-    assert!(
-        !String::from_utf8_lossy(&o.stderr).contains("DL1906"),
-        "granted means no warning"
-    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("DL1906"), "granted means no warning");
 }
 
 /// House rule 4: the machine channel is law. A `--json` run of a hinted program carries no
@@ -93,14 +87,12 @@ fn authority_reports_the_request_only_when_a_jit_hint_exists() {
     std::fs::write(&hinted, HINTED).unwrap();
     std::fs::write(&plain, HINTED.replace("@jit\n", "")).unwrap();
 
-    let vh: serde_json::Value =
-        serde_json::from_slice(&delulu(&["authority", &hinted.to_string_lossy(), "--json"]).stdout)
-            .expect("hinted authority json");
+    let vh: serde_json::Value = serde_json::from_slice(&delulu(&["authority", &hinted.to_string_lossy(), "--json"]).stdout)
+        .expect("hinted authority json");
     assert_eq!(vh["authority"]["native_emission"]["requested"], true);
 
     let vp: serde_json::Value =
-        serde_json::from_slice(&delulu(&["authority", &plain.to_string_lossy(), "--json"]).stdout)
-            .expect("plain authority json");
+        serde_json::from_slice(&delulu(&["authority", &plain.to_string_lossy(), "--json"]).stdout).expect("plain authority json");
     assert!(
         vp["authority"].get("native_emission").is_none(),
         "a hint-free program's report has NO native_emission key — byte-identical to 1.0"
@@ -109,10 +101,7 @@ fn authority_reports_the_request_only_when_a_jit_hint_exists() {
     let human = delulu(&["authority", &hinted.to_string_lossy()]);
     let text = String::from_utf8_lossy(&human.stdout);
     assert!(text.contains("native-emission: requested"), "the human line exists: {text}");
-    assert!(
-        text.contains("no native tier exists in v1.x"),
-        "the honesty clause is on the line itself, not in a footnote"
-    );
+    assert!(text.contains("no native tier exists in v1.x"), "the honesty clause is on the line itself, not in a footnote");
 }
 
 /// The manifest is the reviewable request channel: a hinted package whose manifest does NOT
@@ -128,16 +117,10 @@ fn the_manifest_declares_the_request_but_never_grants_it() {
     std::fs::write(dir.join("delulu.toml"), "[package]\nname = \"m\"\n[authority]\neffects = [\"Write\"]\n").unwrap();
     let o = delulu(&["run", &f.to_string_lossy(), "--grant", "console"]);
     let err = String::from_utf8_lossy(&o.stderr);
-    assert!(
-        err.contains("does not declare the request"),
-        "undeclared request is named: {err}"
-    );
+    assert!(err.contains("does not declare the request"), "undeclared request is named: {err}");
 
-    std::fs::write(
-        dir.join("delulu.toml"),
-        "[package]\nname = \"m\"\n[authority]\neffects = [\"Write\"]\nexec.native = true\n",
-    )
-    .unwrap();
+    std::fs::write(dir.join("delulu.toml"), "[package]\nname = \"m\"\n[authority]\neffects = [\"Write\"]\nexec.native = true\n")
+        .unwrap();
     let o2 = delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant-manifest"]);
     assert!(o2.status.success());
     let err2 = String::from_utf8_lossy(&o2.stderr);
@@ -201,9 +184,7 @@ fn every_ast_item_that_can_carry_an_attribute_is_one_the_native_hint_scan_looks_
     // someone extends the AST and this list together while forgetting the predicate itself.
     // Line endings are normalized: this tree is checked out CRLF on Windows and LF on Linux, and a
     // gate that reads source must not be a gate that only holds on one platform.
-    let cli = std::fs::read_to_string(root().join("crates/delulu/src/cli.rs"))
-        .expect("read cli.rs")
-        .replace("\r\n", "\n");
+    let cli = std::fs::read_to_string(root().join("crates/delulu/src/cli.rs")).expect("read cli.rs").replace("\r\n", "\n");
     let body = {
         let at = cli.find("fn module_requests_native").expect("the predicate exists");
         let end = cli[at..].find("\n}\n").expect("its body ends") + at;

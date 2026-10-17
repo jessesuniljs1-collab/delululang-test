@@ -221,27 +221,22 @@ jobs:
   # literal that would need a pointless cast as `c""`). `cargo clippy --workspace --all-targets
   # -- -D warnings` now exits 0, so from here this step means something.
   #
-  # `cargo fmt --all -- --check` is NOT run, and that is a decision rather than an oversight.
-  # This codebase is hand-formatted and has no `rustfmt.toml`; rustfmt's default style produces
-  # **3,890** diffs against it, and raising `max_width` does not close the gap (2,766 at 120). The
-  # three options were: reformat ~102,000 lines in one unreviewable commit, keep a step that is red
-  # forever, or say plainly that the project has not adopted rustfmt. A permanently red step is the
-  # worst of the three — it teaches people that red is normal, which is how a real failure gets
-  # ignored.
-  #
-  # ADOPTING RUSTFMT IS AN OWNER DECISION, not a cleanup task, because it rewrites every file in the
-  # repository and this project's comments carry much of its value. Until that decision is made,
-  # formatting is not enforced, and this comment is where that is admitted.
+  # Formatting is rustfmt's (D-V2-145, 2026-10-17): `rustfmt.toml` sets the two options measured nearest the hand style
+  # the codebase was written in, the whole tree was formatted once in one commit (283 files; no comment's text changed —
+  # rustfmt does not wrap comments — three byte-order marks removed), and the check below keeps it so. Until then this
+  # comment explained why the step was absent: adopting it was the owner's decision, now taken under his delegation.
   lints:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-        with: { components: clippy }
+        with: { components: "clippy, rustfmt" }
       - uses: Swatinem/rust-cache@v2
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: rustfmt (the tree is formatted)
+        run: cargo fmt --all -- --check
 
   # ---- Undefined behaviour -----------------------------------------------------------------
   # Miri interprets the code and reports UB that a normal build silently tolerates. It is run

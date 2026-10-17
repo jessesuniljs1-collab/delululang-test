@@ -66,8 +66,19 @@ impl Rig {
         copy_dir(&examples, &dir.join("line_driver"));
         let device = device(&dir);
         let rig = Rig { dir, device };
-        let o = rig.delulu(&["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--broker-profile", "sim",
-            "--signoff", "signoff.json", "--no-prompt"]);
+        let o = rig.delulu(&[
+            "run",
+            "arm.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--broker-profile",
+            "sim",
+            "--signoff",
+            "signoff.json",
+            "--no-prompt",
+        ]);
         assert!(o.status.success(), "the simulation signs the program off: {}", text(&o));
         rig
     }
@@ -111,9 +122,24 @@ impl Rig {
     /// refused before its transport is looked up says why; one whose transport came first says "could not
     /// be started" — deterministic where watching a started process die first is a race.
     fn hw_through(&self, transport: &str, dpx: &str, signer: &str, extra: &[&str]) -> Output {
-        let mut a = vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--broker-profile", "hw:arm",
-            "--approved", "signoff.json", "--adapter-dpx", dpx, "--adapter-transport", transport,
-            "--adapter-signer", signer];
+        let mut a = vec![
+            "run",
+            "arm.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--broker-profile",
+            "hw:arm",
+            "--approved",
+            "signoff.json",
+            "--adapter-dpx",
+            dpx,
+            "--adapter-transport",
+            transport,
+            "--adapter-signer",
+            signer,
+        ];
         a.extend_from_slice(extra);
         a.push("--no-prompt");
         self.delulu(&a)
@@ -121,11 +147,7 @@ impl Rig {
 
     /// The frames the device received, one per line.
     fn saw(&self) -> Vec<String> {
-        std::fs::read_to_string(self.dir.join("device-saw.txt"))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        std::fs::read_to_string(self.dir.join("device-saw.txt")).unwrap_or_default().lines().map(str::to_string).collect()
     }
 
     fn device_started(&self) -> bool {
@@ -158,11 +180,8 @@ fn device(dir: &Path) -> String {
              \x20       reply = 'ERR unknown request'\n\
              \x20   print(reply, flush=True)\n";
         std::fs::write(dir.join("device.py"), script).unwrap();
-        let warm = Command::new("python")
-            .args(["-I", "-S", "device.py"])
-            .current_dir(dir)
-            .stdin(std::process::Stdio::null())
-            .output();
+        let warm =
+            Command::new("python").args(["-I", "-S", "device.py"]).current_dir(dir).stdin(std::process::Stdio::null()).output();
         assert!(warm.as_ref().is_ok_and(|o| o.status.success()), "python could not run the device: {warm:?}");
         let _ = std::fs::remove_file(dir.join("device-started.txt"));
         "python -I -S device.py".to_string()
@@ -239,11 +258,9 @@ fn a_driver_the_operator_did_not_pin_starts_nothing() {
     let at = tampered.windows(5).position(|w| w == b"READ ").expect("a frame literal in the DIR");
     tampered[at] = b'X';
     std::fs::write(r.dir.join("tampered.dpx"), &tampered).unwrap();
-    for (dpx, codes) in [
-        ("by-stranger.dpx", &["DL1510"][..]),
-        ("unsigned.dpx", &["DL1511"][..]),
-        ("tampered.dpx", &["DL1504", "DL1510"][..]),
-    ] {
+    for (dpx, codes) in
+        [("by-stranger.dpx", &["DL1510"][..]), ("unsigned.dpx", &["DL1511"][..]), ("tampered.dpx", &["DL1504", "DL1510"][..])]
+    {
         let o = r.hw(dpx, &public, &["--adapter-record", "audit"]);
         let out = text(&o);
         assert_eq!(o.status.code(), Some(1), "{dpx}:\n{out}");
@@ -300,9 +317,20 @@ fn a_verified_drivers_flags_are_refused_where_they_would_be_dropped() {
         ("no transport", [&hw[..], &["--adapter-dpx", "driver.dpx", "--adapter-signer", &public]].concat()),
         (
             "beside --adapter-cmd",
-            [&hw[..], &["--adapter-dpx", "driver.dpx", "--adapter-transport", &r.device, "--adapter-signer", &public,
-                "--adapter-cmd", &r.device]]
-                .concat(),
+            [
+                &hw[..],
+                &[
+                    "--adapter-dpx",
+                    "driver.dpx",
+                    "--adapter-transport",
+                    &r.device,
+                    "--adapter-signer",
+                    &public,
+                    "--adapter-cmd",
+                    &r.device,
+                ],
+            ]
+            .concat(),
         ),
         ("a transport alone", [&hw[..], &["--adapter-cmd", &r.device, "--adapter-transport", &r.device]].concat()),
         // Without `--adapter-signer`, so the two new flags alone must be what refuses it.

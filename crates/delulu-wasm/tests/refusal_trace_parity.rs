@@ -16,7 +16,10 @@ use delulu_wasm::{compile_module, run_main, HostConfig};
 struct DenyAll;
 impl delulu_runtime::Custody for DenyAll {
     fn check(&mut self, _op: delulu_runtime::Op, _arg: Option<&str>) -> delulu_runtime::CustodyDecision {
-        delulu_runtime::CustodyDecision::Deny(delulu_runtime::CustodyDenial::new("DL1403", "lease `g_x` was revoked by audit seq 42"))
+        delulu_runtime::CustodyDecision::Deny(delulu_runtime::CustodyDenial::new(
+            "DL1403",
+            "lease `g_x` was revoked by audit seq 42",
+        ))
     }
     fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
         Err(delulu_runtime::CustodyDenial::new("DL1403", "revoked"))
@@ -59,9 +62,7 @@ fn run_both(src: &str, deny: bool, read_root: Option<&str>) -> ((String, Vec<Tra
         fixed_clock_ms: Some(1_000),
         fs_read_roots: grants.build_root().fs_read,
         trace: Some(wsink.clone()),
-        custody: deny.then(|| {
-            std::rc::Rc::new(std::cell::RefCell::new(Box::new(DenyAll) as Box<dyn delulu_runtime::Custody>))
-        }),
+        custody: deny.then(|| std::rc::Rc::new(std::cell::RefCell::new(Box::new(DenyAll) as Box<dyn delulu_runtime::Custody>))),
         ..HostConfig::default()
     };
     let w = run_main(&wasm, &cfg).expect_err("the WASM run is refused");

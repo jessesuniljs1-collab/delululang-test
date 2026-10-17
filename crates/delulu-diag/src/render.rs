@@ -146,12 +146,7 @@ fn window_line(text: &str, start_col: usize, underline_len: usize) -> (String, u
 /// in `d.args` — otherwise (and always with `None`) the in-code en-US message stands. This is
 /// the ONLY seam a catalog touches: codes, spans, labels, repairs, and the entire JSON envelope
 /// never pass through here (invariant 39 by construction).
-pub fn render_human_localized(
-    d: &Diagnostic,
-    map: &SourceMap,
-    palette: &Palette,
-    catalog: Option<&Catalog>,
-) -> String {
+pub fn render_human_localized(d: &Diagnostic, map: &SourceMap, palette: &Palette, catalog: Option<&Catalog>) -> String {
     let localized = catalog.and_then(|c| c.render(d.code, &d.args));
     let message = terminal_safe(localized.as_deref().unwrap_or(&d.message));
     let message = indented_continuations(&message);
@@ -161,13 +156,7 @@ pub fn render_human_localized(
         Severity::Note => Role::Note,
     };
     let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "{}[{}]: {}",
-        palette.paint(sev_role, d.severity.as_str()),
-        palette.paint(Role::Code, d.code),
-        message
-    );
+    let _ = writeln!(out, "{}[{}]: {}", palette.paint(sev_role, d.severity.as_str()), palette.paint(Role::Code, d.code), message);
 
     for ls in &d.spans {
         let span = ls.span;
@@ -199,8 +188,7 @@ pub fn render_human_localized(
         // 10 KB twice (text plus underline), and a 10 KB file emitted **76 MB** of stderr. That is
         // the D29 backtrace flood in a different costume: not a diagnostic any more, but a denial of
         // service against whoever has to read it, human or agent.
-        let (text, line_start_col, underline_len) =
-            window_line(full_text, full_start_col, full_underline_len);
+        let (text, line_start_col, underline_len) = window_line(full_text, full_start_col, full_underline_len);
 
         let _ = writeln!(out, "{:w$} |", "", w = gutter_w);
         let _ = writeln!(out, "{:w$} | {}", line, text, w = gutter_w);
@@ -234,13 +222,7 @@ pub fn render_human_localized(
             flags.push("requires human decision");
         }
         let flag_text = if flags.is_empty() { String::new() } else { format!("  [{}]", flags.join("; ")) };
-        let _ = writeln!(
-            out,
-            "  repair: {} ({}){}",
-            palette.paint(Role::Repair, r.id),
-            r.confidence.as_str(),
-            flag_text
-        );
+        let _ = writeln!(out, "  repair: {} ({}){}", palette.paint(Role::Repair, r.id), r.confidence.as_str(), flag_text);
     }
 
     let _ = writeln!(out, "  explain: delulu explain {}", d.explanation_id());
@@ -256,8 +238,7 @@ mod tests {
     fn sample() -> (SourceMap, Diagnostic) {
         let mut map = SourceMap::new();
         let f = map.add_file("src/main.delulu", "fn main() {\n  boom()\n}\n");
-        let d = Diagnostic::error("DL0301", "unknown name `boom`")
-            .with_span(Span::new(f, 14, 18), "not found in this scope");
+        let d = Diagnostic::error("DL0301", "unknown name `boom`").with_span(Span::new(f, 14, 18), "not found in this scope");
         (map, d)
     }
 
@@ -291,10 +272,7 @@ mod tests {
             .with_span(Span::new(7, 0, 4), "somewhere in a file we do not have");
         let text = render_human(&d, &map);
         assert!(text.contains("error[DL0501]"), "the message must still be rendered: {text}");
-        assert!(
-            text.contains("raised about a file this map never loaded"),
-            "the message must still be rendered: {text}"
-        );
+        assert!(text.contains("raised about a file this map never loaded"), "the message must still be rendered: {text}");
         assert!(!text.contains("-->"), "no source excerpt is possible, so none may be claimed: {text}");
     }
 

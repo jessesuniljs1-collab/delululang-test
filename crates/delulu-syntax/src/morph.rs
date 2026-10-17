@@ -85,9 +85,8 @@ pub struct Morph {
 /// identifier — which rule 3 of the spec forbids. Reserved-but-inactive words are absent for the
 /// same reason: there is no token to rename yet.
 pub const MORPHABLE_KEYWORDS: &[&str] = &[
-    "fn", "let", "var", "if", "else", "while", "return", "match", "module", "import", "pub", "type",
-    "effect", "true", "false", "actor", "spawn", "consume", "recover", "for", "in", "break",
-    "continue",
+    "fn", "let", "var", "if", "else", "while", "return", "match", "module", "import", "pub", "type", "effect", "true", "false",
+    "actor", "spawn", "consume", "recover", "for", "in", "break", "continue",
 ];
 
 /// A reason a morph was refused, carrying the diagnostic code it maps to.
@@ -187,22 +186,13 @@ impl Morph {
         // rendering does no work and the lexer has one fewer candidate.
         canon_to_alias.retain(|canon, alias| canon != alias);
 
-        let mut alias_to_kind: Vec<(String, TokenKind)> = canon_to_alias
-            .iter()
-            .filter_map(|(canon, alias)| keyword(canon).map(|k| (alias.clone(), k)))
-            .collect();
+        let mut alias_to_kind: Vec<(String, TokenKind)> =
+            canon_to_alias.iter().filter_map(|(canon, alias)| keyword(canon).map(|k| (alias.clone(), k))).collect();
         // Longest first: with `l` → `let` and `lm` → `match` both present, scanning `lm` must not
         // match `l` and leave a stray `m`. Ties broken by the alias for determinism.
         alias_to_kind.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
 
-        Ok(Morph {
-            id,
-            name: name.into(),
-            version: version.into(),
-            kind,
-            canon_to_alias,
-            alias_to_kind,
-        })
+        Ok(Morph { id, name: name.into(), version: version.into(), kind, canon_to_alias, alias_to_kind })
     }
 
     /// The canonical form of an alias-bearing keyword table, for `morph info`.
@@ -283,19 +273,11 @@ impl Morph {
             if seen.insert(text, ()).is_some() {
                 continue;
             }
-            let canon = self
-                .canon_to_alias
-                .iter()
-                .find(|(_, a)| *a == alias)
-                .map(|(c, _)| c.as_str())
-                .unwrap_or("a keyword");
+            let canon = self.canon_to_alias.iter().find(|(_, a)| *a == alias).map(|(c, _)| c.as_str()).unwrap_or("a keyword");
             out.push(
                 Diagnostic::error(
                     "DL1715",
-                    format!(
-                        "`{text}` is used as a name here, but morph `{}` renames the keyword `{canon}` to `{text}`",
-                        self.id
-                    ),
+                    format!("`{text}` is used as a name here, but morph `{}` renames the keyword `{canon}` to `{text}`", self.id),
                 )
                 .with_span(
                     Span::new(file, t.span.start, t.span.end),
@@ -547,14 +529,7 @@ mod tests {
     fn a_mixed_surface_round_trips() {
         // Jesse's actual ask: "Chinese or other characters or symbols or emoji's or mix of
         // everything." Nothing in the mechanism cares which script an alias comes from.
-        round_trip(&[
-            ("fn", "λ"),
-            ("let", "令"),
-            ("return", "⏎"),
-            ("if", "🤔"),
-            ("else", "sinon"),
-            ("module", "модуль"),
-        ]);
+        round_trip(&[("fn", "λ"), ("let", "令"), ("return", "⏎"), ("if", "🤔"), ("else", "sinon"), ("module", "модуль")]);
     }
 
     #[test]
@@ -572,10 +547,7 @@ mod tests {
         assert!(out.contains("fnord"), "identifier must survive:\n{out}");
         assert!(out.contains("letter"), "identifier must survive:\n{out}");
         assert!(out.contains("\"fn let match return\""), "string literal must survive:\n{out}");
-        assert!(
-            out.contains("// a comment mentioning fn and let and match"),
-            "comment must survive:\n{out}"
-        );
+        assert!(out.contains("// a comment mentioning fn and let and match"), "comment must survive:\n{out}");
         // And the declaration keyword really did change.
         assert!(out.contains("pub f fnord"), "the `fn` keyword must be morphed:\n{out}");
     }
@@ -585,8 +557,7 @@ mod tests {
         // The claim that matters: a morph is a surface, not a dialect. Both forms must produce the
         // same AST — compared through the formatter's identity fingerprint, which strips spans and
         // node ids precisely so two parses of the same program compare equal.
-        let m = morph(&[("fn", "函数"), ("let", "令"), ("return", "返回"), ("if", "如果"), ("else", "否则")])
-            .unwrap();
+        let m = morph(&[("fn", "函数"), ("let", "令"), ("return", "返回"), ("if", "如果"), ("else", "否则")]).unwrap();
         let morphed = m.render(0, PROGRAM).expect("render");
         let canonical_again = m.to_canonical(0, &morphed).expect("to_canonical");
         let a = crate::parse_file(0, PROGRAM).0;
@@ -643,8 +614,7 @@ mod tests {
         }
         // Deliberately mixed: ASCII compact aliases CAN collide; CJK/emoji ones CANNOT, because
         // identifiers are ASCII-only. Both halves must come out right.
-        let pairs: &[(&str, &str)] =
-            &[("fn", "F"), ("let", "L"), ("type", "T"), ("match", "函数"), ("if", "🤔")];
+        let pairs: &[(&str, &str)] = &[("fn", "F"), ("let", "L"), ("type", "T"), ("match", "函数"), ("if", "🤔")];
         let m = morph(pairs).unwrap();
         for (canon, alias) in pairs {
             let src = format!("module a\nfn g({alias}: Int) -> Int {{ {alias} }}\n");
@@ -706,11 +676,7 @@ mod tests {
                     }
                     Ok(morphed) => {
                         let back = m.to_canonical(0, &morphed).expect("accepted render must read back");
-                        assert_eq!(
-                            &back, src,
-                            "identity law broken for morph {:?}\nmorphed was:\n{morphed}",
-                            m.id
-                        );
+                        assert_eq!(&back, src, "identity law broken for morph {:?}\nmorphed was:\n{morphed}", m.id);
                         round_tripped += 1;
                     }
                 }

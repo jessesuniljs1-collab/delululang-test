@@ -43,9 +43,9 @@ impl Package {
 
     /// The package's entry module, if any: the one declaring `fn main`.
     pub fn entry_module(&self) -> Option<&ModuleUnit> {
-        self.modules.iter().find(|m| {
-            m.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Fn(f) if f.name.name == "main"))
-        })
+        self.modules
+            .iter()
+            .find(|m| m.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Fn(f) if f.name.name == "main")))
     }
 }
 
@@ -87,10 +87,8 @@ pub fn load_package_into(root_dir: &Path, source_map: &mut SourceMap, display_pr
         diagnostics.append(&mut mdiags);
         let name = module.name.dotted();
         if index.contains_key(&name) {
-            diagnostics.push(
-                Diagnostic::error("DL0302", format!("duplicate module `{name}`"))
-                    .with_bare_span(Span::new(file, 0, 0)),
-            );
+            diagnostics
+                .push(Diagnostic::error("DL0302", format!("duplicate module `{name}`")).with_bare_span(Span::new(file, 0, 0)));
             continue;
         }
         index.insert(name.clone(), modules.len());
@@ -107,13 +105,7 @@ pub fn load_package(root_dir: impl AsRef<Path>) -> Package {
     let mut source_map = SourceMap::new();
     let loaded = load_package_into(&root_dir, &mut source_map, "");
 
-    let pkg = Package {
-        root_dir,
-        modules: loaded.modules,
-        index: loaded.index,
-        source_map,
-        diagnostics: loaded.diagnostics,
-    };
+    let pkg = Package { root_dir, modules: loaded.modules, index: loaded.index, source_map, diagnostics: loaded.diagnostics };
     let mut extra = Vec::new();
     validate_imports(&pkg, &mut extra);
     let mut pkg = pkg;

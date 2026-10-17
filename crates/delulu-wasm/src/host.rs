@@ -264,7 +264,11 @@ struct HostState {
 impl HostState {
     /// The effective foreign-return ceiling (0 in config means "use the default").
     fn max_ret(&self) -> usize {
-        if self.foreign_max_ret == 0 { foreign::DEFAULT_MAX_RET } else { self.foreign_max_ret }
+        if self.foreign_max_ret == 0 {
+            foreign::DEFAULT_MAX_RET
+        } else {
+            self.foreign_max_ret
+        }
     }
 
     /// Consult custody for one gated op (Stage 5 phase 5f). On `Deny` the refusal is RECORDED in
@@ -319,7 +323,15 @@ impl HostState {
     /// The `read_text` record, with the two additive filesystem fields the interpreter's record
     /// carries (REMAINING_WORK 6.13): where the path pointed, and the scope it was resolved in.
     #[allow(clippy::too_many_arguments)]
-    fn push_fs_read_trace(&mut self, rel: &str, pointed: &std::path::Path, scope: &std::path::Path, file: i32, start: i32, end: i32) {
+    fn push_fs_read_trace(
+        &mut self,
+        rel: &str,
+        pointed: &std::path::Path,
+        scope: &std::path::Path,
+        file: i32,
+        start: i32,
+        end: i32,
+    ) {
         let Some(sink) = &self.trace else { return };
         let seq = self.trace_seq;
         self.trace_seq += 1;
@@ -374,10 +386,7 @@ fn encode_fval_return(caller: &mut Caller<'_, HostState>, fv: FVal) -> i64 {
 
 /// Wall-clock milliseconds since the Unix epoch (matches the interpreter's `Cap[Clock].now_ms()`).
 fn wall_clock_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 /// One xorshift64 step — the EXACT generator the interpreter uses (`prim.rs::next_rand`), so a run
@@ -394,11 +403,10 @@ fn xorshift64(mut x: u64) -> u64 {
 fn seed_rng(seed: Option<u64>) -> u64 {
     match seed {
         Some(s) => (if s == 0 { 0x9E37_79B9 } else { s }) | 1,
-        None => std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x9E37_79B9)
-            | 1,
+        None => {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E37_79B9)
+                | 1
+        }
     }
 }
 
@@ -566,56 +574,64 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "console_println", |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32, file: i32, start: i32, end: i32| {
-            if caller.data().refused.is_some() {
-                return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
-            }
-            let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
-            if !ok {
-                caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
-                return;
-            }
-            let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
-                caller.data_mut().refused = Some("guest exports no `memory`".into());
-                return;
-            };
-            let s = {
-                let data = mem.data(&caller);
-                // A wasm pointer is an UNSIGNED 32-bit offset; interpret it that way and use checked
-                // arithmetic so a hostile `ptr` (e.g. -1 / near u32::MAX) can never overflow `usize`
-                // and panic the host — a host panic inside a wasm callback would abort the process.
-                let p = ptr as u32 as usize;
-                let header_end = match p.checked_add(4) {
-                    Some(e) if e <= data.len() => e,
-                    _ => {
-                        caller.data_mut().refused = Some(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
-                        return;
-                    }
+        .func_wrap(
+            "delulu:cap",
+            "console_println",
+            |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32, file: i32, start: i32, end: i32| {
+                if caller.data().refused.is_some() {
+                    return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
+                if !ok {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
+                    return;
+                }
+                let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                    caller.data_mut().refused = Some("guest exports no `memory`".into());
+                    return;
                 };
-                let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
-                let body_end = match header_end.checked_add(len) {
-                    Some(e) if e <= data.len() => e,
-                    _ => {
-                        caller.data_mut().refused = Some(format!("DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)", data.len()));
-                        return;
-                    }
+                let s = {
+                    let data = mem.data(&caller);
+                    // A wasm pointer is an UNSIGNED 32-bit offset; interpret it that way and use checked
+                    // arithmetic so a hostile `ptr` (e.g. -1 / near u32::MAX) can never overflow `usize`
+                    // and panic the host — a host panic inside a wasm callback would abort the process.
+                    let p = ptr as u32 as usize;
+                    let header_end = match p.checked_add(4) {
+                        Some(e) if e <= data.len() => e,
+                        _ => {
+                            caller.data_mut().refused =
+                                Some(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
+                            return;
+                        }
+                    };
+                    let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
+                    let body_end = match header_end.checked_add(len) {
+                        Some(e) if e <= data.len() => e,
+                        _ => {
+                            caller.data_mut().refused = Some(format!(
+                                "DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)",
+                                data.len()
+                            ));
+                            return;
+                        }
+                    };
+                    String::from_utf8_lossy(&data[header_end..body_end]).to_string()
                 };
-                String::from_utf8_lossy(&data[header_end..body_end]).to_string()
-            };
-            // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
-            // `trace_detail`) at DISPATCH — before the custody decides, as the interpreter records it (RW 4.64:
-            // reading the guest's string performs nothing, so the order costs nothing and the traces agree).
-            caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
-            // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
-            // followed in the trace by its refusal (D-V2-129).
-            if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
-                caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
-                return;
-            }
-            let out = &mut caller.data_mut().output;
-            out.push_str(&s);
-            out.push('\n');
-        })
+                // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
+                // `trace_detail`) at DISPATCH — before the custody decides, as the interpreter records it (RW 4.64:
+                // reading the guest's string performs nothing, so the order costs nothing and the traces agree).
+                caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
+                // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5) — and
+                // followed in the trace by its refusal (D-V2-129).
+                if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
+                    caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
+                    return;
+                }
+                let out = &mut caller.data_mut().output;
+                out.push_str(&s);
+                out.push('\n');
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_clock", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
@@ -637,26 +653,30 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "clock_now_ms", |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> i64 {
-            if caller.data().refused.is_some() {
-                return 0;
-            }
-            let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Clock)).unwrap_or(false);
-            if !ok {
-                caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
-                return 0;
-            }
-            // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
-            // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
-            caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
-            if !caller.data_mut().custody_allows(CustodyOp::Clock, None) {
-                caller.data_mut().push_refusal_trace("Clock", "now_ms", "Clock", file, start, end);
-                return 0;
-            }
-            // The clock read happens host-side: fixed for deterministic replay, else the wall clock —
-            // the same source the interpreter uses, so a fixed clock gives byte-identical output.
-            caller.data().fixed_clock_ms.unwrap_or_else(wall_clock_ms)
-        })
+        .func_wrap(
+            "delulu:cap",
+            "clock_now_ms",
+            |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> i64 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Clock)).unwrap_or(false);
+                if !ok {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
+                    return 0;
+                }
+                // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
+                // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
+                caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
+                if !caller.data_mut().custody_allows(CustodyOp::Clock, None) {
+                    caller.data_mut().push_refusal_trace("Clock", "now_ms", "Clock", file, start, end);
+                    return 0;
+                }
+                // The clock read happens host-side: fixed for deterministic replay, else the wall clock —
+                // the same source the interpreter uses, so a fixed clock gives byte-identical output.
+                caller.data().fixed_clock_ms.unwrap_or_else(wall_clock_ms)
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_rand", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
@@ -678,36 +698,40 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "rand_int", |mut caller: Caller<'_, HostState>, cap: i32, lo: i64, hi: i64, file: i32, start: i32, end: i32| -> i64 {
-            if caller.data().refused.is_some() {
-                return 0;
-            }
-            let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
-            if !ok {
-                caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
-                return 0;
-            }
-            // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
-            // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
-            caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
-            if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
-                caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
-                return 0;
-            }
-            if hi <= lo {
-                caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
-                caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
-                return lo;
-            }
-            // Advance the PRNG one step (host-side), then map exactly as the interpreter does:
-            // `lo + (next_rand() % (hi - lo)) as i64`. `wrapping_*` avoids a debug-build host panic on
-            // the full-i64-range span while matching the interpreter's release semantics.
-            let st = caller.data_mut();
-            let x = xorshift64(st.rng);
-            st.rng = x;
-            let span = hi.wrapping_sub(lo) as u64;
-            lo.wrapping_add((x % span) as i64)
-        })
+        .func_wrap(
+            "delulu:cap",
+            "rand_int",
+            |mut caller: Caller<'_, HostState>, cap: i32, lo: i64, hi: i64, file: i32, start: i32, end: i32| -> i64 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
+                if !ok {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                    return 0;
+                }
+                // Traced at DISPATCH, then the custody gate (Stage 5 phase 5f, epoch class): a refusal is recorded,
+                // never an Err (trap 5), and follows the dispatch in the trace (RW 4.64, D-V2-129).
+                caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
+                if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
+                    caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
+                    return 0;
+                }
+                if hi <= lo {
+                    caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
+                    caller.data_mut().push_refusal_trace("Rand", "int", "Rand", file, start, end);
+                    return lo;
+                }
+                // Advance the PRNG one step (host-side), then map exactly as the interpreter does:
+                // `lo + (next_rand() % (hi - lo)) as i64`. `wrapping_*` avoids a debug-build host panic on
+                // the full-i64-range span while matching the interpreter's release semantics.
+                let st = caller.data_mut();
+                let x = xorshift64(st.rng);
+                st.rng = x;
+                let span = hi.wrapping_sub(lo) as u64;
+                lo.wrapping_add((x % span) as i64)
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "root_fs_read", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
@@ -751,85 +775,87 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "fs_read_text", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
-            if caller.data().refused.is_some() {
-                return 0;
-            }
-            let scope = match caller.data().caps.get(cap as usize) {
-                Some(CapKind::FsRead(scope)) => scope.clone(),
-                _ => {
-                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+        .func_wrap(
+            "delulu:cap",
+            "fs_read_text",
+            |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
+                if caller.data().refused.is_some() {
                     return 0;
                 }
-            };
-            let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
-                caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
-                return 0;
-            };
-            // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
-            // Like the interpreter, it also names where the path pointed and the scope (RW 6.13). At DISPATCH:
-            // a hostile spelling is refused after it, as the interpreter refuses it (RW 4.64).
-            let pointed = normalize(&scope.join(&rel));
-            caller.data_mut().push_fs_read_trace(&rel, &pointed, &scope, file, start, end);
-            if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
-                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
-                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                return 0;
-            }
-            // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
-            // The symlink half of that sentence was a comment and not a check until C84 — the
-            // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.
-            let resolved = normalize(&scope.join(&rel));
-            if !resolved.starts_with(&scope)
-                || !delulu_runtime::prim::contains_on_disk(&scope, &resolved)
-            {
-                caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
-                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                return 0;
-            }
-            // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
-            // the broker node's fs scope was granted against. Recorded refusal, never an Err (trap 5).
-            // GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
-            let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
-            let resolved_str = match &pin {
-                Some(real) => delulu_runtime::prim::disk_spelling(real),
-                None => resolved.to_string_lossy().to_string(),
-            };
-            if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
-                caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                return 0;
-            }
-            // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
-            // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
-            // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that
-            // appeared after the check above is followed, and only a regular file is read.
-            let read = match &pin {
-                Some(real) => delulu_runtime::beneath::read_text_at(real),
-                None => delulu_runtime::beneath::read_text(&scope, &resolved),
-            };
-            let built = match read {
-                delulu_runtime::beneath::Outcome::Done(content) => build_ok_str(&mut caller, &content),
-                delulu_runtime::beneath::Outcome::Io(e) => {
-                    use std::io::ErrorKind::*;
-                    match e.kind() {
-                        NotFound => build_err_ioerr(&mut caller, 0, None),
-                        PermissionDenied => build_err_ioerr(&mut caller, 1, None),
-                        _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                let scope = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsRead(scope)) => scope.clone(),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                        return 0;
+                    }
+                };
+                let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
+                    return 0;
+                };
+                // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
+                // Like the interpreter, it also names where the path pointed and the scope (RW 6.13). At DISPATCH:
+                // a hostile spelling is refused after it, as the interpreter refuses it (RW 4.64).
+                let pointed = normalize(&scope.join(&rel));
+                caller.data_mut().push_fs_read_trace(&rel, &pointed, &scope, file, start, end);
+                if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
+                    caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
+                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                    return 0;
+                }
+                // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
+                // The symlink half of that sentence was a comment and not a check until C84 — the
+                // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.
+                let resolved = normalize(&scope.join(&rel));
+                if !resolved.starts_with(&scope) || !delulu_runtime::prim::contains_on_disk(&scope, &resolved) {
+                    caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
+                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                    return 0;
+                }
+                // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
+                // the broker node's fs scope was granted against. Recorded refusal, never an Err (trap 5).
+                // GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
+                let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
+                let resolved_str = match &pin {
+                    Some(real) => delulu_runtime::prim::disk_spelling(real),
+                    None => resolved.to_string_lossy().to_string(),
+                };
+                if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                    return 0;
+                }
+                // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
+                // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
+                // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that
+                // appeared after the check above is followed, and only a regular file is read.
+                let read = match &pin {
+                    Some(real) => delulu_runtime::beneath::read_text_at(real),
+                    None => delulu_runtime::beneath::read_text(&scope, &resolved),
+                };
+                let built = match read {
+                    delulu_runtime::beneath::Outcome::Done(content) => build_ok_str(&mut caller, &content),
+                    delulu_runtime::beneath::Outcome::Io(e) => {
+                        use std::io::ErrorKind::*;
+                        match e.kind() {
+                            NotFound => build_err_ioerr(&mut caller, 0, None),
+                            PermissionDenied => build_err_ioerr(&mut caller, 1, None),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                        }
+                    }
+                    delulu_runtime::beneath::Outcome::Escaped(why) => {
+                        caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        return 0;
+                    }
+                };
+                match built {
+                    Ok(ptr) => ptr,
+                    Err(()) => {
+                        caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                        0
                     }
                 }
-                delulu_runtime::beneath::Outcome::Escaped(why) => {
-                    caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
-                    return 0;
-                }
-            };
-            match built {
-                Ok(ptr) => ptr,
-                Err(()) => {
-                    caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
-                    0
-                }
-            }
-        })
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 4 phase 4g: the `delulu:foreign@0.4` host interface -------------------------------
@@ -846,7 +872,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().foreign_load_granted {
-                caller.data_mut().refused = Some("DL0703: foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)".into());
+                caller.data_mut().refused =
+                    Some("DL0703: foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)".into());
                 return -1;
             }
             let st = caller.data_mut();
@@ -898,8 +925,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                             };
                             write_variant_cell(&mut caller, 0, Some(idx)) // Ok(handle)
                         }
-                        Err(e) => build_foreign_err_cell(&mut caller, &e)
-                            .and_then(|fe| write_variant_cell(&mut caller, 1, Some(fe))),
+                        Err(e) => {
+                            build_foreign_err_cell(&mut caller, &e).and_then(|fe| write_variant_cell(&mut caller, 1, Some(fe)))
+                        }
                     }
                 }
             };
@@ -920,7 +948,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         .func_wrap(
             "delulu:foreign",
             "foreign_call",
-            |mut caller: Caller<'_, HostState>, lib: i32, method_ptr: i32, args_ptr: i32, argc: i32, file: i32, start: i32, end: i32| -> i64 {
+            |mut caller: Caller<'_, HostState>,
+             lib: i32,
+             method_ptr: i32,
+             args_ptr: i32,
+             argc: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i64 {
                 if caller.data().refused.is_some() {
                     return 0;
                 }
@@ -1032,26 +1068,22 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap(
-            "delulu:actors",
-            "actor_field_get",
-            |mut caller: Caller<'_, HostState>, slot: i64, field_idx: i32| -> i64 {
-                if caller.data().refused.is_some() {
-                    return 0;
+        .func_wrap("delulu:actors", "actor_field_get", |mut caller: Caller<'_, HostState>, slot: i64, field_idx: i32| -> i64 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let v = {
+                let rt = &caller.data().actor_rt;
+                rt.slots.get(slot as usize).and_then(|s| s.fields.get(field_idx as usize)).copied()
+            };
+            match v {
+                Some(x) => x,
+                None => {
+                    caller.data_mut().refused = Some(format!("field_get out of range (slot {slot}, field {field_idx})"));
+                    0
                 }
-                let v = {
-                    let rt = &caller.data().actor_rt;
-                    rt.slots.get(slot as usize).and_then(|s| s.fields.get(field_idx as usize)).copied()
-                };
-                match v {
-                    Some(x) => x,
-                    None => {
-                        caller.data_mut().refused = Some(format!("field_get out of range (slot {slot}, field {field_idx})"));
-                        0
-                    }
-                }
-            },
-        )
+            }
+        })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap(
@@ -1230,11 +1262,7 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
 /// then drain the FIFO job queue to quiescence, running one turn at a time. Returns the console
 /// output and the quiescence [`ActorReport`] — the same accounting the native `QuiesceReport`
 /// makes, so a deterministic program's counts match on both engines (criterion 6).
-pub fn run_main_actors(
-    wasm: &[u8],
-    cfg: &HostConfig,
-    table: &ActorTable,
-) -> Result<(String, ActorReport), WasmError> {
+pub fn run_main_actors(wasm: &[u8], cfg: &HostConfig, table: &ActorTable) -> Result<(String, ActorReport), WasmError> {
     let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
     let state = main_host_state(cfg, ActorRuntime::new(table.clone()));
@@ -1508,7 +1536,10 @@ mod feature_hardening_tests {
         let hardened = optimizing_engine();
         for (what, wat) in [
             ("bulk memory", "(module (memory 1) (func (memory.copy (i32.const 0) (i32.const 8) (i32.const 8))))"),
-            ("reference types", "(module (table 1 funcref) (table 1 externref) (func (result funcref) (table.get 0 (i32.const 0))))"),
+            (
+                "reference types",
+                "(module (table 1 funcref) (table 1 externref) (func (result funcref) (table.get 0 (i32.const 0))))",
+            ),
             ("multi-value", "(module (func (result i32 i64) (i32.const 1) (i64.const 2)))"),
             ("sign extension", "(module (func (param i32) (result i32) (i32.extend8_s (local.get 0))))"),
             ("saturating conversions", "(module (func (param f64) (result i32) (i32.trunc_sat_f64_s (local.get 0))))"),
@@ -1543,9 +1574,6 @@ mod feature_hardening_tests {
         let wasm = m.finish();
 
         let hardened = optimizing_engine();
-        assert!(
-            wasmtime::Module::new(&hardened, &wasm).is_ok(),
-            "scalar f64 is what codegen emits and must keep validating"
-        );
+        assert!(wasmtime::Module::new(&hardened, &wasm).is_ok(), "scalar f64 is what codegen emits and must keep validating");
     }
 }

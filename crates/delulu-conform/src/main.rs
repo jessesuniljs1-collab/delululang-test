@@ -62,12 +62,12 @@ fn main() -> ExitCode {
     if check_reference {
         let stale = delulu_conform::reference::drift(&root);
         if stale.is_empty() {
-            println!("reference: in sync with the compiler source ({} chapters)",
-                     delulu_conform::reference::generate(&root).len());
-        } else {
-            eprintln!(
-                "delulu-conform: the generated reference is STALE — run `delulu-conform --reference`:"
+            println!(
+                "reference: in sync with the compiler source ({} chapters)",
+                delulu_conform::reference::generate(&root).len()
             );
+        } else {
+            eprintln!("delulu-conform: the generated reference is STALE — run `delulu-conform --reference`:");
             for s in &stale {
                 eprintln!("  ✗ {s}");
             }

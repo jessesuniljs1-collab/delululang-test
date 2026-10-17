@@ -27,8 +27,7 @@ use serde_json::{json, Value};
 /// travels without its scope is read as covering everything, and this one covers one dimension of
 /// nine (`HARDENING_CAMPAIGN.md` C45).
 const COMPARED_DIMENSIONS: &[&str] = &["effects"];
-const UNCOMPARED_DIMENSIONS: &[&str] =
-    &["capability scopes (fs/net/secrets/declassify/device)", "foreign holes"];
+const UNCOMPARED_DIMENSIONS: &[&str] = &["capability scopes (fs/net/secrets/declassify/device)", "foreign holes"];
 
 /// Dispatches `delulu deploy <subcommand>`. Only `plan` exists today.
 pub fn cmd_deploy(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>) -> i32 {
@@ -107,7 +106,11 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
         .iter()
         .filter_map(|(name, effects)| {
             let exceeding = exceeding_effects(effects, ceiling);
-            if exceeding.is_empty() { None } else { Some((name.clone(), exceeding)) }
+            if exceeding.is_empty() {
+                None
+            } else {
+                Some((name.clone(), exceeding))
+            }
         })
         .collect();
 
@@ -142,10 +145,7 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
             COMPARED_DIMENSIONS.join(", "),
             UNCOMPARED_DIMENSIONS.join(", "),
         );
-        println!(
-            "deploy plan: approved — {} service(s) within {env_path}'s EFFECT ceiling",
-            reports.len()
-        );
+        println!("deploy plan: approved — {} service(s) within {env_path}'s EFFECT ceiling", reports.len());
     }
     0
 }

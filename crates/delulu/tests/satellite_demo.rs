@@ -23,8 +23,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn program() -> String {
-    repo_root().join("measurements").join("satellite-demo").join("sat-pass.delulu")
-        .to_string_lossy().to_string()
+    repo_root().join("measurements").join("satellite-demo").join("sat-pass.delulu").to_string_lossy().to_string()
 }
 
 fn delulu(args: &[&str]) -> Output {
@@ -56,21 +55,31 @@ fn stderr(o: &Output) -> String {
 /// so LOS still falls mid-pass. Sized against the debug path deliberately — see ruling D19e.
 /// (`ttl_ms >= heartbeat_ms` is a hard parse rule: a lease that would expire before its first beat
 /// was due is refused, which is why raising the heartbeat raises the TTL with it.)
-const HGA: &str =
-    "actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=1000,ttl_ms=1000,fail=safe-park";
+const HGA: &str = "actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=1000,ttl_ms=1000,fail=safe-park";
 /// The pre-attenuated autonomy grant: a narrow box, and a TTL that outlives the pass. Its heartbeat
 /// matches its TTL, so no amount of compute between cycles can revoke it — it ends only with the run.
-const WHEELS: &str =
-    "actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=600000,ttl_ms=600000,fail=hold";
+const WHEELS: &str = "actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=600000,ttl_ms=600000,fail=hold";
 
 fn pass() -> Output {
     delulu(&[
-        "run", &program(), "--grant", "console", "--grant", HGA, "--grant", WHEELS,
+        "run",
+        &program(),
+        "--grant",
+        "console",
+        "--grant",
+        HGA,
+        "--grant",
+        WHEELS,
         // `--sim-step 50` (D20) drives the dead-man lease clock off the command sequence — 50 ms of
         // simulated time per device interaction — instead of wall-clock. LOS falls on the same cycle
         // whether this is a debug or release build, so the assertions below are about the scenario,
         // not the machine. The D19 heartbeat margin still holds without it; this makes it exact.
-        "--broker-profile", "sim", "--sim-step", "50", "--trace-effects", "--no-prompt",
+        "--broker-profile",
+        "sim",
+        "--sim-step",
+        "50",
+        "--trace-effects",
+        "--no-prompt",
     ])
 }
 
@@ -97,10 +106,7 @@ fn the_contact_window_expires_at_los_and_the_autonomy_grant_carries_on() {
     // ----- after LOS: it never works again -------------------------------------------------------
     // Not "mostly" and not "eventually": an expired contact window that let one more command
     // through would be a window that had not closed.
-    assert!(
-        !lines[los..].iter().any(|l| l.starts_with("hga COMMANDED")),
-        "no HGA command may land after loss of signal:\n{out}"
-    );
+    assert!(!lines[los..].iter().any(|l| l.starts_with("hga COMMANDED")), "no HGA command may land after loss of signal:\n{out}");
 
     // ----- the autonomy grant engages by being the one that did not end --------------------------
     assert_eq!(
@@ -108,10 +114,7 @@ fn the_contact_window_expires_at_los_and_the_autonomy_grant_carries_on() {
         100,
         "every station-keeping command must land, before and after LOS:\n{out}"
     );
-    assert!(
-        !out.contains("wheels REVOKED"),
-        "the autonomy grant outlives the pass — that is what pre-attenuated means:\n{out}"
-    );
+    assert!(!out.contains("wheels REVOKED"), "the autonomy grant outlives the pass — that is what pre-attenuated means:\n{out}");
 
     // ----- attenuation never widens ---------------------------------------------------------------
     // A ±40° slew offered to a ±0.5° box is refused on every cycle, INCLUDING after the ground is
@@ -129,24 +132,15 @@ fn the_contact_window_expires_at_los_and_the_autonomy_grant_carries_on() {
     // ----- the cause is the contact window, not a missed beat --------------------------------------
     // This is the assertion that makes the scenario mean what it says. A program that simply
     // stopped beating would also lose the HGA, and would look identical in the output above.
-    assert!(
-        out.contains("ttl-expired"),
-        "LOS must be the TTL — the contact window — expiring:\n{out}"
-    );
+    assert!(out.contains("ttl-expired"), "LOS must be the TTL — the contact window — expiring:\n{out}");
     assert!(
         !err.contains("missed-heartbeat"),
         "nothing here missed a beat; if it did, the scenario is measuring the wrong mechanism:\n{err}"
     );
-    assert!(
-        err.contains("safe-park"),
-        "the HGA's declared fail-state must engage at LOS:\n{err}"
-    );
+    assert!(err.contains("safe-park"), "the HGA's declared fail-state must engage at LOS:\n{err}");
     // The audit line reports the right kind of lateness: a lease held past its TTL, not a beat
     // that arrived late. The beats were arriving perfectly.
-    assert!(
-        err.contains("past its ttl"),
-        "a TTL expiry must not be journaled as an overdue heartbeat:\n{err}"
-    );
+    assert!(err.contains("past its ttl"), "a TTL expiry must not be journaled as an overdue heartbeat:\n{err}");
 }
 
 /// Re-contact: the next pass is a NEW delegation with a new lease. Authority does not come back —
@@ -163,10 +157,7 @@ fn ground_re_contact_re_delegates_and_the_spacecraft_is_commandable_again() {
             out.lines().any(|l| l.starts_with("hga COMMANDED")),
             "the {n} pass must command the HGA under its own fresh lease:\n{out}"
         );
-        assert!(
-            out.contains("ttl-expired"),
-            "and each pass must end when its own contact window closes:\n{out}"
-        );
+        assert!(out.contains("ttl-expired"), "and each pass must end when its own contact window closes:\n{out}");
     }
 }
 
@@ -197,9 +188,7 @@ fn a_lease_run_refuses_a_local_device_grant_by_name_instead_of_dropping_it() {
         (HGA, "--grant actuator=", "comes FROM the delegation"),
         ("sensor=sat0/sun-angle", "--grant sensor=", "no sensor dimension"),
     ] {
-        let o = delulu(&[
-            "run", &program(), "--lease", "dlt1_not-a-real-token", "--grant", grant, "--no-prompt",
-        ]);
+        let o = delulu(&["run", &program(), "--lease", "dlt1_not-a-real-token", "--grant", grant, "--no-prompt"]);
         let err = stderr(&o);
         assert_eq!(o.status.code(), Some(2), "a refused argument is exit 2:\n{err}");
         assert!(err.contains(names), "the refusal must name the device grant it is refusing:\n{err}");
@@ -220,16 +209,10 @@ fn a_lease_run_refuses_a_local_device_grant_by_name_instead_of_dropping_it() {
 /// anything. The autonomy grant still works here, so the run is not simply broken.
 #[test]
 fn with_no_ground_delegation_the_hga_is_refused_at_the_mint_not_at_los() {
-    let o = delulu(&[
-        "run", &program(), "--grant", "console", "--grant", WHEELS,
-        "--broker-profile", "sim", "--no-prompt",
-    ]);
+    let o = delulu(&["run", &program(), "--grant", "console", "--grant", WHEELS, "--broker-profile", "sim", "--no-prompt"]);
     let err = stderr(&o);
     assert!(!o.status.success(), "an ungranted device must not be mintable:\n{}", stdout(&o));
-    assert!(
-        err.contains("DL0703") && err.contains("sat0/hga"),
-        "the refusal names the device nobody granted:\n{err}"
-    );
+    assert!(err.contains("DL0703") && err.contains("sat0/hga"), "the refusal names the device nobody granted:\n{err}");
     assert!(
         !err.contains("ttl-expired"),
         "this is a mint refusal, not an expiry — conflating them would hide which one is broken:\n{err}"

@@ -290,7 +290,11 @@ pub enum Type {
     Result(Box<Type>, Box<Type>),
     Record(TypeDefId, Vec<Type>),
     Sum(TypeDefId, Vec<Type>),
-    Fn { params: Vec<Type>, ret: Box<Type>, row: Row },
+    Fn {
+        params: Vec<Type>,
+        ret: Box<Type>,
+        row: Row,
+    },
     Cap(ResourceKind),
     Secret(Box<Type>),
     Root,

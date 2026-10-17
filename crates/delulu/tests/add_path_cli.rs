@@ -39,11 +39,7 @@ fn stdout(o: &Output) -> String {
 /// A workspace with an app, a pure library, and a library that performs `Write`.
 fn workspace(tag: &str) -> PathBuf {
     let w = scratch(tag);
-    for args in [
-        vec!["new", "app"],
-        vec!["new", "purelib", "--lib"],
-        vec!["new", "writerlib", "--lib"],
-    ] {
+    for args in [vec!["new", "app"], vec!["new", "purelib", "--lib"], vec!["new", "writerlib", "--lib"]] {
         let o = delulu_in(&w, &args);
         assert_eq!(o.status.code(), Some(0), "scaffolding failed: {}", stderr(&o));
     }
@@ -103,10 +99,7 @@ fn a_dependency_that_needs_authority_is_refused_until_it_is_accepted() {
     assert!(err.contains("Write"), "it names what the dependency can do:\n{err}");
     assert!(err.contains("nothing was written"), "and says it did not act:\n{err}");
     // A refusal a reader cannot act on is an obstacle, not a safeguard.
-    assert!(
-        err.contains("--accept-authority"),
-        "and gives the exact command to accept:\n{err}"
-    );
+    assert!(err.contains("--accept-authority"), "and gives the exact command to accept:\n{err}");
 
     // Named, it goes through — and pins exactly what the dependency needs, no more.
     let ok = delulu_in(&w.join("app"), &["add", "--path", "../writerlib", "--accept-authority"]);

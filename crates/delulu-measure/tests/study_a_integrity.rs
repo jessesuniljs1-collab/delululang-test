@@ -13,8 +13,7 @@ fn repo_root() -> PathBuf {
 
 fn results() -> serde_json::Value {
     let p = repo_root().join("measurements/study-a/results.json");
-    let raw = std::fs::read_to_string(&p)
-        .unwrap_or_else(|e| panic!("Study A results are committed at {}: {e}", p.display()));
+    let raw = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("Study A results are committed at {}: {e}", p.display()));
     serde_json::from_str(&raw).expect("results.json is valid JSON")
 }
 
@@ -60,8 +59,7 @@ fn every_refusal_is_an_authority_diagnostic_not_a_compile_error() {
     let compile_only = ["DL0201", "DL0202", "DL0203", "DL0401", "DL0403", "DL0405"];
 
     for i in r["injections"].as_array().expect("injections") {
-        let codes: Vec<&str> =
-            i["codes"].as_array().unwrap().iter().filter_map(|c| c.as_str()).collect();
+        let codes: Vec<&str> = i["codes"].as_array().unwrap().iter().filter_map(|c| c.as_str()).collect();
         let victim = i["victim"].as_str().unwrap_or("?");
         assert!(
             codes.iter().any(|c| authority.contains(c)),
@@ -72,11 +70,7 @@ fn every_refusal_is_an_authority_diagnostic_not_a_compile_error() {
             "injection into `{victim}` produced a COMPILE error {codes:?} — the mutation is broken \
              code and its catch was not earned by the authority mechanism"
         );
-        assert_eq!(
-            i["injection_valid"].as_bool(),
-            Some(true),
-            "injection into `{victim}` did not compile on its own"
-        );
+        assert_eq!(i["injection_valid"].as_bool(), Some(true), "injection into `{victim}` did not compile on its own");
     }
 }
 
@@ -109,8 +103,7 @@ fn the_scoring_can_express_failure() {
     };
 
     // An empty campaign is 0%, never a vacuous 100%.
-    let empty =
-        Results { baselines: vec![baseline()], injections: vec![], controls: vec![clean_control()] };
+    let empty = Results { baselines: vec![baseline()], injections: vec![], controls: vec![clean_control()] };
     assert_eq!(empty.catch_rate(), 0.0, "an empty experiment proves nothing");
     assert!(!empty.mechanism_holds());
 
@@ -125,11 +118,7 @@ fn the_scoring_can_express_failure() {
     assert_eq!(missed.missed().len(), 1);
 
     // A mutation that did not compile is not a catch, however the build behaved.
-    let broken = Results {
-        baselines: vec![baseline()],
-        injections: vec![inj(true, false)],
-        controls: vec![clean_control()],
-    };
+    let broken = Results { baselines: vec![baseline()], injections: vec![inj(true, false)], controls: vec![clean_control()] };
     assert_eq!(broken.caught(), 0, "an invalid mutation is never credited as a catch");
     assert!(!broken.mechanism_holds(), "an invalid mutation invalidates the run");
 
@@ -139,10 +128,7 @@ fn the_scoring_can_express_failure() {
         injections: vec![inj(true, true)],
         controls: vec![Control { chain: "c".into(), built_clean: false, codes: vec![] }],
     };
-    assert!(
-        !overzealous.mechanism_holds(),
-        "if even the no-op control is refused, a 100% catch rate is meaningless"
-    );
+    assert!(!overzealous.mechanism_holds(), "if even the no-op control is refused, a 100% catch rate is meaningless");
 
     // And the honest case still passes, so the gates above are not simply always-false.
     let good = Results {
@@ -157,8 +143,7 @@ fn the_scoring_can_express_failure() {
 /// limits section quietly disappears is one nobody can check.
 #[test]
 fn the_methodology_states_its_threats_to_validity() {
-    let m = std::fs::read_to_string(repo_root().join("measurements/METHODOLOGY.md"))
-        .expect("METHODOLOGY.md is committed");
+    let m = std::fs::read_to_string(repo_root().join("measurements/METHODOLOGY.md")).expect("METHODOLOGY.md is committed");
     assert!(m.contains("Threats to validity"), "the threats section must exist");
     for required in [
         "synthetic",           // the corpus is not real software

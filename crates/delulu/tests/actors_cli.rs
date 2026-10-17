@@ -10,11 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn delulu_in(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(cwd).args(args).output().expect("failed to run delulu")
 }
 
 fn combined(o: &Output) -> String {
@@ -104,11 +100,7 @@ fn a_non_actor_program_run_is_untouched_by_stage7_flags_absence() {
     // House rule: a module with no actors takes the identical v0.6 path — smoke it.
     let dir = scratch("plain");
     let file = dir.join("plain.delulu");
-    std::fs::write(
-        &file,
-        "module plain\nfn main(root: Root) ! {Write} { root.console().println(\"hi\") }\n",
-    )
-    .unwrap();
+    std::fs::write(&file, "module plain\nfn main(root: Root) ! {Write} { root.console().println(\"hi\") }\n").unwrap();
     let o = delulu_in(&dir, &["run", file.to_str().unwrap(), "--grant", "console", "--no-prompt"]);
     let out = combined(&o);
     assert!(o.status.success(), "{out}");

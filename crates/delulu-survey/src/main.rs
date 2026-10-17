@@ -288,13 +288,8 @@ fn path(root: &Path, a: &str, b: &str) {
 
 fn not_found(survey: &Survey, id: &str) -> ! {
     eprintln!("error: no node `{id}`");
-    let near: Vec<&str> = survey
-        .nodes
-        .iter()
-        .filter(|n| n.id.contains(id) || n.name.contains(id))
-        .map(|n| n.id.as_str())
-        .take(10)
-        .collect();
+    let near: Vec<&str> =
+        survey.nodes.iter().filter(|n| n.id.contains(id) || n.name.contains(id)).map(|n| n.id.as_str()).take(10).collect();
     if !near.is_empty() {
         eprintln!("did you mean:\n  {}", near.join("\n  "));
     }

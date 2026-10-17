@@ -57,7 +57,8 @@ const HOSTILE: &str = r"\u{1b}]0;PWNED\u{7}\u{1b}[2K\rsandbox: forged";
 #[test]
 fn an_assertions_values_reach_the_terminal_escaped() {
     let d = lab("assert");
-    std::fs::write(d.join("t.delulu"), format!("module t\n\nfn main(root: Root) {{\n    assert_eq(\"{HOSTILE}\", \"x\")\n}}\n")).unwrap();
+    std::fs::write(d.join("t.delulu"), format!("module t\n\nfn main(root: Root) {{\n    assert_eq(\"{HOSTILE}\", \"x\")\n}}\n"))
+        .unwrap();
     let r = delulu(&d, &["run", "t.delulu"]);
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
     assert!(text(&r).contains("DL1707"), "the assertion still fails, and says so: {}", text(&r));
@@ -71,7 +72,8 @@ fn an_assertions_values_reach_the_terminal_escaped() {
 #[test]
 fn a_sandboxed_guests_fault_reaches_the_terminal_escaped() {
     let d = lab("guest");
-    std::fs::write(d.join("t.delulu"), format!("module t\n\nfn main(root: Root) {{\n    assert_eq(\"{HOSTILE}\", \"x\")\n}}\n")).unwrap();
+    std::fs::write(d.join("t.delulu"), format!("module t\n\nfn main(root: Root) {{\n    assert_eq(\"{HOSTILE}\", \"x\")\n}}\n"))
+        .unwrap();
     let r = delulu(&d, &["run", "t.delulu", "--sandbox"]);
     assert_ne!(r.status.code(), Some(0), "{}", text(&r));
     assert!(text(&r).contains("DL1707"), "{}", text(&r));
@@ -112,7 +114,8 @@ fn a_refusal_quotes_the_programs_path_escaped_and_json_keeps_it_exact() {
 #[test]
 fn a_quoted_source_line_carries_no_control_character() {
     let d = lab("snippet");
-    std::fs::write(d.join("c.delulu"), "module c\n\nfn main(root: Root) {\n    let x: Int = \"s\" // \u{1b}]0;PWNED\u{7}\n}\n").unwrap();
+    std::fs::write(d.join("c.delulu"), "module c\n\nfn main(root: Root) {\n    let x: Int = \"s\" // \u{1b}]0;PWNED\u{7}\n}\n")
+        .unwrap();
     let r = delulu(&d, &["check", "c.delulu"]);
     assert_ne!(r.status.code(), Some(0), "the line has a type error to quote: {}", text(&r));
     assert!(text(&r).contains("let x: Int"), "the line is quoted: {}", text(&r));
@@ -175,7 +178,8 @@ fn launcher(d: &Path, before_guest: &str) -> String {
 
 #[cfg(unix)]
 fn hello(d: &Path) {
-    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
 }
 
 /// What an escaped guest would write — control sequences and a line that reads like the host's —
@@ -206,7 +210,11 @@ fn a_flood_on_standard_error_is_bounded_and_the_run_goes_on() {
     let r = delulu(&d, &["run", "h.delulu", "--grant", "console", "--sandbox", "--sandbox-backend", &ext]);
     assert_eq!(r.status.code(), Some(0), "the run goes on: {}", String::from_utf8_lossy(&r.stdout));
     assert!(String::from_utf8_lossy(&r.stdout).contains("hi"));
-    assert!(r.stderr.len() < 1_500_000, "3 MiB on the launcher's standard error became {} bytes on the operator's", r.stderr.len());
+    assert!(
+        r.stderr.len() < 1_500_000,
+        "3 MiB on the launcher's standard error became {} bytes on the operator's",
+        r.stderr.len()
+    );
     assert!(String::from_utf8_lossy(&r.stderr).contains("the rest was discarded"), "and it says so");
     let _ = std::fs::remove_dir_all(&d);
 }
@@ -244,8 +252,11 @@ fn a_programs_line_break_never_starts_a_line_of_its_own() {
     .unwrap();
     let r = delulu(&d, &["run", "t.delulu"]);
     assert!(text(&r).contains("DL1707"), "{}", text(&r));
-    let forged: Vec<String> =
-        text(&r).lines().filter(|l| l.starts_with("sandbox: the guest") || l.starts_with("error[DL0000]")).map(str::to_string).collect();
+    let forged: Vec<String> = text(&r)
+        .lines()
+        .filter(|l| l.starts_with("sandbox: the guest") || l.starts_with("error[DL0000]"))
+        .map(str::to_string)
+        .collect();
     assert!(forged.is_empty(), "lines the host never wrote began at column 0: {forged:?}\n{}", text(&r));
     assert!(text(&r).contains("forged"), "the text is still shown: {}", text(&r));
     let _ = std::fs::remove_dir_all(&d);

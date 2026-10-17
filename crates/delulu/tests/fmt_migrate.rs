@@ -9,11 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn delulu_in(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(cwd).args(args).output().expect("failed to run delulu")
 }
 
 /// House-style scratch dir (see tooling.rs/provenance.rs): fresh per test name + pid.

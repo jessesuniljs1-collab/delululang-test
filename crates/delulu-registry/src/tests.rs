@@ -45,10 +45,7 @@ fn cannot_tell(_: &[u8]) -> Option<Value> {
 /// Publish `artifact` correctly signed, claiming nothing — the common shape.
 fn publish_signed(r: &Registry, tok: &str, name: &str, version: &str, artifact: &[u8]) -> PublishOutcome {
     let sig = sign(artifact);
-    r.publish_submission(
-        &Submission { token: tok, name, version, artifact, signature: Some(&sig), claimed: None },
-        recompute,
-    )
+    r.publish_submission(&Submission { token: tok, name, version, artifact, signature: Some(&sig), claimed: None }, recompute)
 }
 
 fn reg_with_token(tag: &str, scopes: &[&str]) -> (Registry, String) {
@@ -66,16 +63,9 @@ fn criterion5_publish_then_resolve_round_trip() {
     let sig = sign(&art);
 
     let out = r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        );
+        &Submission { token: &tok, name: "widget", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
+        recompute,
+    );
     assert_eq!(out, PublishOutcome::Accepted { name: "widget".into(), version: "1.0.0".into() });
 
     let line = r.resolve("widget").expect("resolvable after publish");
@@ -99,16 +89,9 @@ fn criterion5_a_doctored_authority_claim_is_rejected() {
     let lie = json!({ "effects": [], "capabilities": [], "secrets": [] });
 
     let out = r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "sneaky",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: Some(&lie),
-            },
-            recompute,
-        );
+        &Submission { token: &tok, name: "sneaky", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: Some(&lie) },
+        recompute,
+    );
     match out {
         PublishOutcome::Refused { code, reason } => {
             assert_eq!(code, "DL1706");
@@ -128,16 +111,9 @@ fn the_stored_authority_is_recomputed_even_when_nothing_is_claimed() {
     let sig = sign(&art);
 
     r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "quiet",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        );
+        &Submission { token: &tok, name: "quiet", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
+        recompute,
+    );
     let line = r.resolve("quiet").expect("published");
     assert_eq!(
         line["effects"],
@@ -158,16 +134,16 @@ fn when_the_server_cannot_recompute_the_publish_is_refused() {
     let claim = json!({ "effects": [], "capabilities": [], "secrets": [] });
 
     match r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "opaque",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: Some(&claim),
-            },
-            cannot_tell,
-        ) {
+        &Submission {
+            token: &tok,
+            name: "opaque",
+            version: "1.0.0",
+            artifact: &art,
+            signature: Some(&sig),
+            claimed: Some(&claim),
+        },
+        cannot_tell,
+    ) {
         PublishOutcome::Refused { code, reason } => {
             assert_eq!(code, "DL1706");
             assert!(reason.contains("could not derive"), "{reason}");
@@ -183,16 +159,9 @@ fn when_the_server_cannot_recompute_the_publish_is_refused() {
 fn an_unsigned_publish_is_refused() {
     let (r, tok) = reg_with_token("unsigned", &["widget"]);
     match r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: b"widget",
-                signature: None,
-                claimed: None,
-            },
-            recompute,
-        ) {
+        &Submission { token: &tok, name: "widget", version: "1.0.0", artifact: b"widget", signature: None, claimed: None },
+        recompute,
+    ) {
         PublishOutcome::Refused { code, .. } => assert_eq!(code, "DL1705"),
         other => panic!("publish must require a signature, got {other:?}"),
     }
@@ -203,16 +172,16 @@ fn a_signature_over_different_bytes_is_refused() {
     let (r, tok) = reg_with_token("badsig", &["widget"]);
     let sig = sign(b"some other artifact entirely");
     match r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: b"widget v1",
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        ) {
+        &Submission {
+            token: &tok,
+            name: "widget",
+            version: "1.0.0",
+            artifact: b"widget v1",
+            signature: Some(&sig),
+            claimed: None,
+        },
+        recompute,
+    ) {
         PublishOutcome::Refused { code, reason } => {
             assert_eq!(code, "DL1705");
             assert!(reason.contains("does not verify"), "{reason}");
@@ -229,16 +198,9 @@ fn a_token_cannot_publish_outside_its_scope() {
     let art = b"widget v1".to_vec();
     let sig = sign(&art);
     match r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        ) {
+        &Submission { token: &tok, name: "widget", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
+        recompute,
+    ) {
         PublishOutcome::Refused { reason, .. } => {
             assert!(reason.contains("not scoped"), "{reason}");
         }
@@ -257,16 +219,9 @@ fn a_token_cannot_yank_someone_elses_package() {
     let art = b"widget v1".to_vec();
     let sig = sign(&art);
     r.publish_submission(
-            &Submission {
-                token: &alice,
-                name: "widget",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        );
+        &Submission { token: &alice, name: "widget", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
+        recompute,
+    );
 
     match r.yank(&mallory, "widget", "1.0.0", true) {
         PublishOutcome::Refused { reason, .. } => assert!(reason.contains("not scoped"), "{reason}"),
@@ -283,16 +238,9 @@ fn a_revoked_token_stops_working_immediately() {
     let art = b"widget v1".to_vec();
     let sig = sign(&art);
     match r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
-            recompute,
-        ) {
+        &Submission { token: &tok, name: "widget", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
+        recompute,
+    ) {
         PublishOutcome::Refused { reason, .. } => assert!(reason.contains("revoked"), "{reason}"),
         other => panic!("a revoked token must refuse, got {other:?}"),
     }
@@ -306,14 +254,7 @@ fn an_empty_or_unknown_token_is_refused() {
     let sig = sign(&art);
     for bogus in ["", "dlt_not_a_real_token", "   "] {
         match r.publish_submission(
-            &Submission {
-                token: bogus,
-                name: "widget",
-                version: "1.0.0",
-                artifact: &art,
-                signature: Some(&sig),
-                claimed: None,
-            },
+            &Submission { token: bogus, name: "widget", version: "1.0.0", artifact: &art, signature: Some(&sig), claimed: None },
             recompute,
         ) {
             PublishOutcome::Refused { .. } => {}
@@ -333,37 +274,33 @@ fn yank_is_not_delete() {
     let sig1 = sign(b"widget v1");
     let sig2 = sign(b"widget v2");
     r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.0.0",
-                artifact: b"widget v1",
-                signature: Some(&sig1),
-                claimed: None,
-            },
-            recompute,
-        );
+        &Submission {
+            token: &tok,
+            name: "widget",
+            version: "1.0.0",
+            artifact: b"widget v1",
+            signature: Some(&sig1),
+            claimed: None,
+        },
+        recompute,
+    );
     r.publish_submission(
-            &Submission {
-                token: &tok,
-                name: "widget",
-                version: "1.1.0",
-                artifact: b"widget v2",
-                signature: Some(&sig2),
-                claimed: None,
-            },
-            recompute,
-        );
+        &Submission {
+            token: &tok,
+            name: "widget",
+            version: "1.1.0",
+            artifact: b"widget v2",
+            signature: Some(&sig2),
+            claimed: None,
+        },
+        recompute,
+    );
 
     assert_eq!(r.resolve("widget").unwrap()["version"], "1.1.0");
     assert!(matches!(r.yank(&tok, "widget", "1.1.0", true), PublishOutcome::Accepted { .. }));
 
     // New requirements fall back to the last unyanked version...
-    assert_eq!(
-        r.resolve("widget").unwrap()["version"],
-        "1.0.0",
-        "a yanked version must stop satisfying new requirements"
-    );
+    assert_eq!(r.resolve("widget").unwrap()["version"], "1.0.0", "a yanked version must stop satisfying new requirements");
     // ...and the yanked one is still there for a lockfile that pinned it.
     let exact = r.resolve_exact("widget", "1.1.0").expect("yank must NEVER delete");
     assert_eq!(exact["yanked"], json!(true), "it is present and flagged, not erased");
@@ -392,10 +329,7 @@ fn widening_authority_without_a_major_bump_is_refused() {
     // THE SKIP BRANCH: the same widening WITH a major bump is allowed. A rule that refused both
     // would look identical in the test above while making the registry unusable.
     assert!(
-        matches!(
-            publish_signed(&r, &tok, "widget", "2.0.0", net_art),
-            PublishOutcome::Accepted { .. }
-        ),
+        matches!(publish_signed(&r, &tok, "widget", "2.0.0", net_art), PublishOutcome::Accepted { .. }),
         "a major bump may widen authority — that is what major means"
     );
 }
@@ -408,11 +342,7 @@ fn republishing_an_existing_version_is_refused() {
         PublishOutcome::Refused { reason, .. } => assert!(reason.contains("immutable"), "{reason}"),
         other => panic!("versions must be immutable, got {other:?}"),
     }
-    assert_eq!(
-        r.resolve("widget").unwrap()["effects"],
-        json!([]),
-        "the original must be untouched by the attempt"
-    );
+    assert_eq!(r.resolve("widget").unwrap()["effects"], json!([]), "the original must be untouched by the attempt");
 }
 
 // ----- the HTTP surface ------------------------------------------------------

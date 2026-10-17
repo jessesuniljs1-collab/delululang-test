@@ -33,10 +33,7 @@ use std::path::{Path, PathBuf};
 const JOINED: usize = 150;
 
 /// Known instances in files that are not this repository's to change without the owner.
-const OWNERS: &[(&str, &str)] = &[(
-    "crates/delulu-conform/src/lib.rs",
-    "a rejecting witness",
-)];
+const OWNERS: &[(&str, &str)] = &[("crates/delulu-conform/src/lib.rs", "a rejecting witness")];
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
@@ -101,7 +98,8 @@ fn string_spans(src: &str) -> Vec<(usize, usize, String)> {
                     i += 1;
                 }
             }
-        } else if c == 'r' && (b.get(i + 1) == Some(&'"') || b.get(i + 1) == Some(&'#'))
+        } else if c == 'r'
+            && (b.get(i + 1) == Some(&'"') || b.get(i + 1) == Some(&'#'))
             && (i == 0 || !(b[i - 1].is_alphanumeric() || b[i - 1] == '_'))
         {
             // A raw string: no escapes, so no continuation can be flattened inside one. Skipped.

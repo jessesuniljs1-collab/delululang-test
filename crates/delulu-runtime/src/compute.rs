@@ -43,11 +43,8 @@ pub struct AdapterInfo {
 /// enforcement; there is nothing underneath it. Claiming otherwise would make the reference
 /// implementation the one place the honesty rule is broken, and every later adapter would inherit
 /// the precedent.
-pub const REFERENCE_ADAPTER: AdapterInfo = AdapterInfo {
-    name: "cpu-reference",
-    attests_below_adapter: false,
-    formats: &["refkernel-1"],
-};
+pub const REFERENCE_ADAPTER: AdapterInfo =
+    AdapterInfo { name: "cpu-reference", attests_below_adapter: false, formats: &["refkernel-1"] };
 
 /// Every adapter this build knows. A grant naming anything else is refused — an adapter the
 /// runtime has never heard of certainly cannot attest anything about its own enforcement, and
@@ -86,9 +83,9 @@ impl GrantRefusal {
                  saying so out loud would make that claim silently single. Add \
                  `waive-attestation` to the grant to accept single enforcement deliberately"
             ),
-            GrantRefusal::UnsupportedFormat { adapter, format } => format!(
-                "compute adapter `{adapter}` does not accept kernel format `{format}`"
-            ),
+            GrantRefusal::UnsupportedFormat { adapter, format } => {
+                format!("compute adapter `{adapter}` does not accept kernel format `{format}`")
+            }
         }
     }
 }
@@ -186,10 +183,7 @@ pub fn load_kernel(name: &str, path: &str, formats: &[String]) -> Result<KernelA
             // THE SKIP BRANCH. A missing signature file is not "unsigned, therefore skip the
             // check" — it IS the refusal. Criterion 7 asks that an unsigned kernel artifact be
             // refused, and the way that rule dies is an `if let Ok(sig)` with no `else`.
-            return Err(KernelRefusal::Unsigned {
-                name: name.to_string(),
-                path: path.to_string(),
-            });
+            return Err(KernelRefusal::Unsigned { name: name.to_string(), path: path.to_string() });
         }
     };
     let signer = match crate::plugin::verify_detached(&bytes, &sig) {
@@ -198,19 +192,13 @@ pub fn load_kernel(name: &str, path: &str, formats: &[String]) -> Result<KernelA
             return Err(KernelRefusal::BadSignature { name: name.to_string(), why: reason })
         }
         crate::plugin::SignatureStatus::Unsigned => {
-            return Err(KernelRefusal::Unsigned {
-                name: name.to_string(),
-                path: path.to_string(),
-            })
+            return Err(KernelRefusal::Unsigned { name: name.to_string(), path: path.to_string() })
         }
     };
     let text = String::from_utf8_lossy(&bytes);
     let line = text.lines().find(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'));
     let Some(line) = line else {
-        return Err(KernelRefusal::Malformed {
-            name: name.to_string(),
-            why: "the artifact is empty".to_string(),
-        });
+        return Err(KernelRefusal::Malformed { name: name.to_string(), why: "the artifact is empty".to_string() });
     };
     let mut parts = line.split_whitespace();
     let format = parts.next().unwrap_or("");
@@ -239,12 +227,7 @@ pub fn load_kernel(name: &str, path: &str, formats: &[String]) -> Result<KernelA
             ),
         });
     }
-    Ok(KernelArtifact {
-        name: name.to_string(),
-        hash: delulu_broker::content_hash(&bytes),
-        signer,
-        op: op.to_string(),
-    })
+    Ok(KernelArtifact { name: name.to_string(), hash: delulu_broker::content_hash(&bytes), signer, op: op.to_string() })
 }
 
 /// The reductions the reference adapter implements. Buffer in, scalar out — the honest minimum
@@ -326,16 +309,9 @@ impl ComputeBroker {
     /// result is discarded when it overruns. That ordering is stated rather than hidden, because
     /// "enforced" means something weaker here than for the other three, and a reader deserves to
     /// know which kind of bound they are relying on.
-    pub fn dispatch(
-        &self,
-        device: &str,
-        kernel: &str,
-        buffer: &[f64],
-    ) -> Result<f64, DispatchRefusal> {
+    pub fn dispatch(&self, device: &str, kernel: &str, buffer: &[f64]) -> Result<f64, DispatchRefusal> {
         let Some(env) = self.devices.iter().find(|d| d.device == device) else {
-            return Err(DispatchRefusal::UnknownKernel(format!(
-                "no compute device `{device}` in this run"
-            )));
+            return Err(DispatchRefusal::UnknownKernel(format!("no compute device `{device}` in this run")));
         };
         let refuse = |reason: String| -> Result<f64, DispatchRefusal> {
             self.journal.lock().unwrap().push(DispatchRecord {
@@ -351,17 +327,10 @@ impl ComputeBroker {
         // Provenance first: kernels are DATA, and the name resolves to a VERIFIED ARTIFACT rather
         // than to the grant string. A device with no loaded artifacts can dispatch nothing, which
         // is the correct answer when signature verification refused them all.
-        let art = self
-            .artifacts
-            .get(device)
-            .and_then(|arts| arts.iter().find(|a| a.name == kernel))
-            .cloned();
+        let art = self.artifacts.get(device).and_then(|arts| arts.iter().find(|a| a.name == kernel)).cloned();
         let Some(art) = art else {
-            let known: Vec<&str> = self
-                .artifacts
-                .get(device)
-                .map(|a| a.iter().map(|k| k.name.as_str()).collect())
-                .unwrap_or_default();
+            let known: Vec<&str> =
+                self.artifacts.get(device).map(|a| a.iter().map(|k| k.name.as_str()).collect()).unwrap_or_default();
             self.journal.lock().unwrap().push(DispatchRecord {
                 device: device.to_string(),
                 kernel: kernel.to_string(),
@@ -394,9 +363,7 @@ impl ComputeBroker {
             let cur = q.entry(device.to_string()).or_insert(0);
             if *cur >= env.queue_depth {
                 let depth = env.queue_depth;
-                return refuse(format!(
-                    "`{device}` already has {cur} dispatches in flight; granted queue_depth={depth}"
-                ));
+                return refuse(format!("`{device}` already has {cur} dispatches in flight; granted queue_depth={depth}"));
             }
             *cur += 1;
         }
@@ -474,8 +441,7 @@ fn run_reference_kernel(kernel: &str, buffer: &[f64]) -> f64 {
 /// The last row is the one that matters. `power_w` is mandatory in the grant but enforced by
 /// nothing here, and calling that "enforced" in a table nobody reads carefully is exactly how a
 /// double-enforcement claim becomes silently single.
-pub const ENFORCEMENT_NOTE: &str =
-    "cpu-reference enforces memory_bytes and kernel_ms; queue_depth is enforced but unreachable \
+pub const ENFORCEMENT_NOTE: &str = "cpu-reference enforces memory_bytes and kernel_ms; queue_depth is enforced but unreachable \
      from synchronous dispatch; power_w is carried and NOT enforced by this adapter";
 
 /// The DL1911 gate (spec §7.1, invariant 50): may this compute grant be issued at all?
@@ -491,10 +457,7 @@ pub fn check_grant(env: &crate::value::ComputeEnvelope) -> Result<(), GrantRefus
     };
     for f in &env.formats {
         if !info.formats.contains(&f.as_str()) {
-            return Err(GrantRefusal::UnsupportedFormat {
-                adapter: env.adapter.clone(),
-                format: f.clone(),
-            });
+            return Err(GrantRefusal::UnsupportedFormat { adapter: env.adapter.clone(), format: f.clone() });
         }
     }
     if !info.attests_below_adapter && !env.waived {

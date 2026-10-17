@@ -54,10 +54,7 @@ fn run_console(seed: u64, s: &mut Stats) {
     let wr = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() });
 
     set_capture(true);
-    let g = Grants {
-        console: true,
-        ..Default::default()
-    };
+    let g = Grants { console: true, ..Default::default() };
     let interp = Interp::new(&checked.module);
     let ir = interp.run_main(Value::Root(Rc::new(g.build_root())));
     let io = take_capture().unwrap_or_default();
@@ -87,7 +84,10 @@ fn two_engine_differential_gate() {
 
     println!(
         "differential: n={n} checked={} agreed={} both_faulted={} mismatches={}",
-        s.checked, s.agreed, s.both_faulted, s.mismatches.len()
+        s.checked,
+        s.agreed,
+        s.both_faulted,
+        s.mismatches.len()
     );
     assert!(
         s.mismatches.is_empty(),

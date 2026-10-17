@@ -39,10 +39,7 @@ fn run(name: &str, src: &str, grants: &[&str]) -> (i32, String) {
     let mut args: Vec<&str> = vec!["run", &path];
     args.extend_from_slice(grants);
     let o = delulu(&args);
-    (
-        o.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&o.stdout).replace("\r\n", "\n"),
-    )
+    (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).replace("\r\n", "\n"))
 }
 
 /// Check `src` and return the diagnostic codes it produced, in order.
@@ -56,12 +53,7 @@ fn codes(name: &str, src: &str) -> Vec<String> {
         serde_json::from_slice(&o.stdout).unwrap_or_else(|e| panic!("one envelope: {e}\n{}", String::from_utf8_lossy(&o.stdout)));
     v["diagnostics"]
         .as_array()
-        .map(|ds| {
-            ds.iter()
-                .filter(|d| d["severity"] == "error")
-                .map(|d| d["code"].as_str().unwrap_or("?").to_string())
-                .collect()
-        })
+        .map(|ds| ds.iter().filter(|d| d["severity"] == "error").map(|d| d["code"].as_str().unwrap_or("?").to_string()).collect())
         .unwrap_or_default()
 }
 
@@ -187,9 +179,8 @@ fn every_higher_order_builtin_surfaces_its_callbacks_row() {
         ("find", "let _y = xs.find(fn(x: Int) -> Bool ! {Write} { out.println(\"e\"); true })"),
         ("fold", "let _y = xs.fold(0, fn(a: Int, x: Int) -> Int ! {Write} { out.println(\"e\"); a })"),
     ] {
-        let src = format!(
-            "module t\n\nfn main(root: Root) -> Int {{\n  let out = root.console()\n  let xs = [1]\n  {call}\n  0\n}}\n"
-        );
+        let src =
+            format!("module t\n\nfn main(root: Root) -> Int {{\n  let out = root.console()\n  let xs = [1]\n  {call}\n  0\n}}\n");
         let cs = codes(&format!("row_{name}"), &src);
         assert!(
             cs.iter().any(|c| c == "DL0501"),
@@ -207,7 +198,8 @@ fn every_higher_order_builtin_surfaces_its_callbacks_row() {
 /// PLAINTEXT under a parameter type its author declared and nobody verified.
 #[test]
 fn a_callbacks_parameter_type_must_match_what_the_builtin_will_pass_it() {
-    let bad_list = "module t\n\nfn main() -> Int {\n  let xs = [1, 2, 3]\n  let ys = xs.map(fn(s: Str) -> Int { 7 })\n  ys.len()\n}\n";
+    let bad_list =
+        "module t\n\nfn main() -> Int {\n  let xs = [1, 2, 3]\n  let ys = xs.map(fn(s: Str) -> Int { 7 })\n  ys.len()\n}\n";
     let cs = codes("mapparam_list", bad_list);
     assert!(
         cs.iter().any(|c| c == "DL0401"),
@@ -234,12 +226,8 @@ fn a_callbacks_parameter_type_must_match_what_the_builtin_will_pass_it() {
 /// them.
 #[test]
 fn exactly_one_diagnostic_for_a_non_function_callback() {
-    for (name, call) in [
-        ("map", "xs.map(42)"),
-        ("filter", "xs.filter(42)"),
-        ("find", "xs.find(42)"),
-        ("fold", "xs.fold(0, 42)"),
-    ] {
+    for (name, call) in [("map", "xs.map(42)"), ("filter", "xs.filter(42)"), ("find", "xs.find(42)"), ("fold", "xs.fold(0, 42)")]
+    {
         let src = format!("module t\n\nfn main() -> Int {{\n  let xs = [1]\n  let _ = {call}\n  0\n}}\n");
         let cs = codes(&format!("one_{name}"), &src);
         assert_eq!(cs.len(), 1, "`{name}` must report ONE diagnostic, got {cs:?}");
@@ -363,7 +351,8 @@ fn only_the_mutating_methods_demand_a_writable_receiver() {
         let cs = codes(&format!("val_list_{name}"), &src);
         let refused = cs.iter().any(|c| c == "DL1604");
         assert_eq!(
-            refused, *mutates,
+            refused,
+            *mutates,
             "`List.{name}` mutates={mutates} but a `val` receiver {} it: {cs:?}",
             if refused { "refused" } else { "allowed" }
         );
@@ -382,7 +371,8 @@ fn only_the_mutating_methods_demand_a_writable_receiver() {
         let cs = codes(&format!("val_map_{name}"), &src);
         let refused = cs.iter().any(|c| c == "DL1604");
         assert_eq!(
-            refused, *mutates,
+            refused,
+            *mutates,
             "`Map.{name}` mutates={mutates} but a `val` receiver {} it: {cs:?}",
             if refused { "refused" } else { "allowed" }
         );
@@ -461,10 +451,7 @@ fn a_callback_that_mutates_its_receiver_does_not_panic() {
     ] {
         let src = format!("module t\n\nfn main() -> Int {{\n  let xs = [1, 2]\n  {call}\n  xs.len()\n}}\n");
         let (rc, out) = run(&format!("reentrant_{name}"), &src, &[]);
-        assert!(
-            rc == 0 || rc == 1,
-            "`{name}` with a mutating callback must not crash the interpreter (rc={rc}): {out}"
-        );
+        assert!(rc == 0 || rc == 1, "`{name}` with a mutating callback must not crash the interpreter (rc={rc}): {out}");
         assert!(!out.contains("panicked"), "`{name}`: {out}");
     }
 }

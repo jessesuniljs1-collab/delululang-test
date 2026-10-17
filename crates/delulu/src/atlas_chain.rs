@@ -293,18 +293,36 @@ fn render(c: &Value) -> String {
     use std::fmt::Write as _;
     let list = |v: &Value| -> String {
         let xs = strs(v);
-        if xs.is_empty() { "none".to_string() } else { xs.join(", ") }
+        if xs.is_empty() {
+            "none".to_string()
+        } else {
+            xs.join(", ")
+        }
     };
     let mut s = String::new();
     let p = &c["program"];
-    let _ = writeln!(s, "{:<18} {} (root {}; {} function(s))", "program", p["name"].as_str().unwrap_or("?"), p["root"].as_str().unwrap_or("?"), p["functions"]);
+    let _ = writeln!(
+        s,
+        "{:<18} {} (root {}; {} function(s))",
+        "program",
+        p["name"].as_str().unwrap_or("?"),
+        p["root"].as_str().unwrap_or("?"),
+        p["functions"]
+    );
     let a = &c["authority"];
     let _ = writeln!(s, "{:<18} effects {}; grants {}", "authority", list(&a["effects"]), list(&a["required_grants"]));
     for e in c["effects"].as_array().into_iter().flatten() {
         let _ = writeln!(s, "{:<18} {} ← {}", "effects", e["effect"].as_str().unwrap_or(""), list(&e["performed_by"]));
     }
     for cap in c["capabilities"].as_array().into_iter().flatten() {
-        let _ = writeln!(s, "{:<18} {} {} → {}", "capabilities", cap["kind"].as_str().unwrap_or(""), list(&cap["requested_scopes"]), list(&cap["resources"]));
+        let _ = writeln!(
+            s,
+            "{:<18} {} {} → {}",
+            "capabilities",
+            cap["kind"].as_str().unwrap_or(""),
+            list(&cap["requested_scopes"]),
+            list(&cap["resources"])
+        );
     }
     let sp = &c["sandbox_policy"];
     let carried = match (sp["carried"].as_bool(), sp["unsupported_surface"].as_str()) {
@@ -312,7 +330,15 @@ fn render(c: &Value) -> String {
         (Some(false), Some(u)) => format!("NOT carried yet: {u} — `--sandbox` would refuse it"),
         _ => sp["carried_note"].as_str().unwrap_or("").to_string(),
     };
-    let _ = writeln!(s, "{:<18} {} (L{}, {} bytes, {} s); {carried}", "sandbox policy", sp["profile"].as_str().unwrap_or(""), sp["requested_level"], sp["limits"]["memory_bytes"], sp["limits"]["cpu_seconds"]);
+    let _ = writeln!(
+        s,
+        "{:<18} {} (L{}, {} bytes, {} s); {carried}",
+        "sandbox policy",
+        sp["profile"].as_str().unwrap_or(""),
+        sp["requested_level"],
+        sp["limits"]["memory_bytes"],
+        sp["limits"]["cpu_seconds"]
+    );
     for r in c["resources"].as_array().into_iter().flatten() {
         let _ = writeln!(s, "{:<18} {} ← {}", "resources", r["id"].as_str().unwrap_or(""), list(&r["required_by"]));
     }
@@ -326,6 +352,12 @@ fn render(c: &Value) -> String {
         let _ = writeln!(s, "{:<18} {} ← {}", "devices", d["id"].as_str().unwrap_or(""), list(&d["required_by"]));
     }
     let b = &c["execution_boundary"];
-    let _ = writeln!(s, "{:<18} {}; sandboxed: L1 guest performs no effect, the host performs every one; custody {}", "execution boundary", b["ordinary_run"].as_str().unwrap_or(""), b["custody"].as_str().unwrap_or("?"));
+    let _ = writeln!(
+        s,
+        "{:<18} {}; sandboxed: L1 guest performs no effect, the host performs every one; custody {}",
+        "execution boundary",
+        b["ordinary_run"].as_str().unwrap_or(""),
+        b["custody"].as_str().unwrap_or("?")
+    );
     s
 }

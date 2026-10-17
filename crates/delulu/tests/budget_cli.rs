@@ -97,8 +97,12 @@ const GROW: &str = "    var s = \"x\"\n    while true {\n        s = s + s\n    
 fn an_endless_loop_is_stopped_by_its_cpu_budget() {
     let dir = tmp("cpu");
     program(&dir, "spin.delulu", SPIN);
-    let r = run(&dir, &["run", "spin.delulu", "--grant", "console", "--limits", "cpu=1", "--report-out", "rep.json"], Duration::from_secs(60))
-        .expect("an endless loop under `--limits cpu=1` must be STOPPED, not left running");
+    let r = run(
+        &dir,
+        &["run", "spin.delulu", "--grant", "console", "--limits", "cpu=1", "--report-out", "rep.json"],
+        Duration::from_secs(60),
+    )
+    .expect("an endless loop under `--limits cpu=1` must be STOPPED, not left running");
     assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
     assert!(r.stdout.contains("started"), "the program did run: {}", r.stdout);
     assert!(r.stderr.contains("processor time") && r.stderr.contains("budget"), "{}", r.stderr);
@@ -117,8 +121,12 @@ fn a_runaway_allocation_is_stopped_by_its_memory_budget() {
     program(&dir, "grow.delulu", GROW);
     let budget = 256u64 * 1024 * 1024;
     let limit = format!("mem={budget}");
-    let r = run(&dir, &["run", "grow.delulu", "--grant", "console", "--limits", &limit, "--report-out", "rep.json"], Duration::from_secs(60))
-        .expect("a doubling string under a 256 MiB budget must be STOPPED");
+    let r = run(
+        &dir,
+        &["run", "grow.delulu", "--grant", "console", "--limits", &limit, "--report-out", "rep.json"],
+        Duration::from_secs(60),
+    )
+    .expect("a doubling string under a 256 MiB budget must be STOPPED");
     assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
     assert!(r.stderr.contains("memory") && r.stderr.contains("budget"), "{}", r.stderr);
     let v = report(&dir);
@@ -203,8 +211,12 @@ fn an_ordinary_run_reports_the_default_budget_and_finishes() {
 fn a_wall_budget_applies_when_named() {
     let dir = tmp("wall");
     program(&dir, "spin.delulu", SPIN);
-    let r = run(&dir, &["run", "spin.delulu", "--grant", "console", "--limits", "wall=1,cpu=120", "--report-out", "rep.json"], Duration::from_secs(60))
-        .expect("stopped by the wall budget");
+    let r = run(
+        &dir,
+        &["run", "spin.delulu", "--grant", "console", "--limits", "wall=1,cpu=120", "--report-out", "rep.json"],
+        Duration::from_secs(60),
+    )
+    .expect("stopped by the wall budget");
     assert_eq!(r.code, Some(1));
     assert_eq!(report(&dir)["outcome"]["stopped_by"]["dimension"], "wall");
 }
@@ -266,7 +278,8 @@ fn a_delegated_budget_is_inherited_never_widened_and_holds_the_lease_run() {
     let _stop = StopBroker(dir.clone());
 
     // Delegated: half a gibibyte and one second, typed out of order — the node holds the canonical form.
-    let r = run(&dir, &["grants", "delegate", "--effects", "Write", "--budget", "cpu=1,mem=536870912", "--multi", "--json"], t).unwrap();
+    let r = run(&dir, &["grants", "delegate", "--effects", "Write", "--budget", "cpu=1,mem=536870912", "--multi", "--json"], t)
+        .unwrap();
     assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
     let v = json_of(&r);
     let node = v["node"].as_str().expect("the delegated node").to_string();
@@ -279,7 +292,8 @@ fn a_delegated_budget_is_inherited_never_widened_and_holds_the_lease_run() {
     assert_eq!(inspect(&node), "mem=536870912,cpu=1");
 
     // More processor time below it is a widening: refused, and the refusal carries the meet.
-    let r = run(&dir, &["grants", "delegate", "--parent", &node, "--effects", "Write", "--budget", "mem=536870912,cpu=2"], t).unwrap();
+    let r = run(&dir, &["grants", "delegate", "--parent", &node, "--effects", "Write", "--budget", "mem=536870912,cpu=2"], t)
+        .unwrap();
     assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
     let said = format!("{}{}", r.stdout, r.stderr);
     assert!(said.contains("DL0802") && said.contains("mem=536870912,cpu=1"), "{said}");
@@ -311,19 +325,18 @@ fn a_delegated_budget_is_inherited_never_widened_and_holds_the_lease_run() {
     assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 536_870_912u64, "{v}");
 
     // Asking for less is allowed, and is what the run is held to.
-    let r = run(&dir, &["run", "hello.delulu", "--lease", &token, "--limits", "mem=268435456", "--report-out", "rep2.json"], t).unwrap();
+    let r = run(&dir, &["run", "hello.delulu", "--lease", &token, "--limits", "mem=268435456", "--report-out", "rep2.json"], t)
+        .unwrap();
     assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
     let v: serde_json::Value = serde_json::from_str(std::fs::read_to_string(dir.join("rep2.json")).unwrap().trim()).unwrap();
     assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 268_435_456u64, "{v}");
     assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 1, "the unnamed dimension is the delegated one: {v}");
 
     // A `--broker daemon` run's root records the budget the run is held to.
-    let r = run(&dir, &["run", "hello.delulu", "--grant", "console", "--broker", "daemon", "--limits", "mem=268435456,cpu=7"], t).unwrap();
+    let r = run(&dir, &["run", "hello.delulu", "--grant", "console", "--broker", "daemon", "--limits", "mem=268435456,cpu=7"], t)
+        .unwrap();
     assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
     let r = run(&dir, &["grants", "list", "--json"], t).unwrap();
     let nodes = json_of(&r)["nodes"].as_array().expect("nodes").clone();
-    assert!(
-        nodes.iter().any(|n| n["budget"] == "mem=268435456,cpu=7"),
-        "the daemon run's root carries its budget: {nodes:?}"
-    );
+    assert!(nodes.iter().any(|n| n["budget"] == "mem=268435456,cpu=7"), "the daemon run's root carries its budget: {nodes:?}");
 }

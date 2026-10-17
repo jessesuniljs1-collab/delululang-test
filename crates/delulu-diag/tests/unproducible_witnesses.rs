@@ -18,10 +18,7 @@
 //!   4. the diagnostic renders on the machine channel (the JSON envelope carries the code and
 //!      an explanation id) — an agent that receives one of these has everything it needs.
 
-use delulu_diag::{
-    code_explain, code_title, envelope, is_registered, Diagnostic, Severity, SourceMap,
-    MIN_EXPLAIN_BODY,
-};
+use delulu_diag::{code_explain, code_title, envelope, is_registered, Diagnostic, Severity, SourceMap, MIN_EXPLAIN_BODY};
 
 /// The witness body shared by every unproducible code.
 fn witness(code: &'static str, expect_in_explain: &str) {

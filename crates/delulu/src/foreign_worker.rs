@@ -173,19 +173,11 @@ fn wire_to_err(e: WireForeignErr) -> ForeignErr {
 }
 
 fn sig_to_wire(s: &ForeignSig) -> WireSig {
-    WireSig {
-        name: s.name.clone(),
-        params: s.params.iter().map(|k| fkind_to_u8(*k)).collect(),
-        ret: fkind_to_u8(s.ret),
-    }
+    WireSig { name: s.name.clone(), params: s.params.iter().map(|k| fkind_to_u8(*k)).collect(), ret: fkind_to_u8(s.ret) }
 }
 
 fn wire_to_sig(s: WireSig) -> ForeignSig {
-    ForeignSig {
-        name: s.name,
-        params: s.params.into_iter().map(u8_to_fkind).collect(),
-        ret: u8_to_fkind(s.ret),
-    }
+    ForeignSig { name: s.name, params: s.params.into_iter().map(u8_to_fkind).collect(), ret: u8_to_fkind(s.ret) }
 }
 
 // ===================================================================================================
@@ -258,22 +250,13 @@ pub(crate) fn build_worker_command(exe: &Path, channel_dir: &Path, iso_state: &P
 }
 
 impl WorkerConn {
-    fn spawn(
-        exe: &Path,
-        lib_name: &str,
-        path: &str,
-        sigs: Vec<ForeignSig>,
-        max_ret: usize,
-    ) -> Result<WorkerConn, ForeignErr> {
+    fn spawn(exe: &Path, lib_name: &str, path: &str, sigs: Vec<ForeignSig>, max_ret: usize) -> Result<WorkerConn, ForeignErr> {
         let paths = worker_paths();
-        std::fs::create_dir_all(&paths.channel_dir)
-            .map_err(|e| ForeignErr::Unavailable(format!("worker channel dir: {e}")))?;
+        std::fs::create_dir_all(&paths.channel_dir).map_err(|e| ForeignErr::Unavailable(format!("worker channel dir: {e}")))?;
 
         // Absolute lib path so the worker (whose cwd is its channel dir) resolves the same binary the
         // caller intended, regardless of a relative grant path.
-        let abs_path = std::fs::canonicalize(path)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| path.to_string());
+        let abs_path = std::fs::canonicalize(path).map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| path.to_string());
 
         let mut cmd = build_worker_command(exe, &paths.channel_dir, &paths.iso_state);
         // Clear inheritance on OUR std handles just before spawning (Rust spawns bInheritHandles=TRUE).
@@ -284,9 +267,7 @@ impl WorkerConn {
         #[cfg(target_os = "linux")]
         set_pdeathsig(&mut cmd);
 
-        let child = cmd
-            .spawn()
-            .map_err(|e| ForeignErr::Unavailable(format!("cannot spawn foreign worker `{lib_name}`: {e}")))?;
+        let child = cmd.spawn().map_err(|e| ForeignErr::Unavailable(format!("cannot spawn foreign worker `{lib_name}`: {e}")))?;
 
         // Kill-on-host-death: assign the worker to a kill-on-close Job Object (Windows). Best-effort:
         // if assignment fails, the guard still kills the child explicitly on drop.
@@ -319,11 +300,7 @@ impl WorkerConn {
             return Err(ForeignErr::Unavailable("cannot bound the worker channel's reads".into()));
         }
         // Bind handshake: send the path + sigs; the worker loads and replies.
-        let req = WorkerReq::Bind {
-            path: abs_path,
-            sigs: sigs.iter().map(sig_to_wire).collect(),
-            max_ret: max_ret as u64,
-        };
+        let req = WorkerReq::Bind { path: abs_path, sigs: sigs.iter().map(sig_to_wire).collect(), max_ret: max_ret as u64 };
         if write_frame(&mut conn, &req).is_err() {
             return Err(ForeignErr::WorkerDied("worker channel closed during bind handshake".into()));
         }
@@ -384,10 +361,7 @@ impl BoundForeign for WorkerConn {
     }
 
     fn call(&self, method: &str, args: &[FVal], _max_ret: usize) -> Result<FVal, ForeignErr> {
-        let req = WorkerReq::Call {
-            method: method.to_string(),
-            args: args.iter().map(fval_to_wire).collect(),
-        };
+        let req = WorkerReq::Call { method: method.to_string(), args: args.iter().map(fval_to_wire).collect() };
         let mut conn = self.conn.borrow_mut();
         // ANY transport failure — a broken pipe on write, EOF on read — means the worker died. That is
         // the headline: the host turns the worker's death into a value, and keeps running.
@@ -509,9 +483,8 @@ pub fn run_worker(args: &[String]) -> i32 {
     if probe_broker {
         // The worker's ONLY view of "the broker" is its resolved state dir (DELULU_STATE_DIR, which
         // the binder points at a broker-less directory). A connection attempt there is refused.
-        let reachable = crate::brokerd::resolve_state_dir(None)
-            .map(|dir| broker_transport::connect(&dir).is_ok())
-            .unwrap_or(false);
+        let reachable =
+            crate::brokerd::resolve_state_dir(None).map(|dir| broker_transport::connect(&dir).is_ok()).unwrap_or(false);
         if reachable {
             println!("reachable");
             return 0;
@@ -620,9 +593,8 @@ mod win {
 
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
 
     /// A held Job Object handle. Closing it (drop) fires `KILL_ON_JOB_CLOSE` for any assigned process.
@@ -681,14 +653,9 @@ mod tests {
 
     #[test]
     fn wire_scalar_round_trips_the_marshallable_set() {
-        for v in [
-            FVal::Int(-42),
-            FVal::Float(3.5),
-            FVal::Bool(true),
-            FVal::Str(Rc::from("héllo")),
-            FVal::Unit,
-            FVal::Ptr(0xdead_beef),
-        ] {
+        for v in
+            [FVal::Int(-42), FVal::Float(3.5), FVal::Bool(true), FVal::Str(Rc::from("héllo")), FVal::Unit, FVal::Ptr(0xdead_beef)]
+        {
             let round = wire_to_fval(fval_to_wire(&v));
             match (&v, &round) {
                 (FVal::Str(a), FVal::Str(b)) => assert_eq!(a, b),

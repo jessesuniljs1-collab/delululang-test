@@ -137,10 +137,7 @@ fn generate_reject(rng: &mut Rng) -> Program {
         // A helper performs an effect its declared row omits → DL0501.
         // Pick one op it performs, and declare a row WITHOUT it.
         let op = rng.below(OPS.len() as u64) as usize;
-        let src = format!(
-            "module fuzz\nfn h({CAP_PARAMS}) ! {{}} {{\n  {}\n}}\nfn main(root: Root) {{ }}\n",
-            OPS[op].2
-        );
+        let src = format!("module fuzz\nfn h({CAP_PARAMS}) ! {{}} {{\n  {}\n}}\nfn main(root: Root) {{ }}\n", OPS[op].2);
         Program { src, expect: Expect::Reject("DL0501") }
     } else {
         // A secret passed to `str` → DL0604 (opacity).
@@ -237,14 +234,8 @@ pub fn run(iterations: u64, start_seed: u64) -> Report {
 /// Run an accepted program under a full grant with a trace sink, then assert every traced effect
 /// is in the checker's computed `main_row`. Returns `Some(msg)` on a violation (a soundness bug).
 fn run_and_check_trace(checked: &delulu_check::Checked) -> Option<String> {
-    let allowed: BTreeSet<String> = checked
-        .result
-        .main_row
-        .clone()
-        .unwrap_or_default()
-        .iter()
-        .map(|e| e.name().to_string())
-        .collect();
+    let allowed: BTreeSet<String> =
+        checked.result.main_row.clone().unwrap_or_default().iter().map(|e| e.name().to_string()).collect();
 
     let grants = Grants { console: true, clock: true, rand: true, ..Default::default() };
 
@@ -335,14 +326,8 @@ fn run_and_check_trace_in_guest_mode(checked: &delulu_check::Checked, local: &[T
     use delulu_runtime::channel::{ChannelSink, HostChannel, Loopback};
     use delulu_runtime::sink::LocalSink;
 
-    let allowed: BTreeSet<String> = checked
-        .result
-        .main_row
-        .clone()
-        .unwrap_or_default()
-        .iter()
-        .map(|e| e.name().to_string())
-        .collect();
+    let allowed: BTreeSet<String> =
+        checked.result.main_row.clone().unwrap_or_default().iter().map(|e| e.name().to_string()).collect();
 
     // The host holds the real root. The guest is given one that grants nothing — exactly what
     // `delulu run --sandbox` hands it — so anything it reaches, it reached by asking.
@@ -371,9 +356,8 @@ fn run_and_check_trace_in_guest_mode(checked: &delulu_check::Checked, local: &[T
     // The differential claim. Compared on (effect, cap kind, method) rather than on whole records,
     // because a record also carries a span and an actor attribution, and the question here is which
     // effects were performed, not how they were annotated.
-    let shape = |r: &[TraceRecord]| -> Vec<String> {
-        r.iter().map(|x| format!("{}/{}/{}", x.effect, x.cap_kind, x.op)).collect()
-    };
+    let shape =
+        |r: &[TraceRecord]| -> Vec<String> { r.iter().map(|x| format!("{}/{}/{}", x.effect, x.cap_kind, x.op)).collect() };
     let (a, b) = (shape(local), shape(&records));
     if a != b {
         return Some(format!(

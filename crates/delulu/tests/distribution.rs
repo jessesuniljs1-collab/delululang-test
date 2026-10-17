@@ -20,7 +20,8 @@ fn root() -> PathBuf {
 /// The release, as its two files say it: `release.yml` (the triggers, the draft release) and the reusable
 /// `release-build.yml` it calls (the build, the attestation, the install gate — SLSA Build L3, D-V2-144).
 fn release_workflows() -> String {
-    read(".github/workflows/release.yml") + "
+    read(".github/workflows/release.yml")
+        + "
 " + &read(".github/workflows/release-build.yml")
 }
 
@@ -41,10 +42,7 @@ fn the_packaging_script_ships_the_portable_build() {
         "the shipped binary must be the Python-less build, or it will not start on a machine \
          without the exact CPython it was linked against"
     );
-    assert!(
-        s.contains("sha256sum") && s.contains("SHA256SUMS"),
-        "an archive without checksums asks to be trusted for no reason"
-    );
+    assert!(s.contains("sha256sum") && s.contains("SHA256SUMS"), "an archive without checksums asks to be trusted for no reason");
     for owed in ["LICENSE", "NOTICE", "TRADEMARK.md"] {
         assert!(s.contains(owed), "the archive must carry {owed} — a binary alone is not a distribution");
     }
@@ -104,22 +102,13 @@ fn the_install_page_and_the_archive_agree_on_the_first_commands() {
         "INSTALL.txt (written by the packaging script) must walk through the SAME example as \
          INSTALL.md, or the archive contradicts the page that sent the reader to it"
     );
-    assert!(
-        root().join("examples/hello_wasm.delulu").exists(),
-        "both documents name an example that must exist in the tree"
-    );
+    assert!(root().join("examples/hello_wasm.delulu").exists(), "both documents name an example that must exist in the tree");
 
     // Both must teach the refusal, because it is the one step a newcomer would otherwise report as
     // a bug. A page that hides it produces a bug report; a page that explains it produces a user.
     for (name, text) in [("INSTALL.md", &md), ("the packaging script", &sh)] {
-        assert!(
-            text.contains("DL0703"),
-            "{name} must show the refusal by code — it is the step that looks like a failure"
-        );
-        assert!(
-            text.contains("--grant console"),
-            "{name} must show the grant that resolves the refusal"
-        );
+        assert!(text.contains("DL0703"), "{name} must show the refusal by code — it is the step that looks like a failure");
+        assert!(text.contains("--grant console"), "{name} must show the grant that resolves the refusal");
     }
 }
 
@@ -183,11 +172,17 @@ fn the_archive_ships_the_morphs_and_the_skill() {
     let sh = read("scripts/package-toolchain.sh");
     assert!(sh.contains(r#"cp morphs/*.toml "$STAGE/morphs/""#), "the archive must ship the morphs beside bin/");
     assert!(sh.contains(r#"skills/delulu/SKILL.md "$STAGE/skills/delulu/""#), "the archive must ship the Agent Skill");
-    assert!(sh.contains(r#"cp -r examples/guide "$STAGE/examples/""#), "the archive must ship the guided tour GETTING_STARTED walks");
+    assert!(
+        sh.contains(r#"cp -r examples/guide "$STAGE/examples/""#),
+        "the archive must ship the guided tour GETTING_STARTED walks"
+    );
     let morph = read("crates/delulu/src/morph_file.rs");
     assert!(morph.contains(r#"root.join("morphs")"#), "the binary must look for the morphs where the archive puts them");
     assert!(
-        std::fs::read_dir(root().join("morphs")).expect("morphs/").flatten().any(|e| e.path().extension().is_some_and(|x| x == "toml")),
+        std::fs::read_dir(root().join("morphs"))
+            .expect("morphs/")
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "toml")),
         "there must be morphs to ship"
     );
 }

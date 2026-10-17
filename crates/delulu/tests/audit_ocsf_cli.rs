@@ -86,7 +86,10 @@ fn seeded(tag: &str) -> PathBuf {
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
         // P9-04 (d), D-V2-134: a send to the secret's audience, and one outside it.
-        assert_eq!(b.send_secret_guarded(&root, "API_KEY", "example.com:443", &store, Some("app.delulu:4:9".into())).0.unwrap(), CANARY);
+        assert_eq!(
+            b.send_secret_guarded(&root, "API_KEY", "example.com:443", &store, Some("app.delulu:4:9".into())).0.unwrap(),
+            CANARY
+        );
         assert!(b.send_secret_guarded(&root, "API_KEY", "evil.example:443", &store, None).0.is_err());
         b.revoke(&root, &child).unwrap();
     }
@@ -177,7 +180,10 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
         .map(|e| {
             let r = &e["unmapped"]["delulu"];
             let op = r["authority"]["op"].as_str().map(|o| format!("/{o}")).unwrap_or_default();
-            (format!("{}/{}{op}", r["action"].as_str().unwrap(), r["decision"].as_str().unwrap()), e["class_uid"].as_u64().unwrap())
+            (
+                format!("{}/{}{op}", r["action"].as_str().unwrap(), r["decision"].as_str().unwrap()),
+                e["class_uid"].as_u64().unwrap(),
+            )
         })
         .collect();
     let want: BTreeMap<String, u64> = [
@@ -216,7 +222,11 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
         }
     }
     let write = events.iter().find(|e| e["class_uid"] == 1001).unwrap();
-    assert_eq!((write["activity_id"].as_u64(), write["file"]["path"].as_str()), (Some(3), Some("./out/a.txt")), "a write updates the path it was decided on");
+    assert_eq!(
+        (write["activity_id"].as_u64(), write["file"]["path"].as_str()),
+        (Some(3), Some("./out/a.txt")),
+        "a write updates the path it was decided on"
+    );
     assert_eq!(write["file"]["name"], "a.txt");
     let send = events.iter().find(|e| e["class_uid"] == 4002 && e["unmapped"]["delulu"]["action"] == "send").unwrap();
     assert_eq!(send["dst_endpoint"], serde_json::json!({ "hostname": "example.com", "port": 443 }), "a send names its origin");
@@ -226,7 +236,11 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
     assert_eq!(net["dst_endpoint"]["hostname"], "example.com", "a network use names its host");
     assert_eq!(net["http_request"]["http_method"], "GET");
     let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
-    assert_eq!(refused["finding_info"]["types"], serde_json::json!(["use", "FsWrite"]), "a refused use's finding names its effect");
+    assert_eq!(
+        refused["finding_info"]["types"],
+        serde_json::json!(["use", "FsWrite"]),
+        "a refused use's finding names its effect"
+    );
     let revoke = events.iter().find(|e| e["unmapped"]["delulu"]["action"] == "revoke").unwrap();
     assert_eq!(revoke["activity_id"], 2, "a revocation revokes privileges");
     let delegation = events.iter().find(|e| e["unmapped"]["delulu"]["action"] == "delegate").unwrap();
@@ -273,7 +287,8 @@ fn an_edited_event_or_record_is_detected() {
     let pristine = std::fs::read_to_string(&file).unwrap();
 
     // An OCSF field only — the record untouched: the refusal reported as informational.
-    let edited = pristine.replacen("\"severity\":\"Medium\",\"severity_id\":3", "\"severity\":\"Informational\",\"severity_id\":1", 1);
+    let edited =
+        pristine.replacen("\"severity\":\"Medium\",\"severity_id\":3", "\"severity\":\"Informational\",\"severity_id\":1", 1);
     assert_ne!(edited, pristine, "the edit landed");
     std::fs::write(&file, &edited).unwrap();
     let v = verify_ocsf(&file, &[]);
@@ -402,9 +417,7 @@ fn a_real_sandboxed_runs_records_export_and_verify_its_launch_and_death_paired()
     assert_eq!(e.status.code(), Some(0), "{}", text(&e.stderr));
     keep_corpus(&out, "real-run");
     let events = lines(&out);
-    let of = |action: &str| -> Vec<&Value> {
-        events.iter().filter(|e| e["unmapped"]["delulu"]["action"] == action).collect()
-    };
+    let of = |action: &str| -> Vec<&Value> { events.iter().filter(|e| e["unmapped"]["delulu"]["action"] == action).collect() };
     let (launches, deaths) = (of("sandbox-launch"), of("sandbox-death"));
     assert_eq!((launches.len(), deaths.len()), (2, 2), "two runs, each launched and ended: {events:?}");
     for (l, dth) in launches.iter().zip(&deaths) {

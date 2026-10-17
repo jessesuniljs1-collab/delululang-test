@@ -80,10 +80,9 @@ pub fn meet(a: Option<&BudgetScope>, b: Option<&BudgetScope>) -> Option<BudgetSc
     match (a, b) {
         (None, None) => None,
         (Some(x), None) | (None, Some(x)) => Some(*x),
-        (Some(x), Some(y)) => Some(BudgetScope {
-            memory_bytes: x.memory_bytes.min(y.memory_bytes),
-            cpu_seconds: x.cpu_seconds.min(y.cpu_seconds),
-        }),
+        (Some(x), Some(y)) => {
+            Some(BudgetScope { memory_bytes: x.memory_bytes.min(y.memory_bytes), cpu_seconds: x.cpu_seconds.min(y.cpu_seconds) })
+        }
     }
 }
 
@@ -167,8 +166,19 @@ mod tests {
         assert_eq!(BudgetScope::parse(&b.to_grant_string()), Ok(b));
         assert_eq!(BudgetScope::parse("cpu=60,mem=268435456"), Ok(b), "order does not matter on input");
         for bad in [
-            "", "mem=1", "cpu=1", "mem=0,cpu=1", "mem=1,cpu=0", "mem=1,cpu=1,wall=5", "mem=1,mem=2,cpu=1",
-            "mem=01,cpu=1", "mem=+1,cpu=1", "mem= 1,cpu=1", "mem=1,cpu=1,", "mem=1;cpu=1", "MEM=1,cpu=1",
+            "",
+            "mem=1",
+            "cpu=1",
+            "mem=0,cpu=1",
+            "mem=1,cpu=0",
+            "mem=1,cpu=1,wall=5",
+            "mem=1,mem=2,cpu=1",
+            "mem=01,cpu=1",
+            "mem=+1,cpu=1",
+            "mem= 1,cpu=1",
+            "mem=1,cpu=1,",
+            "mem=1;cpu=1",
+            "MEM=1,cpu=1",
             "mem=99999999999999999999,cpu=1",
         ] {
             assert!(BudgetScope::parse(bad).is_err(), "`{bad}` must be refused");

@@ -53,14 +53,14 @@ pub enum TokenKind {
     Comma,
     Dot,
     Colon,
-    Arrow,     // ->
-    FatArrow,  // =>
-    Bang,      // !   (effect-row marker in types; logical not in expressions)
-    Question,  // ?   (Result propagation)
-    Pipe,      // |   (sum variants; row-variable tail)
+    Arrow,    // ->
+    FatArrow, // =>
+    Bang,     // !   (effect-row marker in types; logical not in expressions)
+    Question, // ?   (Result propagation)
+    Pipe,     // |   (sum variants; row-variable tail)
     Underscore,
-    At,        // @   (attributes; reserved token, no attribute grammar in Stage 1)
-    Eq,        // =
+    At, // @   (attributes; reserved token, no attribute grammar in Stage 1)
+    Eq, // =
     EqEq,
     NotEq,
     Lt,
@@ -269,11 +269,8 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
 ///   typeclass design exists), and `pure` (redundant with `!{}`).
 /// - **Reserved as namespace guards:** `plugin`, `secret`, `cap` — the authority-bearing type
 ///   names, kept out of the identifier space so a user declaration cannot shadow them (C23).
-pub const RESERVED: &[&str] = &[
-    "async", "await", "iso", "val", "ref", "box", "tag", "trn", "plugin",
-    "secret", "cap", "trait", "impl", "where",
-    "pure",
-];
+pub const RESERVED: &[&str] =
+    &["async", "await", "iso", "val", "ref", "box", "tag", "trn", "plugin", "secret", "cap", "trait", "impl", "where", "pure"];
 
 pub fn is_reserved(word: &str) -> bool {
     RESERVED.contains(&word)
@@ -417,8 +414,7 @@ mod index_tests {
             if t.is_empty() || t.starts_with("//") || t.starts_with("#[") {
                 continue;
             }
-            let name: String =
-                t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            let name: String = t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
             if !name.is_empty() && name.chars().next().unwrap().is_uppercase() {
                 out.insert(name);
             }
@@ -429,11 +425,11 @@ mod index_tests {
     /// DRIFT GUARD: the index covers exactly the enum — no missing token, no stale entry.
     #[test]
     fn token_index_covers_every_variant_exactly() {
-        let listed: BTreeSet<String> =
-            token_index().iter().map(|t| t.variant.to_string()).collect();
+        let listed: BTreeSet<String> = token_index().iter().map(|t| t.variant.to_string()).collect();
         let declared = enum_variants();
         assert_eq!(
-            listed, declared,
+            listed,
+            declared,
             "the token index drifted from `TokenKind`\n  missing from index: {:?}\n  stale in index: {:?}",
             declared.difference(&listed).collect::<Vec<_>>(),
             listed.difference(&declared).collect::<Vec<_>>()
@@ -455,13 +451,11 @@ mod index_tests {
     #[test]
     fn every_active_keyword_is_indexed_with_its_lexeme() {
         let idx = token_index();
-        for word in ["fn", "let", "var", "if", "else", "while", "return", "match", "module",
-                     "import", "pub", "type", "effect", "true", "false", "actor", "spawn",
-                     "consume", "recover"] {
-            assert!(
-                idx.iter().any(|t| t.lexeme == Some(word)),
-                "active keyword `{word}` is missing from the token index"
-            );
+        for word in [
+            "fn", "let", "var", "if", "else", "while", "return", "match", "module", "import", "pub", "type", "effect", "true",
+            "false", "actor", "spawn", "consume", "recover",
+        ] {
+            assert!(idx.iter().any(|t| t.lexeme == Some(word)), "active keyword `{word}` is missing from the token index");
         }
     }
 }

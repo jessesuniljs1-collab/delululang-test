@@ -62,7 +62,10 @@ fn a_prepared_workspace_confines_the_model_to_its_condition() {
     }
     assert!(!c1.join("knowledge").exists(), "the first condition is given nothing");
     assert!(c3.join("knowledge/skills/delulu/SKILL.md").is_file(), "the third is given the Skill");
-    assert!(!std::fs::read_to_string(c1.join("dl.py")).unwrap().contains(&*delulu().to_string_lossy()), "no machine path in the wrapper");
+    assert!(
+        !std::fs::read_to_string(c1.join("dl.py")).unwrap().contains(&*delulu().to_string_lossy()),
+        "no machine path in the wrapper"
+    );
 
     // A command the condition does not allow is refused and logged; an allowed one runs and a
     // `check` snapshots the attempt.
@@ -85,7 +88,11 @@ fn a_prepared_workspace_confines_the_model_to_its_condition() {
     let r = ai::score(&dir, &delulu()).unwrap();
     assert_eq!(r["valid"], true, "{r:#}");
     let run = r["runs"].as_array().unwrap().iter().find(|x| x["run"] == "c1__t6").unwrap().clone();
-    assert_eq!((run["compile_first_try"].clone(), run["completed"].clone()), (serde_json::json!(true), serde_json::json!(true)), "{run}");
+    assert_eq!(
+        (run["compile_first_try"].clone(), run["completed"].clone()),
+        (serde_json::json!(true), serde_json::json!(true)),
+        "{run}"
+    );
     assert_eq!(run["refused_tool_calls"], 1);
     assert_eq!(run["tokens"], serde_json::Value::Null, "no harness recorded tokens: UNRUN, not zero");
     let report = ai::report(&r);
@@ -103,7 +110,8 @@ fn a_prepared_workspace_confines_the_model_to_its_condition() {
 fn the_recorded_result_replays_from_its_own_evidence() {
     let record = repo().join("measurements/ai-usability");
     let committed: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(record.join("results.json")).expect("the first result is recorded")).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(record.join("results.json")).expect("the first result is recorded"))
+            .unwrap();
     assert_eq!(committed["valid"], true, "the published result's controls held");
     let replayed = ai::score(&record, &delulu()).unwrap();
     assert_eq!(replayed, committed, "scoring the record's own evidence gives its published numbers");

@@ -41,7 +41,11 @@ impl Rng {
         self.0 >> 16
     }
     fn below(&mut self, n: usize) -> usize {
-        if n == 0 { 0 } else { (self.next() % n as u64) as usize }
+        if n == 0 {
+            0
+        } else {
+            (self.next() % n as u64) as usize
+        }
     }
     /// True with probability `pct`/100.
     fn chance(&mut self, pct: u64) -> bool {
@@ -52,10 +56,8 @@ impl Rng {
 /// Deliberately mixed spellings of the same paths — the input canonicalization exists for. A
 /// generator that only ever wrote `./data` could not tell a canonicalizing broker from a
 /// non-canonicalizing one.
-const SPELLINGS: &[&str] = &[
-    "./data", "data", "./data/", r".\data", "./data/sub", ".\\data\\sub", "./data/sub/deep",
-    "./data//sub", "./data/x/../sub",
-];
+const SPELLINGS: &[&str] =
+    &["./data", "data", "./data/", r".\data", "./data/sub", ".\\data\\sub", "./data/sub/deep", "./data//sub", "./data/x/../sub"];
 
 fn scopes_from(paths: &[&str]) -> Scopes {
     Scopes { fs_read: paths.iter().map(|s| s.to_string()).collect(), ..Default::default() }
@@ -92,8 +94,7 @@ fn run_scale(agents: usize, seed: u64) {
     let mut rng = Rng(seed);
     let clock = Rc::new(ManualClock::new(1_000));
     let sink = MemSink::new();
-    let mut b = Broker::with_sources(Box::new(SeqIdSource::default()), Box::new(clock.clone()))
-        .with_sink(Box::new(sink));
+    let mut b = Broker::with_sources(Box::new(SeqIdSource::default()), Box::new(clock.clone())).with_sink(Box::new(sink));
 
     // The root holds the widest authority anything can hold. Everything else attenuates from it.
     let root = b.issue_root(holder(0), raw_authority(&["./data"]), None).unwrap();
@@ -154,8 +155,11 @@ fn run_scale(agents: usize, seed: u64) {
     // Push time well past every deadline so the expiry laws are actually exercised.
     clock.advance(50_000);
 
-    assert!(denied > 0, "seed {seed}: no delegation was ever refused — the generator never \
-                         proposed a widening, so this run did not test attenuation at all");
+    assert!(
+        denied > 0,
+        "seed {seed}: no delegation was ever refused — the generator never \
+                         proposed a widening, so this run did not test attenuation at all"
+    );
     assert!(revoked > 0, "seed {seed}: nothing was revoked — the inheritance law was not exercised");
     assert!(expiring > 0, "seed {seed}: nothing carried a deadline — expiry was not exercised");
 

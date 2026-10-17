@@ -533,17 +533,8 @@ mod tests {
             assert!(r.anchor.starts_with("ref.rule."), "bad anchor {}", r.anchor);
             assert!(seen.insert(r.anchor), "duplicate rule anchor {}", r.anchor);
             assert!(!r.statement.is_empty(), "{} has no statement", r.anchor);
-            assert!(
-                !r.enforced_by.is_empty(),
-                "{} names no enforcement — a rule nothing checks is a wish, not a rule",
-                r.anchor
-            );
-            assert!(
-                CHAPTERS.iter().any(|(n, _)| *n == r.chapter),
-                "{} names unknown chapter {}",
-                r.anchor,
-                r.chapter
-            );
+            assert!(!r.enforced_by.is_empty(), "{} names no enforcement — a rule nothing checks is a wish, not a rule", r.anchor);
+            assert!(CHAPTERS.iter().any(|(n, _)| *n == r.chapter), "{} names unknown chapter {}", r.anchor, r.chapter);
         }
     }
 
@@ -576,10 +567,7 @@ mod tests {
     #[test]
     fn every_chapter_has_at_least_one_rule() {
         for (num, title) in CHAPTERS {
-            assert!(
-                RULES.iter().any(|r| r.chapter == *num),
-                "chapter {num} ({title}) has no normative rule"
-            );
+            assert!(RULES.iter().any(|r| r.chapter == *num), "chapter {num} ({title}) has no normative rule");
         }
     }
 }

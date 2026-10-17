@@ -76,11 +76,7 @@ pub fn run_rollout(
     mut journal: impl FnMut(FleetEvent),
 ) -> RolloutOutcome {
     for m in 0..members {
-        journal(FleetEvent {
-            op: "member.staged".to_string(),
-            member: Some(m),
-            detail: format!("member {m} staged for update"),
-        });
+        journal(FleetEvent { op: "member.staged".to_string(), member: Some(m), detail: format!("member {m} staged for update") });
         if health_check(m) {
             journal(FleetEvent {
                 op: "member.health_pass".to_string(),
@@ -102,9 +98,7 @@ pub fn run_rollout(
         journal(FleetEvent {
             op: "rollout.rolled_back".to_string(),
             member: Some(m),
-            detail: format!(
-                "member {m}'s health failure stopped the rollout; rolled back to {previous}; {remaining}"
-            ),
+            detail: format!("member {m}'s health failure stopped the rollout; rolled back to {previous}; {remaining}"),
         });
         return RolloutOutcome::RolledBack { at_member: m };
     }
@@ -294,8 +288,7 @@ fn cmd_fleet_update(rest: &[String]) -> i32 {
     };
 
     let mut events: Vec<FleetEvent> = Vec::new();
-    let outcome =
-        run_rollout(members, &previous_hash, |m| Some(m) != fail_health_at, |ev| events.push(ev));
+    let outcome = run_rollout(members, &previous_hash, |m| Some(m) != fail_health_at, |ev| events.push(ev));
 
     print_rollout_summary(&artifact, &actual_hash, members, &previous_hash, outcome, &events, json);
 
@@ -342,10 +335,8 @@ fn print_rollout_summary(
     json: bool,
 ) {
     if json {
-        let events_json: Vec<serde_json::Value> = events
-            .iter()
-            .map(|e| json!({ "op": e.op, "member": e.member, "detail": e.detail }))
-            .collect();
+        let events_json: Vec<serde_json::Value> =
+            events.iter().map(|e| json!({ "op": e.op, "member": e.member, "detail": e.detail })).collect();
         let mut obj = json!({
             "command": "fleet",
             "subcommand": "update",
@@ -436,19 +427,11 @@ mod tests {
         let mut events = Vec::new();
         let outcome = run_rollout(5, "blake3:prev", |_m| true, |ev| events.push(ev));
         assert_eq!(outcome, RolloutOutcome::Completed);
-        let staged: Vec<u32> =
-            events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
+        let staged: Vec<u32> = events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
         assert_eq!(staged, vec![0, 1, 2, 3, 4], "every member is staged, in order");
-        let passed: Vec<u32> = events
-            .iter()
-            .filter(|e| e.op == "member.health_pass")
-            .filter_map(|e| e.member)
-            .collect();
+        let passed: Vec<u32> = events.iter().filter(|e| e.op == "member.health_pass").filter_map(|e| e.member).collect();
         assert_eq!(passed, vec![0, 1, 2, 3, 4], "every member passes its health gate");
-        assert!(
-            events.iter().any(|e| e.op == "rollout.completed"),
-            "the completion event is journaled: {events:?}"
-        );
+        assert!(events.iter().any(|e| e.op == "rollout.completed"), "the completion event is journaled: {events:?}");
         assert!(
             !events.iter().any(|e| e.op.contains("fail") || e.op.contains("rolled_back")),
             "a clean rollout journals nothing about failure: {events:?}"
@@ -464,22 +447,17 @@ mod tests {
         let mut events = Vec::new();
         let outcome = run_rollout(5, "blake3:prev", |m| m != 2, |ev| events.push(ev));
         assert_eq!(outcome, RolloutOutcome::RolledBack { at_member: 2 });
-        let staged: Vec<u32> =
-            events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
+        let staged: Vec<u32> = events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
         assert_eq!(staged, vec![0, 1, 2], "members 3 and 4 must never be staged: {events:?}");
-        assert!(!events.iter().any(|e| e.member == Some(3) || e.member == Some(4)),
-            "no event at all — staged, passed, failed — may mention members 3 or 4: {events:?}");
+        assert!(
+            !events.iter().any(|e| e.member == Some(3) || e.member == Some(4)),
+            "no event at all — staged, passed, failed — may mention members 3 or 4: {events:?}"
+        );
         assert!(events.iter().any(|e| e.op == "member.health_fail" && e.member == Some(2)));
-        let rollback = events
-            .iter()
-            .find(|e| e.op == "rollout.rolled_back")
-            .expect("the rollback is journaled");
+        let rollback = events.iter().find(|e| e.op == "rollout.rolled_back").expect("the rollback is journaled");
         assert_eq!(rollback.member, Some(2), "the rollback names which member triggered it");
         assert!(rollback.detail.contains("blake3:prev"), "and what it rolled back to: {}", rollback.detail);
-        assert!(
-            !events.iter().any(|e| e.op == "rollout.completed"),
-            "a rolled-back rollout never also completes: {events:?}"
-        );
+        assert!(!events.iter().any(|e| e.op == "rollout.completed"), "a rolled-back rollout never also completes: {events:?}");
     }
 
     /// The edge at the front of the list: failure at member 0 still stages that member first
@@ -489,8 +467,7 @@ mod tests {
         let mut events = Vec::new();
         let outcome = run_rollout(3, "blake3:prev", |m| m != 0, |ev| events.push(ev));
         assert_eq!(outcome, RolloutOutcome::RolledBack { at_member: 0 });
-        let staged: Vec<u32> =
-            events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
+        let staged: Vec<u32> = events.iter().filter(|e| e.op == "member.staged").filter_map(|e| e.member).collect();
         assert_eq!(staged, vec![0], "member 0 is staged even though it immediately fails");
     }
 
@@ -529,12 +506,7 @@ mod tests {
 
     #[test]
     fn flag_and_positional_agree_on_which_tokens_are_values() {
-        let rest = vec![
-            "art.bin".to_string(),
-            "--members".to_string(),
-            "5".to_string(),
-            "--json".to_string(),
-        ];
+        let rest = vec!["art.bin".to_string(), "--members".to_string(), "5".to_string(), "--json".to_string()];
         assert_eq!(positional(&rest), Some("art.bin".to_string()));
         assert_eq!(flag(&rest, "--members"), Some("5".to_string()));
     }

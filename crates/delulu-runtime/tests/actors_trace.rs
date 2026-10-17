@@ -1,5 +1,5 @@
-﻿//! Stage 7 phase 7i â€” causal trace attribution (spec Â§6.3) and the `--debug-rcaps`
-//! uniqueness detector (spec Â§6.4). The causal law (invariant 35, executable): every traced
+//! Stage 7 phase 7i — causal trace attribution (spec §6.3) and the `--debug-rcaps`
+//! uniqueness detector (spec §6.4). The causal law (invariant 35, executable): every traced
 //! effect belongs to the EXECUTING member's static row AND the send site's static row via
 //! the cause chain.
 
@@ -29,10 +29,7 @@ fn traced_effects_carry_actor_member_turn_and_cause() {
     let collector: Arc<Mutex<Vec<TraceRecord>>> = Arc::new(Mutex::new(Vec::new()));
     let system = ActorSystem::start_with(&checked.module, 2, false, Some(collector.clone()), None, None, false);
     let interp = Interp::new(&checked.module).with_actors(system.host());
-    let root = Value::Root(std::rc::Rc::new(delulu_runtime::RootVal {
-        console: true,
-        ..Default::default()
-    }));
+    let root = Value::Root(std::rc::Rc::new(delulu_runtime::RootVal { console: true, ..Default::default() }));
     delulu_runtime::set_capture(true); // keep test output clean; println captures
     interp.run_main(root).expect("main runs clean");
     let report = system.finish();
@@ -68,7 +65,7 @@ fn traced_effects_carry_actor_member_turn_and_cause() {
 
 #[test]
 fn the_causal_law_flags_an_effect_outside_the_executing_members_row() {
-    // Synthetic (a checked program can never produce this â€” that is the point: this is the
+    // Synthetic (a checked program can never produce this — that is the point: this is the
     // compiler-bug detector's own witness). The behavior's static row lacks Net.
     let main_row: BTreeSet<String> = ["Async", "Net"].iter().map(|s| s.to_string()).collect();
     let mut member_rows: HashMap<String, BTreeSet<String>> = HashMap::new();
@@ -85,15 +82,12 @@ fn the_causal_law_flags_an_effect_outside_the_executing_members_row() {
         ..Default::default()
     };
     let violations = assert_trace_causal(&main_row, &member_rows, &[record]);
-    assert!(
-        violations.iter().any(|v| v.contains("executing member")),
-        "the executing-member half fires: {violations:?}"
-    );
+    assert!(violations.iter().any(|v| v.contains("executing member")), "the executing-member half fires: {violations:?}");
 }
 
 #[test]
 fn the_causal_law_flags_a_send_site_that_could_not_have_carried_the_effect() {
-    // The effect IS in the executing member's row, but the SEND SITE's row lacks it â€” the
+    // The effect IS in the executing member's row, but the SEND SITE's row lacks it — the
     // T-Send containment replayed on the witness.
     let main_row: BTreeSet<String> = ["Async"].iter().map(|s| s.to_string()).collect();
     let mut member_rows: HashMap<String, BTreeSet<String>> = HashMap::new();
@@ -110,13 +104,10 @@ fn the_causal_law_flags_a_send_site_that_could_not_have_carried_the_effect() {
         ..Default::default()
     };
     let violations = assert_trace_causal(&main_row, &member_rows, &[record]);
-    assert!(
-        violations.iter().any(|v| v.contains("SEND SITE")),
-        "the send-site half fires: {violations:?}"
-    );
+    assert!(violations.iter().any(|v| v.contains("SEND SITE")), "the send-site half fires: {violations:?}");
 }
 
-// ----- --debug-rcaps: the Â§7.4 uniqueness detector --------------------------------------
+// ----- --debug-rcaps: the §7.4 uniqueness detector --------------------------------------
 
 #[test]
 fn an_unaliased_iso_graph_passes_the_uniqueness_walk() {
@@ -127,13 +118,10 @@ fn an_unaliased_iso_graph_passes_the_uniqueness_walk() {
 
 #[test]
 fn an_aliased_nested_node_is_a_dl1610_class_violation() {
-    // Two paths to the same mutable list inside a "unique" graph â€” exactly what the static
+    // Two paths to the same mutable list inside a "unique" graph — exactly what the static
     // proof forbids; the detector must see it.
     let shared = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![Value::Int(1)])));
-    let outer = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![
-        shared.clone(),
-        shared,
-    ])));
+    let outer = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![shared.clone(), shared])));
     let err = assert_unique_graph(&outer).expect_err("aliasing must be detected");
     assert!(err.contains("strong refs"), "{err}");
 }

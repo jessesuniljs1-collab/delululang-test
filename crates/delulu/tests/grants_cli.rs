@@ -114,10 +114,7 @@ fn delegate_lease_run_revoke_orchestration_end_to_end() {
     assert_eq!(o.status.code(), Some(1), "widening must be refused");
     let err = stderr(&o);
     assert!(err.contains("DL0802"), "criterion 3: {err}");
-    assert!(
-        err.contains("effects={Read}"),
-        "the refusal carries the computed intersection (never widens): {err}"
-    );
+    assert!(err.contains("effects={Read}"), "the refusal carries the computed intersection (never widens): {err}");
 
     // A (reflexive) delegation under the node succeeds — this child proves transitive revocation
     // next. Multi-redemption, so the post-revocation run exercises the DL1403 path (a dead lease),
@@ -126,7 +123,20 @@ fn delegate_lease_run_revoke_orchestration_end_to_end() {
     let o = delulu_in(
         &cwd,
         &state,
-        &["grants", "delegate", "--parent", &node, "--effects", "Read,Write", "--fs-read", "./data", "--fs-write", "./out", "--multi", "--json"],
+        &[
+            "grants",
+            "delegate",
+            "--parent",
+            &node,
+            "--effects",
+            "Read,Write",
+            "--fs-read",
+            "./data",
+            "--fs-write",
+            "./out",
+            "--multi",
+            "--json",
+        ],
     );
     assert!(o.status.success(), "narrowing delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
@@ -155,15 +165,11 @@ fn delegate_lease_run_revoke_orchestration_end_to_end() {
     let o = delulu_in(&cwd, &state, &["grants", "revoke", &node, "--json"]);
     assert!(o.status.success(), "revoke: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("revoke --json");
-    let revoked: Vec<String> =
-        v["newly_revoked"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
+    let revoked: Vec<String> = v["newly_revoked"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
     assert!(revoked.contains(&node) && revoked.contains(&child), "transitive: {revoked:?}");
     let by_seq = v["by_seq"].as_u64().unwrap();
     // The revocation reply states the honest §4.2 bound — never "immediate" (playbook trap 3).
-    assert!(
-        v["revocation_takes_effect"].as_str().unwrap().contains("before the next use"),
-        "{v}"
-    );
+    assert!(v["revocation_takes_effect"].as_str().unwrap().contains("before the next use"), "{v}");
 
     // `grants tree` shows the whole subtree revoked, the root still live (criterion 4's shape).
     let o = delulu_in(&cwd, &state, &["grants", "tree"]);
@@ -212,7 +218,11 @@ fn a_delegations_strings_are_shown_escaped_in_tree_list_and_inspect() {
     let _guard = DaemonGuard { state: state.clone() };
     let path = "./out/\u{1b}]0;PWNED\u{7}\u{1b}[2J\ng_forged [live] effects={Read,Write,Net}";
     let host = "evil\u{1b}[31m.example";
-    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write,Net", "--fs-write", path, "--net", host, "--ttl", "1h", "--json"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Write,Net", "--fs-write", path, "--net", host, "--ttl", "1h", "--json"],
+    );
     assert!(o.status.success(), "delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
     let node = v["node"].as_str().expect("node").to_string();

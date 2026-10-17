@@ -96,15 +96,8 @@ fn corpus() -> Vec<String> {
         walk(&base.join(area), &mut found);
     }
 
-    let mut rel: Vec<String> = found
-        .iter()
-        .map(|p| {
-            p.strip_prefix(&base)
-                .unwrap_or(p)
-                .to_string_lossy()
-                .replace('\\', "/")
-        })
-        .collect();
+    let mut rel: Vec<String> =
+        found.iter().map(|p| p.strip_prefix(&base).unwrap_or(p).to_string_lossy().replace('\\', "/")).collect();
     rel.sort();
     rel
 }
@@ -126,10 +119,8 @@ fn render() -> String {
         let checked = surface(&["check", &path, "--json"]);
         let clean = checked.starts_with("exit 0\n");
 
-        let mut cases: Vec<(String, String)> = vec![
-            ("check --json".to_string(), checked),
-            ("check".to_string(), surface(&["check", &path])),
-        ];
+        let mut cases: Vec<(String, String)> =
+            vec![("check --json".to_string(), checked), ("check".to_string(), surface(&["check", &path]))];
         // On a program that does not check, `authority` and `why` re-print the same
         // diagnostics. Recording them would triple the file with duplicates and hide the
         // signal, so the authority surfaces are recorded for programs that have one.
@@ -194,9 +185,9 @@ fn the_core_still_answers_exactly_as_recorded() {
     for (name, body) in &now {
         match was.iter().find(|(n, _)| n == name) {
             None => report.push_str(&format!("\n+ NEW  {name}\n{body}")),
-            Some((_, old)) if old != body => report.push_str(&format!(
-                "\n~ CHANGED  {name}\n--- recorded ---\n{old}--- now ---\n{body}"
-            )),
+            Some((_, old)) if old != body => {
+                report.push_str(&format!("\n~ CHANGED  {name}\n--- recorded ---\n{old}--- now ---\n{body}"))
+            }
             Some(_) => {}
         }
     }

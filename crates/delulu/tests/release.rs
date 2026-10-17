@@ -77,19 +77,13 @@ fn criterion4_release_artifacts_sign_and_verify() {
 
     assert!(run(&["keygen"]).status.success(), "keygen");
     assert!(run(&["sign", &art.to_string_lossy()]).status.success(), "sign");
-    assert!(
-        run(&["verify-sig", &art.to_string_lossy()]).status.success(),
-        "a freshly signed artifact must verify"
-    );
+    assert!(run(&["verify-sig", &art.to_string_lossy()]).status.success(), "a freshly signed artifact must verify");
 
     // Tamper: one byte.
     let mut bytes = std::fs::read(&art).unwrap();
     bytes[0] ^= 0xFF;
     std::fs::write(&art, &bytes).unwrap();
-    assert!(
-        !run(&["verify-sig", &art.to_string_lossy()]).status.success(),
-        "a tampered artifact must NOT verify"
-    );
+    assert!(!run(&["verify-sig", &art.to_string_lossy()]).status.success(), "a tampered artifact must NOT verify");
 }
 
 /// CRITERION 10: every claim in the announcement traces to a measured number or a named artifact.
@@ -99,8 +93,8 @@ fn criterion4_release_artifacts_sign_and_verify() {
 /// that can be mechanized.
 #[test]
 fn criterion10_the_announcement_makes_no_unsupported_claim() {
-    let a = std::fs::read_to_string(root().join("docs/release/ANNOUNCEMENT-1.0.md"))
-        .expect("the announcement draft is committed");
+    let a =
+        std::fs::read_to_string(root().join("docs/release/ANNOUNCEMENT-1.0.md")).expect("the announcement draft is committed");
 
     // Claims the constitution forbids outright (§5.11, §9). Checked case-insensitively so a
     // capitalised headline cannot slip through.
@@ -116,10 +110,7 @@ fn criterion10_the_announcement_makes_no_unsupported_claim() {
         "100% safe",
         "zero bugs",
     ] {
-        assert!(
-            !lower.contains(forbidden),
-            "the announcement contains the forbidden claim `{forbidden}` — Constitution §9"
-        );
+        assert!(!lower.contains(forbidden), "the announcement contains the forbidden claim `{forbidden}` — Constitution §9");
     }
 
     // The uncomfortable numbers must be PRESENT, not merely un-contradicted. An announcement that
@@ -140,14 +131,8 @@ fn criterion10_the_announcement_makes_no_unsupported_claim() {
     // claims (coverage was 273/290); at the release gate coverage reached 287/287 with the
     // remainder closed honestly, so the requirement inverts: the announcement must state the
     // exact number — and the retirements that got it there — rather than a vague adjective.
-    assert!(
-        a.contains("287 of 287"),
-        "coverage is stated as the exact measured number, not an adjective"
-    );
-    assert!(
-        !a.contains("fully covered"),
-        "the vague completeness adjective stays banned — the number is the claim"
-    );
+    assert!(a.contains("287 of 287"), "coverage is stated as the exact measured number, not an adjective");
+    assert!(!a.contains("fully covered"), "the vague completeness adjective stays banned — the number is the claim");
     assert!(
         a.contains("retired"),
         "the announcement must mention the D22 retirements — 100% reached partly by removing \
@@ -159,8 +144,7 @@ fn criterion10_the_announcement_makes_no_unsupported_claim() {
 /// as launch approaches, a placeholder quietly becomes a claim.
 #[test]
 fn the_release_checklist_still_marks_what_is_not_live() {
-    let c = std::fs::read_to_string(root().join("docs/release/CHECKLIST-1.0.md"))
-        .expect("the release checklist is committed");
+    let c = std::fs::read_to_string(root().join("docs/release/CHECKLIST-1.0.md")).expect("the release checklist is committed");
     assert!(c.contains("PENDING-PUBLIC"), "controls needing public hosting must stay marked");
     assert!(
         c.contains("BLOCKED") || c.contains("NOT MET"),
@@ -173,14 +157,12 @@ fn the_release_checklist_still_marks_what_is_not_live() {
 /// linked into the binary is worse than none: it will be trusted.
 #[test]
 fn the_sbom_lists_the_real_dependencies() {
-    let sbom = std::fs::read_to_string(root().join("docs/release/SBOM-1.0.json"))
-        .expect("the SBOM is committed");
+    let sbom = std::fs::read_to_string(root().join("docs/release/SBOM-1.0.json")).expect("the SBOM is committed");
     let v: serde_json::Value = serde_json::from_str(&sbom).expect("the SBOM is valid JSON");
     assert_eq!(v["bomFormat"], "CycloneDX", "CycloneDX per spec §4");
 
     let components = v["components"].as_array().expect("components");
-    let names: Vec<&str> =
-        components.iter().filter_map(|c| c["name"].as_str()).collect();
+    let names: Vec<&str> = components.iter().filter_map(|c| c["name"].as_str()).collect();
 
     // Every third-party crate the workspace actually depends on must appear. This list is a floor,
     // not the full closure — but it must name every crate whose omission would be a *silent* lie.
@@ -188,10 +170,7 @@ fn the_sbom_lists_the_real_dependencies() {
     // for exactly that reason: the SBOM had dropped or misnamed all three and the check could not
     // tell, because it only looked for crates it already knew about. A checker that cannot see the
     // omission it exists to catch is worse than none. (Post-1.0 production-readiness pass, D19.)
-    for dep in [
-        "serde", "serde_json", "toml", "wasmtime", "wasm-encoder", "ed25519-dalek", "getrandom",
-        "ml-dsa", "ml-kem",
-    ] {
+    for dep in ["serde", "serde_json", "toml", "wasmtime", "wasm-encoder", "ed25519-dalek", "getrandom", "ml-dsa", "ml-kem"] {
         assert!(
             names.contains(&dep),
             "the SBOM omits `{dep}`, which the workspace links — an incomplete SBOM is worse than \
@@ -204,19 +183,13 @@ fn the_sbom_lists_the_real_dependencies() {
 /// not achieve is a supply-chain lie with a schema around it.
 #[test]
 fn the_provenance_states_the_builder_honestly() {
-    let p = std::fs::read_to_string(root().join("docs/release/PROVENANCE-1.0.json"))
-        .expect("the provenance statement is committed");
+    let p =
+        std::fs::read_to_string(root().join("docs/release/PROVENANCE-1.0.json")).expect("the provenance statement is committed");
     let v: serde_json::Value = serde_json::from_str(&p).expect("valid JSON");
-    assert!(
-        v["_type"].as_str().unwrap_or("").contains("in-toto"),
-        "provenance is an in-toto statement"
-    );
+    assert!(v["_type"].as_str().unwrap_or("").contains("in-toto"), "provenance is an in-toto statement");
     // SLSA v1 nests the builder under runDetails.
     let builder = v["predicate"]["runDetails"]["builder"]["id"].as_str().unwrap_or("");
-    assert!(
-        builder.contains("local"),
-        "the builder must be identified as the local runner it is, not as hosted CI: `{builder}`"
-    );
+    assert!(builder.contains("local"), "the builder must be identified as the local runner it is, not as hosted CI: `{builder}`");
     let level = v["predicate"]["_slsaLevel"].as_str().unwrap_or("");
     assert!(
         level.contains("sub-L3") || level.contains("PENDING"),

@@ -2,20 +2,18 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use delulu_check::{
-    authority_report, authority_widened, check_pins, check_program, check_self_authority,
-    check_source, check_workspace, compute_lockfile, enforce_semver_law, load_package,
-    program_authority, resolve_workspace, verify_locked, Checked, Effect, Lockfile, Program, Row,
-    Workspace,
-};
 use delulu_atlas::{Atlas, BuildInput, ModuleView, PackageView};
 use delulu_check::lockfile::api_row_hash;
-use delulu_diag::{
-    color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role,
-    SourceMap, Theme,
+use delulu_check::{
+    authority_report, authority_widened, check_pins, check_program, check_self_authority, check_source, check_workspace,
+    compute_lockfile, enforce_semver_law, load_package, program_authority, resolve_workspace, verify_locked, Checked, Effect,
+    Lockfile, Program, Row, Workspace,
 };
-use delulu_runtime::{parse_manifest, Grants, Interp, Value};
+use delulu_diag::{
+    color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role, SourceMap, Theme,
+};
 use delulu_runtime::value::RootVal;
+use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_syntax::ast::Item;
 use serde_json::{json, Value as Json};
 
@@ -42,12 +40,7 @@ static SURFACE: OnceLock<Surface> = OnceLock::new();
 fn surface() -> &'static Surface {
     // If `init_surface` was never called (e.g. a unit test calling a helper directly), default to
     // "no forced color, default theme" — auto/TTY decides, so tests stay colorless.
-    SURFACE.get_or_init(|| Surface {
-        color_flag: None,
-        delulu_color: None,
-        no_color: false,
-        theme: Theme::default_theme(),
-    })
+    SURFACE.get_or_init(|| Surface { color_flag: None, delulu_color: None, no_color: false, theme: Theme::default_theme() })
 }
 
 fn palette_for(is_tty: bool) -> Palette {
@@ -144,18 +137,11 @@ fn init_surface(args: &[String]) -> (Vec<String>, Vec<Diagnostic>) {
     let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
     let env_theme = std::env::var("DELULU_THEME").ok();
     let config_path = theme_config_path();
-    let (theme, warn) = delulu_diag::resolve_theme(
-        theme_flag.as_deref(),
-        env_theme.as_deref(),
-        config_path.as_deref(),
-    );
+    let (theme, warn) = delulu_diag::resolve_theme(theme_flag.as_deref(), env_theme.as_deref(), config_path.as_deref());
 
     let _ = SURFACE.set(Surface { color_flag, delulu_color, no_color, theme });
 
-    let warnings = warn
-        .into_iter()
-        .map(|m| Diagnostic::warning("DL1790", m))
-        .collect();
+    let warnings = warn.into_iter().map(|m| Diagnostic::warning("DL1790", m)).collect();
     (cleaned, warnings)
 }
 
@@ -176,8 +162,7 @@ fn theme_config_path() -> Option<std::path::PathBuf> {
 #[cfg(windows)]
 fn enable_vt() {
     use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetStdHandle, SetConsoleMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
-        STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+        GetConsoleMode, GetStdHandle, SetConsoleMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
     };
     for which in [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
         unsafe {
@@ -457,9 +442,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--accept-authority".to_string());
                 }
             }
-            s if s.starts_with("--accept-authority=") => {
-                opts.accept_authority.push(s["--accept-authority=".len()..].to_string())
-            }
+            s if s.starts_with("--accept-authority=") => opts.accept_authority.push(s["--accept-authority=".len()..].to_string()),
             "--diff" => {
                 if i + 1 < rest.len() {
                     opts.diff = Some(rest[i + 1].clone());
@@ -526,9 +509,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--sandbox-backend".to_string());
                 }
             }
-            s if s.starts_with("--sandbox-backend=") => {
-                opts.sandbox_backend = Some(s["--sandbox-backend=".len()..].to_string())
-            }
+            s if s.starts_with("--sandbox-backend=") => opts.sandbox_backend = Some(s["--sandbox-backend=".len()..].to_string()),
             "--require-attestation" => {
                 if i + 1 < rest.len() {
                     opts.require_attestation = Some(rest[i + 1].clone());
@@ -548,12 +529,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--launcher-digest".to_string());
                 }
             }
-            s if s.starts_with("--launcher-digest=") => {
-                opts.launcher_digest = Some(s["--launcher-digest=".len()..].to_string())
-            }
-            s if s.starts_with("--sandbox-profile=") => {
-                opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string())
-            }
+            s if s.starts_with("--launcher-digest=") => opts.launcher_digest = Some(s["--launcher-digest=".len()..].to_string()),
+            s if s.starts_with("--sandbox-profile=") => opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string()),
             "--limits" => {
                 if i + 1 < rest.len() {
                     opts.limits = Some(rest[i + 1].clone());
@@ -682,9 +659,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--advisory-feed".to_string());
                 }
             }
-            s if s.starts_with("--advisory-feed=") => {
-                opts.advisory_feed = Some(s["--advisory-feed=".len()..].to_string())
-            }
+            s if s.starts_with("--advisory-feed=") => opts.advisory_feed = Some(s["--advisory-feed=".len()..].to_string()),
             "--clock" => {
                 if i + 1 < rest.len() {
                     opts.clock_ms = rest[i + 1].strip_prefix("fixed:").and_then(|s| s.parse().ok());
@@ -805,9 +780,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--isolation".to_string());
                 }
             }
-            s if s.starts_with("--isolation=") => {
-                opts.isolation = Some(s["--isolation=".len()..].to_string())
-            }
+            s if s.starts_with("--isolation=") => opts.isolation = Some(s["--isolation=".len()..].to_string()),
             "--lease" => {
                 if i + 1 < rest.len() {
                     opts.lease = Some(rest[i + 1].clone());
@@ -884,11 +857,7 @@ pub(crate) fn refuse_extra_positionals(cmd: &str, opts: &Opts) -> Option<i32> {
     if extra.is_empty() {
         return None;
     }
-    eprintln!(
-        "error: `{cmd}` takes one path, and was given {}: {}",
-        opts.positionals.len(),
-        opts.positionals.join(", ")
-    );
+    eprintln!("error: `{cmd}` takes one path, and was given {}: {}", opts.positionals.len(), opts.positionals.join(", "));
     eprintln!("  nothing was done — the extra path is refused rather than silently ignored");
     eprintln!("note: `delulu check` takes several files in one run; every other command takes one");
     Some(2)
@@ -1269,11 +1238,11 @@ fn run_inner(args: &[String]) -> i32 {
             match nearest_subcommand(other) {
                 Some(hit) => {
                     eprintln!(
-                        "unknown command `{other}`\n\ndid you mean `{hit}`?\n\n\
+                        "error: unknown command `{other}`\n\ndid you mean `{hit}`?\n\n\
                          run `delulu --help` for every command, or `delulu help {hit}` for that one"
                     );
                 }
-                None => eprintln!("unknown command `{other}`\n\n{}", usage()),
+                None => eprintln!("error: unknown command `{other}`\n\n{}", usage()),
             }
             2
         }
@@ -1351,10 +1320,47 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 pub(crate) const SUBCOMMANDS: &[&str] = &[
-    "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
-    "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
-    "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit", "device", "monitor",
+    "new",
+    "check",
+    "fix",
+    "fmt",
+    "test",
+    "lsp",
+    "keygen",
+    "sign",
+    "verify-sig",
+    "publish",
+    "deploy",
+    "add",
+    "login",
+    "build",
+    "lock",
+    "run",
+    "plugin",
+    "authority",
+    "why",
+    "atlas",
+    "repl",
+    "audit",
+    "grants",
+    "guard",
+    "broker",
+    "sandbox",
+    "fleet",
+    "secrets",
+    "locale",
+    "morph",
+    "explain",
+    "doctor",
+    "completions",
+    "skill",
+    "toolchain",
+    "schema",
+    "examples",
+    "mcp",
+    "edit",
+    "device",
+    "monitor",
 ];
 
 fn usage() -> &'static str {
@@ -1579,8 +1585,7 @@ fn usage() -> &'static str {
 /// Expand directories to their `.delulu` files, recursively, deterministically.
 fn collect_delulu_files(p: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
     if p.is_dir() {
-        let mut entries: Vec<_> =
-            std::fs::read_dir(p)?.collect::<Result<Vec<_>, _>>()?.into_iter().map(|e| e.path()).collect();
+        let mut entries: Vec<_> = std::fs::read_dir(p)?.collect::<Result<Vec<_>, _>>()?.into_iter().map(|e| e.path()).collect();
         entries.sort();
         for e in entries {
             collect_delulu_files(&e, out)?;
@@ -1705,10 +1710,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
         // deliberately (campaign finding C66, the C26 class). A DIRECTORY is different: filtering is
         // the whole point of walking one, and a tree with no `.delulu` in it is not a mistake.
         if p.is_file() && p.extension().and_then(|e| e.to_str()) != Some("delulu") {
-            eprintln!(
-                "error: `{}` is not a `.delulu` source file, so `fmt` has nothing to do with it",
-                p.display()
-            );
+            eprintln!("error: `{}` is not a `.delulu` source file, so `fmt` has nothing to do with it", p.display());
             if looks_like_dwx(&p.display().to_string()) {
                 eprintln!("note: that is a compiled `.dwx` artifact — format the source it was built from");
             }
@@ -1742,10 +1744,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
             Ok(out) => {
                 if let Err(why) = fmt_laws_ok(&src, &out) {
                     let map = SourceMap::new();
-                    let d = Diagnostic::error(
-                        "DL1702",
-                        format!("formatter law violation on {}: {why}", f.display()),
-                    );
+                    let d = Diagnostic::error("DL1702", format!("formatter law violation on {}: {why}", f.display()));
                     print_diagnostics("fmt", &[d], &map, None, json);
                     return 2; // compiler-bug class: stop, write nothing further
                 }
@@ -1785,12 +1784,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
         for f in &changed {
             println!("would reformat: {f}");
         }
-        println!(
-            "fmt --check: {} would change, {} clean, {} refused (parse errors)",
-            changed.len(),
-            unchanged,
-            refused.len()
-        );
+        println!("fmt --check: {} would change, {} clean, {} refused (parse errors)", changed.len(), unchanged, refused.len());
     } else {
         println!(
             "fmt: reformatted {} file(s), {} already canonical, {} refused (parse errors)",
@@ -1962,10 +1956,7 @@ fn package_test_ceiling(dir: &std::path::Path) -> TestCeiling {
 /// code trusts, so a link, a `..` spelling or another letter case cannot reach a file by a route
 /// that skips its package. Each governing package enters `ceilings` once; the index is returned,
 /// or `None` when no package encloses the file (then it is pure unless `--test-authority` says).
-fn enclosing_test_ceiling(
-    path: &std::path::Path,
-    ceilings: &mut Vec<(std::path::PathBuf, TestCeiling)>,
-) -> Option<usize> {
+fn enclosing_test_ceiling(path: &std::path::Path, ceilings: &mut Vec<(std::path::PathBuf, TestCeiling)>) -> Option<usize> {
     let resolved = std::fs::canonicalize(path).ok()?;
     let dir = resolved.ancestors().skip(1).find(|d| d.join("delulu.toml").is_file())?;
     let is_here = std::env::current_dir().ok().and_then(|d| std::fs::canonicalize(d).ok()).is_some_and(|h| h == dir);
@@ -2018,17 +2009,11 @@ fn run_module_tests(
         // Where the test is WRITTEN — its own file and span, even when it runs inside a flattened
         // package — or `None` for a test that is not this run's to run (a dependency's).
         let Some((file, id, name_span)) = locate(t) else { continue };
-        let declared: Vec<String> = t
-            .row
-            .iter()
-            .flat_map(|r| r.effects.iter())
-            .filter_map(|p| p.segs.last().map(|s| s.name.clone()))
-            .collect();
+        let declared: Vec<String> =
+            t.row.iter().flat_map(|r| r.effects.iter()).filter_map(|p| p.segs.last().map(|s| s.name.clone())).collect();
 
         // DL1703: the test's declared row must fit the package ceiling.
-        if let Some(excess) =
-            declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e))
-        {
+        if let Some(excess) = declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e)) {
             let d = Diagnostic::error(
                 "DL1703",
                 format!(
@@ -2038,7 +2023,10 @@ fn run_module_tests(
                     ceiling.effects
                 ),
             )
-            .with_span(delulu_diag::Span::new(id, name_span.start, name_span.end), "narrow the row, or widen delulu.toml's [test-authority] — a real review decision");
+            .with_span(
+                delulu_diag::Span::new(id, name_span.start, name_span.end),
+                "narrow the row, or widen delulu.toml's [test-authority] — a real review decision",
+            );
             if st.json {
                 st.diags_json.extend(diagnostics_json(std::slice::from_ref(&d), map));
             } else {
@@ -2068,8 +2056,7 @@ fn run_module_tests(
         }
 
         // Deterministic by default: fixed clock; rand seeded by (--seed ⊕ name hash).
-        let name_hash: u64 =
-            t.name.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        let name_hash: u64 = t.name.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
         delulu_runtime::set_fixed_clock_ms(Some(0));
         delulu_runtime::set_rand_seed(st.seed_base ^ name_hash);
 
@@ -2093,8 +2080,7 @@ fn run_module_tests(
         let ms = t0.elapsed().as_millis() as u64;
         let output = delulu_runtime::take_capture().unwrap_or_default();
 
-        let mut traced: Vec<String> =
-            sink.records().iter().map(|r| r.effect.clone()).collect();
+        let mut traced: Vec<String> = sink.records().iter().map(|r| r.effect.clone()).collect();
         traced.sort();
         traced.dedup();
 
@@ -2117,12 +2103,7 @@ fn run_module_tests(
                 entry["status"] = json!(status);
                 // deviation 5: assert_eq's symmetric `a` != `b` maps to actual/expected.
                 let mut failure = json!({ "code": fault.code, "message": fault.message });
-                let ticks: Vec<&str> = fault
-                    .message
-                    .split('`')
-                    .skip(1)
-                    .step_by(2)
-                    .collect();
+                let ticks: Vec<&str> = fault.message.split('`').skip(1).step_by(2).collect();
                 if fault.code == "DL1707" && ticks.len() == 2 {
                     failure["actual"] = json!(ticks[0]);
                     failure["expected"] = json!(ticks[1]);
@@ -2146,7 +2127,6 @@ fn run_module_tests(
         st.reports.push(entry);
     }
 }
-
 
 /// `delulu test [paths|patterns] [--json] [--seed N]` — the authority-isolated test
 /// runner (Stage 8, phase 8g; spec §5). Deterministic by default (fixed clock, per-name
@@ -2424,10 +2404,7 @@ fn cmd_test(rest: &[String]) -> i32 {
         }
         let _package_node = attenuate(&unit_ceiling, format!("test-package {label}"));
         run_module_tests(&mut st, &map, &flat.module, &unit_ceiling, &|t| {
-            written
-                .iter()
-                .find(|(n, ..)| *n == t.name)
-                .map(|(_, file, id, span)| (file.clone(), *id, *span))
+            written.iter().find(|(n, ..)| *n == t.name).map(|(_, file, id, span)| (file.clone(), *id, *span))
         });
     }
 
@@ -2461,10 +2438,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     let custody = match (&session, &state_dir) {
         (Some(sess), Some(sd)) => {
             let revoked = matches!(
-                crate::brokerd::request(
-                    sd,
-                    crate::broker_ipc::ReqBody::Revoke { caller: sess.clone(), target: sess.clone() },
-                ),
+                crate::brokerd::request(sd, crate::broker_ipc::ReqBody::Revoke { caller: sess.clone(), target: sess.clone() },),
                 Ok(crate::broker_ipc::Response::Revoked { .. })
             );
             json!({ "mode": "daemon", "session": sess, "revoked_at_end": revoked })
@@ -2538,19 +2512,14 @@ fn cmd_locale(rest: &[String]) -> i32 {
             // Verified class, by rule — a Contained catalog has no typed export to trust.
             if art.class != "verified" {
                 return refuse(
-                    format!(
-                        "catalog plugins are `verified`-class by rule — `{}` declares `{}`",
-                        art.name(),
-                        art.class
-                    ),
+                    format!("catalog plugins are `verified`-class by rule — `{}` declares `{}`", art.name(), art.class),
                     json,
                 );
             }
             // ZERO authority, by rule — the ceiling bounds the plugin to prose forever.
             let ceiling = art.ceiling();
             if !ceiling.effects.is_empty() {
-                let names: Vec<String> =
-                    ceiling.effects.iter().map(|e| format!("{e:?}")).collect();
+                let names: Vec<String> = ceiling.effects.iter().map(|e| format!("{e:?}")).collect();
                 return refuse(
                     format!(
                         "a catalog plugin must declare ZERO authority — `{}` declares effects [{}]",
@@ -2571,27 +2540,15 @@ fn cmd_locale(rest: &[String]) -> i32 {
             };
             match art.exports().get("catalog").map(String::as_str) {
                 Some("fn() -> Str") => {}
-                Some(other) => {
-                    return refuse(
-                        format!("the `catalog` export must be `fn() -> Str`, found `{other}`"),
-                        json,
-                    )
-                }
-                None => {
-                    return refuse(
-                        format!("`{}` exports no `catalog() -> Str`", art.name()),
-                        json,
-                    )
-                }
+                Some(other) => return refuse(format!("the `catalog` export must be `fn() -> Str`, found `{other}`"), json),
+                None => return refuse(format!("`{}` exports no `catalog() -> Str`", art.name()), json),
             }
             // Evaluate the export: pure by type, zero-authority by ceiling — the module
             // holds no capability and can perform no effect while producing its TOML.
             let interp = Interp::new(&verified.dir.module);
             let toml = match interp.call_with("catalog", vec![]) {
                 Ok(delulu_runtime::Value::Str(s)) => s.to_string(),
-                Ok(other) => {
-                    return refuse(format!("`catalog()` produced a non-string value: {other:?}"), json)
-                }
+                Ok(other) => return refuse(format!("`catalog()` produced a non-string value: {other:?}"), json),
                 Err(e) => return refuse(format!("`catalog()` faulted: {}", e.message), json),
             };
             let (cat, cat_warnings) = delulu_diag::Catalog::parse(&toml);
@@ -2602,16 +2559,10 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 return refuse("the catalog declares no `[meta] locale` name".to_string(), json);
             }
             if matches!(cat.locale.as_str(), "en-US" | "delulu-slang") {
-                return refuse(
-                    format!("locale `{}` is a built-in and cannot be replaced", cat.locale),
-                    json,
-                );
+                return refuse(format!("locale `{}` is a built-in and cannot be replaced", cat.locale), json);
             }
             if cat.is_empty() {
-                return refuse(
-                    format!("the catalog for `{}` has no valid entries — nothing to install", cat.locale),
-                    json,
-                );
+                return refuse(format!("the catalog for `{}` has no valid entries — nothing to install", cat.locale), json);
             }
             // The prose bound, stated where the spec says to state it.
             eprintln!(
@@ -2719,10 +2670,7 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 }
             }
             if json {
-                print_success_envelope(
-                    "locale",
-                    json!({ "command": "locale", "subcommand": "list", "locales": rows }),
-                );
+                print_success_envelope("locale", json!({ "command": "locale", "subcommand": "list", "locales": rows }));
             } else {
                 for r in &rows {
                     let b = if r["builtin"].as_bool().unwrap_or(false) { " (built-in)" } else { "" };
@@ -2763,9 +2711,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
             if json {
                 let arr: Vec<Json> = found
                     .iter()
-                    .map(|(id, path)| {
-                        serde_json::json!({ "morph": id, "path": path.display().to_string() })
-                    })
+                    .map(|(id, path)| serde_json::json!({ "morph": id, "path": path.display().to_string() }))
                     .collect();
                 print_success_envelope("morph", json!({ "subcommand": "list", "morphs": arr }));
                 return 0;
@@ -2774,11 +2720,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                 println!("no morphs installed — canonical DeluluLang is the only surface");
                 println!(
                     "  searched: {}",
-                    crate::morph_file::search_dirs()
-                        .iter()
-                        .map(|d| d.display().to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    crate::morph_file::search_dirs().iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", ")
                 );
                 return 0;
             }
@@ -2801,10 +2743,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                 Err(e) => return refuse(e.0),
             };
             if json {
-                let kw: Vec<Json> = m
-                    .entries()
-                    .map(|(c, a)| serde_json::json!({ "canonical": c, "alias": a }))
-                    .collect();
+                let kw: Vec<Json> = m.entries().map(|(c, a)| serde_json::json!({ "canonical": c, "alias": a })).collect();
                 print_success_envelope(
                     "morph",
                     json!({
@@ -2958,8 +2897,7 @@ pub(crate) fn broker_unreachable_detail(e: &dyn std::fmt::Display) -> String {
         return "no broker is running for this state directory (its socket does not exist)".to_string();
     }
     if lower.contains("connection refused") {
-        return "a broker socket exists but nothing answers on it — a broker that stopped without cleaning up"
-            .to_string();
+        return "a broker socket exists but nothing answers on it — a broker that stopped without cleaning up".to_string();
     }
     if lower.contains("permission denied") || lower.contains("access is denied") {
         return "the broker's socket is not this user's to open (permission denied)".to_string();
@@ -3023,7 +2961,10 @@ pub(crate) fn load_into(map: &mut SourceMap, file: &str) -> Result<(u32, String)
     if path.is_dir() {
         eprintln!("error: `{file}` is a directory, and this command takes a single `.delulu` file");
         if path.join("delulu.toml").is_file() {
-            eprintln!("note: it looks like a package — try `delulu build {file}`, or name a file such as `{}`", path.join("src").join("main.delulu").display());
+            eprintln!(
+                "note: it looks like a package — try `delulu build {file}`, or name a file such as `{}`",
+                path.join("src").join("main.delulu").display()
+            );
         } else {
             eprintln!("note: name the file explicitly, e.g. `{}`", path.join("main.delulu").display());
         }
@@ -3137,10 +3078,7 @@ fn authority_artifact(file: &str, opts: &Opts) -> i32 {
         return 0;
     }
     println!("Authority of `{file}` — a COMPILED ARTIFACT's own embedded manifest, re-verified:");
-    println!(
-        "  effects:      {}",
-        if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") }
-    );
+    println!("  effects:      {}", if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") });
     println!("  secrets:      {}", if secrets.is_empty() { "(none)".to_string() } else { secrets.join(", ") });
     for key in ["fs_read", "fs_write", "net", "declassify"] {
         let v = artifact.authority.get(key).map(strs).unwrap_or_default();
@@ -3251,21 +3189,14 @@ pub(crate) fn success_envelope(command: &str, report: Json) -> Json {
 /// envelope builder; it serializes per file and concatenates. Spans stay byte-exact because each
 /// batch is positioned against the map it came from.
 pub(crate) fn diagnostics_json(diags: &[Diagnostic], map: &SourceMap) -> Vec<Json> {
-    delulu_diag::envelope("", diags, None, map)["diagnostics"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
+    delulu_diag::envelope("", diags, None, map)["diagnostics"].as_array().cloned().unwrap_or_default()
 }
 
 /// Print [`success_envelope`] on stdout and record that an envelope was emitted, so the nonzero
 /// fallback in [`run`] can never double-report.
 pub(crate) fn print_success_envelope(command: &str, report: Json) {
     note_json_emitted();
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&success_envelope(command, report))
-            .expect("the success envelope serializes")
-    );
+    println!("{}", serde_json::to_string_pretty(&success_envelope(command, report)).expect("the success envelope serializes"));
 }
 
 pub(crate) fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
@@ -3493,9 +3424,9 @@ fn authority_within(map: &SourceMap, modules: &[&delulu_syntax::ast::Module], mu
             return 2;
         }
         match std::fs::read_to_string(f) {
-            Ok(text) => lines.extend(
-                text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string),
-            ),
+            Ok(text) => {
+                lines.extend(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string))
+            }
             Err(e) => {
                 eprintln!("error: {}", unreadable(f, &e));
                 return 2;
@@ -3584,10 +3515,8 @@ pub(crate) fn authority_of_text(label: &str, src: &str) -> Result<Json, usize> {
 /// a time. The lines below are the answer to "what do I type to run this?", and they are a
 /// REQUIREMENT, never a permission: printing them grants nothing.
 fn render_required_grants(report: &Json) -> String {
-    let grants: Vec<&str> = report["required_grants"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
+    let grants: Vec<&str> =
+        report["required_grants"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
     let mut out = String::new();
     if grants.is_empty() {
         out.push_str("(no grants needed — this program is provably pure)\n");
@@ -3975,7 +3904,13 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
             }
         }
         let unseen = all.is_empty() || hidden.contains(kind);
-        let mut scopes: Vec<Scope> = all.into_iter().map(|s| { let at = lit_at(kind, &s); Scope::Lit(s, at) }).collect();
+        let mut scopes: Vec<Scope> = all
+            .into_iter()
+            .map(|s| {
+                let at = lit_at(kind, &s);
+                Scope::Lit(s, at)
+            })
+            .collect();
         if unseen {
             scopes.push(Scope::Unseen(unseen_at(kind)));
         }
@@ -3985,7 +3920,13 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     let devices_for = |kind: &str| -> Vec<Scope> {
         let all = requested.get(kind).cloned().unwrap_or_default();
         let unseen = all.is_empty() || hidden.contains(kind);
-        let mut scopes: Vec<Scope> = all.into_iter().map(|s| { let at = lit_at(kind, &s); Scope::Lit(s, at) }).collect();
+        let mut scopes: Vec<Scope> = all
+            .into_iter()
+            .map(|s| {
+                let at = lit_at(kind, &s);
+                Scope::Lit(s, at)
+            })
+            .collect();
         if unseen {
             scopes.push(Scope::Unseen(unseen_at(kind)));
         }
@@ -4071,7 +4012,12 @@ pub(crate) fn requirements(report: &Json, walk: &ScopeWalk) -> (Vec<Requirement>
     }
     for s in report["secrets"].as_array().cloned().unwrap_or_default() {
         if let Some(name) = s.as_str() {
-            push(&mut out, format!("secret:{name}=VALUE"), Ask::Mint { method: "secret", arg: Some(name.to_string()) }, lit_at("Secret", name));
+            push(
+                &mut out,
+                format!("secret:{name}=VALUE"),
+                Ask::Mint { method: "secret", arg: Some(name.to_string()) },
+                lit_at("Secret", name),
+            );
         }
     }
     // SECRET-HIDDEN-1: a secret read under a name the source computes — the checker could not name it,
@@ -4267,9 +4213,7 @@ fn collect_plugin_loads(block: &delulu_syntax::ast::Block, out: &mut Vec<PluginL
     fn resolve_grant(arg: &Expr, grants: &Grants) -> Vec<String> {
         match arg {
             Expr::Record { .. } => grant_effects_of(arg),
-            Expr::Var { path, .. } if path.segs.len() == 1 => {
-                grants.get(&path.segs[0].name).cloned().unwrap_or_default()
-            }
+            Expr::Var { path, .. } if path.segs.len() == 1 => grants.get(&path.segs[0].name).cloned().unwrap_or_default(),
             _ => Vec::new(),
         }
     }
@@ -4444,10 +4388,7 @@ pub(crate) fn microvm_unavailable() -> Result<(), String> {
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn microvm_unavailable() -> Result<(), String> {
-    Err(format!(
-        "`--isolation microvm` requires Linux x86_64/aarch64 with KVM; this platform is `{}`",
-        std::env::consts::OS
-    ))
+    Err(format!("`--isolation microvm` requires Linux x86_64/aarch64 with KVM; this platform is `{}`", std::env::consts::OS))
 }
 
 /// Stamp the requested isolation profile on an authority report (Stage 5 phase 5i, spec §6) —
@@ -4466,9 +4407,7 @@ fn stamp_isolation(report: &mut Json, opts: &Opts) {
 }
 
 pub(crate) fn strs(v: &Json) -> Vec<String> {
-    v.as_array()
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
 fn render_authority(report: &Json) -> String {
@@ -4481,7 +4420,11 @@ fn render_authority(report: &Json) -> String {
         let _ = writeln!(out, "  modules:      {}", modules.join(", "));
     }
     let effects = strs(&report["effects"]);
-    let _ = writeln!(out, "  effects:      {}", if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") });
+    let _ = writeln!(
+        out,
+        "  effects:      {}",
+        if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") }
+    );
     let caps = report["capabilities"].as_array().cloned().unwrap_or_default();
     if caps.is_empty() {
         let _ = writeln!(out, "  capabilities: (none)");
@@ -4523,18 +4466,10 @@ fn render_authority(report: &Json) -> String {
             reach.push("files/console");
         }
         if reach.is_empty() {
-            let _ = writeln!(
-                out,
-                "  exposure:     {} declassifiable, but this program has no egress in its row",
-                secrets.join(", ")
-            );
+            let _ =
+                writeln!(out, "  exposure:     {} declassifiable, but this program has no egress in its row", secrets.join(", "));
         } else {
-            let _ = writeln!(
-                out,
-                "  exposure:     {} declassifiable -> {}",
-                secrets.join(", "),
-                reach.join(", ")
-            );
+            let _ = writeln!(out, "  exposure:     {} declassifiable -> {}", secrets.join(", "), reach.join(", "));
             let _ = writeln!(
                 out,
                 "                an exposed secret is an ordinary value; the language cannot follow it past `expose`"
@@ -4628,7 +4563,10 @@ fn render_authority(report: &Json) -> String {
                 let kernels = strs(&f["kernels"]);
                 let ks = if kernels.is_empty() { "(none named statically)".to_string() } else { kernels.join(", ") };
                 for d in &devices {
-                    let _ = writeln!(out, "    - compute/{d} [{ks}]  (kernels are signed artifacts; what they compute is not proven)");
+                    let _ = writeln!(
+                        out,
+                        "    - compute/{d} [{ks}]  (kernels are signed artifacts; what they compute is not proven)"
+                    );
                 }
                 if devices.is_empty() {
                     let _ = writeln!(out, "    - compute/(device chosen at runtime) [{ks}]");
@@ -4728,14 +4666,20 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         return 1;
     }
     if !checked.result.main_present {
-        let d = Diagnostic::error("DL1201", format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"));
+        let d = Diagnostic::error(
+            "DL1201",
+            format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"),
+        );
         print_diagnostics("build", &[d], &map, None, opts.json);
         return 1;
     }
     let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
         Ok(w) => w,
         Err(e) => {
-            let d = Diagnostic::error(e.code(), format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()));
+            let d = Diagnostic::error(
+                e.code(),
+                format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()),
+            );
             print_diagnostics("build", &[d], &map, None, opts.json);
             return 1;
         }
@@ -4750,9 +4694,8 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     let authority = authority_report(&program, &checked.result, &scopes);
     let dwx = delulu_wasm::embed_authority(&wasm, &authority);
 
-    let out_path = opts.out.clone().unwrap_or_else(|| {
-        std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string()
-    });
+    let out_path =
+        opts.out.clone().unwrap_or_else(|| std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string());
     if let Err(e) = std::fs::write(&out_path, &dwx) {
         eprintln!("error: could not write `{out_path}`: {e}");
         return 2;
@@ -4762,11 +4705,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         note_json_emitted();
         println!("{}", envelope_to_string("build", &[], Some(report), &map));
     } else {
-        ok_line!(
-            "ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`",
-            dwx.len(),
-            delulu_wasm::AUTHORITY_SECTION
-        );
+        ok_line!("ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`", dwx.len(), delulu_wasm::AUTHORITY_SECTION);
     }
     0
 }
@@ -4891,11 +4830,8 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     let kind_ok = manifest.as_ref().map(|m| m.kind == delulu_check::PackageKind::Plugin).unwrap_or(false);
     if manifest.is_some() && !kind_ok {
         diags.push(
-            Diagnostic::error(
-                "DL1004",
-                "`plugin build` needs a `kind = \"plugin\"` package (set `kind` under `[package]`)",
-            )
-            .with_bare_span(delulu_diag::Span::new(mfile, 0, 0)),
+            Diagnostic::error("DL1004", "`plugin build` needs a `kind = \"plugin\"` package (set `kind` under `[package]`)")
+                .with_bare_span(delulu_diag::Span::new(mfile, 0, 0)),
         );
     }
 
@@ -4916,10 +4852,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     if sources.len() != 1 {
         diags.push(Diagnostic::error(
             "DL1004",
-            format!(
-                "plugin packages are single-module in v0.6 — found {} module file(s) under `src/`",
-                sources.len()
-            ),
+            format!("plugin packages are single-module in v0.6 — found {} module file(s) under `src/`", sources.len()),
         ));
         print_diagnostics("plugin", &diags, &map, None, opts.json);
         return 1;
@@ -4948,9 +4881,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
 
     // Class-specific payload (spec §2.2 table). DIR for Verified; the compiled module for Contained.
     let (dir_bytes, wasm_bytes): (Option<Vec<u8>>, Option<Vec<u8>>) = match pm.class {
-        delulu_check::PluginClass::Verified => {
-            (Some(delulu_check::dir_serialize(&checked.module, &checked.result)), None)
-        }
+        delulu_check::PluginClass::Verified => (Some(delulu_check::dir_serialize(&checked.module, &checked.result)), None),
         delulu_check::PluginClass::Contained => {
             match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
                 Ok(w) => (None, Some(w)),
@@ -5002,10 +4933,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
         lock_bytes.as_deref(),
     );
 
-    let out_path = opts
-        .out
-        .clone()
-        .unwrap_or_else(|| root.join(format!("{}.dpx", pm.name)).to_string_lossy().to_string());
+    let out_path = opts.out.clone().unwrap_or_else(|| root.join(format!("{}.dpx", pm.name)).to_string_lossy().to_string());
     if let Err(e) = std::fs::write(&out_path, &dpx) {
         eprintln!("error: could not write `{out_path}`: {e}");
         return 2;
@@ -5021,7 +4949,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
                 "api": pm.api, "class": pm.class.as_str(),
                 "exports": pm.exports.keys().cloned().collect::<Vec<_>>(),
                 "signed": sig_bytes.is_some(),
-            })
+            }),
         );
     } else {
         let signed = if sig_bytes.is_some() { " (signed)" } else { "" };
@@ -5055,10 +4983,7 @@ fn read_ed25519_seed(path: &str) -> Result<[u8; 32], String> {
         }
         return Ok(s);
     }
-    Err(format!(
-        "key file must be a raw 32-byte ed25519 seed or 64 hex characters (found {} bytes)",
-        raw.len()
-    ))
+    Err(format!("key file must be a raw 32-byte ed25519 seed or 64 hex characters (found {} bytes)", raw.len()))
 }
 
 /// Build the `delulu:plugin` section JSON from the parsed manifest (spec §2.2). Fixed shape,
@@ -5160,10 +5085,16 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
             dpx.api
         );
         if let Some(a) = dpx.manifest.get("authority") {
-            let effects: Vec<&str> =
-                a.get("effects").and_then(|v| v.as_array()).map(|xs| xs.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
-            let requires: Vec<&str> =
-                a.get("requires").and_then(|v| v.as_array()).map(|xs| xs.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+            let effects: Vec<&str> = a
+                .get("effects")
+                .and_then(|v| v.as_array())
+                .map(|xs| xs.iter().filter_map(|x| x.as_str()).collect())
+                .unwrap_or_default();
+            let requires: Vec<&str> = a
+                .get("requires")
+                .and_then(|v| v.as_array())
+                .map(|xs| xs.iter().filter_map(|x| x.as_str()).collect())
+                .unwrap_or_default();
             println!("  authority ceiling: effects [{}]; requires [{}]", effects.join(", "), requires.join(", "));
         }
         if let Some(exports) = dpx.manifest.get("exports").and_then(|v| v.as_object()) {
@@ -5231,7 +5162,10 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
                 for pkg in &ws.packages {
                     diags.push(Diagnostic::error(
                         "DL1011",
-                        format!("`--locked` build but delulu.lock is missing — package `{}` is unresolved; run `delulu lock`", pkg.name),
+                        format!(
+                            "`--locked` build but delulu.lock is missing — package `{}` is unresolved; run `delulu lock`",
+                            pkg.name
+                        ),
                     ));
                 }
             }
@@ -5316,9 +5250,7 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
             // advisory feed unreadable, or no modules found). The old closing line here was
             // `0 error(s)`, which reads as success next to a nonzero exit — the note above carries
             // the reason, so say that instead of counting errors that were never the problem.
-            eprintln!(
-                "refused: the source produced no errors, but a required check could not run (see the note above)"
-            );
+            eprintln!("error: refused — the source produced no errors, but a required check could not run (see the note above)");
         }
     }
     if failed {
@@ -5418,11 +5350,7 @@ fn advisory_diagnostics(dir: &str, ws: &Workspace, opts: &Opts) -> (Vec<Diagnost
     // The resolved set is every workspace package name@version. The feed names none of the packages
     // that have no advisory, so scanning all of them is safe and needs no graph bookkeeping the
     // workspace does not already carry.
-    let deps: Vec<(String, String)> = ws
-        .packages
-        .iter()
-        .map(|p| (p.name.clone(), p.manifest.version.clone()))
-        .collect();
+    let deps: Vec<(String, String)> = ws.packages.iter().map(|p| (p.name.clone(), p.manifest.version.clone())).collect();
 
     for hit in scan(&advisories, &deps) {
         let fix = match &hit.patched {
@@ -5434,11 +5362,7 @@ fn advisory_diagnostics(dir: &str, ws: &Workspace, opts: &Opts) -> (Vec<Diagnost
             "dependency `{}` {} is affected by advisory {} ({}){}{}",
             hit.package, hit.version, hit.advisory_id, hit.severity, summary, fix
         );
-        diags.push(if deny {
-            Diagnostic::error("DL1903", msg)
-        } else {
-            Diagnostic::warning("DL1903", msg)
-        });
+        diags.push(if deny { Diagnostic::error("DL1903", msg) } else { Diagnostic::warning("DL1903", msg) });
     }
 
     (diags, None)
@@ -5460,11 +5384,7 @@ fn write_interfaces(ws: &Workspace, program: &Program) {
                         continue;
                     }
                     let key = format!("{}::{}", wm.unit.name, f.name.name);
-                    let ty = program
-                        .fn_types
-                        .get(&key)
-                        .map(|t| t.show(&program.type_names).to_string())
-                        .unwrap_or_default();
+                    let ty = program.fn_types.get(&key).map(|t| t.show(&program.type_names).to_string()).unwrap_or_default();
                     let row = program
                         .facts
                         .get(&key)
@@ -5614,11 +5534,8 @@ fn authority_workspace(dir: &str, opts: &Opts) -> i32 {
     // The entry module names the report when there is one. A library package has no `fn main`, and
     // the old fallback called it `package` — a placeholder that tells a reviewer nothing about what
     // they are reading. The root package's own name is right there once the graph is resolved.
-    let name = program
-        .entry_module
-        .clone()
-        .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
-        .unwrap_or_else(|| "package".to_string());
+    let name =
+        program.entry_module.clone().or_else(|| ws.root_pkg().map(|p| p.name.clone())).unwrap_or_else(|| "package".to_string());
     let modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
     emit_authority(&program, &name, dir, &ws.source_map, &modules, opts)
 }
@@ -5749,10 +5666,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
         }
 
         if old_e.api_row_hash != new_e.api_row_hash {
-            api_row_changes.insert(
-                name.clone(),
-                json!({ "old_hash": old_e.api_row_hash, "new_hash": new_e.api_row_hash }),
-            );
+            api_row_changes.insert(name.clone(), json!({ "old_hash": old_e.api_row_hash, "new_hash": new_e.api_row_hash }));
         }
 
         // Reuses the same subset check the semver-authority law enforces (lockfile.rs) — a
@@ -5762,11 +5676,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
         }
     }
 
-    let verdict = if widened {
-        "WIDENING — requires major version + --accept-authority"
-    } else {
-        "OK"
-    };
+    let verdict = if widened { "WIDENING — requires major version + --accept-authority" } else { "OK" };
 
     let report = json!({
         "added_effects": added_effects,
@@ -5874,25 +5784,24 @@ fn cmd_why(rest: &[String]) -> i32 {
     // Named so the four-member result reads: what went wrong, what was learned, where each name
     // lives, and the sources those spans point into.
     type WhyInputs = (Vec<Diagnostic>, Program, HashMap<String, (String, u32)>, SourceMap);
-    let (diags, program, locations, map): WhyInputs =
-        if std::path::Path::new(&path).is_dir() {
-            let ws = resolve_workspace(&path);
-            let program = check_workspace(&ws);
-            let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
-            diags.extend(program.diagnostics.iter().cloned());
-            let locations = locations_workspace(&ws);
-            (diags, program, locations, ws.source_map)
-        } else {
-            let (map, id, src) = match load(&path) {
-                Ok(x) => x,
-                Err(c) => return c,
-            };
-            let checked = check_source(id, &src);
-            let locations = locations_single(&checked, &map);
-            let diags = checked.diagnostics.clone();
-            let program = synth_single_program(&checked);
-            (diags, program, locations, map)
+    let (diags, program, locations, map): WhyInputs = if std::path::Path::new(&path).is_dir() {
+        let ws = resolve_workspace(&path);
+        let program = check_workspace(&ws);
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        diags.extend(program.diagnostics.iter().cloned());
+        let locations = locations_workspace(&ws);
+        (diags, program, locations, ws.source_map)
+    } else {
+        let (map, id, src) = match load(&path) {
+            Ok(x) => x,
+            Err(c) => return c,
         };
+        let checked = check_source(id, &src);
+        let locations = locations_single(&checked, &map);
+        let diags = checked.diagnostics.clone();
+        let program = synth_single_program(&checked);
+        (diags, program, locations, map)
+    };
 
     if errors(&diags) > 0 {
         print_diagnostics("why", &diags, &map, None, opts.json);
@@ -6065,15 +5974,9 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
     }
 
     // Start from an EXPORT that performs the effect (the plugin's real entry points).
-    let exports: Vec<String> = dpx
-        .manifest
-        .get("exports")
-        .and_then(|v| v.as_object())
-        .map(|o| o.keys().cloned().collect())
-        .unwrap_or_default();
-    let start = exports
-        .iter()
-        .find(|ex| dir.facts.get(*ex).is_some_and(|f| f.effects.iter().any(|e| e.name() == effect_name)));
+    let exports: Vec<String> =
+        dpx.manifest.get("exports").and_then(|v| v.as_object()).map(|o| o.keys().cloned().collect()).unwrap_or_default();
+    let start = exports.iter().find(|ex| dir.facts.get(*ex).is_some_and(|f| f.effects.iter().any(|e| e.name() == effect_name)));
     let Some(start) = start else {
         if opts.json {
             print_success_envelope(
@@ -6101,11 +6004,7 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
 /// Follow a Verified plugin's real call chain over its DIR facts from `start` to the primitive op:
 /// at each step, descend into a callee that also performs the effect; when none does, the current
 /// function is the origin (it performs the primitive itself). Cycle-safe via a visited set.
-fn plugin_why_chain(
-    facts: &std::collections::BTreeMap<String, delulu_check::FnFacts>,
-    start: &str,
-    effect: &str,
-) -> Vec<String> {
+fn plugin_why_chain(facts: &std::collections::BTreeMap<String, delulu_check::FnFacts>, start: &str, effect: &str) -> Vec<String> {
     let mut chain = vec![start.to_string()];
     let mut visited: std::collections::HashSet<String> = std::iter::once(start.to_string()).collect();
     let mut current = start.to_string();
@@ -6140,7 +6039,10 @@ fn locations_workspace(ws: &Workspace) -> HashMap<String, (String, u32)> {
         for item in &wm.unit.module.items {
             if let Item::Fn(f) = item {
                 let (line, _col) = ws.source_map.position(f.name.span.file, f.name.span.start);
-                out.insert(format!("{}::{}", wm.unit.name, f.name.name), (ws.source_map.name(f.name.span.file).to_string(), line));
+                out.insert(
+                    format!("{}::{}", wm.unit.name, f.name.name),
+                    (ws.source_map.name(f.name.span.file).to_string(), line),
+                );
             }
         }
     }
@@ -6231,9 +6133,7 @@ pub(crate) fn wasm_fault_code(msg: &str) -> &'static str {
     // reports the SAME code as the interpreter for the same fault (parity, invariant 15; C20). The
     // DL07xx/DL13xx/DL14xx entries are host-side capability/custody denials whose reason strings
     // already carry the code.
-    for code in [
-        "DL0703", "DL0901", "DL0902", "DL0903", "DL0905", "DL1306", "DL1401", "DL1402", "DL1403",
-    ] {
+    for code in ["DL0703", "DL0901", "DL0902", "DL0903", "DL0905", "DL1306", "DL1401", "DL1402", "DL1403"] {
         if msg.contains(code) {
             // The registry stores codes as &'static str; return the matching literal.
             return match code {
@@ -6286,34 +6186,37 @@ pub(crate) fn mint_device_nodes(
         nodes.insert(env.device.clone(), child.as_str().to_string());
     }
     let ids: Vec<String> = nodes.values().cloned().collect();
-    Ok((Box::new(move |device: &str| {
-        // A device with no node of its own is not a device this run may command. Unknown is dead,
-        // like every other unanswerable case.
-        let Some(node) = nodes.get(device) else {
-            return AuthorityState::Dead(format!("`{device}` has no grant node in this run"));
-        };
-        let req = crate::broker_ipc::ReqBody::NodeState { node: node.clone() };
-        // DEADMAN-1: bound the probe so a hung/slow broker can NEVER stall the dead-man watchdog. A
-        // broker that does not answer within 1 s surfaces as `Err` below → `AuthorityState::Dead` →
-        // the device parks (fail closed). On Unix the unbounded `request` would otherwise block the
-        // watchdog forever against a broker hung by IPC-1, disabling the heartbeat dead-man.
-        match crate::brokerd::request_timed(&dir, req, std::time::Duration::from_secs(1)) {
-            Ok(crate::broker_ipc::Response::NodeState { state, by_seq, .. }) => {
-                if state == "live" {
-                    AuthorityState::Live
-                } else {
-                    AuthorityState::Dead(match by_seq {
-                        Some(seq) => format!("grant node `{node}` is {state} (by audit seq {seq})"),
-                        None => format!("grant node `{node}` is {state}"),
-                    })
+    Ok((
+        Box::new(move |device: &str| {
+            // A device with no node of its own is not a device this run may command. Unknown is dead,
+            // like every other unanswerable case.
+            let Some(node) = nodes.get(device) else {
+                return AuthorityState::Dead(format!("`{device}` has no grant node in this run"));
+            };
+            let req = crate::broker_ipc::ReqBody::NodeState { node: node.clone() };
+            // DEADMAN-1: bound the probe so a hung/slow broker can NEVER stall the dead-man watchdog. A
+            // broker that does not answer within 1 s surfaces as `Err` below → `AuthorityState::Dead` →
+            // the device parks (fail closed). On Unix the unbounded `request` would otherwise block the
+            // watchdog forever against a broker hung by IPC-1, disabling the heartbeat dead-man.
+            match crate::brokerd::request_timed(&dir, req, std::time::Duration::from_secs(1)) {
+                Ok(crate::broker_ipc::Response::NodeState { state, by_seq, .. }) => {
+                    if state == "live" {
+                        AuthorityState::Live
+                    } else {
+                        AuthorityState::Dead(match by_seq {
+                            Some(seq) => format!("grant node `{node}` is {state} (by audit seq {seq})"),
+                            None => format!("grant node `{node}` is {state}"),
+                        })
+                    }
                 }
+                Ok(other) => AuthorityState::Dead(format!(
+                    "the broker answered the liveness of `{node}` with {other:?}, which is not an answer"
+                )),
+                Err(e) => AuthorityState::Dead(format!("the broker did not answer for `{node}`: {e}")),
             }
-            Ok(other) => AuthorityState::Dead(format!(
-                "the broker answered the liveness of `{node}` with {other:?}, which is not an answer"
-            )),
-            Err(e) => AuthorityState::Dead(format!("the broker did not answer for `{node}`: {e}")),
-        }
-    }), ids))
+        }),
+        ids,
+    ))
 }
 
 /// Revoke this run's device nodes as it exits (10g). Best-effort and silent: the run is over and
@@ -6351,8 +6254,7 @@ pub(crate) fn revoke_device_nodes(state_dir: &std::path::Path, ids: &[String]) {
 /// Dimensions are emitted in sorted order so the string is byte-canonical regardless of the order
 /// the human wrote them at the prompt.
 fn device_grant_string(env: &delulu_runtime::value::ActuatorEnvelope) -> String {
-    let mut dims: Vec<(&str, f64, f64)> =
-        env.dims.iter().map(|(d, lo, hi)| (d.as_str(), *lo, *hi)).collect();
+    let mut dims: Vec<(&str, f64, f64)> = env.dims.iter().map(|(d, lo, hi)| (d.as_str(), *lo, *hi)).collect();
     dims.sort_by(|a, b| a.0.cmp(b.0));
     let mut parts: Vec<String> = dims.iter().map(|(d, lo, hi)| format!("{d}={lo}..{hi}")).collect();
     if let Some(hz) = env.rate_hz {
@@ -6488,11 +6390,7 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // the actuator is then absent, so `root.actuator(…)` refuses at the mint (DL0703) before any
         // command is issued. A device this side cannot read the bounds of is a device it must not
         // drive.
-        actuators: info
-            .device
-            .iter()
-            .filter_map(|s| delulu_runtime::value::ActuatorEnvelope::parse(s).ok())
-            .collect(),
+        actuators: info.device.iter().filter_map(|s| delulu_runtime::value::ActuatorEnvelope::parse(s).ok()).collect(),
         // Sensors are NOT covered by F1 and the distinction is real, not an oversight: a sensor read
         // is `Read` under a sensor scope (spec §5.1), and `Scopes` has no sensor dimension. A lease
         // still confers no sensor, and `--lease` still refuses a local `--grant sensor=` by name.
@@ -6508,7 +6406,10 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
 /// P9-04 (d), D-V2-133: a node's `secret_to` pairs as the runtime's per-secret audiences — each pair split at its first
 /// `@` (a secret's name holds none) and its origin read by the egress client's own parser. Dropped, never guessed: a pair
 /// whose name `secrets` lacks, or whose origin does not parse — that origin is then outside the audience.
-pub(crate) fn secret_audiences_of(secrets: &[String], pairs: &[String]) -> HashMap<String, Vec<delulu_runtime::egress::Audience>> {
+pub(crate) fn secret_audiences_of(
+    secrets: &[String],
+    pairs: &[String],
+) -> HashMap<String, Vec<delulu_runtime::egress::Audience>> {
     let mut out: HashMap<String, Vec<delulu_runtime::egress::Audience>> = HashMap::new();
     for pair in pairs {
         let Some((name, member)) = pair.split_once('@') else { continue };
@@ -6658,10 +6559,7 @@ fn parse_ttl_millis(s: &str) -> Option<i64> {
 /// Wall-clock "now" in epoch millis — the CLI side of an absolute TTL deadline (the broker's own
 /// clock does the enforcement; spec §4.3).
 fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 /// One daemon round-trip for a `grants` verb. Fail closed (invariant 27): an unreachable daemon
@@ -6817,7 +6715,10 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
-                print_success_envelope("grants", json!({ "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") }));
+                print_success_envelope(
+                    "grants",
+                    json!({ "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") }),
+                );
             } else {
                 // RW 4.42: every field the delegating party chose is shown escaped on its line.
                 use delulu_diag::terminal_line;
@@ -6854,11 +6755,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
             };
             // The CLI revokes AS the named node (self-or-descendant is always satisfied by
             // caller == target, spec §3.2); transitivity kills the whole subtree.
-            let resp = match grants_rpc(
-                &state_dir,
-                crate::broker_ipc::ReqBody::Revoke { caller: id.clone(), target: id },
-                json,
-            ) {
+            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::Revoke { caller: id.clone(), target: id }, json) {
                 Ok(r) => r,
                 Err(c) => return c,
             };
@@ -6965,7 +6862,9 @@ fn read_grant_lines(f: &str) -> Result<Vec<String>, i32> {
         return Err(2);
     }
     match std::fs::read_to_string(f) {
-        Ok(text) => Ok(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect()),
+        Ok(text) => {
+            Ok(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect())
+        }
         Err(e) => {
             eprintln!("error: {}", unreadable(&f, &e));
             Err(2)
@@ -7087,7 +6986,9 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         }
     };
     if report["command"] != "run" {
-        eprintln!("error: `{report_f}` is not a run report — its `command` is not `run` (`delulu run … --report-out FILE` writes one)");
+        eprintln!(
+            "error: `{report_f}` is not a run report — its `command` is not `run` (`delulu run … --report-out FILE` writes one)"
+        );
         return 2;
     }
     // Every answer, a proposal or none, has one shape: what was refused, where, and what is proposed or why nothing is —
@@ -7142,7 +7043,11 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         } else {
             println!("no proposal: {}", delulu_diag::terminal_line(reason));
         }
-        if proposes && !matches!(filed, Filing::NotFiled(_)) { 0 } else { 1 }
+        if proposes && !matches!(filed, Filing::NotFiled(_)) {
+            0
+        } else {
+            1
+        }
     };
     let d = &report["diagnostics"][0];
     let Some(code) = d["code"].as_str() else {
@@ -7159,13 +7064,21 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         );
     }
     let span = &d["spans"][0];
-    let (Some(file), Some(start), Some(end)) = (span["file"].as_str(), span["start"]["byte"].as_u64(), span["end"]["byte"].as_u64())
+    let (Some(file), Some(start), Some(end)) =
+        (span["file"].as_str(), span["start"]["byte"].as_u64(), span["end"]["byte"].as_u64())
     else {
-        return answer(refusal(Json::Null), None, None, &[], "the report does not place the refusal at a call, so no call's requirement can be read");
+        return answer(
+            refusal(Json::Null),
+            None,
+            None,
+            &[],
+            "the report does not place the refusal at a call, so no call's requirement can be read",
+        );
     };
     // A package's run names its calls in the flattened text it executed (`run_cmd::flattened_name`): the call is found, and its
     // requirement read, there (routine run 21).
-    let package = file.strip_suffix(" (flattened for execution)").filter(|d| std::path::Path::new(d).join("delulu.toml").is_file());
+    let package =
+        file.strip_suffix(" (flattened for execution)").filter(|d| std::path::Path::new(d).join("delulu.toml").is_file());
     let (map, id, src) = match package {
         Some(dir) => match crate::run_cmd::flattened_package(dir) {
             Some(flat) => {
@@ -7174,7 +7087,13 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
                 (map, id, flat)
             }
             None => {
-                return answer(refusal(Json::Null), Some(file), None, &[], "the package does not check, or would not run, as it is now")
+                return answer(
+                    refusal(Json::Null),
+                    Some(file),
+                    None,
+                    &[],
+                    "the package does not check, or would not run, as it is now",
+                )
             }
         },
         None => match load(file) {
@@ -7183,7 +7102,8 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
         },
     };
     // The report is input: its offsets are checked against the program as it is now before anything reads them.
-    let changed = "the program changed since the run (or the report was edited): no capability-minting call is at the refused call's place";
+    let changed =
+        "the program changed since the run (or the report was edited): no capability-minting call is at the refused call's place";
     let (start, end) = (start as usize, end as usize);
     if start > end || !src.is_char_boundary(start) || !src.is_char_boundary(end) {
         return answer(refusal(Json::Null), Some(file), None, &[], changed);
@@ -7192,13 +7112,18 @@ fn cmd_grants_propose(args: &[String], state_dir: &std::path::Path, json: bool) 
     let at = json!({ "line": line, "column": column });
     let checked = check_source(id, &src);
     if errors(&checked.diagnostics) > 0 {
-        return answer(refusal(at), Some(file), None, &[], "the program does not check as it is now, so its requirements cannot be read");
+        return answer(
+            refusal(at),
+            Some(file),
+            None,
+            &[],
+            "the program does not check as it is now, so its requirements cannot be read",
+        );
     }
     // A package's flattened text is the program the run executed; a proposal filters the requirements by the call's own kind
     // and literals, so a manifest's scopes — lines no call of the source writes — never change it.
     let (_, opts) = parse_opts(&[]);
-    let authority =
-        source_authority_report(file, &map, &checked, manifest_scopes(file), &manifest_python_allowlist(file), &opts);
+    let authority = source_authority_report(file, &map, &checked, manifest_scopes(file), &manifest_python_allowlist(file), &opts);
     let walk = requested_scopes(&[&checked.module]);
     let (reqs, _) = requirements(&authority, &walk);
     let call = Some(src[start..end].to_string());
@@ -7239,8 +7164,14 @@ fn file_proposal(
         let mut one = Grants::default();
         let carried = one.add(line).is_ok() && {
             let s = authority_spec_from_grants(&one, "");
-            !(s.effects.is_empty() && s.fs_read.is_empty() && s.fs_write.is_empty() && s.net.is_empty()
-                && s.secrets.is_empty() && s.foreign_c.is_empty() && s.foreign_python.is_empty() && s.device.is_empty())
+            !(s.effects.is_empty()
+                && s.fs_read.is_empty()
+                && s.fs_write.is_empty()
+                && s.net.is_empty()
+                && s.secrets.is_empty()
+                && s.foreign_c.is_empty()
+                && s.foreign_python.is_empty()
+                && s.device.is_empty())
         };
         if !carried {
             return Ok(Filing::NotFiled(format!(
@@ -7307,9 +7238,20 @@ fn cmd_grants_proposals(args: &[String], state_dir: &std::path::Path, json: bool
         use delulu_diag::terminal_line;
         for p in &proposals {
             let asks = crate::brokerd::spec_to_authority(&p.asks).render_compact();
-            println!("{}  {}  for `{}`  asks {}", terminal_line(&p.id), terminal_line(&p.status), terminal_line(&p.node), terminal_line(&asks));
+            println!(
+                "{}  {}  for `{}`  asks {}",
+                terminal_line(&p.id),
+                terminal_line(&p.status),
+                terminal_line(&p.node),
+                terminal_line(&asks)
+            );
             if !p.call.is_empty() {
-                println!("    the proposer says: {} at {} ({})", terminal_line(&p.call), terminal_line(&p.at), terminal_line(&p.code));
+                println!(
+                    "    the proposer says: {} at {} ({})",
+                    terminal_line(&p.call),
+                    terminal_line(&p.at),
+                    terminal_line(&p.code)
+                );
             }
             if let Some(m) = &p.mints {
                 let mints = crate::brokerd::spec_to_authority(m).render_compact();
@@ -7460,7 +7402,8 @@ fn proposal_id(args: &[String], value_flags: &[&str]) -> Option<String> {
 /// under the approver's own node, of the proposer's authority joined with what it asked — `⊑` and the Guard's mint gate
 /// bound it as they bound `grants delegate`. Prints the new node and a lease token: the program is re-run under it.
 fn cmd_grants_approve(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
-    if let Some(code) = refuse_unlisted_flags("grants approve", args, &["--json", "--state-dir", "--parent", "--ttl", "--owner"]) {
+    if let Some(code) = refuse_unlisted_flags("grants approve", args, &["--json", "--state-dir", "--parent", "--ttl", "--owner"])
+    {
         return code;
     }
     let value_flags = ["--state-dir", "--parent", "--ttl", "--owner"];
@@ -7973,8 +7916,7 @@ fn cmd_grants_renew(args: &[String], state_dir: &std::path::Path, json: bool) ->
         eprintln!("error: `grants renew` needs a receipt file");
         return 2;
     };
-    let anchors_path =
-        anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
+    let anchors_path = anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
     if let Ok(text) = std::fs::read_to_string(&anchors_path) {
         for line in text.lines() {
             let line = line.split('#').next().unwrap_or("").trim();
@@ -8055,8 +7997,7 @@ fn cmd_grants_adopt(args: &[String], state_dir: &std::path::Path, json: bool) ->
     // Anchors may also live in a file, one hex key per line, `#` comments allowed. The default is
     // `<state-dir>/anchors`; an absent file is NOT an error but an EMPTY anchor set, which trusts
     // nothing — the fail-closed reading.
-    let anchors_path =
-        anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
+    let anchors_path = anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
     if let Ok(text) = std::fs::read_to_string(&anchors_path) {
         for line in text.lines() {
             let line = line.split('#').next().unwrap_or("").trim();
@@ -8212,10 +8153,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // baffling). Validate up front.
     for e in &effects {
         if Effect::core_from_name(e).is_none() {
-            eprintln!(
-                "error: unknown effect `{e}` (core effects: {})",
-                delulu_check::check::CORE_EFFECT_NAMES.join(", ")
-            );
+            eprintln!("error: unknown effect `{e}` (core effects: {})", delulu_check::check::CORE_EFFECT_NAMES.join(", "));
             return 2;
         }
     }
@@ -8508,10 +8446,7 @@ fn cmd_guard_bypass(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 // The banner is mandatory on every enable (addendum §2.6) — stderr, so `--json`
                 // stdout stays machine-clean (the dcg robot-mode convention, §2.7). Painted in the
                 // strongest error style (Palette `guard_banner` role) when color is on.
-                eprintln!(
-                    "{}",
-                    palette_stderr().paint(Role::GuardBanner, delulu_diag::GUARD_BYPASS_BANNER)
-                );
+                eprintln!("{}", palette_stderr().paint(Role::GuardBanner, delulu_diag::GUARD_BYPASS_BANNER));
             }
             if json {
                 print_success_envelope("guard", json!({ "subcommand": "bypass", "bypass": on }));
@@ -8535,19 +8470,13 @@ pub(crate) fn lease_guard_status_line(bypass: bool, poisoned: bool, rules: &[cra
     }
     // Each rule with its tier: a `sealed` rule listed under "guarded" told the holder a request
     // could lift it, which is exactly what sealed means it cannot (found 2026-09-27).
-    let guarded: Vec<String> = rules
-        .iter()
-        .filter(|r| r.tier != "warn")
-        .map(|r| format!("{}:{} ({})", r.class, r.pattern, r.tier))
-        .collect();
+    let guarded: Vec<String> =
+        rules.iter().filter(|r| r.tier != "warn").map(|r| format!("{}:{} ({})", r.class, r.pattern, r.tier)).collect();
     let poisoned = if poisoned { " [policy store unreadable — fail closed]" } else { "" };
     if guarded.is_empty() {
         format!("guard: on — no guarded/sealed classes{poisoned}")
     } else {
-        format!(
-            "guard: on — guarded: {}{poisoned} — to request access: delulu guard request",
-            guarded.join(", ")
-        )
+        format!("guard: on — guarded: {}{poisoned} — to request access: delulu guard request", guarded.join(", "))
     }
 }
 
@@ -8801,10 +8730,8 @@ fn print_guard_status(resp: &crate::broker_ipc::Response, subcommand: &str, json
         return 2;
     };
     if json {
-        let rules_json: Vec<Json> = rules
-            .iter()
-            .map(|r| json!({ "class": r.class, "pattern": r.pattern, "tier": r.tier }))
-            .collect();
+        let rules_json: Vec<Json> =
+            rules.iter().map(|r| json!({ "class": r.class, "pattern": r.pattern, "tier": r.tier })).collect();
         print_success_envelope(
             "guard",
             json!({
@@ -8876,17 +8803,15 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             let pattern = pattern.as_str();
             match guard_rpc(
                 state_dir,
-                ReqBody::GuardPolicySet {
-                    owner,
-                    class: class.to_string(),
-                    pattern: pattern.to_string(),
-                    tier: tier.to_string(),
-                },
+                ReqBody::GuardPolicySet { owner, class: class.to_string(), pattern: pattern.to_string(), tier: tier.to_string() },
                 json,
             ) {
                 Ok(_) => {
                     if json {
-                        print_success_envelope("guard", json!({ "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                        print_success_envelope(
+                            "guard",
+                            json!({ "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }),
+                        );
                     } else {
                         ok_line!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
                         // The honest bound, stated at the point of a policy edit (criterion 11).
@@ -8916,7 +8841,10 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             ) {
                 Ok(_) => {
                     if json {
-                        print_success_envelope("guard", json!({ "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                        print_success_envelope(
+                            "guard",
+                            json!({ "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }),
+                        );
                     } else {
                         ok_line!("ok: guard policy unset `{class}:{pattern}`");
                         eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
@@ -8932,7 +8860,6 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
         }
     }
 }
-
 
 /// The default simulator seed. Named rather than inlined so a run without `--seed` is still a
 /// reproducible run — an unseeded simulator that quietly picked a fresh seed each time would make
@@ -9021,10 +8948,7 @@ pub(crate) fn resolve_device_profile(file: &str, opts: &Opts) -> Result<delulu_r
         print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
         return Err(1);
     }
-    eprintln!(
-        "device sign-off: OK — `{file}` matches the artifact approved under `{}` ({})",
-        approval.profile, approval.hash
-    );
+    eprintln!("device sign-off: OK — `{file}` matches the artifact approved under `{}` ({})", approval.profile, approval.hash);
     // Gate passed. What may run now depends on whether a driver was actually supplied.
     //
     // RFC 0001 dish 3 attached the FIRST real adapter: an operator-supplied subprocess speaking a
@@ -9074,13 +8998,9 @@ pub(crate) fn write_signoff(file: &str, path: &str, profile: &delulu_runtime::Pr
         }
     };
     let bytes = std::fs::read(file).map_err(|e| format!("cannot read `{file}` to sign it off: {e}"))?;
-    let approval = delulu_runtime::Approval {
-        artifact: file.to_string(),
-        hash: delulu_broker::content_hash(&bytes),
-        profile: profile_name,
-    };
-    std::fs::write(path, approval.to_json())
-        .map_err(|e| format!("cannot write the sign-off record `{path}`: {e}"))?;
+    let approval =
+        delulu_runtime::Approval { artifact: file.to_string(), hash: delulu_broker::content_hash(&bytes), profile: profile_name };
+    std::fs::write(path, approval.to_json()).map_err(|e| format!("cannot write the sign-off record `{path}`: {e}"))?;
     eprintln!("device sign-off: wrote `{path}` for {} ({})", approval.artifact, approval.hash);
     Ok(())
 }
@@ -9134,9 +9054,8 @@ pub(crate) fn foreign_grant_preflight(
     // ----- C libs (spec §4.1) ----------------------------------------------
     let bound: BTreeSet<&String> = checked.result.foreign_binds.values().collect();
     let blocks = foreign_blocks_of(&checked.module);
-    let symbols_of = |lib: &str| -> Vec<String> {
-        blocks.iter().find(|b| b.lib == lib).map(|b| b.symbols.clone()).unwrap_or_default()
-    };
+    let symbols_of =
+        |lib: &str| -> Vec<String> { blocks.iter().find(|b| b.lib == lib).map(|b| b.symbols.clone()).unwrap_or_default() };
     for lib in bound {
         // Manifest ceiling: a bound lib must be listed in `[authority] foreign.c` when a manifest
         // exists. Exceeding it is the program reaching for authority it never declared (DL1303).
@@ -9174,7 +9093,8 @@ pub(crate) fn foreign_grant_preflight(
             if m.foreign_python.is_empty() {
                 diags.push(Diagnostic::error(
                     "DL1303",
-                    "program uses embedded Python not permitted by the authority manifest (`[authority] foreign.python`)".to_string(),
+                    "program uses embedded Python not permitted by the authority manifest (`[authority] foreign.python`)"
+                        .to_string(),
                 ));
             } else {
                 // Granted patterns must not exceed the manifest's declared allowlist (attenuation).
@@ -9286,13 +9206,7 @@ struct PythonUsage {
 }
 
 fn python_usage(module: &delulu_syntax::ast::Module) -> Option<PythonUsage> {
-    let mut w = PyWalk {
-        python_call: None,
-        imports: Vec::new(),
-        compute_call: None,
-        devices: Vec::new(),
-        kernels: Vec::new(),
-    };
+    let mut w = PyWalk { python_call: None, imports: Vec::new(), compute_call: None, devices: Vec::new(), kernels: Vec::new() };
     for item in &module.items {
         match item {
             Item::Fn(f) => w.walk_block(&f.body),
@@ -9312,13 +9226,7 @@ struct ComputeUsage {
 }
 
 fn compute_usage(module: &delulu_syntax::ast::Module) -> Option<ComputeUsage> {
-    let mut w = PyWalk {
-        python_call: None,
-        imports: Vec::new(),
-        compute_call: None,
-        devices: Vec::new(),
-        kernels: Vec::new(),
-    };
+    let mut w = PyWalk { python_call: None, imports: Vec::new(), compute_call: None, devices: Vec::new(), kernels: Vec::new() };
     for item in &module.items {
         match item {
             Item::Fn(f) => w.walk_block(&f.body),
@@ -9465,19 +9373,13 @@ impl PyWalk {
 /// "reads the wrong store" class as campaign finding C75 (the `--state-dir` typo note below). An
 /// explicit `--dir` still overrides both (the caller tries `--dir` first).
 fn default_audit_dir() -> Option<std::path::PathBuf> {
-    audit_dir_from(
-        std::env::var_os("DELULU_STATE_DIR"),
-        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")),
-    )
+    audit_dir_from(std::env::var_os("DELULU_STATE_DIR"), std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")))
 }
 
 /// The pure resolution behind [`default_audit_dir`] (split out so it is testable without mutating
 /// process-global env, which races under the parallel test harness): a set `DELULU_STATE_DIR` wins
 /// with `<state>/audit`, else `<home>/.delulu/audit`, else `None` when neither is known.
-fn audit_dir_from(
-    state_dir: Option<std::ffi::OsString>,
-    home: Option<std::ffi::OsString>,
-) -> Option<std::path::PathBuf> {
+fn audit_dir_from(state_dir: Option<std::ffi::OsString>, home: Option<std::ffi::OsString>) -> Option<std::path::PathBuf> {
     if let Some(state) = state_dir {
         return Some(std::path::PathBuf::from(state).join("audit"));
     }
@@ -9598,9 +9500,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                     i += 1;
                 }
             }
-            s if s.starts_with("--expect-start=") => {
-                expect_start = Some(s["--expect-start=".len()..].to_string())
-            }
+            s if s.starts_with("--expect-start=") => expect_start = Some(s["--expect-start=".len()..].to_string()),
             "--node" => {
                 if i + 1 < args.len() {
                     filter.node = Some(args[i + 1].clone());
@@ -9683,11 +9583,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
 
     match sub {
         "tail" | "query" => {
-            let result = if sub == "tail" {
-                delulu_broker::tail(&dir, tail_n)
-            } else {
-                delulu_broker::query(&dir, &filter)
-            };
+            let result = if sub == "tail" { delulu_broker::tail(&dir, tail_n) } else { delulu_broker::query(&dir, &filter) };
             let records = match result {
                 Ok(r) => r,
                 Err(e) => {
@@ -9803,12 +9699,11 @@ fn cmd_audit(rest: &[String]) -> i32 {
             // not enforcement (spec §7, playbook trap 6): this reports and records, and nothing
             // here may ever gate a vehicle's ability to operate. Exit 1 says "look at this", not
             // "authority withdrawn".
-            let (summary, problem) = match delulu_broker::audit::parse_bundle(&text)
-                .and_then(|b| b.verify(expect_start.as_deref()))
-            {
-                Ok(s) => (Some(s), None),
-                Err(e) => (None, Some(e.to_string())),
-            };
+            let (summary, problem) =
+                match delulu_broker::audit::parse_bundle(&text).and_then(|b| b.verify(expect_start.as_deref())) {
+                    Ok(s) => (Some(s), None),
+                    Err(e) => (None, Some(e.to_string())),
+                };
             let mut log = match delulu_broker::AuditLog::open(&dir) {
                 Ok(l) => l,
                 Err(e) => {
@@ -10193,8 +10088,7 @@ pub(crate) fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result
         let mut authority = program_authority(&program, &root, &scopes);
         // NE-14: the Atlas dropped the requested scopes exactly as the authority report did. Same
         // walk, same labelling — a map that omits what the program asks for is not a map of it.
-        let atlas_modules: Vec<&delulu_syntax::ast::Module> =
-            ws.modules.iter().map(|m| &m.unit.module).collect();
+        let atlas_modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
         stamp_grants(&mut authority, &atlas_modules);
         let modules: Vec<ModuleView> = ws
             .modules
@@ -10259,10 +10153,7 @@ pub(crate) fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result
 
 /// DL1780 — the atlas refuses to build from a program with check errors (no partial graph).
 fn atlas_refusal(n: usize) -> Diagnostic {
-    Diagnostic::error(
-        "DL1780",
-        format!("the atlas is built from checked facts — fix the {n} error(s) above first"),
-    )
+    Diagnostic::error("DL1780", format!("the atlas is built from checked facts — fix the {n} error(s) above first"))
 }
 
 /// Collect atlas flags shared by the graph + query commands.
@@ -10486,18 +10377,13 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
     0
 }
 
-
 /// Query verbs: `node <name>`, `callers <fn>`, `calls <fn>`, `why <x>`, `path <A> <B>`. Each takes
 /// an optional trailing target (file/dir/atlas.json); default is the current directory.
 fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
     let f = parse_atlas_flags(args);
     let n_query = if verb == "path" { 2 } else { 1 };
     if f.positionals.len() < n_query {
-        eprintln!(
-            "error: `atlas {verb}` needs {} argument(s){}",
-            n_query,
-            if verb == "path" { " (<A> <B>)" } else { "" }
-        );
+        eprintln!("error: `atlas {verb}` needs {} argument(s){}", n_query, if verb == "path" { " (<A> <B>)" } else { "" });
         return 2;
     }
     let target = f.positionals.get(n_query).cloned().unwrap_or_else(|| ".".to_string());
@@ -10621,11 +10507,7 @@ pub(crate) fn split_frontmatter(doc: &str) -> (&str, &str) {
 /// required fields are single-line scalars, and pulling in a YAML dependency to read two of them
 /// would be supply-chain surface for nothing.
 pub(crate) fn front_field<'a>(front: &'a str, key: &str) -> &'a str {
-    front
-        .lines()
-        .find_map(|l| l.strip_prefix(&format!("{key}:")))
-        .map(str::trim)
-        .unwrap_or("")
+    front.lines().find_map(|l| l.strip_prefix(&format!("{key}:"))).map(str::trim).unwrap_or("")
 }
 
 fn cmd_explain(rest: &[String]) -> i32 {
@@ -10786,10 +10668,7 @@ pub(crate) fn record_adapter_provenance(prov: &AdapterProvenance, explicit_dir: 
     }
     let entry = delulu_broker::AuditEntry {
         seq: 0,
-        ts: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0),
+        ts: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0),
         actor_node: None,
         action: "adapter.provenance".to_string(),
         target: Some(prov.artifact.clone()),
@@ -10797,8 +10676,7 @@ pub(crate) fn record_adapter_provenance(prov: &AdapterProvenance, explicit_dir: 
         span: None,
         decision: prov.decision.to_string(),
     };
-    let written = delulu_broker::AuditLog::open(&dir)
-        .and_then(|mut log| delulu_broker::AuditSink::append(&mut log, entry));
+    let written = delulu_broker::AuditLog::open(&dir).and_then(|mut log| delulu_broker::AuditSink::append(&mut log, entry));
     match written {
         Ok(rec) => {
             eprintln!("adapter: provenance recorded in {} (seq {}, {})", dir.display(), rec.seq, rec.hash);
@@ -11115,11 +10993,10 @@ pub(crate) fn load_dpx_driver(file: &str, pin: &str, record: Option<&str>) -> Re
         refuse(code, message);
         return Err(1);
     }
-    let proved = delulu_runtime::plugin::step1_container_api(&art, delulu_runtime::PLUGIN_API_SUPPORTED)
-        .and_then(|class| {
-            delulu_runtime::plugin::step2_class(class, delulu_runtime::PluginClass::Verified)?;
-            delulu_runtime::step5_verified(&art)
-        });
+    let proved = delulu_runtime::plugin::step1_container_api(&art, delulu_runtime::PLUGIN_API_SUPPORTED).and_then(|class| {
+        delulu_runtime::plugin::step2_class(class, delulu_runtime::PluginClass::Verified)?;
+        delulu_runtime::step5_verified(&art)
+    });
     match proved {
         Ok(v) => {
             record_adapter_provenance(&rec("verified-pinned", Some(pin.to_ascii_lowercase())), record)?;
@@ -11151,11 +11028,7 @@ mod suggestion_tests {
             ("pluging", "plugin"),
             ("expalin", "explain"),
         ] {
-            assert_eq!(
-                nearest_subcommand(typed),
-                Some(want),
-                "`{typed}` should suggest `{want}`"
-            );
+            assert_eq!(nearest_subcommand(typed), Some(want), "`{typed}` should suggest `{want}`");
         }
     }
 
@@ -11321,9 +11194,17 @@ mod secret_to_tests {
         assert_eq!(auth.scopes.secret_to.len(), 2);
         assert_eq!(crate::brokerd::authority_spec_of(&auth).secret_to, spec.secret_to, "authority -> wire keeps them");
         // A lease's node gives its run those audiences (beside broker-handle names, invariant 23).
-        let info = crate::broker_ipc::NodeInfo { secrets: spec.secrets.clone(), secret_to: spec.secret_to.clone(), ..Default::default() };
+        let info = crate::broker_ipc::NodeInfo {
+            secrets: spec.secrets.clone(),
+            secret_to: spec.secret_to.clone(),
+            ..Default::default()
+        };
         let leased = grants_from_lease(&info, HashMap::new());
-        assert_eq!(leased.secret_audiences.get("K"), g.secret_audiences.get("K"), "a leased run's grants carry the node's audience");
+        assert_eq!(
+            leased.secret_audiences.get("K"),
+            g.secret_audiences.get("K"),
+            "a leased run's grants carry the node's audience"
+        );
         assert_eq!(leased.secrets.get("K").map(String::as_str), Some(""), "a name, never a value");
     }
 }

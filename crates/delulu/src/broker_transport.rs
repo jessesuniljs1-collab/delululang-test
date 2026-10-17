@@ -43,23 +43,21 @@ mod imp {
     use std::ptr;
 
     use windows_sys::Win32::Foundation::{
-        CloseHandle, GetLastError, LocalFree, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY,
-        ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+        CloseHandle, GetLastError, LocalFree, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, GENERIC_READ,
+        GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
     };
     use windows_sys::Win32::Security::Authorization::{
         ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
     use windows_sys::Win32::Security::{
-        CopySid, EqualSid, GetLengthSid, GetTokenInformation, TokenUser, PSID, SECURITY_ATTRIBUTES,
-        TOKEN_QUERY, TOKEN_USER,
+        CopySid, EqualSid, GetLengthSid, GetTokenInformation, TokenUser, PSID, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FlushFileBuffers, ReadFile, WriteFile, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
     };
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
-        PeekNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
-        PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId, PeekNamedPipe, WaitNamedPipeW,
+        PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -158,12 +156,7 @@ mod imp {
         let wsddl = to_wide(&sddl);
         let mut sd: *mut core::ffi::c_void = ptr::null_mut();
         let ok = unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                wsddl.as_ptr(),
-                SDDL_REVISION_1,
-                &mut sd,
-                ptr::null_mut(),
-            )
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(wsddl.as_ptr(), SDDL_REVISION_1, &mut sd, ptr::null_mut())
         };
         if ok == 0 {
             return Err(last_err("ConvertStringSecurityDescriptorToSecurityDescriptorW"));
@@ -268,9 +261,7 @@ mod imp {
             let client_sid = unsafe { process_user_sid(proc) };
             unsafe { CloseHandle(proc) };
             let client_sid = client_sid?;
-            let equal = unsafe {
-                EqualSid(self.server_sid.as_ptr() as PSID, client_sid.as_ptr() as PSID)
-            };
+            let equal = unsafe { EqualSid(self.server_sid.as_ptr() as PSID, client_sid.as_ptr() as PSID) };
             Ok(equal != 0)
         }
     }
@@ -366,9 +357,8 @@ mod imp {
                 let deadline = std::time::Instant::now() + timeout;
                 loop {
                     let mut avail: u32 = 0;
-                    let ok = unsafe {
-                        PeekNamedPipe(self.handle, ptr::null_mut(), 0, ptr::null_mut(), &mut avail, ptr::null_mut())
-                    };
+                    let ok =
+                        unsafe { PeekNamedPipe(self.handle, ptr::null_mut(), 0, ptr::null_mut(), &mut avail, ptr::null_mut()) };
                     if ok == 0 {
                         let e = unsafe { GetLastError() };
                         return Err(io::Error::new(io::ErrorKind::UnexpectedEof, format!("PeekNamedPipe: win32 error {e}")));
@@ -406,7 +396,10 @@ mod imp {
                     match self.outbound()? {
                         (free, _) if free > 0 || buf.is_empty() => break free,
                         _ if std::time::Instant::now() >= deadline => {
-                            return Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe write timed out: the reader took nothing"))
+                            return Err(io::Error::new(
+                                io::ErrorKind::TimedOut,
+                                "broker pipe write timed out: the reader took nothing",
+                            ))
                         }
                         _ => std::thread::sleep(std::time::Duration::from_millis(2)),
                     }
@@ -428,7 +421,10 @@ mod imp {
                 let deadline = std::time::Instant::now() + timeout;
                 while !self.outbound()?.1 {
                     if std::time::Instant::now() >= deadline {
-                        return Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe flush timed out: the reader did not take its answer"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "broker pipe flush timed out: the reader did not take its answer",
+                        ));
                     }
                     std::thread::sleep(std::time::Duration::from_millis(2));
                 }
@@ -474,15 +470,7 @@ mod imp {
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
         loop {
             let h = unsafe {
-                CreateFileW(
-                    name_w.as_ptr(),
-                    GENERIC_READ | GENERIC_WRITE,
-                    0,
-                    ptr::null_mut(),
-                    OPEN_EXISTING,
-                    0,
-                    ptr::null_mut(),
-                )
+                CreateFileW(name_w.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, ptr::null_mut(), OPEN_EXISTING, 0, ptr::null_mut())
             };
             if h != INVALID_HANDLE_VALUE {
                 return Ok(Connection { handle: h, server: false, read_timeout: None, write_timeout: None });
@@ -665,9 +653,9 @@ mod imp {
     }
 }
 
-pub use imp::{connect, Connection, Listener};
 #[cfg(windows)]
 pub(crate) use imp::owner_only_for_this_user;
+pub use imp::{connect, Connection, Listener};
 
 /// Refuse, before anything is spawned, a state directory whose transport address this platform
 /// cannot hold.

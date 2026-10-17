@@ -27,8 +27,7 @@ fn delulu(args: &[&str]) -> Output {
 }
 
 fn skill_text() -> String {
-    std::fs::read_to_string(root().join("skills").join("delulu").join("SKILL.md"))
-        .expect("skills/delulu/SKILL.md is committed")
+    std::fs::read_to_string(root().join("skills").join("delulu").join("SKILL.md")).expect("skills/delulu/SKILL.md is committed")
 }
 
 /// The Agent Skills format, in the four rules this project depends on.
@@ -41,11 +40,7 @@ fn the_skill_is_a_valid_agent_skills_document() {
 
     // 1. `name` must equal the folder name — that is the format's rule, and a harness resolves the
     //    skill by folder.
-    let name = front
-        .lines()
-        .find_map(|l| l.strip_prefix("name:"))
-        .map(str::trim)
-        .expect("the frontmatter declares `name`");
+    let name = front.lines().find_map(|l| l.strip_prefix("name:")).map(str::trim).expect("the frontmatter declares `name`");
     assert_eq!(name, "delulu", "`name:` must equal the folder `skills/delulu/`");
 
     // 2. `description` carries the triggers. An agent decides whether to load a skill from this one
@@ -125,18 +120,14 @@ fn every_command_the_skill_teaches_exists_in_the_binary() {
         .filter(|w| !w.starts_with('-'))
         .filter(|w| !known.contains(w))
         .collect();
-    assert!(
-        missing.is_empty(),
-        "the skill teaches commands the binary does not have: {missing:?}\nthe binary has: {known:?}"
-    );
+    assert!(missing.is_empty(), "the skill teaches commands the binary does not have: {missing:?}\nthe binary has: {known:?}");
 }
 
 /// Every stable anchor the skill sends a reader to must exist in `for-agents.md`. A reference that
 /// points at a heading nobody kept is a dead end an agent cannot diagnose.
 #[test]
 fn every_anchor_the_skill_cites_exists_in_the_reference() {
-    let reference = std::fs::read_to_string(root().join("docs").join("for-agents.md"))
-        .expect("docs/for-agents.md is committed");
+    let reference = std::fs::read_to_string(root().join("docs").join("for-agents.md")).expect("docs/for-agents.md is committed");
     let text = skill_text();
     let mut cited: Vec<String> = Vec::new();
     let mut rest = text.as_str();
@@ -187,13 +178,9 @@ fn the_skill_carries_the_honesty_caveats() {
     // "holes in that guarantee" against a document where those words span two lines, and failed on a
     // skill that said exactly the right thing.
     let text: String = skill_text().split_whitespace().collect::<Vec<_>>().join(" ");
-    for must in [
-        "holes in that guarantee",
-        "under** the OS account boundary",
-        "same user",
-        "Certification is NONE",
-        "authority_widening",
-    ] {
+    for must in
+        ["holes in that guarantee", "under** the OS account boundary", "same user", "Certification is NONE", "authority_widening"]
+    {
         assert!(text.contains(must), "the skill must say `{must}` — an agent repeats what it was told");
     }
 }

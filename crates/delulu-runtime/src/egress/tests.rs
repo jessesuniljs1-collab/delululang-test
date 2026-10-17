@@ -101,7 +101,9 @@ fn only_https_is_fetched() {
 /// C86's shape, refused before it can be parsed wrongly: everything before the last `@` is userinfo.
 #[test]
 fn userinfo_is_refused_rather_than_parsed() {
-    for url in ["https://u@example.com/", "https://u:p@example.com/", "https://example.com:8080@evil.com/steal", "https://@example.com/"] {
+    for url in
+        ["https://u@example.com/", "https://u:p@example.com/", "https://example.com:8080@evil.com/steal", "https://@example.com/"]
+    {
         assert_eq!(parse_target(url), Err(Reason::Userinfo), "`{url}`");
     }
 }
@@ -215,11 +217,9 @@ fn a_public_name_is_resolved_once_pinned_and_sent_as_the_checked_host() {
 #[test]
 fn the_allowlist_keeps_its_dot_boundary() {
     let r = FakeResolver::with(&[("evilexample.com", &[PUBLIC]), ("api.example.com", &[PUBLIC]), ("example.com", &[PUBLIC])]);
-    for (url, allowed) in [
-        ("https://api.example.com/", true),
-        ("https://evilexample.com/", false),
-        ("https://example.com/", false),
-    ] {
+    for (url, allowed) in
+        [("https://api.example.com/", true), ("https://evilexample.com/", false), ("https://example.com/", false)]
+    {
         let t = FakeTransport::answering(vec![ok("x")]);
         let (rec, _) = get_with(&policy(&["*.example.com"], &[]), url, &r, &t);
         assert_eq!(rec.outcome.is_ok(), allowed, "`{url}`: {:?}", rec.outcome);
@@ -361,11 +361,18 @@ fn every_redirect_hop_is_checked_like_a_first_request() {
 fn a_path_scope_is_judged_on_every_hop() {
     let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
     let allow = ["a.example.com/v1/**", "b.example.com"];
-    let t = FakeTransport::answering(vec![redirect(302, "next"), redirect(301, "https://b.example.com/anything/../else"), ok("done")]);
+    let t = FakeTransport::answering(vec![
+        redirect(302, "next"),
+        redirect(301, "https://b.example.com/anything/../else"),
+        ok("done"),
+    ]);
     let (rec, body) = get_with(&policy(&allow, &[]), "https://a.example.com/v1/start?q=/v2", &r, &t);
     assert_eq!(body.as_deref(), Some("done"), "{:?}", rec.outcome);
     let urls: Vec<String> = t.sent.borrow().iter().map(|s| s.url.clone()).collect();
-    assert_eq!(urls, ["https://a.example.com/v1/start?q=/v2", "https://a.example.com/v1/next", "https://b.example.com/anything/../else"]);
+    assert_eq!(
+        urls,
+        ["https://a.example.com/v1/start?q=/v2", "https://a.example.com/v1/next", "https://b.example.com/anything/../else"]
+    );
     for (first, to, why) in [
         ("https://a.example.com/v2/x", None, Reason::NotAllowlisted),
         ("https://a.example.com/", None, Reason::NotAllowlisted),
@@ -570,7 +577,8 @@ fn a_secret_goes_only_to_its_audience_on_the_origins_hops() {
     let given = hs(&[("Accept", "application/json")]);
     let (rec, body) = request_with_secret(&p, "https://a.example.com/start", &given, Some(&secret), &r, &t);
     assert_eq!(body.as_deref(), Some("done"), "{:?}", rec.outcome);
-    let carried: Vec<(String, Vec<(String, String)>)> = t.sent.borrow().iter().map(|s| (s.url.clone(), s.headers.clone())).collect();
+    let carried: Vec<(String, Vec<(String, String)>)> =
+        t.sent.borrow().iter().map(|s| (s.url.clone(), s.headers.clone())).collect();
     let with = hs(&[("accept", "application/json"), ("authorization", SECRET_BYTES)]);
     assert_eq!(
         carried,
@@ -609,7 +617,11 @@ fn a_secret_outside_its_audience_is_refused_before_anything_is_resolved() {
     ];
     let allow = ["api.example.com", "evil.example.net", "*.api.example.com", PUBLIC];
     for (label, url, to, rule) in cases {
-        let r = FakeResolver::with(&[("api.example.com", &[PUBLIC]), ("evil.example.net", &[PUBLIC]), ("v2.api.example.com", &[PUBLIC])]);
+        let r = FakeResolver::with(&[
+            ("api.example.com", &[PUBLIC]),
+            ("evil.example.net", &[PUBLIC]),
+            ("v2.api.example.com", &[PUBLIC]),
+        ]);
         let t = FakeTransport::answering(vec![ok("must not arrive")]);
         let secret = SecretHeader { header: "X-Api-Key", name: "API_TOKEN", value: SECRET_BYTES, audience: &to };
         let (rec, body) = request_with_secret(&policy(&allow, &[]), url, &[], Some(&secret), &r, &t);
@@ -640,7 +652,13 @@ fn a_secrets_header_is_held_to_every_header_rule() {
     let to = aud(&["api.example.com"]);
     let cases: [(&str, &str, &str, Headers, &str); 5] = [
         ("Host", "Host", SECRET_BYTES, Vec::new(), "`Host`"),
-        ("a plain name, then the secret's in another case", "X-Api-Key", SECRET_BYTES, hs(&[("x-api-key", "1")]), "differ only in case"),
+        (
+            "a plain name, then the secret's in another case",
+            "X-Api-Key",
+            SECRET_BYTES,
+            hs(&[("x-api-key", "1")]),
+            "differ only in case",
+        ),
         ("the other way round", "x-api-key", SECRET_BYTES, hs(&[("X-Api-Key", "1")]), "differ only in case"),
         ("a line break in the bytes", "Authorization", "8f2c\r\nHost: evil.example.net", Vec::new(), "printable ASCII"),
         ("not a token", "Author ization", SECRET_BYTES, Vec::new(), "not an HTTP token"),
@@ -649,11 +667,15 @@ fn a_secrets_header_is_held_to_every_header_rule() {
         let r = FakeResolver::with(&[("api.example.com", &[PUBLIC])]);
         let t = FakeTransport::answering(vec![ok("must not arrive")]);
         let secret = SecretHeader { header, name: "API_TOKEN", value, audience: &to };
-        let (rec, _) = request_with_secret(&policy(&["api.example.com"], &[]), "https://api.example.com/x", &plain, Some(&secret), &r, &t);
+        let (rec, _) =
+            request_with_secret(&policy(&["api.example.com"], &[]), "https://api.example.com/x", &plain, Some(&secret), &r, &t);
         assert!(matches!(&rec.outcome, Err(Reason::Header(why)) if why.contains(rule)), "{label}: {:?}", rec.outcome);
         assert!(t.sent.borrow().is_empty() && r.asked.borrow().is_empty(), "{label}");
         let explain = rec.outcome.as_ref().unwrap_err().explain();
-        assert!(!explain.contains("8f2c") && !explain.contains("evil.example.net"), "{label}: the reason never quotes the bytes: {explain}");
+        assert!(
+            !explain.contains("8f2c") && !explain.contains("evil.example.net"),
+            "{label}: the reason never quotes the bytes: {explain}"
+        );
     }
 }
 
@@ -791,10 +813,23 @@ fn the_program_learns_nothing_the_host_did_not_choose_to_say() {
     }
     // Every code is distinct, so the report can be read by a machine.
     let codes: std::collections::BTreeSet<&str> = [
-        Reason::Scheme, Reason::Userinfo, Reason::Malformed(""), Reason::NotAllowlisted, Reason::SpecialUse(""),
-        Reason::NoAddress, Reason::TooManyRedirects, Reason::RedirectWithoutLocation, Reason::BodyTooLarge,
-        Reason::NotUtf8, Reason::Status(0), Reason::Tls, Reason::Connect, Reason::Timeout, Reason::Protocol,
-        Reason::HostMismatch, Reason::NoClient,
+        Reason::Scheme,
+        Reason::Userinfo,
+        Reason::Malformed(""),
+        Reason::NotAllowlisted,
+        Reason::SpecialUse(""),
+        Reason::NoAddress,
+        Reason::TooManyRedirects,
+        Reason::RedirectWithoutLocation,
+        Reason::BodyTooLarge,
+        Reason::NotUtf8,
+        Reason::Status(0),
+        Reason::Tls,
+        Reason::Connect,
+        Reason::Timeout,
+        Reason::Protocol,
+        Reason::HostMismatch,
+        Reason::NoClient,
     ]
     .iter()
     .map(Reason::code)
@@ -822,7 +857,8 @@ fn the_log_is_bounded_but_its_counts_are_not() {
 #[test]
 fn a_refusal_record_says_why_in_a_machine_readable_code() {
     let r = FakeResolver::with(&[("internal.example.com", &["10.0.0.1"])]);
-    let (rec, _) = get_with(&policy(&["internal.example.com"], &[]), "https://internal.example.com/", &r, &FakeTransport::default());
+    let (rec, _) =
+        get_with(&policy(&["internal.example.com"], &[]), "https://internal.example.com/", &r, &FakeTransport::default());
     let j = rec.to_json();
     assert_eq!(j["delivered"], false);
     assert_eq!(j["reason"], "special-use");
@@ -1010,7 +1046,8 @@ mod real_transport {
         assert!(seen[0].no_request, "the request must not be sent over an unverified connection: {seen:?}");
         assert_eq!(seen[0].sni.as_deref(), Some("pinned.test"));
         // And with no roots at all, the same.
-        let (rec, _) = get_with(&loopback_policy("pinned.test"), &url, &r, &ReqwestTransport::with_roots(rustls::RootCertStore::empty()));
+        let (rec, _) =
+            get_with(&loopback_policy("pinned.test"), &url, &r, &ReqwestTransport::with_roots(rustls::RootCertStore::empty()));
         assert_eq!(rec.outcome, Err(Reason::Tls));
     }
 

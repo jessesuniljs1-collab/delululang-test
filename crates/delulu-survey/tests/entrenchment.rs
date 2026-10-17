@@ -30,10 +30,7 @@ fn the_entrenched_set_is_marked_and_every_marking_cites_its_line() {
         "file:tests/conformance/witnesses.toml",
     ] {
         let n = s.node(id).unwrap_or_else(|| panic!("{id} must exist in the map"));
-        let e = n
-            .entrenched
-            .as_ref()
-            .unwrap_or_else(|| panic!("{id} is entrenched by CODEOWNERS and the map does not say so"));
+        let e = n.entrenched.as_ref().unwrap_or_else(|| panic!("{id} is entrenched by CODEOWNERS and the map does not say so"));
         assert_eq!(e.file, ".github/CODEOWNERS", "the citation names the file it was read from");
         assert!(e.line > 0, "the provenance law does not weaken for an attribute: {id} has no line");
         assert!(!e.owner.is_empty(), "a marking without an owner assigns nothing");
@@ -102,11 +99,7 @@ fn the_guards_nothing_check_fires_on_a_rule_that_resolves_to_no_path() {
     std::fs::create_dir_all(dir.join(".github")).unwrap();
     std::fs::create_dir_all(dir.join("crates/only/src")).unwrap();
     std::fs::write(dir.join("crates/only/src/lib.rs"), "//! a crate\n").unwrap();
-    std::fs::write(
-        dir.join(".github/CODEOWNERS"),
-        "*                        @lead\n/docs/design/GONE.md     @lead\n",
-    )
-    .unwrap();
+    std::fs::write(dir.join(".github/CODEOWNERS"), "*                        @lead\n/docs/design/GONE.md     @lead\n").unwrap();
 
     let s = Survey::build(&dir);
     let hit: Vec<_> = s.findings.iter().filter(|f| f.class == "codeowners-rule-guards-nothing").collect();

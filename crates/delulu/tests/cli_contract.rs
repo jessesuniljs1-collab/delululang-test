@@ -110,10 +110,7 @@ fn argument_taking_subcommands_refuse_an_empty_invocation() {
         let out = text(&o);
         assert!(!o.status.success(), "`delulu {sub}` with no arguments must refuse (ref.cli.{sub}):\n{out}");
         assert!(!out.contains("panicked at"), "`delulu {sub}` panicked instead of refusing:\n{out}");
-        assert!(
-            out.contains("needs") || out.contains("error"),
-            "`delulu {sub}` must say what it needs (ref.cli.{sub}):\n{out}"
-        );
+        assert!(out.contains("needs") || out.contains("error"), "`delulu {sub}` must say what it needs (ref.cli.{sub}):\n{out}");
     }
 }
 
@@ -152,11 +149,7 @@ fn keygen_writes_a_key_then_refuses_to_overwrite_it() {
 fn integer_overflow_at_runtime_is_dl0901() {
     let home = scratch("overflow");
     let src = home.join("overflow.delulu");
-    std::fs::write(
-        &src,
-        "module m\nfn main(root: Root) {\n  let big = 9223372036854775807\n  let x = big + big\n}\n",
-    )
-    .unwrap();
+    std::fs::write(&src, "module m\nfn main(root: Root) {\n  let big = 9223372036854775807\n  let x = big + big\n}\n").unwrap();
     let o = delulu(&home, &["run", src.to_str().unwrap()]);
     let out = text(&o);
     assert!(!o.status.success(), "an overflowing program must not exit 0: {out}");
@@ -184,11 +177,7 @@ fn unbounded_recursion_is_dl0905_not_a_host_crash() {
     let o = delulu(&home, &["run", src.to_str().unwrap(), "--grant", "console"]);
     let out = text(&o);
     assert!(out.contains("DL0905"), "deep recursion must report DL0905, got: {out}");
-    assert_eq!(
-        o.status.code(),
-        Some(1),
-        "a runtime fault exits 1; a stack-overflow abort produces no usable code at all"
-    );
+    assert_eq!(o.status.code(), Some(1), "a runtime fault exits 1; a stack-overflow abort produces no usable code at all");
     assert!(!out.contains("has overflowed its stack"), "the host must not crash: {out}");
 }
 
@@ -260,10 +249,7 @@ fn recursion_past_the_bound_inside_an_actor_is_dl0905() {
     let out = text(&o);
     assert!(out.contains("DL0905"), "the guard must fire on a worker thread too, got: {out}");
     assert!(!out.contains("has overflowed its stack"), "the host must not crash: {out}");
-    assert!(
-        o.status.code().is_some(),
-        "an aborted process yields no exit code at all; a diagnosed fault always does"
-    );
+    assert!(o.status.code().is_some(), "an aborted process yields no exit code at all; a diagnosed fault always does");
 }
 
 /// `login` stores a scoped registry token — and never echoes it. A credential printed to a
@@ -276,10 +262,7 @@ fn login_stores_a_token_without_ever_echoing_it() {
     let o = delulu(&home, &["login", "--registry", "http://127.0.0.1:9", "--token", SECRET]);
     let out = text(&o);
     assert!(o.status.success(), "login must succeed: {out}");
-    assert!(
-        !out.contains(SECRET),
-        "the token must NEVER appear in output — it would land in scrollback and CI logs:\n{out}"
-    );
+    assert!(!out.contains(SECRET), "the token must NEVER appear in output — it would land in scrollback and CI logs:\n{out}");
 
     let creds = std::fs::read_to_string(home.join("credentials.jsonl")).expect("credentials stored");
     assert!(creds.contains(SECRET), "the token must actually be stored: {creds}");
@@ -479,13 +462,11 @@ fn a_value_taking_flag_with_no_value_is_refused() {
 /// a convention held only by habit worth converting into a test.
 #[test]
 fn every_user_facing_error_line_is_prefixed_so_it_can_be_found() {
-    let src = std::fs::read_to_string(workspace_root().join("crates/delulu/src/cli.rs"))
-        .expect("cli.rs is readable");
+    let src = std::fs::read_to_string(workspace_root().join("crates/delulu/src/cli.rs")).expect("cli.rs is readable");
 
     // Prefixes that mark a line's role. `error:`/`warning:`/`note:`/`hint:` are the diagnostic
     // vocabulary; the rest are usage or a rendered diagnostic that carries its own.
-    const KNOWN: [&str; 8] =
-        ["error", "warning", "note", "hint", "usage", "ok", "delulu", "  "];
+    const KNOWN: [&str; 8] = ["error", "warning", "note", "hint", "usage", "ok", "delulu", "  "];
 
     // The check is deliberately scoped to lines that READ as failures, not to every `eprintln!`.
     // stderr legitimately carries progress here too — `wrote …`, `fingerprint: …`, `expires: …` —
@@ -509,12 +490,23 @@ fn every_user_facing_error_line_is_prefixed_so_it_can_be_found() {
     ];
 
     let mut unprefixed = Vec::new();
-    for (i, line) in src.lines().enumerate() {
+    let lines: Vec<&str> = src.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
         let t = line.trim_start();
         if t.starts_with("//") {
             continue;
         }
-        let Some(rest) = t.strip_prefix("eprintln!(\"") else { continue };
+        // The message may start on the call's line or, once a formatter has broken the call, on the next
+        // (D-V2-145): `eprintln!(` alone, then `"…"`. Reading only the first form, this gate was blind to every
+        // message too long for one line — rustfmt joined one such call and the gate found its missing prefix.
+        let rest = match t.strip_prefix("eprintln!(\"") {
+            Some(r) => r,
+            None if t == "eprintln!(" => match lines.get(i + 1).map(|n| n.trim_start()).and_then(|n| n.strip_prefix('"')) {
+                Some(r) => r,
+                None => continue,
+            },
+            None => continue,
+        };
         // A bare interpolation (`eprintln!("{msg}")`) forwards a string built elsewhere, which
         // carries its own prefix; judging it here would be guessing at a value this test cannot see.
         if rest.starts_with('{') || rest.starts_with('"') {

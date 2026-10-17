@@ -113,18 +113,17 @@ pub fn load_and_resolve(path: &str, sigs: Vec<ForeignSig>) -> Result<LoadedLib, 
     // SAFETY: loading an arbitrary shared library runs its initializers with full process authority
     // — Stage 4's acknowledged threat model (spec §10; behavioral containment is Stage 5). libloading
     // upholds the dlopen/LoadLibrary contract and reports a load failure as an `Err`, never UB.
-    let lib = unsafe { Library::new(path) }
-        .map_err(|e| ForeignErr::Unavailable(format!("cannot load `{path}`: {e}")))?;
+    let lib = unsafe { Library::new(path) }.map_err(|e| ForeignErr::Unavailable(format!("cannot load `{path}`: {e}")))?;
 
     let mut syms = HashMap::new();
     let mut sigmap = HashMap::new();
     for sig in sigs {
         let mut cname = sig.name.clone().into_bytes();
         cname.push(0); // NUL-terminate for the loader lookup
-        // SAFETY: `cname` is NUL-terminated. `Library::get` only reads the export table; a missing
-        // symbol is a returned `Err` (→ DL1304), never UB. We capture the code address immediately
-        // and drop the borrow — the address stays valid for as long as `lib` (moved into the struct
-        // below) is alive.
+                       // SAFETY: `cname` is NUL-terminated. `Library::get` only reads the export table; a missing
+                       // symbol is a returned `Err` (→ DL1304), never UB. We capture the code address immediately
+                       // and drop the borrow — the address stays valid for as long as `lib` (moved into the struct
+                       // below) is alive.
         let addr = unsafe {
             match lib.get::<unsafe extern "C" fn()>(&cname) {
                 Ok(sym) => (*sym) as usize as *mut c_void,
@@ -247,8 +246,7 @@ pub unsafe fn validate_c_string(ptr: *const u8, max_ret: usize) -> Result<String
     }
     // SAFETY: the `len` bytes at `ptr` were just scanned as readable and outlive this copy.
     let bytes = unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec();
-    String::from_utf8(bytes)
-        .map_err(|_| ForeignErr::BadReturn("foreign string return is not valid UTF-8".into()))
+    String::from_utf8(bytes).map_err(|_| ForeignErr::BadReturn("foreign string return is not valid UTF-8".into()))
 }
 
 /// A stable owned home for one native scalar argument, so libffi's `arg(&_)` borrows something that

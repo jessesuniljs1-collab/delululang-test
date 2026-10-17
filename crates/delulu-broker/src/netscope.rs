@@ -59,7 +59,9 @@ pub fn parse_pattern(path: &str) -> Result<Vec<Segment>, String> {
             "*" => Segment::One,
             "." | ".." => return Err(format!("a `{s}` segment, which a URL parser removes")),
             _ if s.contains('*') => {
-                return Err(format!("`{s}`: `*` stands alone as a whole segment (`*` one segment, `**` the rest), never inside one"));
+                return Err(format!(
+                    "`{s}`: `*` stands alone as a whole segment (`*` one segment, `**` the rest), never inside one"
+                ));
             }
             _ => {
                 if let Some(c) = s.chars().find(|c| !literal_char(*c)) {
@@ -328,7 +330,10 @@ pub fn canonicalize_set(net: &std::collections::BTreeSet<String>) -> std::collec
 
 /// The meet of two `net` sets: every non-empty meet of an entry of each — never wider than either side, and the
 /// greatest set that is not (each entry of a common lower bound is within one entry of each side, so within their meet).
-pub fn set_meet(a: &std::collections::BTreeSet<String>, b: &std::collections::BTreeSet<String>) -> std::collections::BTreeSet<String> {
+pub fn set_meet(
+    a: &std::collections::BTreeSet<String>,
+    b: &std::collections::BTreeSet<String>,
+) -> std::collections::BTreeSet<String> {
     let mut out = std::collections::BTreeSet::new();
     for x in a {
         for y in b {
@@ -350,14 +355,14 @@ mod tests {
 
     #[test]
     fn a_pattern_is_literals_one_segment_wildcards_and_a_last_rest() {
-        assert_eq!(pat("/repos/*/issues/**"), vec![
-            Segment::Literal("repos".into()),
-            Segment::One,
-            Segment::Literal("issues".into()),
-            Segment::Rest
-        ]);
-        for bad in ["", "repos", "/", "/a//b", "/a/", "/**/a", "/a/**/b", "/v1*", "/*x", "/a/./b", "/a/..", "/a%2Fb", "/a;b",
-                    "/a?b", "/a#b", "/a b", "/a\\b", "/é"] {
+        assert_eq!(
+            pat("/repos/*/issues/**"),
+            vec![Segment::Literal("repos".into()), Segment::One, Segment::Literal("issues".into()), Segment::Rest]
+        );
+        for bad in [
+            "", "repos", "/", "/a//b", "/a/", "/**/a", "/a/**/b", "/v1*", "/*x", "/a/./b", "/a/..", "/a%2Fb", "/a;b", "/a?b",
+            "/a#b", "/a b", "/a\\b", "/é",
+        ] {
             assert!(parse_pattern(bad).is_err(), "`{bad}` is refused");
         }
         assert!(parse_pattern(&format!("/{}", "a/".repeat(MAX_SEGMENTS) + "b")).is_err(), "too many segments");
@@ -369,7 +374,9 @@ mod tests {
         for ok in ["/repos/org/issues", "/repos/org/issues/", "/repos/org/issues/1", "/repos/org/issues/1/comments"] {
             assert!(path_matches(&p, ok), "{ok}");
         }
-        for no in ["/", "", "/repos", "/repos/org", "/repos//issues", "/repos/org/pulls/1", "/Repos/org/issues", "/repos/org/issuesx"] {
+        for no in
+            ["/", "", "/repos", "/repos/org", "/repos//issues", "/repos/org/pulls/1", "/Repos/org/issues", "/repos/org/issuesx"]
+        {
             assert!(!path_matches(&p, no), "{no}");
         }
         let exact = pat("/v1/status");
@@ -382,8 +389,23 @@ mod tests {
 
     #[test]
     fn a_path_a_server_could_read_another_way_is_refused_not_matched() {
-        for bad in ["/a/../b", "/a/./b", "/a//b", "/a;x/b", "/..;/admin", "/a%2Fb", "/a%2fb", "/a%5Cb", "/a%2E%2E/b", "/a%252Fb",
-                    "/a%00", "/a%3Bb", "/a%", "/a%2", "/a%zz"] {
+        for bad in [
+            "/a/../b",
+            "/a/./b",
+            "/a//b",
+            "/a;x/b",
+            "/..;/admin",
+            "/a%2Fb",
+            "/a%2fb",
+            "/a%5Cb",
+            "/a%2E%2E/b",
+            "/a%252Fb",
+            "/a%00",
+            "/a%3Bb",
+            "/a%",
+            "/a%2",
+            "/a%zz",
+        ] {
             assert!(ambiguity(bad).is_some(), "`{bad}` is ambiguous");
         }
         for plain in ["", "/", "/a/b", "/a/b/", "/a%20b", "/caf%C3%A9", "/a-b_c.d~e"] {
@@ -393,14 +415,22 @@ mod tests {
 
     #[test]
     fn an_entry_judges_its_host_then_its_path() {
-        assert_eq!(judge("api.example.com", "api.example.com", "/a/../b"), Verdict::Allow, "a host-only grant reaches every path");
+        assert_eq!(
+            judge("api.example.com", "api.example.com", "/a/../b"),
+            Verdict::Allow,
+            "a host-only grant reaches every path"
+        );
         assert_eq!(judge("api.example.com/v1/**", "api.example.com", "/v1/x"), Verdict::Allow);
         assert_eq!(judge("api.example.com/v1/**", "api.example.com", "/v2/x"), Verdict::OutsidePath);
         assert!(matches!(judge("api.example.com/v1/**", "api.example.com", "/v1/../v2"), Verdict::Ambiguous(_)));
         assert_eq!(judge("api.example.com/v1/**", "evil.example.com", "/v1/x"), Verdict::OtherHost);
         assert_eq!(judge("*.example.com/v1/**", "api.example.com", "/v1/x"), Verdict::Allow, "the host part is `host_matches`'");
         assert_eq!(judge("*.example.com/v1/**", "example.com", "/v1/x"), Verdict::OtherHost, "C85: the apex is not under `*.`");
-        assert_eq!(judge("api.example.com/v1/*x", "api.example.com", "/v1/ax"), Verdict::OutsidePath, "an unparsed entry matches nothing");
+        assert_eq!(
+            judge("api.example.com/v1/*x", "api.example.com", "/v1/ax"),
+            Verdict::OutsidePath,
+            "an unparsed entry matches nothing"
+        );
         assert_eq!(judge("[::1]/v1/**", "[::1]", "/v1/x"), Verdict::Allow);
         let list = ["a.com/x/**".to_string(), "b.com".to_string()];
         assert_eq!(judge_all(&list, "a.com", "/y"), Verdict::OutsidePath);
@@ -456,7 +486,11 @@ mod tests {
             }
         }
         // The control: a domain where nothing (or everything) was within proved nothing.
-        assert!(within_pairs > pats.len() && within_pairs < pats.len() * pats.len() / 2, "{within_pairs} of {}", pats.len().pow(2));
+        assert!(
+            within_pairs > pats.len() && within_pairs < pats.len() * pats.len() / 2,
+            "{within_pairs} of {}",
+            pats.len().pow(2)
+        );
     }
 
     /// P17-F3 for `net` (D-V2-139): over every subset of a small universe of entries, the canonical form is ⊑-equivalent
@@ -485,11 +519,16 @@ mod tests {
 
     #[test]
     fn entries_and_sets_are_ordered_by_host_then_path() {
-        assert!(entry_within("h.com/v1/x", "h.com/v1/**") && entry_within("h.com/v1/**", "h.com") && entry_within("h.com", "h.com"));
+        assert!(
+            entry_within("h.com/v1/x", "h.com/v1/**") && entry_within("h.com/v1/**", "h.com") && entry_within("h.com", "h.com")
+        );
         assert!(!entry_within("h.com", "h.com/v1/**"), "every path is not within some paths");
         assert!(!entry_within("h.com/v2/x", "h.com/v1/**") && !entry_within("g.com/v1/x", "h.com/v1/**"));
         assert!(!entry_within("api.h.com/v1/x", "*.h.com/v1/**"), "a host under a pattern is not contained, as before");
-        assert!(entry_within("h.com/v1*", "h.com/v1*") && !entry_within("h.com/v1*", "h.com/**"), "an unparsed entry: itself only");
+        assert!(
+            entry_within("h.com/v1*", "h.com/v1*") && !entry_within("h.com/v1*", "h.com/**"),
+            "an unparsed entry: itself only"
+        );
         assert_eq!(entry_meet("h.com", "h.com/v1/**").as_deref(), Some("h.com/v1/**"));
         assert_eq!(entry_meet("h.com/*/x/**", "h.com/v1/**").as_deref(), Some("h.com/v1/x/**"));
         assert_eq!(entry_meet("h.com/v1/**", "h.com/v2/**"), None);
@@ -497,7 +536,10 @@ mod tests {
         let set = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<std::collections::BTreeSet<String>>();
         assert!(set_within(&set(&["h.com/v1/a", "g.com"]), &set(&["h.com/v1/**", "g.com"])));
         assert!(!set_within(&set(&["h.com/v1/a", "f.com"]), &set(&["h.com/v1/**", "g.com"])));
-        assert_eq!(set_meet(&set(&["h.com", "g.com/x/**"]), &set(&["h.com/v1/**", "g.com/x/y", "f.com"])), set(&["h.com/v1/**", "g.com/x/y"]));
+        assert_eq!(
+            set_meet(&set(&["h.com", "g.com/x/**"]), &set(&["h.com/v1/**", "g.com/x/y", "f.com"])),
+            set(&["h.com/v1/**", "g.com/x/y"])
+        );
         assert_eq!(canonicalize_set(&set(&["h.com", "h.com/v1/**", "g.com/x/*", "g.com/x/y"])), set(&["h.com", "g.com/x/*"]));
         assert_eq!(check_entry("h.com/v1/**"), Ok(()));
         assert!(check_entry("/v1/**").is_err() && check_entry("h.com/v1/").is_err() && check_entry("h.com/a/../b").is_err());

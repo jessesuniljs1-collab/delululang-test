@@ -206,8 +206,7 @@ pub fn read_image() -> Result<Image, String> {
 }
 
 fn parse_manifest(dir: &Path, text: &str) -> Result<Image, String> {
-    let m: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| format!("the guest image's manifest is not JSON: {e}"))?;
+    let m: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("the guest image's manifest is not JSON: {e}"))?;
     if m["format"] != IMAGE_FORMAT {
         return Err(format!("the guest image's manifest is not `{IMAGE_FORMAT}` (it says {})", m["format"]));
     }
@@ -321,10 +320,9 @@ pub fn locate_vmm() -> Result<PathBuf, String> {
         };
     }
     let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
-        .map(|d| d.join("firecracker"))
-        .find(|p| is_executable(p))
-        .ok_or_else(|| format!("no microVM monitor: `firecracker` is not on PATH and {VMM_ENV} is not set ({TESTED_VMM} is the tested one)"))
+    std::env::split_paths(&path).map(|d| d.join("firecracker")).find(|p| is_executable(p)).ok_or_else(|| {
+        format!("no microVM monitor: `firecracker` is not on PATH and {VMM_ENV} is not set ({TESTED_VMM} is the tested one)")
+    })
 }
 
 fn running_as_root() -> bool {
@@ -1028,11 +1026,7 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
             return Err(fail(format!("the VM ended before its guest dialled in ({st}){}", vm.log_tail())));
         }
         if Instant::now() >= until {
-            return Err(fail(format!(
-                "the guest did not dial in within {:?}{}",
-                crate::guest::CONNECT_DEADLINE,
-                vm.log_tail()
-            )));
+            return Err(fail(format!("the guest did not dial in within {:?}{}", crate::guest::CONNECT_DEADLINE, vm.log_tail())));
         }
         std::thread::sleep(Duration::from_millis(10));
     };
@@ -1381,7 +1375,8 @@ mod tests {
     #[test]
     fn an_api_response_is_read_by_its_status_and_length() {
         assert_eq!(response(b"HTTP/1.1 204 \r\nServer: Firecracker API\r\n\r\n").unwrap(), (204, String::new()));
-        let fault = b"HTTP/1.1 400 \r\nContent-Type: application/json\r\nContent-Length: 29\r\n\r\n{\"fault_message\":\"no kernel\"}";
+        let fault =
+            b"HTTP/1.1 400 \r\nContent-Type: application/json\r\nContent-Length: 29\r\n\r\n{\"fault_message\":\"no kernel\"}";
         assert_eq!(response(fault).unwrap(), (400, "{\"fault_message\":\"no kernel\"}".to_string()));
         // Bytes after the announced length are not part of the answer.
         assert_eq!(response(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nokEXTRA").unwrap(), (200, "ok".to_string()));

@@ -59,8 +59,7 @@ fn build_shout(dir: &Path) -> PathBuf {
          [plugin.exports]\nshout = \"fn(Str) -> Str\"\n",
     )
     .unwrap();
-    std::fs::write(pkg.join("src").join("lib.delulu"), "module shout\n\npub fn shout(s: Str) -> Str { s + \"!\" }\n")
-        .unwrap();
+    std::fs::write(pkg.join("src").join("lib.delulu"), "module shout\n\npub fn shout(s: Str) -> Str { s + \"!\" }\n").unwrap();
     let o = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "the plugin must build: {}", out(&o));
     let dpx = pkg.join("shout.dpx");
@@ -224,10 +223,7 @@ fn a_corrupt_artifact_refuses_at_load_exactly_as_verify_does() {
 
     let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
     let text = out(&o);
-    assert!(
-        text.contains("BadArtifact") || text.contains("VerifyFailed"),
-        "a corrupt artifact must refuse at load too: {text}"
-    );
+    assert!(text.contains("BadArtifact") || text.contains("VerifyFailed"), "a corrupt artifact must refuse at load too: {text}");
     assert!(!text.contains("hello!"), "nothing may have run: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -374,8 +370,7 @@ fn a_resource_limit_this_build_cannot_enforce_is_refused_rather_than_ignored() {
     std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
 
     for (field, value) in [("fuel", "1000000"), ("mem_mb", "16"), ("wall_ms", "100")] {
-        let src = host_program("shout.dpx")
-            .replace(&format!("{field}: 0"), &format!("{field}: {value}"));
+        let src = host_program("shout.dpx").replace(&format!("{field}: 0"), &format!("{field}: {value}"));
         assert!(src.contains(&format!("{field}: {value}")), "the fixture must actually set {field}");
         std::fs::write(dir.join("host.delulu"), src).unwrap();
         let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
@@ -477,10 +472,7 @@ chain = \"fn(Cap[PluginHost], Str) -> Str ! {Load, Read}\"
     std::fs::write(dir.join("host.delulu"), host).unwrap();
     let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
     let text = out(&o);
-    assert!(
-        !text.contains("loaded another plugin"),
-        "a plugin loaded a plugin — R-7 composition is not bounded: {text}"
-    );
+    assert!(!text.contains("loaded another plugin"), "a plugin loaded a plugin — R-7 composition is not bounded: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -774,10 +766,7 @@ fn under_the_broker_daemon_a_plugins_node_does_not_outlive_its_run() {
     let plugin_nodes: Vec<&serde_json::Value> =
         v["nodes"].as_array().expect("nodes").iter().filter(|n| n["holder_kind"] == "plugin").collect();
     assert_eq!(plugin_nodes.len(), 1, "the run minted one plugin node:\n{v}");
-    assert_ne!(
-        plugin_nodes[0]["state"], "live",
-        "a plugin node must not stay live after the run that holds it has ended:\n{v}"
-    );
+    assert_ne!(plugin_nodes[0]["state"], "live", "a plugin node must not stay live after the run that holds it has ended:\n{v}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -872,7 +861,8 @@ fn a_closures_names_resolve_in_its_own_module(extra: &[&str]) {
     std::fs::create_dir_all(dir.join("out")).unwrap();
     std::fs::write(dir.join("host.delulu"), SCOPE_HOST).unwrap();
     let state = dir.join("state");
-    let mut args = vec!["run", "host.delulu", "--grant", "console", "--grant", "plugin=.", "--grant", "fs.write=./out", "--no-prompt"];
+    let mut args =
+        vec!["run", "host.delulu", "--grant", "console", "--grant", "plugin=.", "--grant", "fs.write=./out", "--no-prompt"];
     args.extend_from_slice(extra);
     let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .args(&args)
@@ -889,8 +879,14 @@ fn a_closures_names_resolve_in_its_own_module(extra: &[&str]) {
         "a plugin with an all-empty grant wrote a file of its own choosing through the host's FsWrite — the host's callback ran the PLUGIN's `save`:\n{text}"
     );
     assert!(text.contains("callback answered 1\n") && wrote("host-file.txt"), "the callback runs the host's `save`:\n{text}");
-    assert!(text.contains("plugin closure answered 1000\n"), "a closure the plugin built runs the plugin's `helper`, not the host's:\n{text}");
-    assert!(text.contains("plugin function answered 1000\n"), "a plugin function handed out as a value runs in the plugin's module:\n{text}");
+    assert!(
+        text.contains("plugin closure answered 1000\n"),
+        "a closure the plugin built runs the plugin's `helper`, not the host's:\n{text}"
+    );
+    assert!(
+        text.contains("plugin function answered 1000\n"),
+        "a plugin function handed out as a value runs in the plugin's module:\n{text}"
+    );
     assert!(
         text.contains("second callback answered 11\n") && wrote("host-file-2.txt"),
         "a callback reaches a host function the plugin does not have:\n{text}"
@@ -982,8 +978,18 @@ fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_t
     let _daemon = Daemon::start(&state);
     let mut run = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .args([
-            "run", "host.delulu", "--broker", "daemon", "--broker-profile", "sim", "--grant", "console", "--grant", "plugin=.",
-            "--grant", "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
+            "run",
+            "host.delulu",
+            "--broker",
+            "daemon",
+            "--broker-profile",
+            "sim",
+            "--grant",
+            "console",
+            "--grant",
+            "plugin=.",
+            "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
             "--no-prompt",
         ])
         .current_dir(&dir)
@@ -1000,7 +1006,9 @@ fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_t
         let o = delulu_state(&dir, &state, &["grants", "list", "--json"]);
         let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).unwrap_or_default();
         let plugin = v["nodes"].as_array().and_then(|ns| {
-            ns.iter().find(|n| n["holder_kind"] == "plugin" && n["state"] == "live").and_then(|n| n["id"].as_str().map(str::to_string))
+            ns.iter()
+                .find(|n| n["holder_kind"] == "plugin" && n["state"] == "live")
+                .and_then(|n| n["id"].as_str().map(str::to_string))
         });
         let a = delulu_state(&dir, &state, &["audit", "query", "--action", "use", "--json"]);
         let uses = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&a.stdout)).unwrap_or_default()["records"]
@@ -1028,7 +1036,10 @@ fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_t
     run.stderr.take().unwrap().read_to_string(&mut se).unwrap();
     let _ = run.wait();
     let a = delulu_state(&dir, &state, &["audit", "query", "--action", "use", "--json"]);
-    let recs = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&a.stdout)).unwrap()["records"].as_array().unwrap().clone();
+    let recs = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&a.stdout)).unwrap()["records"]
+        .as_array()
+        .unwrap()
+        .clone();
     let landed_after = recs
         .iter()
         .filter(|r| r["target"] == "arm0/elbow" && r["decision"] == "allow" && r["seq"].as_u64().unwrap_or(0) > revoked_at)

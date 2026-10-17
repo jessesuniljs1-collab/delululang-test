@@ -343,17 +343,43 @@ pub struct Block {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Stmt {
-    Let { name: Ident, ty: Option<TypeExpr>, value: Expr, mutable: bool, span: Span },
-    Assign { target: LValue, value: Expr, span: Span },
-    While { cond: Expr, body: Block, span: Span },
+    Let {
+        name: Ident,
+        ty: Option<TypeExpr>,
+        value: Expr,
+        mutable: bool,
+        span: Span,
+    },
+    Assign {
+        target: LValue,
+        value: Expr,
+        span: Span,
+    },
+    While {
+        cond: Expr,
+        body: Block,
+        span: Span,
+    },
     /// `for <var> in <iter> { body }` — iterate a `List[T]`, binding `var: T` per element
     /// (Tier 1, owner-directed 2026-08-08). Empty row for the iteration itself; body effects
     /// propagate exactly as a `while` body's do.
-    For { var: Ident, iter: Expr, body: Block, span: Span },
+    For {
+        var: Ident,
+        iter: Expr,
+        body: Block,
+        span: Span,
+    },
     /// `break` / `continue` — valid only inside a `while` or `for` body (DL0412 otherwise).
-    Break { span: Span },
-    Continue { span: Span },
-    Return { value: Option<Expr>, span: Span },
+    Break {
+        span: Span,
+    },
+    Continue {
+        span: Span,
+    },
+    Return {
+        value: Option<Expr>,
+        span: Span,
+    },
     Expr(Expr),
 }
 
@@ -414,21 +440,81 @@ pub enum BinOp {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Expr {
-    Lit { kind: LitKind, id: NodeId, span: Span },
+    Lit {
+        kind: LitKind,
+        id: NodeId,
+        span: Span,
+    },
     /// A variable reference. The parser produces single-segment paths here;
     /// dotted chains are `Field`/`Method` and are resolved by the checker
     /// (module member vs. record field), Go-selector style.
-    Var { path: Path, id: NodeId, span: Span },
-    List { items: Vec<Expr>, id: NodeId, span: Span },
-    Record { path: Path, fields: Vec<(Ident, Expr)>, id: NodeId, span: Span },
-    Call { callee: Box<Expr>, args: Vec<Expr>, id: NodeId, span: Span },
-    Method { recv: Box<Expr>, name: Ident, args: Vec<Expr>, id: NodeId, span: Span },
-    Field { recv: Box<Expr>, name: Ident, id: NodeId, span: Span },
-    Index { recv: Box<Expr>, index: Box<Expr>, id: NodeId, span: Span },
-    Unary { op: UnOp, operand: Box<Expr>, id: NodeId, span: Span },
-    Binary { op: BinOp, lhs: Box<Expr>, rhs: Box<Expr>, id: NodeId, span: Span },
-    If { cond: Box<Expr>, then_: Block, else_: Option<Box<Expr>>, id: NodeId, span: Span },
-    Match { scrutinee: Box<Expr>, arms: Vec<Arm>, id: NodeId, span: Span },
+    Var {
+        path: Path,
+        id: NodeId,
+        span: Span,
+    },
+    List {
+        items: Vec<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    Record {
+        path: Path,
+        fields: Vec<(Ident, Expr)>,
+        id: NodeId,
+        span: Span,
+    },
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    Method {
+        recv: Box<Expr>,
+        name: Ident,
+        args: Vec<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    Field {
+        recv: Box<Expr>,
+        name: Ident,
+        id: NodeId,
+        span: Span,
+    },
+    Index {
+        recv: Box<Expr>,
+        index: Box<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    Unary {
+        op: UnOp,
+        operand: Box<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    Binary {
+        op: BinOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+        id: NodeId,
+        span: Span,
+    },
+    If {
+        cond: Box<Expr>,
+        then_: Block,
+        else_: Option<Box<Expr>>,
+        id: NodeId,
+        span: Span,
+    },
+    Match {
+        scrutinee: Box<Expr>,
+        arms: Vec<Arm>,
+        id: NodeId,
+        span: Span,
+    },
     Lambda {
         params: Vec<Param>,
         ret: Option<TypeExpr>,
@@ -438,19 +524,37 @@ pub enum Expr {
         span: Span,
     },
     /// `expr?` — Result propagation; pure control flow.
-    Try { inner: Box<Expr>, id: NodeId, span: Span },
+    Try {
+        inner: Box<Expr>,
+        id: NodeId,
+        span: Span,
+    },
     /// Needed for `else { … }` branches and block-bodied match arms
     /// (implementation-forced addition, spec §4).
     Block(Block),
     /// `spawn A(args)` — creates an actor; type `tag A`, row `{Async} ∪ row(A.new)`
     /// (Stage 7, T-Spawn).
-    Spawn { actor: Path, args: Vec<Expr>, id: NodeId, span: Span },
+    Spawn {
+        actor: Path,
+        args: Vec<Expr>,
+        id: NodeId,
+        span: Span,
+    },
     /// `consume x` — yields `x`'s full rcap and kills the binding (locals/params only in
     /// v0.7; any later use is DL1602).
-    Consume { name: Ident, id: NodeId, span: Span },
+    Consume {
+        name: Ident,
+        id: NodeId,
+        span: Span,
+    },
     /// `recover [rcap] { … }` — checks the block in a restricted environment and lifts the
     /// result to `iso` (default) or `val` (Stage 7, spec §3).
-    Recover { target: Option<Rcap>, body: Block, id: NodeId, span: Span },
+    Recover {
+        target: Option<Rcap>,
+        body: Block,
+        id: NodeId,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -515,7 +619,11 @@ pub enum Pattern {
     /// A single lowercase-or-uppercase identifier; the checker decides whether
     /// it binds or names a variant of the scrutinee's type (Rust-style resolution).
     Bind(Ident),
-    Variant { path: Path, fields: Vec<Pattern>, span: Span },
+    Variant {
+        path: Path,
+        fields: Vec<Pattern>,
+        span: Span,
+    },
 }
 
 impl Pattern {

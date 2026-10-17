@@ -20,11 +20,7 @@ fn run_py(src: &str, setup: impl FnOnce(&mut Grants)) -> (Result<Value, Fault>, 
     setup(&mut grants);
     let sink = TraceSink::new();
     let interp = Interp::new(&checked.module)
-        .with_foreign(
-            checked.result.foreign_binds.clone(),
-            grants.foreign_c.clone(),
-            delulu_runtime::foreign::DEFAULT_MAX_RET,
-        )
+        .with_foreign(checked.result.foreign_binds.clone(), grants.foreign_c.clone(), delulu_runtime::foreign::DEFAULT_MAX_RET)
         .with_trace(sink.clone());
     set_capture(true);
     let out = interp.run_main(Value::Root(Rc::new(grants.build_root())));
@@ -101,11 +97,7 @@ fn import_off_allowlist_is_dl1305_pyerr_and_the_denied_attempt_is_traced() {
     assert_eq!(printed.trim(), "denied:ImportNotAllowed", "off-allowlist import must be a PyErr");
     // Criterion 5: the DENIED attempt is visible in the trace as a ForeignCall on `py.import` naming
     // the refused module — the interface gate is observable, not silent.
-    let denied = sink
-        .records()
-        .into_iter()
-        .find(|r| r.op == "py.import")
-        .expect("the denied import attempt must be traced");
+    let denied = sink.records().into_iter().find(|r| r.op == "py.import").expect("the denied import attempt must be traced");
     assert_eq!(denied.effect, "ForeignCall");
     assert_eq!(denied.detail.as_deref(), Some("os"));
 }

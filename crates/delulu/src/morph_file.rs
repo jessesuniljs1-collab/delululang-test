@@ -36,13 +36,11 @@ impl LoadError {
 
 /// Parse a morph from TOML text. `id_hint` is used in messages when `[meta] morph` is absent.
 pub fn parse_morph(text: &str, id_hint: &str) -> Result<Morph, LoadError> {
-    let value: toml::Value = toml::from_str(text)
-        .map_err(|e| LoadError::one("DL1714", format!("morph `{id_hint}` is not valid TOML: {e}")))?;
+    let value: toml::Value =
+        toml::from_str(text).map_err(|e| LoadError::one("DL1714", format!("morph `{id_hint}` is not valid TOML: {e}")))?;
 
     let meta = value.get("meta");
-    let get_meta = |key: &str| -> Option<String> {
-        meta.and_then(|m| m.get(key)).and_then(|v| v.as_str()).map(str::to_string)
-    };
+    let get_meta = |key: &str| -> Option<String> { meta.and_then(|m| m.get(key)).and_then(|v| v.as_str()).map(str::to_string) };
     let id = get_meta("morph").unwrap_or_else(|| id_hint.to_string());
     let name = get_meta("name").unwrap_or_else(|| id.clone());
     let version = get_meta("version").unwrap_or_else(|| "0.0.0".to_string());
@@ -63,10 +61,7 @@ pub fn parse_morph(text: &str, id_hint: &str) -> Result<Morph, LoadError> {
         let Some(t) = value.get(table).and_then(|v| v.as_table()) else { continue };
         for (canon, alias) in t {
             let Some(alias) = alias.as_str() else {
-                return Err(LoadError::one(
-                    "DL1712",
-                    format!("morph `{id}`: the alias for `{canon}` must be a string"),
-                ));
+                return Err(LoadError::one("DL1712", format!("morph `{id}`: the alias for `{canon}` must be a string")));
             };
             entries.push((canon.clone(), alias.to_string()));
         }
@@ -78,8 +73,7 @@ pub fn parse_morph(text: &str, id_hint: &str) -> Result<Morph, LoadError> {
         ));
     }
 
-    Morph::new(id, name, version, kind, entries)
-        .map_err(|errs| LoadError(errs.iter().map(|e| e.to_diagnostic()).collect()))
+    Morph::new(id, name, version, kind, entries).map_err(|errs| LoadError(errs.iter().map(|e| e.to_diagnostic()).collect()))
 }
 
 /// The directories searched for `<id>.toml`, in order.
@@ -117,17 +111,13 @@ pub fn load(id: &str) -> Result<Morph, LoadError> {
     // path traversal that reads outside the search path is not a thing a language toolchain should
     // do on request, and refusing is one line.
     if id.is_empty() || id.contains(['/', '\\', ':']) || id.contains("..") {
-        return Err(LoadError::one(
-            "DL1714",
-            format!("`{id}` is not a valid morph id — ids are plain names, not paths"),
-        ));
+        return Err(LoadError::one("DL1714", format!("`{id}` is not a valid morph id — ids are plain names, not paths")));
     }
     for dir in search_dirs() {
         let path = dir.join(format!("{id}.toml"));
         if path.is_file() {
-            let text = std::fs::read_to_string(&path).map_err(|e| {
-                LoadError::one("DL1714", format!("cannot read morph `{}`: {e}", path.display()))
-            })?;
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| LoadError::one("DL1714", format!("cannot read morph `{}`: {e}", path.display())))?;
             return parse_morph(&text, id);
         }
     }
@@ -142,8 +132,7 @@ pub fn load(id: &str) -> Result<Morph, LoadError> {
 
 /// Load a morph file by explicit path (for `delulu morph check <file.toml>`).
 pub fn load_path(path: &Path) -> Result<Morph, LoadError> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| LoadError::one("DL1714", crate::cli::unreadable(&path, &e)))?;
+    let text = std::fs::read_to_string(path).map_err(|e| LoadError::one("DL1714", crate::cli::unreadable(&path, &e)))?;
     let hint = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     parse_morph(&text, &hint)
 }
@@ -157,9 +146,7 @@ pub fn installed() -> Vec<(String, PathBuf)> {
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("toml"))
-            .filter_map(|p| {
-                p.file_stem().map(|s| (s.to_string_lossy().to_string(), p.clone()))
-            })
+            .filter_map(|p| p.file_stem().map(|s| (s.to_string_lossy().to_string(), p.clone())))
             .collect();
         found.sort();
         for (id, path) in found {

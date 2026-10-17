@@ -67,20 +67,14 @@ fn the_command_list_agrees_with_the_dispatcher_and_the_usage_text() {
 
     completed.sort();
     documented.sort();
-    assert_eq!(
-        completed, documented,
-        "the completion script and `delulu --help` disagree about which commands exist"
-    );
+    assert_eq!(completed, documented, "the completion script and `delulu --help` disagree about which commands exist");
 
     // And every one of them is a command the dispatcher actually accepts. `--help` is the safe
     // probe: rule D11 makes asking a command what it does never make it do the thing.
     for name in &completed {
         let o = delulu(&[name, "--help"]);
         let seen = format!("{}{}", stdout(&o), String::from_utf8_lossy(&o.stderr));
-        assert!(
-            !seen.contains("unknown command"),
-            "`{name}` is offered by completion but the dispatcher does not know it"
-        );
+        assert!(!seen.contains("unknown command"), "`{name}` is offered by completion but the dispatcher does not know it");
         assert_eq!(o.status.code(), Some(0), "`delulu {name} --help` must answer:\n{seen}");
     }
 }
@@ -90,10 +84,7 @@ fn the_command_list_agrees_with_the_dispatcher_and_the_usage_text() {
 fn the_hidden_worker_subcommand_is_not_advertised() {
     let completed = completed_commands();
     for name in &completed {
-        assert!(
-            !name.contains("worker"),
-            "`{name}` looks like the internal worker and must not be completable"
-        );
+        assert!(!name.contains("worker"), "`{name}` looks like the internal worker and must not be completable");
     }
 }
 
@@ -143,11 +134,7 @@ fn an_unknown_shell_is_refused() {
 fn there_is_no_json_form() {
     let o = delulu(&["completions", "bash", "--json"]);
     assert_eq!(o.status.code(), Some(2));
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("no `--json` form"),
-        "{}",
-        String::from_utf8_lossy(&o.stderr)
-    );
+    assert!(String::from_utf8_lossy(&o.stderr).contains("no `--json` form"), "{}", String::from_utf8_lossy(&o.stderr));
 }
 
 /// The negative half of the CLI contract.

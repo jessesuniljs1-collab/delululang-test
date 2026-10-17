@@ -53,13 +53,19 @@ fn a_synthetic_diff_reaches_the_union_of_its_files_impacts_each_node_at_its_near
     // The entrenched file is named, with its owner and the CODEOWNERS line that says so.
     let entrenched = v["entrenched"].as_array().unwrap();
     assert!(
-        entrenched.iter().any(|e| e["node"] == "doc:docs/design/CONSTITUTION.md" && e["owner"].is_string() && e["matched_at"]["line"].is_u64()),
+        entrenched.iter().any(|e| e["node"] == "doc:docs/design/CONSTITUTION.md"
+            && e["owner"].is_string()
+            && e["matched_at"]["line"].is_u64()),
         "{entrenched:#?}"
     );
-    assert!(entrenched.iter().all(|e| e["node"] != "mod:crates/delulu-diag/src/codes.rs"), "an ordinary file is not called entrenched");
+    assert!(
+        entrenched.iter().all(|e| e["node"] != "mod:crates/delulu-diag/src/codes.rs"),
+        "an ordinary file is not called entrenched"
+    );
 
     // The reach is the union of the three walks, each node at the minimum of its distances.
-    let starts = ["mod:crates/delulu-diag/src/codes.rs", "mod:crates/delulu-check/src/check.rs", "doc:docs/design/CONSTITUTION.md"];
+    let starts =
+        ["mod:crates/delulu-diag/src/codes.rs", "mod:crates/delulu-check/src/check.rs", "doc:docs/design/CONSTITUTION.md"];
     let mut want: BTreeMap<String, u32> = BTreeMap::new();
     for s in starts {
         for r in survey.walk(s, Dir::Incoming, MAX_WALK_DEPTH) {

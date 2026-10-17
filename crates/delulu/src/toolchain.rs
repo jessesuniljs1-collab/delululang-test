@@ -42,8 +42,7 @@ pub(crate) fn describe() -> Value {
         .iter()
         .map(|name| {
             let flags = crate::cli::documented_flags(name);
-            let usage: Vec<String> =
-                crate::cli::usage_lines(name).iter().map(|l| l.trim().to_string()).collect();
+            let usage: Vec<String> = crate::cli::usage_lines(name).iter().map(|l| l.trim().to_string()).collect();
             json!({
                 "name": name,
                 "json": flags.iter().any(|f| f == "--json"),
@@ -67,10 +66,8 @@ pub(crate) fn describe() -> Value {
             json!({ "name": p.name(), "memory_bytes": l.memory_bytes, "cpu_seconds": l.cpu_seconds })
         })
         .collect();
-    let levels: Vec<Value> =
-        crate::sandbox::LEVELS.iter().map(|(n, name)| json!({ "level": n, "name": name })).collect();
-    let codes: Vec<Value> =
-        delulu_diag::REGISTRY.iter().map(|c| json!({ "code": c.code, "title": c.title })).collect();
+    let levels: Vec<Value> = crate::sandbox::LEVELS.iter().map(|(n, name)| json!({ "level": n, "name": name })).collect();
+    let codes: Vec<Value> = delulu_diag::REGISTRY.iter().map(|c| json!({ "code": c.code, "title": c.title })).collect();
     let topics: Vec<String> = delulu_diag::TOPICS.iter().map(|t| format!("E-{t}")).collect();
     json!({
         "version": env!("CARGO_PKG_VERSION"),
@@ -161,8 +158,7 @@ mod tests {
             let t = t.as_str().unwrap().strip_prefix("E-").unwrap();
             assert!(delulu_diag::topic_explain(t).is_some(), "E-{t}");
         }
-        let levels: Vec<&str> =
-            d["sandbox"]["levels"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect();
+        let levels: Vec<&str> = d["sandbox"]["levels"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect();
         assert_eq!(levels, ["none", "process", "microvm", "external", "attested"]);
         let run_usage = crate::cli::usage_lines("run").join("\n");
         assert!(run_usage.contains("--engine wasm"), "the engines listed are the ones `run` documents");

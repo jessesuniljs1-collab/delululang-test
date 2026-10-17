@@ -100,10 +100,7 @@ fn descend(root: &Path, dir: &Path, out: &mut Vec<ScannedFile>) {
                 continue;
             }
             descend(root, &path, out);
-        } else if EXCLUDED_FILE_EXTENSIONS
-            .iter()
-            .any(|(e, _)| name.rsplit_once('.').is_some_and(|(_, x)| x == *e))
-        {
+        } else if EXCLUDED_FILE_EXTENSIONS.iter().any(|(e, _)| name.rsplit_once('.').is_some_and(|(_, x)| x == *e)) {
             continue;
         } else if let Some(f) = classify(root, &path, &name) {
             // The Survey's own generated output is never read back. See `OUTPUT_FILES`.
@@ -149,10 +146,7 @@ fn classify(root: &Path, path: &Path, name: &str) -> Option<ScannedFile> {
     };
     let lines = text.lines().count() as u32;
 
-    let crate_name = rel
-        .strip_prefix("crates/")
-        .and_then(|r| r.split_once('/'))
-        .map(|(c, _)| c.to_string());
+    let crate_name = rel.strip_prefix("crates/").and_then(|r| r.split_once('/')).map(|(c, _)| c.to_string());
 
     Some(ScannedFile { rel, abs: path.to_path_buf(), kind, lines, crate_name, text })
 }

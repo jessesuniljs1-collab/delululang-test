@@ -43,7 +43,12 @@ enum K {
     /// NE-02). Without it the refusal said only "a fresh value whose contents forbid the lift" —
     /// true, and unusable: a reader with a ten-element literal was told one of them is the problem
     /// and left to find out which.
-    Fresh { natural: Rcap, lift_val: bool, lift_iso: bool, blame: Option<Span> },
+    Fresh {
+        natural: Rcap,
+        lift_val: bool,
+        lift_iso: bool,
+        blame: Option<Span>,
+    },
     Unknown,
 }
 
@@ -171,11 +176,8 @@ impl<'a> Pass<'a> {
         // Use after consume (DL1602) — including possibly-consumed (branch joins) and
         // loop-carried consumes.
         if let Some((site, loop_carried)) = consumed {
-            let mut d = Diagnostic::error(
-                "DL1602",
-                format!("use of `{name}` after `consume` — the binding is dead"),
-            )
-            .with_span(span, "used here");
+            let mut d = Diagnostic::error("DL1602", format!("use of `{name}` after `consume` — the binding is dead"))
+                .with_span(span, "used here");
             d = if loop_carried {
                 d.with_secondary_span(site, "consumed here — by the next loop iteration this binding is already dead")
             } else {
@@ -189,10 +191,8 @@ impl<'a> Pass<'a> {
         // a consumed iso may be transferred in.
         if let Some(rb) = self.recover_boundary {
             if depth < rb {
-                let allowed = matches!(
-                    (kind, rcap),
-                    (_, Some(Rcap::Val) | Some(Rcap::Tag)) | (UseKind::Consume, Some(Rcap::Iso))
-                );
+                let allowed =
+                    matches!((kind, rcap), (_, Some(Rcap::Val) | Some(Rcap::Tag)) | (UseKind::Consume, Some(Rcap::Iso)));
                 if !allowed {
                     let shown = rcap.map(|r| format!("`{}`", r.name())).unwrap_or_else(|| "an undetermined capability".into());
                     self.diags.push(
@@ -239,10 +239,7 @@ impl<'a> Pass<'a> {
     /// Snapshot every visible binding's consumed state, name-keyed per scope depth
     /// (for branch joins).
     fn consumed_snapshot(&self) -> Vec<HashMap<String, Option<(Span, bool)>>> {
-        self.scopes
-            .iter()
-            .map(|s| s.iter().map(|(n, b)| (n.clone(), b.consumed)).collect())
-            .collect()
+        self.scopes.iter().map(|s| s.iter().map(|(n, b)| (n.clone(), b.consumed)).collect()).collect()
     }
 
     fn consumed_restore(&mut self, snap: &[HashMap<String, Option<(Span, bool)>>]) {
@@ -279,20 +276,13 @@ impl<'a> Pass<'a> {
         };
         for (i, p) in f.params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
-            let rcap = p
-                .ty
-                .written_rcap()
-                .or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
+            let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
             self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false });
         }
-        let ret_dest = f
-            .ret
-            .as_ref()
-            .and_then(|r| r.written_rcap())
-            .or_else(|| match self.fn_types.get(&f.name.name) {
-                Some(Type::Fn { ret, .. }) => self.default_of(ret),
-                _ => None,
-            });
+        let ret_dest = f.ret.as_ref().and_then(|r| r.written_rcap()).or_else(|| match self.fn_types.get(&f.name.name) {
+            Some(Type::Fn { ret, .. }) => self.default_of(ret),
+            _ => None,
+        });
         self.walk_block_with_tail(&f.body, ret_dest, f.ret.is_some());
         self.pop_scope();
     }
@@ -363,9 +353,7 @@ impl<'a> Pass<'a> {
                             k.name()
                         )
                     };
-                    self.diags.push(
-                        Diagnostic::error("DL1601", msg).with_span(p.ty.span(), "not sendable"),
-                    );
+                    self.diags.push(Diagnostic::error("DL1601", msg).with_span(p.ty.span(), "not sendable"));
                 }
                 None => {
                     self.diags.push(
@@ -383,15 +371,7 @@ impl<'a> Pass<'a> {
         }
     }
 
-    fn check_actor_member(
-        &mut self,
-        actor: &str,
-        member: &str,
-        params: &[Param],
-        body: &Block,
-        has_ret: bool,
-        self_ty: &Type,
-    ) {
+    fn check_actor_member(&mut self, actor: &str, member: &str, params: &[Param], body: &Block, has_ret: bool, self_ty: &Type) {
         self.scopes.clear();
         self.push_scope();
         // T-Behavior: `self : ref ActorType` — the ONLY ref to an actor anywhere; every
@@ -458,14 +438,7 @@ impl<'a> Pass<'a> {
     /// annotation the author wrote is a judgement about intent, and `val` may be exactly what was
     /// meant — in which case the fix is to build `val` contents instead. Nothing here changes what
     /// is accepted; the same programs are refused, with a refusal a reader can act on.
-    fn explain_val_binding(
-        &mut self,
-        before: usize,
-        vk: K,
-        dest: Rcap,
-        ty: Option<&TypeExpr>,
-        name_span: Span,
-    ) {
+    fn explain_val_binding(&mut self, before: usize, vk: K, dest: Rcap, ty: Option<&TypeExpr>, name_span: Span) {
         if self.diags.len() != before + 1 || dest != Rcap::Val {
             return;
         }
@@ -500,12 +473,7 @@ impl<'a> Pass<'a> {
                 confidence: Confidence::Safe,
                 authority_widening: false,
                 requires_human: false,
-                edits: vec![Edit {
-                    file: rcap_span.file,
-                    start_byte: cut_start,
-                    end_byte: cut_end,
-                    insert: String::new(),
-                }],
+                edits: vec![Edit { file: rcap_span.file, start_byte: cut_start, end_byte: cut_end, insert: String::new() }],
                 reason: None,
             };
             // Through `with_repair`, not by pushing onto `repairs` directly: that builder is the one
@@ -522,8 +490,7 @@ impl<'a> Pass<'a> {
                 let vk = self.walk_expr(value);
                 let vty = self.node_types.get(&value.id()).cloned();
                 let written = ty.as_ref().and_then(|t| t.written_rcap());
-                let annotated_default =
-                    ty.as_ref().and_then(|_| vty.as_ref().and_then(|t| self.default_of(t)));
+                let annotated_default = ty.as_ref().and_then(|_| vty.as_ref().and_then(|t| self.default_of(t)));
                 let dest = written.or(annotated_default);
                 if let Some(d) = dest {
                     let before = self.diags.len();
@@ -547,10 +514,7 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
-                self.bind(
-                    &name.name,
-                    Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some() },
-                );
+                self.bind(&name.name, Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some() });
             }
             Stmt::Assign { target, value, span } => {
                 let vk = self.walk_expr(value);
@@ -599,10 +563,7 @@ impl<'a> Pass<'a> {
                 });
                 let rcap = elem_ty.as_ref().and_then(|t| self.default_of(t));
                 self.push_scope();
-                self.bind(
-                    &var.name,
-                    Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false },
-                );
+                self.bind(&var.name, Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false });
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
             }
@@ -638,10 +599,7 @@ impl<'a> Pass<'a> {
                             self.diags.push(
                                 Diagnostic::error(
                                     "DL1603",
-                                    format!(
-                                        "this value's contents do not permit lifting it to `{}` at return",
-                                        dest.name()
-                                    ),
+                                    format!("this value's contents do not permit lifting it to `{}` at return", dest.name()),
                                 )
                                 .with_span(e.span(), "returned here"),
                             );
@@ -680,13 +638,7 @@ impl<'a> Pass<'a> {
     /// Scoped deliberately to `val` destinations. `iso`/`trn` mean *transfer*, and the right spelling
     /// for that is `consume` — quietly consuming a binding because it happened to be fresh would be a
     /// second, invisible way to move a unique reference.
-    fn lift_fresh_arg(
-        &mut self,
-        arg: &Expr,
-        dest: Rcap,
-        k: K,
-        captured: Option<(bool, bool)>,
-    ) -> K {
+    fn lift_fresh_arg(&mut self, arg: &Expr, dest: Rcap, k: K, captured: Option<(bool, bool)>) -> K {
         if dest != Rcap::Val {
             return k;
         }
@@ -754,14 +706,8 @@ impl<'a> Pass<'a> {
                 K::Unknown => "an undetermined capability".to_string(),
             };
             self.diags.push(
-                Diagnostic::error(
-                    "DL1603",
-                    format!(
-                        "cannot store {shown} where `{}` is required ({what}){hint}",
-                        dest.name()
-                    ),
-                )
-                .with_span(span, format!("`{}` required here", dest.name())),
+                Diagnostic::error("DL1603", format!("cannot store {shown} where `{}` is required ({what}){hint}", dest.name()))
+                    .with_span(span, format!("`{}` required here", dest.name())),
             );
         }
     }
@@ -821,9 +767,9 @@ impl<'a> Pass<'a> {
                     Some(format!("cannot write a {what} through this receiver"))
                 }
             }
-            K::Unknown => Some(format!(
-                "cannot write a {what}: the receiver's reference capability could not be determined — annotate it"
-            )),
+            K::Unknown => {
+                Some(format!("cannot write a {what}: the receiver's reference capability could not be determined — annotate it"))
+            }
         };
         if let Some(msg) = refusal {
             self.diags.push(Diagnostic::error("DL1604", msg).with_span(span, "write refused"));
@@ -980,11 +926,9 @@ impl<'a> Pass<'a> {
                     _ => None,
                 };
                 let k = match (bk, &elem) {
-                    (K::Known(o) | K::Unaliased(o), Some(et)) => self
-                        .default_of(et)
-                        .and_then(|f| viewpoint(o, f))
-                        .map(K::Known)
-                        .unwrap_or(K::Unknown),
+                    (K::Known(o) | K::Unaliased(o), Some(et)) => {
+                        self.default_of(et).and_then(|f| viewpoint(o, f)).map(K::Known).unwrap_or(K::Unknown)
+                    }
                     _ => K::Unknown,
                 };
                 (k, elem)
@@ -1008,9 +952,7 @@ impl<'a> Pass<'a> {
             _ => return None,
         };
         let fty = lower_shallow(te, self.table);
-        let rcap = te
-            .written_rcap()
-            .or_else(|| fty.as_ref().and_then(|t| self.default_of(t)));
+        let rcap = te.written_rcap().or_else(|| fty.as_ref().and_then(|t| self.default_of(t)));
         Some((rcap?, fty))
     }
 
@@ -1023,10 +965,7 @@ impl<'a> Pass<'a> {
                 if path.segs.len() == 1 {
                     let name = &path.segs[0].name;
                     if self.lookup(name).is_some() {
-                        return self
-                            .use_binding(name, *span, UseKind::Read)
-                            .map(K::Known)
-                            .unwrap_or(K::Unknown);
+                        return self.use_binding(name, *span, UseKind::Read).map(K::Known).unwrap_or(K::Unknown);
                     }
                     // A top-level fn used as a value captures nothing — a `val` closure.
                     if self.table.fns.contains_key(name) {
@@ -1140,13 +1079,8 @@ impl<'a> Pass<'a> {
                                 _ => Vec::new(),
                             };
                             for (i, p) in sig.params.iter().enumerate() {
-                                let dest = p
-                                    .ty
-                                    .written_rcap()
-                                    .or_else(|| sig_tys.get(i).and_then(|t| self.default_of(t)));
-                                if let (Some(d), Some((k, lift)), Some(a)) =
-                                    (dest, arg_ks.get(i), args.get(i))
-                                {
+                                let dest = p.ty.written_rcap().or_else(|| sig_tys.get(i).and_then(|t| self.default_of(t)));
+                                if let (Some(d), Some((k, lift)), Some(a)) = (dest, arg_ks.get(i), args.get(i)) {
                                     let k = self.lift_fresh_arg(a, d, *k, *lift);
                                     self.check_storable(
                                         k,
@@ -1207,12 +1141,8 @@ impl<'a> Pass<'a> {
                 // DL1601 with the EXACT `consume` repair.
                 if let Some(Type::Actor(aname, _)) = recv_ty {
                     let aname = aname.clone();
-                    let beh_params = self
-                        .table
-                        .actors
-                        .get(&aname)
-                        .and_then(|adef| adef.behavior(&name.name))
-                        .map(|b| b.params.clone());
+                    let beh_params =
+                        self.table.actors.get(&aname).and_then(|adef| adef.behavior(&name.name)).map(|b| b.params.clone());
                     if let Some(params) = beh_params {
                         let dests = self.boundary_dests(&aname, &name.name, &params);
                         for ((a, k), dest) in args.iter().zip(&arg_ks).zip(dests) {
@@ -1225,9 +1155,7 @@ impl<'a> Pass<'a> {
                 // denies synchronous access. Messages are the only cross-actor interface.
                 if let Some(Type::Actor(aname, _)) = recv_ty {
                     if let Some(adef) = self.table.actors.get(aname) {
-                        if adef.sync_fn(&name.name).is_some()
-                            && !matches!(rk, K::Known(Rcap::Ref) | K::Unaliased(Rcap::Ref))
-                        {
+                        if adef.sync_fn(&name.name).is_some() && !matches!(rk, K::Known(Rcap::Ref) | K::Unaliased(Rcap::Ref)) {
                             self.diags.push(
                                 Diagnostic::error(
                                     "DL1604",
@@ -1260,9 +1188,7 @@ impl<'a> Pass<'a> {
                             K::Unknown
                         }
                     },
-                    (K::Fresh { natural, .. }, Some((f, _))) => {
-                        viewpoint(natural, f).map(K::Known).unwrap_or(K::Unknown)
-                    }
+                    (K::Fresh { natural, .. }, Some((f, _))) => viewpoint(natural, f).map(K::Known).unwrap_or(K::Unknown),
                     _ => K::Unknown,
                 }
             }
@@ -1274,11 +1200,9 @@ impl<'a> Pass<'a> {
                     _ => None,
                 };
                 match (rk, elem) {
-                    (K::Known(o) | K::Unaliased(o), Some(et)) => self
-                        .default_of(&et)
-                        .and_then(|f| viewpoint(o, f))
-                        .map(K::Known)
-                        .unwrap_or(K::Unknown),
+                    (K::Known(o) | K::Unaliased(o), Some(et)) => {
+                        self.default_of(&et).and_then(|f| viewpoint(o, f)).map(K::Known).unwrap_or(K::Unknown)
+                    }
                     _ => K::Unknown,
                 }
             }
@@ -1381,10 +1305,9 @@ impl<'a> Pass<'a> {
             Expr::Block(b) => self.walk_block_value(b),
             // T-Consume (spec §3): yields the binding's FULL rcap, unaliased, and kills the
             // binding — flow-sensitively, through the centralized use path.
-            Expr::Consume { name, span, .. } => self
-                .use_binding(&name.name, *span, UseKind::Consume)
-                .map(K::Unaliased)
-                .unwrap_or(K::Unknown),
+            Expr::Consume { name, span, .. } => {
+                self.use_binding(&name.name, *span, UseKind::Consume).map(K::Unaliased).unwrap_or(K::Unknown)
+            }
             // T-Recover (spec §3): the body checks under the boundary restriction — only
             // val/tag (or consumed iso) outer bindings are visible (DL1605 via use_binding) —
             // and the result lifts to the target: full κ, unaliased.
@@ -1461,11 +1384,7 @@ impl<'a> Pass<'a> {
     }
 
     fn default_k(&self, e: &Expr) -> K {
-        self.node_types
-            .get(&e.id())
-            .and_then(|t| self.default_of(t))
-            .map(K::Known)
-            .unwrap_or(K::Unknown)
+        self.node_types.get(&e.id()).and_then(|t| self.default_of(t)).map(K::Known).unwrap_or(K::Unknown)
     }
 
     fn written_field_rcap(&self, recv: &Type, fname: &str) -> Option<Rcap> {
@@ -1542,11 +1461,7 @@ fn components_of(table: &DeclTable, id: TypeDefId) -> Option<Vec<Type>> {
 fn lower_shallow(te: &TypeExpr, table: &DeclTable) -> Option<Type> {
     match te {
         TypeExpr::Rcap { inner, .. } => lower_shallow(inner, table),
-        TypeExpr::Fn { .. } => Some(Type::Fn {
-            params: Vec::new(),
-            ret: Box::new(Type::Unit),
-            row: crate::ty::Row::pure(),
-        }),
+        TypeExpr::Fn { .. } => Some(Type::Fn { params: Vec::new(), ret: Box::new(Type::Unit), row: crate::ty::Row::pure() }),
         TypeExpr::Named { path, args, .. } => {
             if path.segs.len() != 1 {
                 return None;
@@ -1563,10 +1478,9 @@ fn lower_shallow(te: &TypeExpr, table: &DeclTable) -> Option<Type> {
                 "PyObj" => Type::PyObj,
                 "List" => Type::List(Box::new(lower_shallow(args.first()?, table)?)),
                 "Option" => Type::Option(Box::new(lower_shallow(args.first()?, table)?)),
-                "Result" => Type::Result(
-                    Box::new(lower_shallow(args.first()?, table)?),
-                    Box::new(lower_shallow(args.get(1)?, table)?),
-                ),
+                "Result" => {
+                    Type::Result(Box::new(lower_shallow(args.first()?, table)?), Box::new(lower_shallow(args.get(1)?, table)?))
+                }
                 "Secret" => Type::Secret(Box::new(lower_shallow(args.first()?, table)?)),
                 "Cap" => {
                     let arg = args.first()?;
@@ -1703,8 +1617,7 @@ fn free_vars_expr(e: &Expr, bound: &mut HashSet<String>, out: &mut Vec<String>) 
             for arm in arms {
                 let mut names = Vec::new();
                 pattern_names(&arm.pattern, &mut names);
-                let newly: Vec<String> =
-                    names.into_iter().filter(|n| bound.insert(n.clone())).collect();
+                let newly: Vec<String> = names.into_iter().filter(|n| bound.insert(n.clone())).collect();
                 free_vars_expr(&arm.body, bound, out);
                 for n in newly {
                     bound.remove(&n);
@@ -1712,11 +1625,7 @@ fn free_vars_expr(e: &Expr, bound: &mut HashSet<String>, out: &mut Vec<String>) 
             }
         }
         Expr::Lambda { params, body, .. } => {
-            let newly: Vec<String> = params
-                .iter()
-                .map(|p| p.name.name.clone())
-                .filter(|n| bound.insert(n.clone()))
-                .collect();
+            let newly: Vec<String> = params.iter().map(|p| p.name.name.clone()).filter(|n| bound.insert(n.clone())).collect();
             free_vars_block(body, bound, out);
             for n in newly {
                 bound.remove(&n);
@@ -1782,9 +1691,7 @@ fn consumed_free_in_expr(e: &Expr, bound: &mut HashSet<String>, out: &mut Vec<(S
         }
         Expr::Lit { .. } | Expr::Var { .. } => {}
         Expr::List { items, .. } => items.iter().for_each(|i| consumed_free_in_expr(i, bound, out)),
-        Expr::Record { fields, .. } => {
-            fields.iter().for_each(|(_, v)| consumed_free_in_expr(v, bound, out))
-        }
+        Expr::Record { fields, .. } => fields.iter().for_each(|(_, v)| consumed_free_in_expr(v, bound, out)),
         Expr::Call { callee, args, .. } => {
             consumed_free_in_expr(callee, bound, out);
             args.iter().for_each(|a| consumed_free_in_expr(a, bound, out));

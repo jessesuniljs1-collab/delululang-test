@@ -121,7 +121,8 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
 
         if id == 0 {
             let body = &wasm[body_start..body_end];
-            let (name_len, m) = read_uleb(body).ok_or_else(|| ArtifactError::Malformed("truncated custom-section name".into()))?;
+            let (name_len, m) =
+                read_uleb(body).ok_or_else(|| ArtifactError::Malformed("truncated custom-section name".into()))?;
             let name_end = m
                 .checked_add(name_len as usize)
                 .filter(|&e| e <= body.len())
@@ -138,10 +139,9 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
 
     let payload = payload.ok_or(ArtifactError::NoSection)?;
     let manifest: Value = serde_json::from_slice(&payload).map_err(|e| ArtifactError::BadJson(e.to_string()))?;
-    let version = manifest
-        .get("version")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| ArtifactError::BadJson("missing `version`".into()))? as u32;
+    let version =
+        manifest.get("version").and_then(|v| v.as_u64()).ok_or_else(|| ArtifactError::BadJson("missing `version`".into()))?
+            as u32;
     if version > DWX_VERSION {
         return Err(ArtifactError::UnsupportedVersion(version));
     }
@@ -150,10 +150,7 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| ArtifactError::BadJson("missing `code_blake3`".into()))?
         .to_string();
-    let authority = manifest
-        .get("authority")
-        .cloned()
-        .ok_or_else(|| ArtifactError::BadJson("missing `authority`".into()))?;
+    let authority = manifest.get("authority").cloned().ok_or_else(|| ArtifactError::BadJson("missing `authority`".into()))?;
 
     let actual = blake3::hash(&bare).to_hex().to_string();
     if actual != declared {
@@ -256,7 +253,8 @@ mod tests {
     #[test]
     fn round_trip_embeds_and_verifies_authority() {
         let bare = hello_wasm();
-        let authority = json!({ "program": "m", "effects": ["Write"], "capabilities": [{ "kind": "Console", "scopes": ["stdio"] }] });
+        let authority =
+            json!({ "program": "m", "effects": ["Write"], "capabilities": [{ "kind": "Console", "scopes": ["stdio"] }] });
         let dwx = embed_authority(&bare, &authority);
         assert!(dwx.len() > bare.len(), "the artifact must carry the extra section");
 

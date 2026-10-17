@@ -43,9 +43,8 @@ pub mod tree;
 pub mod validate;
 
 pub use audit::{
-    canonical_json, content_hash, query, render_ts_utc, tail, verify, AppendLock, AuditEntry,
-    AuditError, AuditLog, AuditRecord, AuditSink, MemSink, QueryFilter, VerifiedStats,
-    APPEND_LOCK_FILE, GENESIS_HASH, OBSERVABILITY_PHRASE,
+    canonical_json, content_hash, query, render_ts_utc, tail, verify, AppendLock, AuditEntry, AuditError, AuditLog, AuditRecord,
+    AuditSink, MemSink, QueryFilter, VerifiedStats, APPEND_LOCK_FILE, GENESIS_HASH, OBSERVABILITY_PHRASE,
 };
 pub use authority::{attenuation_check, secret_to_name, Authority, Scopes};
 pub use budget_scope::BudgetScope;
@@ -53,8 +52,8 @@ pub use deadman::{DeadmanRefusal, Fired};
 pub use device_scope::DeviceScope;
 pub use diag::Denial;
 pub use guard::{
-    generate_owner_code, GuardClass, GuardPolicy, GuardRequest, GuardRule, GuardState, GuardSubset,
-    GuardTier, GuardVerdict, Permit, ReqStatus, DEFAULT_PERMIT_TTL_MILLIS, REQUEST_TTL_MILLIS,
+    generate_owner_code, GuardClass, GuardPolicy, GuardRequest, GuardRule, GuardState, GuardSubset, GuardTier, GuardVerdict,
+    Permit, ReqStatus, DEFAULT_PERMIT_TTL_MILLIS, REQUEST_TTL_MILLIS,
 };
 pub use ids::{IdSource, OsIdSource, SeqIdSource};
 pub use lease::{load_or_create_key, Token};

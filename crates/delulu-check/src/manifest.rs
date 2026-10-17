@@ -128,27 +128,21 @@ impl Manifest {
                 match parse_dependency(dep_name, val) {
                     Ok(dep) => dependencies.push(dep),
                     Err(msg) => diags.push(
-                        Diagnostic::error("DL1004", msg)
-                            .with_span(key_span(src, file, dep_name), "in this dependency entry"),
+                        Diagnostic::error("DL1004", msg).with_span(key_span(src, file, dep_name), "in this dependency entry"),
                     ),
                 }
             }
         }
         dependencies.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let language =
-            pkg.and_then(|p| p.get("language")).and_then(|v| v.as_str()).map(str::to_string);
+        let language = pkg.and_then(|p| p.get("language")).and_then(|v| v.as_str()).map(str::to_string);
         if let Some(edition) = &language {
             if let Err(msg) = validate_edition(edition) {
-                diags.push(
-                    Diagnostic::error("DL1004", msg)
-                        .with_span(key_span(src, file, "language"), "here"),
-                );
+                diags.push(Diagnostic::error("DL1004", msg).with_span(key_span(src, file, "language"), "here"));
             }
         }
 
-        let manifest =
-            Manifest { name, version, kind, language, authority, dependencies, raw: src.to_string(), file };
+        let manifest = Manifest { name, version, kind, language, authority, dependencies, raw: src.to_string(), file };
         (Some(manifest), diags)
     }
 
@@ -242,9 +236,7 @@ fn parse_dependency(name: &str, val: &toml::Value) -> Result<Dependency, String>
 }
 
 fn arr_of_str(v: Option<&toml::Value>) -> Vec<String> {
-    v.and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
 // ----- coarse span helpers (manifest diagnostics are line-granular by design) --------------------
@@ -267,9 +259,7 @@ fn parse_edition(s: &str) -> Option<(u32, u32)> {
 fn validate_edition(s: &str) -> Result<(), String> {
     match parse_edition(s) {
         Some(_) => Ok(()),
-        None => Err(format!(
-            "`[package] language` must be a `MAJOR.MINOR` edition such as \"1.0\", found \"{s}\""
-        )),
+        None => Err(format!("`[package] language` must be a `MAJOR.MINOR` edition such as \"1.0\", found \"{s}\"")),
     }
 }
 

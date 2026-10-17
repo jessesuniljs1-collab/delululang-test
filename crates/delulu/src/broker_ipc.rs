@@ -307,16 +307,34 @@ impl Request {
 pub enum Response {
     Ok,
     /// A refusal carrying the diagnostic code (DL0802/DL1401/DL1402/DL1403/DL1406/DL1407/DL0904…).
-    Error { code: String, message: String, requires_human: bool },
-    Issued { node: String },
-    Delegated { node: String, token: String },
-    Redeemed { node: String },
+    Error {
+        code: String,
+        message: String,
+        requires_human: bool,
+    },
+    Issued {
+        node: String,
+    },
+    Delegated {
+        node: String,
+        token: String,
+    },
+    Redeemed {
+        node: String,
+    },
     /// `Adopt` reply (RFC 0001 F3): the local root minted from a verified chain, plus the chain's
     /// leaf fingerprint (the vehicle's own answer to "where did this authority come from?") and the
     /// adopted TTL, which is the shortest hop's expiry.
-    Adopted { node: String, fingerprint: String, ttl_millis: Option<i64> },
+    Adopted {
+        node: String,
+        fingerprint: String,
+        ttl_millis: Option<i64>,
+    },
     /// `Renew` reply (RFC 0001 F4): the uplink-lease deadline now in force.
-    Renewed { node: String, ttl_millis: i64 },
+    Renewed {
+        node: String,
+        ttl_millis: i64,
+    },
     Revoked {
         by_seq: u64,
         epoch: u64,
@@ -328,14 +346,26 @@ pub enum Response {
     },
     /// `DeviceRefused` reply: the seq of the `deny` record written (and `DisarmDeadman`'s: the
     /// `deadman-disarm` record's).
-    Recorded { seq: u64 },
+    Recorded {
+        seq: u64,
+    },
     /// `ArmDeadman` reply: the `deadman-arm` record's seq, the period in force, and the key every beat
     /// and the disarm must carry — held only by the armer and (hashed) by the daemon, never written.
-    DeadmanArmed { seq: u64, period_ms: u64, key: String },
+    DeadmanArmed {
+        seq: u64,
+        period_ms: u64,
+        key: String,
+    },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
     /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that
     /// PROCEEDED — the client surfaces it once per rule per run (addendum §2.6/§2.7).
-    Decision { allow: bool, code: Option<String>, message: Option<String>, audit_seq: Option<u64>, warn: Option<String> },
+    Decision {
+        allow: bool,
+        code: Option<String>,
+        message: Option<String>,
+        audit_seq: Option<u64>,
+        warn: Option<String>,
+    },
     /// The node's effective state + the current epoch (client epoch-cache refresh). The guard fields
     /// `guarded_classes` and `guard_bypass` (Stage 5 chunk 6) let the client route guarded epoch-class
     /// ops synchronously (addendum §2.4.2 / criterion 11).
@@ -349,21 +379,39 @@ pub enum Response {
         guard_bypass: bool,
     },
     /// The declassified bytes (phase 5g — one of the two responses that carry secret material).
-    Exposed { bytes: String },
+    Exposed {
+        bytes: String,
+    },
     /// P9-04 (d), D-V2-134: a secret's bytes for one request — the other response that carries secret material, and it
     /// goes to the run's egress client, never to a program value.
-    SecretBytes { bytes: String },
+    SecretBytes {
+        bytes: String,
+    },
     /// `Secret.verify`'s one bit.
-    Verified { equal: bool },
+    Verified {
+        equal: bool,
+    },
     /// A fresh broker-held secret handle name from a broker-side `Secret.map` (phase 5g).
-    Mapped { name: String },
-    Status { pid: u32, nodes: usize, epoch: u64 },
-    Tree { text: String },
+    Mapped {
+        name: String,
+    },
+    Status {
+        pid: u32,
+        nodes: usize,
+        epoch: u64,
+    },
+    Tree {
+        text: String,
+    },
     /// `List` reply: every node, sorted by id (additive `broker/1` variant, chunk 5).
-    Listed { nodes: Vec<NodeInfo> },
+    Listed {
+        nodes: Vec<NodeInfo>,
+    },
     /// `Inspect` reply (additive `broker/1` variant, chunk 5). Boxed: `NodeInfo` is by far the
     /// widest payload and would otherwise bloat every `Response` on the stack.
-    Inspected { node: Box<NodeInfo> },
+    Inspected {
+        node: Box<NodeInfo>,
+    },
 
     // ----- The Guard (Stage 5 chunk 6). Additive `broker/1` variants. --------------------------
     /// Guard status / policy show reply: mode, bypass, rule digest, queue sizes.
@@ -375,17 +423,31 @@ pub enum Response {
         permits: usize,
     },
     /// A guard request was recorded (or an existing one returned — `deduped`). Carries the id.
-    GuardRequested { id: String, deduped: bool },
+    GuardRequested {
+        id: String,
+        deduped: bool,
+    },
     /// A guard request was approved: the minted permit id.
-    GuardApproved { permit_id: String },
+    GuardApproved {
+        permit_id: String,
+    },
     /// The pending/decided guard request queue (with justifications).
-    GuardPendingList { requests: Vec<GuardRequestWire> },
+    GuardPendingList {
+        requests: Vec<GuardRequestWire>,
+    },
     /// The broker-held permits.
-    GuardPermitList { permits: Vec<GuardPermitWire> },
+    GuardPermitList {
+        permits: Vec<GuardPermitWire>,
+    },
     /// A proposal was filed (or the same pending one answered — `deduped`). Carries its id (D-V2-125).
-    Proposed { id: String, deduped: bool },
+    Proposed {
+        id: String,
+        deduped: bool,
+    },
     /// Every proposal, in the order filed (D-V2-125).
-    ProposalList { proposals: Vec<ProposalWire> },
+    ProposalList {
+        proposals: Vec<ProposalWire>,
+    },
 }
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.

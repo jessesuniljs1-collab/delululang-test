@@ -81,10 +81,7 @@ fn atlas_custody_overlay_live_then_degraded_end_to_end() {
     let banner = format!("{}{}", stdout(&start), stderr(&start));
     let owner = extract_owner_code(&banner).expect("owner code in start output");
 
-    let del = delulu_state(
-        &state,
-        &["grants", "delegate", "--effects", "Read", "--fs-read", "./data", "--json"],
-    );
+    let del = delulu_state(&state, &["grants", "delegate", "--effects", "Read", "--fs-read", "./data", "--json"]);
     assert!(del.status.success(), "delegate: {}", stderr(&del));
     let delegated: Value = serde_json::from_str(&stdout(&del)).expect("delegate --json");
     let node_id = delegated["node"].as_str().expect("node id").to_string();
@@ -106,19 +103,12 @@ fn atlas_custody_overlay_live_then_degraded_end_to_end() {
     let node_ids: Vec<&str> = v["nodes"].as_array().unwrap().iter().map(|n| n["id"].as_str().unwrap()).collect();
     assert!(node_ids.contains(&format!("grant:{node_id}").as_str()), "grant node in the graph");
     assert!(
-        v["edges"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|e| e["kind"] == "delegates" && e["to"] == format!("grant:{node_id}")),
+        v["edges"].as_array().unwrap().iter().any(|e| e["kind"] == "delegates" && e["to"] == format!("grant:{node_id}")),
         "a delegates edge reaches the delegated grant"
     );
     // The verbatim custody caveat ships (addendum §2.6).
     let caveats: Vec<&str> = v["caveats"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
-    assert!(
-        caveats.iter().any(|c| c.contains("awareness, not enforcement")),
-        "the custody caveat ships verbatim: {caveats:?}"
-    );
+    assert!(caveats.iter().any(|c| c.contains("awareness, not enforcement")), "the custody caveat ships verbatim: {caveats:?}");
 
     // ----- 3. broker down: DL1781 note + the atlas is STILL emitted (criterion 6) ---------------
     let stop = delulu_state(&state, &["broker", "stop"]);
@@ -128,18 +118,14 @@ fn atlas_custody_overlay_live_then_degraded_end_to_end() {
     let e = stderr(&o);
     assert!(e.contains("DL1781"), "the degradation is a DL1781 note: {e}");
     assert!(e.contains("atlas emitted without it"), "the note says the atlas still ships: {e}");
-    let env: Value =
-        serde_json::from_str(&stdout(&o)).expect("stdout is still the clean machine channel");
+    let env: Value = serde_json::from_str(&stdout(&o)).expect("stdout is still the clean machine channel");
     let v: Value = env["atlas"].clone();
     assert_eq!(v["atlas"], "atlas/1", "the atlas is emitted without the overlay");
     assert!(v["custody"].is_null(), "no overlay when the broker is down");
 
     // ----- 4. the HTML artifact is fully self-contained (criterion 7, e2e witness) --------------
     let out_dir = tmp.join("bundle");
-    let o = delulu_state(
-        &state,
-        &["atlas", DEMO, "--format", "html", "--out", out_dir.to_str().unwrap()],
-    );
+    let o = delulu_state(&state, &["atlas", DEMO, "--format", "html", "--out", out_dir.to_str().unwrap()]);
     assert!(o.status.success(), "atlas --out: {}", stderr(&o));
     let html = std::fs::read_to_string(out_dir.join("atlas.html")).expect("atlas.html written");
     assert!(html.contains("const ATLAS="), "data embedded inline");

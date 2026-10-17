@@ -95,7 +95,19 @@ const SENSOR: &str = "sensor=arm0/elbow#angle_deg";
 fn a_control_program_says_the_same_thing_in_a_guest_as_it_does_unsandboxed() {
     let (cwd, state) = scratch("same");
     std::fs::write(cwd.join("arm.delulu"), arm_program()).unwrap();
-    let base = ["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--grant", SENSOR, "--broker-profile", "sim", "--no-prompt"];
+    let base = [
+        "run",
+        "arm.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        GRANT,
+        "--grant",
+        SENSOR,
+        "--broker-profile",
+        "sim",
+        "--no-prompt",
+    ];
     let plain = delulu_in(&cwd, &state, &base);
     assert!(plain.status.success(), "the ordinary run: {}", stderr(&plain));
     let mut sandboxed = base.to_vec();
@@ -133,11 +145,7 @@ fn logging_driver(cwd: &Path) -> String {
              \x20   log.flush()\n\
              \x20   print('VAL 21.5' if l.startswith('READ') else 'OK', flush=True)\n";
         std::fs::write(cwd.join("driver.py"), script).unwrap();
-        let warm = Command::new("python")
-            .args(["-I", "-S", "driver.py"])
-            .current_dir(cwd)
-            .stdin(Stdio::null())
-            .output();
+        let warm = Command::new("python").args(["-I", "-S", "driver.py"]).current_dir(cwd).stdin(Stdio::null()).output();
         assert!(warm.as_ref().is_ok_and(|o| o.status.success()), "the test driver could not start: {warm:?}");
         let _ = std::fs::remove_file(cwd.join("adapter-saw.txt"));
         "python -I -S driver.py".to_string()
@@ -169,15 +177,43 @@ fn a_guests_out_of_envelope_command_never_reaches_the_driver_process() {
     let signed = delulu_in(
         &cwd,
         &state,
-        &["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--grant", SENSOR, "--broker-profile", "sim", "--signoff", "signoff.json", "--no-prompt"],
+        &[
+            "run",
+            "arm.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--grant",
+            SENSOR,
+            "--broker-profile",
+            "sim",
+            "--signoff",
+            "signoff.json",
+            "--no-prompt",
+        ],
     );
     assert!(signed.status.success(), "the simulation signs off: {}", stderr(&signed));
     let o = delulu_in(
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
-            "--broker-profile", "hw:demo-adapter", "--approved", "signoff.json", "--adapter-cmd", &driver, "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--grant",
+            SENSOR,
+            "--broker-profile",
+            "hw:demo-adapter",
+            "--approved",
+            "signoff.json",
+            "--adapter-cmd",
+            &driver,
+            "--no-prompt",
         ],
     );
     assert!(o.status.success(), "a refusal is a value; the guest's run exits 0:\n{}", stderr(&o));
@@ -228,8 +264,18 @@ fn a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock() {
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim",
-            "--report-out", "rep.json", "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            SHORT_BEAT,
+            "--broker-profile",
+            "sim",
+            "--report-out",
+            "rep.json",
+            "--no-prompt",
         ],
     );
     assert!(o.status.success(), "losing a device kills the command, never the run:\n{}", stderr(&o));
@@ -269,8 +315,20 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", SHORT_BEAT, "--broker-profile", "sim",
-            "--limits", "wall=3", "--report-out", "rep.json", "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            SHORT_BEAT,
+            "--broker-profile",
+            "sim",
+            "--limits",
+            "wall=3",
+            "--report-out",
+            "rep.json",
+            "--no-prompt",
         ],
     );
     let took = started.elapsed();
@@ -289,9 +347,15 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
     // the devices' own clock — the revocation's instant less the heartbeat and the overdue.
     if let Ok(text) = std::fs::read_to_string(cwd.join("rep.json")) {
         let report: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
-        let at = report["devices"].as_array().and_then(|j| j.iter().find(|e| e["op"] == "lease.revoked")).and_then(|e| e["at_ms"].as_u64());
+        let at = report["devices"]
+            .as_array()
+            .and_then(|j| j.iter().find(|e| e["op"] == "lease.revoked"))
+            .and_then(|e| e["at_ms"].as_u64());
         if let Some(at) = at {
-            eprintln!("RW 4.59: the first command beat the lease {} ms after the devices started", at.saturating_sub(150 + late / 1000));
+            eprintln!(
+                "RW 4.59: the first command beat the lease {} ms after the devices started",
+                at.saturating_sub(150 + late / 1000)
+            );
         }
     }
 }
@@ -299,8 +363,9 @@ fn a_wedged_guest_that_never_asks_again_still_loses_its_actuator() {
 /// A program of `n` small functions, then `main`: one command, as the first thing it does. Its check takes
 /// time in proportion to `n`, and nothing else about it does.
 fn long_to_check(n: usize) -> String {
-    let pad: String =
-        (0..n).map(|i| format!("fn pad{i}(x: Int) -> Int {{\n  if x < {i} {{ x + {i} }} else {{ pad{i}(x - 1) }}\n}}\n\n")).collect();
+    let pad: String = (0..n)
+        .map(|i| format!("fn pad{i}(x: Int) -> Int {{\n  if x < {i} {{ x + {i} }} else {{ pad{i}(x - 1) }}\n}}\n\n"))
+        .collect();
     format!(
         "module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n{pad}\
          fn main(root: Root) ! {{Write, Actuate}} {{\n\
@@ -376,8 +441,20 @@ fn a_guest_that_never_asks_leaves_no_device_node_live() {
         &cwd,
         &state,
         &[
-            "run", "mute.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant", SHORT_BEAT,
-            "--broker-profile", "sim", "--limits", "wall=2", "--no-prompt",
+            "run",
+            "mute.delulu",
+            "--sandbox",
+            "--broker",
+            "daemon",
+            "--grant",
+            "console",
+            "--grant",
+            SHORT_BEAT,
+            "--broker-profile",
+            "sim",
+            "--limits",
+            "wall=2",
+            "--no-prompt",
         ],
     );
     assert!(stdout(&o).is_empty(), "the guest never reached its first request:\n{}\n{}", stdout(&o), stderr(&o));
@@ -407,8 +484,18 @@ fn a_guest_that_talks_to_its_host_without_touching_the_device_is_not_beating_it(
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", "clock", "--grant", SHORT_BEAT,
-            "--broker-profile", "sim", "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            "clock",
+            "--grant",
+            SHORT_BEAT,
+            "--broker-profile",
+            "sim",
+            "--no-prompt",
         ],
     );
     assert!(o.status.success(), "{}", stderr(&o));
@@ -479,7 +566,8 @@ fn device_node(cwd: &Path, state: &Path, device: &str) -> Option<String> {
 #[test]
 fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
     let (cwd, state) = scratch("estop");
-    std::fs::write(cwd.join("sup.delulu"), format!("module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n{SUPERVISOR}")).unwrap();
+    std::fs::write(cwd.join("sup.delulu"), format!("module m\n\ntype Elbow {{ angle_deg: Float }}\n\n{SAY}\n{SUPERVISOR}"))
+        .unwrap();
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let _guard = DaemonGuard { state: state.clone() };
@@ -488,9 +576,18 @@ fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
         .env("DELULU_STATE_DIR", &state)
         .env("DELULU_NO_FIRST_RUN", "1")
         .args([
-            "run", "sup.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant",
+            "run",
+            "sup.delulu",
+            "--sandbox",
+            "--broker",
+            "daemon",
+            "--grant",
+            "console",
+            "--grant",
             "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
-            "--broker-profile", "sim", "--no-prompt",
+            "--broker-profile",
+            "sim",
+            "--no-prompt",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -549,9 +646,20 @@ fn an_operator_revoke_during_a_guests_compute_stops_its_first_command() {
         .env("DELULU_STATE_DIR", &state)
         .env("DELULU_NO_FIRST_RUN", "1")
         .args([
-            "run", "late.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant",
+            "run",
+            "late.delulu",
+            "--sandbox",
+            "--broker",
+            "daemon",
+            "--grant",
+            "console",
+            "--grant",
             "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=600000,ttl_ms=600000,fail=safe-park",
-            "--broker-profile", "sim", "--report-out", "rep.json", "--no-prompt",
+            "--broker-profile",
+            "sim",
+            "--report-out",
+            "rep.json",
+            "--no-prompt",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -597,8 +705,20 @@ fn the_sign_off_gate_binds_a_sandboxed_hardware_run_and_starts_no_driver_and_no_
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
-            "--broker-profile", "hw:demo-adapter", "--adapter-cmd", &driver, "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--grant",
+            SENSOR,
+            "--broker-profile",
+            "hw:demo-adapter",
+            "--adapter-cmd",
+            &driver,
+            "--no-prompt",
         ],
     );
     let err = stderr(&o);
@@ -619,7 +739,8 @@ fn a_hardware_flag_without_a_hardware_profile_is_refused_sandboxed_or_not() {
     std::fs::write(cwd.join("arm.delulu"), arm_program()).unwrap();
     for sandbox in [false, true] {
         for flag in [vec!["--approved", "signoff.json"], vec!["--adapter-cmd", "drv"], vec!["--require-signed-adapter"]] {
-            let mut args = vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--grant", SENSOR, "--broker-profile", "sim"];
+            let mut args =
+                vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--grant", SENSOR, "--broker-profile", "sim"];
             if sandbox {
                 args.push("--sandbox");
             }
@@ -661,9 +782,17 @@ fn a_sandboxed_simulation_keeps_the_stepped_clock_and_loses_the_lease_on_the_sam
     let (cwd, state) = scratch("stepped");
     std::fs::write(cwd.join("arm.delulu"), refused_in_between()).unwrap();
     let base = [
-        "run", "arm.delulu", "--grant", "console", "--grant",
-        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=5000,ttl_ms=600000,fail=hold", "--broker-profile", "sim",
-        "--sim-step", "1000", "--no-prompt",
+        "run",
+        "arm.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=5000,ttl_ms=600000,fail=hold",
+        "--broker-profile",
+        "sim",
+        "--sim-step",
+        "1000",
+        "--no-prompt",
     ];
     let plain = delulu_in(&cwd, &state, &base);
     assert!(plain.status.success(), "{}", stderr(&plain));
@@ -695,8 +824,20 @@ fn a_clean_sandboxed_simulation_signs_off_and_a_faulted_one_does_not() {
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
-            "--broker-profile", "sim", "--signoff", "signoff.json", "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--grant",
+            SENSOR,
+            "--broker-profile",
+            "sim",
+            "--signoff",
+            "signoff.json",
+            "--no-prompt",
         ],
     );
     assert!(sim.status.success(), "{}", stderr(&sim));
@@ -706,8 +847,22 @@ fn a_clean_sandboxed_simulation_signs_off_and_a_faulted_one_does_not() {
         &cwd,
         &state,
         &[
-            "run", "arm.delulu", "--sandbox", "--grant", "console", "--grant", GRANT, "--grant", SENSOR,
-            "--broker-profile", "hw:demo-adapter", "--approved", "signoff.json", "--adapter-cmd", &driver, "--no-prompt",
+            "run",
+            "arm.delulu",
+            "--sandbox",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--grant",
+            SENSOR,
+            "--broker-profile",
+            "hw:demo-adapter",
+            "--approved",
+            "signoff.json",
+            "--adapter-cmd",
+            &driver,
+            "--no-prompt",
         ],
     );
     assert!(hw.status.success(), "the sandboxed sign-off opens the gate:\n{}", stderr(&hw));
@@ -722,10 +877,7 @@ fn a_clean_sandboxed_simulation_signs_off_and_a_faulted_one_does_not() {
     let faulted = delulu_in(
         &cwd,
         &state,
-        &[
-            "run", "bad.delulu", "--sandbox", "--grant", GRANT, "--broker-profile", "sim", "--signoff", "bad.json",
-            "--no-prompt",
-        ],
+        &["run", "bad.delulu", "--sandbox", "--grant", GRANT, "--broker-profile", "sim", "--signoff", "bad.json", "--no-prompt"],
     );
     assert!(!faulted.status.success(), "the guest faulted: {}", stderr(&faulted));
     assert!(!cwd.join("bad.json").exists(), "a faulted simulation signs nothing off:\n{}", stderr(&faulted));
@@ -774,7 +926,11 @@ fn a_report_says_when_a_guests_devices_never_started() {
     };
     let mute_report = report("mute.delulu", &["--grant", SHORT_BEAT, "--limits", "wall=2"]);
     assert_eq!(mute_report["outcome"]["ran"], true, "the baseline: the guest ran (and its wall ended it): {mute_report}");
-    assert_eq!(not_started(&mute_report), vec!["arm0/elbow".to_string()], "the report names the device that never started: {mute_report}");
+    assert_eq!(
+        not_started(&mute_report),
+        vec!["arm0/elbow".to_string()],
+        "the report names the device that never started: {mute_report}"
+    );
     let asked = report("arm.delulu", &["--grant", GRANT, "--grant", SENSOR]);
     assert!(asked["devices"].is_array(), "the control's devices were started and journaled: {asked}");
     assert!(not_started(&asked).is_empty(), "a guest that asked started its devices: {asked}");

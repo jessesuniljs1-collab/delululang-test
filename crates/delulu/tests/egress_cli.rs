@@ -115,7 +115,8 @@ fn a_granted_request_leaves_the_process_as_tls_at_l0_and_from_a_guest() {
         let dir = tmp(if sandbox { "tls-guest" } else { "tls-l0" });
         let (port, seen) = listen(Duration::from_secs(20));
         fetcher(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/probe"));
-        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
+        let mut args =
+            vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
         if sandbox {
             args.push("--sandbox");
         }
@@ -150,7 +151,8 @@ fn a_refused_request_says_why_to_the_operator_and_nothing_to_the_program() {
     for sandbox in [false, true] {
         let dir = tmp(if sandbox { "scheme-guest" } else { "scheme-l0" });
         fetcher(&dir, "example.com", "http://example.com/plain");
-        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com", "--report-out", "rep.json"];
+        let mut args =
+            vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com", "--report-out", "rep.json"];
         if sandbox {
             args.push("--sandbox");
         }
@@ -196,15 +198,25 @@ fn a_path_scoped_grant_reaches_its_paths_and_no_other() {
         fetcher(&dir, scope, &format!("https://127.0.0.1:{port}/allowed/x?then=/other"));
         let o = run(&dir);
         let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
-        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert!(
+            first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03,
+            "sandbox={sandbox}: TLS, got {first:02x?}:\n{}",
+            out(&o)
+        );
         assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
-        for (label, path) in [("another path", "/other/x"), ("a `..` segment", "/allowed/../other"), ("an escaped `/`", "/allowed/..%2Fother")] {
+        for (label, path) in
+            [("another path", "/other/x"), ("a `..` segment", "/allowed/../other"), ("an escaped `/`", "/allowed/..%2Fother")]
+        {
             let dir = tmp(if sandbox { "path-out-guest" } else { "path-out-l0" });
             let (port, seen) = listen(Duration::from_secs(3));
             fetcher(&dir, scope, &format!("https://127.0.0.1:{port}{path}"));
             let o = run(&dir);
             assert!(out(&o).contains("DL0904"), "sandbox={sandbox}, {label}: refused at the call:\n{}", out(&o));
-            assert!(!String::from_utf8_lossy(&o.stdout).lines().any(|l| l.ends_with("delivered")), "sandbox={sandbox}, {label}:\n{}", out(&o));
+            assert!(
+                !String::from_utf8_lossy(&o.stdout).lines().any(|l| l.ends_with("delivered")),
+                "sandbox={sandbox}, {label}:\n{}",
+                out(&o)
+            );
             assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}, {label}: nothing connected");
         }
     }
@@ -236,20 +248,34 @@ fn a_request_with_headers_leaves_as_tls_at_l0_and_from_a_guest_and_the_report_na
     for sandbox in [false, true] {
         let dir = tmp(if sandbox { "hdr-guest" } else { "hdr-l0" });
         let (port, seen) = listen(Duration::from_secs(20));
-        fetcher_with(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/probe"), &[("X-Api-Version", "7"), ("Accept", "text/plain")]);
-        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
+        fetcher_with(
+            &dir,
+            "127.0.0.1",
+            &format!("https://127.0.0.1:{port}/probe"),
+            &[("X-Api-Version", "7"), ("Accept", "text/plain")],
+        );
+        let mut args =
+            vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
         if sandbox {
             args.push("--sandbox");
         }
         let o = delulu(&dir, &args);
         let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
-        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert!(
+            first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03,
+            "sandbox={sandbox}: TLS, got {first:02x?}:\n{}",
+            out(&o)
+        );
         assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
         assert!(String::from_utf8_lossy(&o.stdout).contains("not delivered"), "sandbox={sandbox}:\n{}", out(&o));
         let v = report(&dir);
         assert_eq!(v["egress"]["requests"], 1, "sandbox={sandbox}: {v}");
         let hop = &v["egress"]["records"][0]["hops"][0];
-        assert_eq!(hop["headers"], serde_json::json!(["accept", "x-api-version"]), "sandbox={sandbox}: the names, in the map's order: {v}");
+        assert_eq!(
+            hop["headers"],
+            serde_json::json!(["accept", "x-api-version"]),
+            "sandbox={sandbox}: the names, in the map's order: {v}"
+        );
         assert!(!v.to_string().contains("text/plain"), "sandbox={sandbox}: no header value in the report: {v}");
         // And the report, `headers` and all, is still a `run-report` (a field the schema had never seen is a field
         // nothing would have held to it — routine run 21's lesson).
@@ -268,7 +294,8 @@ fn a_refused_header_connects_nowhere_and_says_why_to_the_operator() {
         let dir = tmp(if sandbox { "hdr-refused-guest" } else { "hdr-refused-l0" });
         let (port, seen) = listen(Duration::from_secs(3));
         fetcher_with(&dir, "127.0.0.1", &format!("https://127.0.0.1:{port}/probe"), &[("Host", "evil.example.net")]);
-        let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
+        let mut args =
+            vec!["run", "fetch.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--report-out", "rep.json"];
         if sandbox {
             args.push("--sandbox");
         }
@@ -325,7 +352,18 @@ fn secret_sender(dir: &Path, url: &str) {
 fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
     let run = |dir: &Path, audience: &str, sandbox: bool| -> Output {
         let grant = format!("secret:API_TOKEN{audience}={SECRET_BYTES}");
-        let mut args = vec!["run", "send.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1", "--grant", &grant, "--report-out", "rep.json"];
+        let mut args = vec![
+            "run",
+            "send.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1",
+            "--grant",
+            &grant,
+            "--report-out",
+            "rep.json",
+        ];
         // A sandboxed run refuses the trace flags (it does not apply them yet) — the trace is read at L0.
         args.extend(if sandbox { ["--sandbox"].as_slice() } else { ["--trace-effects", "--trace-out", "trace.txt"].as_slice() });
         delulu(dir, &args)
@@ -388,7 +426,10 @@ fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
 fn under_json_the_reason_is_in_the_report_and_not_in_prose() {
     let dir = tmp("json");
     fetcher(&dir, "example.com", "http://example.com/plain");
-    let o = delulu(&dir, &["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com", "--json", "--report-out", "rep.json"]);
+    let o = delulu(
+        &dir,
+        &["run", "fetch.delulu", "--grant", "console", "--grant", "net=example.com", "--json", "--report-out", "rep.json"],
+    );
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     assert!(!String::from_utf8_lossy(&o.stderr).contains("[egress:"), "{}", out(&o));
     assert_eq!(report(&dir)["egress"]["records"][0]["reason"], "scheme");
@@ -398,7 +439,11 @@ fn under_json_the_reason_is_in_the_report_and_not_in_prose() {
 #[test]
 fn a_run_without_requests_reports_zero_rather_than_nothing() {
     let dir = tmp("none");
-    std::fs::write(dir.join("hi.delulu"), "module hi\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(
+        dir.join("hi.delulu"),
+        "module hi\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n",
+    )
+    .unwrap();
     let o = delulu(&dir, &["run", "hi.delulu", "--grant", "console", "--report-out", "rep.json"]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     let v = report(&dir);

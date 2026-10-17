@@ -92,13 +92,7 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
             Ok(())
         });
     }
-    vec![
-        "memory ceiling",
-        "processor-time ceiling",
-        "no privilege escalation",
-        "no core dump",
-        "killed with the host",
-    ]
+    vec!["memory ceiling", "processor-time ceiling", "no privilege escalation", "no core dump", "killed with the host"]
 }
 
 /// The macOS jail: the guest runs under a DENY-DEFAULT Seatbelt profile. Everything is refused
@@ -165,8 +159,7 @@ pub fn seatbelt_launcher(
     // itself is right. This is the campaign's recurring shape — a security decision made on an
     // unnormalized representation — so both spellings of both paths are named.
     let raw_sock = dir.join("broker.sock");
-    let resolved_sock =
-        std::fs::canonicalize(dir).map(|d| d.join("broker.sock")).unwrap_or_else(|_| raw_sock.clone());
+    let resolved_sock = std::fs::canonicalize(dir).map(|d| d.join("broker.sock")).unwrap_or_else(|_| raw_sock.clone());
     let raw_exe = exe.to_path_buf();
     let resolved_exe = std::fs::canonicalize(exe).unwrap_or_else(|_| raw_exe.clone());
     let p = |x: &std::path::Path| x.display().to_string();
@@ -512,8 +505,7 @@ pub fn harden(_cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static
 #[cfg(target_os = "linux")]
 pub fn confine_filesystem(channel_dir: Option<&std::path::Path>) -> Option<Vec<&'static str>> {
     use landlock::{
-        path_beneath_rules, Access, AccessFs, AccessNet, LandlockStatus, Ruleset, RulesetAttr,
-        RulesetCreatedAttr, ABI,
+        path_beneath_rules, Access, AccessFs, AccessNet, LandlockStatus, Ruleset, RulesetAttr, RulesetCreatedAttr, ABI,
     };
 
     // Read-only, and only what a running process needs: its loader and libraries, the system
@@ -534,8 +526,20 @@ pub fn confine_filesystem(channel_dir: Option<&std::path::Path>) -> Option<Vec<&
     //   could open the operator's terminal (`/dev/pts/N`) for reading — keystrokes. The devices a
     //   process may reasonably read are named one by one.
     const SYSTEM_READ: &[&str] = &[
-        "/usr", "/lib", "/lib64", "/lib32", "/bin", "/sbin", "/etc", "/sys", "/proc/self", "/dev/null", "/dev/zero",
-        "/dev/full", "/dev/random", "/dev/urandom",
+        "/usr",
+        "/lib",
+        "/lib64",
+        "/lib32",
+        "/bin",
+        "/sbin",
+        "/etc",
+        "/sys",
+        "/proc/self",
+        "/dev/null",
+        "/dev/zero",
+        "/dev/full",
+        "/dev/random",
+        "/dev/urandom",
     ];
 
     // The rights are requested at ABI v3 for the filesystem, because v3 is where `truncate` became
@@ -682,8 +686,7 @@ pub fn lock_down_self(outer: bool) -> Result<Vec<&'static str>, String> {
     .collect();
     // `c_long` IS `i64` on every Linux target this builds for, so a cast here is not just redundant,
     // it is a lint error under `-D warnings`.
-    let mut rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
-        denied.iter().map(|s| (*s, Vec::new())).collect();
+    let mut rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> = denied.iter().map(|s| (*s, Vec::new())).collect();
     // H1: `unshare` was denied, and `clone` with a namespace flag did the same thing — an escaped guest
     // made a user namespace with it. `clone` itself stays, because threads are made with it: only its
     // namespace flags are refused, one rule per flag (a call matches if ANY rule does). `CLONE_NEWTIME`
@@ -881,9 +884,8 @@ mod windows_jail {
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicAccountingInformation, JobObjectBasicUIRestrictions,
         JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
-        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_BASIC_UI_RESTRICTIONS,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_ACTIVE_PROCESS,
-        JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_BASIC_UI_RESTRICTIONS, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         JOB_OBJECT_LIMIT_PROCESS_MEMORY, JOB_OBJECT_UILIMIT_DESKTOP, JOB_OBJECT_UILIMIT_EXITWINDOWS,
         JOB_OBJECT_UILIMIT_GLOBALATOMS, JOB_OBJECT_UILIMIT_HANDLES, JOB_OBJECT_UILIMIT_READCLIPBOARD,
         JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS, JOB_OBJECT_UILIMIT_WRITECLIPBOARD,
@@ -1095,9 +1097,9 @@ mod windows_jail {
 mod windows_tests {
     use windows_sys::Win32::Foundation::HANDLE;
     use windows_sys::Win32::System::JobObjects::{
-        IsProcessInJob, QueryInformationJobObject, JobObjectExtendedLimitInformation,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_ACTIVE_PROCESS,
-        JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
+        IsProcessInJob, JobObjectExtendedLimitInformation, QueryInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_PROCESS_MEMORY,
     };
 
     /// A child that waits, so the jail is asked about a process that is certainly still alive.
@@ -1256,28 +1258,45 @@ mod linux_tests {
         // a path that does not exist, a read-only mount, a container that forbids binding.
         let free = probe("free", &chan, &secret);
         for expected in ["WRITE=true", "SECRET=true", "SYSTEM=true", "BIND=true"] {
-            assert!(free.contains(expected), "the unconfined control could not `{expected}`, so this test proves nothing:
-{free}");
+            assert!(
+                free.contains(expected),
+                "the unconfined control could not `{expected}`, so this test proves nothing:
+{free}"
+            );
         }
 
         let confined = probe("confined", &chan, &secret);
         if confined.contains("APPLIED=none") {
             // Honest, and visible: this host measured nothing, and the run said so rather than
             // reporting a boundary it does not have.
-            eprintln!("this kernel has no Landlock, so there was nothing to measure:
-{confined}");
+            eprintln!(
+                "this kernel has no Landlock, so there was nothing to measure:
+{confined}"
+            );
             let _ = std::fs::remove_dir_all(&base);
             return;
         }
-        assert!(confined.contains("WRITE=false"), "the guest could still write:
-{confined}");
-        assert!(confined.contains("SECRET=false"), "the guest could still read the operator's file:
-{confined}");
-        assert!(confined.contains("SYSTEM=true"), "the guest could not read `/proc`, so it cannot run at all:
-{confined}");
+        assert!(
+            confined.contains("WRITE=false"),
+            "the guest could still write:
+{confined}"
+        );
+        assert!(
+            confined.contains("SECRET=false"),
+            "the guest could still read the operator's file:
+{confined}"
+        );
+        assert!(
+            confined.contains("SYSTEM=true"),
+            "the guest could not read `/proc`, so it cannot run at all:
+{confined}"
+        );
         if confined.contains("no TCP bind or connect") {
-            assert!(confined.contains("BIND=false"), "`no TCP bind or connect` was claimed and the guest bound anyway:
-{confined}");
+            assert!(
+                confined.contains("BIND=false"),
+                "`no TCP bind or connect` was claimed and the guest bound anyway:
+{confined}"
+            );
         }
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -1353,7 +1372,10 @@ mod escaped_tests {
         unsafe {
             // H2 — sockets. Landlock mediates TCP only.
             ok("UDP", libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) as libc::c_long);
-            ok("NETLINK", libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, libc::NETLINK_ROUTE) as libc::c_long);
+            ok(
+                "NETLINK",
+                libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, libc::NETLINK_ROUTE) as libc::c_long,
+            );
             ok("UNIX_SOCKET", libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) as libc::c_long);
             println!("UNIX_CONNECT={}", std::os::unix::net::UnixStream::connect(&sock).is_ok());
             // H1 — system calls the filter does not name.
@@ -1439,7 +1461,10 @@ mod escaped_tests {
             // Zeroed rather than spelled: musl's `sched_param` has fields glibc's has not.
             let param: libc::sched_param = std::mem::zeroed();
             let policy = libc::sched_getscheduler(pid);
-            println!("SCHEDULER_OTHER={}", policy == libc::SCHED_OTHER && libc::sched_setscheduler(pid, libc::SCHED_OTHER, &param) == 0);
+            println!(
+                "SCHEDULER_OTHER={}",
+                policy == libc::SCHED_OTHER && libc::sched_setscheduler(pid, libc::SCHED_OTHER, &param) == 0
+            );
             // `ioprio_get`/`ioprio_set` for a process (`IOPRIO_WHO_PROCESS` is 1).
             let prio = libc::syscall(libc::SYS_ioprio_get, 1, pid);
             println!("IOPRIO_OTHER={}", prio >= 0 && libc::syscall(libc::SYS_ioprio_set, 1, pid, prio) == 0);
@@ -1523,7 +1548,11 @@ mod escaped_tests {
         assert_eq!(escaped.get("PROC_SELF").map(String::as_str), Some("true"), "the guest cannot read itself: {escaped:?}");
         assert_eq!(escaped.get("DEV_NULL").map(String::as_str), Some("true"), "the guest cannot open /dev/null: {escaped:?}");
         assert_eq!(escaped.get("SIGNAL_SELF").map(String::as_str), Some("true"), "the guest cannot signal itself: {escaped:?}");
-        assert_eq!(escaped.get("PRLIMIT_SELF").map(String::as_str), Some("true"), "the guest cannot read its own limits: {escaped:?}");
+        assert_eq!(
+            escaped.get("PRLIMIT_SELF").map(String::as_str),
+            Some("true"),
+            "the guest cannot read its own limits: {escaped:?}"
+        );
         let mut open = Vec::new();
         for n in names {
             match (free.get(*n).map(String::as_str), escaped.get(*n).map(String::as_str)) {
@@ -1589,7 +1618,9 @@ mod escaped_tests {
     /// H1: the system calls the filter did not name are refused after lock-down.
     #[test]
     fn h1_an_escaped_guest_makes_none_of_the_unnamed_calls() {
-        let Some(open) = still_open("h1", &["MEMFD", "IO_URING", "USERFAULTFD", "PIDFD_OPEN", "FSOPEN", "CLONE_NEWUSER", "CLONE3"]) else {
+        let Some(open) =
+            still_open("h1", &["MEMFD", "IO_URING", "USERFAULTFD", "PIDFD_OPEN", "FSOPEN", "CLONE_NEWUSER", "CLONE3"])
+        else {
             return;
         };
         assert!(open.is_empty(), "an escaped guest still reached: {open:?}");
@@ -1634,7 +1665,11 @@ mod macos_tests {
         assert!(applied.contains(&"the state directory unreadable"), "{applied:?}");
         let out = cmd.env(MODE, &paths).output().unwrap();
         let text = String::from_utf8_lossy(&out.stdout).to_string();
-        assert!(text.contains("ELSEWHERE=true"), "the profiled child ran and could read what it may:\n{text}\n{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            text.contains("ELSEWHERE=true"),
+            "the profiled child ran and could read what it may:\n{text}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         assert!(text.contains("STATE=false"), "T14: the profiled child read the state directory:\n{text}");
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -1685,9 +1720,10 @@ mod macos_tests {
             .output()
             .unwrap();
         let text = String::from_utf8_lossy(&out.stdout).to_string();
-        let line = text.lines().find(|l| l.starts_with("FOOTPRINT ")).unwrap_or_else(|| {
-            panic!("the probe child printed no reading:\n{text}\n{}", String::from_utf8_lossy(&out.stderr))
-        });
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("FOOTPRINT "))
+            .unwrap_or_else(|| panic!("the probe child printed no reading:\n{text}\n{}", String::from_utf8_lossy(&out.stderr)));
         let read = |key: &str| -> u64 {
             line.split_whitespace()
                 .find_map(|w| w.strip_prefix(key))

@@ -204,8 +204,7 @@ mod tests {
 
     /// A `main` header with a broad row so every capability op is in-row; the drift guard only
     /// gates on DL0405 (unknown method), so unrelated arg/type errors are irrelevant.
-    const HEADER: &str =
-        "module m\nfn main(root: Root) ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall, Actuate} {\n";
+    const HEADER: &str = "module m\nfn main(root: Root) ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall, Actuate} {\n";
 
     /// Wrap a receiver-binding + call body in a checkable program.
     fn program(body: &str) -> String {
@@ -320,11 +319,7 @@ mod tests {
     fn every_listed_primitive_resolves() {
         for e in swept() {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
-            assert!(
-                resolves(binding, e.method),
-                "primitive `{}` does not resolve in method_sig — the index drifted",
-                e.anchor()
-            );
+            assert!(resolves(binding, e.method), "primitive `{}` does not resolve in method_sig — the index drifted", e.anchor());
         }
     }
 
@@ -337,9 +332,7 @@ mod tests {
             } else {
                 format!("let o = py.of_int(1);\nlet _z = o.{}();", e.method)
             };
-            let body = format!(
-                "match root.python(root.foreign_load()) {{\nOk(py) => {{\n{inner}\n}}\nErr(e) => {{}}\n}}"
-            );
+            let body = format!("match root.python(root.foreign_load()) {{\nOk(py) => {{\n{inner}\n}}\nErr(e) => {{}}\n}}");
             assert!(
                 !dl0405_present(&program(&body)),
                 "primitive `{}` does not resolve in method_sig — the index drifted",
@@ -389,10 +382,7 @@ mod tests {
     /// from `expect_arg`'s "missing argument" DL0403 and from type mismatches.
     fn gate_fired(src: &str, label: &str, method: &str) -> bool {
         let needle = format!("`{label}.{method}` expects");
-        check_source(0, src)
-            .diagnostics
-            .iter()
-            .any(|d| d.code == "DL0403" && d.message.contains(&needle))
+        check_source(0, src).diagnostics.iter().any(|d| d.code == "DL0403" && d.message.contains(&needle))
     }
 
     /// ARITY DRIFT GUARD, both directions: for every constructible entry, a call with exactly
@@ -404,8 +394,7 @@ mod tests {
             let Some(binding) = receiver_binding(e.receiver) else { continue };
             let recv = if binding.is_empty() { "root" } else { "recv" };
             let exact_args = (0..e.arity).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
-            let extra_args =
-                (0..e.arity + 1).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let extra_args = (0..e.arity + 1).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
             let exact = format!("{binding}\nlet _z = {recv}.{}({exact_args});", e.method);
             let extra = format!("{binding}\nlet _z = {recv}.{}({extra_args});", e.method);
             assert!(
@@ -430,9 +419,7 @@ mod tests {
             } else {
                 format!("let o = py.of_int(1);\nlet _z = o.{}(1, 2, 3, 4, 5);", e.method)
             };
-            let body = format!(
-                "match root.python(root.foreign_load()) {{\nOk(py) => {{\n{inner}\n}}\nErr(e) => {{}}\n}}"
-            );
+            let body = format!("match root.python(root.foreign_load()) {{\nOk(py) => {{\n{inner}\n}}\nErr(e) => {{}}\n}}");
             assert!(
                 rejected_with_error(&program(&body)),
                 "primitive `{}` accepted a five-argument call — the rejecting side is broken",

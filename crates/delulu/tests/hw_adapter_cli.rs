@@ -32,8 +32,7 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).to_string()
 }
 
-const GRANT: &str =
-    "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
+const GRANT: &str = "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
 
 /// A program that commands one value inside the envelope and one far outside it.
 fn arm_program(a: f64, b: f64) -> String {
@@ -108,11 +107,8 @@ fn rig(tag: &str, program: &str) -> Rig {
         // once, untimed, before any test times it, the way an operator's driver has been run before
         // it drives anything. `EXCHANGE_TIMEOUT` is untouched: what was too slow was this runner's
         // first launch of an interpreter, which is not the property these tests exist for.
-        let warm = Command::new("python")
-            .args(["-I", "-S", "driver.py"])
-            .current_dir(&dir)
-            .stdin(std::process::Stdio::null())
-            .output();
+        let warm =
+            Command::new("python").args(["-I", "-S", "driver.py"]).current_dir(&dir).stdin(std::process::Stdio::null()).output();
         assert!(
             warm.as_ref().is_ok_and(|o| o.status.success()),
             "the test driver could not be started by `python` at all: {warm:?}"
@@ -148,14 +144,24 @@ impl Rig {
     fn signoff(&self, name: &str) {
         let o = delulu(
             &self.dir,
-            &["run", "arm.delulu", "--grant", "console", "--grant", GRANT,
-              "--broker-profile", "sim", "--signoff", name, "--no-prompt"],
+            &[
+                "run",
+                "arm.delulu",
+                "--grant",
+                "console",
+                "--grant",
+                GRANT,
+                "--broker-profile",
+                "sim",
+                "--signoff",
+                name,
+                "--no-prompt",
+            ],
         );
         assert!(o.status.success(), "the simulation must run: {}", stderr(&o));
     }
     fn hw(&self, extra: &[&str]) -> Output {
-        let mut a = vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT,
-                         "--broker-profile", "hw:demo-adapter"];
+        let mut a = vec!["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--broker-profile", "hw:demo-adapter"];
         a.extend_from_slice(extra);
         a.push("--no-prompt");
         delulu(&self.dir, &a)
@@ -187,10 +193,7 @@ fn an_out_of_envelope_command_never_reaches_the_driver_process() {
 
     let saw = r.saw();
     assert!(saw.contains("angle_deg=12"), "the permitted command DID cross the boundary:\n{saw}");
-    assert!(
-        !saw.contains("999"),
-        "THE REFUSED COMMAND MUST NEVER REACH VENDOR CODE. The driver's log shows it did:\n{saw}"
-    );
+    assert!(!saw.contains("999"), "THE REFUSED COMMAND MUST NEVER REACH VENDOR CODE. The driver's log shows it did:\n{saw}");
     assert_eq!(saw.lines().filter(|l| !l.trim().is_empty()).count(), 1, "exactly one request:\n{saw}");
 }
 
@@ -249,15 +252,8 @@ fn a_hardware_profile_with_no_driver_refuses_rather_than_pretending() {
     assert_eq!(o.status.code(), Some(2), "a hw run with no driver is a usage error");
     let err = stderr(&o);
     assert!(err.contains("--adapter-cmd"), "the refusal names what is missing: {err}");
-    assert!(
-        err.contains("would be a lie"),
-        "…and says why silence is not an option here: {err}"
-    );
-    assert!(
-        !stdout(&o).contains("COMMANDED"),
-        "nothing may report success when no driver exists:\n{}",
-        stdout(&o)
-    );
+    assert!(err.contains("would be a lie"), "…and says why silence is not an option here: {err}");
+    assert!(!stdout(&o).contains("COMMANDED"), "nothing may report success when no driver exists:\n{}", stdout(&o));
 }
 
 /// A driver that cannot be started fails the run BEFORE `main`, not partway through a motion.
@@ -268,16 +264,8 @@ fn a_driver_that_will_not_start_fails_the_run_before_main() {
 
     let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", "definitely-not-a-program-xyzzy"]);
     assert!(!o.status.success(), "an unstartable driver must not run the program");
-    assert!(
-        stderr(&o).contains("adapter could not be started"),
-        "the refusal says what failed: {}",
-        stderr(&o)
-    );
-    assert!(
-        !stdout(&o).contains("COMMANDED"),
-        "and `main` never ran:\n{}",
-        stdout(&o)
-    );
+    assert!(stderr(&o).contains("adapter could not be started"), "the refusal says what failed: {}", stderr(&o));
+    assert!(!stdout(&o).contains("COMMANDED"), "and `main` never ran:\n{}", stdout(&o));
 }
 
 // ----- adapter provenance (D52, closing the gap D23 named) --------------------------------------
@@ -372,13 +360,9 @@ fn a_driver_resigned_by_an_attackers_key_verifies_and_is_still_refused_when_the_
     std::fs::write(&sig, delulu_runtime::plugin::sign_detached(&operator_seed, &std::fs::read(&drv).unwrap())).unwrap();
 
     // Pinned to the operator's key: accepted, and the run gets as far as the driver.
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
-                   "--adapter-signer", &operator_key]);
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s, "--adapter-signer", &operator_key]);
     let err = stderr(&o);
-    assert!(
-        err.contains("verifies under the pinned key"),
-        "the operator's own signed driver must pass its own pin: {err}"
-    );
+    assert!(err.contains("verifies under the pinned key"), "the operator's own signed driver must pass its own pin: {err}");
 
     // Now the attack. Both files are replaced; the new signature is real and self-consistent.
     let attacker_seed = [66u8; 32];
@@ -396,15 +380,11 @@ fn a_driver_resigned_by_an_attackers_key_verifies_and_is_still_refused_when_the_
         "unpinned, the attacker's own signature satisfies the gate — this is the hole: {err}"
     );
     // And the run must SAY that this is not an assurance, rather than reporting a bare success.
-    assert!(
-        err.contains("NOT that the key is trusted"),
-        "an unpinned verify must not read as a trust decision: {err}"
-    );
+    assert!(err.contains("NOT that the key is trusted"), "an unpinned verify must not read as a trust decision: {err}");
 
     // WITH the pin: refused. Same bytes, same valid signature, different answer — because the
     // question changed from "did anyone sign this?" to "did YOU sign this?".
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
-                   "--adapter-signer", &operator_key]);
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s, "--adapter-signer", &operator_key]);
     assert!(!o.status.success(), "a pinned run must refuse another signer: {}", stdout(&o));
     let err = stderr(&o);
     assert!(err.contains("DL1510"), "the wrong-key case is DL1510: {err}");
@@ -445,16 +425,12 @@ fn a_verified_driver_leaves_a_durable_record_of_which_key_signed_it() {
     let seed = [7u8; 32];
     let key = delulu_runtime::plugin::public_key_hex(&seed);
     std::fs::write(&drv, b"the driver the operator built and reviewed").unwrap();
-    std::fs::write(
-        r.dir.join("driver.bin.sig"),
-        delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&drv).unwrap()),
-    )
-    .unwrap();
+    std::fs::write(r.dir.join("driver.bin.sig"), delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&drv).unwrap()))
+        .unwrap();
 
     let rec_dir = r.dir.join("provenance");
     let rec_s = rec_dir.display().to_string();
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
-                   "--adapter-signer", &key, "--adapter-record", &rec_s]);
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s, "--adapter-signer", &key, "--adapter-record", &rec_s]);
     assert!(
         stderr(&o).contains("verifies under the pinned key"),
         "the operator's own driver must pass its own pin: {}",
@@ -483,16 +459,21 @@ fn a_refused_driver_is_recorded_too() {
     let operator_key = delulu_runtime::plugin::public_key_hex(&[7u8; 32]);
     let attacker_key = delulu_runtime::plugin::public_key_hex(&attacker);
     std::fs::write(&drv, b"a driver that does something else entirely").unwrap();
-    std::fs::write(
-        r.dir.join("driver.bin.sig"),
-        delulu_runtime::plugin::sign_detached(&attacker, &std::fs::read(&drv).unwrap()),
-    )
-    .unwrap();
+    std::fs::write(r.dir.join("driver.bin.sig"), delulu_runtime::plugin::sign_detached(&attacker, &std::fs::read(&drv).unwrap()))
+        .unwrap();
 
     let rec_dir = r.dir.join("provenance");
     let rec_s = rec_dir.display().to_string();
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
-                   "--adapter-signer", &operator_key, "--adapter-record", &rec_s]);
+    let o = r.hw(&[
+        "--approved",
+        "signoff.json",
+        "--adapter-cmd",
+        &drv_s,
+        "--adapter-signer",
+        &operator_key,
+        "--adapter-record",
+        &rec_s,
+    ]);
     assert!(!o.status.success(), "a pinned run must refuse another signer: {}", stdout(&o));
 
     let text = audit_text(&rec_dir);
@@ -525,10 +506,7 @@ fn a_named_record_sink_that_cannot_be_written_refuses_the_run() {
     assert!(!o.status.success(), "an unwritable named sink must stop the run: {}", stdout(&o));
     let err = stderr(&o);
     assert!(err.contains("DL1511"), "refused under the adapter-provenance code: {err}");
-    assert!(
-        err.contains("worse than none"),
-        "and it must say why it refused rather than warning: {err}"
-    );
+    assert!(err.contains("worse than none"), "and it must say why it refused rather than warning: {err}");
 }
 
 /// D53. `--adapter-artifact` exists because the commonest driver shape could not be checked at all.
@@ -550,14 +528,21 @@ fn the_signed_bytes_can_be_named_apart_from_the_command_that_runs() {
     std::fs::write(r.dir.join(format!("{script}.sig")), delulu_runtime::plugin::sign_detached(&seed, &bytes)).unwrap();
 
     // Without naming it, the run still cannot verify — and still refuses under the flag.
-    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter",
-                   "--adapter-cmd", &r.adapter_cmd]);
+    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter", "--adapter-cmd", &r.adapter_cmd]);
     assert!(!o.status.success(), "unchanged from D52: the interpreter is not the driver");
     assert!(stderr(&o).contains("--adapter-artifact"), "and it now names the fix: {}", stderr(&o));
 
     // Naming it verifies the script's own bytes, under the operator's own key.
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd,
-                   "--adapter-artifact", script, "--adapter-signer", &key]);
+    let o = r.hw(&[
+        "--approved",
+        "signoff.json",
+        "--adapter-cmd",
+        &r.adapter_cmd,
+        "--adapter-artifact",
+        script,
+        "--adapter-signer",
+        &key,
+    ]);
     let err = stderr(&o);
     assert!(err.contains("verifies under the pinned key"), "the script itself is what got signed: {err}");
     assert!(o.status.success(), "and the run proceeds: {} {}", stdout(&o), err);
@@ -565,8 +550,16 @@ fn the_signed_bytes_can_be_named_apart_from_the_command_that_runs() {
     // Tamper with the script the interpreter will actually execute: refused, because the bytes
     // named are the bytes checked.
     std::fs::write(r.dir.join(script), "# replaced\n").unwrap();
-    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd,
-                   "--adapter-artifact", script, "--adapter-signer", &key]);
+    let o = r.hw(&[
+        "--approved",
+        "signoff.json",
+        "--adapter-cmd",
+        &r.adapter_cmd,
+        "--adapter-artifact",
+        script,
+        "--adapter-signer",
+        &key,
+    ]);
     assert!(!o.status.success(), "a tampered driver must not run");
     assert!(stderr(&o).contains("DL1510"), "{}", stderr(&o));
 }
@@ -594,7 +587,8 @@ fn a_bare_driver_name_is_verified_and_started_as_one_file() {
     let real = r.dir.join("drive");
     std::fs::copy(r.dir.join("driver.sh"), &real).unwrap();
     exec(&real);
-    std::fs::write(r.dir.join("drive.sig"), delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&real).unwrap())).unwrap();
+    std::fs::write(r.dir.join("drive.sig"), delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&real).unwrap()))
+        .unwrap();
 
     // A different `drive`, first on PATH: it leaves a mark and then behaves, so a run that starts it
     // would otherwise look healthy.
@@ -610,8 +604,23 @@ fn a_bare_driver_name_is_verified_and_started_as_one_file() {
             .current_dir(&r.dir)
             .env("DELULU_NO_FIRST_RUN", "1")
             .env("PATH", &path)
-            .args(["run", "arm.delulu", "--grant", "console", "--grant", GRANT, "--broker-profile", "hw:demo-adapter",
-                   "--approved", "signoff.json", "--adapter-cmd", cmd, "--adapter-signer", &key, "--no-prompt"])
+            .args([
+                "run",
+                "arm.delulu",
+                "--grant",
+                "console",
+                "--grant",
+                GRANT,
+                "--broker-profile",
+                "hw:demo-adapter",
+                "--approved",
+                "signoff.json",
+                "--adapter-cmd",
+                cmd,
+                "--adapter-signer",
+                &key,
+                "--no-prompt",
+            ])
             .output()
             .unwrap()
     };

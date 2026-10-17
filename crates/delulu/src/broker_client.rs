@@ -115,12 +115,7 @@ impl BrokerClientCustody {
     /// the client-side copy used for epoch snapshot reconstruction. This is how `delulu run
     /// --lease <token>` runs under exactly the delegated node (phase 5j — the orchestration
     /// payoff, spec §3.3).
-    pub fn for_node(
-        state_dir: PathBuf,
-        node: GrantId,
-        authority: Authority,
-        epoch_ms: Option<u64>,
-    ) -> BrokerClientCustody {
+    pub fn for_node(state_dir: PathBuf, node: GrantId, authority: Authority, epoch_ms: Option<u64>) -> BrokerClientCustody {
         BrokerClientCustody {
             state_dir,
             node,
@@ -168,16 +163,10 @@ impl BrokerClientCustody {
                 let eff = match state.as_str() {
                     "live" => EffState::Live,
                     "revoked" => EffState::Revoked { by_seq: by_seq.unwrap_or(0) },
-                    "expired" => EffState::Expired {
-                        ttl_millis: ttl_millis.unwrap_or(0),
-                        now_millis: now_millis.unwrap_or(0),
-                    },
+                    "expired" => EffState::Expired { ttl_millis: ttl_millis.unwrap_or(0), now_millis: now_millis.unwrap_or(0) },
                     other => return Err(dl1401(&format!("unknown node state `{other}`"))),
                 };
-                let snap = Snapshot::from_entries(
-                    epoch,
-                    vec![(self.node.clone(), eff, self.authority.clone())],
-                );
+                let snap = Snapshot::from_entries(epoch, vec![(self.node.clone(), eff, self.authority.clone())]);
                 self.guarded_classes = guarded_classes;
                 self.cache = Some((Instant::now(), snap));
                 Ok(())
@@ -197,11 +186,7 @@ impl BrokerClientCustody {
     fn synchronous_check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
         let resp = match rpc(
             &self.state_dir,
-            ReqBody::Check {
-                node: self.node.as_str().to_string(),
-                op: op.wire_name().to_string(),
-                arg: arg.map(str::to_string),
-            },
+            ReqBody::Check { node: self.node.as_str().to_string(), op: op.wire_name().to_string(), arg: arg.map(str::to_string) },
         ) {
             Ok(r) => r,
             Err(d) => return CustodyDecision::Deny(d),
@@ -219,9 +204,7 @@ impl BrokerClientCustody {
                 static_code(code.as_deref().unwrap_or("DL1401")),
                 message.unwrap_or_else(|| "broker denied the operation".to_string()),
             )),
-            Response::Error { code, message, .. } => {
-                CustodyDecision::Deny(CustodyDenial::new(static_code(&code), message))
-            }
+            Response::Error { code, message, .. } => CustodyDecision::Deny(CustodyDenial::new(static_code(&code), message)),
             other => CustodyDecision::Deny(dl1401(&format!("unexpected check response: {other:?}"))),
         }
     }
@@ -293,11 +276,7 @@ impl Custody for BrokerClientCustody {
         // first time, audited daemon-side with the calling span.
         let resp = rpc(
             &self.state_dir,
-            ReqBody::Expose {
-                node: self.node.as_str().to_string(),
-                name: name.to_string(),
-                span: span.map(str::to_string),
-            },
+            ReqBody::Expose { node: self.node.as_str().to_string(), name: name.to_string(), span: span.map(str::to_string) },
         )?;
         match resp {
             Response::Exposed { bytes } => Ok(bytes),
@@ -361,11 +340,7 @@ impl Custody for BrokerClientCustody {
         Some(self.node.clone())
     }
 
-    fn attenuate(
-        &mut self,
-        authority: Authority,
-        holder: delulu_broker::Holder,
-    ) -> Result<GrantId, CustodyDenial> {
+    fn attenuate(&mut self, authority: Authority, holder: delulu_broker::Holder) -> Result<GrantId, CustodyDenial> {
         let mut spec = authority_to_spec(&authority);
         spec.holder_kind = holder.kind.clone();
         spec.holder_desc = holder.desc.clone();
@@ -373,14 +348,8 @@ impl Custody for BrokerClientCustody {
         // `owner: None` — a plugin grant is minted from THIS run's node, under the ordinary
         // attenuation law. If the grant reaches guarded authority the daemon's guard answers
         // (DL1410/DL1413) exactly as it does for any other mint; the loader never bypasses it.
-        let resp = rpc(
-            &self.state_dir,
-            ReqBody::Attenuate {
-                parent: self.node.as_str().to_string(),
-                authority: spec,
-                owner: None,
-            },
-        )?;
+        let resp =
+            rpc(&self.state_dir, ReqBody::Attenuate { parent: self.node.as_str().to_string(), authority: spec, owner: None })?;
         match resp {
             Response::Issued { node } => {
                 let node = GrantId::from_trusted(node);
@@ -417,10 +386,7 @@ impl Custody for BrokerClientCustody {
     fn revoke_node(&mut self, target: &GrantId) -> Result<u64, CustodyDenial> {
         let resp = rpc(
             &self.state_dir,
-            ReqBody::Revoke {
-                caller: self.node.as_str().to_string(),
-                target: target.as_str().to_string(),
-            },
+            ReqBody::Revoke { caller: self.node.as_str().to_string(), target: target.as_str().to_string() },
         )?;
         match resp {
             Response::Revoked { by_seq, .. } => Ok(by_seq),
@@ -433,10 +399,8 @@ impl Custody for BrokerClientCustody {
     /// `revoke_device_nodes` does for its device nodes. Idempotent — an `unload` already revoked one.
     fn end_of_run(&mut self) {
         for node in std::mem::take(&mut self.minted) {
-            let _ = rpc(
-                &self.state_dir,
-                ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() },
-            );
+            let _ =
+                rpc(&self.state_dir, ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() });
         }
     }
 
@@ -578,12 +542,7 @@ mod code_mapping_tests {
     #[test]
     fn every_registered_code_renders_as_itself() {
         for c in delulu_diag::REGISTRY {
-            assert_eq!(
-                static_code(c.code),
-                c.code,
-                "`{}` must not be rewritten on its way to the operator",
-                c.code
-            );
+            assert_eq!(static_code(c.code), c.code, "`{}` must not be rewritten on its way to the operator", c.code);
         }
     }
 
@@ -591,7 +550,11 @@ mod code_mapping_tests {
     #[test]
     fn the_strict_root_refusal_is_not_reported_as_a_dead_broker() {
         assert_eq!(static_code("DL1421"), "DL1421", "DISC-1's refusal must say DL1421");
-        assert_ne!(static_code("DL1421"), "DL1401", "reporting it as `broker unreachable` sends the operator to look for a dead daemon");
+        assert_ne!(
+            static_code("DL1421"),
+            "DL1401",
+            "reporting it as `broker unreachable` sends the operator to look for a dead daemon"
+        );
     }
 
     /// The fail-closed fallback is preserved: a code this build does not know is a protocol-level

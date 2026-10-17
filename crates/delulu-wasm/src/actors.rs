@@ -59,12 +59,7 @@ impl ActorTable {
 
     /// The index of behaviour `name` within actor `actor_idx`, if it exists.
     pub fn behavior_index(&self, actor_idx: u32, name: &str) -> Option<u32> {
-        self.actors
-            .get(actor_idx as usize)?
-            .behaviors
-            .iter()
-            .position(|b| b.name == name)
-            .map(|i| i as u32)
+        self.actors.get(actor_idx as usize)?.behaviors.iter().position(|b| b.name == name).map(|i| i as u32)
     }
 }
 
@@ -144,14 +139,7 @@ pub(crate) struct ActorRuntime {
 
 impl ActorRuntime {
     pub fn new(table: ActorTable) -> ActorRuntime {
-        ActorRuntime {
-            table,
-            slots: Vec::new(),
-            queue: VecDeque::new(),
-            total_turns: 0,
-            dead_actors: 0,
-            dropped_sends: 0,
-        }
+        ActorRuntime { table, slots: Vec::new(), queue: VecDeque::new(), total_turns: 0, dead_actors: 0, dropped_sends: 0 }
     }
 
     /// Allocate a fresh slot (fields zero-seeded; the ctor turn assigns them — the checker's

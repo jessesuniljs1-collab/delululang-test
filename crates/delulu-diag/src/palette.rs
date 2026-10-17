@@ -255,12 +255,7 @@ impl ColorChoice {
 /// `--color` flag > `DELULU_COLOR` > `NO_COLOR` > auto(TTY) — with the single exception that
 /// `NO_COLOR` beats `DELULU_COLOR=always` (but never the explicit `--color always`, the user
 /// speaking now). `--color auto` is not a forced decision: it falls through to the env layers.
-pub fn color_enabled(
-    flag: Option<ColorChoice>,
-    delulu_color: Option<&str>,
-    no_color: bool,
-    is_tty: bool,
-) -> bool {
+pub fn color_enabled(flag: Option<ColorChoice>, delulu_color: Option<&str>, no_color: bool, is_tty: bool) -> bool {
     // 1. Explicit flag — the user speaking now. `always` even beats NO_COLOR.
     match flag {
         Some(ColorChoice::Always) => return true,
@@ -330,11 +325,7 @@ pub const RESET: &str = "\x1b[0m";
 /// `theme.toml` (`theme = "…"` + optional `[roles]`), falling back to `default`. A bad theme NAME,
 /// an unreadable/unparseable file, or an unknown role/color in `[roles]` never hard-fails: the
 /// default theme is used and a DL1790 warning message is returned (addendum §2.5 / criterion 9).
-pub fn resolve_theme(
-    flag: Option<&str>,
-    env_theme: Option<&str>,
-    config_path: Option<&Path>,
-) -> (Theme, Option<String>) {
+pub fn resolve_theme(flag: Option<&str>, env_theme: Option<&str>, config_path: Option<&Path>) -> (Theme, Option<String>) {
     // Read the config file, if any. A missing/unreadable file means "no config" (no warning); an
     // oversized, non-UTF-8, or structurally broken file is a DL1790 (never a hard failure).
     let mut cfg_theme_name: Option<String> = None;
@@ -349,16 +340,14 @@ pub fn resolve_theme(
                 }
                 Err(()) => file_bad = true,
             },
-            Ok(None) => {}       // no file / unreadable → simply no config
+            Ok(None) => {}              // no file / unreadable → simply no config
             Err(()) => file_bad = true, // too large or not UTF-8 → malformed, fall back
         }
     }
 
     // Choose the base theme by name precedence.
-    let requested: Option<String> = flag
-        .map(str::to_string)
-        .or_else(|| env_theme.map(str::to_string))
-        .or_else(|| cfg_theme_name.clone());
+    let requested: Option<String> =
+        flag.map(str::to_string).or_else(|| env_theme.map(str::to_string)).or_else(|| cfg_theme_name.clone());
     let (mut theme, name_bad) = match requested.as_deref() {
         Some(n) => match Theme::builtin(n) {
             Some(t) => (t, false),
@@ -379,10 +368,7 @@ pub fn resolve_theme(
     }
 
     let warning = if name_bad {
-        Some(format!(
-            "unknown theme `{}` — using `default` (built-ins: default, bright, mono)",
-            requested.unwrap_or_default()
-        ))
+        Some(format!("unknown theme `{}` — using `default` (built-ins: default, bright, mono)", requested.unwrap_or_default()))
     } else if file_bad {
         Some("malformed theme.toml — using `default`".to_string())
     } else if role_bad {

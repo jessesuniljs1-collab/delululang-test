@@ -138,10 +138,7 @@ pub fn subcap(a: Rcap, b: Rcap) -> bool {
 /// `components_of` resolves a user type id to its component types (record: field types; sum:
 /// all variant field types), with the caller applying any generic substitution first.
 /// Unknown id ⇒ `None` ⇒ undetermined ⇒ fail-closed.
-pub fn default_rcap(
-    t: &Type,
-    components_of: &dyn Fn(TypeDefId) -> Option<Vec<Type>>,
-) -> Option<Rcap> {
+pub fn default_rcap(t: &Type, components_of: &dyn Fn(TypeDefId) -> Option<Vec<Type>>) -> Option<Rcap> {
     let mut visiting = Vec::new();
     default_rcap_inner(t, components_of, &mut visiting)
 }
@@ -169,18 +166,20 @@ fn default_rcap_inner(
         Type::Actor(_, _) => Rcap::Tag,
         // Composites of only val-defaulting components are deeply immutable → val;
         // anything else → ref (spec §2).
-        Type::List(e) | Type::Option(e) => {
-            match default_rcap_inner(e, components_of, visiting)? {
-                Rcap::Val => Rcap::Val,
-                _ => Rcap::Ref,
-            }
-        }
+        Type::List(e) | Type::Option(e) => match default_rcap_inner(e, components_of, visiting)? {
+            Rcap::Val => Rcap::Val,
+            _ => Rcap::Ref,
+        },
         // A `Map` is a composite of its key and value types, exactly like `Result` — and, like a
         // `List`, it has a write surface (`insert`/`remove`), so a `val` Map refuses them.
         Type::Result(o, e) | Type::Map(o, e) => {
             let a = default_rcap_inner(o, components_of, visiting)?;
             let b = default_rcap_inner(e, components_of, visiting)?;
-            if a == Rcap::Val && b == Rcap::Val { Rcap::Val } else { Rcap::Ref }
+            if a == Rcap::Val && b == Rcap::Val {
+                Rcap::Val
+            } else {
+                Rcap::Ref
+            }
         }
         Type::Record(id, _) | Type::Sum(id, _) => {
             // Sums mirror records here (build-order deviation 8): the spec's list names
@@ -411,22 +410,30 @@ mod tests {
         use Rcap::*;
         // iso <: trn <: ref <: box <: tag, trn <: val <: box (plus reflexivity/transitivity).
         let expected: &[(Rcap, Rcap)] = &[
-            (Iso, Iso), (Trn, Trn), (Ref, Ref), (Val, Val), (Box_, Box_), (Tag, Tag),
-            (Iso, Trn), (Iso, Ref), (Iso, Val), (Iso, Box_), (Iso, Tag),
-            (Trn, Ref), (Trn, Val), (Trn, Box_), (Trn, Tag),
-            (Ref, Box_), (Ref, Tag),
-            (Val, Box_), (Val, Tag),
+            (Iso, Iso),
+            (Trn, Trn),
+            (Ref, Ref),
+            (Val, Val),
+            (Box_, Box_),
+            (Tag, Tag),
+            (Iso, Trn),
+            (Iso, Ref),
+            (Iso, Val),
+            (Iso, Box_),
+            (Iso, Tag),
+            (Trn, Ref),
+            (Trn, Val),
+            (Trn, Box_),
+            (Trn, Tag),
+            (Ref, Box_),
+            (Ref, Tag),
+            (Val, Box_),
+            (Val, Tag),
             (Box_, Tag),
         ];
         for a in ALL {
             for b in ALL {
-                assert_eq!(
-                    subcap(a, b),
-                    expected.contains(&(a, b)),
-                    "subcap({}, {})",
-                    a.name(),
-                    b.name()
-                );
+                assert_eq!(subcap(a, b), expected.contains(&(a, b)), "subcap({}, {})", a.name(), b.name());
             }
         }
     }
@@ -550,11 +557,8 @@ mod tests {
     /// coexisting aliases, each side's PERMISSIONS must not violate what the other side
     /// DENIES (locally for same-actor pairs, globally across actors).
     fn compatible(a: &SimAlias, b: &SimAlias) -> bool {
-        let (da, db) = if a.actor == b.actor {
-            (denies_local(a.k), denies_local(b.k))
-        } else {
-            (denies_global(a.k), denies_global(b.k))
-        };
+        let (da, db) =
+            if a.actor == b.actor { (denies_local(a.k), denies_local(b.k)) } else { (denies_global(a.k), denies_global(b.k)) };
         (!can_read(b.k) || !da.read)
             && (!can_write(b.k) || !da.write)
             && (!can_read(a.k) || !db.read)
@@ -567,8 +571,7 @@ mod tests {
         for (i, a) in aliases.iter().enumerate() {
             for b in &aliases[i + 1..] {
                 if a.actor != b.actor
-                    && ((can_write(a.k) && (can_read(b.k) || can_write(b.k)))
-                        || (can_write(b.k) && can_read(a.k)))
+                    && ((can_write(a.k) && (can_read(b.k) || can_write(b.k))) || (can_write(b.k) && can_read(a.k)))
                 {
                     return Err(format!("cross-actor race: {a:?} vs {b:?}"));
                 }
@@ -621,18 +624,13 @@ mod tests {
         let seeds = if cfg!(miri) { 20 } else { 10_000u64 };
         for seed in 1..=seeds {
             let mut rng = XorShift(seed);
-            let mut world: Vec<SimObject> = vec![SimObject {
-                aliases: vec![SimAlias { actor: 0, k: ALL[rng.pick(6)] }],
-                fields: Vec::new(),
-            }];
+            let mut world: Vec<SimObject> =
+                vec![SimObject { aliases: vec![SimAlias { actor: 0, k: ALL[rng.pick(6)] }], fields: Vec::new() }];
             let mut trail = vec![format!("start obj0 {:?}", world[0].aliases[0])];
             'seq: for _step in 0..40 {
                 // Pick a live (object, alias) pair uniformly.
-                let live: Vec<(usize, usize)> = world
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(oi, o)| (0..o.aliases.len()).map(move |ai| (oi, ai)))
-                    .collect();
+                let live: Vec<(usize, usize)> =
+                    world.iter().enumerate().flat_map(|(oi, o)| (0..o.aliases.len()).map(move |ai| (oi, ai))).collect();
                 if live.is_empty() {
                     break;
                 }
@@ -653,14 +651,10 @@ mod tests {
                         let arriving = if consumed { src.k } else { alias(src.k) };
                         if sendable(arriving) {
                             if consumed {
-                                trail.push(format!(
-                                    "send(consume) obj{oi} {src:?} -> actor {to} at {arriving:?}"
-                                ));
+                                trail.push(format!("send(consume) obj{oi} {src:?} -> actor {to} at {arriving:?}"));
                                 world[oi].aliases.swap_remove(ai);
                             } else {
-                                trail.push(format!(
-                                    "send(alias) obj{oi} {src:?} -> actor {to} at {arriving:?}"
-                                ));
+                                trail.push(format!("send(alias) obj{oi} {src:?} -> actor {to} at {arriving:?}"));
                             }
                             world[oi].aliases.push(SimAlias { actor: to, k: arriving });
                         }
@@ -682,30 +676,20 @@ mod tests {
                         let (f_decl, target) = world[oi].fields[slot];
                         if let Some(v) = viewpoint(src.k, f_decl) {
                             let derived = SimAlias { actor: src.actor, k: alias(v) };
-                            trail.push(format!(
-                                "view obj{oi} {src:?} ▷ {} retained -> obj{target} {derived:?}",
-                                f_decl.name()
-                            ));
+                            trail.push(format!("view obj{oi} {src:?} ▷ {} retained -> obj{target} {derived:?}", f_decl.name()));
                             world[target].aliases.push(derived);
                         }
                     }
                 }
                 for (i, o) in world.iter().enumerate() {
                     if let Err(why) = race_free(&o.aliases) {
-                        failures.push(format!(
-                            "seed {seed}: obj{i}: {why}\n  trail: {}",
-                            trail.join("; ")
-                        ));
+                        failures.push(format!("seed {seed}: obj{i}: {why}\n  trail: {}", trail.join("; ")));
                         break 'seq;
                     }
                 }
             }
         }
-        assert!(
-            failures.is_empty(),
-            "criterion 8 COUNTEREXAMPLE(S) — the stage is blocked:\n{}",
-            failures.join("\n")
-        );
+        assert!(failures.is_empty(), "criterion 8 COUNTEREXAMPLE(S) — the stage is blocked:\n{}", failures.join("\n"));
     }
 
     #[test]

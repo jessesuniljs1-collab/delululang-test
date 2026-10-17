@@ -10,14 +10,12 @@ use serde_json::Value;
 
 /// The verbatim honesty caveat that ships in `caveats` in every format (addendum §2.6). The atlas
 /// maps *checked structure*, not a runtime trace.
-pub const CAVEAT_STATIC: &str =
-    "the atlas is a static map of checked facts, not a runtime trace; calls through function values \
+pub const CAVEAT_STATIC: &str = "the atlas is a static map of checked facts, not a runtime trace; calls through function values \
      may be under-approximated";
 
 /// The verbatim custody-overlay caveat (addendum §2.6), added to `caveats` only when `--custody`
 /// succeeded. The overlay is awareness, not enforcement.
-pub const CAVEAT_CUSTODY: &str =
-    "the custody overlay reflects broker state at the moment of the query and requires the daemon; \
+pub const CAVEAT_CUSTODY: &str = "the custody overlay reflects broker state at the moment of the query and requires the daemon; \
      it is awareness, not enforcement (the Guard enforces)";
 
 /// The kinds of node the atlas contains (addendum §2.1).
@@ -275,17 +273,8 @@ mod tests {
                 n.pure = Some(false);
                 n
             }],
-            edges: vec![Edge {
-                from: fn_id("app", "app", "main"),
-                to: effect_id("Write"),
-                kind: EdgeKind::Performs,
-            }],
-            gods: vec![God {
-                id: fn_id("app", "app", "main"),
-                name: "main".to_string(),
-                kind: NodeKind::Function,
-                degree: 1,
-            }],
+            edges: vec![Edge { from: fn_id("app", "app", "main"), to: effect_id("Write"), kind: EdgeKind::Performs }],
+            gods: vec![God { id: fn_id("app", "app", "main"), name: "main".to_string(), kind: NodeKind::Function, degree: 1 }],
             authority: serde_json::json!({"program": "app", "effects": ["Write"]}),
             custody: None,
             caveats: vec![CAVEAT_STATIC.to_string()],

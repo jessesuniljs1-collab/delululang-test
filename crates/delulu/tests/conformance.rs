@@ -63,12 +63,7 @@ fn corpus_packages(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn error_codes(src: &str) -> Vec<String> {
-    check_source(0, src)
-        .diagnostics
-        .iter()
-        .filter(|d| d.is_error())
-        .map(|d| d.code.to_string())
-        .collect()
+    check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
 }
 
 fn expected_code(path: &Path) -> Option<String> {
@@ -107,11 +102,7 @@ fn accepting_programs_check_clean() {
 fn accepting_packages_build_clean() {
     let root = workspace_root();
     let pkgs = corpus_packages(&root.join("tests/corpus"));
-    assert!(
-        pkgs.len() >= 4,
-        "expected the multi-package corpus tier to be populated, found {} package(s)",
-        pkgs.len()
-    );
+    assert!(pkgs.len() >= 4, "expected the multi-package corpus tier to be populated, found {} package(s)", pkgs.len());
     for dir in &pkgs {
         let ws = delulu_check::deps::resolve_workspace(dir);
         let program = delulu_check::deps::check_workspace(&ws);
@@ -132,17 +123,10 @@ fn rejecting_programs_produce_their_named_code() {
     let files = delulu_files(&root.join("tests/conformance/reject"));
     assert!(!files.is_empty(), "no reject programs found");
     for file in &files {
-        let want = expected_code(file)
-            .unwrap_or_else(|| panic!("reject file {} must be named DLxxxx_*.delulu", file.display()));
+        let want = expected_code(file).unwrap_or_else(|| panic!("reject file {} must be named DLxxxx_*.delulu", file.display()));
         let src = std::fs::read_to_string(file).unwrap();
         let codes = error_codes(&src);
-        assert!(
-            codes.contains(&want),
-            "{} should produce {}, got {:?}",
-            file.display(),
-            want,
-            codes
-        );
+        assert!(codes.contains(&want), "{} should produce {}, got {:?}", file.display(), want, codes);
     }
 }
 
@@ -153,15 +137,12 @@ fn rejecting_programs_produce_their_named_code() {
 #[test]
 fn every_stage1_static_code_has_a_reject_case() {
     let root = workspace_root();
-    let covered: std::collections::HashSet<String> = delulu_files(&root.join("tests/conformance/reject"))
-        .iter()
-        .filter_map(|f| expected_code(f))
-        .collect();
+    let covered: std::collections::HashSet<String> =
+        delulu_files(&root.join("tests/conformance/reject")).iter().filter_map(|f| expected_code(f)).collect();
 
     let required = [
-        "DL0106", "DL0107", "DL0204", "DL0206", "DL0301", "DL0302", "DL0305", "DL0306", "DL0307", "DL0401",
-        "DL0402", "DL0403", "DL0405", "DL0407", "DL0409", "DL0410", "DL0501", "DL0504", "DL0602",
-        "DL0603", "DL0604", "DL0605",
+        "DL0106", "DL0107", "DL0204", "DL0206", "DL0301", "DL0302", "DL0305", "DL0306", "DL0307", "DL0401", "DL0402", "DL0403",
+        "DL0405", "DL0407", "DL0409", "DL0410", "DL0501", "DL0504", "DL0602", "DL0603", "DL0604", "DL0605",
     ];
     let missing: Vec<&str> = required.iter().copied().filter(|c| !covered.contains(*c)).collect();
     assert!(missing.is_empty(), "coverage law: these codes have no reject case: {missing:?}");

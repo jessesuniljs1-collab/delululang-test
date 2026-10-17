@@ -35,7 +35,8 @@ fn reject_file_code_matches_the_conformance_runner() {
 
 #[test]
 fn parse_witnesses_accepts_a_well_formed_record() {
-    let text = "# comment\n[[witness]]\nanchor = \"ref.diag.DL0501\"\nfile = \"crates/x/src/y.rs\"\ntest = \"t\"\nkind = \"negative\"\n";
+    let text =
+        "# comment\n[[witness]]\nanchor = \"ref.diag.DL0501\"\nfile = \"crates/x/src/y.rs\"\ntest = \"t\"\nkind = \"negative\"\n";
     let recs = parse_witnesses(text).expect("valid");
     assert_eq!(recs.len(), 1);
     assert_eq!(recs[0].anchor, "ref.diag.DL0501");
@@ -262,11 +263,7 @@ const COVERED_FLOOR: usize = 307;
 fn coverage_never_regresses() {
     let cov = run_coverage(&repo_root());
     assert!(!cov.registry.anchors.is_empty(), "registry built from the real source");
-    assert!(
-        cov.validation_errors.is_empty(),
-        "the committed witnesses/headers must be clean: {:?}",
-        cov.validation_errors
-    );
+    assert!(cov.validation_errors.is_empty(), "the committed witnesses/headers must be clean: {:?}", cov.validation_errors);
     assert!(
         cov.covered() >= COVERED_FLOOR,
         "coverage REGRESSED: {} covered, floor is {COVERED_FLOOR}. Restore the missing witness \
@@ -307,14 +304,8 @@ fn the_generated_reference_is_not_stale() {
 #[test]
 fn every_generated_chapter_declares_itself_generated() {
     for (path, content) in crate::reference::generate(&repo_root()) {
-        assert!(
-            content.starts_with("<!-- GENERATED FILE"),
-            "{path} does not open with the generated-file banner"
-        );
-        assert!(
-            content.contains("--check-reference"),
-            "{path} does not say how staleness is detected"
-        );
+        assert!(content.starts_with("<!-- GENERATED FILE"), "{path} does not open with the generated-file banner");
+        assert!(content.contains("--check-reference"), "{path} does not say how staleness is detected");
     }
 }
 
@@ -328,10 +319,7 @@ fn the_drift_gate_detects_a_modified_chapter() {
     // must be reported as drift rather than skipped.
     let stale = crate::reference::drift(&fx.root);
     assert!(!stale.is_empty(), "a repo with no reference at all must report drift");
-    assert!(
-        stale.iter().all(|s| s.contains("missing")),
-        "missing chapters must be named as missing: {stale:?}"
-    );
+    assert!(stale.iter().all(|s| s.contains("missing")), "missing chapters must be named as missing: {stale:?}");
 
     // Now write one chapter with the wrong content: it must be reported as differing, not as fine.
     let generated = crate::reference::generate(&fx.root);
@@ -352,20 +340,12 @@ fn the_drift_gate_detects_a_modified_chapter() {
 #[test]
 fn a_rule_is_only_covered_when_every_enforcing_code_is() {
     // --- Synthetic: cover exactly one single-code rule's code, both directions. ---
-    let single = crate::rules::RULES
-        .iter()
-        .find(|r| r.enforced_by.len() == 1)
-        .expect("at least one rule is enforced by exactly one code");
+    let single =
+        crate::rules::RULES.iter().find(|r| r.enforced_by.len() == 1).expect("at least one rule is enforced by exactly one code");
     let code = single.enforced_by[0];
     let fx = Fixture::new();
-    fx.write(
-        "tests/conformance/accept/one.delulu",
-        &format!("// anchors: ref.diag.{code}\nmodule m\n"),
-    );
-    fx.write(
-        &format!("tests/conformance/reject/{code}_fixture.delulu"),
-        &format!("// anchors: ref.diag.{code}\nmodule m\n"),
-    );
+    fx.write("tests/conformance/accept/one.delulu", &format!("// anchors: ref.diag.{code}\nmodule m\n"));
+    fx.write(&format!("tests/conformance/reject/{code}_fixture.delulu"), &format!("// anchors: ref.diag.{code}\nmodule m\n"));
     let cov = fx.run();
     let uncovered_codes: BTreeSet<String> = cov
         .gaps
@@ -373,10 +353,7 @@ fn a_rule_is_only_covered_when_every_enforcing_code_is() {
         .filter(|g| g.category == Category::Diag)
         .map(|g| g.anchor.trim_start_matches("ref.diag.").to_string())
         .collect();
-    assert!(
-        !uncovered_codes.is_empty(),
-        "the fixture covers one code; every other code must be a gap"
-    );
+    assert!(!uncovered_codes.is_empty(), "the fixture covers one code; every other code must be a gap");
     assert!(!uncovered_codes.contains(code), "`{code}` is covered in the fixture");
     for rule in crate::rules::RULES {
         let leans_on_a_gap = rule.enforced_by.iter().any(|c| uncovered_codes.contains(*c));
@@ -469,16 +446,11 @@ fn every_grammar_production_is_defined_in_a_normative_specification() {
 
     // The map must not rot the other way: an entry naming a spelling the specs no longer use would
     // send a reader somewhere that has since moved.
-    let stale: Vec<&str> = NORMATIVE_NAME
-        .iter()
-        .filter(|(_, n)| !defined.contains(*n))
-        .map(|(p, _)| *p)
-        .collect();
+    let stale: Vec<&str> = NORMATIVE_NAME.iter().filter(|(_, n)| !defined.contains(*n)).map(|(p, _)| *p).collect();
     assert!(stale.is_empty(), "NORMATIVE_NAME points at productions the specs no longer define: {stale:?}");
 
     // And no entry may claim a divergence that is not one — that would be noise pretending to be
     // information.
-    let pointless: Vec<&str> =
-        NORMATIVE_NAME.iter().filter(|(p, n)| p == n).map(|(p, _)| *p).collect();
+    let pointless: Vec<&str> = NORMATIVE_NAME.iter().filter(|(p, n)| p == n).map(|(p, _)| *p).collect();
     assert!(pointless.is_empty(), "these NORMATIVE_NAME entries map a name to itself: {pointless:?}");
 }

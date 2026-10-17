@@ -14,17 +14,14 @@ mod render;
 mod source;
 mod span;
 
+pub use catalog::{cli_string, placeholders_for, Catalog, CLI_STRINGS};
 pub use codes::{
-    code_explain, code_title, is_registered, static_code, topic_explain, unallocated, CodeInfo, Disposition,
-    UnallocatedCode, GUARD_BYPASS_BANNER, GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY,
-    REGISTRY, REVOCATION_BOUND, TOPICS, UNALLOCATED,
+    code_explain, code_title, is_registered, static_code, topic_explain, unallocated, CodeInfo, Disposition, UnallocatedCode,
+    GUARD_BYPASS_BANNER, GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY, REGISTRY, REVOCATION_BOUND, TOPICS, UNALLOCATED,
 };
 pub use diagnostic::{Confidence, Diagnostic, Edit, LabeledSpan, Repair, Severity};
 pub use json::{envelope, envelope_to_string};
-pub use palette::{
-    color_enabled, named_color_sgr, resolve_theme, ColorChoice, Palette, Role, Theme, RESET,
-};
-pub use catalog::{cli_string, placeholders_for, Catalog, CLI_STRINGS};
+pub use palette::{color_enabled, named_color_sgr, resolve_theme, ColorChoice, Palette, Role, Theme, RESET};
 pub use render::{render_human, render_human_localized, render_human_with, terminal_line, terminal_safe};
 pub use source::{SourceFile, SourceMap};
 pub use span::{FileId, Span};

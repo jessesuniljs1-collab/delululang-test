@@ -39,11 +39,8 @@ fn invariant45_hints_change_nothing_observable() {
     let plain = dir.join("plain.delulu");
     let hinted = dir.join("hinted.delulu");
     std::fs::write(&plain, format!("module twin\n\n{BODY}")).unwrap();
-    std::fs::write(
-        &hinted,
-        format!("@interpret\nmodule twin\n\n@jit\n{}", BODY.replacen("fn main", "@aot\nfn main", 1)),
-    )
-    .unwrap();
+    std::fs::write(&hinted, format!("@interpret\nmodule twin\n\n@jit\n{}", BODY.replacen("fn main", "@aot\nfn main", 1)))
+        .unwrap();
 
     let run_a = delulu(&["run", &plain.to_string_lossy(), "--grant", "console"]);
     let run_b = delulu(&["run", &hinted.to_string_lossy(), "--grant", "console"]);
@@ -51,11 +48,9 @@ fn invariant45_hints_change_nothing_observable() {
     assert_eq!(run_a.stdout, run_b.stdout, "run output is identical with and without hints");
 
     let mut va: serde_json::Value =
-        serde_json::from_slice(&delulu(&["authority", &plain.to_string_lossy(), "--json"]).stdout)
-            .expect("plain authority json");
-    let mut vb: serde_json::Value =
-        serde_json::from_slice(&delulu(&["authority", &hinted.to_string_lossy(), "--json"]).stdout)
-            .expect("hinted authority json");
+        serde_json::from_slice(&delulu(&["authority", &plain.to_string_lossy(), "--json"]).stdout).expect("plain authority json");
+    let mut vb: serde_json::Value = serde_json::from_slice(&delulu(&["authority", &hinted.to_string_lossy(), "--json"]).stdout)
+        .expect("hinted authority json");
     // Build-order D7: invariant 45 binds SEMANTICS and authority FACTS — effects, capabilities,
     // secrets, scopes. The `native_emission` stamp is not a fact about what the program may do;
     // it is the `@jit` REQUEST made reviewable, and spec §2.3 orders it onto the report. So the
@@ -66,10 +61,7 @@ fn invariant45_hints_change_nothing_observable() {
         .remove("native_emission")
         .expect("the hinted twin carries the request stamp");
     assert_eq!(stamp["requested"], true);
-    assert!(
-        va["authority"].as_object_mut().unwrap().remove("native_emission").is_none(),
-        "the plain twin carries no stamp"
-    );
+    assert!(va["authority"].as_object_mut().unwrap().remove("native_emission").is_none(), "the plain twin carries no stamp");
     assert_eq!(
         va, vb,
         "with the request stamp removed, the reports are IDENTICAL — a hint can never widen, \
@@ -112,8 +104,7 @@ fn a_known_attribute_with_the_wrong_shape_is_dl1901() {
         let o = delulu(&["check", &f.to_string_lossy(), "--json"]);
         assert!(!o.status.success(), "{tag} must be refused");
         let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
-        let codes: Vec<&str> =
-            v["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
+        let codes: Vec<&str> = v["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
         assert!(codes.contains(&"DL1901"), "{tag}: expected DL1901, got {codes:?}");
     }
 }

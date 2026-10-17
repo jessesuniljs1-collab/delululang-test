@@ -77,10 +77,7 @@ fn sign_hybrid_without_unstable_refuses_and_writes_no_signature_file() {
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(err.contains("DL1910"), "{err}");
-    assert!(
-        !dir.join("payload.dwx.sig").exists(),
-        "a refused sign must not leave a signature file for something else to trust"
-    );
+    assert!(!dir.join("payload.dwx.sig").exists(), "a refused sign must not leave a signature file for something else to trust");
 
     // The JSON channel must agree with the exit code — the DRILL-001 lesson from
     // `signing_cli.rs`'s `an_unsigned_artifact_fails_verification_by_exit_code`, reapplied here:
@@ -152,8 +149,7 @@ fn verify_sig_require_hybrid_refuses_classical_only_in_both_of_its_spellings() {
     let o = delulu(&dir, &home, &["verify-sig", legacy_art.to_str().unwrap(), "--require-hybrid", "--json"]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
-    let v: Value =
-        serde_json::from_slice(&o.stdout).expect("verify-sig --json is valid JSON even when refused");
+    let v: Value = serde_json::from_slice(&o.stdout).expect("verify-sig --json is valid JSON even when refused");
     assert_eq!(v["code"], "DL1908", "{v}");
 
     // Spelling 2: a `dlsig1` envelope that declares only `ed25519` — a shape the CLI itself never
@@ -169,8 +165,7 @@ fn verify_sig_require_hybrid_refuses_classical_only_in_both_of_its_spellings() {
     let o2 = delulu(&dir, &home, &["verify-sig", env_art.to_str().unwrap(), "--require-hybrid", "--json"]);
     let err2 = stderr(&o2);
     assert_eq!(o2.status.code(), Some(1), "{err2}");
-    let v2: Value =
-        serde_json::from_slice(&o2.stdout).expect("verify-sig --json is valid JSON even when refused");
+    let v2: Value = serde_json::from_slice(&o2.stdout).expect("verify-sig --json is valid JSON even when refused");
     assert_eq!(v2["code"], "DL1908", "{v2}");
 }
 
@@ -228,8 +223,7 @@ fn a_hybrid_signature_verified_without_unstable_is_refused_even_under_the_defaul
     let o = delulu(&dir, &home, &["verify-sig", art.to_str().unwrap(), "--json"]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
-    let v: Value =
-        serde_json::from_slice(&o.stdout).expect("verify-sig --json is valid JSON even when refused");
+    let v: Value = serde_json::from_slice(&o.stdout).expect("verify-sig --json is valid JSON even when refused");
     assert_eq!(v["code"], "DL1910", "{v}");
 }
 
@@ -248,11 +242,7 @@ fn verify_sig_require_hybrid_accepts_a_genuine_hybrid_signature_under_unstable()
     let sg = delulu(&dir, &home, &["sign", art.to_str().unwrap(), "--hybrid", "--unstable"]);
     assert!(sg.status.success(), "{}", stderr(&sg));
 
-    let o = delulu(
-        &dir,
-        &home,
-        &["verify-sig", art.to_str().unwrap(), "--require-hybrid", "--unstable", "--json"],
-    );
+    let o = delulu(&dir, &home, &["verify-sig", art.to_str().unwrap(), "--require-hybrid", "--unstable", "--json"]);
     assert!(o.status.success(), "{}", stderr(&o));
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["verdict"], "valid");

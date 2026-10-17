@@ -81,8 +81,7 @@ enum Access {
 /// the same resolution [`crate::prim::contains_on_disk`] makes — returning the canonical path to
 /// open, or why it is refused.
 fn checked(root: &Path, joined: &Path) -> Result<PathBuf, &'static str> {
-    let (Some(r), Some(c)) = (crate::prim::resolve_for_decision(root), crate::prim::resolve_for_decision(joined))
-    else {
+    let (Some(r), Some(c)) = (crate::prim::resolve_for_decision(root), crate::prim::resolve_for_decision(joined)) else {
         return Err(OUTSIDE);
     };
     if c.starts_with(&r) {
@@ -390,16 +389,16 @@ mod imp {
 
     use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
     use windows_sys::Wdk::Storage::FileSystem::{
-        NtCreateFile, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_IF,
-        FILE_OPEN_REPARSE_POINT, FILE_SYNCHRONOUS_IO_NONALERT,
+        NtCreateFile, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_IF, FILE_OPEN_REPARSE_POINT,
+        FILE_SYNCHRONOUS_IO_NONALERT,
     };
-    use windows_sys::Win32::Foundation::{RtlNtStatusToDosError, HANDLE, OBJ_CASE_INSENSITIVE, UNICODE_STRING};
     use windows_sys::Win32::Foundation::ERROR_NO_MORE_FILES;
+    use windows_sys::Win32::Foundation::{RtlNtStatusToDosError, HANDLE, OBJ_CASE_INSENSITIVE, UNICODE_STRING};
     use windows_sys::Win32::Storage::FileSystem::{
         FileFullDirectoryInfo, GetFileInformationByHandleEx, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL,
-        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FULL_DIR_INFO, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-        FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES, SYNCHRONIZE,
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FULL_DIR_INFO, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_LIST_DIRECTORY,
+        FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES,
+        SYNCHRONIZE,
     };
     use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
 
@@ -478,14 +477,16 @@ mod imp {
             Err(e) => return Outcome::Io(e),
         };
         let Some((last, dirs)) = names.split_last() else {
-            return if access == Access::List {
-                Outcome::Done(Opened::Dir(DirHandle(cur)))
-            } else {
-                Outcome::Io(not_regular())
-            };
+            return if access == Access::List { Outcome::Done(Opened::Dir(DirHandle(cur))) } else { Outcome::Io(not_regular()) };
         };
         for d in dirs {
-            cur = match step(cur.as_raw_handle() as HANDLE, d, FILE_TRAVERSE | FILE_READ_ATTRIBUTES, FILE_OPEN, FILE_DIRECTORY_FILE) {
+            cur = match step(
+                cur.as_raw_handle() as HANDLE,
+                d,
+                FILE_TRAVERSE | FILE_READ_ATTRIBUTES,
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE,
+            ) {
                 Ok(h) => h,
                 Err(e) => return Outcome::Io(e),
             };

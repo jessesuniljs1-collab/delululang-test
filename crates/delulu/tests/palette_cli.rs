@@ -121,10 +121,7 @@ fn theme_toml_role_override_is_honored() {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("theme.toml");
     std::fs::write(&path, "theme = \"default\"\n[roles]\nerror = \"green\"\n").unwrap();
-    let e = stderr(&run(
-        &["check", REJECT, "--color", "always"],
-        &[("DELULU_THEME_FILE", path.to_str().unwrap())],
-    ));
+    let e = stderr(&run(&["check", REJECT, "--color", "always"], &[("DELULU_THEME_FILE", path.to_str().unwrap())]));
     assert!(e.contains(&format!("{ESC}[32merror{ESC}[0m")), "error overridden to green: {e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }

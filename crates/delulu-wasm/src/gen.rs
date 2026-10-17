@@ -35,9 +35,7 @@ pub fn random_pure_program(seed: u64) -> (String, Vec<i64>) {
     let mut r = Rng::new(seed);
     let g_body = gen_expr(&mut r, 2, &["x"], false);
     let f_body = gen_expr(&mut r, 3, &["a", "b", "c"], true);
-    let src = format!(
-        "module gp\nfn g(x: Int) -> Int {{ {g_body} }}\nfn f(a: Int, b: Int, c: Int) -> Int {{ {f_body} }}\n"
-    );
+    let src = format!("module gp\nfn g(x: Int) -> Int {{ {g_body} }}\nfn f(a: Int, b: Int, c: Int) -> Int {{ {f_body} }}\n");
     // Arguments span a large range so multiplication overflows and edge values appear.
     let args = vec![gen_arg(&mut r), gen_arg(&mut r), gen_arg(&mut r)];
     (src, args)

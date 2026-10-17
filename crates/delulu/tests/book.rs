@@ -62,15 +62,10 @@ fn chapter1_hello_has_a_real_authority_report() {
     let o = delulu(&["authority", &hello.to_string_lossy(), "--json"]);
     assert!(o.status.success(), "authority on hello must succeed: {}", text(&o));
 
-    let v: serde_json::Value =
-        serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("valid JSON");
-    let effects: Vec<&str> =
-        v["authority"]["effects"].as_array().unwrap().iter().filter_map(|e| e.as_str()).collect();
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("valid JSON");
+    let effects: Vec<&str> = v["authority"]["effects"].as_array().unwrap().iter().filter_map(|e| e.as_str()).collect();
     assert_eq!(effects, vec!["Write"], "hello-world writes and does nothing else: {effects:?}");
-    assert!(
-        v["authority"]["secrets"].as_array().unwrap().is_empty(),
-        "hello-world holds no secrets"
-    );
+    assert!(v["authority"]["secrets"].as_array().unwrap().is_empty(), "hello-world holds no secrets");
 }
 
 /// A sample that claims to be pure must BE pure. This is the sample most likely to rot into a lie,
@@ -79,8 +74,7 @@ fn chapter1_hello_has_a_real_authority_report() {
 fn the_pure_sample_is_actually_pure() {
     let pure = root().join("docs/book/samples/02_pure_function.delulu");
     let o = delulu(&["authority", &pure.to_string_lossy(), "--json"]);
-    let v: serde_json::Value =
-        serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("valid JSON");
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("valid JSON");
     assert!(
         v["authority"]["effects"].as_array().unwrap().is_empty(),
         "the Book says this function cannot read, reach the network, or tell time — the authority \
@@ -93,8 +87,7 @@ fn the_pure_sample_is_actually_pure() {
 /// could be added to the prose and never checked by anything.
 #[test]
 fn every_book_code_block_has_a_checked_sample() {
-    let book = std::fs::read_to_string(root().join("docs/book/THE_DELULULANG_BOOK.md"))
-        .expect("the Book is committed");
+    let book = std::fs::read_to_string(root().join("docs/book/THE_DELULULANG_BOOK.md")).expect("the Book is committed");
     let blocks = book.matches("```delulu").count();
     let files = samples().len();
     assert_eq!(
@@ -109,18 +102,14 @@ fn every_book_code_block_has_a_checked_sample() {
 #[test]
 fn the_book_keeps_its_honesty_chapter() {
     let book = std::fs::read_to_string(root().join("docs/book/THE_DELULULANG_BOOK.md")).unwrap();
-    assert!(
-        book.contains("What DeluluLang Refuses to Claim"),
-        "the honesty chapter must not be dropped"
-    );
+    assert!(book.contains("What DeluluLang Refuses to Claim"), "the honesty chapter must not be dropped");
 }
 
 /// `docs/for-agents.md` is the page machine harnesses pin, so its anchors are a contract. It must
 /// also carry the warnings a harness author is most likely to overstate downstream.
 #[test]
 fn the_agent_page_keeps_its_anchors_and_its_warnings() {
-    let p = std::fs::read_to_string(root().join("docs/for-agents.md"))
-        .expect("docs/for-agents.md is committed");
+    let p = std::fs::read_to_string(root().join("docs/for-agents.md")).expect("docs/for-agents.md is committed");
     for anchor in [
         "[agents.exit-codes]",
         "[agents.json-envelope]",
@@ -132,18 +121,9 @@ fn the_agent_page_keeps_its_anchors_and_its_warnings() {
         assert!(p.contains(anchor), "the stable anchor `{anchor}` must exist");
     }
     // The two things a harness must not get wrong.
-    assert!(
-        p.contains("DO NOT APPLY AUTOMATICALLY"),
-        "the authority-widening warning must be unmissable"
-    );
-    assert!(
-        p.contains("8.3%"),
-        "the honest repair-coverage number must be stated, not implied to be universal"
-    );
-    assert!(
-        p.contains("not competitive with C"),
-        "the performance position must be stated plainly on the page agents read"
-    );
+    assert!(p.contains("DO NOT APPLY AUTOMATICALLY"), "the authority-widening warning must be unmissable");
+    assert!(p.contains("8.3%"), "the honest repair-coverage number must be stated, not implied to be universal");
+    assert!(p.contains("not competitive with C"), "the performance position must be stated plainly on the page agents read");
 }
 
 /// The Book's Chapter 9 quotes a number for the two-engine parity fuzzer, and a number in prose is
@@ -160,10 +140,8 @@ fn the_agent_page_keeps_its_anchors_and_its_warnings() {
 /// Change the harness and this fails until the prose is changed too.
 #[test]
 fn the_books_engine_parity_number_matches_the_harness() {
-    let harness = std::fs::read_to_string(
-        root().join("crates/delulu-wasm/tests/conformance_parity.rs"),
-    )
-    .expect("the parity harness must exist — the Book's claim rests on it");
+    let harness = std::fs::read_to_string(root().join("crates/delulu-wasm/tests/conformance_parity.rs"))
+        .expect("the parity harness must exist — the Book's claim rests on it");
 
     // `for k in 0..2000u64 {` — the generative two-engine sweep.
     let bound = harness
@@ -193,10 +171,7 @@ fn the_books_engine_parity_number_matches_the_harness() {
 
     // The fragment itself must stay disclosed: the honest half of the correction is that a reader
     // is told the WASM backend is a SUBSET, not a second full implementation.
-    assert!(
-        book.contains("DL1201"),
-        "Chapter 9 must name the refusal code that marks the fragment boundary"
-    );
+    assert!(book.contains("DL1201"), "Chapter 9 must name the refusal code that marks the fragment boundary");
 }
 
 /// The other half of C63: `delulu-fuzz` must not silently become a WASM harness (which would make
@@ -215,11 +190,7 @@ fn the_differential_fuzz_crate_still_does_not_run_the_wasm_backend() {
 /// Normalize a code block or sample for comparison: drop blank lines, comments and trailing
 /// whitespace, so a slice matches its source regardless of surrounding prose or comment edits.
 fn normalize_code(s: &str) -> String {
-    s.lines()
-        .map(|l| l.trim_end())
-        .filter(|l| !l.trim().is_empty() && !l.trim().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    s.lines().map(|l| l.trim_end()).filter(|l| !l.trim().is_empty() && !l.trim().starts_with("//")).collect::<Vec<_>>().join("\n")
 }
 
 fn book_delulu_blocks() -> Vec<String> {
@@ -262,10 +233,8 @@ fn book_blocks_that_claim_to_be_compiled_really_are() {
     assert!(blocks.len() >= 10, "the Book lost code blocks: found {}", blocks.len());
 
     for (marker, sample) in BACKED {
-        let block = blocks
-            .iter()
-            .find(|b| b.contains(marker))
-            .unwrap_or_else(|| panic!("no Book block contains {marker:?} any more"));
+        let block =
+            blocks.iter().find(|b| b.contains(marker)).unwrap_or_else(|| panic!("no Book block contains {marker:?} any more"));
         let src = std::fs::read_to_string(root().join("docs/book/samples").join(sample))
             .unwrap_or_else(|e| panic!("{sample} must exist: {e}"));
         assert!(

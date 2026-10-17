@@ -203,12 +203,42 @@ mod tests {
     #[test]
     fn every_spelling_of_a_special_address_is_caught() {
         for h in [
-            "169.254.169.254", "127.0.0.1", "127.1", "2130706433", "0x7f.0.0.1", "0177.0.0.1", "0x7f000001",
-            "127.0.0.1.", "LOCALHOST", "localhost.", "api.localhost", "10.0.0.8", "172.16.3.4", "172.31.255.255",
-            "192.168.1.1", "100.64.0.1", "0.0.0.0", "0", "255.255.255.255", "224.0.0.1", "[::1]", "::1",
-            "[::1]:8080", "fe80::1%eth0", "[fe80::1%25en0]", "fd12::3", "fc00::1", "::ffff:127.0.0.1",
-            "[::ffff:169.254.169.254]", "::127.0.0.1", "ff02::1", "::", "metadata.google.internal",
-            "Metadata.Google.Internal.", "169.254.169.254:80", "localhost:3000",
+            "169.254.169.254",
+            "127.0.0.1",
+            "127.1",
+            "2130706433",
+            "0x7f.0.0.1",
+            "0177.0.0.1",
+            "0x7f000001",
+            "127.0.0.1.",
+            "LOCALHOST",
+            "localhost.",
+            "api.localhost",
+            "10.0.0.8",
+            "172.16.3.4",
+            "172.31.255.255",
+            "192.168.1.1",
+            "100.64.0.1",
+            "0.0.0.0",
+            "0",
+            "255.255.255.255",
+            "224.0.0.1",
+            "[::1]",
+            "::1",
+            "[::1]:8080",
+            "fe80::1%eth0",
+            "[fe80::1%25en0]",
+            "fd12::3",
+            "fc00::1",
+            "::ffff:127.0.0.1",
+            "[::ffff:169.254.169.254]",
+            "::127.0.0.1",
+            "ff02::1",
+            "::",
+            "metadata.google.internal",
+            "Metadata.Google.Internal.",
+            "169.254.169.254:80",
+            "localhost:3000",
         ] {
             assert!(special_use_class(h).is_some(), "`{h}` must be special");
         }
@@ -217,11 +247,25 @@ mod tests {
     #[test]
     fn ordinary_hosts_are_not() {
         for h in [
-            "example.com", "api.weather.example.com", "8.8.8.8", "1.1.1.1", "172.32.0.1", "100.128.0.1",
-            "192.169.0.1", "2606:4700::1111", "*.example.com", "localhost.example.com", "metadata.example.com",
-            "11.0.0.1", "0x.example.com",
+            "example.com",
+            "api.weather.example.com",
+            "8.8.8.8",
+            "1.1.1.1",
+            "172.32.0.1",
+            "100.128.0.1",
+            "192.169.0.1",
+            "2606:4700::1111",
+            "*.example.com",
+            "localhost.example.com",
+            "metadata.example.com",
+            "11.0.0.1",
+            "0x.example.com",
             // The translation prefixes are judged by what they carry: these reach PUBLIC addresses.
-            "64:ff9b::808:808", "2002:808:808::1", "198.20.0.1", "192.0.3.1", "239.255.255.255.example.com",
+            "64:ff9b::808:808",
+            "2002:808:808::1",
+            "198.20.0.1",
+            "192.0.3.1",
+            "239.255.255.255.example.com",
         ] {
             assert!(special_use_class(h).is_none(), "`{h}` is ordinary: {:?}", special_use_class(h));
         }
@@ -231,11 +275,28 @@ mod tests {
     #[test]
     fn the_registry_ranges_added_for_the_egress_client_are_special() {
         for h in [
-            "192.0.0.1", "192.0.2.10", "198.51.100.7", "203.0.113.200", "198.18.0.1", "198.19.255.255",
-            "240.0.0.1", "250.1.2.3", "fec0::1", "100::1", "2001::1", "2001:0:4136:e378::1", "2001:db8::1",
-            "3fff::1", "2001:2::5", "5f00::1", "64:ff9b:1::1",
+            "192.0.0.1",
+            "192.0.2.10",
+            "198.51.100.7",
+            "203.0.113.200",
+            "198.18.0.1",
+            "198.19.255.255",
+            "240.0.0.1",
+            "250.1.2.3",
+            "fec0::1",
+            "100::1",
+            "2001::1",
+            "2001:0:4136:e378::1",
+            "2001:db8::1",
+            "3fff::1",
+            "2001:2::5",
+            "5f00::1",
+            "64:ff9b:1::1",
             // The metadata endpoint and loopback, each spelled through a translator.
-            "64:ff9b::a9fe:a9fe", "64:ff9b::7f00:1", "2002:a9fe:a9fe::1", "2002:0a00:0001::",
+            "64:ff9b::a9fe:a9fe",
+            "64:ff9b::7f00:1",
+            "2002:a9fe:a9fe::1",
+            "2002:0a00:0001::",
         ] {
             assert!(special_use_class(h).is_some(), "`{h}` must be special");
         }

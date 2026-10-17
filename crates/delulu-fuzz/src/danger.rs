@@ -205,8 +205,7 @@ fn nested_higher_order(rng: &mut Rng) -> Program {
 /// these are never executed — the assertion is the accept/reject verdict, not a trace.
 fn secret_oracle(rng: &mut Rng) -> Program {
     let declare = rng.chance(1, 2);
-    let (probe_row, main_row) =
-        if declare { (" ! {Declassify}", "{Write, Declassify}") } else { ("", "{Write}") };
+    let (probe_row, main_row) = if declare { (" ! {Declassify}", "{Write, Declassify}") } else { ("", "{Write}") };
     let src = format!(
         "module fuzz\n\nfn probe(k: Secret[Str], c: Str) -> Bool{probe_row} {{\n  let a = k.map(fn(x: Str) -> Str {{ if x == c {{ \"Y\" }} else {{ \"N\" }} }})\n  let b = k.map(fn(x: Str) -> Str {{ \"Y\" }})\n  a.verify(b)\n}}\n\nfn main(root: Root) ! {main_row} {{\n  let out = root.console()\n  let k = root.secret(\"K\")\n  if probe(k, \"a\") {{ out.println(\"y\") }} else {{ out.println(\"n\") }}\n}}\n",
     );

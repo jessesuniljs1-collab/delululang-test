@@ -111,15 +111,24 @@ pub enum WireValue {
     Float(f64),
     Str(String),
     List(Vec<WireValue>),
-    Record { name: String, fields: Vec<(String, WireValue)> },
-    Variant { name: String, fields: Vec<WireValue> },
+    Record {
+        name: String,
+        fields: Vec<(String, WireValue)>,
+    },
+    Variant {
+        name: String,
+        fields: Vec<WireValue>,
+    },
     /// A `Map[K, V]` (P9-04 (a), D-V2-128 — `http.get_with`'s headers cross from a guest), as its entries
     /// in the map's own ascending order. A key is `Bool`, `Int` or `Str` (D-V2-29); a key sent twice is
     /// refused on the way in rather than letting the second silently replace the first.
     Map(Vec<(WireValue, WireValue)>),
     /// A capability, by host-minted handle plus its KIND. The guest needs the kind to type-check its
     /// own use of the value; it never learns the scope, which is the part that names a resource.
-    Cap { handle: Handle, kind: String },
+    Cap {
+        handle: Handle,
+        kind: String,
+    },
 }
 
 /// Why a value may not cross. Carried as a refusal, never silently dropped or coerced.
@@ -135,16 +144,16 @@ impl WireValue {
             Value::Int(i) => WireValue::Int(*i),
             Value::Float(f) => WireValue::Float(*f),
             Value::Str(s) => WireValue::Str(s.to_string()),
-            Value::List(items) => WireValue::List(
-                items.borrow().iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?,
-            ),
+            Value::List(items) => {
+                WireValue::List(items.borrow().iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?)
+            }
             Value::Record { name, fields } => WireValue::Record {
                 name: name.to_string(),
-                fields: fields
-                    .borrow()
-                    .iter()
-                    .map(|(k, x)| Ok((k.clone(), WireValue::from_value(x, cap)?)))
-                    .collect::<Result<Vec<_>, Untransferable>>()?,
+                fields: fields.borrow().iter().map(|(k, x)| Ok((k.clone(), WireValue::from_value(x, cap)?))).collect::<Result<
+                    Vec<_>,
+                    Untransferable,
+                >>(
+                )?,
             },
             Value::Variant { name, fields } => WireValue::Variant {
                 name: name.to_string(),
@@ -182,17 +191,12 @@ impl WireValue {
             WireValue::Record { name, fields } => Value::Record {
                 name: name.into(),
                 fields: std::rc::Rc::new(std::cell::RefCell::new(
-                    fields
-                        .into_iter()
-                        .map(|(k, x)| Ok((k, x.into_value(cap)?)))
-                        .collect::<Result<Vec<_>, Untransferable>>()?,
+                    fields.into_iter().map(|(k, x)| Ok((k, x.into_value(cap)?))).collect::<Result<Vec<_>, Untransferable>>()?,
                 )),
             },
             WireValue::Variant { name, fields } => Value::Variant {
                 name: name.into(),
-                fields: VariantFields::new(
-                    fields.into_iter().map(|x| x.into_value(cap)).collect::<Result<Vec<_>, _>>()?,
-                ),
+                fields: VariantFields::new(fields.into_iter().map(|x| x.into_value(cap)).collect::<Result<Vec<_>, _>>()?),
             },
             WireValue::Map(entries) => {
                 let mut m = std::collections::BTreeMap::new();
@@ -204,9 +208,7 @@ impl WireValue {
                 }
                 Value::Map(std::rc::Rc::new(std::cell::RefCell::new(m)))
             }
-            WireValue::Cap { handle, .. } => {
-                Value::Cap(cap(handle).ok_or(Untransferable("an unknown capability handle"))?)
-            }
+            WireValue::Cap { handle, .. } => Value::Cap(cap(handle).ok_or(Untransferable("an unknown capability handle"))?),
         })
     }
 }
@@ -245,9 +247,7 @@ impl WireValue {
             },
             WireValue::Variant { name, fields } => Value::Variant {
                 name: name.into(),
-                fields: VariantFields::new(
-                    fields.into_iter().map(WireValue::into_guest_value).collect::<Result<Vec<_>, _>>()?,
-                ),
+                fields: VariantFields::new(fields.into_iter().map(WireValue::into_guest_value).collect::<Result<Vec<_>, _>>()?),
             },
             WireValue::Map(entries) => {
                 let mut m = std::collections::BTreeMap::new();
@@ -808,10 +808,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             }
             ReqBody::RootMethod { method, args, file, start, end } => {
                 let Some(root) = self.root.clone() else {
-                    return Response::Error {
-                        code: "DL1401".into(),
-                        message: "this run has no root to mint from".into(),
-                    };
+                    return Response::Error { code: "DL1401".into(), message: "this run has no root to mint from".into() };
                 };
                 let mut resolve = |h: Handle| self.caps.get(h.wrapping_sub(1) as usize).cloned();
                 let mut decoded = Vec::with_capacity(args.len());
@@ -831,10 +828,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             }
             ReqBody::CapMethod { cap, method, args, file, start, end } => {
                 let Some(capv) = self.resolve(*cap) else {
-                    return Response::Error {
-                        code: "DL1401".into(),
-                        message: format!("no capability handle {cap} in this run"),
-                    };
+                    return Response::Error { code: "DL1401".into(), message: format!("no capability handle {cap} in this run") };
                 };
                 let mut resolve = |h: Handle| self.caps.get((h.wrapping_sub(1)) as usize).cloned();
                 let mut decoded = Vec::with_capacity(args.len());
@@ -946,17 +940,13 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 *next += 1;
                 WireValue::Cap { handle: self.mint(cap), kind }
             }
-            WireValue::List(items) => {
-                WireValue::List(items.into_iter().map(|x| self.walk(x, minted, next)).collect())
+            WireValue::List(items) => WireValue::List(items.into_iter().map(|x| self.walk(x, minted, next)).collect()),
+            WireValue::Record { name, fields } => {
+                WireValue::Record { name, fields: fields.into_iter().map(|(k, x)| (k, self.walk(x, minted, next))).collect() }
             }
-            WireValue::Record { name, fields } => WireValue::Record {
-                name,
-                fields: fields.into_iter().map(|(k, x)| (k, self.walk(x, minted, next))).collect(),
-            },
-            WireValue::Variant { name, fields } => WireValue::Variant {
-                name,
-                fields: fields.into_iter().map(|x| self.walk(x, minted, next)).collect(),
-            },
+            WireValue::Variant { name, fields } => {
+                WireValue::Variant { name, fields: fields.into_iter().map(|x| self.walk(x, minted, next)).collect() }
+            }
             // A capability inside a map's value is reminted like any other, in the encoder's order;
             // leaving a map to the catch-all would send the placeholder handle 0 — another capability.
             WireValue::Map(entries) => WireValue::Map(
@@ -1059,16 +1049,12 @@ impl<T: Read + Write> ChannelSink<T> {
         write_frame(&mut *io, &req).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
         let resp: Response = read_frame(&mut *io).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
         match resp {
-            Response::Ok(w) => {
-                w.into_guest_value().map_err(|Untransferable(why)| fault(format!("the reply carried {why}")))
-            }
+            Response::Ok(w) => w.into_guest_value().map_err(|Untransferable(why)| fault(format!("the reply carried {why}"))),
             // The host's own answer, carried through unchanged: an unregistered code would be a lie
             // about which diagnostic this is, so it becomes the channel's own DL1401 instead.
-            Response::Fault { code, message } | Response::Error { code, message } => Err(crate::value::Fault::at(
-                delulu_diag::static_code(&code).unwrap_or("DL1401"),
-                message,
-                span,
-            )),
+            Response::Fault { code, message } | Response::Error { code, message } => {
+                Err(crate::value::Fault::at(delulu_diag::static_code(&code).unwrap_or("DL1401"), message, span))
+            }
         }
     }
 }
@@ -1428,14 +1414,20 @@ mod tests {
         ]);
         assert_eq!(twice.clone().into_value(&mut |_| None).err(), Some(Untransferable("a map that names one key twice")));
         assert_eq!(twice.into_guest_value().err(), Some(Untransferable("a map that names one key twice")));
-        for key in [WireValue::Float(1.0), WireValue::Unit, WireValue::List(vec![]), WireValue::Cap { handle: 1, kind: "Clock".into() }] {
+        for key in
+            [WireValue::Float(1.0), WireValue::Unit, WireValue::List(vec![]), WireValue::Cap { handle: 1, kind: "Clock".into() }]
+        {
             let odd = WireValue::Map(vec![(key.clone(), WireValue::Int(1))]);
             assert_eq!(
                 odd.clone().into_value(&mut |_| None).err(),
                 Some(Untransferable("a map key that is not a Bool, an Int or a Str")),
                 "{key:?}"
             );
-            assert_eq!(odd.into_guest_value().err(), Some(Untransferable("a map key that is not a Bool, an Int or a Str")), "{key:?}");
+            assert_eq!(
+                odd.into_guest_value().err(),
+                Some(Untransferable("a map key that is not a Bool, an Int or a Str")),
+                "{key:?}"
+            );
         }
     }
 
@@ -1461,7 +1453,11 @@ mod tests {
         assert_eq!(handles.len(), 2);
         assert!(handles.iter().all(|h| *h != 0 && *h != first), "fresh handles, not the placeholder: {handles:?}");
         assert_ne!(handles[0], handles[1]);
-        assert_eq!(host.resolve(handles[1]).map(|c| c.kind), Some(delulu_check::ResourceKind::Rand), "each handle names its own capability");
+        assert_eq!(
+            host.resolve(handles[1]).map(|c| c.kind),
+            Some(delulu_check::ResourceKind::Rand),
+            "each handle names its own capability"
+        );
     }
 
     /// A guest's `get_with` is performed by the HOST with the guest's headers — and a header the host
@@ -1479,11 +1475,21 @@ mod tests {
         let resp = host.answer(&Request {
             version: CHANNEL_VERSION.to_string(),
             seq: 1,
-            body: ReqBody::CapMethod { cap: h, method: "get_with".into(), args: vec![WireValue::Str(url.clone()), headers], file: 0, start: 0, end: 1 },
+            body: ReqBody::CapMethod {
+                cap: h,
+                method: "get_with".into(),
+                args: vec![WireValue::Str(url.clone()), headers],
+                file: 0,
+                start: 0,
+                end: 1,
+            },
         });
         let Response::Ok(WireValue::Variant { name, fields }) = &resp else { panic!("a value, not a fault: {resp:?}") };
         assert_eq!(name, "Err");
-        assert!(matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()), "{resp:?}");
+        assert!(
+            matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()),
+            "{resp:?}"
+        );
         let (denied, _) = host.denied();
         assert!(
             denied.iter().any(|d| d.contains(&url) && d.contains("header") && d.contains("Host")),
@@ -1624,13 +1630,8 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn a_pause_before_a_frame_is_not_a_slow_frame() {
         let within = std::time::Duration::from_millis(150);
-        let mut drip = Drip {
-            bytes: done_frame(),
-            at: 0,
-            pause: within * 2,
-            gap: std::time::Duration::ZERO,
-            answers: Vec::new(),
-        };
+        let mut drip =
+            Drip { bytes: done_frame(), at: 0, pause: within * 2, gap: std::time::Duration::ZERO, answers: Vec::new() };
         let exit = HostChannel::new(crate::sink::LocalSink).with_frame_deadline(within).serve(&mut drip).unwrap();
         assert_eq!(exit, 7);
         assert!(!drip.answers.is_empty(), "the goodbye was answered");
@@ -1642,10 +1643,17 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn from_now_counts_the_wait_before_the_first_byte() {
         let within = std::time::Duration::from_millis(100);
-        let mut late = Drip { bytes: done_frame(), at: 0, pause: within * 2, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let mut late =
+            Drip { bytes: done_frame(), at: 0, pause: within * 2, gap: std::time::Duration::ZERO, answers: Vec::new() };
         let e = read_frame::<Request>(&mut Within::from_now(&mut late, within)).unwrap_err();
         assert!(FrameTooSlow::is(&e), "{e}");
-        let mut prompt = Drip { bytes: done_frame(), at: 0, pause: std::time::Duration::ZERO, gap: std::time::Duration::ZERO, answers: Vec::new() };
+        let mut prompt = Drip {
+            bytes: done_frame(),
+            at: 0,
+            pause: std::time::Duration::ZERO,
+            gap: std::time::Duration::ZERO,
+            answers: Vec::new(),
+        };
         assert!(read_frame::<Request>(&mut Within::from_now(&mut prompt, within)).is_ok());
     }
 
@@ -1687,16 +1695,12 @@ mod tests {
         use crate::sink::EffectSink;
         crate::prim::set_fixed_clock_ms(Some(1_234));
         let mut host = HostChannel::new(crate::sink::LocalSink);
-        let handle = host.mint(std::rc::Rc::new(CapVal {
-            kind: delulu_check::ResourceKind::Clock,
-            scope: crate::value::CapScope::Clock,
-        }));
+        let handle =
+            host.mint(std::rc::Rc::new(CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Clock }));
         let guest_cap = CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Handle(handle) };
         let sink = ChannelSink::new(Loopback::new(host));
 
-        let got = sink
-            .cap_method(&guest_cap, "now_ms", &[], delulu_diag::Span::new(0, 0, 1))
-            .expect("the host performs it");
+        let got = sink.cap_method(&guest_cap, "now_ms", &[], delulu_diag::Span::new(0, 0, 1)).expect("the host performs it");
         assert_eq!(got.display(), Value::Int(1_234).display());
         assert_eq!(sink.backend(), "channel");
         crate::prim::set_fixed_clock_ms(None);
@@ -1717,12 +1721,22 @@ mod tests {
         let resp = host.answer(&Request {
             version: CHANNEL_VERSION.to_string(),
             seq: 1,
-            body: ReqBody::CapMethod { cap: h, method: "get".into(), args: vec![WireValue::Str(url.clone())], file: 0, start: 0, end: 1 },
+            body: ReqBody::CapMethod {
+                cap: h,
+                method: "get".into(),
+                args: vec![WireValue::Str(url.clone())],
+                file: 0,
+                start: 0,
+                end: 1,
+            },
         });
         // The guest learns the opaque refusal and nothing else.
         let Response::Ok(WireValue::Variant { name, fields }) = &resp else { panic!("a value, not a fault: {resp:?}") };
         assert_eq!(name, "Err");
-        assert!(matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()), "{resp:?}");
+        assert!(
+            matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()),
+            "{resp:?}"
+        );
         // The host records what it refused, and why.
         let (denied, total) = host.denied();
         assert!(total >= 1);
@@ -1746,10 +1760,7 @@ mod tests {
 
         let console = sink.root_method(&empty_root, "console", &[], span).expect("the host mints it");
         let Value::Cap(c) = &console else { panic!("minting must answer with a capability") };
-        assert!(
-            matches!(c.scope, crate::value::CapScope::Handle(_)),
-            "the guest must receive a handle, never a scope"
-        );
+        assert!(matches!(c.scope, crate::value::CapScope::Handle(_)), "the guest must receive a handle, never a scope");
 
         crate::prim::set_capture(true);
         sink.cap_method(c, "println", &[Value::str("from the guest".to_string())], span).expect("the host performs it");
@@ -1788,7 +1799,8 @@ mod tests {
         assert!(matches!(r, Response::Ok(_)), "{r:?}");
         assert_eq!(host.refusal().map(|r| (r.code.as_str(), r.start, r.end)), Some(("DL0703", 90, 99)));
         // A channel error is the host's refusal too, held at its call.
-        let _ = host.answer(&at(5, ReqBody::CapMethod { cap: 99, method: "now_ms".into(), args: vec![], file: 0, start: 5, end: 9 }));
+        let _ =
+            host.answer(&at(5, ReqBody::CapMethod { cap: 99, method: "now_ms".into(), args: vec![], file: 0, start: 5, end: 9 }));
         assert_eq!(host.refusal().map(|r| (r.code.as_str(), r.start)), Some(("DL1401", 5)));
     }
 
@@ -1876,7 +1888,9 @@ mod tests {
                             0 => ReqBody::Done { exit: (next() % 8) as i32 },
                             3 => ReqBody::Confined {
                                 applied: (0..next() % 3)
-                                    .map(|_| ["no new programs", "no file writes", "root access", ""][(next() % 4) as usize].into())
+                                    .map(|_| {
+                                        ["no new programs", "no file writes", "root access", ""][(next() % 4) as usize].into()
+                                    })
                                     .collect(),
                                 generation: ["", "00", &"ab".repeat(32)][(next() % 3) as usize].into(),
                             },
@@ -1929,10 +1943,7 @@ mod tests {
                 fields: (0..next() % 3).map(|_| ("f".to_string(), random_wire(next, depth - 1))).collect(),
             },
             8 => WireValue::Map((0..next() % 3).map(|_| (random_wire(next, 0), random_wire(next, depth - 1))).collect()),
-            _ => WireValue::Variant {
-                name: "V".into(),
-                fields: (0..next() % 3).map(|_| random_wire(next, depth - 1)).collect(),
-            },
+            _ => WireValue::Variant { name: "V".into(), fields: (0..next() % 3).map(|_| random_wire(next, depth - 1)).collect() },
         }
     }
 

@@ -116,13 +116,7 @@ pub struct Dpx {
 /// manifest is augmented with the container version and the blake3 binding of every section
 /// present, then serialized canonically (serde_json sorts keys) — identical inputs produce
 /// byte-identical artifacts (house rule 8).
-pub fn write_dpx(
-    manifest: &Value,
-    dir: Option<&[u8]>,
-    wasm: Option<&[u8]>,
-    sig: Option<&[u8]>,
-    lock: Option<&[u8]>,
-) -> Vec<u8> {
+pub fn write_dpx(manifest: &Value, dir: Option<&[u8]>, wasm: Option<&[u8]>, sig: Option<&[u8]>, lock: Option<&[u8]>) -> Vec<u8> {
     let m = augmented_plugin_manifest(manifest, dir, wasm, lock);
     let manifest_bytes = serde_json::to_vec(&m).expect("manifest serializes");
 
@@ -148,12 +142,7 @@ pub fn write_dpx(
 /// Exposed (Stage 6 phase 6h) so `plugin build --sign` can sign over the EXACT canonical manifest
 /// bytes the container will hold — `serde_json::to_vec` of this value equals the `delulu:plugin`
 /// section a loader reads and re-serializes for signature verification (`sig_message`).
-pub fn augmented_plugin_manifest(
-    manifest: &Value,
-    dir: Option<&[u8]>,
-    wasm: Option<&[u8]>,
-    lock: Option<&[u8]>,
-) -> Value {
+pub fn augmented_plugin_manifest(manifest: &Value, dir: Option<&[u8]>, wasm: Option<&[u8]>, lock: Option<&[u8]>) -> Value {
     let mut m = manifest.clone();
     let obj = m.as_object_mut().expect("plugin manifest is a JSON object");
     obj.insert("container".into(), Value::from(DPX_VERSION));
@@ -203,8 +192,7 @@ pub fn read_dpx(bytes: &[u8]) -> Result<Dpx, DpxError> {
     while i < bytes.len() {
         let id = bytes[i];
         i += 1;
-        let (size, n) =
-            read_uleb(&bytes[i..]).ok_or_else(|| DpxError::Malformed("truncated section size".into()))?;
+        let (size, n) = read_uleb(&bytes[i..]).ok_or_else(|| DpxError::Malformed("truncated section size".into()))?;
         i += n;
         let body_start = i;
         let body_end = body_start
@@ -217,8 +205,7 @@ pub fn read_dpx(bytes: &[u8]) -> Result<Dpx, DpxError> {
             )));
         }
         let body = &bytes[body_start..body_end];
-        let (name_len, m) =
-            read_uleb(body).ok_or_else(|| DpxError::Malformed("truncated custom-section name".into()))?;
+        let (name_len, m) = read_uleb(body).ok_or_else(|| DpxError::Malformed("truncated custom-section name".into()))?;
         let name_end = m
             .checked_add(name_len as usize)
             .filter(|&e| e <= body.len())
@@ -239,18 +226,14 @@ pub fn read_dpx(bytes: &[u8]) -> Result<Dpx, DpxError> {
             }
         };
         if slot.is_some() {
-            return Err(DpxError::Malformed(format!(
-                "duplicate `{}` section",
-                String::from_utf8_lossy(name)
-            )));
+            return Err(DpxError::Malformed(format!("duplicate `{}` section", String::from_utf8_lossy(name))));
         }
         *slot = Some(payload);
         i = body_end;
     }
 
     let plugin_payload = plugin_payload.ok_or(DpxError::NoPluginSection)?;
-    let manifest: Value =
-        serde_json::from_slice(&plugin_payload).map_err(|e| DpxError::BadManifest(e.to_string()))?;
+    let manifest: Value = serde_json::from_slice(&plugin_payload).map_err(|e| DpxError::BadManifest(e.to_string()))?;
 
     let container = manifest
         .get("container")
@@ -259,10 +242,7 @@ pub fn read_dpx(bytes: &[u8]) -> Result<Dpx, DpxError> {
     if container > DPX_VERSION {
         return Err(DpxError::UnsupportedVersion(container));
     }
-    let api = manifest
-        .get("api")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| DpxError::BadManifest("missing `api`".into()))? as u32;
+    let api = manifest.get("api").and_then(|v| v.as_u64()).ok_or_else(|| DpxError::BadManifest("missing `api`".into()))? as u32;
     let class = manifest
         .get("class")
         .and_then(|v| v.as_str())
@@ -390,8 +370,7 @@ impl PluginEngine for WasmPluginEngine {
     fn validate_imports(&self, wasm: &[u8], slice: &ImportSlice) -> Result<(), LoadRefusal> {
         let engine = wasmtime::Engine::default();
         // A module that does not validate cannot be reasoned about at all — refuse it.
-        let module = wasmtime::Module::new(&engine, wasm)
-            .map_err(|e| dl1505(format!("the module does not validate ({e})")))?;
+        let module = wasmtime::Module::new(&engine, wasm).map_err(|e| dl1505(format!("the module does not validate ({e})")))?;
 
         // A module importing NOTHING trivially fits every slice: it can reach nothing. That is the
         // flagship's shape — a pure text transform under `Grant { effects: [] }`.
@@ -401,11 +380,7 @@ impl PluginEngine for WasmPluginEngine {
                 // Covers the ungranted name, the unknown name, and — the one that matters — a
                 // foreign namespace: `wasi_snapshot_preview1.fd_write` and friends are simply not in
                 // any slice, so a Contained module can never reach WASI by the back door.
-                return Err(dl1505(format!(
-                    "`{}::{}` is not derivable from this grant",
-                    imp.module(),
-                    imp.name()
-                )));
+                return Err(dl1505(format!("`{}::{}` is not derivable from this grant", imp.module(), imp.name())));
             };
             // Only functions cross. A memory/global/table import is refused rather than ignored.
             let wasmtime::ExternType::Func(ft) = imp.ty() else {
@@ -418,12 +393,16 @@ impl PluginEngine for WasmPluginEngine {
             // NAME IS NOT ENOUGH. A module can declare a granted name with a signature that suits
             // it; if we matched on name alone, only the engine's instantiation type-check would
             // stand between that and reality. We decide it here.
-            let actual_params: Vec<WasmVal> = ft.params().map(val_of).collect::<Result<_, _>>().map_err(|t| {
-                dl1505(format!("`{}::{}` uses unsupported parameter type `{t}`", imp.module(), imp.name()))
-            })?;
-            let actual_results: Vec<WasmVal> = ft.results().map(val_of).collect::<Result<_, _>>().map_err(|t| {
-                dl1505(format!("`{}::{}` uses unsupported result type `{t}`", imp.module(), imp.name()))
-            })?;
+            let actual_params: Vec<WasmVal> = ft
+                .params()
+                .map(val_of)
+                .collect::<Result<_, _>>()
+                .map_err(|t| dl1505(format!("`{}::{}` uses unsupported parameter type `{t}`", imp.module(), imp.name())))?;
+            let actual_results: Vec<WasmVal> = ft
+                .results()
+                .map(val_of)
+                .collect::<Result<_, _>>()
+                .map_err(|t| dl1505(format!("`{}::{}` uses unsupported result type `{t}`", imp.module(), imp.name())))?;
             if actual_params != expected.params || actual_results != expected.results {
                 return Err(dl1505(format!(
                     "`{}::{}` is granted, but its declared signature does not match the host's — the name being in the slice is not enough",
@@ -558,8 +537,7 @@ mod tests {
 
         let read = read_dpx(&dpx).expect("a signed .dpx reads");
         assert!(read.sig.is_some(), "the signature section is present");
-        let status =
-            delulu_runtime::verify_signature(&read.manifest, read.dir.as_deref(), read.sig.as_deref());
+        let status = delulu_runtime::verify_signature(&read.manifest, read.dir.as_deref(), read.sig.as_deref());
         assert!(
             matches!(status, delulu_runtime::SignatureStatus::Valid { .. }),
             "the signed .dpx verifies end-to-end via the loader's message construction: {status:?}"
@@ -758,8 +736,7 @@ mod tests {
     #[test]
     fn dl1505_an_import_resolving_to_nothing_is_refused() {
         // A name derivable from NO grant: refused by whitelist, never "unknown ⇒ harmless".
-        let wasm =
-            module_importing("delulu:cap", "definitely_not_a_host_fn", vec![wasm_encoder::ValType::I32], vec![]);
+        let wasm = module_importing("delulu:cap", "definitely_not_a_host_fn", vec![wasm_encoder::ValType::I32], vec![]);
         let e = WasmPluginEngine::new()
             .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Read", "Write"])))
             .expect_err("an unknown import must refuse");
@@ -769,8 +746,7 @@ mod tests {
     #[test]
     fn dl1505_an_ungranted_but_real_host_import_is_refused() {
         // `console_println` is real, but this grant has no Write — so it is not in the slice.
-        let wasm =
-            module_importing("delulu:cap", "console_println", vec![wasm_encoder::ValType::I32; 5], vec![]);
+        let wasm = module_importing("delulu:cap", "console_println", vec![wasm_encoder::ValType::I32; 5], vec![]);
         let e = WasmPluginEngine::new()
             .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Read"])))
             .expect_err("Write is not granted");
@@ -805,12 +781,8 @@ mod tests {
     #[test]
     fn dl1505_a_granted_name_with_the_wrong_type_is_refused_instantiation_is_not_the_gate() {
         // `console_println` is granted under Write, but declared here with a different signature.
-        let wasm = module_importing(
-            "delulu:cap",
-            "console_println",
-            vec![wasm_encoder::ValType::I64],
-            vec![wasm_encoder::ValType::I64],
-        );
+        let wasm =
+            module_importing("delulu:cap", "console_println", vec![wasm_encoder::ValType::I64], vec![wasm_encoder::ValType::I64]);
         let e = WasmPluginEngine::new()
             .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Write"])))
             .expect_err("a granted name with a forged signature must refuse at step 5");
@@ -827,12 +799,8 @@ mod tests {
         // Invariant 31's shape: a plugin receives capability VALUES from its host and never holds a
         // Root, so it can never mint a capability. `root_console` is in no slice at any grant —
         // the operation does not exist in the plugin's world.
-        let wasm = module_importing(
-            "delulu:cap",
-            "root_console",
-            vec![wasm_encoder::ValType::I32],
-            vec![wasm_encoder::ValType::I32],
-        );
+        let wasm =
+            module_importing("delulu:cap", "root_console", vec![wasm_encoder::ValType::I32], vec![wasm_encoder::ValType::I32]);
         for g in [grant_with(&["Write"]), grant_with(&["Read", "Write", "Clock", "Rand"])] {
             let e = WasmPluginEngine::new()
                 .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&g))

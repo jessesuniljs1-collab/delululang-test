@@ -63,17 +63,12 @@ pub fn warn(table: &[Deprecation], item: &str, span: Span) -> Option<Diagnostic>
         Some(r) => format!("use `{r}` instead"),
         None => format!("see {} for the migration", d.rfc),
     };
-    let mut diag = Diagnostic::warning(
-        "DL1801",
-        format!(
-            "`{}` is deprecated since {} — {advice} (decided in {})",
-            d.item, d.since, d.rfc
-        ),
-    )
-    .with_span(span, "deprecated here")
-    .with_arg("item", d.item.to_string())
-    .with_arg("since", d.since.to_string())
-    .with_arg("rfc", d.rfc.to_string());
+    let mut diag =
+        Diagnostic::warning("DL1801", format!("`{}` is deprecated since {} — {advice} (decided in {})", d.item, d.since, d.rfc))
+            .with_span(span, "deprecated here")
+            .with_arg("item", d.item.to_string())
+            .with_arg("since", d.since.to_string())
+            .with_arg("rfc", d.rfc.to_string());
     if let Some(r) = d.replacement {
         diag = diag.with_arg("replacement", r.to_string());
     }
@@ -107,20 +102,8 @@ mod tests {
 
     /// The synthetic fixture (criterion 9): one mechanical deprecation and one that needs judgement.
     const FIXTURE: &[Deprecation] = &[
-        Deprecation {
-            item: "old_greet",
-            kind: DeprKind::Name,
-            since: "1.1",
-            replacement: Some("greet"),
-            rfc: "RFC-0002",
-        },
-        Deprecation {
-            item: "console.print_line",
-            kind: DeprKind::Method,
-            since: "1.2",
-            replacement: None,
-            rfc: "RFC-0003",
-        },
+        Deprecation { item: "old_greet", kind: DeprKind::Name, since: "1.1", replacement: Some("greet"), rfc: "RFC-0002" },
+        Deprecation { item: "console.print_line", kind: DeprKind::Method, since: "1.2", replacement: None, rfc: "RFC-0003" },
     ];
 
     #[test]

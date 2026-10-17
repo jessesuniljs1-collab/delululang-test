@@ -115,7 +115,12 @@ fn the_wall_is_the_programs_authority_within_its_grants_and_nothing_more() {
     assert_eq!(grants_in("narrowed").len(), 2, "port 443 is narrower than `net=`, and says so: {e:#}");
     // The YAML says what the JSON says.
     let doc = e["document"].as_str().unwrap();
-    for path in p["filesystem_policy"]["read_only"].as_array().unwrap().iter().chain(p["filesystem_policy"]["read_write"].as_array().unwrap()) {
+    for path in p["filesystem_policy"]["read_only"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(p["filesystem_policy"]["read_write"].as_array().unwrap())
+    {
         assert!(doc.contains(&format!("\n    - \"{}\"\n", path.as_str().unwrap())), "`{path}` missing from:\n{doc}");
     }
     for h in &hosts {
@@ -143,7 +148,11 @@ fn the_wall_is_the_programs_authority_within_its_grants_and_nothing_more() {
 fn a_grant_the_program_cannot_use_is_omitted_and_named() {
     let dir = scratch("omitted");
     std::fs::write(dir.join("q.delulu"), PRINTER).unwrap();
-    let o = export(&dir, "q.delulu", &with_grants(&["console", "fs.read=./data", "fs.write=./out", "net=example.com"], &["--workdir", "/w", "--json"]));
+    let o = export(
+        &dir,
+        "q.delulu",
+        &with_grants(&["console", "fs.read=./data", "fs.write=./out", "net=example.com"], &["--workdir", "/w", "--json"]),
+    );
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     let e = &v["openshell"];
@@ -222,7 +231,10 @@ fn paths_are_the_sandboxs_and_every_malformed_request_is_refused() {
         assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
         let v: Value = serde_json::from_slice(&o.stdout).unwrap();
         let ro = &v["openshell"]["policy"]["filesystem_policy"]["read_only"];
-        assert!(ro.as_array().unwrap().iter().any(|p| p == abs) && ro.as_array().unwrap().iter().any(|p| p == "/srv/data"), "{ro}");
+        assert!(
+            ro.as_array().unwrap().iter().any(|p| p == abs) && ro.as_array().unwrap().iter().any(|p| p == "/srv/data"),
+            "{ro}"
+        );
     }
     // A Windows spelling in a grant is refused on every host: it names no path in the sandbox.
     let o = export(&dir, "p.delulu", &["--workdir", "/sandbox", "--grant", "fs.read=.\\data"]);
@@ -243,11 +255,7 @@ fn a_secret_is_named_never_shown_and_every_string_stays_quoted() {
     } else {
         ("fs.read=./we\"ird: [x] #y {z}, &!%@'", "\n    - \"/sandbox/we\\\"ird: [x] #y {z}, &!%@'\"\n")
     };
-    let o = export(
-        &dir,
-        "p.delulu",
-        &with_grants(&["secret:TOKEN=hunter2-value", weird], &["--workdir", "/sandbox", "--json"]),
-    );
+    let o = export(&dir, "p.delulu", &with_grants(&["secret:TOKEN=hunter2-value", weird], &["--workdir", "/sandbox", "--json"]));
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     let out = text(&o.stdout);
     assert!(!out.contains("hunter2"), "a secret's value reached the output:\n{out}");
@@ -266,7 +274,9 @@ fn a_secret_is_named_never_shown_and_every_string_stays_quoted() {
 fn the_exports_flags_belong_to_policy_alone() {
     let dir = scratch("verbs");
     for verb in ["status", "probe"] {
-        for flag in [["--grant", "console"], ["--format", "openshell"], ["--workdir", "/w"], ["--binary", "/b"], ["--run-as", "5"]] {
+        for flag in
+            [["--grant", "console"], ["--format", "openshell"], ["--workdir", "/w"], ["--binary", "/b"], ["--run-as", "5"]]
+        {
             let o = delulu(&dir, &["sandbox", verb, flag[0], flag[1]]);
             assert_eq!(o.status.code(), Some(2), "sandbox {verb} {flag:?}: {}", text(&o.stderr));
             assert!(text(&o.stderr).contains("belongs to `sandbox policy"), "sandbox {verb} {flag:?}: {}", text(&o.stderr));
@@ -282,7 +292,11 @@ fn the_exports_flags_belong_to_policy_alone() {
 fn a_host_grant_delulu_would_never_match_is_omitted_not_lowercased() {
     let dir = scratch("case");
     std::fs::write(dir.join("p.delulu"), PROGRAM).unwrap();
-    let o = export(&dir, "p.delulu", &with_grants(&["net=EXAMPLE.com", "net=example.org.", "net=api.example.com"], &["--workdir", "/s", "--json"]));
+    let o = export(
+        &dir,
+        "p.delulu",
+        &with_grants(&["net=EXAMPLE.com", "net=example.org.", "net=api.example.com"], &["--workdir", "/s", "--json"]),
+    );
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     let e = &v["openshell"];

@@ -269,7 +269,10 @@ pub fn verify_locked(ws: &Workspace, program: &Program, lock: &Lockfile) -> Vec<
         if ch != entry.content_hash {
             diags.push(Diagnostic::error(
                 "DL1010",
-                format!("package `{}` source has changed under its locked version (possible tampering) — content hash mismatch", pkg.name),
+                format!(
+                    "package `{}` source has changed under its locked version (possible tampering) — content hash mismatch",
+                    pkg.name
+                ),
             ));
             continue;
         }
@@ -279,7 +282,10 @@ pub fn verify_locked(ws: &Workspace, program: &Program, lock: &Lockfile) -> Vec<
         if ah != entry.authority_hash {
             diags.push(Diagnostic::error(
                 "DL1002",
-                format!("package `{}` has a different verified authority than its lock entry (same version, different authority)", pkg.name),
+                format!(
+                    "package `{}` has a different verified authority than its lock entry (same version, different authority)",
+                    pkg.name
+                ),
             ));
             continue;
         }
@@ -418,11 +424,7 @@ pub fn authority_widened(old: &LockEntry, new: &LockEntry) -> bool {
 /// Enforce the semver-authority law when re-locking. For each package present in the previous
 /// lock, an authority widening (or public-API row change) that is not backed by a major version
 /// bump is DL1003 unless the package name is in `accept`. Returns (diagnostics, accepted-names).
-pub fn enforce_semver_law(
-    old: &Lockfile,
-    new: &mut Lockfile,
-    accept: &[String],
-) -> Vec<Diagnostic> {
+pub fn enforce_semver_law(old: &Lockfile, new: &mut Lockfile, accept: &[String]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for entry in &mut new.packages {
         let Some(prev) = old.get(&entry.name) else { continue };
@@ -510,7 +512,12 @@ mod tests {
     #[test]
     fn widening_with_minor_bump_is_dl1003() {
         let old = LockEntry { name: "webby".into(), version: "1.0.0".into(), effects: vec!["Net".into()], ..Default::default() };
-        let new = LockEntry { name: "webby".into(), version: "1.1.0".into(), effects: vec!["Net".into(), "Write".into()], ..Default::default() };
+        let new = LockEntry {
+            name: "webby".into(),
+            version: "1.1.0".into(),
+            effects: vec!["Net".into(), "Write".into()],
+            ..Default::default()
+        };
         let oldlock = Lockfile { version: 1, packages: vec![old] };
         let mut newlock = Lockfile { version: 1, packages: vec![new] };
         let diags = enforce_semver_law(&oldlock, &mut newlock, &[]);
@@ -551,7 +558,12 @@ mod tests {
     #[test]
     fn widening_accepted_records_accepted_by() {
         let old = LockEntry { name: "webby".into(), version: "1.0.0".into(), effects: vec!["Net".into()], ..Default::default() };
-        let new = LockEntry { name: "webby".into(), version: "2.0.0".into(), effects: vec!["Net".into(), "Write".into()], ..Default::default() };
+        let new = LockEntry {
+            name: "webby".into(),
+            version: "2.0.0".into(),
+            effects: vec!["Net".into(), "Write".into()],
+            ..Default::default()
+        };
         let oldlock = Lockfile { version: 1, packages: vec![old] };
         let mut newlock = Lockfile { version: 1, packages: vec![new] };
         let diags = enforce_semver_law(&oldlock, &mut newlock, &["webby".to_string()]);

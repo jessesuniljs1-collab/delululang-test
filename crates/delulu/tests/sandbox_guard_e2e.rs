@@ -152,7 +152,20 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
     let del = delulu_in(
         &cwd,
         &state,
-        &["grants", "delegate", "--effects", "Read,Write", "--fs-read", &d, "--fs-write", &o, "--multi", "--owner", &owner, "--json"],
+        &[
+            "grants",
+            "delegate",
+            "--effects",
+            "Read,Write",
+            "--fs-read",
+            &d,
+            "--fs-write",
+            &o,
+            "--multi",
+            "--owner",
+            &owner,
+            "--json",
+        ],
     );
     assert!(del.status.success(), "delegate: {}", text(&del));
     let v: serde_json::Value = serde_json::from_slice(&del.stdout).expect("delegate --json");
@@ -177,7 +190,8 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
     // 3. Request → DL1411 → DENY → DL1412; a new request → approve ONE use → exactly one write, and the
     //    next is refused again; the report names the node.
     let request = || {
-        let q = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &format!("fs_write:{o}"), "--why", "write the result"]);
+        let q =
+            delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &format!("fs_write:{o}"), "--why", "write the result"]);
         assert!(q.status.success(), "request: {}", text(&q));
         String::from_utf8_lossy(&q.stdout).trim().to_string()
     };
@@ -276,7 +290,11 @@ fn main(root: Root) ! {{Read, Write}} {{
         std::fs::write(cwd.join("other.delulu"), &prog).unwrap();
         for sandbox in [true, false] {
             let r = run("other.delulu", sandbox, &[]);
-            assert!(text(&r).contains("public: public words"), "`{name}` (sandbox={sandbox}) is the granted directory: {}", text(&r));
+            assert!(
+                text(&r).contains("public: public words"),
+                "`{name}` (sandbox={sandbox}) is the granted directory: {}",
+                text(&r)
+            );
         }
     }
 

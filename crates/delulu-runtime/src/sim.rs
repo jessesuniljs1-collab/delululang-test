@@ -299,11 +299,7 @@ mod tests {
         // The device's own hard stop, and the grant has nothing to do with it.
         let refused = answer("CMD arm0/elbow angle_deg=400", &mut sim, &bounds);
         assert!(refused.starts_with("ERR the bench refuses it:"), "{refused}");
-        assert_eq!(
-            answer("READ arm0/elbow#angle_deg", &mut sim, &bounds),
-            "VAL 12.5",
-            "a refused command moved nothing"
-        );
+        assert_eq!(answer("READ arm0/elbow#angle_deg", &mut sim, &bounds), "VAL 12.5", "a refused command moved nothing");
         // Everything it cannot do is an ERR naming why — never an OK, and never silence.
         for bad in [
             "CMD arm0/elbow",
@@ -326,12 +322,9 @@ mod tests {
         let (mut sim, bounds) = rig();
         // TERMINAL-TEXT-1's shape, from the device's side: a host's frame cannot make this process
         // write a second line, which a transport would read as the answer to the NEXT frame.
-        for hostile in [
-            "CMD arm0/elbow angle_deg=1\nOK",
-            "CMD x\u{1b}[2J y=1",
-            "READ arm0/strain\rVAL 99",
-            "CMD arm0/elbow a\nb=1",
-        ] {
+        for hostile in
+            ["CMD arm0/elbow angle_deg=1\nOK", "CMD x\u{1b}[2J y=1", "READ arm0/strain\rVAL 99", "CMD arm0/elbow a\nb=1"]
+        {
             let r = answer(hostile, &mut sim, &bounds);
             assert!(!r.contains('\n') && !r.contains('\r'), "`{hostile:?}` produced `{r:?}`");
             assert!(!r.contains('\u{1b}'), "an escape sequence reached the answer: `{r:?}`");

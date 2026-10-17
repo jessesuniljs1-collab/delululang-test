@@ -91,11 +91,7 @@ impl Scopes {
     /// `secret_to` without a pair whose name `secrets` does not hold (P9-04 (d)): such a pair grants reach to
     /// nothing, and keeping it would make two authorities that grant the same thing unequal under `⊑`.
     fn well_formed_secret_to(&self) -> BTreeSet<String> {
-        self.secret_to
-            .iter()
-            .filter(|p| secret_to_name(p).is_some_and(|n| self.secrets.contains(n)))
-            .cloned()
-            .collect()
+        self.secret_to.iter().filter(|p| secret_to_name(p).is_some_and(|n| self.secrets.contains(n))).cloned().collect()
     }
 }
 
@@ -174,7 +170,10 @@ impl Authority {
         // P9-04 (d): `secret_to` follows the same rule — emitted ONLY when non-empty, so every authority whose
         // secrets name no audience keeps its canonical JSON, chain hash and certificate bytes.
         if !s.secret_to.is_empty() {
-            scopes.as_object_mut().expect("json! built an object").insert("secret_to".into(), serde_json::json!(to_vec(&s.secret_to)));
+            scopes
+                .as_object_mut()
+                .expect("json! built an object")
+                .insert("secret_to".into(), serde_json::json!(to_vec(&s.secret_to)));
         }
         serde_json::json!({ "effects": effects, "scopes": scopes })
     }
@@ -222,10 +221,7 @@ impl Authority {
                 secrets: name_intersect(&self.scopes.secrets, &other.scopes.secrets),
                 declassify: name_intersect(&self.scopes.declassify, &other.scopes.declassify),
                 foreign_c: name_intersect(&self.scopes.foreign_c, &other.scopes.foreign_c),
-                foreign_python: name_intersect(
-                    &self.scopes.foreign_python,
-                    &other.scopes.foreign_python,
-                ),
+                foreign_python: name_intersect(&self.scopes.foreign_python, &other.scopes.foreign_python),
                 device: device_scope::intersect_device_sets(&self.scopes.device, &other.scopes.device),
                 budget: budget_scope::meet(self.scopes.budget.as_ref(), other.scopes.budget.as_ref()),
                 secret_to: name_intersect(&self.scopes.secret_to, &other.scopes.secret_to),
@@ -417,7 +413,10 @@ mod tests {
                     Scopes { secrets: names(&["K"]), secret_to: names(&["K@a.com:443", "K@evil.com:443"]), ..Default::default() },
                 ),
                 parent: auth(&[], Scopes { secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() }),
-                expected: Some(auth(&[], Scopes { secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() })),
+                expected: Some(auth(
+                    &[],
+                    Scopes { secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() },
+                )),
             },
             Row {
                 name: "secret_to: the bottom (no pair) is within any audience",
@@ -453,27 +452,15 @@ mod tests {
                 name: "multi-dimension failure meets on every dimension at once",
                 child: auth(
                     &["Read", "Net", "Write"],
-                    Scopes {
-                        fs_read: names(&["./data"]),
-                        net: names(&["a.com", "b.com"]),
-                        ..Default::default()
-                    },
+                    Scopes { fs_read: names(&["./data"]), net: names(&["a.com", "b.com"]), ..Default::default() },
                 ),
                 parent: auth(
                     &["Read", "Net"],
-                    Scopes {
-                        fs_read: names(&["./data/sub"]),
-                        net: names(&["a.com"]),
-                        ..Default::default()
-                    },
+                    Scopes { fs_read: names(&["./data/sub"]), net: names(&["a.com"]), ..Default::default() },
                 ),
                 expected: Some(auth(
                     &["Read", "Net"],
-                    Scopes {
-                        fs_read: names(&["./data/sub"]),
-                        net: names(&["a.com"]),
-                        ..Default::default()
-                    },
+                    Scopes { fs_read: names(&["./data/sub"]), net: names(&["a.com"]), ..Default::default() },
                 )),
             },
             // PS-B-05: the budget dimension, componentwise, with `None` as the top.
@@ -521,14 +508,9 @@ mod tests {
     #[test]
     fn intersection_is_never_wider_than_either_side() {
         // Property spot-check: the meet is ⊑ both operands.
-        let a = auth(
-            &["Read", "Net"],
-            Scopes { fs_read: names(&["./data"]), net: names(&["a.com"]), ..Default::default() },
-        );
-        let b = auth(
-            &["Read", "Write"],
-            Scopes { fs_read: names(&["./data/sub"]), net: names(&["b.com"]), ..Default::default() },
-        );
+        let a = auth(&["Read", "Net"], Scopes { fs_read: names(&["./data"]), net: names(&["a.com"]), ..Default::default() });
+        let b =
+            auth(&["Read", "Write"], Scopes { fs_read: names(&["./data/sub"]), net: names(&["b.com"]), ..Default::default() });
         let m = a.intersect(&b);
         assert!(attenuation_check(&m, &a).is_ok(), "meet must be ⊑ a");
         assert!(attenuation_check(&m, &b).is_ok(), "meet must be ⊑ b");
@@ -570,11 +552,22 @@ mod tests {
     fn a_secret_to_pair_lives_only_beside_its_name() {
         let wf = Authority::new(
             [],
-            Scopes { secrets: names(&["K"]), secret_to: names(&["K@a.com:443", "J@a.com:443", "noname", "@a.com:443"]), ..Default::default() },
+            Scopes {
+                secrets: names(&["K"]),
+                secret_to: names(&["K@a.com:443", "J@a.com:443", "noname", "@a.com:443"]),
+                ..Default::default()
+            },
         );
-        assert_eq!(wf.scopes.secret_to, names(&["K@a.com:443"]), "an orphan pair, a pair with no `@` and one with no name are dropped");
+        assert_eq!(
+            wf.scopes.secret_to,
+            names(&["K@a.com:443"]),
+            "an orphan pair, a pair with no `@` and one with no name are dropped"
+        );
         assert!(wf.is_canonical());
-        let raw = Authority { effects: Default::default(), scopes: Scopes { secret_to: names(&["K@a.com:443"]), ..Default::default() } };
+        let raw = Authority {
+            effects: Default::default(),
+            scopes: Scopes { secret_to: names(&["K@a.com:443"]), ..Default::default() },
+        };
         assert!(!raw.is_canonical(), "a kept orphan is not canonical");
         assert_eq!(raw.canonicalized(), Authority::default());
         let other = Authority::new(

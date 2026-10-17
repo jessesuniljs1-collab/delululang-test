@@ -77,8 +77,20 @@ fn delegate_rw(cwd: &Path, state: &Path, owner: &str) -> (String, String) {
     let o = delulu_in(
         cwd,
         state,
-        &["grants", "delegate", "--effects", "Read,Write", "--fs-read", "./data", "--fs-write", "./out",
-          "--multi", "--owner", owner, "--json"],
+        &[
+            "grants",
+            "delegate",
+            "--effects",
+            "Read,Write",
+            "--fs-read",
+            "./data",
+            "--fs-write",
+            "./out",
+            "--multi",
+            "--owner",
+            owner,
+            "--json",
+        ],
     );
     assert!(o.status.success(), "delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
@@ -148,7 +160,11 @@ fn guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end() {
     let (node2, token2) = delegate_rw(&cwd, &state, &owner);
     let o = delulu_in(&cwd, &state, &["guard", "request", &node2, "--use", "fs_write:*", "--why", "me too"]);
     let req2 = stdout(&o).trim().to_string();
-    let o = delulu_in(&cwd, &state, &["guard", "deny", &req2, "--owner", &owner, "--comment", "not this agent; use the reporting pipeline"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["guard", "deny", &req2, "--owner", &owner, "--comment", "not this agent; use the reporting pipeline"],
+    );
     assert!(o.status.success(), "deny: {}", stderr(&o));
     let o = delulu_in(&cwd, &state, &["run", "agent.delulu", "--lease", &token2, "--no-prompt"]);
     assert_eq!(o.status.code(), Some(1));
@@ -196,8 +212,18 @@ fn guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end() {
     let audit_dir = state.join("audit").to_string_lossy().to_string();
     let o = delulu_in(&cwd, &state, &["audit", "verify", "--dir", &audit_dir]);
     assert!(o.status.success(), "criterion 4/7: audit verify green: {}", stderr(&o));
-    for action in ["guard_block", "guard_request", "guard_approve", "guard_permit_use", "guard_deny",
-                   "guard_bypassed_use", "guard_bypass_on", "guard_bypass_off", "guard_policy_edit", "guard_warn"] {
+    for action in [
+        "guard_block",
+        "guard_request",
+        "guard_approve",
+        "guard_permit_use",
+        "guard_deny",
+        "guard_bypassed_use",
+        "guard_bypass_on",
+        "guard_bypass_off",
+        "guard_policy_edit",
+        "guard_warn",
+    ] {
         let o = delulu_in(&cwd, &state, &["audit", "query", "--action", action, "--dir", &audit_dir]);
         assert!(!stdout(&o).trim().is_empty(), "the audit log carries `{action}` events");
     }
@@ -360,7 +386,12 @@ fn a_use_the_custody_refuses_is_followed_by_its_refusal_in_the_trace() {
     assert!(!cwd.join("out/x.txt").exists(), "and nothing was written");
 
     // A guarded `expose`: the broker's refusal, and a secret involved — the code alone.
-    let t = traced("e.delulu", &token_for(&["--effects", "Write,Declassify", "--secret", "API_KEY", "--declassify", "API_KEY"]), "e.jsonl", "interp");
+    let t = traced(
+        "e.delulu",
+        &token_for(&["--effects", "Write,Declassify", "--secret", "API_KEY", "--declassify", "API_KEY"]),
+        "e.jsonl",
+        "interp",
+    );
     assert_eq!(t.len(), 2, "{t:#?}");
     assert_eq!((t[0]["op"].as_str(), t[0]["effect"].as_str()), (Some("expose"), Some("Declassify")), "{t:#?}");
     assert_eq!((t[1]["op"].as_str(), t[1]["effect"].as_str()), (Some("expose.refused"), Some("Declassify")), "{t:#?}");

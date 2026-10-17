@@ -12,10 +12,7 @@ use delulu_check::Effect;
 use serde_json::Value;
 
 fn delulu(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(env!("CARGO_BIN_EXE_delulu")).args(args).output().expect("failed to run delulu")
 }
 
 fn stdout(o: &Output) -> String {
@@ -59,8 +56,7 @@ fn seeded_dir(tag: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     let log = AuditLog::open(&dir).unwrap();
     let clock = Rc::new(ManualClock::new(1_752_192_000_000)); // 2025-07-11-ish, any fixed epoch ms
-    let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
-        .with_sink(Box::new(log));
+    let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock)).with_sink(Box::new(log));
     let root = b
         .issue_root(
             Holder::new("process", "cli-test", "pid:0"),
@@ -154,10 +150,7 @@ fn audit_log_header_states_observability_not_enforcement() {
     let file = day_file(&dir);
     let text = std::fs::read_to_string(&file).unwrap();
     let first = text.lines().next().unwrap();
-    assert!(
-        first.contains("observability, not enforcement"),
-        "header line must state the exact phrase: {first}"
-    );
+    assert!(first.contains("observability, not enforcement"), "header line must state the exact phrase: {first}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -192,9 +185,7 @@ fn a_tampered_record_is_not_shown_as_authentic() {
     // value with no warning — on the one surface an operator uses after an incident. The chain
     // verifier already detected this; nothing on the read path called it.
     let dir = seeded_dir("c30_tamper");
-    mangle_day_file(&dir, |l| {
-        if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() }
-    });
+    mangle_day_file(&dir, |l| if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() });
     let o = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
     let err = stderr(&o);
     assert!(err.contains("WARNING"), "a broken chain must warn loudly:\n{err}");
@@ -213,18 +204,13 @@ fn a_record_corrupted_beyond_parsing_does_not_vanish_silently() {
     let dir = seeded_dir("c30_omit");
     let full = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
     let before = stdout(&full).lines().count();
-    mangle_day_file(&dir, |l| {
-        if l.contains("\"seq\":3") { "{ not json".to_string() } else { l.to_string() }
-    });
+    mangle_day_file(&dir, |l| if l.contains("\"seq\":3") { "{ not json".to_string() } else { l.to_string() });
     let o = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
     let after = stdout(&o).lines().count();
     assert!(after < before, "the probe must actually drop a record ({before} -> {after})");
     let err = stderr(&o);
     assert!(err.contains("WARNING"), "the loss must be announced:\n{err}");
-    assert!(
-        err.contains("MISSING from this listing"),
-        "the warning must say entries may be missing entirely: {err}"
-    );
+    assert!(err.contains("MISSING from this listing"), "the warning must say entries may be missing entirely: {err}");
     assert_ne!(o.status.code(), Some(0));
 }
 
@@ -239,9 +225,7 @@ fn the_json_read_surface_always_states_whether_the_chain_verified() {
     assert_eq!(v["chain_verified"], Value::Bool(true), "{}", stdout(&clean));
     assert!(v.get("chain_error").is_none(), "no error on a clean chain");
 
-    mangle_day_file(&dir, |l| {
-        if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() }
-    });
+    mangle_day_file(&dir, |l| if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() });
     let broken = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap(), "--json"]);
     let v2: Value = serde_json::from_str(&stdout(&broken)).expect("valid JSON even when broken");
     assert_eq!(v2["chain_verified"], Value::Bool(false), "{}", stdout(&broken));
@@ -271,15 +255,9 @@ fn audit_refuses_an_option_it_does_not_know_instead_of_reading_the_wrong_store()
 
     let o = delulu(&["audit", "tail", "2", "--state-dir", empty.to_str().unwrap()]);
     let out = format!("{}{}", stdout(&o), stderr(&o));
-    assert!(
-        out.contains("does not know the option"),
-        "the habitual flag must be REFUSED, not dropped: {out}"
-    );
+    assert!(out.contains("does not know the option"), "the habitual flag must be REFUSED, not dropped: {out}");
     assert!(out.contains("--dir"), "and the refusal must name the flag that does work: {out}");
-    assert!(
-        !out.contains("seq "),
-        "no records may be printed for a store the caller did not ask for: {out}"
-    );
+    assert!(!out.contains("seq "), "no records may be printed for a store the caller did not ask for: {out}");
 
     // A flag nobody could mistake for a real one is refused too — the fix is not special-cased.
     let o = delulu(&["audit", "tail", "2", "--totally-bogus"]);
@@ -356,7 +334,10 @@ fn a_programs_string_in_a_record_is_shown_escaped_never_obeyed() {
         let o = delulu(&sub);
         assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
         let out = stdout(&o);
-        assert!(!out.contains('\u{1b}') && !out.contains('\u{7}') && !out.contains('\u{202e}'), "raw control characters reached the terminal: {out:?}");
+        assert!(
+            !out.contains('\u{1b}') && !out.contains('\u{7}') && !out.contains('\u{202e}'),
+            "raw control characters reached the terminal: {out:?}"
+        );
         let records = delulu_broker::tail(&dir, 100).unwrap().len();
         assert_eq!(records, 2, "the issue and the use");
         assert_eq!(out.lines().count(), records, "one line per record — the program's line break forged none: {out:?}");

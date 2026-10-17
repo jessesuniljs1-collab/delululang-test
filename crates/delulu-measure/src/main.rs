@@ -110,11 +110,7 @@ fn run_c(out: Option<PathBuf>) -> ExitCode {
     );
     let _ = std::fs::write(out.join("REPORT.md"), delulu_measure::study_c::report(&r));
     let _ = std::fs::remove_dir_all(&work);
-    println!(
-        "study C: {} benchmarks across lanes [{}]",
-        r.benches.len(),
-        r.lanes_available.join(", ")
-    );
+    println!("study C: {} benchmarks across lanes [{}]", r.benches.len(), r.lanes_available.join(", "));
     ExitCode::SUCCESS
 }
 
@@ -153,19 +149,11 @@ fn run_a(out: Option<PathBuf>) -> ExitCode {
     }
 
     let json = delulu_measure::study_a::json(&results);
-    let _ = std::fs::write(
-        out.join("results.json"),
-        format!("{}\n", serde_json::to_string_pretty(&json).unwrap()),
-    );
+    let _ = std::fs::write(out.join("results.json"), format!("{}\n", serde_json::to_string_pretty(&json).unwrap()));
     let _ = std::fs::write(out.join("REPORT.md"), delulu_measure::study_a::report(&results));
     let _ = std::fs::remove_dir_all(&work);
 
-    println!(
-        "study A: {} injection sites, {} caught ({:.1}%)",
-        results.injections.len(),
-        results.caught(),
-        results.catch_rate()
-    );
+    println!("study A: {} injection sites, {} caught ({:.1}%)", results.injections.len(), results.caught(), results.catch_rate());
     println!("wrote {}/results.json and {}/REPORT.md", out.display(), out.display());
 
     if results.mechanism_holds() {
@@ -193,7 +181,10 @@ fn run_ai_usability(args: &[String]) -> ExitCode {
     };
     let delulu = flag("--delulu").map(PathBuf::from).unwrap_or_else(sibling_delulu);
     if !delulu.is_file() {
-        eprintln!("delulu-measure: no delulu binary at {} — build it (`cargo build -p delulu`) or pass --delulu", delulu.display());
+        eprintln!(
+            "delulu-measure: no delulu binary at {} — build it (`cargo build -p delulu`) or pass --delulu",
+            delulu.display()
+        );
         return ExitCode::from(2);
     }
     match args.first().map(String::as_str) {
@@ -236,7 +227,11 @@ fn run_ai_usability(args: &[String]) -> ExitCode {
                 }
             }
             println!("ai-usability: {} run(s) scored; valid: {}", r["runs"].as_array().map_or(0, Vec::len), r["valid"]);
-            if r["valid"] == true { ExitCode::SUCCESS } else { ExitCode::from(1) }
+            if r["valid"] == true {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
         }
         _ => {
             eprint!("{}", usage());

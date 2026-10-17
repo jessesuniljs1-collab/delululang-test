@@ -225,7 +225,11 @@ fn declared_guest_under(wall: Wall) {
     let (r, s) = run(&d, FLAG, Some(wall), true);
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
     assert!(String::from_utf8_lossy(&r.stdout).contains("hello from the guest"), "{}", text(&r));
-    assert!(text(&r).contains("refused by a filter already in force"), "the guest says so on the operator's screen: {}", text(&r));
+    assert!(
+        text(&r).contains("refused by a filter already in force"),
+        "the guest says so on the operator's screen: {}",
+        text(&r)
+    );
     assert_eq!(s["level"], 3, "{s}");
     assert_eq!(s["backend"], "external", "{s}");
     assert_eq!(s["host_guarantees"].as_array().map(Vec::len), Some(0), "no HOST guarantee is claimed: {s}");

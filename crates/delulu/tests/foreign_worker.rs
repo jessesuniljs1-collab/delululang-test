@@ -23,11 +23,7 @@ fn delulu() -> &'static str {
 }
 
 fn run(cwd: &std::path::Path, args: &[&str]) -> Output {
-    Command::new(delulu())
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(delulu()).current_dir(cwd).args(args).output().expect("failed to run delulu")
 }
 
 fn stdout(o: &Output) -> String {
@@ -79,11 +75,7 @@ fn fixture_path() -> &'static str {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
         let src = dir.join("dl_worker_fixture.rs");
         std::fs::write(&src, FIXTURE_SRC).expect("write fixture source");
-        let dll = dir.join(format!(
-            "{}dl_worker_fixture{}",
-            std::env::consts::DLL_PREFIX,
-            std::env::consts::DLL_SUFFIX
-        ));
+        let dll = dir.join(format!("{}dl_worker_fixture{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX));
         let out = Command::new("rustc")
             .args(["--edition", "2021", "--crate-type", "cdylib"])
             .arg(&src)
@@ -131,10 +123,8 @@ fn process_isolation_runs_a_normal_foreign_call() {
     )
     .unwrap();
     let grant = format!("foreign.c=crashlib:{}", fixture_path());
-    let o = run(
-        &dir,
-        &["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant],
-    );
+    let o =
+        run(&dir, &["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant]);
     assert!(o.status.success(), "process-isolation run failed: {}", stderr(&o));
     assert_eq!(stdout(&o).trim(), "42", "the value round-tripped across the worker pipe");
     assert!(stderr(&o).contains("foreign-isolation: process"), "isolation labeled: {}", stderr(&o));
@@ -150,10 +140,8 @@ fn segfault_in_worker_is_dl1409_and_the_host_survives() {
     let prog = dir.join("crash.delulu");
     std::fs::write(&prog, program("dl_segfault")).unwrap();
     let grant = format!("foreign.c=crashlib:{}", fixture_path());
-    let o = run(
-        &dir,
-        &["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant],
-    );
+    let o =
+        run(&dir, &["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant]);
     // Clean fault, NOT a crash: a crashed host would exit with the OS exception code, never 1.
     assert_eq!(o.status.code(), Some(1), "host must exit cleanly (1), not crash. stderr: {}", stderr(&o));
     let err = stderr(&o);

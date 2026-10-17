@@ -27,8 +27,13 @@ pub const REASON_MAX: usize = 2048;
 pub enum ProposalStatus {
     Pending,
     /// Approved: `node` was delegated under `under`, the approver's node.
-    Approved { node: GrantId, under: GrantId },
-    Rejected { reason: String },
+    Approved {
+        node: GrantId,
+        under: GrantId,
+    },
+    Rejected {
+        reason: String,
+    },
 }
 
 /// The proposer's own account of its refusal — the program, the call, where it is, and the refusal's code. DATA: shown to
@@ -271,7 +276,8 @@ mod tests {
         let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
             .with_sink(Box::new(sink.clone()))
             .with_owner_code("gow1_testowner");
-        let root = b.issue(holder(), auth(&["Read", "Write"], Scopes { fs_read: names(&["./a", "./b"]), ..Default::default() }), None);
+        let root =
+            b.issue(holder(), auth(&["Read", "Write"], Scopes { fs_read: names(&["./a", "./b"]), ..Default::default() }), None);
         let agent = b.attenuate(&root, read(&["./a"]), holder(), None).unwrap();
         (b, sink, root, agent)
     }
@@ -285,7 +291,10 @@ mod tests {
         assert_eq!(b.proposal_mints(&b.proposals()[0]), Some(read(&["./a", "./b"])), "the approver reads the whole new node");
         assert_eq!(b.propose(&agent, read(&["./b"]), claim()).unwrap(), (id.clone(), true), "a pending proposal is answered");
         let filed = sink.records().last().cloned().unwrap();
-        assert_eq!((filed.action.as_str(), filed.target.as_deref(), filed.decision.as_str()), ("proposal", Some("pp_0000"), "allow"));
+        assert_eq!(
+            (filed.action.as_str(), filed.target.as_deref(), filed.decision.as_str()),
+            ("proposal", Some("pp_0000"), "allow")
+        );
         assert_eq!(filed.actor_node.as_deref(), Some(agent.as_str()));
         let (node, _token) = b.approve_proposal(&id, &root, None, None).unwrap().unwrap();
         let minted = b.inspect(&node).unwrap();
@@ -346,7 +355,10 @@ mod tests {
         assert!(b.reject_proposal(&id, "not ./b"));
         assert_eq!(b.proposals()[0].status, ProposalStatus::Rejected { reason: "not ./b".into() });
         let r = sink.records().last().cloned().unwrap();
-        assert_eq!((r.action.as_str(), r.decision.as_str(), r.actor_node.as_deref()), ("proposal_reject", "deny", Some(agent.as_str())));
+        assert_eq!(
+            (r.action.as_str(), r.decision.as_str(), r.actor_node.as_deref()),
+            ("proposal_reject", "deny", Some(agent.as_str()))
+        );
         assert!(!b.reject_proposal(&id, "again"), "decided once");
         assert_eq!(b.approve_proposal(&id, &root, None, None).unwrap().map(|(n, _)| n), None);
         // Asked again after a rejection, it is a new proposal.

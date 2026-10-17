@@ -12,8 +12,7 @@ fn root() -> PathBuf {
 }
 
 fn read(rel: &str) -> String {
-    std::fs::read_to_string(root().join(rel))
-        .unwrap_or_else(|e| panic!("{rel} must exist and be readable: {e}"))
+    std::fs::read_to_string(root().join(rel)).unwrap_or_else(|e| panic!("{rel} must exist and be readable: {e}"))
 }
 
 /// The governance artifacts Constitution §9 requires all exist.
@@ -79,10 +78,7 @@ fn the_security_policy_is_substantive() {
 #[test]
 fn criterion6_the_patch_runbook_has_been_rehearsed() {
     let s = read("SECURITY.md");
-    assert!(
-        s.contains("rehearsed") && s.contains("DRILL-001"),
-        "SECURITY.md must link the drill that rehearsed it"
-    );
+    assert!(s.contains("rehearsed") && s.contains("DRILL-001"), "SECURITY.md must link the drill that rehearsed it");
 
     let d = read("docs/security/DRILL-001.md");
     assert!(d.contains("Timeline"), "the drill must record a timeline");
@@ -97,10 +93,7 @@ fn criterion6_the_patch_runbook_has_been_rehearsed() {
         d.contains("entire 875-test suite passed"),
         "the drill must keep stating that the full suite was blind to the staged vulnerability"
     );
-    assert!(
-        d.contains("not yet taken"),
-        "the drill must keep its open actions open rather than quietly closing them"
-    );
+    assert!(d.contains("not yet taken"), "the drill must keep its open actions open rather than quietly closing them");
 }
 
 /// The contribution policy exists and carries the clauses that matter — especially the ones that
@@ -119,18 +112,9 @@ fn the_contribution_policy_binds_this_project_too() {
         c.contains("not the\n   author") || c.contains("not the author") || c.contains("sponsor is not"),
         "the sponsor must be someone other than the author — that is the independence the rule buys"
     );
-    assert!(
-        c.contains("say-so of its own author"),
-        "no change may merge on the say-so of its own author"
-    );
-    assert!(
-        c.contains("Stage-5 isolation profiles"),
-        "ALL contributed code runs under the project's own isolation"
-    );
-    assert!(
-        c.contains("never merge one"),
-        "unattended automation must never hold merge authority — Constitution §9"
-    );
+    assert!(c.contains("say-so of its own author"), "no change may merge on the say-so of its own author");
+    assert!(c.contains("Stage-5 isolation profiles"), "ALL contributed code runs under the project's own isolation");
+    assert!(c.contains("never merge one"), "unattended automation must never hold merge authority — Constitution §9");
 }
 
 /// **No governance document may reintroduce a kind-of-party trust hierarchy.**
@@ -155,12 +139,8 @@ fn no_governance_document_makes_a_rule_depend_on_the_kind_of_party() {
         "A human decides it is submitted",
     ];
     // Where the policy is stated or summarised. A new restatement belongs in this list.
-    const RESTATED_IN: &[&str] = &[
-        "CONTRIBUTING.md",
-        "GOVERNANCE.md",
-        "docs/design/CONSTITUTION.md",
-        "docs/archive/v1/design/LANGUAGE_SPECIFICATION.md",
-    ];
+    const RESTATED_IN: &[&str] =
+        &["CONTRIBUTING.md", "GOVERNANCE.md", "docs/design/CONSTITUTION.md", "docs/archive/v1/design/LANGUAGE_SPECIFICATION.md"];
 
     let mut violations: Vec<String> = Vec::new();
     for file in RESTATED_IN {
@@ -169,7 +149,12 @@ fn no_governance_document_makes_a_rule_depend_on_the_kind_of_party() {
             // A document may QUOTE the old wording to record that it changed; what it may not do is
             // state it as current. The historical form always names the date it stopped being true.
             for (n, line) in text.lines().enumerate() {
-                if line.contains(phrase) && !line.contains("2026-08-03") && !line.contains("previously") && !line.contains("used to") && !line.contains("Until") {
+                if line.contains(phrase)
+                    && !line.contains("2026-08-03")
+                    && !line.contains("previously")
+                    && !line.contains("used to")
+                    && !line.contains("Until")
+                {
                     violations.push(format!("{file}:{} states `{phrase}` as current", n + 1));
                 }
             }
@@ -218,10 +203,7 @@ fn pending_public_controls_are_still_marked_as_pending() {
          upgraded to claims — build-order D2"
     );
     let owners = read(".github/CODEOWNERS");
-    assert!(
-        owners.contains("PENDING-PUBLIC"),
-        "CODEOWNERS must not name a plausible-looking account that does not exist"
-    );
+    assert!(owners.contains("PENDING-PUBLIC"), "CODEOWNERS must not name a plausible-looking account that does not exist");
     // And the reverse: anything claimed LIVE must be something that actually runs here.
     for live in ["Release artifact signatures", "Reproducible builds", "SBOM"] {
         assert!(s.contains(live), "the controls table must list `{live}`");
@@ -258,11 +240,8 @@ fn no_tracked_text_file_is_stored_with_crlf() {
         eprintln!("note: `git` unavailable, line-ending invariant not checked");
         return;
     };
-    let offenders: Vec<String> = String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
+    let offenders: Vec<String> =
+        String::from_utf8_lossy(&out.stdout).lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect();
     assert!(
         offenders.is_empty(),
         "`.gitattributes` declares `* text=auto eol=lf`, and these tracked files are stored with \
@@ -381,9 +360,7 @@ fn the_ignored_pyo3_advisories_are_still_unreachable() {
     let others: Vec<String> = walk_rust_sources()
         .into_iter()
         .filter(|(path, src)| {
-            path.contains("/src/")
-                && !path.ends_with("python.rs")
-                && (src.contains("use pyo3") || src.contains("pyo3::"))
+            path.contains("/src/") && !path.ends_with("python.rs") && (src.contains("use pyo3") || src.contains("pyo3::"))
         })
         .map(|(p, _)| p)
         .collect();

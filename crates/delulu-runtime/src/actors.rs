@@ -70,19 +70,35 @@ pub enum MsgValue {
     /// because the wire form should not depend on the receiver rebuilding the same ordering — it
     /// arrives in the order the sender iterated, which is ascending by key.
     Map(Vec<(crate::value::MapKey, MsgValue)>),
-    Record { name: String, fields: Vec<(String, MsgValue)> },
-    Variant { name: String, fields: Vec<MsgValue> },
+    Record {
+        name: String,
+        fields: Vec<(String, MsgValue)>,
+    },
+    Variant {
+        name: String,
+        fields: Vec<MsgValue>,
+    },
     /// A sendable (`val`-inferred) closure: body AST plus the converted capture scopes,
     /// outermost first (the module-global scope is NOT carried — the receiver reattaches
     /// its own identical globals).
-    Closure { params: Vec<String>, body: Block, scopes: Vec<Vec<(String, MsgValue)>> },
-    Cap { kind: ResourceKind, scope: CapScope },
+    Closure {
+        params: Vec<String>,
+        body: Block,
+        scopes: Vec<Vec<(String, MsgValue)>>,
+    },
+    Cap {
+        kind: ResourceKind,
+        scope: CapScope,
+    },
     /// A local secret's bytes and, P9-04 (c), its grant name and audience — owned, so the message stays `Send`.
     SecretLocal(String, Option<(String, Vec<crate::egress::Audience>)>),
     /// A broker-held secret's name and, P9-04 (d), its audience — a handle sent to another actor goes where it may go.
     SecretHandle(String, Option<(String, Vec<crate::egress::Audience>)>),
     Root(RootMsg),
-    Actor { id: ActorId, actor: String },
+    Actor {
+        id: ActorId,
+        actor: String,
+    },
 }
 
 /// A root slice crossing an actor boundary (value-level authority passing, spec §7).
@@ -233,13 +249,7 @@ pub struct ActorHost {
 impl ActorHost {
     /// Spawn, resolving the mailbox config (Stage 10, 10c): the declaration's
     /// `(mailbox = N)` wins, else the manifest default; no config = unbounded (1.0 behavior).
-    pub fn spawn(
-        &self,
-        actor: &str,
-        args: Vec<MsgValue>,
-        cause: SendCause,
-        decl_bound: Option<u64>,
-    ) -> ActorId {
+    pub fn spawn(&self, actor: &str, args: Vec<MsgValue>, cause: SendCause, decl_bound: Option<u64>) -> ActorId {
         let id = self.shared.next_actor.fetch_add(1, Ordering::SeqCst);
         let worker = self.shared.round_robin.fetch_add(1, Ordering::SeqCst) % self.senders.len();
         if let Some(bound) = decl_bound.map(|b| b as usize).or(self.shared.default_bound) {
@@ -284,9 +294,7 @@ impl ActorHost {
                     let g = self.shared.space_lock.lock().unwrap();
                     // Re-check under the lock so a completion between the load and the wait
                     // cannot strand us (the missed-notification race, closed the classic way).
-                    if (st.depth.load(Ordering::SeqCst).max(0) as usize) < st.bound
-                        || self.shared.died.load(Ordering::SeqCst)
-                    {
+                    if (st.depth.load(Ordering::SeqCst).max(0) as usize) < st.bound || self.shared.died.load(Ordering::SeqCst) {
                         continue;
                     }
                     let _g = self.shared.space.wait(g).unwrap();
@@ -300,9 +308,7 @@ impl ActorHost {
             st.peak.fetch_max(now, Ordering::SeqCst);
         }
         self.shared.enqueue();
-        let _ = self
-            .senders[to.worker]
-            .send(Job::Send { id: to.id, behavior: behavior.to_string(), args, cause });
+        let _ = self.senders[to.worker].send(Job::Send { id: to.id, behavior: behavior.to_string(), args, cause });
         SendOutcome::Delivered
     }
 
@@ -482,8 +488,7 @@ impl ActorSystem {
     /// conclusion. Reached only when the full reservation was refused — a strict `RLIMIT_STACK`, a
     /// container with an address-space cap, a 32-bit host.
     pub fn reduced_depth_bound(&self) -> Option<(usize, u32)> {
-        (self.worker_max_depth < crate::interp::DEFAULT_MAX_DEPTH)
-            .then_some((self.worker_stack, self.worker_max_depth))
+        (self.worker_max_depth < crate::interp::DEFAULT_MAX_DEPTH).then_some((self.worker_stack, self.worker_max_depth))
     }
 
     /// A host handle for the calling thread's interpreter.
@@ -499,10 +504,7 @@ impl ActorSystem {
             let _guard = self
                 .shared
                 .quiesced
-                .wait_while(guard, |_| {
-                    self.shared.pending.load(Ordering::SeqCst) > 0
-                        && !self.shared.died.load(Ordering::SeqCst)
-                })
+                .wait_while(guard, |_| self.shared.pending.load(Ordering::SeqCst) > 0 && !self.shared.died.load(Ordering::SeqCst))
                 .unwrap();
         }
         for s in &self.senders {
@@ -564,12 +566,7 @@ struct Cell {
 /// the bound is a diagnostic; degrading the stack alone would be the crash. The ladder is descending
 /// and finite, and its last rung is the OS default with a bound sized for it, so this always
 /// returns a worker.
-fn spawn_worker(
-    wi: usize,
-    rx: mpsc::Receiver<Job>,
-    setup: WorkerSetup,
-    stack_bytes: usize,
-) -> std::thread::JoinHandle<()> {
+fn spawn_worker(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup, stack_bytes: usize) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name(format!("delulu-actor-{wi}"))
         .stack_size(stack_bytes)
@@ -606,14 +603,9 @@ struct WorkerSetup {
 /// [`max_depth_for_stack`] then lowers that worker's bound to match — a smaller bound is a
 /// diagnostic, a mismatched pair is the crash.
 fn usable_worker_stack() -> usize {
-    const LADDER: [usize; 3] =
-        [crate::interp::INTERPRETER_STACK_BYTES, 64 * 1024 * 1024, 8 * 1024 * 1024];
+    const LADDER: [usize; 3] = [crate::interp::INTERPRETER_STACK_BYTES, 64 * 1024 * 1024, 8 * 1024 * 1024];
     for bytes in LADDER {
-        if let Ok(h) = std::thread::Builder::new()
-            .name("delulu-actor-probe".into())
-            .stack_size(bytes)
-            .spawn(|| {})
-        {
+        if let Ok(h) = std::thread::Builder::new().name("delulu-actor-probe".into()).stack_size(bytes).spawn(|| {}) {
             let _ = h.join();
             return bytes;
         }
@@ -624,9 +616,11 @@ fn usable_worker_stack() -> usize {
 
 fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
     let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth, effects } = setup;
-    let mut interp = crate::interp::Interp::new(&module)
-        .with_max_depth(max_depth)
-        .with_actors(ActorHost { shared: shared.clone(), senders, me: Some(wi) });
+    let mut interp = crate::interp::Interp::new(&module).with_max_depth(max_depth).with_actors(ActorHost {
+        shared: shared.clone(),
+        senders,
+        me: Some(wi),
+    });
     // ACTOR-CUSTODY-1: an actor's uses go through the run's custody and its devices through the run's
     // brokers, exactly as `main`'s do — never a pass-through that answers for a device nobody holds.
     if let Some(make) = &effects.custody {
@@ -649,11 +643,8 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
     // (actor/member were stamped by the interpreter at record time).
     let ship = |turn_id: u64, cause: &SendCause| {
         if let (Some(collector), Some(sink)) = (&trace, &local_sink) {
-            let c = Cause {
-                sender: cause.sender.clone(),
-                sender_member: cause.sender_member.clone(),
-                send_span: cause.send_span,
-            };
+            let c =
+                Cause { sender: cause.sender.clone(), sender_member: cause.sender_member.clone(), send_span: cause.send_span };
             let mut recs = sink.take_records();
             for r in &mut recs {
                 r.turn = Some(turn_id);
@@ -675,12 +666,8 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                 };
                 // Fields pre-seed Unit; the checker's definite-initialization rule makes an
                 // uninitialized read unreachable in a checked program.
-                let fields: Vec<(String, Value)> =
-                    decl.fields.iter().map(|f| (f.name.name.clone(), Value::Unit)).collect();
-                let state = Value::Record {
-                    name: Rc::from(actor.as_str()),
-                    fields: Rc::new(std::cell::RefCell::new(fields)),
-                };
+                let fields: Vec<(String, Value)> = decl.fields.iter().map(|f| (f.name.name.clone(), Value::Unit)).collect();
+                let state = Value::Record { name: Rc::from(actor.as_str()), fields: Rc::new(std::cell::RefCell::new(fields)) };
                 let self_ref = Value::ActorRef { id: ActorId { worker: wi, id }, actor: Rc::from(actor.as_str()) };
                 let params: Vec<String> = decl.ctor.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
@@ -719,8 +706,7 @@ fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
                     shared.done();
                     continue;
                 };
-                let self_ref =
-                    Value::ActorRef { id: ActorId { worker: wi, id }, actor: Rc::from(actor_name.as_str()) };
+                let self_ref = Value::ActorRef { id: ActorId { worker: wi, id }, actor: Rc::from(actor_name.as_str()) };
                 let params: Vec<String> = beh.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
                 let turn_id = shared.total_turns.fetch_add(1, Ordering::SeqCst);
@@ -835,10 +821,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
                 Rc::strong_count(m)
             );
             MsgValue::Map(
-                m.borrow()
-                    .iter()
-                    .map(|(k, v)| Ok((k.clone(), value_to_msg(v, self_state)?)))
-                    .collect::<Result<_, Fault>>()?,
+                m.borrow().iter().map(|(k, v)| Ok((k.clone(), value_to_msg(v, self_state)?))).collect::<Result<_, Fault>>()?,
             )
         }
         Value::Record { name, fields } => MsgValue::Record {
@@ -907,10 +890,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
         }
         #[cfg(feature = "python")]
         Value::PyObj(_) => {
-            return Err(Fault::new(
-                "DL0907",
-                "a PyObj reached an actor boundary (checker bug — PyObj is statically pinned)",
-            ))
+            return Err(Fault::new("DL0907", "a PyObj reached an actor boundary (checker bug — PyObj is statically pinned)"))
         }
     })
 }
@@ -946,17 +926,15 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         MsgValue::Bool(b) => Value::Bool(b),
         MsgValue::Str(s) => Value::str(s),
         MsgValue::Unit => Value::Unit,
-        MsgValue::Map(pairs) => Value::Map(Rc::new(std::cell::RefCell::new(
-            pairs.into_iter().map(|(k, v)| (k, msg_to_value(v, globals))).collect(),
-        ))),
-        MsgValue::List(items) => Value::List(Rc::new(std::cell::RefCell::new(
-            items.into_iter().map(|x| msg_to_value(x, globals)).collect(),
-        ))),
+        MsgValue::Map(pairs) => {
+            Value::Map(Rc::new(std::cell::RefCell::new(pairs.into_iter().map(|(k, v)| (k, msg_to_value(v, globals))).collect())))
+        }
+        MsgValue::List(items) => {
+            Value::List(Rc::new(std::cell::RefCell::new(items.into_iter().map(|x| msg_to_value(x, globals)).collect())))
+        }
         MsgValue::Record { name, fields } => Value::Record {
             name: Rc::from(name.as_str()),
-            fields: Rc::new(std::cell::RefCell::new(
-                fields.into_iter().map(|(n, x)| (n, msg_to_value(x, globals))).collect(),
-            )),
+            fields: Rc::new(std::cell::RefCell::new(fields.into_iter().map(|(n, x)| (n, msg_to_value(x, globals))).collect())),
         },
         MsgValue::Variant { name, fields } => Value::Variant {
             name: Rc::from(name.as_str()),
@@ -974,10 +952,9 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
             Value::Closure(Rc::new(Closure { params, body, env, home: None }))
         }
         MsgValue::Cap { kind, scope } => Value::Cap(Rc::new(CapVal { kind, scope })),
-        MsgValue::SecretLocal(s, aud) => Value::Secret(Rc::new(SecretVal::bound(
-            s,
-            aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
-        ))),
+        MsgValue::SecretLocal(s, aud) => {
+            Value::Secret(Rc::new(SecretVal::bound(s, aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })))))
+        }
         MsgValue::SecretHandle(h, aud) => Value::Secret(Rc::new(SecretVal::handle_bound(
             h,
             aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
@@ -1174,10 +1151,9 @@ mod boundary_authority_tests {
         let stale: Vec<&str> = THREADS_THAT_NEVER_RUN_INTERPRETER_CODE
             .iter()
             .filter(|(f, _)| {
-                !sources.iter().any(|(name, text)| {
-                    name == f
-                        && (text.contains("thread::spawn(") || text.contains("thread::Builder::new()"))
-                })
+                !sources
+                    .iter()
+                    .any(|(name, text)| name == f && (text.contains("thread::spawn(") || text.contains("thread::Builder::new()")))
             })
             .map(|(f, _)| *f)
             .collect();
@@ -1194,10 +1170,7 @@ mod boundary_authority_tests {
         let system = super::ActorSystem::start(&checked.module, 1, false);
         let reduced = system.reduced_depth_bound();
         let _ = system.finish();
-        assert!(
-            reduced.is_none(),
-            "a host that granted the full reservation must report nothing, got {reduced:?}"
-        );
+        assert!(reduced.is_none(), "a host that granted the full reservation must report nothing, got {reduced:?}");
     }
 
     /// The (stack, bound) pair is the invariant, so the arithmetic that ties them together gets its
@@ -1233,26 +1206,22 @@ mod boundary_authority_tests {
                 let l = l.trim();
                 let rest = l.strip_prefix("pub ")?;
                 let name = rest.split(':').next()?.trim();
-                (!name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-                    .then(|| name.to_string())
+                (!name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')).then(|| name.to_string())
             })
             .collect()
     }
 
     #[test]
     fn every_root_dimension_either_crosses_an_actor_boundary_or_is_listed_as_withheld() {
-        let root = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/value.rs"))
-            .expect("value.rs is committed");
-        let actors = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/actors.rs"))
-            .expect("actors.rs is committed");
+        let root = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/value.rs")).expect("value.rs is committed");
+        let actors =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/actors.rs")).expect("actors.rs is committed");
         let root_dims = declared_fields(&root, "RootVal");
         let msg_dims = declared_fields(&actors, "RootMsg");
         assert!(root_dims.len() > 10, "the RootVal scan found too few fields to be right: {root_dims:?}");
 
-        let missing: Vec<&String> = root_dims
-            .iter()
-            .filter(|d| !msg_dims.contains(d) && !WITHHELD_FROM_ACTORS.contains(&d.as_str()))
-            .collect();
+        let missing: Vec<&String> =
+            root_dims.iter().filter(|d| !msg_dims.contains(d) && !WITHHELD_FROM_ACTORS.contains(&d.as_str())).collect();
         assert!(
             missing.is_empty(),
             "these Root authority dimensions silently do not cross an actor boundary: {missing:?}\n\
@@ -1263,10 +1232,7 @@ mod boundary_authority_tests {
 
         // The list must not rot in the other direction either: a dimension that has since started
         // crossing should be removed from the withheld list rather than left as a stale claim.
-        let stale: Vec<&&str> = WITHHELD_FROM_ACTORS
-            .iter()
-            .filter(|w| msg_dims.iter().any(|m| m == *w))
-            .collect();
+        let stale: Vec<&&str> = WITHHELD_FROM_ACTORS.iter().filter(|w| msg_dims.iter().any(|m| m == *w)).collect();
         assert!(stale.is_empty(), "these are listed as withheld but now cross: {stale:?}");
     }
 
@@ -1291,8 +1257,8 @@ mod boundary_authority_tests {
             attested: true,
         };
         let root = RootVal { computes: vec![env.clone()], ..Default::default() };
-        let crossed = value_to_msg(&Value::Root(std::rc::Rc::new(root)), None)
-            .expect("a Root is sendable by decision (invariant 36)");
+        let crossed =
+            value_to_msg(&Value::Root(std::rc::Rc::new(root)), None).expect("a Root is sendable by decision (invariant 36)");
         let back = msg_to_value(crossed, &crate::value::Scope::root());
         let Value::Root(r) = back else { panic!("a Root must come back as a Root") };
         assert_eq!(r.computes.len(), 1, "the compute envelope must cross the boundary (C35/D46b)");
@@ -1324,7 +1290,10 @@ mod boundary_authority_tests {
         let Value::Secret(s) = back else { panic!("a Secret must come back as a Secret") };
         let a = s.audience().expect("a minted secret's audience crosses");
         assert_eq!((a.name.as_str(), &a.to), ("K", &to));
-        let plain = msg_to_value(value_to_msg(&Value::Secret(Rc::new(SecretVal::new("v".to_string()))), None).unwrap(), &crate::value::Scope::root());
+        let plain = msg_to_value(
+            value_to_msg(&Value::Secret(Rc::new(SecretVal::new("v".to_string()))), None).unwrap(),
+            &crate::value::Scope::root(),
+        );
         let Value::Secret(s) = plain else { panic!() };
         assert!(s.audience().is_none(), "and none is not invented for a secret granted without one");
         // P9-04 (d), D-V2-134: a broker HANDLE keeps its audience too — and stays a handle, with no bytes.

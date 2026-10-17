@@ -76,11 +76,7 @@ fn fmt_refuses_unparseable_files_and_exits_1() {
     std::fs::write(&f, "module m\nfn broken( {\n").unwrap();
     let o = delulu_in(&dir, &["fmt", "bad.delulu"]);
     assert_eq!(o.status.code(), Some(1), "refusal is an error exit");
-    assert_eq!(
-        std::fs::read_to_string(&f).unwrap(),
-        "module m\nfn broken( {\n",
-        "an unparseable file is NEVER rewritten"
-    );
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "module m\nfn broken( {\n", "an unparseable file is NEVER rewritten");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("DL02") || err.contains("DL01"), "the real parse diagnostics surface: {err}");
 }

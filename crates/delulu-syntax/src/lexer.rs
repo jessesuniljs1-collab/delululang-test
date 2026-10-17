@@ -83,11 +83,7 @@ pub fn lex_with_comments(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic
 /// downstream — parser, checker, DIR, hashes, diagnostics, both engines — sees canonical tokens and
 /// cannot tell which surface produced them, which is the property that makes morphs safe to add to a
 /// language whose identity is computed from its source.
-pub fn lex_with_morph(
-    file: FileId,
-    src: &str,
-    morph: Option<&crate::morph::Morph>,
-) -> (Vec<Token>, Vec<Diagnostic>) {
+pub fn lex_with_morph(file: FileId, src: &str, morph: Option<&crate::morph::Morph>) -> (Vec<Token>, Vec<Diagnostic>) {
     let mut lx = Lexer::new(file, src);
     lx.morph = morph;
     let (tokens, diags, _comments) = lx.run();
@@ -123,15 +119,7 @@ impl<'a> Lexer<'a> {
         // -Encoding utf8` on Windows) prepend one, and it isn't source text. Only a *leading* BOM is
         // trivia; a U+FEFF elsewhere still lexes normally (and is rejected as an unexpected char).
         let pos = if src.starts_with('\u{feff}') { '\u{feff}'.len_utf8() } else { 0 };
-        Lexer {
-            file,
-            src,
-            pos,
-            tokens: Vec::new(),
-            diags: Vec::new(),
-            comments: Vec::new(),
-            morph: None,
-        }
+        Lexer { file, src, pos, tokens: Vec::new(), diags: Vec::new(), comments: Vec::new(), morph: None }
     }
 
     fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
@@ -191,29 +179,23 @@ impl<'a> Lexer<'a> {
             // looking at the next byte, which is why CR is handled here and not in the table.
             if ch == '\r' && bytes.get(off + 1) != Some(&b'\n') {
                 self.diags.push(
-                    Diagnostic::error(
-                        "DL0108",
-                        "lone CARRIAGE RETURN (U+000D) in source, not part of a `\\r\\n` line ending",
-                    )
-                    .with_span(
-                        Span::new(self.file, off as u32, (off + 1) as u32),
-                        "editors show a line break here and the compiler does not — anything after it \
+                    Diagnostic::error("DL0108", "lone CARRIAGE RETURN (U+000D) in source, not part of a `\\r\\n` line ending")
+                        .with_span(
+                            Span::new(self.file, off as u32, (off + 1) as u32),
+                            "editors show a line break here and the compiler does not — anything after it \
                          on this line stays inside a comment, and two statements can silently join",
-                    ),
+                        ),
                 );
                 continue;
             }
             if let Some((_, name)) = LINE_BREAK_LOOKALIKES.iter().find(|(c, _)| *c == ch) {
                 self.diags.push(
-                    Diagnostic::error(
-                        "DL0108",
-                        format!("line-break-like character U+{:04X} ({name}) in source", ch as u32),
-                    )
-                    .with_span(
-                        Span::new(self.file, off as u32, (off + ch.len_utf8()) as u32),
-                        "editors render this as a new line and the compiler does not — code after it \
+                    Diagnostic::error("DL0108", format!("line-break-like character U+{:04X} ({name}) in source", ch as u32))
+                        .with_span(
+                            Span::new(self.file, off as u32, (off + ch.len_utf8()) as u32),
+                            "editors render this as a new line and the compiler does not — code after it \
                          can sit invisibly inside a comment; use the `\\u{…}` escape if a string truly needs it",
-                    ),
+                        ),
                 );
             }
         }
@@ -250,16 +232,8 @@ impl<'a> Lexer<'a> {
 
     /// Record a comment spanning `start..self.pos` for the formatter's side channel.
     fn record_comment(&mut self, start: usize) {
-        let own_line = self.src[..start]
-            .chars()
-            .rev()
-            .take_while(|&c| c != '\n')
-            .all(char::is_whitespace);
-        self.comments.push(Comment {
-            text: self.src[start..self.pos].to_string(),
-            start: start as u32,
-            own_line,
-        });
+        let own_line = self.src[..start].chars().rev().take_while(|&c| c != '\n').all(char::is_whitespace);
+        self.comments.push(Comment { text: self.src[start..self.pos].to_string(), start: start as u32, own_line });
     }
 
     // ----- low-level cursor -----------------------------------------------
@@ -475,8 +449,7 @@ impl<'a> Lexer<'a> {
             c if c.is_ascii_alphabetic() || c == '_' => self.ident(start),
             other => {
                 self.diags.push(
-                    Diagnostic::error("DL0101", format!("unexpected character `{other}`"))
-                        .with_bare_span(self.span_from(start)),
+                    Diagnostic::error("DL0101", format!("unexpected character `{other}`")).with_bare_span(self.span_from(start)),
                 );
             }
         }
@@ -514,12 +487,10 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
-            let digits: String =
-                self.src[digits_start..self.pos].chars().filter(|&c| c != '_').collect();
+            let digits: String = self.src[digits_start..self.pos].chars().filter(|&c| c != '_').collect();
             if digits.is_empty() {
                 self.diags.push(
-                    Diagnostic::error("DL0104", "hex literal needs at least one digit")
-                        .with_bare_span(self.span_from(start)),
+                    Diagnostic::error("DL0104", "hex literal needs at least one digit").with_bare_span(self.span_from(start)),
                 );
                 self.push(TokenKind::Int(0), start);
                 return;
@@ -528,8 +499,7 @@ impl<'a> Lexer<'a> {
                 Ok(v) => self.push(TokenKind::Int(v), start),
                 Err(_) => {
                     self.diags.push(
-                        Diagnostic::error("DL0104", "integer literal overflows Int (i64)")
-                            .with_bare_span(self.span_from(start)),
+                        Diagnostic::error("DL0104", "integer literal overflows Int (i64)").with_bare_span(self.span_from(start)),
                     );
                     self.push(TokenKind::Int(0), start);
                 }
@@ -566,8 +536,7 @@ impl<'a> Lexer<'a> {
                 }
                 if !self.peek().is_some_and(|c| c.is_ascii_digit()) {
                     self.diags.push(
-                        Diagnostic::error("DL0104", "exponent needs at least one digit")
-                            .with_bare_span(self.span_from(exp_mark)),
+                        Diagnostic::error("DL0104", "exponent needs at least one digit").with_bare_span(self.span_from(exp_mark)),
                     );
                 } else {
                     while let Some(c) = self.peek() {
@@ -610,8 +579,7 @@ impl<'a> Lexer<'a> {
                 crate::num::FloatText::Malformed => (0.0, Some("invalid float literal")),
             };
             if let Some(m) = message {
-                self.diags
-                    .push(Diagnostic::error("DL0104", m).with_bare_span(self.span_from(start)));
+                self.diags.push(Diagnostic::error("DL0104", m).with_bare_span(self.span_from(start)));
             }
             self.push(TokenKind::Float(value), start);
         } else {
@@ -619,8 +587,7 @@ impl<'a> Lexer<'a> {
                 Ok(v) => self.push(TokenKind::Int(v), start),
                 Err(_) => {
                     self.diags.push(
-                        Diagnostic::error("DL0104", "integer literal overflows Int (i64)")
-                            .with_bare_span(self.span_from(start)),
+                        Diagnostic::error("DL0104", "integer literal overflows Int (i64)").with_bare_span(self.span_from(start)),
                     );
                     self.push(TokenKind::Int(0), start);
                 }
@@ -679,11 +646,8 @@ impl<'a> Lexer<'a> {
                                         .is_some();
                                 if !ok {
                                     self.diags.push(
-                                        Diagnostic::error(
-                                            "DL0103",
-                                            "invalid unicode escape (expected \\u{1-6 hex digits})",
-                                        )
-                                        .with_bare_span(self.span_from(esc_start)),
+                                        Diagnostic::error("DL0103", "invalid unicode escape (expected \\u{1-6 hex digits})")
+                                            .with_bare_span(self.span_from(esc_start)),
                                     );
                                 }
                             } else {
@@ -696,11 +660,8 @@ impl<'a> Lexer<'a> {
                         other => {
                             let shown = other.map(|c| c.to_string()).unwrap_or_default();
                             self.diags.push(
-                                Diagnostic::error(
-                                    "DL0103",
-                                    format!("invalid escape sequence `\\{shown}`"),
-                                )
-                                .with_bare_span(self.span_from(esc_start)),
+                                Diagnostic::error("DL0103", format!("invalid escape sequence `\\{shown}`"))
+                                    .with_bare_span(self.span_from(esc_start)),
                             );
                         }
                     }
@@ -738,8 +699,16 @@ mod tests {
         assert_eq!(
             k,
             vec![
-                TokenKind::KwLet, ident("x"), TokenKind::Eq, TokenKind::Int(1), TokenKind::Term,
-                TokenKind::KwLet, ident("y"), TokenKind::Eq, TokenKind::Int(2), TokenKind::Term,
+                TokenKind::KwLet,
+                ident("x"),
+                TokenKind::Eq,
+                TokenKind::Int(1),
+                TokenKind::Term,
+                TokenKind::KwLet,
+                ident("y"),
+                TokenKind::Eq,
+                TokenKind::Int(2),
+                TokenKind::Term,
                 TokenKind::Eof,
             ]
         );
@@ -758,10 +727,7 @@ mod tests {
         assert!(k.contains(&TokenKind::Term));
         let k2 = kinds("{ }\nx");
         // Term inserted after `}` — this is the `} else` consequence documented in §2.2.
-        assert_eq!(
-            k2,
-            vec![TokenKind::LBrace, TokenKind::RBrace, TokenKind::Term, ident("x"), TokenKind::Term, TokenKind::Eof]
-        );
+        assert_eq!(k2, vec![TokenKind::LBrace, TokenKind::RBrace, TokenKind::Term, ident("x"), TokenKind::Term, TokenKind::Eof]);
     }
 
     #[test]
@@ -821,16 +787,18 @@ mod tests {
         assert_eq!(kinds("1_000"), vec![TokenKind::Int(1000), TokenKind::Term, TokenKind::Eof]);
         assert_eq!(kinds("0xFF"), vec![TokenKind::Int(255), TokenKind::Term, TokenKind::Eof]);
         assert_eq!(kinds("1.5"), vec![TokenKind::Float(1.5), TokenKind::Term, TokenKind::Eof]);
-        assert_eq!(
-            kinds("2.5e2"),
-            vec![TokenKind::Float(250.0), TokenKind::Term, TokenKind::Eof]
-        );
+        assert_eq!(kinds("2.5e2"), vec![TokenKind::Float(250.0), TokenKind::Term, TokenKind::Eof]);
         // `1.method` is Int Dot Ident, not a float.
         assert_eq!(
             kinds("1.abs()"),
             vec![
-                TokenKind::Int(1), TokenKind::Dot, ident("abs"),
-                TokenKind::LParen, TokenKind::RParen, TokenKind::Term, TokenKind::Eof
+                TokenKind::Int(1),
+                TokenKind::Dot,
+                ident("abs"),
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::Term,
+                TokenKind::Eof
             ]
         );
     }

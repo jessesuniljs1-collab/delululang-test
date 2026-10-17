@@ -38,10 +38,7 @@ fn the_survey_reads_no_file_that_git_ignores() {
         .map(|o| o.status.success())
         .unwrap_or(false);
     if !in_git {
-        eprintln!(
-            "SKIPPED: {} is not a git work tree, so there are no ignore rules to check against",
-            root.display()
-        );
+        eprintln!("SKIPPED: {} is not a git work tree, so there are no ignore rules to check against", root.display());
         return;
     }
 

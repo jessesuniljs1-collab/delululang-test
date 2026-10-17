@@ -77,12 +77,7 @@ pub fn git_changes(root: &Path, rev: &str) -> Result<Vec<Change>, String> {
         return Err(format!("`{rev}` is not a revision: a revision may not be empty or begin with `-`"));
     }
     let git = |args: &[&str]| -> Result<String, String> {
-        let out = Command::new("git")
-            .arg("-C")
-            .arg(root)
-            .args(args)
-            .output()
-            .map_err(|e| format!("cannot run git: {e}"))?;
+        let out = Command::new("git").arg("-C").arg(root).args(args).output().map_err(|e| format!("cannot run git: {e}"))?;
         if !out.status.success() {
             let why = String::from_utf8_lossy(&out.stderr);
             return Err(format!("git could not answer for `{rev}`: {}", why.trim()));
@@ -106,8 +101,7 @@ pub fn git_changes(root: &Path, rev: &str) -> Result<Vec<Change>, String> {
 /// union walk toward what breaks, each hop with the changed node it traces back to (`origin`).
 /// Uncapped, like `impact --json`.
 pub fn diff_json(survey: &Survey, rev: &str, changes: &[Change], depth: u32) -> Value {
-    let by_path: BTreeMap<&str, &crate::Node> =
-        survey.nodes.iter().filter_map(|n| n.path.as_deref().map(|p| (p, n))).collect();
+    let by_path: BTreeMap<&str, &crate::Node> = survey.nodes.iter().filter_map(|n| n.path.as_deref().map(|p| (p, n))).collect();
     let mut starts: Vec<&str> = Vec::new();
     let mut entrenched = Vec::new();
     let changed: Vec<Value> = changes

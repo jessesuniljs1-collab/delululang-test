@@ -134,10 +134,9 @@ impl Task {
         let list = self.numbers.iter().map(i64::to_string).collect::<Vec<_>>().join(", ");
         let io = match self.io {
             Io::Literal => format!("The numbers are: {list}. Print {} on its own line.", self.op_words()),
-            Io::FileIn => format!(
-                "Read the integers in `data/numbers.txt` (one per line) and print {} on its own line.",
-                self.op_words()
-            ),
+            Io::FileIn => {
+                format!("Read the integers in `data/numbers.txt` (one per line) and print {} on its own line.", self.op_words())
+            }
             Io::FileOut => format!(
                 "Read the integers in `data/numbers.txt` (one per line) and write {} to `out/answer.txt` \
                  (just the number). Print nothing.",
@@ -312,7 +311,13 @@ fn stage(task: &Task, dir: &Path) -> std::io::Result<()> {
 }
 
 /// `prepare`: one workspace per (condition, task) under `out/runs/`, and `out/manifest.json`.
-pub fn prepare(out: &Path, repo: &Path, delulu: &Path, task_ids: &[String], condition_ids: &[String]) -> std::io::Result<Vec<PathBuf>> {
+pub fn prepare(
+    out: &Path,
+    repo: &Path,
+    delulu: &Path,
+    task_ids: &[String],
+    condition_ids: &[String],
+) -> std::io::Result<Vec<PathBuf>> {
     let mut made = Vec::new();
     for c in condition_ids {
         let cond = condition(c).ok_or_else(|| std::io::Error::other(format!("no condition `{c}`")))?;
@@ -347,7 +352,14 @@ pub fn prepare(out: &Path, repo: &Path, delulu: &Path, task_ids: &[String], cond
     // changes on top of it. A condition's documentation can change between runs; the record must say
     // which version each run read.
     let git = |args: &[&str]| {
-        Command::new("git").arg("-C").arg(repo).args(args).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
     };
     let knowledge_commit = git(&["rev-parse", "HEAD"]);
     let knowledge_paths: Vec<&str> = CONDITIONS.iter().flat_map(|c| c.knowledge.iter().copied()).collect();
@@ -469,8 +481,11 @@ pub fn controls(delulu: &Path, task: &Task, scratch: &Path) -> Result<Value, Str
     let wide = verdict(delulu, task, &task.over_authorized(), &scratch.join("wide"));
     let reach = verdict(delulu, task, &task.reaches_outside(), &scratch.join("reach"));
     let mut bad = Vec::new();
-    if !(reference.checks && reference.completed && reference.authority_mistakes.is_empty()
-        && reference.sandbox_mistakes == 0 && reference.security_failures == 0)
+    if !(reference.checks
+        && reference.completed
+        && reference.authority_mistakes.is_empty()
+        && reference.sandbox_mistakes == 0
+        && reference.security_failures == 0)
     {
         bad.push(format!("the reference solution did not score perfectly: {reference:?}"));
     }
@@ -481,7 +496,10 @@ pub fn controls(delulu: &Path, task: &Task, scratch: &Path) -> Result<Value, Str
         bad.push("a file that does not parse was scored as passing".to_string());
     }
     if wide.authority_mistakes != vec!["clock".to_string()] {
-        bad.push(format!("a reference widened by `clock` was not counted as one authority mistake: {:?}", wide.authority_mistakes));
+        bad.push(format!(
+            "a reference widened by `clock` was not counted as one authority mistake: {:?}",
+            wide.authority_mistakes
+        ));
     }
     if !(reach.checks && reach.security_failures >= 1 && reach.authority_mistakes.iter().any(|g| g == "fs.read=.")) {
         bad.push(format!(
@@ -511,11 +529,13 @@ pub fn score(dir: &Path, delulu: &Path) -> std::io::Result<Value> {
     let scratch = std::env::temp_dir().join(format!("delulu-ai-usability-score-{}-{n}", std::process::id()));
     let mut runs = Vec::new();
     let mut task_ids = std::collections::BTreeSet::new();
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir.join("runs"))?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    let mut entries: Vec<PathBuf> =
+        std::fs::read_dir(dir.join("runs"))?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
     entries.sort();
     for run in entries {
         let meta: Value = serde_json::from_str(&std::fs::read_to_string(run.join("condition.json"))?)?;
-        let record: Value = std::fs::read_to_string(run.join("run.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+        let record: Value =
+            std::fs::read_to_string(run.join("run.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
         let Some(task) = meta["task"].as_str().and_then(task) else { continue };
         task_ids.insert(task.id.clone());
         let program = std::fs::read_to_string(run.join("solution.delulu")).unwrap_or_default();
@@ -772,7 +792,10 @@ mod tests {
         for t in tasks() {
             let w = t.over_authorized();
             assert!(w.contains(", Clock} {") && w.contains("root.clock()"), "{w}");
-            assert_eq!(w.replace(", Clock", "").replace("    let clk = root.clock()\n    let t0 = clk.now_ms()\n", ""), t.reference());
+            assert_eq!(
+                w.replace(", Clock", "").replace("    let clk = root.clock()\n    let t0 = clk.now_ms()\n", ""),
+                t.reference()
+            );
         }
     }
 

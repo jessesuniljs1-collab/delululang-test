@@ -488,7 +488,9 @@ pub fn run_mcp(args: &[String]) -> i32 {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(line) {
-            Err(e) => Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("not JSON: {e}") } })),
+            Err(e) => {
+                Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("not JSON: {e}") } }))
+            }
             Ok(msg) => handle(&msg, tree.as_deref()),
         };
         if let Some(r) = reply {
@@ -578,14 +580,25 @@ mod tests {
     /// `monitor` is here because it REVOKES: `monitor watch` quarantines a run by revoking its node, and
     /// a tool that could start one would let an agent stop runs — the opposite of reading.
     const EFFECTORS: &[&str] = &[
-        "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish",
-        "login", "deploy", "fleet", "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp",
-        "mcp", "edit", "audit", "device", "monitor",
+        "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish", "login", "deploy", "fleet",
+        "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp", "mcp", "edit", "audit", "device", "monitor",
     ];
     /// The commands that only read and answer. A tool may run one of these and nothing else.
     const READ_ONLY: &[&str] = &[
-        "check", "authority", "why", "atlas", "explain", "verify-sig", "morph", "completions",
-        "skill", "toolchain", "schema", "examples", "sandbox", "doctor",
+        "check",
+        "authority",
+        "why",
+        "atlas",
+        "explain",
+        "verify-sig",
+        "morph",
+        "completions",
+        "skill",
+        "toolchain",
+        "schema",
+        "examples",
+        "sandbox",
+        "doctor",
     ];
 
     /// Every command is one or the other, so a command added later cannot reach a tool unreviewed:

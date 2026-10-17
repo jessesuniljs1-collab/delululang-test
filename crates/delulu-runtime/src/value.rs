@@ -48,13 +48,19 @@ pub enum Value {
     /// other languages' map output untestable simply does not exist here — which matters for a
     /// language whose tests compare printed output and whose plugin DIR must be byte-reproducible.
     Map(Rc<RefCell<std::collections::BTreeMap<MapKey, Value>>>),
-    Record { name: Rc<str>, fields: Rc<RefCell<Vec<(String, Value)>>> },
+    Record {
+        name: Rc<str>,
+        fields: Rc<RefCell<Vec<(String, Value)>>>,
+    },
     /// A sum-type value: builtin (`Ok`/`Err`/`Some`/`None`) or a user variant, by name.
     ///
     /// The payload is [`VariantFields`] rather than a bare `Rc<Vec<Value>>` for one reason, and it is
     /// a safety reason: this is the **only** unbounded nesting vector in the value representation, so
     /// it is where the iterative teardown lives (campaign finding INTERP-DROP-1).
-    Variant { name: Rc<str>, fields: VariantFields },
+    Variant {
+        name: Rc<str>,
+        fields: VariantFields,
+    },
     Closure(Rc<Closure>),
     Cap(Rc<CapVal>),
     Secret(Rc<SecretVal>),
@@ -74,7 +80,10 @@ pub enum Value {
     /// An actor reference (Stage 7) — `tag`: opaque identity, sendable, no synchronous
     /// access (the checker enforces all three). Carries the process-wide address; the id is
     /// never reused, so a reference to a dead/unloaded actor stays dead forever.
-    ActorRef { id: crate::actors::ActorId, actor: Rc<str> },
+    ActorRef {
+        id: crate::actors::ActorId,
+        actor: Rc<str>,
+    },
     /// P2: a loaded plugin, minted only by `load(host, path, grant)` (Stage 6, spec §3.1). Opaque
     /// (R-5) exactly as `Foreign` is — the checker's `Type::Plugin` refuses `str`, `==` and
     /// serialization, so a well-typed program never displays or compares one.
@@ -258,8 +267,7 @@ impl Value {
                 format!("[{}]", inner.join(", "))
             }
             Value::Record { name, fields } => {
-                let inner: Vec<String> =
-                    fields.borrow().iter().map(|(n, v)| format!("{n}: {}", v.display())).collect();
+                let inner: Vec<String> = fields.borrow().iter().map(|(n, v)| format!("{n}: {}", v.display())).collect();
                 format!("{name} {{ {} }}", inner.join(", "))
             }
             Value::Variant { name, fields } => {
@@ -390,8 +398,7 @@ impl ComputeEnvelope {
     /// Note what cannot be written here at all: an attestation. A grant may `waive-attestation`,
     /// never claim one — see `compute::check_grant`.
     pub fn parse(spec: &str) -> Result<ComputeEnvelope, String> {
-        let (device, rest) =
-            spec.split_once(':').ok_or("missing `:` (use DEVICE:memory_bytes=N,...)")?;
+        let (device, rest) = spec.split_once(':').ok_or("missing `:` (use DEVICE:memory_bytes=N,...)")?;
         let device = device.trim();
         if device.is_empty() {
             return Err("empty device name".into());
@@ -459,9 +466,9 @@ impl ComputeEnvelope {
                     // `NAME:PATH` — the provenance half of "kernels are data", and deliberately the
                     // same shape as `foreign.c=LIB:PATH`. Split at the FIRST `:` so a Windows path
                     // (`C:\k\reduce.refkernel`) survives intact on the right.
-                    let (name, path) = v.split_once(':').ok_or_else(|| {
-                        format!("bad kernel `{v}` — use kernel=NAME:PATH naming the artifact file")
-                    })?;
+                    let (name, path) = v
+                        .split_once(':')
+                        .ok_or_else(|| format!("bad kernel `{v}` — use kernel=NAME:PATH naming the artifact file"))?;
                     let (name, path) = (name.trim(), path.trim());
                     if name.is_empty() || path.is_empty() {
                         return Err(format!("bad kernel `{v}` — both the name and the artifact path must be present"));
@@ -474,14 +481,10 @@ impl ComputeEnvelope {
 
         // Each refusal names the term the operator left out. An operator who forgot one should be
         // told which, not handed a syntax summary to diff by eye (10f's rule, D11a).
-        let memory_bytes = memory_bytes.ok_or(
-            "no `memory_bytes` — a device with no memory ceiling is a device with no ceiling",
-        )?;
-        let kernel_ms = kernel_ms.ok_or(
-            "no `kernel_ms=lo..hi` — a kernel with no time budget can occupy the device forever",
-        )?;
-        let queue_depth = queue_depth
-            .ok_or("no `queue_depth` — unbounded in-flight work is unbounded resource use")?;
+        let memory_bytes =
+            memory_bytes.ok_or("no `memory_bytes` — a device with no memory ceiling is a device with no ceiling")?;
+        let kernel_ms = kernel_ms.ok_or("no `kernel_ms=lo..hi` — a kernel with no time budget can occupy the device forever")?;
+        let queue_depth = queue_depth.ok_or("no `queue_depth` — unbounded in-flight work is unbounded resource use")?;
         let power_w = power_w.ok_or(
             "no `power_w=lo..hi` — power is a real envelope dimension even where this build \
              cannot measure it (see the honesty note on enforcement)",
@@ -491,20 +494,16 @@ impl ComputeEnvelope {
              for you",
         )?;
         if formats.is_empty() {
-            return Err(
-                "no `format=` — a device that accepts any kernel format accepts kernels nobody \
+            return Err("no `format=` — a device that accepts any kernel format accepts kernels nobody \
                  vetted"
-                    .into(),
-            );
+                .into());
         }
         if kernels.is_empty() {
-            return Err(
-                "no `kernel=NAME:PATH` — a compute grant enumerates the kernels it carries, each \
+            return Err("no `kernel=NAME:PATH` — a compute grant enumerates the kernels it carries, each \
                  pointing at the artifact file it resolves to; a grant that named none would \
                  either dispatch nothing or dispatch anything, and the second is how a kernel \
                  nobody signed gets to run"
-                    .into(),
-            );
+                .into());
         }
         Ok(ComputeEnvelope {
             device: device.to_string(),
@@ -603,9 +602,10 @@ impl ActuatorEnvelope {
                     continue;
                 }
                 "fail" => {
-                    fail_state = Some(crate::device::FailState::parse(v).ok_or_else(|| {
-                        format!("unknown fail-state `{v}` (use hold, coast, or safe-park)")
-                    })?);
+                    fail_state = Some(
+                        crate::device::FailState::parse(v)
+                            .ok_or_else(|| format!("unknown fail-state `{v}` (use hold, coast, or safe-park)"))?,
+                    );
                     continue;
                 }
                 _ => {}
@@ -635,11 +635,9 @@ impl ActuatorEnvelope {
         }
         // The three dead-man terms are named individually in their refusals: an operator who
         // forgot one should be told which one, not handed a syntax summary to diff by eye.
-        let heartbeat_ms = heartbeat_ms.ok_or(
-            "no `heartbeat_ms` — a device grant with no dead-man is not a grant (spec §5.2)",
-        )?;
-        let ttl_ms = ttl_ms
-            .ok_or("no `ttl_ms` — a lease with no end is a transfer of the device, not a loan")?;
+        let heartbeat_ms =
+            heartbeat_ms.ok_or("no `heartbeat_ms` — a device grant with no dead-man is not a grant (spec §5.2)")?;
+        let ttl_ms = ttl_ms.ok_or("no `ttl_ms` — a lease with no end is a transfer of the device, not a loan")?;
         let fail_state = fail_state.ok_or(
             "no `fail=hold|coast|safe-park` — what this machine does when the software stops is \
              not a decision the runtime may make for you",
@@ -650,42 +648,47 @@ impl ActuatorEnvelope {
                  expire before its first beat was ever due"
             ));
         }
-        Ok(ActuatorEnvelope {
-            device: device.to_string(),
-            dims,
-            rate_hz,
-            heartbeat_ms,
-            ttl_ms,
-            fail_state,
-        })
+        Ok(ActuatorEnvelope { device: device.to_string(), dims, rate_hz, heartbeat_ms, ttl_ms, fail_state })
     }
 }
 
 /// The runtime capability scope (§7.1) — enforced host-side on every use.
 #[derive(Clone, Debug)]
 pub enum CapScope {
-    Fs { root: PathBuf, write: bool },
+    Fs {
+        root: PathBuf,
+        write: bool,
+    },
     /// `allow` is the program's host list, each entry granted exactly. `special` is the subset of it
     /// the operator granted with `net.special=` (PS-B-02) — the only hosts the egress client will
     /// connect to in a special-use range. It travels WITH the capability, so an actor handed this
     /// capability holds exactly the special-use authority its minter held, never more.
-    Net { allow: Vec<String>, special: Vec<String> },
+    Net {
+        allow: Vec<String>,
+        special: Vec<String>,
+    },
     Console,
     Clock,
     Rand,
-    Declassify { names: Vec<String> },
+    Declassify {
+        names: Vec<String>,
+    },
     /// Gates binding a foreign C library (`Cap[ForeignLoad]`, spec §3 T-ForeignBind). Carries no
     /// scope of its own — the per-lib authority decision is the `foreign.c` grant checked at bind.
     ForeignLoad,
     /// Stage 10 (10e): the actuator's scope IS its envelope (spec §5.1).
     Actuator(ActuatorEnvelope),
     /// Stage 10 (10e): the sensor's scope is its device identity; reads are `Read` under it.
-    Sensor { device: String },
+    Sensor {
+        device: String,
+    },
     /// Stage 10 (10h): the compute device's scope IS its envelope (spec §7.1, invariant 50).
     Compute(ComputeEnvelope),
     /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
     /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
-    Python { allowlist: Vec<String> },
+    Python {
+        allowlist: Vec<String>,
+    },
     /// P2 (D-V2-27): gates loading a plugin artifact at run time (`Cap[PluginHost]`).
     ///
     /// The scope IS the two halves of the loading decision, and both are the OPERATOR's: `roots` are
@@ -694,7 +697,10 @@ pub enum CapScope {
     /// name a root it was not given, and it cannot add a hash to the list. Empty `allow_hashes` means
     /// the package pinned nothing, and then the roots alone decide — pinning is the honest form, not a
     /// mandatory one.
-    PluginHost { roots: Vec<PathBuf>, allow_hashes: Vec<String> },
+    PluginHost {
+        roots: Vec<PathBuf>,
+        allow_hashes: Vec<String>,
+    },
     /// PS-A-02: a capability the HOST holds; this process has only the number the host minted for
     /// it. A guest's capabilities are all of this shape, which is what "the guest performs no
     /// effects" means concretely: there is no path, host or socket here to act on.

@@ -7,31 +7,28 @@ mod advisories;
 mod atlas_chain;
 mod attest;
 mod boundary;
+mod breakglass;
 mod broker_client;
 mod broker_ipc;
 mod broker_transport;
 mod brokerd;
-mod breakglass;
 mod budget;
 mod ceiling;
 mod cert_crypto;
 mod cli;
 mod completions;
 mod deploy;
+mod device_cmd;
 mod doctor;
 mod edit;
-mod device_cmd;
-mod monitor_cmd;
 mod examples;
 mod fix;
 mod guest;
 mod identity;
 mod jail;
 mod launcher;
+mod monitor_cmd;
 // Used by the Windows contained guest today; its tests run everywhere, so the module is not gated.
-#[cfg_attr(not(windows), allow(dead_code))]
-mod pipe_channel;
-mod policy;
 mod fleet;
 mod foreign_worker;
 mod locale;
@@ -39,15 +36,18 @@ mod lsp;
 mod mcp;
 mod morph_file;
 mod new;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod pipe_channel;
+mod policy;
 mod signing;
 // Phase 5i / PS-C: the microVM profile is Linux-only (spec §6); the probe, the launcher and the
 // in-VM guest compile only there. Every other platform refuses `--isolation microvm` with DL1408 in `cli.rs` (trap 8 —
 // never fake a weaker platform's isolation as equivalent).
 #[cfg(target_os = "linux")]
 mod microvm;
+mod openshell;
 mod repl;
 mod run_cmd;
-mod openshell;
 mod sandbox;
 mod schema;
 mod toolchain;
@@ -81,10 +81,8 @@ use delulu_runtime::INTERPRETER_STACK_BYTES;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let worker = std::thread::Builder::new()
-        .name("delulu-main".into())
-        .stack_size(INTERPRETER_STACK_BYTES)
-        .spawn(move || cli::run(&args));
+    let worker =
+        std::thread::Builder::new().name("delulu-main".into()).stack_size(INTERPRETER_STACK_BYTES).spawn(move || cli::run(&args));
     let code = match worker {
         // A worker panic becomes exit 2 (internal), never a pretended success. Rust has already
         // printed the panic itself. **This mapping is load-bearing and must not be "simplified"

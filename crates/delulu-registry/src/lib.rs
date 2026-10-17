@@ -66,9 +66,15 @@ pub struct Submission<'a> {
 /// What a publish attempt resolved to.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PublishOutcome {
-    Accepted { name: String, version: String },
+    Accepted {
+        name: String,
+        version: String,
+    },
     /// Refused, with the diagnostic code and the reason a human needs.
-    Refused { code: &'static str, reason: String },
+    Refused {
+        code: &'static str,
+        reason: String,
+    },
 }
 
 impl Registry {
@@ -89,10 +95,7 @@ impl Registry {
     pub fn lines(&self, name: &str) -> Vec<Value> {
         let path = self.index_dir().join(name);
         let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
-        text.lines()
-            .filter(|l| !l.trim().is_empty())
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect()
+        text.lines().filter(|l| !l.trim().is_empty()).filter_map(|l| serde_json::from_str(l).ok()).collect()
     }
 
     /// The line a *new* requirement should resolve to: the latest **unyanked** version.
@@ -114,21 +117,14 @@ impl Registry {
     /// `submission.claimed` is whatever the client sent. It is used for **nothing** except being
     /// compared against the truth, so a mismatch can be reported. The record the registry writes is
     /// built only from what `recompute` derives from the artifact.
-    pub fn publish_submission(
-        &self,
-        sub: &Submission<'_>,
-        recompute: impl Fn(&[u8]) -> Option<Value>,
-    ) -> PublishOutcome {
+    pub fn publish_submission(&self, sub: &Submission<'_>, recompute: impl Fn(&[u8]) -> Option<Value>) -> PublishOutcome {
         let Submission { token: token_str, name, version, artifact, signature, claimed } = *sub;
         // ----- authorization -------------------------------------------------
         let tokens = self.tokens.lock().expect("token store");
         match tokens.authorize(token_str, name) {
             token::Authorization::Ok => {}
             token::Authorization::Unknown => {
-                return PublishOutcome::Refused {
-                    code: "DL1706",
-                    reason: "unknown or revoked token".into(),
-                }
+                return PublishOutcome::Refused { code: "DL1706", reason: "unknown or revoked token".into() }
             }
             token::Authorization::OutOfScope => {
                 return PublishOutcome::Refused {
@@ -155,10 +151,7 @@ impl Registry {
                 }
             }
             delulu_runtime::SignatureStatus::Invalid { reason } => {
-                return PublishOutcome::Refused {
-                    code: "DL1705",
-                    reason: format!("signature does not verify: {reason}"),
-                }
+                return PublishOutcome::Refused { code: "DL1705", reason: format!("signature does not verify: {reason}") }
             }
         }
 
@@ -207,8 +200,7 @@ impl Registry {
         if let Some(prior) = self.resolve(name) {
             let prior_effects = effect_set(&prior);
             let new_effects = effect_set(&truth);
-            let widened: Vec<&String> =
-                new_effects.iter().filter(|e| !prior_effects.contains(*e)).collect();
+            let widened: Vec<&String> = new_effects.iter().filter(|e| !prior_effects.contains(*e)).collect();
             let prior_v = prior["version"].as_str().unwrap_or("0.0.0");
             if !widened.is_empty() && same_major(prior_v, version) {
                 return PublishOutcome::Refused {
@@ -242,10 +234,7 @@ impl Registry {
             return PublishOutcome::Refused { code: "DL1706", reason: "index write failed".into() };
         }
         let _ = std::fs::write(self.root.join("artifacts").join(format!("{name}-{version}.dwx")), artifact);
-        let _ = std::fs::write(
-            self.root.join("artifacts").join(format!("{name}-{version}.dwx.sig")),
-            sig,
-        );
+        let _ = std::fs::write(self.root.join("artifacts").join(format!("{name}-{version}.dwx.sig")), sig);
 
         PublishOutcome::Accepted { name: name.into(), version: version.into() }
     }
@@ -318,20 +307,14 @@ impl Registry {
     pub fn advisories(&self, name: &str) -> Vec<Value> {
         let path = self.root.join("advisories").join(name);
         let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
-        text.lines()
-            .filter(|l| !l.trim().is_empty())
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect()
+        text.lines().filter(|l| !l.trim().is_empty()).filter_map(|l| serde_json::from_str(l).ok()).collect()
     }
 
     /// Every advisory across every package, for exporting a whole-feed file a build can consult.
     pub fn all_advisories(&self) -> Vec<Value> {
         let mut out = Vec::new();
         let Ok(entries) = std::fs::read_dir(self.root.join("advisories")) else { return out };
-        let mut names: Vec<String> = entries
-            .flatten()
-            .filter_map(|e| e.file_name().into_string().ok())
-            .collect();
+        let mut names: Vec<String> = entries.flatten().filter_map(|e| e.file_name().into_string().ok()).collect();
         names.sort(); // stable export order — a feed file diffs cleanly
         for name in names {
             out.extend(self.advisories(&name));
@@ -346,12 +329,8 @@ impl Registry {
     /// the registry vouches for; a submission missing `id`, `package`, or a non-empty `affected`
     /// list is refused rather than stored as a half-record a build would then have to guess about.
     pub fn file_advisory(&self, token_str: &str, advisory: &Value) -> PublishOutcome {
-        let Some(package) = advisory.get("package").and_then(Value::as_str).filter(|s| !s.is_empty())
-        else {
-            return PublishOutcome::Refused {
-                code: "DL1706",
-                reason: "an advisory must name a `package`".into(),
-            };
+        let Some(package) = advisory.get("package").and_then(Value::as_str).filter(|s| !s.is_empty()) else {
+            return PublishOutcome::Refused { code: "DL1706", reason: "an advisory must name a `package`".into() };
         };
 
         let tokens = self.tokens.lock().expect("token store");
@@ -370,10 +349,8 @@ impl Registry {
         drop(tokens);
 
         let id = advisory.get("id").and_then(Value::as_str).filter(|s| !s.is_empty());
-        let affected = advisory
-            .get("affected")
-            .and_then(Value::as_array)
-            .filter(|xs| !xs.is_empty() && xs.iter().all(Value::is_string));
+        let affected =
+            advisory.get("affected").and_then(Value::as_array).filter(|xs| !xs.is_empty() && xs.iter().all(Value::is_string));
         let (Some(id), Some(affected)) = (id, affected) else {
             return PublishOutcome::Refused {
                 code: "DL1706",
@@ -424,7 +401,11 @@ pub fn same_major(a: &str, b: &str) -> bool {
     };
     let (am, an) = parts(a);
     let (bm, bn) = parts(b);
-    if am == 0 || bm == 0 { am == bm && an == bn } else { am == bm }
+    if am == 0 || bm == 0 {
+        am == bm && an == bn
+    } else {
+        am == bm
+    }
 }
 
 // ===== the HTTP surface =====================================================
@@ -605,14 +586,7 @@ fn handle_conn(
     stream.flush()
 }
 
-fn route(
-    reg: &Registry,
-    method: &str,
-    path: &str,
-    body: &[u8],
-    token: &str,
-    recompute: &Recompute,
-) -> (&'static str, Value) {
+fn route(reg: &Registry, method: &str, path: &str, body: &[u8], token: &str, recompute: &Recompute) -> (&'static str, Value) {
     match (method, path) {
         // The sparse index: exactly the Stage-8 format, one JSON line per version.
         ("GET", p) if p.starts_with("/index/") => {
@@ -632,21 +606,10 @@ fn route(
             let artifact = req["artifact"].as_str().unwrap_or("").as_bytes().to_vec();
             let sig = req["signature"].as_str().and_then(hex_decode);
             let claimed = req.get("authority");
-            let sub = Submission {
-                token,
-                name,
-                version,
-                artifact: &artifact,
-                signature: sig.as_deref(),
-                claimed,
-            };
+            let sub = Submission { token, name, version, artifact: &artifact, signature: sig.as_deref(), claimed };
             match reg.publish_submission(&sub, |a| recompute(a)) {
-                PublishOutcome::Accepted { name, version } => {
-                    ("200 OK", json!({"published": name, "version": version}))
-                }
-                PublishOutcome::Refused { code, reason } => {
-                    ("400 Bad Request", json!({"code": code, "error": reason}))
-                }
+                PublishOutcome::Accepted { name, version } => ("200 OK", json!({"published": name, "version": version})),
+                PublishOutcome::Refused { code, reason } => ("400 Bad Request", json!({"code": code, "error": reason})),
             }
         }
         ("POST", "/yank") => {
@@ -658,9 +621,7 @@ fn route(
                 PublishOutcome::Accepted { name, version } => {
                     ("200 OK", json!({"yanked": yanked, "name": name, "version": version}))
                 }
-                PublishOutcome::Refused { code, reason } => {
-                    ("400 Bad Request", json!({"code": code, "error": reason}))
-                }
+                PublishOutcome::Refused { code, reason } => ("400 Bad Request", json!({"code": code, "error": reason})),
             }
         }
         // The advisory feed (10k). GET is public — a build must be able to fetch advisories with
@@ -676,12 +637,8 @@ fn route(
                 return ("400 Bad Request", json!({"code": "DL1706", "error": "malformed request"}));
             };
             match reg.file_advisory(token, &req) {
-                PublishOutcome::Accepted { name, version } => {
-                    ("200 OK", json!({"advisory": version, "package": name}))
-                }
-                PublishOutcome::Refused { code, reason } => {
-                    ("400 Bad Request", json!({"code": code, "error": reason}))
-                }
+                PublishOutcome::Accepted { name, version } => ("200 OK", json!({"advisory": version, "package": name})),
+                PublishOutcome::Refused { code, reason } => ("400 Bad Request", json!({"code": code, "error": reason})),
             }
         }
         ("GET", "/health") => ("200 OK", json!({"status": "ok"})),

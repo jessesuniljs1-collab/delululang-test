@@ -75,8 +75,7 @@ fn each_direction_works_when_it_is_asked_for_once() {
         rep.to_str().unwrap(),
     ]);
     assert_eq!(on.status.code(), Some(0), "{}", out(&on));
-    let report: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
     assert_eq!(report["sandbox"]["level"], 1, "the on run must report a confined level: {report}");
 
     let _ = std::fs::remove_file(dir.join("out").join("made.txt"));
@@ -103,10 +102,7 @@ fn a_command_line_that_asks_for_both_is_refused_in_either_order() {
         let text = out(&o);
         assert_eq!(o.status.code(), Some(2), "{text}");
         assert!(text.contains("different answers"), "the refusal must say what is contradictory: {text}");
-        assert!(
-            !dir.join("out").join("made.txt").exists(),
-            "a refused command line must perform nothing: {text}"
-        );
+        assert!(!dir.join("out").join("made.txt").exists(), "a refused command line must perform nothing: {text}");
     }
     // Falsification: the SAME answer twice is not a contradiction, so this must still run. Without
     // it the test above would pass for a rule that merely forbade repeating the flag.
@@ -154,15 +150,7 @@ fn audit_performs_nothing_and_strict_performs_it() {
 fn an_unknown_mode_refuses_rather_than_falling_back() {
     let dir = tmp("badmode");
     let (src, scope) = writer(&dir);
-    let o = delulu(&[
-        "run",
-        src.to_str().unwrap(),
-        "--sandbox",
-        "--mode",
-        "audit-ish",
-        "--grant",
-        &format!("fs.write={scope}"),
-    ]);
+    let o = delulu(&["run", src.to_str().unwrap(), "--sandbox", "--mode", "audit-ish", "--grant", &format!("fs.write={scope}")]);
     assert_eq!(o.status.code(), Some(2), "{}", out(&o));
     assert!(out(&o).contains("is not a mode this command knows"), "{}", out(&o));
     assert!(!dir.join("out").join("made.txt").exists(), "nothing ran");
@@ -185,11 +173,7 @@ fn a_sandbox_flag_without_a_sandbox_is_refused_not_ignored() {
     let made = dir.join("out").join("made.txt");
     // `--limits` was on this list until PS-B-01. An ordinary run has budgets now (D-V2-25), so the
     // flag is APPLIED to it, and the test below proves that instead of the refusal.
-    for flag in [
-        vec!["--mode", "audit"],
-        vec!["--mode", "strict"],
-        vec!["--sandbox-profile", "hostile-agent"],
-    ] {
+    for flag in [vec!["--mode", "audit"], vec!["--mode", "strict"], vec!["--sandbox-profile", "hostile-agent"]] {
         let _ = std::fs::remove_file(&made);
         let mut args = vec!["run", src.to_str().unwrap(), "--grant", &grant];
         args.extend(flag.iter().copied());
@@ -406,8 +390,7 @@ fn a_program_cannot_relax_its_own_sandbox_because_there_is_nothing_to_call() {
     let dir = tmp("selfrelax");
     for method in ["sandbox_off", "set_mode", "break_glass", "escape"] {
         let src = dir.join(format!("{method}.delulu"));
-        std::fs::write(&src, format!("module g\n\nfn main(root: Root) {{\n    let _ = root.{method}()\n}}\n"))
-            .unwrap();
+        std::fs::write(&src, format!("module g\n\nfn main(root: Root) {{\n    let _ = root.{method}()\n}}\n")).unwrap();
         let o = delulu(&["check", src.to_str().unwrap()]);
         assert_ne!(o.status.code(), Some(0), "`root.{method}()` checked clean: {}", out(&o));
         // And under a sandbox it is refused too, having run nothing.
@@ -417,8 +400,7 @@ fn a_program_cannot_relax_its_own_sandbox_because_there_is_nothing_to_call() {
     // Falsification: a method that DOES exist checks clean, so the refusals above are about these
     // names being absent rather than about calls on `root` failing in general.
     let real = dir.join("real.delulu");
-    std::fs::write(&real, "module g\n\nfn main(root: Root) ! {Write} {\n    let _ = root.fs_write(\"out\")\n}\n")
-        .unwrap();
+    std::fs::write(&real, "module g\n\nfn main(root: Root) ! {Write} {\n    let _ = root.fs_write(\"out\")\n}\n").unwrap();
     let o = delulu(&["check", real.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     let _ = std::fs::remove_dir_all(&dir);
@@ -445,11 +427,7 @@ fn a_scope_that_was_never_granted_is_still_refused_inside_the_sandbox() {
     .unwrap();
     let o = delulu(&["run", src.to_str().unwrap(), "--sandbox", "--grant", &format!("fs.write={scope}")]);
     assert_ne!(o.status.code(), Some(0), "a scope that was never granted was reached: {}", out(&o));
-    assert!(
-        !dir.join("elsewhere").join("leaked.txt").exists(),
-        "a file appeared outside the granted scope: {}",
-        out(&o)
-    );
+    assert!(!dir.join("elsewhere").join("leaked.txt").exists(), "a file appeared outside the granted scope: {}", out(&o));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

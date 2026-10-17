@@ -80,7 +80,11 @@ fn verify_under_a_lease_is_computed_by_the_broker_and_gated_by_the_guard() {
     }
 
     // A value in `--secret` is refused, and says where values go.
-    let bad = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write,Declassify", "--secret", "KEY=hunter2", "--owner", &owner]);
+    let bad = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Write,Declassify", "--secret", "KEY=hunter2", "--owner", &owner],
+    );
     assert_eq!(bad.status.code(), Some(2), "{}", text(&bad));
     assert!(text(&bad).contains("delulu secrets set KEY VALUE"), "{}", text(&bad));
 
@@ -88,8 +92,20 @@ fn verify_under_a_lease_is_computed_by_the_broker_and_gated_by_the_guard() {
         &cwd,
         &state,
         &[
-            "grants", "delegate", "--effects", "Write,Declassify", "--secret", "KEY", "--secret", "SAME", "--secret", "DIFF",
-            "--multi", "--owner", &owner, "--json",
+            "grants",
+            "delegate",
+            "--effects",
+            "Write,Declassify",
+            "--secret",
+            "KEY",
+            "--secret",
+            "SAME",
+            "--secret",
+            "DIFF",
+            "--multi",
+            "--owner",
+            &owner,
+            "--json",
         ],
     );
     assert!(del.status.success(), "delegate: {}", text(&del));
@@ -105,7 +121,19 @@ fn verify_under_a_lease_is_computed_by_the_broker_and_gated_by_the_guard() {
     let q = delulu_in(
         &cwd,
         &state,
-        &["guard", "request", &node, "--use", "declassify:KEY", "--use", "declassify:SAME", "--use", "declassify:DIFF", "--why", "compare"],
+        &[
+            "guard",
+            "request",
+            &node,
+            "--use",
+            "declassify:KEY",
+            "--use",
+            "declassify:SAME",
+            "--use",
+            "declassify:DIFF",
+            "--why",
+            "compare",
+        ],
     );
     assert!(q.status.success(), "request: {}", text(&q));
     let req = String::from_utf8_lossy(&q.stdout).trim().to_string();
@@ -146,7 +174,8 @@ fn main(root: Root) ! {Write, Declassify} {
     assert!(a.status.success(), "audit verify: {}", text(&a));
 
     // A secret the broker never stored says how to store it, rather than naming a scope.
-    let del2 = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write,Declassify", "--secret", "NEVER", "--owner", &owner]);
+    let del2 =
+        delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write,Declassify", "--secret", "NEVER", "--owner", &owner]);
     let tok2 = String::from_utf8_lossy(&del2.stdout).trim().to_string();
     std::fs::write(
         cwd.join("nv.delulu"),

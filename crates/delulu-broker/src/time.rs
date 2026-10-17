@@ -17,10 +17,7 @@ pub struct SystemClock;
 impl ClockSource for SystemClock {
     fn now_millis(&self) -> i64 {
         use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0)
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
     }
 }
 

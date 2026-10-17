@@ -21,7 +21,7 @@ use crate::check::check_module;
 use crate::manifest::{AuthoritySpec, DepSource, Manifest};
 use crate::package::{load_package_into, ModuleUnit};
 use crate::program::{build_kind, dup, insert_unique_type, push_prelude, Program};
-use crate::resolve::{classify_generics, ConstSig, DeclTable, ForeignDef, ForeignFnDef, FnSig, TypeDef};
+use crate::resolve::{classify_generics, ConstSig, DeclTable, FnSig, ForeignDef, ForeignFnDef, TypeDef};
 use crate::ty::{ResourceKind, TypeDefId};
 
 /// One resolved package in the workspace.
@@ -110,13 +110,7 @@ fn canonical(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn resolve_dir(
-    ws: &mut Workspace,
-    dir: &Path,
-    root_dir: &Path,
-    is_root: bool,
-    stack: &mut Vec<String>,
-) -> Option<usize> {
+fn resolve_dir(ws: &mut Workspace, dir: &Path, root_dir: &Path, is_root: bool, stack: &mut Vec<String>) -> Option<usize> {
     let manifest_path = dir.join("delulu.toml");
     let raw = match std::fs::read_to_string(&manifest_path) {
         Ok(s) => s,
@@ -170,7 +164,9 @@ fn resolve_dir(
             ws.diagnostics.push(
                 Diagnostic::error(
                     "DL1008",
-                    format!("package `{name}` is required from two different sources — versions/authority could differ invisibly"),
+                    format!(
+                        "package `{name}` is required from two different sources — versions/authority could differ invisibly"
+                    ),
                 )
                 .with_span(Span::new(file, 0, 0), "second source of this package name"),
             );
@@ -206,8 +202,11 @@ fn resolve_dir(
                 let dep_dir = dir.join(rel);
                 if !dep_dir.join("delulu.toml").exists() {
                     ws.diagnostics.push(
-                        Diagnostic::error("DL1004", format!("path dependency `{}` not found at `{}`", dep.name, dep_dir.display()))
-                            .with_span(manifest.dep_span(&dep.name), "no package at this path"),
+                        Diagnostic::error(
+                            "DL1004",
+                            format!("path dependency `{}` not found at `{}`", dep.name, dep_dir.display()),
+                        )
+                        .with_span(manifest.dep_span(&dep.name), "no package at this path"),
                     );
                     continue;
                 }
@@ -220,8 +219,11 @@ fn resolve_dir(
             DepSource::Git { rev, tag, .. } => {
                 if rev.is_none() && tag.is_none() {
                     ws.diagnostics.push(
-                        Diagnostic::error("DL1007", format!("git dependency `{}` must pin `rev` or `tag` (floating branches are forbidden)", dep.name))
-                            .with_span(manifest.dep_span(&dep.name), "add `rev = \"...\"` or `tag = \"...\"`"),
+                        Diagnostic::error(
+                            "DL1007",
+                            format!("git dependency `{}` must pin `rev` or `tag` (floating branches are forbidden)", dep.name),
+                        )
+                        .with_span(manifest.dep_span(&dep.name), "add `rev = \"...\"` or `tag = \"...\"`"),
                     );
                 } else {
                     ws.git_deferred.push(dep.name.clone());
@@ -376,8 +378,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
 
     // Which module owns each source file, so a diagnostic that lands outside the module being
     // checked can be attributed to the module whose text it actually is (C58).
-    let file_owner: HashMap<delulu_diag::FileId, usize> =
-        (0..n).map(|gi| (ws.modules[gi].unit.file, gi)).collect();
+    let file_owner: HashMap<delulu_diag::FileId, usize> = (0..n).map(|gi| (ws.modules[gi].unit.file, gi)).collect();
 
     for gi in 0..n {
         let unit = &ws.modules[gi].unit;
@@ -428,8 +429,14 @@ pub fn check_workspace(ws: &Workspace) -> Program {
             }
             if candidates.len() > 1 {
                 diagnostics.push(
-                    Diagnostic::error("DL1006", format!("import `{target}` is ambiguous between a local module and a dependency"))
-                        .with_span(imp.span, "rename the local module or alias the dependency — imports are never resolved by guessing"),
+                    Diagnostic::error(
+                        "DL1006",
+                        format!("import `{target}` is ambiguous between a local module and a dependency"),
+                    )
+                    .with_span(
+                        imp.span,
+                        "rename the local module or alias the dependency — imports are never resolved by guessing",
+                    ),
                 );
             }
             let tgi = candidates[0];
@@ -489,7 +496,8 @@ pub fn check_workspace(ws: &Workspace) -> Program {
             }
         }
 
-        let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, actors: HashMap::new(), fn_order };
+        let table =
+            DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, actors: HashMap::new(), fn_order };
         let result = check_module(&unit.module, &table);
         diagnostics.extend(reframe_foreign_scope_errors(&result.diags, gi, ws, &owned_types, &file_owner));
         for (name, f) in result.facts {
@@ -721,22 +729,15 @@ pub fn check_self_authority(ws: &Workspace, program: &Program) -> Vec<Diagnostic
                 );
             }
         }
-        let declared_secrets: HashSet<&str> =
-            pkg.manifest.authority.secrets.iter().map(|s| s.as_str()).collect();
+        let declared_secrets: HashSet<&str> = pkg.manifest.authority.secrets.iter().map(|s| s.as_str()).collect();
         for s in &auth.secrets {
             if !declared_secrets.contains(s.as_str()) {
                 diags.push(
                     Diagnostic::error(
                         "DL1009",
-                        format!(
-                            "package `{}` reads secret `{s}` not permitted by its authority manifest",
-                            pkg.name
-                        ),
+                        format!("package `{}` reads secret `{s}` not permitted by its authority manifest", pkg.name),
                     )
-                    .with_span(
-                        pkg.manifest.secrets_span(),
-                        format!("add `\"{s}\"` to `[authority] secrets` in delulu.toml"),
-                    ),
+                    .with_span(pkg.manifest.secrets_span(), format!("add `\"{s}\"` to `[authority] secrets` in delulu.toml")),
                 );
             }
         }
@@ -832,7 +833,16 @@ fn compute_exports_gi(
                 continue;
             }
             let child = compute_exports_gi(
-                tgi, ws, owned_types, owned_fns, owned_consts, owned_effects, gi_by_pkg_name, visiting, reported, diags,
+                tgi,
+                ws,
+                owned_types,
+                owned_fns,
+                owned_consts,
+                owned_effects,
+                gi_by_pkg_name,
+                visiting,
+                reported,
+                diags,
             );
             ex.types.extend(child.types);
             ex.fns.extend(child.fns);
@@ -1168,10 +1178,7 @@ mod tests {
             assert!(err_codes(&prog).is_empty(), "{name} should check clean: {:?}", prog.diagnostics);
             crate::lockfile::compute_entry(&ws, &prog, 0)
         };
-        let v1 = mk(
-            "secret_v1",
-            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n",
-        );
+        let v1 = mk("secret_v1", "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n");
         let v2 = mk(
             "secret_v2",
             "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n\
@@ -1205,20 +1212,13 @@ mod tests {
         // dimension the ceiling does not mention is a dimension it does not bound.
         let dir = scratch("undeclared_secret");
         write(&dir, "delulu.toml", LIB); // `[authority] effects=[]`, no `secrets` key at all
-        write(
-            &dir,
-            "src/root.delulu",
-            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
-        );
+        write(&dir, "src/root.delulu", "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n");
         let ws = resolve_workspace(&dir);
         let prog = check_workspace(&ws);
         // `check_self_authority` is the ceiling gate the CLI composes (it is not part of
         // `check_workspace`, which computes facts); call it the same way `delulu build` does.
         let diags = check_self_authority(&ws, &prog);
-        let d = diags
-            .iter()
-            .find(|d| d.code == "DL1009")
-            .unwrap_or_else(|| panic!("expected DL1009, got {diags:?}"));
+        let d = diags.iter().find(|d| d.code == "DL1009").unwrap_or_else(|| panic!("expected DL1009, got {diags:?}"));
         assert!(d.message.contains("DB_PASSWORD"), "the message must name the secret: {}", d.message);
     }
 
@@ -1231,11 +1231,7 @@ mod tests {
             "delulu.toml",
             "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\nsecrets=[\"DB_PASSWORD\"]\n",
         );
-        write(
-            &dir,
-            "src/root.delulu",
-            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
-        );
+        write(&dir, "src/root.delulu", "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n");
         let ws = resolve_workspace(&dir);
         let prog = check_workspace(&ws);
         assert!(err_codes(&prog).is_empty(), "{:?}", prog.diagnostics);
@@ -1276,20 +1272,9 @@ mod tests {
         let ws = resolve_workspace(&app);
         let prog = check_workspace(&ws);
         let diags = check_pins(&ws, &prog);
-        let d = diags
-            .iter()
-            .find(|d| d.code == "DL1001")
-            .unwrap_or_else(|| panic!("expected DL1001, got {diags:?}"));
-        assert!(
-            d.message.contains("DB_PASSWORD"),
-            "the message must name the secret outside the pin: {}",
-            d.message
-        );
-        assert!(
-            !d.message.contains("TELEMETRY_TOKEN"),
-            "the pinned secret is permitted and must not be reported: {}",
-            d.message
-        );
+        let d = diags.iter().find(|d| d.code == "DL1001").unwrap_or_else(|| panic!("expected DL1001, got {diags:?}"));
+        assert!(d.message.contains("DB_PASSWORD"), "the message must name the secret outside the pin: {}", d.message);
+        assert!(!d.message.contains("TELEMETRY_TOKEN"), "the pinned secret is permitted and must not be reported: {}", d.message);
     }
 
     /// **DEPPIN-LEX-1 regression lock.** Two spellings of the same out-of-pin location must both be
@@ -1353,7 +1338,11 @@ mod tests {
         write(&dir, "src/facade.delulu", "module p.facade\nimport p.inner\npub fn via() -> Int { helper() }\n");
         write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn bad() -> Int { helper() }\n");
         let prog = check_workspace(&resolve_workspace(&dir));
-        assert!(err_codes(&prog).iter().any(|c| c == "DL0301"), "helper must NOT leak through a plain import: {:?}", prog.diagnostics);
+        assert!(
+            err_codes(&prog).iter().any(|c| c == "DL0301"),
+            "helper must NOT leak through a plain import: {:?}",
+            prog.diagnostics
+        );
     }
 
     // ===== C58 · the report lands where the reader can act on it ============================
@@ -1372,11 +1361,7 @@ mod tests {
         let dir = scratch(name);
         write(&dir, "delulu.toml", LIB);
         write(&dir, "src/inner.delulu", "module p.inner\npub type Sample { v: Int }\n");
-        write(
-            &dir,
-            "src/facade.delulu",
-            "module p.facade\nimport p.inner\npub fn widen(s: Sample) -> Int { s.v }\n",
-        );
+        write(&dir, "src/facade.delulu", "module p.facade\nimport p.inner\npub fn widen(s: Sample) -> Int { s.v }\n");
         write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn go() -> Int { widen(0) }\n");
         dir
     }
@@ -1403,9 +1388,7 @@ mod tests {
 
         // It is reported against the module that actually cannot compile.
         assert!(
-            prog.diagnostics
-                .iter()
-                .any(|d| d.is_error() && d.primary_span().map(|s| s.file == root_file).unwrap_or(false)),
+            prog.diagnostics.iter().any(|d| d.is_error() && d.primary_span().map(|s| s.file == root_file).unwrap_or(false)),
             "the importer must be told: {:?}",
             prog.diagnostics
         );
@@ -1426,18 +1409,10 @@ mod tests {
     #[test]
     fn applying_the_suggested_re_export_builds_clean() {
         let dir = unexported_type_workspace("c58fix");
-        write(
-            &dir,
-            "src/facade.delulu",
-            "module p.facade\npub import p.inner\npub fn widen(s: Sample) -> Int { s.v }\n",
-        );
+        write(&dir, "src/facade.delulu", "module p.facade\npub import p.inner\npub fn widen(s: Sample) -> Int { s.v }\n");
         // With the re-export in place `Sample` reaches the root, so the call can be written the way
         // it always should have been — which is the point: the advice restores the whole type.
-        write(
-            &dir,
-            "src/root.delulu",
-            "module p\nimport p.facade\npub fn go() -> Int { widen(Sample { v: 1 }) }\n",
-        );
+        write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn go() -> Int { widen(Sample { v: 1 }) }\n");
         let prog = check_workspace(&resolve_workspace(&dir));
         assert!(err_codes(&prog).is_empty(), "the suggested fix must work: {:?}", prog.diagnostics);
     }
@@ -1450,11 +1425,7 @@ mod tests {
         write(&dir, "delulu.toml", LIB);
         write(&dir, "src/root.delulu", "module p\ntype Sample { v: Int }\npub fn f(s: Smaple) -> Int { 1 }\n");
         let prog = check_workspace(&resolve_workspace(&dir));
-        let d = prog
-            .diagnostics
-            .iter()
-            .find(|d| d.code == "DL0301")
-            .expect("the typo must still be refused");
+        let d = prog.diagnostics.iter().find(|d| d.code == "DL0301").expect("the typo must still be refused");
         assert_eq!(d.message, "unknown type `Smaple`", "a typo must not be decorated with a guess");
     }
 

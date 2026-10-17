@@ -35,12 +35,7 @@ fn no_holder_kind_branching_outside_allowlisted_display() {
             let is_comment = trimmed.starts_with("//");
             let is_allowlisted = line.contains(ALLOW_MARKER);
             if !is_comment && !is_allowlisted {
-                offending.push(format!(
-                    "{}:{}: {}",
-                    path.file_name().unwrap().to_string_lossy(),
-                    i + 1,
-                    line.trim()
-                ));
+                offending.push(format!("{}:{}: {}", path.file_name().unwrap().to_string_lossy(), i + 1, line.trim()));
             }
         }
     }

@@ -106,11 +106,7 @@ pub fn extract(f: &ScannedFile, b: &mut Builder) {
     // configuration into the pinned-stable workspace is exactly what the separate table prevents.
     // Counting it as a member would have made every "13 workspace members" sentence in the
     // documentation wrong, which is how this was noticed at all — the stale-count gate fired.
-    let kind = if f.text.lines().any(|l| l.trim() == "[workspace]") {
-        NodeKind::SeparateWorkspaceCrate
-    } else {
-        NodeKind::Crate
-    };
+    let kind = if f.text.lines().any(|l| l.trim() == "[workspace]") { NodeKind::SeparateWorkspaceCrate } else { NodeKind::Crate };
     let n = b.node(&crate_id, kind, &name);
     n.path = Some(crate_dir.to_string());
     if !description.is_empty() {
@@ -244,12 +240,8 @@ mod tests {
             ),
             &mut b,
         );
-        let found: Vec<&str> = b
-            .edges
-            .iter()
-            .filter(|e| e.from == "workspace")
-            .map(|e| e.to.trim_start_matches("crate:"))
-            .collect();
+        let found: Vec<&str> =
+            b.edges.iter().filter(|e| e.from == "workspace").map(|e| e.to.trim_start_matches("crate:")).collect();
         assert_eq!(found, vec!["delulu-diag", "delulu-survey"], "a comment became a crate");
     }
 

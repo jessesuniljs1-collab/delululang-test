@@ -23,8 +23,7 @@ fn repo_root() -> PathBuf {
 /// allowing that would make this gate unfailable — the shape the campaign keeps finding (a gate that
 /// cannot fail is not a gate). A group has to be specific enough that a reader following it lands on
 /// a handful of related files.
-const NOT_A_GROUP: &[&str] =
-    &["", ".", "docs", "crates", "tests", "measurements", "examples", "scripts", ".github", "morphs"];
+const NOT_A_GROUP: &[&str] = &["", ".", "docs", "crates", "tests", "measurements", "examples", "scripts", ".github", "morphs"];
 
 /// Is `path` accounted for by §5's text? Three ways, in the document's own words: "by name or by its
 /// group" — an exact path, a bare file name, or a directory §5 lists that contains it.
@@ -52,9 +51,7 @@ fn accounted_for(path: &str, section5: &str) -> bool {
 fn section5() -> String {
     let doc = std::fs::read_to_string(repo_root().join("docs").join("REPOSITORY_STRUCTURE.md"))
         .expect("REPOSITORY_STRUCTURE.md is committed");
-    let at = doc
-        .find("## 5. Every document in this repository")
-        .expect("§5 must exist — it is the section this gate checks");
+    let at = doc.find("## 5. Every document in this repository").expect("§5 must exist — it is the section this gate checks");
     doc[at..].to_string()
 }
 
@@ -120,11 +117,7 @@ fn the_accounting_rule_refuses_a_file_nobody_listed() {
     }
     // And the positive control, so the rule is not simply "refuse everything": a real file named by
     // path, one named by bare name, and one covered by the group §5 declares for agents' notes.
-    for p in [
-        "docs/REMAINING_WORK.md",
-        "HANDOFF.md",
-        "docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md",
-    ] {
+    for p in ["docs/REMAINING_WORK.md", "HANDOFF.md", "docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md"] {
         assert!(accounted_for(p, &s5), "`{p}` is accounted for and the rule must say so");
     }
 }
@@ -181,6 +174,7 @@ fn the_repeated_heading_rule_finds_the_shape_it_was_written_for_and_nothing_else
     assert_eq!(repeated_headings(shape).len(), 1, "the 52b2572 shape must be found");
     let spaced = "### Evidence\n\n\n### Evidence\n";
     assert_eq!(repeated_headings(spaced).len(), 1, "blank lines between do not hide a repeat");
-    let control = "## 2026-10-11\n### Evidence\ntext\n## 2026-10-12\n### Evidence\ntext\n```\n# x\n# x\n```\n#hashtag\n#hashtag\n";
+    let control =
+        "## 2026-10-11\n### Evidence\ntext\n## 2026-10-12\n### Evidence\ntext\n```\n# x\n# x\n```\n#hashtag\n#hashtag\n";
     assert!(repeated_headings(control).is_empty(), "{:?}", repeated_headings(control));
 }

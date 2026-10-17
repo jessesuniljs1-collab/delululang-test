@@ -215,11 +215,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     register_plugin_prelude(&mut table);
     // Stage 10 (10e): `ActuateErr` — appended LAST, mirroring `program.rs` exactly (the
     // two-paths order law).
-    register_prelude_type(
-        &mut table,
-        "ActuateErr",
-        &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])],
-    );
+    register_prelude_type(&mut table, "ActuateErr", &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])]);
     // Stage 10 (10h, Track F): `ComputeErr` — appended after `ActuateErr` in BOTH paths, because
     // the order law pins every prelude type's id by position.
     register_prelude_type(
@@ -243,15 +239,12 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
             }
             let id = TypeDefId(table.types.len() as u32);
             let kind = match &td.kind {
-                TypeDeclKind::Record(fields) => TypeDefKind::Record(
-                    fields.iter().map(|f| (f.name.name.clone(), f.ty.clone())).collect(),
-                ),
-                TypeDeclKind::Sum(variants) => TypeDefKind::Sum(
-                    variants
-                        .iter()
-                        .map(|v| (v.name.name.clone(), v.fields.clone()))
-                        .collect(),
-                ),
+                TypeDeclKind::Record(fields) => {
+                    TypeDefKind::Record(fields.iter().map(|f| (f.name.name.clone(), f.ty.clone())).collect())
+                }
+                TypeDeclKind::Sum(variants) => {
+                    TypeDefKind::Sum(variants.iter().map(|v| (v.name.name.clone(), v.fields.clone())).collect())
+                }
                 TypeDeclKind::Alias(t) => TypeDefKind::Alias(t.clone()),
             };
             table.types.push(TypeDef { name: td.name.name.clone(), generics: gen_names(&td.generics), kind });
@@ -292,12 +285,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
             let fns = fd
                 .fns
                 .iter()
-                .map(|f| ForeignFnDef {
-                    name: f.name.name.clone(),
-                    params: f.params.clone(),
-                    ret: f.ret.clone(),
-                    span: f.span,
-                })
+                .map(|f| ForeignFnDef { name: f.name.name.clone(), params: f.params.clone(), ret: f.ret.clone(), span: f.span })
                 .collect();
             table.foreigns.insert(name.clone(), ForeignDef { abi: fd.abi.clone(), name, fns });
         }
@@ -309,10 +297,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     // build-order §5). Registered before user actors so a user `actor Promise` is a dup.
     {
         let (std_mod, std_diags) = delulu_syntax::parse_file(u32::MAX, STD_ACTORS_SRC);
-        debug_assert!(
-            !std_diags.iter().any(|d| d.is_error()),
-            "std.actors must parse clean: {std_diags:?}"
-        );
+        debug_assert!(!std_diags.iter().any(|d| d.is_error()), "std.actors must parse clean: {std_diags:?}");
         for item in &std_mod.items {
             if let Item::Actor(a) = item {
                 table.actors.insert(a.name.name.clone(), actor_def_of(a));
@@ -324,10 +309,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     for item in &module.items {
         if let Item::Actor(a) = item {
             let name = a.name.name.clone();
-            if table.type_ix.contains_key(&name)
-                || table.foreigns.contains_key(&name)
-                || table.actors.contains_key(&name)
-            {
+            if table.type_ix.contains_key(&name) || table.foreigns.contains_key(&name) || table.actors.contains_key(&name) {
                 diags.push(dup("type", &a.name));
                 continue;
             }
@@ -411,11 +393,7 @@ fn register_prelude_type(table: &mut DeclTable, name: &str, variants: &[(&str, &
 /// single-module (`resolve`) and whole-program (`program::push_prelude`) paths so a `TypeDefId`
 /// means the same thing on both.
 pub(crate) fn register_plugin_prelude(table: &mut DeclTable) {
-    register_prelude_record(
-        table,
-        "Limits",
-        &[("fuel", "Int"), ("mem_mb", "Int"), ("wall_ms", "Int")],
-    );
+    register_prelude_record(table, "Limits", &[("fuel", "Int"), ("mem_mb", "Int"), ("wall_ms", "Int")]);
     // `Grant` carries List[Str] scope dimensions plus a nested `Limits` and `require_signed`.
     let id = TypeDefId(table.types.len() as u32);
     table.types.push(TypeDef {
@@ -491,8 +469,7 @@ fn gen_names(gs: &[Ident]) -> Vec<String> {
 }
 
 fn dup(what: &str, name: &Ident) -> Diagnostic {
-    Diagnostic::error("DL0302", format!("duplicate {what} definition `{}`", name.name))
-        .with_span(name.span, "already defined")
+    Diagnostic::error("DL0302", format!("duplicate {what} definition `{}`", name.name)).with_span(name.span, "already defined")
 }
 
 /// Refuse a declaration that reuses a prelude builtin's name (DL0302).
@@ -511,14 +488,11 @@ fn shadows_a_builtin(what: &str, name: &Ident) -> Option<Diagnostic> {
         return None;
     }
     Some(
-        Diagnostic::error(
-            "DL0302",
-            format!("`{}` is a prelude builtin and cannot be redefined as a {what}", name.name),
-        )
-        .with_span(
-            name.span,
-            "calls resolve to the builtin before user scope, so this definition would never be called — rename it",
-        ),
+        Diagnostic::error("DL0302", format!("`{}` is a prelude builtin and cannot be redefined as a {what}", name.name))
+            .with_span(
+                name.span,
+                "calls resolve to the builtin before user scope, so this definition would never be called — rename it",
+            ),
     )
 }
 
@@ -536,16 +510,10 @@ pub(crate) fn shadows_a_builtin_type(what: &str, name: &Ident) -> Option<Diagnos
     if !crate::check::PRELUDE_TYPES.contains(&name.name.as_str()) {
         return None;
     }
-    Some(
-        Diagnostic::error(
-            "DL0302",
-            format!("`{}` is a builtin type and cannot be redefined as a {what}", name.name),
-        )
-        .with_span(
-            name.span,
-            "types resolve to the builtin before user scope, so this definition would never take effect — rename it",
-        ),
-    )
+    Some(Diagnostic::error("DL0302", format!("`{}` is a builtin type and cannot be redefined as a {what}", name.name)).with_span(
+        name.span,
+        "types resolve to the builtin before user scope, so this definition would never take effect — rename it",
+    ))
 }
 
 /// Refuse an `effect` declaration that reuses a CORE effect name (DL0302, C23).
@@ -558,16 +526,10 @@ pub(crate) fn shadows_a_core_effect(name: &Ident) -> Option<Diagnostic> {
     if !crate::check::CORE_EFFECT_NAMES.contains(&name.name.as_str()) {
         return None;
     }
-    Some(
-        Diagnostic::error(
-            "DL0302",
-            format!("`{}` is a core effect and cannot be redeclared", name.name),
-        )
-        .with_span(
-            name.span,
-            "rows resolve core effects before user effects, so this declaration would never take effect — rename it",
-        ),
-    )
+    Some(Diagnostic::error("DL0302", format!("`{}` is a core effect and cannot be redeclared", name.name)).with_span(
+        name.span,
+        "rows resolve core effects before user effects, so this declaration would never take effect — rename it",
+    ))
 }
 
 /// Classify a function's generics (DL0410 if a name is used as both a type and a row).
@@ -695,12 +657,7 @@ fn actor_def_of(a: &ActorDecl) -> ActorDef {
         behaviors: a
             .behaviors
             .iter()
-            .map(|b| ActorBehavior {
-                name: b.name.name.clone(),
-                params: b.params.clone(),
-                row: b.row.clone(),
-                span: b.span,
-            })
+            .map(|b| ActorBehavior { name: b.name.name.clone(), params: b.params.clone(), row: b.row.clone(), span: b.span })
             .collect(),
         fns: a
             .fns

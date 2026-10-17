@@ -207,10 +207,7 @@ fn an_operator_revoke_stops_a_healthy_arm_and_the_supervisor_lives_to_report_it(
 
     // Property 3: the program was told, in the language, and kept running afterwards.
     assert!(so.contains("SUPERVISOR UP"), "the run must have started: {so}\n{se}");
-    assert!(
-        so.contains("REVOKED:"),
-        "losing the arm must reach the program as LeaseRevoked:\nstdout:\n{so}\nstderr:\n{se}"
-    );
+    assert!(so.contains("REVOKED:"), "losing the arm must reach the program as LeaseRevoked:\nstdout:\n{so}\nstderr:\n{se}");
     assert!(
         so.contains("SUPERVISOR DOWN"),
         "the supervisor must SURVIVE losing its arm — a revoked device is not a crashed process:\n{so}"
@@ -223,10 +220,7 @@ fn an_operator_revoke_stops_a_healthy_arm_and_the_supervisor_lives_to_report_it(
         lines[..first_revoked].iter().any(|l| l.trim() == "COMMANDED"),
         "the arm must have been driving BEFORE the e-stop, or the test proves nothing:\n{so}"
     );
-    assert!(
-        !lines[first_revoked..].iter().any(|l| l.trim() == "COMMANDED"),
-        "no command may succeed after the revoke:\n{so}"
-    );
+    assert!(!lines[first_revoked..].iter().any(|l| l.trim() == "COMMANDED"), "no command may succeed after the revoke:\n{so}");
 
     // Property 2: the fail-state engaged, journaled with the operator as the cause and the audit
     // seq that killed the node — not a fabricated missed heartbeat.
@@ -234,21 +228,12 @@ fn an_operator_revoke_stops_a_healthy_arm_and_the_supervisor_lives_to_report_it(
         se.contains("lease.revoked") && se.contains("operator-revoke"),
         "the trace must record the operator revocation:\n{se}"
     );
-    assert!(
-        se.contains("failstate.engaged"),
-        "the declared fail-state must actually engage:\n{se}"
-    );
-    assert!(
-        !se.contains("missed-heartbeat"),
-        "nothing here missed a beat — a 600 s heartbeat cannot expire in this test:\n{se}"
-    );
+    assert!(se.contains("failstate.engaged"), "the declared fail-state must actually engage:\n{se}");
+    assert!(!se.contains("missed-heartbeat"), "nothing here missed a beat — a 600 s heartbeat cannot expire in this test:\n{se}");
     // A sanity bound, not a published latency figure: the measured numbers live in
     // measurements/robotics-demo/RECORD.md, taken over repeated runs. This only catches an e-stop
     // that has silently become unbounded.
-    assert!(
-        revoke_returned < Duration::from_secs(10),
-        "`grants revoke` itself took {revoke_returned:?}"
-    );
+    assert!(revoke_returned < Duration::from_secs(10), "`grants revoke` itself took {revoke_returned:?}");
 }
 
 /// The control case. The identical program, the identical grant, the identical daemon — and
@@ -294,15 +279,8 @@ fn with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm() {
         !so.contains("REVOKED:") && !so.contains("REFUSED:"),
         "an unrevoked, in-envelope run loses nothing:\n{so}\n--- the journal ---\n{se}"
     );
-    assert!(
-        !se.contains("lease.revoked"),
-        "no lease may be revoked when no operator revoked one:\n{se}"
-    );
-    assert_eq!(
-        so.matches("COMMANDED").count(),
-        14,
-        "every one of the 14 commands must land:\n{so}"
-    );
+    assert!(!se.contains("lease.revoked"), "no lease may be revoked when no operator revoked one:\n{se}");
+    assert_eq!(so.matches("COMMANDED").count(), 14, "every one of the 14 commands must land:\n{so}");
 }
 
 /// The other e-stop, one level up: revoking the RUN's node — the parent — must also stop the arm,
@@ -364,10 +342,7 @@ fn revoking_the_parent_stops_the_arm_too_and_takes_the_program_with_it() {
     assert!(se.contains("failstate.engaged"), "the fail-state must engage:\n{se}");
     // And the program itself loses everything, console included — DL1403 on its next effect. This
     // assertion documents the blast radius rather than treating it as an accident.
-    assert!(
-        se.contains("DL1403"),
-        "revoking the run's own node ends the run — say so plainly:\n{se}"
-    );
+    assert!(se.contains("DL1403"), "revoking the run's own node ends the run — say so plainly:\n{se}");
 }
 
 /// A device's grant node must not outlive the run that minted it.
@@ -407,8 +382,17 @@ fn main(root: Root) ! {Write, Actuate} {
             &f.cwd,
             &f.state,
             &[
-                "run", "quick.delulu", "--broker", "daemon", "--grant", "console", "--grant",
-                GRANT, "--broker-profile", "sim", "--no-prompt",
+                "run",
+                "quick.delulu",
+                "--broker",
+                "daemon",
+                "--grant",
+                "console",
+                "--grant",
+                GRANT,
+                "--broker-profile",
+                "sim",
+                "--no-prompt",
             ],
         );
         assert!(o.status.success(), "{}", stderr(&o));
@@ -417,10 +401,7 @@ fn main(root: Root) ! {Write, Actuate} {
     let o = delulu_in(&f.cwd, &f.state, &["grants", "list"]);
     assert!(o.status.success(), "grants list: {}", stderr(&o));
     let listing = stdout(&o);
-    let ghosts: Vec<&str> = listing
-        .lines()
-        .filter(|l| l.contains("(device)") && l.contains("[live]"))
-        .collect();
+    let ghosts: Vec<&str> = listing.lines().filter(|l| l.contains("(device)") && l.contains("[live]")).collect();
     assert!(
         ghosts.is_empty(),
         "three finished runs left {} live device node(s) for an operator to aim at:\n{listing}",
@@ -446,26 +427,14 @@ fn the_grant_tree_shows_actuate_for_an_actuator_and_not_for_a_sensor() {
     let prog = "module m\nfn main(root: Root) ! {Write} { let c = root.console()\n c.println(\"hi\") }\n";
     std::fs::write(f.cwd.join("quiet.delulu"), prog).unwrap();
 
-    let o = delulu_in(
-        &f.cwd,
-        &f.state,
-        &["authority", "supervisor.delulu", "--json"],
-    );
+    let o = delulu_in(&f.cwd, &f.state, &["authority", "supervisor.delulu", "--json"]);
     assert!(o.status.success(), "authority: {}", stderr(&o));
-    assert!(
-        stdout(&o).contains("Actuate"),
-        "an actuator grant must show Actuate in the authority answer:\n{}",
-        stdout(&o)
-    );
+    assert!(stdout(&o).contains("Actuate"), "an actuator grant must show Actuate in the authority answer:\n{}", stdout(&o));
 
     // A sensor grant alone confers no Actuate — and no `Read` either. A sensor read is `Read` with
     // a SENSOR scope (spec §5.1); minting a bare `Read` effect here would hand the node the power
     // to read files, which nobody granted. The absence below is the whole point.
-    let o = delulu_in(
-        &f.cwd,
-        &f.state,
-        &["authority", "quiet.delulu", "--json"],
-    );
+    let o = delulu_in(&f.cwd, &f.state, &["authority", "quiet.delulu", "--json"]);
     assert!(o.status.success(), "authority: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("json");
     let text = v.to_string();
@@ -636,11 +605,7 @@ fn an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain() {
         .iter()
         .filter(|r| r["authority"]["op"] == "Actuate" && r["target"] == "arm0/elbow")
         .collect();
-    assert_eq!(
-        uses.len(),
-        14,
-        "each of the actor's commands must be a `use` in the chain, as each of main's is:\n{v}"
-    );
+    assert_eq!(uses.len(), 14, "each of the actor's commands must be a `use` in the chain, as each of main's is:\n{v}");
     let o = delulu_in(&f.cwd, &f.state, &["audit", "query", "--action", "issue", "--json"]);
     let issued: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit json");
     let run_node = issued["records"][0]["actor_node"].as_str().expect("the run's node").to_string();

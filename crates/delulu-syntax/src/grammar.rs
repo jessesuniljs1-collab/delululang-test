@@ -75,11 +75,7 @@ pub const NORMATIVE_NAME: &[(&str, &str)] = &[
 /// The name the normative grammar uses for `production` — itself, unless [`NORMATIVE_NAME`] says
 /// otherwise.
 pub fn normative_name(production: &str) -> &str {
-    NORMATIVE_NAME
-        .iter()
-        .find(|(p, _)| *p == production)
-        .map(|(_, n)| *n)
-        .unwrap_or(production)
+    NORMATIVE_NAME.iter().find(|(p, _)| *p == production).map(|(_, n)| *n).unwrap_or(production)
 }
 
 #[cfg(test)]
@@ -104,10 +100,7 @@ mod tests {
         let src = include_str!("parser.rs");
         for p in GRAMMAR_PRODUCTIONS {
             let needle = format!("fn parse_{p}(");
-            assert!(
-                src.contains(&needle),
-                "grammar production `{p}` has no `{needle}` in parser.rs — the index drifted"
-            );
+            assert!(src.contains(&needle), "grammar production `{p}` has no `{needle}` in parser.rs — the index drifted");
         }
     }
 
@@ -117,9 +110,6 @@ mod tests {
     #[test]
     fn a_bogus_production_is_not_found() {
         let src = include_str!("parser.rs");
-        assert!(
-            !src.contains("fn parse_definitely_not_a_production_9a("),
-            "the drift guard's needle is too loose to ever fail"
-        );
+        assert!(!src.contains("fn parse_definitely_not_a_production_9a("), "the drift guard's needle is too loose to ever fail");
     }
 }

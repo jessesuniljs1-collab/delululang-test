@@ -55,11 +55,7 @@ fn fixture_path() -> &'static str {
             .arg(&dll)
             .output()
             .expect("rustc must be runnable (tests run under cargo)");
-        assert!(
-            out.status.success(),
-            "fixture cdylib failed to compile: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        assert!(out.status.success(), "fixture cdylib failed to compile: {}", String::from_utf8_lossy(&out.stderr));
         dll.to_string_lossy().to_string()
     })
 }
@@ -207,11 +203,7 @@ fn marshalling_round_trips_int_bool_str_and_foreignptr() {
     // Int→int64_t and back; Bool→int32_t 0/1 and back; Str→(ptr,len) borrowed — the callee sees the
     // exact length AND readable bytes ('h' = 104); ForeignPtr→opaque void* round-trip (*ptr = 42).
     assert_eq!(lines, vec!["42", "true", "5", "104", "42"], "printed: {printed:?}");
-    assert_eq!(
-        sink.records().iter().filter(|r| r.effect == "ForeignCall").count(),
-        6,
-        "every foreign call is traced"
-    );
+    assert_eq!(sink.records().iter().filter(|r| r.effect == "ForeignCall").count(), 6, "every foreign call is traced");
 }
 
 #[test]

@@ -192,8 +192,7 @@ pub fn parse(spec: &str) -> Result<DeviceScope, String> {
     if dims.is_empty() {
         return Err("no bounded dimensions — a device grant that bounds nothing is not a grant".into());
     }
-    let heartbeat_ms = heartbeat_ms
-        .ok_or("no `heartbeat_ms` — a device grant with no dead-man is not a grant (spec §5.2)")?;
+    let heartbeat_ms = heartbeat_ms.ok_or("no `heartbeat_ms` — a device grant with no dead-man is not a grant (spec §5.2)")?;
     let ttl_ms = ttl_ms.ok_or("no `ttl_ms` — a device grant with no loan end is not a grant (spec §5.2)")?;
     if ttl_ms < heartbeat_ms {
         return Err(format!(
@@ -339,13 +338,8 @@ mod tests {
     fn dropping_a_dimension_narrows_and_adding_one_widens() {
         let fewer = ds("arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold");
         assert!(within(&fewer, &ds(P)), "dropping a dimension refuses more commands — narrower");
-        let more = ds(
-            "arm0/elbow:angle_deg=-30..95,torque_nm=0..2.5,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold",
-        );
-        assert!(
-            !within(&more, &ds(P)),
-            "a dimension the parent never bounded admits a command shape the parent refuses"
-        );
+        let more = ds("arm0/elbow:angle_deg=-30..95,torque_nm=0..2.5,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold");
+        assert!(!within(&more, &ds(P)), "a dimension the parent never bounded admits a command shape the parent refuses");
     }
 
     #[test]

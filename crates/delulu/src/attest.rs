@@ -240,9 +240,15 @@ pub enum Refusal {
     BadStatement(String),
     WrongNonce,
     BadSignature(String),
-    WrongKey { pinned: String, signer: String },
+    WrongKey {
+        pinned: String,
+        signer: String,
+    },
     /// D-V2-89: the attester measured one launcher, and the host started another.
-    WrongLauncher { measured: String, started: String },
+    WrongLauncher {
+        measured: String,
+        started: String,
+    },
 }
 
 impl Refusal {
@@ -272,11 +278,9 @@ impl Refusal {
             ),
             Refusal::LauncherEnded(st) => format!("the launcher ended ({st}) before it wrote an attestation"),
             Refusal::Unreadable(e) => format!("the attestation cannot be read ({e})"),
-            Refusal::NotAFile => {
-                "what the launcher put where the attestation goes is not a regular file (a link, a pipe or a \
+            Refusal::NotAFile => "what the launcher put where the attestation goes is not a regular file (a link, a pipe or a \
                  device) — the host reads a document there, nothing else"
-                    .to_string()
-            }
+                .to_string(),
             Refusal::TooLarge => format!("the attestation is larger than {MAX_DOCUMENT_BYTES} bytes"),
             Refusal::Incomplete => format!(
                 "the attestation is incomplete: the document ends before it is whole. The host reads it the moment \
@@ -290,13 +294,12 @@ impl Refusal {
             ),
             Refusal::BadStatement(e) => format!("the attestation's statement is refused: {e}"),
             Refusal::WrongNonce => {
-                "the attestation was not made for this run: it carries another nonce (a replayed or stale document)"
-                    .to_string()
+                "the attestation was not made for this run: it carries another nonce (a replayed or stale document)".to_string()
             }
             Refusal::BadSignature(e) => format!("the attestation's signature does not verify ({e})"),
-            Refusal::WrongKey { pinned, signer } => format!(
-                "the attestation is signed by {signer}, and the key this run pinned is {pinned}"
-            ),
+            Refusal::WrongKey { pinned, signer } => {
+                format!("the attestation is signed by {signer}, and the key this run pinned is {pinned}")
+            }
             Refusal::WrongLauncher { measured, started } => format!(
                 "the attester vouched for the launcher whose BLAKE3 is {measured}, and the host started {started} — not \
                  the launcher it measured"
@@ -319,8 +322,13 @@ pub fn verify(bytes: &[u8], pinned: &str, nonce: &str, started: Option<&str>) ->
         None => Refusal::Incomplete,
         Some(_) => Refusal::NotADocument("it is not UTF-8".to_string()),
     })?;
-    let doc: Document =
-        serde_json::from_str(text).map_err(|e| if e.is_eof() { Refusal::Incomplete } else { Refusal::NotADocument(e.to_string()) })?;
+    let doc: Document = serde_json::from_str(text).map_err(|e| {
+        if e.is_eof() {
+            Refusal::Incomplete
+        } else {
+            Refusal::NotADocument(e.to_string())
+        }
+    })?;
     // Each format for its own kind of statement: v1 binds no launcher, v2 one (D-V2-89).
     if doc.format != doc.statement.format() {
         return Err(Refusal::WrongFormat(doc.format.chars().take(64).collect()));
@@ -499,7 +507,8 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
              attestation (`delulu run … --sandbox --sandbox-backend external:… --require-attestation HEX`)"
         ))
     })?;
-    let out = std::env::var_os(ENV_OUT).ok_or_else(|| usage(format!("`${ENV_OUT}` is not set: the host names where the attestation goes")))?;
+    let out = std::env::var_os(ENV_OUT)
+        .ok_or_else(|| usage(format!("`${ENV_OUT}` is not set: the host names where the attestation goes")))?;
     if nonce.len() != 64 || crate::breakglass::decode_hex(&nonce).is_none() {
         return Err(usage(format!("`${ENV_NONCE}` is not a 32-byte nonce in hex")));
     }
@@ -521,7 +530,8 @@ fn attest(flags: &[String], command: &[String]) -> Result<i32, (i32, String)> {
     // Whole or not at all: the host reads the file the moment it exists.
     let out = std::path::PathBuf::from(out);
     let tmp = out.with_file_name(format!(".{FILE_NAME}.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, format!("{text}\n")).map_err(|e| (1, format!("cannot write the attestation to `{}`: {e}", tmp.display())))?;
+    std::fs::write(&tmp, format!("{text}\n"))
+        .map_err(|e| (1, format!("cannot write the attestation to `{}`: {e}", tmp.display())))?;
     std::fs::rename(&tmp, &out).map_err(|e| (1, format!("cannot put the attestation in place at `{}`: {e}", out.display())))?;
     let mut c = std::process::Command::new(program);
     c.args(program_args).env_remove(ENV_NONCE).env_remove(ENV_OUT);
@@ -696,7 +706,9 @@ mod tests {
         assert_eq!(a.to_json()["launcher_blake3"], launcher.as_str());
         // Another launcher, or none: refused, naming both.
         match verify(&doc_bytes(&d), &pinned, &nonce(), Some(&other)) {
-            Err(Refusal::WrongLauncher { measured, started }) => assert_eq!((measured, started), (launcher.clone(), other.clone())),
+            Err(Refusal::WrongLauncher { measured, started }) => {
+                assert_eq!((measured, started), (launcher.clone(), other.clone()))
+            }
             r => panic!("served for another launcher: {r:?}"),
         }
         assert!(matches!(verify(&doc_bytes(&d), &pinned, &nonce(), None), Err(Refusal::WrongLauncher { .. })));
@@ -734,22 +746,36 @@ mod tests {
     /// resembles one is free text. Every claim naming the same property is kept, in the order signed.
     #[test]
     fn a_claim_names_a_property_only_by_its_exact_name() {
-        assert_eq!(named_property("egress_confinement: runsc --network=none"), Some(("egress_confinement", "runsc --network=none")));
+        assert_eq!(
+            named_property("egress_confinement: runsc --network=none"),
+            Some(("egress_confinement", "runsc --network=none"))
+        );
         assert_eq!(named_property("  privilege_floor  "), Some(("privilege_floor", "")));
         assert_eq!(named_property("resource_ceiling:cgroup v2: 256 MiB"), Some(("resource_ceiling", "cgroup v2: 256 MiB")));
         for p in crate::boundary::PROPERTIES {
             assert_eq!(named_property(p).map(|(n, _)| n), Some(p));
         }
         for free in [
-            "Egress_Confinement: x", "egress-confinement: x", "egress_confinements: x", "no egress_confinement: x",
-            "egress_confinement x", "gVisor runsc", "", ":egress_confinement",
+            "Egress_Confinement: x",
+            "egress-confinement: x",
+            "egress_confinements: x",
+            "no egress_confinement: x",
+            "egress_confinement x",
+            "gVisor runsc",
+            "",
+            ":egress_confinement",
         ] {
             assert_eq!(named_property(free), None, "{free:?} names no property");
         }
         let a = Attested {
             key: "00".repeat(32),
             attester: "a".into(),
-            guarantees: vec!["egress_confinement: one".into(), "gVisor".into(), "egress_confinement:two".into(), "privilege_floor".into()],
+            guarantees: vec![
+                "egress_confinement: one".into(),
+                "gVisor".into(),
+                "egress_confinement:two".into(),
+                "privilege_floor".into(),
+            ],
             launcher_blake3: None,
         };
         assert_eq!(a.vouches_for("egress_confinement").as_deref(), Some("one; two"));
@@ -776,14 +802,18 @@ mod tests {
         let path = dir.join(FILE_NAME);
         let pinned = delulu_runtime::plugin::public_key_hex(&SEED);
         let t = std::time::Instant::now();
-        let r = await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(30), || Some("exit 0".to_string()));
+        let r =
+            await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(30), || Some("exit 0".to_string()));
         assert_eq!(r, Err(Refusal::LauncherEnded("exit 0".to_string())));
         assert!(t.elapsed() < std::time::Duration::from_secs(5));
         let r = await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_millis(200), || None);
         assert_eq!(r, Err(Refusal::Absent(std::time::Duration::from_millis(200))));
         // Written and then the launcher ended at once: the document still counts.
         std::fs::write(&path, doc_bytes(&sign(&SEED, statement(&nonce())).unwrap())).unwrap();
-        assert!(await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(5), || Some("exit 0".to_string())).is_ok());
+        assert!(await_and_verify(&path, &pinned, &nonce(), None, std::time::Duration::from_secs(5), || Some(
+            "exit 0".to_string()
+        ))
+        .is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

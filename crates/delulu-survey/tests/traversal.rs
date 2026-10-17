@@ -71,10 +71,7 @@ fn narrative_edges_do_not_compose_into_a_build_relation() {
             reached.len()
         );
         // The one-hop view must still show those relations — they are true, just not composable.
-        assert!(
-            !s.into_(id).is_empty(),
-            "`{id}` should still have incoming narrative edges for `rdeps` to report"
-        );
+        assert!(!s.into_(id).is_empty(), "`{id}` should still have incoming narrative edges for `rdeps` to report");
     }
 }
 

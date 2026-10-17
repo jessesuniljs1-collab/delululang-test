@@ -38,8 +38,7 @@ fn scaffold(name: &str, package_extra: &str) -> PathBuf {
         format!("[package]\nname = \"edtest\"\nversion = \"0.1.0\"\nkind = \"lib\"\n{package_extra}\n"),
     )
     .unwrap();
-    std::fs::write(dir.join("src").join("main.delulu"), "module edtest\n\npub fn two() -> Int {\n  2\n}\n")
-        .unwrap();
+    std::fs::write(dir.join("src").join("main.delulu"), "module edtest\n\npub fn two() -> Int {\n  2\n}\n").unwrap();
     dir
 }
 
@@ -92,10 +91,7 @@ fn a_malformed_edition_is_reported_not_ignored() {
 #[test]
 fn dl1801_and_dl1802_are_registered_with_explanations() {
     for code in ["DL1801", "DL1802"] {
-        assert!(
-            delulu_diag::code_title(code).is_some(),
-            "{code} must be in the diagnostic registry"
-        );
+        assert!(delulu_diag::code_title(code).is_some(), "{code} must be in the diagnostic registry");
         let o = delulu(&["explain", code]);
         assert!(o.status.success(), "`delulu explain {code}` must succeed");
         let out = text(&o);
@@ -108,13 +104,8 @@ fn dl1801_and_dl1802_are_registered_with_explanations() {
 #[test]
 fn a_deprecation_is_a_warning_and_never_fails_a_build() {
     use delulu_check::deprecation::{warn, DeprKind, Deprecation};
-    const FIXTURE: &[Deprecation] = &[Deprecation {
-        item: "old_greet",
-        kind: DeprKind::Name,
-        since: "1.1",
-        replacement: Some("greet"),
-        rfc: "RFC-0002",
-    }];
+    const FIXTURE: &[Deprecation] =
+        &[Deprecation { item: "old_greet", kind: DeprKind::Name, since: "1.1", replacement: Some("greet"), rfc: "RFC-0002" }];
     let d = warn(FIXTURE, "old_greet", delulu_diag::Span::new(0, 0, 9)).expect("deprecated");
     assert_eq!(d.code, "DL1801");
     assert!(!d.is_error(), "DL1801 must be a warning");
@@ -125,10 +116,7 @@ fn a_deprecation_is_a_warning_and_never_fails_a_build() {
 /// than by nobody looking.
 #[test]
 fn nothing_is_deprecated_at_1_0() {
-    assert!(
-        delulu_check::deprecation::DEPRECATIONS.is_empty(),
-        "the 1.0 release deprecates nothing — see STABILITY.md §3"
-    );
+    assert!(delulu_check::deprecation::DEPRECATIONS.is_empty(), "the 1.0 release deprecates nothing — see STABILITY.md §3");
 }
 
 /// D11: asking a tool what it does must never make it do the thing. `--help` is answered by the

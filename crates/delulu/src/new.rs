@@ -48,10 +48,7 @@ pub fn cmd_new(rest: &[String]) -> i32 {
     // `delulu new path/to/myapp` names the directory; the package is `myapp`. This is what a
     // reader expects from every other toolchain, and it is also the only reading that lets the
     // package name stay a legal module identifier while the path stays a path.
-    let name = dir
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| target.clone());
+    let name = dir.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| target.clone());
 
     if let Err(why) = legal_package_name(&name) {
         eprintln!("error: `{name}` cannot be a package name — {why}");
@@ -140,9 +137,7 @@ fn legal_package_name(name: &str) -> Result<(), &'static str> {
     // keywords the lexer emits today live in `MORPHABLE_KEYWORDS`. Checking only the first accepts
     // `delulu new fn` and hands someone a package containing `module fn`, which does not parse —
     // caught by `a_name_that_cannot_be_a_module_is_refused`, not by reading the code.
-    if delulu_syntax::token::is_reserved(name)
-        || delulu_syntax::morph::MORPHABLE_KEYWORDS.contains(&name)
-    {
+    if delulu_syntax::token::is_reserved(name) || delulu_syntax::morph::MORPHABLE_KEYWORDS.contains(&name) {
         return Err("it is a keyword");
     }
     if is_reserved_device_name(name) {
@@ -166,8 +161,8 @@ fn legal_package_name(name: &str) -> Result<(), &'static str> {
 /// learned the same lesson about its own build when a control binary named `nul.exe` refused to link.
 fn is_reserved_device_name(name: &str) -> bool {
     const RESERVED: &[&str] = &[
-        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
-        "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2",
+        "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
     ];
     // Windows matches the stem, so `con.txt` is reserved too — though a package name cannot carry a
     // `.` anyway (refused above), the stem is taken so this stays true if that ever loosens.
@@ -177,10 +172,7 @@ fn is_reserved_device_name(name: &str) -> bool {
 
 /// The nearest legal name, when there is an obvious one. `my-app` → `my_app`.
 fn suggestion(name: &str) -> Option<String> {
-    let fixed: String = name
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
+    let fixed: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
     let fixed = fixed.trim_matches('_').to_string();
     (!fixed.is_empty() && legal_package_name(&fixed).is_ok() && fixed != name).then_some(fixed)
 }

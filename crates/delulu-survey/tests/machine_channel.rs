@@ -42,10 +42,7 @@ fn one_object(out: &Output, what: &str) -> serde_json::Value {
         .next()
         .unwrap_or_else(|| panic!("{what}: nothing on stdout"))
         .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}):\n{stdout}"));
-    assert!(
-        values.next().is_none(),
-        "{what}: more than one JSON value on stdout — the contract is exactly one:\n{stdout}"
-    );
+    assert!(values.next().is_none(), "{what}: more than one JSON value on stdout — the contract is exactly one:\n{stdout}");
     first
 }
 
@@ -117,10 +114,7 @@ fn every_relation_in_json_cites_the_file_and_line_it_was_read_from() {
 #[test]
 fn entrenchment_is_always_answered_never_merely_omitted() {
     let ordinary = one_object(&survey(&["query", HEART, "--json"]), "query");
-    assert!(
-        ordinary.get("entrenched").is_some(),
-        "an ordinary node must still carry the field, set to null: {ordinary}"
-    );
+    assert!(ordinary.get("entrenched").is_some(), "an ordinary node must still carry the field, set to null: {ordinary}");
     assert!(ordinary["entrenched"].is_null(), "this node is not entrenched: {ordinary}");
 
     let locked = one_object(&survey(&["query", "doc:docs/design/CONSTITUTION.md", "--json"]), "query");

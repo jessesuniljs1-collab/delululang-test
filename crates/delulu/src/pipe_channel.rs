@@ -239,13 +239,12 @@ mod win {
     use std::time::Duration;
 
     use windows_sys::Win32::Foundation::{
-        DuplicateHandle, GetLastError, DUPLICATE_SAME_ACCESS, ERROR_BROKEN_PIPE, ERROR_IO_PENDING,
-        ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        DuplicateHandle, GetLastError, DUPLICATE_SAME_ACCESS, ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_PIPE_CONNECTED,
+        GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
-        PIPE_ACCESS_DUPLEX,
+        CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
     };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -398,7 +397,8 @@ mod win {
                 lpSecurityDescriptor: std::ptr::null_mut(),
                 bInheritHandle: 1,
             };
-            let client = CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, &inherit, OPEN_EXISTING, 0, std::ptr::null_mut());
+            let client =
+                CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, &inherit, OPEN_EXISTING, 0, std::ptr::null_mut());
             if client == INVALID_HANDLE_VALUE {
                 return Err(format!("the guest's end of the channel could not be opened ({})", GetLastError()));
             }
@@ -420,7 +420,16 @@ mod win {
                 return Err("the channel pipe was not connected to the guest's end".into());
             }
             let mut dup: HANDLE = std::ptr::null_mut();
-            if DuplicateHandle(GetCurrentProcess(), client.as_raw_handle() as HANDLE, GetCurrentProcess(), &mut dup, 0, 1, DUPLICATE_SAME_ACCESS) == 0 {
+            if DuplicateHandle(
+                GetCurrentProcess(),
+                client.as_raw_handle() as HANDLE,
+                GetCurrentProcess(),
+                &mut dup,
+                0,
+                1,
+                DUPLICATE_SAME_ACCESS,
+            ) == 0
+            {
                 return Err(format!("the guest's end of the channel could not be duplicated ({})", GetLastError()));
             }
             let dup = OwnedHandle::from_raw_handle(dup as RawHandle);

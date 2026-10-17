@@ -64,19 +64,13 @@ fn the_tier3_application_reads_real_input_and_refuses_a_value_float_cannot_hold(
     let dir = stage("tier3", "tests/corpus/tier3-application/telemetry_report.delulu");
     write(&dir, "data/telemetry.txt", "bay3=21.5\nbay4=8.25\nbay5=41.0\nbroken\nbay6=1.0e400\n");
 
-    let out = delulu(
-        &dir,
-        &["run", "telemetry_report.delulu", "--grant", "console", "--grant", "fs.read=./data"],
-    );
+    let out = delulu(&dir, &["run", "telemetry_report.delulu", "--grant", "console", "--grant", "fs.read=./data"]);
     assert_eq!(stdout(&out).trim(), "hottest reading: 41.0", "stdout was {:?}", stdout(&out));
 
     // The failure paths are distinguishable, which is the file's other claim.
     let empty = stage("tier3empty", "tests/corpus/tier3-application/telemetry_report.delulu");
     write(&empty, "data/telemetry.txt", "   \n");
-    let out = delulu(
-        &empty,
-        &["run", "telemetry_report.delulu", "--grant", "console", "--grant", "fs.read=./data"],
-    );
+    let out = delulu(&empty, &["run", "telemetry_report.delulu", "--grant", "console", "--grant", "fs.read=./data"]);
     assert_eq!(stdout(&out).trim(), "the telemetry file was empty");
 }
 
@@ -87,20 +81,14 @@ fn the_tier5_program_reads_through_two_independent_narrowings() {
     write(&dir, "data/public/notice.txt", "reactor bay open");
     write(&dir, "data/archive/index.txt", "log 001");
 
-    let out = delulu(
-        &dir,
-        &["run", "attenuation.delulu", "--grant", "console", "--grant", "fs.read=./data"],
-    );
+    let out = delulu(&dir, &["run", "attenuation.delulu", "--grant", "console", "--grant", "fs.read=./data"]);
     let s = stdout(&out);
     assert!(s.contains("reactor bay open"), "stdout was {s:?}");
     assert!(s.contains("log 001"), "stdout was {s:?}");
 
     // And the grant is the bound, not a suggestion: narrowed to `./data/public`, the same program
     // cannot reach `./data/archive`. The narrowing is a subset of a grant that no longer covers it.
-    let out = delulu(
-        &dir,
-        &["run", "attenuation.delulu", "--grant", "console", "--grant", "fs.read=./data/public"],
-    );
+    let out = delulu(&dir, &["run", "attenuation.delulu", "--grant", "console", "--grant", "fs.read=./data/public"]);
     let s = stdout(&out) + &String::from_utf8_lossy(&out.stderr);
     assert!(
         !s.contains("log 001"),
@@ -120,9 +108,7 @@ fn the_tier4_package_reports_the_authority_of_its_whole_graph() {
 
     let out = delulu(&root, &["authority", pkg]);
     let s = stdout(&out);
-    for module in
-        ["archive", "policy", "reading", "reading.parse", "reading.types", "station", "station.report"]
-    {
+    for module in ["archive", "policy", "reading", "reading.parse", "reading.types", "station", "station.report"] {
         assert!(s.contains(module), "authority should name module `{module}`:\n{s}");
     }
     assert!(s.contains("Read, Write"), "the join of the graph is Read+Write:\n{s}");

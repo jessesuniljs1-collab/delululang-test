@@ -108,10 +108,7 @@ pub fn parse(bytes: &[u8]) -> Result<Envelope, String> {
     if !text.starts_with(MAGIC) {
         // The v1.0 shape: 32-byte public key followed by a 64-byte signature.
         if bytes.len() != 96 {
-            return Err(format!(
-                "not a `{MAGIC}` envelope and not a 96-byte v1.0 detached signature ({} bytes)",
-                bytes.len()
-            ));
+            return Err(format!("not a `{MAGIC}` envelope and not a 96-byte v1.0 detached signature ({} bytes)", bytes.len()));
         }
         let mut parts = BTreeMap::new();
         parts.insert(ALG_ED25519.to_string(), bytes.to_vec());
@@ -227,11 +224,10 @@ fn ml_dsa_verify(data: &[u8], blob: &[u8]) -> Result<String, String> {
     }
     let vk_bytes = EncodedVerifyingKey::<MlDsa65>::try_from(&blob[..vk_len])
         .map_err(|_| "ml-dsa-65 verifying key is malformed".to_string())?;
-    let sig_bytes = EncodedSignature::<MlDsa65>::try_from(&blob[vk_len..])
-        .map_err(|_| "ml-dsa-65 signature is malformed".to_string())?;
+    let sig_bytes =
+        EncodedSignature::<MlDsa65>::try_from(&blob[vk_len..]).map_err(|_| "ml-dsa-65 signature is malformed".to_string())?;
     let vk = VerifyingKey::<MlDsa65>::decode(&vk_bytes);
-    let sig = Signature::<MlDsa65>::decode(&sig_bytes)
-        .ok_or_else(|| "ml-dsa-65 signature is malformed".to_string())?;
+    let sig = Signature::<MlDsa65>::decode(&sig_bytes).ok_or_else(|| "ml-dsa-65 signature is malformed".to_string())?;
     if vk.verify_with_context(data, ML_DSA_CTX, &sig) {
         Ok(hex_lower(&blob[..vk_len]))
     } else {
@@ -283,9 +279,7 @@ pub fn verify(data: &[u8], sig_file: &[u8], policy: Policy, unstable: bool) -> V
     let signer = match crate::plugin::verify_detached(data, ed) {
         crate::plugin::SignatureStatus::Valid { signer } => signer,
         crate::plugin::SignatureStatus::Invalid { reason } => return Verdict::Invalid { reason },
-        crate::plugin::SignatureStatus::Unsigned => {
-            return Verdict::Invalid { reason: "ed25519 part is empty".into() }
-        }
+        crate::plugin::SignatureStatus::Unsigned => return Verdict::Invalid { reason: "ed25519 part is empty".into() },
     };
     let mut algs = vec![ALG_ED25519.to_string()];
     if has_pq {
@@ -416,13 +410,11 @@ mod tests {
     fn an_envelope_that_does_not_match_its_own_declaration_is_refused() {
         let ed = hex_lower(&crate::plugin::sign_detached(&SEED, DATA));
 
-        let declares_more_than_it_carries =
-            format!("{MAGIC}\nalg: {ALG_ED25519},{ALG_ML_DSA_65}\n{ALG_ED25519}: {ed}\n");
+        let declares_more_than_it_carries = format!("{MAGIC}\nalg: {ALG_ED25519},{ALG_ML_DSA_65}\n{ALG_ED25519}: {ed}\n");
         let err = parse(declares_more_than_it_carries.as_bytes()).expect_err("must not parse");
         assert!(err.contains("carries no"), "{err}");
 
-        let carries_more_than_it_declares =
-            format!("{MAGIC}\nalg: {ALG_ED25519}\n{ALG_ED25519}: {ed}\n{ALG_ML_DSA_65}: aabb\n");
+        let carries_more_than_it_declares = format!("{MAGIC}\nalg: {ALG_ED25519}\n{ALG_ED25519}: {ed}\n{ALG_ML_DSA_65}: aabb\n");
         let err = parse(carries_more_than_it_declares.as_bytes()).expect_err("must not parse");
         assert!(err.contains("does not declare"), "{err}");
     }
@@ -466,18 +458,15 @@ mod tests {
         use ml_dsa::{EncodedVerifyingKey, MlDsa65};
 
         let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../testdata/nist_acvp_ml_dsa_65_keygen.json"))
-                .expect("fixture is valid JSON");
+            serde_json::from_str(include_str!("../testdata/nist_acvp_ml_dsa_65_keygen.json")).expect("fixture is valid JSON");
         let vk_len = <EncodedVerifyingKey<MlDsa65> as Default>::default().len();
         let vectors = fixture["vectors"].as_array().expect("fixture carries a `vectors` array");
         assert_eq!(vectors.len(), 3, "expected the three vectors this fixture was built with");
 
         for v in vectors {
             let tc_id = v["tcId"].as_i64().expect("tcId is an integer");
-            let seed_bytes = hex_decode(v["seed"].as_str().expect("seed is a string"))
-                .expect("seed is valid hex");
-            let seed: [u8; 32] =
-                seed_bytes.try_into().expect("NIST ACVP ML-DSA seed is 32 bytes");
+            let seed_bytes = hex_decode(v["seed"].as_str().expect("seed is a string")).expect("seed is valid hex");
+            let seed: [u8; 32] = seed_bytes.try_into().expect("NIST ACVP ML-DSA seed is 32 bytes");
             let expected_pk = v["expected_pk"].as_str().expect("expected_pk is a string").to_lowercase();
 
             // Calls the actual pqc.rs signing function — not a hand-rolled re-derivation of what

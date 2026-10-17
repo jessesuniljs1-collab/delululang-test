@@ -15,11 +15,7 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn delulu(dir: &PathBuf, locales: &PathBuf, args: &[&str], locale_env: Option<&str>) -> Output {
     let mut c = Command::new(env!("CARGO_BIN_EXE_delulu"));
-    c.current_dir(dir)
-        .args(args)
-        .env("DELULU_NO_FIRST_RUN", "1")
-        .env("DELULU_LOCALES_DIR", locales)
-        .env_remove("DELULU_LOCALE");
+    c.current_dir(dir).args(args).env("DELULU_NO_FIRST_RUN", "1").env("DELULU_LOCALES_DIR", locales).env_remove("DELULU_LOCALE");
     if let Some(l) = locale_env {
         c.env("DELULU_LOCALE", l);
     }
@@ -71,12 +67,7 @@ fn build_catalog_plugin(work: &PathBuf, toml_text: &str, effects: &str) -> PathB
         .env("DELULU_NO_FIRST_RUN", "1")
         .output()
         .unwrap();
-    assert!(
-        o.status.success(),
-        "plugin build: {}{}",
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    );
+    assert!(o.status.success(), "plugin build: {}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     out
 }
 

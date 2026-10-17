@@ -58,16 +58,19 @@ fn nominal_grant() -> String {
 #[test]
 fn behavior_1_the_nominal_sweep_lands_every_command() {
     let o = delulu(&[
-        "run", &demo("arm.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--no-prompt",
+        "run",
+        &demo("arm.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--no-prompt",
     ]);
     let out = stdout(&o);
     assert!(o.status.success(), "the nominal sweep must succeed:\n{out}\n{}", stderr(&o));
-    assert_eq!(
-        out.lines().filter(|l| l.trim() == "COMMANDED").count(),
-        20,
-        "all twenty in-envelope commands must land:\n{out}"
-    );
+    assert_eq!(out.lines().filter(|l| l.trim() == "COMMANDED").count(), 20, "all twenty in-envelope commands must land:\n{out}");
     assert!(!out.contains("REFUSED"), "nothing in the envelope may be refused:\n{out}");
     assert!(!out.contains("REVOKED"), "nothing may lose the arm here:\n{out}");
     assert!(out.contains("DONE"), "{out}");
@@ -81,8 +84,16 @@ fn behavior_1_the_nominal_sweep_lands_every_command() {
 #[test]
 fn behavior_2_the_over_torque_edit_is_refused_and_the_controller_survives() {
     let o = delulu(&[
-        "run", &demo("arm-overtorque.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--trace-effects", "--no-prompt",
+        "run",
+        &demo("arm-overtorque.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--trace-effects",
+        "--no-prompt",
     ]);
     let out = stdout(&o);
     let err = stderr(&o);
@@ -112,8 +123,16 @@ fn behavior_2_the_over_torque_edit_is_refused_and_the_controller_survives() {
 #[test]
 fn behavior_3_a_wedged_controller_loses_the_arm_to_safe_park() {
     let o = delulu(&[
-        "run", &demo("arm-wedged.delulu"), "--grant", "console", "--grant", &nominal_grant(),
-        "--broker-profile", "sim", "--trace-effects", "--no-prompt",
+        "run",
+        &demo("arm-wedged.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &nominal_grant(),
+        "--broker-profile",
+        "sim",
+        "--trace-effects",
+        "--no-prompt",
     ]);
     let out = stdout(&o);
     let err = stderr(&o);
@@ -126,16 +145,10 @@ fn behavior_3_a_wedged_controller_loses_the_arm_to_safe_park() {
         err.contains("lease.revoked") && err.contains("failstate.engaged"),
         "both halves must be journaled — revoked, then the declared fail-state engaged:\n{err}"
     );
-    assert!(
-        err.contains("safe-park"),
-        "the fail-state that engages is the one the operator declared:\n{err}"
-    );
+    assert!(err.contains("safe-park"), "the fail-state that engages is the one the operator declared:\n{err}");
     // The first command landed. Without this the test would pass for a program that never reached
     // the arm at all.
-    assert!(
-        out.lines().any(|l| l.trim() == "COMMANDED"),
-        "the controller must have been driving before it wedged:\n{out}"
-    );
+    assert!(out.lines().any(|l| l.trim() == "COMMANDED"), "the controller must have been driving before it wedged:\n{out}");
 }
 
 /// The control for behavior 3: the identical wedged program, granted a heartbeat long enough to
@@ -144,15 +157,20 @@ fn behavior_3_a_wedged_controller_loses_the_arm_to_safe_park() {
 #[test]
 fn behavior_3_control_a_generous_heartbeat_survives_the_same_long_think() {
     let o = delulu(&[
-        "run", &demo("arm-wedged.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--trace-effects", "--no-prompt",
+        "run",
+        &demo("arm-wedged.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--trace-effects",
+        "--no-prompt",
     ]);
     let out = stdout(&o);
     assert!(o.status.success(), "{out}\n{}", stderr(&o));
-    assert!(
-        !out.contains("REVOKED:"),
-        "the same long think under a 600 s heartbeat must NOT lose the arm:\n{out}"
-    );
+    assert!(!out.contains("REVOKED:"), "the same long think under a 600 s heartbeat must NOT lose the arm:\n{out}");
     assert_eq!(
         out.lines().filter(|l| l.trim() == "COMMANDED").count(),
         2,
@@ -165,8 +183,15 @@ fn behavior_3_control_a_generous_heartbeat_survives_the_same_long_think() {
 #[test]
 fn the_staged_deploy_gate_refuses_hardware_with_no_signoff() {
     let o = delulu(&[
-        "run", &demo("arm.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "hw:demo-adapter", "--no-prompt",
+        "run",
+        &demo("arm.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "hw:demo-adapter",
+        "--no-prompt",
     ]);
     let err = stderr(&o);
     assert!(!o.status.success(), "hardware with no approval must not run:\n{}", stdout(&o));
@@ -179,8 +204,16 @@ fn the_staged_deploy_gate_refuses_hardware_with_no_signoff() {
 #[test]
 fn the_benchmark_programs_still_measure_what_the_record_says_they_do() {
     let o = delulu(&[
-        "run", &demo("bench-none.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--trace-effects", "--no-prompt",
+        "run",
+        &demo("bench-none.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--trace-effects",
+        "--no-prompt",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     assert!(stdout(&o).contains("baseline 2000"), "{}", stdout(&o));
@@ -191,15 +224,29 @@ fn the_benchmark_programs_still_measure_what_the_record_says_they_do() {
     );
 
     let o = delulu(&[
-        "run", &demo("bench-ok.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--no-prompt",
+        "run",
+        &demo("bench-ok.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--no-prompt",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     assert!(stdout(&o).contains("accepted 2000"), "every command must land:\n{}", stdout(&o));
 
     let o = delulu(&[
-        "run", &demo("bench-refused.delulu"), "--grant", "console", "--grant", &patient_grant(),
-        "--broker-profile", "sim", "--no-prompt",
+        "run",
+        &demo("bench-refused.delulu"),
+        "--grant",
+        "console",
+        "--grant",
+        &patient_grant(),
+        "--broker-profile",
+        "sim",
+        "--no-prompt",
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     assert!(

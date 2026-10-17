@@ -246,7 +246,9 @@ fn limits_narrow_a_profile_and_never_widen_it() {
 fn a_ceiling_that_stops_a_sandboxed_run_is_named_and_the_exit_agrees_with_the_report() {
     let dir = tmp("stops");
     let spin = dir.join("spin.delulu");
-    std::fs::write(&spin, "module spin
+    std::fs::write(
+        &spin,
+        "module spin
 
 fn main(root: Root) {
     var x = 0
@@ -254,7 +256,9 @@ fn main(root: Root) {
         x = x + 1
     }
 }
-").unwrap();
+",
+    )
+    .unwrap();
     let mem = dir.join("mem.delulu");
     std::fs::write(
         &mem,
@@ -282,8 +286,10 @@ fn big() -> Str {
     let report = dir.join("rep.json");
     let run = |prog: &std::path::Path, limits: &str| {
         let _ = std::fs::remove_file(&report);
-        let o = delulu(&["run", prog.to_str().unwrap(), "--sandbox", "--limits", limits, "--report-out", report.to_str().unwrap()]);
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
+        let o =
+            delulu(&["run", prog.to_str().unwrap(), "--sandbox", "--limits", limits, "--report-out", report.to_str().unwrap()]);
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
         (o, v)
     };
     // Wall: the host's own watchdog, on every platform with a process guest.
@@ -347,7 +353,8 @@ fn a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs()
     )
     .unwrap();
     let small = dir.join("small.delulu");
-    std::fs::write(&small, "module small\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"under\")\n}\n").unwrap();
+    std::fs::write(&small, "module small\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"under\")\n}\n")
+        .unwrap();
     let report = dir.join("rep.json");
     let run = |prog: &std::path::Path, limits: &str| {
         let _ = std::fs::remove_file(&report);
@@ -362,7 +369,8 @@ fn a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs()
             "--report-out",
             report.to_str().unwrap(),
         ]);
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
         (o, v)
     };
     let budget = 64 * 1024 * 1024_u64;
@@ -374,14 +382,18 @@ fn a_guest_past_its_memory_budget_is_stopped_on_every_os_and_one_under_it_runs()
     // The witness.
     let (o, v) = run(&mem, &format!("mem={budget},cpu=30,wall=8"));
     assert_eq!(
-        v["outcome"]["stopped_by"]["dimension"], "memory",
+        v["outcome"]["stopped_by"]["dimension"],
+        "memory",
         "a guest that allocated without end was not stopped by its memory ceiling: {v} / {}",
         out(&o)
     );
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     assert_eq!(v["outcome"]["exit"], 1, "the report and the exit agree: {v}");
     assert!(out(&o).contains("memory ceiling"), "{}", out(&o));
-    assert!(v["sandbox"]["host_guarantees"].to_string().contains("memory ceiling"), "the ceiling that stopped it is claimed: {v}");
+    assert!(
+        v["sandbox"]["host_guarantees"].to_string().contains("memory ceiling"),
+        "the ceiling that stopped it is claimed: {v}"
+    );
     assert_eq!(v["sandbox"]["posture"]["memory"], "capped", "{v}");
     if let Some(seen) = v["outcome"]["stopped_by"]["observed_bytes"].as_u64() {
         assert!(seen >= budget, "a stop at {seen} bytes, under its own budget of {budget}: {v}");
@@ -618,21 +630,11 @@ fn sandbox_policy_previews_exactly_what_a_run_would_use() {
 
     // The real run's report must carry the SAME policy hash.
     let report = dir.join("rep.json");
-    let o = delulu(&[
-        "run",
-        file,
-        "--sandbox",
-        "--grant",
-        &format!("fs.write={scope}"),
-        "--report-out",
-        report.to_str().unwrap(),
-    ]);
+    let o =
+        delulu(&["run", file, "--sandbox", "--grant", &format!("fs.write={scope}"), "--report-out", report.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
     let run: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
-    assert_eq!(
-        run["sandbox"]["policy_hash"], previewed["policy_hash"],
-        "the preview and the run must name the same policy"
-    );
+    assert_eq!(run["sandbox"]["policy_hash"], previewed["policy_hash"], "the preview and the run must name the same policy");
 
     // A program the channel cannot carry is named as such, and a bad profile is refused rather than
     // quietly previewing a different policy from the one a run would use.
@@ -780,8 +782,7 @@ fn the_report_lists_what_the_host_refused_and_stays_empty_when_it_refused_nothin
         rep.to_str().unwrap(),
     ]);
     assert_ne!(o.status.code(), Some(0), "{}", out(&o));
-    let r: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
+    let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
     let denied = r["sandbox"]["denied"].as_array().expect("denied is an array");
     assert!(!denied.is_empty(), "a refused run listed no refusal: {r}");
     assert!(
@@ -815,8 +816,7 @@ fn the_report_lists_what_the_host_refused_and_stays_empty_when_it_refused_nothin
         rep2.to_str().unwrap(),
     ]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
-    let r2: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&rep2).expect("the run report")).unwrap();
+    let r2: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&rep2).expect("the run report")).unwrap();
     assert_eq!(
         r2["sandbox"]["denied_total"].as_u64(),
         Some(0),
@@ -844,8 +844,7 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
         rep.to_str().unwrap(),
     ]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
-    let r: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
+    let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
     let sb = &r["sandbox"];
     assert_eq!(sb["requested_level"], 1, "{r}");
     assert_eq!(sb["level"], 1, "{r}");
@@ -879,8 +878,7 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     // confined" on every Linux run that confined it.
     if cfg!(target_os = "linux") {
         enforced.push("new_programs");
-        let own: Vec<&str> =
-            sb["host_guarantees"].as_array().expect("guarantees").iter().filter_map(|v| v.as_str()).collect();
+        let own: Vec<&str> = sb["host_guarantees"].as_array().expect("guarantees").iter().filter_map(|v| v.as_str()).collect();
         assert!(own.contains(&"no new programs"), "the guest's own filter is in the report: {r}");
     }
     for q in enforced {
@@ -912,7 +910,8 @@ fn status_agrees_with_what_a_real_sandboxed_run_does() {
     let run = delulu(&["run", src.to_str().unwrap(), "--sandbox"]);
     let ran = run.status.code() == Some(0);
     assert_eq!(
-        claims_l1, ran,
+        claims_l1,
+        ran,
         "`sandbox status` says l1_available={claims_l1} and a real `run --sandbox` {}. \
          A probe that disagrees with the thing it probes is worse than no probe.\nstatus: {st}\nrun: {}",
         if ran { "succeeded" } else { "failed" },

@@ -78,12 +78,7 @@ const HELLO: &str = "module m\n\nfn main(root: Root) ! {Write} {\n  root.console
 fn vm_dirs_of(pid: u32) -> Vec<PathBuf> {
     let prefix = format!("delulu-vm-{pid}-");
     std::fs::read_dir(std::env::temp_dir())
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
-                .map(|e| e.path())
-                .collect()
-        })
+        .map(|rd| rd.flatten().filter(|e| e.file_name().to_string_lossy().starts_with(&prefix)).map(|e| e.path()).collect())
         .unwrap_or_default()
 }
 
@@ -116,7 +111,9 @@ fn a_program_runs_in_the_microvm_and_the_report_says_level_2() {
     assert_eq!(sb["level"], 2, "{v}");
     assert_eq!(sb["requested_level"], 2, "{v}");
     let g: Vec<&str> = sb["host_guarantees"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
-    for word in ["a separate guest kernel under KVM", "no network device", "no filesystem device", "no network stack in its kernel"] {
+    for word in
+        ["a separate guest kernel under KVM", "no network device", "no filesystem device", "no network stack in its kernel"]
+    {
         assert!(g.contains(&word), "`{word}` missing from {g:?}");
     }
     assert_eq!(sb["posture"]["network"], "only the channel", "{v}");
@@ -203,7 +200,10 @@ fn the_processor_time_ceiling_ends_a_spinning_guest() {
     let dir = tmp("spin");
     write(&dir, "spin.delulu", "module m\n\nfn main(root: Root) {\n  var i = 0\n  while i >= 0 {\n    i = i + 1\n  }\n}\n");
     let started = Instant::now();
-    let o = delulu(&dir, &["run", "spin.delulu", "--isolation", "microvm", "--sandbox-profile", "hostile-agent", "--limits", "cpu=3"]);
+    let o = delulu(
+        &dir,
+        &["run", "spin.delulu", "--isolation", "microvm", "--sandbox-profile", "hostile-agent", "--limits", "cpu=3"],
+    );
     let took = started.elapsed();
     assert_ne!(o.status.code(), Some(0), "a spinning guest cannot succeed: {}", out(&o));
     assert!(took < Duration::from_secs(45), "the ceiling did not end it: {took:?}: {}", out(&o));
@@ -221,7 +221,10 @@ fn a_guest_that_exhausts_its_memory_ends_its_vm_not_the_host() {
         "module m\n\nfn main(root: Root) {\n  let l: ref List[Int] = []\n  var i = 0\n  while i >= 0 {\n    l.push(i)\n    i = i + 1\n  }\n}\n",
     );
     let started = Instant::now();
-    let o = delulu(&dir, &["run", "grow.delulu", "--isolation", "microvm", "--sandbox-profile", "hostile-agent", "--limits", "cpu=30"]);
+    let o = delulu(
+        &dir,
+        &["run", "grow.delulu", "--isolation", "microvm", "--sandbox-profile", "hostile-agent", "--limits", "cpu=30"],
+    );
     assert_ne!(o.status.code(), Some(0), "{}", out(&o));
     assert!(started.elapsed() < Duration::from_secs(90), "{}", out(&o));
     // The host is still here to say so, and the next run is unaffected.
@@ -283,8 +286,16 @@ fn two_vms_at_once_do_not_share() {
             &format!("module m\n\nfn main(root: Root) ! {{Write}} {{\n  root.console().println(\"i am {n}\")\n}}\n"),
         );
     }
-    let a = command(&dir, &["run", "one.delulu", "--isolation", "microvm", "--grant", "console"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    let b = command(&dir, &["run", "two.delulu", "--isolation", "microvm", "--grant", "console"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let a = command(&dir, &["run", "one.delulu", "--isolation", "microvm", "--grant", "console"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let b = command(&dir, &["run", "two.delulu", "--isolation", "microvm", "--grant", "console"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     let (a, b) = (a.wait_with_output().unwrap(), b.wait_with_output().unwrap());
     assert_eq!(a.status.code(), Some(0), "{}", out(&a));
     assert_eq!(b.status.code(), Some(0), "{}", out(&b));
@@ -345,7 +356,9 @@ fn as_root(dir: &Path, program: &Path, args: &[&str]) -> Command {
         "DELULU_NO_COLOR=1".to_string(),
         format!("DELULU_STATE_DIR={}", dir.join("root-state").display()),
     ];
-    let mut c = if root { Command::new("env") } else {
+    let mut c = if root {
+        Command::new("env")
+    } else {
         let mut s = Command::new("sudo");
         s.arg("-n").arg("env");
         s
@@ -389,9 +402,10 @@ fn as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host() {
     write(&dir, "hello.delulu", HELLO);
 
     // 1. A jailed run, and what its report says.
-    let o = as_root(&dir, &exe, &["run", "hello.delulu", "--isolation", "microvm", "--grant", "console", "--report-out", "rep.json"])
-        .output()
-        .unwrap();
+    let o =
+        as_root(&dir, &exe, &["run", "hello.delulu", "--isolation", "microvm", "--grant", "console", "--report-out", "rep.json"])
+            .output()
+            .unwrap();
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     assert!(String::from_utf8_lossy(&o.stdout).contains("hello from the guest"), "{}", out(&o));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
@@ -484,12 +498,21 @@ fn as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host() {
     let alone = dir.join("fc-alone");
     std::fs::create_dir_all(&alone).unwrap();
     std::fs::copy(&vmm, alone.join("firecracker")).unwrap();
-    let mut c = as_root(&dir, Path::new("env"), &[
-        &format!("DELULU_FIRECRACKER={}", alone.join("firecracker").display()),
-        "PATH=/usr/bin:/bin",
-        exe.to_str().unwrap(),
-        "run", "hello.delulu", "--isolation", "microvm", "--grant", "console",
-    ]);
+    let mut c = as_root(
+        &dir,
+        Path::new("env"),
+        &[
+            &format!("DELULU_FIRECRACKER={}", alone.join("firecracker").display()),
+            "PATH=/usr/bin:/bin",
+            exe.to_str().unwrap(),
+            "run",
+            "hello.delulu",
+            "--isolation",
+            "microvm",
+            "--grant",
+            "console",
+        ],
+    );
     let o = c.output().unwrap();
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     assert!(out(&o).contains("DL1408") && out(&o).contains("jailer"), "{}", out(&o));
@@ -535,16 +558,32 @@ fn a_control_program_runs_in_the_microvm_and_its_boot_is_not_charged_to_its_hear
     let o = delulu(
         &dir,
         &[
-            "run", "arm.delulu", "--isolation", "microvm", "--grant", "console", "--grant",
-            "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=150,ttl_ms=600000,fail=safe-park", "--grant",
-            "sensor=arm0/elbow#angle_deg", "--broker-profile", "sim", "--report-out", "rep.json",
+            "run",
+            "arm.delulu",
+            "--isolation",
+            "microvm",
+            "--grant",
+            "console",
+            "--grant",
+            "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=150,ttl_ms=600000,fail=safe-park",
+            "--grant",
+            "sensor=arm0/elbow#angle_deg",
+            "--broker-profile",
+            "sim",
+            "--report-out",
+            "rep.json",
         ],
     );
     let took = started.elapsed();
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     let stdout = String::from_utf8_lossy(&o.stdout).to_string();
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.first().copied(), Some("COMMANDED"), "the first command, after a {took:?} run, was not charged the VM's boot:\n{}", out(&o));
+    assert_eq!(
+        lines.first().copied(),
+        Some("COMMANDED"),
+        "the first command, after a {took:?} run, was not charged the VM's boot:\n{}",
+        out(&o)
+    );
     assert!(lines.get(1).is_some_and(|l| l.starts_with("REFUSED: ") && l.contains("outside the envelope")), "{}", out(&o));
     assert_eq!(lines.get(2).copied(), Some("READ 12.0"), "{}", out(&o));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();

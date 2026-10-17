@@ -60,9 +60,35 @@ pub const AUDIT_RULES: &[&str] = &["R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-
 /// meta flags (`--help`/`--version`) and the hidden foreign-worker subcommand. The drift test
 /// fences this against the dispatch source.
 pub const CLI_SUBCOMMANDS: &[&str] = &[
-    "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish", "add", "login",
-    "build", "lock", "run", "plugin", "authority", "why", "atlas", "repl", "audit", "grants",
-    "guard", "broker", "secrets", "locale", "explain", "doctor", "completions",
+    "new",
+    "check",
+    "fix",
+    "fmt",
+    "test",
+    "lsp",
+    "keygen",
+    "sign",
+    "verify-sig",
+    "publish",
+    "add",
+    "login",
+    "build",
+    "lock",
+    "run",
+    "plugin",
+    "authority",
+    "why",
+    "atlas",
+    "repl",
+    "audit",
+    "grants",
+    "guard",
+    "broker",
+    "secrets",
+    "locale",
+    "explain",
+    "doctor",
+    "completions",
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -87,14 +113,7 @@ impl Category {
         }
     }
     pub fn all() -> [Category; 6] {
-        [
-            Category::Diag,
-            Category::Prim,
-            Category::Grammar,
-            Category::Audit,
-            Category::Cli,
-            Category::Rule,
-        ]
+        [Category::Diag, Category::Prim, Category::Grammar, Category::Audit, Category::Cli, Category::Rule]
     }
 }
 
@@ -188,8 +207,7 @@ pub fn parse_witnesses(text: &str) -> Result<Vec<WitnessRecord>, Vec<String>> {
             "kind" => match val.as_str() {
                 "positive" => rec.positive = Some(true),
                 "negative" => rec.positive = Some(false),
-                other => errors
-                    .push(format!("witnesses.toml:{}: kind must be positive|negative, got `{other}`", lineno + 1)),
+                other => errors.push(format!("witnesses.toml:{}: kind must be positive|negative, got `{other}`", lineno + 1)),
             },
             other => errors.push(format!("witnesses.toml:{}: unknown key `{other}`", lineno + 1)),
         }
@@ -286,8 +304,12 @@ fn body_mentions_code(src: &str, test: &str, code: &str) -> bool {
     let Some(idx) = find_fn(src, test) else { return false };
     let rest = &src[idx..];
     // The body runs to the next test attribute, or to end of file for the last test in a module.
-    let end = rest.find("
-    #[test]").unwrap_or(rest.len());
+    let end = rest
+        .find(
+            "
+    #[test]",
+        )
+        .unwrap_or(rest.len());
     rest[..end].contains(code)
 }
 
@@ -441,11 +463,7 @@ pub fn run_coverage(root: &Path) -> Coverage {
     };
 
     // --- Conformance headers (accept = positive, reject = negative) + corpus (positive) ---
-    for (dir, positive) in [
-        ("tests/conformance/accept", true),
-        ("tests/corpus", true),
-        ("tests/conformance/reject", false),
-    ] {
+    for (dir, positive) in [("tests/conformance/accept", true), ("tests/corpus", true), ("tests/conformance/reject", false)] {
         let mut files = Vec::new();
         delulu_files(&root.join(dir), &mut files);
         for file in &files {
@@ -470,8 +488,7 @@ pub fn run_coverage(root: &Path) -> Coverage {
                     if registry.contains(&anchor) {
                         witnesses.add(&anchor, false, format!("reject-file:{rel}"));
                     } else {
-                        validation_errors
-                            .push(format!("{rel}: file name encodes unregistered code `{code}`"));
+                        validation_errors.push(format!("{rel}: file name encodes unregistered code `{code}`"));
                     }
                 }
             }
@@ -490,10 +507,7 @@ pub fn run_coverage(root: &Path) -> Coverage {
                     let src = match std::fs::read_to_string(root.join(&r.file)) {
                         Ok(s) => s,
                         Err(_) => {
-                            validation_errors.push(format!(
-                                "witness for `{}` names missing file `{}`",
-                                r.anchor, r.file
-                            ));
+                            validation_errors.push(format!("witness for `{}` names missing file `{}`", r.anchor, r.file));
                             continue;
                         }
                     };
@@ -503,14 +517,9 @@ pub fn run_coverage(root: &Path) -> Coverage {
                             // this, a witness repointed at a real but unrelated test satisfied the
                             // anchor and coverage still read 100%.
                             let code = r.anchor.strip_prefix("ref.diag.").unwrap_or("");
-                            let excepted = REJECTING_WITNESSES_WITHOUT_A_CODE_ASSERTION
-                                .iter()
-                                .any(|(a, t)| *a == r.anchor && *t == r.test);
-                            if !r.positive
-                                && !code.is_empty()
-                                && !excepted
-                                && !body_mentions_code(&src, &r.test, code)
-                            {
+                            let excepted =
+                                REJECTING_WITNESSES_WITHOUT_A_CODE_ASSERTION.iter().any(|(a, t)| *a == r.anchor && *t == r.test);
+                            if !r.positive && !code.is_empty() && !excepted && !body_mentions_code(&src, &r.test, code) {
                                 validation_errors.push(format!(
                                     "witness for `{}` names test `{}::{}`, whose body never mentions `{}`                                      — a rejecting witness must assert on the code it witnesses, or the                                      anchor is satisfied by a test that does not exercise it",
                                     r.anchor, r.file, r.test, code
@@ -523,10 +532,8 @@ pub fn run_coverage(root: &Path) -> Coverage {
                             "witness for `{}` names `#[ignore]`d test `{}::{}` (inactive witness)",
                             r.anchor, r.file, r.test
                         )),
-                        TestPresence::Absent => validation_errors.push(format!(
-                            "witness for `{}` names nonexistent test `{}::{}`",
-                            r.anchor, r.file, r.test
-                        )),
+                        TestPresence::Absent => validation_errors
+                            .push(format!("witness for `{}` names nonexistent test `{}::{}`", r.anchor, r.file, r.test)),
                     }
                 }
             }
@@ -544,9 +551,7 @@ pub fn run_coverage(root: &Path) -> Coverage {
         for positive in [true, false] {
             let map = if positive { &witnesses.positive } else { &witnesses.negative };
             let all_enforced = !rule.enforced_by.is_empty()
-                && rule.enforced_by.iter().all(|code| {
-                    map.get(&format!("ref.diag.{code}")).is_some_and(|v| !v.is_empty())
-                });
+                && rule.enforced_by.iter().all(|code| map.get(&format!("ref.diag.{code}")).is_some_and(|v| !v.is_empty()));
             if all_enforced {
                 let via = rule.enforced_by.join("+");
                 witnesses.add(rule.anchor, positive, format!("via:{via}"));

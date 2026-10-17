@@ -480,11 +480,9 @@ mod linux {
                 std::fs::create_dir_all(d).unwrap();
                 std::fs::set_permissions(d, std::fs::Permissions::from_mode(mode)).unwrap();
             }
-            for (f, mode) in [
-                (operator.join("secret.txt"), 0o600),
-                (state.join("broker.key"), 0o600),
-                (public_dir.join("readme.txt"), 0o644),
-            ] {
+            for (f, mode) in
+                [(operator.join("secret.txt"), 0o600), (state.join("broker.key"), 0o600), (public_dir.join("readme.txt"), 0o644)]
+            {
                 std::fs::write(&f, b"x").unwrap();
                 std::fs::set_permissions(&f, std::fs::Permissions::from_mode(mode)).unwrap();
             }
@@ -501,7 +499,10 @@ mod linux {
             let free = Command::new(&exe).args(args).env(MODE, &targets).output().unwrap();
             let free = String::from_utf8_lossy(&free.stdout).to_string();
             for want in ["SECRET=true", "STATE=true", "LIST=true", "WRITE=true", "PUBLIC=true"] {
-                assert!(free.contains(want), "the operator's control could not do `{want}`, so nothing below would be measured:\n{free}");
+                assert!(
+                    free.contains(want),
+                    "the operator's control could not do `{want}`, so nothing below would be measured:\n{free}"
+                );
             }
             let _ = std::fs::remove_file(operator.join("escaped.txt"));
 
@@ -554,31 +555,30 @@ mod win {
     use std::process::ExitStatus;
 
     use windows_sys::Win32::Foundation::{
-        DuplicateHandle, GetLastError, LocalFree, SetHandleInformation, DUPLICATE_SAME_ACCESS, GENERIC_EXECUTE,
-        GENERIC_READ, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        DuplicateHandle, GetLastError, LocalFree, SetHandleInformation, DUPLICATE_SAME_ACCESS, GENERIC_EXECUTE, GENERIC_READ,
+        HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
     };
     use windows_sys::Win32::Security::Authorization::{
-        ConvertStringSidToSidW, GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W,
-        GRANT_ACCESS, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, TRUSTEE_IS_SID, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_W,
+        ConvertStringSidToSidW, GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W, GRANT_ACCESS,
+        NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, TRUSTEE_IS_SID, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_W,
     };
     use windows_sys::Win32::Security::Isolation::{
         CreateAppContainerProfile, DeleteAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
     };
     use windows_sys::Win32::Security::{
-        FreeSid, ACL, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES,
-        SECURITY_CAPABILITIES, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        FreeSid, ACL, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES,
+        SUB_CONTAINERS_AND_OBJECTS_INHERIT,
     };
     use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE};
     use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
     use windows_sys::Win32::System::Pipes::CreatePipe;
     use windows_sys::Win32::System::ProcessStatus::K32EnumProcessModules;
     use windows_sys::Win32::System::Threading::{
-        CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
-        InitializeProcThreadAttributeList, OpenProcess, ResumeThread, TerminateProcess, UpdateProcThreadAttribute,
-        WaitForSingleObject, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, INFINITE,
-        LPPROC_THREAD_ATTRIBUTE_LIST, PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
-        PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, STARTF_USESTDHANDLES,
-        STARTUPINFOEXW,
+        CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess, InitializeProcThreadAttributeList,
+        OpenProcess, ResumeThread, TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject, CREATE_SUSPENDED,
+        CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, INFINITE, LPPROC_THREAD_ATTRIBUTE_LIST, PROCESS_INFORMATION,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+        STARTF_USESTDHANDLES, STARTUPINFOEXW,
     };
 
     fn wide(s: &OsStr) -> Vec<u16> {
@@ -756,7 +756,11 @@ mod win {
                     new,
                     std::ptr::null(),
                 );
-                if e != 0 { Err(format!("cannot grant the runtime directory ({e})")) } else { Ok(()) }
+                if e != 0 {
+                    Err(format!("cannot grant the runtime directory ({e})"))
+                } else {
+                    Ok(())
+                }
             };
             LocalFree(new as _);
             LocalFree(sd as _);
@@ -841,10 +845,8 @@ mod win {
                 continue;
             }
             let path = e.path();
-            let last = std::fs::metadata(path.join(COMPLETE))
-                .or_else(|_| std::fs::metadata(&path))
-                .and_then(|m| m.modified())
-                .ok();
+            let last =
+                std::fs::metadata(path.join(COMPLETE)).or_else(|_| std::fs::metadata(&path)).and_then(|m| m.modified()).ok();
             let idle = last.and_then(|t| t.elapsed().ok()).is_some_and(|d| d > day);
             if idle {
                 let _ = std::fs::remove_dir_all(&path);
@@ -1000,7 +1002,9 @@ mod win {
             let mut dup: HANDLE = std::ptr::null_mut();
             let ok = !mine.is_null()
                 && mine != INVALID_HANDLE_VALUE
-                && unsafe { DuplicateHandle(GetCurrentProcess(), mine, GetCurrentProcess(), &mut dup, 0, 1, DUPLICATE_SAME_ACCESS) } != 0;
+                && unsafe {
+                    DuplicateHandle(GetCurrentProcess(), mine, GetCurrentProcess(), &mut dup, 0, 1, DUPLICATE_SAME_ACCESS)
+                } != 0;
             (if ok { Some(unsafe { OwnedHandle::from_raw_handle(dup as RawHandle) }) } else { None }, None)
         };
 
@@ -1058,8 +1062,11 @@ mod win {
             let set = |attr: u32, value: *const core::ffi::c_void, size: usize| {
                 UpdateProcThreadAttribute(list, 0, attr as usize, value, size, std::ptr::null_mut(), std::ptr::null()) != 0
             };
-            if !set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, &caps as *const _ as _, std::mem::size_of::<SECURITY_CAPABILITIES>())
-                || !set(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit.as_ptr() as _, inherit.len() * std::mem::size_of::<HANDLE>())
+            if !set(
+                PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+                &caps as *const _ as _,
+                std::mem::size_of::<SECURITY_CAPABILITIES>(),
+            ) || !set(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit.as_ptr() as _, inherit.len() * std::mem::size_of::<HANDLE>())
             {
                 let e = GetLastError();
                 DeleteProcThreadAttributeList(list);
@@ -1175,14 +1182,14 @@ mod win {
             );
             let args = ["--exact", "identity::win::tests::t14_child", "--nocapture", "--test-threads=1"];
 
-            let free = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(args)
-                .env(MODE, &targets)
-                .output()
-                .unwrap();
+            let free =
+                std::process::Command::new(std::env::current_exe().unwrap()).args(args).env(MODE, &targets).output().unwrap();
             let free = String::from_utf8_lossy(&free.stdout).to_string();
             for want in ["SECRET=true", "STATE=true", "LIST=true", "WRITE=true", "CONNECT=true"] {
-                assert!(free.contains(want), "the uncontained control could not do `{want}`, so nothing below would be measured:\n{free}");
+                assert!(
+                    free.contains(want),
+                    "the uncontained control could not do `{want}`, so nothing below would be measured:\n{free}"
+                );
             }
             let _ = std::fs::remove_file(operator.join("escaped.txt"));
 

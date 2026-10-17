@@ -72,13 +72,8 @@ impl Catalog {
     /// Parse and validate catalog text. Always returns a catalog (possibly empty) plus the
     /// DL1704 warnings its defects produced — load never fails hard, entries fall back.
     pub fn parse(text: &str) -> (Catalog, Vec<Diagnostic>) {
-        let mut cat = Catalog {
-            locale: String::new(),
-            version: String::new(),
-            fallback: None,
-            coverage: None,
-            entries: HashMap::new(),
-        };
+        let mut cat =
+            Catalog { locale: String::new(), version: String::new(), fallback: None, coverage: None, entries: HashMap::new() };
         let mut warnings = Vec::new();
         // Current section: None = prologue, Some(("meta", _)) or Some((key, allowed)).
         enum Section {
@@ -108,9 +103,7 @@ impl Catalog {
                     section = Some(Section::Skipped);
                 } else {
                     match placeholders_for(name) {
-                        Some(allowed) => {
-                            section = Some(Section::Entry { key: name.to_string(), allowed })
-                        }
+                        Some(allowed) => section = Some(Section::Entry { key: name.to_string(), allowed }),
                         None => {
                             warnings.push(dl1704(format!(
                                 "catalog key `{name}` (line {}) is not a registered diagnostic \
@@ -124,10 +117,7 @@ impl Catalog {
                 continue;
             }
             let Some((k, v)) = line.split_once('=') else {
-                warnings.push(dl1704(format!(
-                    "malformed catalog line {} (expected `key = \"value\"`) — ignored",
-                    lineno + 1
-                )));
+                warnings.push(dl1704(format!("malformed catalog line {} (expected `key = \"value\"`) — ignored", lineno + 1)));
                 continue;
             };
             let k = k.trim();
@@ -135,10 +125,7 @@ impl Catalog {
                 // Meta may carry non-string values (tables, numbers) — tolerated and
                 // ignored there; inside an entry a non-string value cannot be a template.
                 if matches!(section, Some(Section::Entry { .. })) {
-                    warnings.push(dl1704(format!(
-                        "catalog line {} has a non-string value — entry field ignored",
-                        lineno + 1
-                    )));
+                    warnings.push(dl1704(format!("catalog line {} has a non-string value — entry field ignored", lineno + 1)));
                 }
                 continue;
             };
@@ -320,10 +307,7 @@ mod tests {
     fn an_unknown_placeholder_is_dl1704_and_the_entry_falls_back() {
         let src = "[meta]\nlocale = \"x\"\n[DL0501]\nmessage = \"fn {fn} did {nope}\"\n";
         let (cat, warnings) = Catalog::parse(src);
-        assert!(
-            warnings.iter().any(|d| d.code == "DL1704" && d.message.contains("{nope}")),
-            "{warnings:?}"
-        );
+        assert!(warnings.iter().any(|d| d.code == "DL1704" && d.message.contains("{nope}")), "{warnings:?}");
         assert_eq!(cat.render("DL0501", &args(&[("fn", "f")])), None, "entry dropped");
     }
 
@@ -333,10 +317,7 @@ mod tests {
     fn a_welcome_override_attempt_is_dl1704_by_name() {
         let src = "[cli.first-run.welcome]\nmessage = \"new welcome who dis\"\n";
         let (cat, warnings) = Catalog::parse(src);
-        assert!(
-            warnings.iter().any(|d| d.code == "DL1704" && d.message.contains("welcome is law")),
-            "{warnings:?}"
-        );
+        assert!(warnings.iter().any(|d| d.code == "DL1704" && d.message.contains("welcome is law")), "{warnings:?}");
         assert!(cat.is_empty(), "the entry must not load");
     }
 

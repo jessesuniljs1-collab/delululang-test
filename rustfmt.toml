@@ -1,0 +1,6 @@
+# The formatting every contribution follows (D-V2-145): `cargo fmt --all`, checked in CI's `lints` job. The two settings
+# are the measured nearest to the hand style the codebase was written in (2026-10-17: default 7,065 disagreements,
+# max_width 130 alone 4,461, with use_small_heuristics = "Max" 2,371) — long lines where they read better, short
+# constructs kept on one line.
+max_width = 130
+use_small_heuristics = "Max"

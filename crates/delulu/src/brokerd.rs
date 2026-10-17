@@ -19,14 +19,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use delulu_broker::{
-    load_or_create_key, AuditEntry, AuditError, AuditLog, AuditRecord, AuditSink, Authority, Broker,
-    Decision, GrantId, Holder, Op, Scopes, SecretStore,
+    load_or_create_key, AuditEntry, AuditError, AuditLog, AuditRecord, AuditSink, Authority, Broker, Decision, GrantId, Holder,
+    Op, Scopes, SecretStore,
 };
 use delulu_check::Effect;
 
-use crate::broker_ipc::{
-    read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION,
-};
+use crate::broker_ipc::{read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION};
 use crate::broker_transport::{self, Connection, Listener};
 
 // ----- state-dir + file paths (the only place ~/.delulu is resolved) -----------------------------
@@ -57,12 +55,7 @@ fn key_path(state: &Path) -> PathBuf {
 fn write_broker_key(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::OpenOptionsExt as _;
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)?;
+    let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
     f.write_all(key)
 }
 #[cfg(not(unix))]
@@ -90,14 +83,13 @@ fn load_guard_policy(state: &Path) -> (delulu_broker::GuardPolicy, bool) {
     let path = guard_policy_path(state);
     match std::fs::read_to_string(&path) {
         Err(_) => (delulu_broker::GuardPolicy::default_policy(), false),
-        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text)
-            .ok()
-            .and_then(|v| delulu_broker::GuardPolicy::from_json(&v))
-        {
-            Some(p) => (p, false),
-            // Present but unreadable/corrupt → poisoned (fail closed).
-            None => (delulu_broker::GuardPolicy::default_policy(), true),
-        },
+        Ok(text) => {
+            match serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| delulu_broker::GuardPolicy::from_json(&v)) {
+                Some(p) => (p, false),
+                // Present but unreadable/corrupt → poisoned (fail closed).
+                None => (delulu_broker::GuardPolicy::default_policy(), true),
+            }
+        }
     }
 }
 
@@ -382,9 +374,10 @@ pub(crate) fn spec_to_authority(spec: &AuthoritySpec) -> Authority {
             // smallest budget there is instead, so whatever it was meant to allow, it now allows
             // less. The CLI cannot produce one (it writes these strings from parsed values); pinned
             // by `an_unreadable_budget_on_the_wire_becomes_the_smallest_budget_not_the_largest`.
-            budget: spec.budget.as_deref().map(|s| {
-                delulu_broker::BudgetScope::parse(s).unwrap_or(delulu_broker::BudgetScope::SMALLEST)
-            }),
+            budget: spec
+                .budget
+                .as_deref()
+                .map(|s| delulu_broker::BudgetScope::parse(s).unwrap_or(delulu_broker::BudgetScope::SMALLEST)),
             // P9-04 (d), D-V2-133: kept as written. `Authority::new` canonicalizes, dropping a pair whose name `secrets`
             // does not hold; a spelling no origin has matches no destination, so it is reach to nothing either way.
             secret_to: spec.secret_to.iter().cloned().collect(),
@@ -483,7 +476,9 @@ fn fire_deadmen(
     }
     // RW 4.58: the revocations are in force either way; the log says when the chain does not hold them.
     if !fired.is_empty() && failed.get() {
-        eprintln!("delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written");
+        eprintln!(
+            "delulu broker: WARNING (RW 4.58) — a dead-man's revocation is in force but its audit record could not be written"
+        );
     }
 }
 
@@ -706,8 +701,7 @@ fn handle(
                     // never switched on (criterion 9). Without it a vehicle could not answer "which
                     // credential is this authority?", and an operator with a contact receipt would
                     // have no way to find the node it renews. `grants inspect` shows it.
-                    let holder =
-                        delulu_broker::Holder::new("federated", "adopted grant certificate", &fingerprint);
+                    let holder = delulu_broker::Holder::new("federated", "adopted grant certificate", &fingerprint);
                     failed.set(false);
                     match broker.adopt(&certs, &anchors, &crate::cert_crypto::Ed25519Verifier, holder) {
                         // RW 4.58's rest: an adoption is a mint across a broker boundary (D-V2-109, D-V2-111).
@@ -736,10 +730,7 @@ fn handle(
                         (unrecorded_undone("a renewal", "the adopted node's deadline left where it was"), false)
                     }
                     Ok((ttl_millis, _)) => {
-                        let node = broker
-                            .adopted_node_public(&cert)
-                            .map(|id| id.to_string())
-                            .unwrap_or_default();
+                        let node = broker.adopted_node_public(&cert).map(|id| id.to_string()).unwrap_or_default();
                         (Response::Renewed { node, ttl_millis }, false)
                     }
                     Err(d) => (deny_response(&d), false),
@@ -917,7 +908,13 @@ fn handle(
                 }
                 Decision::Deny(d) => {
                     let diag = d.to_diagnostic();
-                    Response::Decision { allow: false, code: Some(diag.code.to_string()), message: Some(diag.message), audit_seq: None, warn: None }
+                    Response::Decision {
+                        allow: false,
+                        code: Some(diag.code.to_string()),
+                        message: Some(diag.message),
+                        audit_seq: None,
+                        warn: None,
+                    }
                 }
             };
             (resp, false)
@@ -929,7 +926,9 @@ fn handle(
                     let (state, by_seq, ttl_millis, now_millis) = match eff {
                         delulu_broker::EffState::Live => ("live", None, None, None),
                         delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(by_seq), None, None),
-                        delulu_broker::EffState::Expired { ttl_millis, now_millis } => ("expired", None, Some(ttl_millis), Some(now_millis)),
+                        delulu_broker::EffState::Expired { ttl_millis, now_millis } => {
+                            ("expired", None, Some(ttl_millis), Some(now_millis))
+                        }
                     };
                     (
                         Response::NodeState {
@@ -945,7 +944,11 @@ fn handle(
                     )
                 }
                 None => (
-                    Response::Error { code: "DL0904".to_string(), message: format!("no such lease `{node}` (fail closed)"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such lease `{node}` (fail closed)"),
+                        requires_human: false,
+                    },
                     false,
                 ),
             }
@@ -965,7 +968,8 @@ fn handle(
                         return (
                             Response::Error {
                                 code: "DL1401".to_string(),
-                                message: "broker could not append the expose audit record — refused (fail closed, invariant 26)".to_string(),
+                                message: "broker could not append the expose audit record — refused (fail closed, invariant 26)"
+                                    .to_string(),
                                 requires_human: true,
                             },
                             false,
@@ -988,7 +992,8 @@ fn handle(
                         return (
                             Response::Error {
                                 code: "DL1401".to_string(),
-                                message: "broker could not append the verify audit record — refused (fail closed, invariant 26)".to_string(),
+                                message: "broker could not append the verify audit record — refused (fail closed, invariant 26)"
+                                    .to_string(),
                                 requires_human: true,
                             },
                             false,
@@ -1010,8 +1015,9 @@ fn handle(
                 Ok(_) if failed.get() => (
                     Response::Error {
                         code: "DL1401".to_string(),
-                        message: "broker could not append the send audit record — refused, nothing sent (fail closed, invariant 26)"
-                            .to_string(),
+                        message:
+                            "broker could not append the send audit record — refused, nothing sent (fail closed, invariant 26)"
+                                .to_string(),
                         requires_human: true,
                     },
                     false,
@@ -1055,7 +1061,11 @@ fn handle(
             match (broker.inspect(&node), broker.effective_state(&node)) {
                 (Some(n), Some(eff)) => (Response::Inspected { node: Box::new(node_info(n, eff)) }, false),
                 _ => (
-                    Response::Error { code: "DL0904".to_string(), message: format!("no such lease `{node}` (fail closed)"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such lease `{node}` (fail closed)"),
+                        requires_human: false,
+                    },
                     false,
                 ),
             }
@@ -1069,17 +1079,17 @@ fn handle(
                 (delulu_broker::GuardClass::from_wire(&class), delulu_broker::GuardTier::from_wire(&tier))
             else {
                 return (
-                    Response::Error { code: "DL0904".to_string(), message: format!("unknown guard class/tier `{class}`/`{tier}` (fail closed)"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("unknown guard class/tier `{class}`/`{tier}` (fail closed)"),
+                        requires_human: false,
+                    },
                     false,
                 );
             };
             let before = broker.guard_policy_snapshot();
-            let what = format!(
-                "`guard policy set {}:{} {}`",
-                class.wire_name(),
-                delulu_diag::terminal_line(&pattern),
-                tier.wire_name()
-            );
+            let what =
+                format!("`guard policy set {}:{} {}`", class.wire_name(), delulu_diag::terminal_line(&pattern), tier.wire_name());
             failed.set(false);
             match broker.guard_policy_set(owner.as_deref(), class, pattern, tier) {
                 Ok(()) => (guard_policy_edited(broker, failed, state_dir, before, &what), false),
@@ -1089,7 +1099,11 @@ fn handle(
         ReqBody::GuardPolicyUnset { owner, class, pattern } => {
             let Some(class) = delulu_broker::GuardClass::from_wire(&class) else {
                 return (
-                    Response::Error { code: "DL0904".to_string(), message: format!("unknown guard class `{class}` (fail closed)"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("unknown guard class `{class}` (fail closed)"),
+                        requires_human: false,
+                    },
                     false,
                 );
             };
@@ -1119,7 +1133,11 @@ fn handle(
         ReqBody::GuardRequest { node, uses, why } => {
             let Some(subset) = delulu_broker::GuardSubset::parse(&uses) else {
                 return (
-                    Response::Error { code: "DL0904".to_string(), message: "a guard request `--use` must be `class:pattern` items".to_string(), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: "a guard request `--use` must be `class:pattern` items".to_string(),
+                        requires_human: false,
+                    },
                     false,
                 );
             };
@@ -1152,7 +1170,11 @@ fn handle(
                 }
                 Ok(Some(permit_id)) => (Response::GuardApproved { permit_id }, false),
                 Ok(None) => (
-                    Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such pending guard request `{id}`"),
+                        requires_human: false,
+                    },
                     false,
                 ),
                 Err(d) => (deny_response(&d), false),
@@ -1168,7 +1190,11 @@ fn handle(
                 }
                 Ok(true) => (Response::Ok, false),
                 Ok(false) => (
-                    Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such pending guard request `{id}`"),
+                        requires_human: false,
+                    },
                     false,
                 ),
                 Err(d) => (deny_response(&d), false),
@@ -1247,7 +1273,11 @@ fn handle(
                 }
                 Ok(true) => (Response::Ok, false),
                 Ok(false) => (
-                    Response::Error { code: "DL0904".to_string(), message: format!("no such permit `{id}`"), requires_human: false },
+                    Response::Error {
+                        code: "DL0904".to_string(),
+                        message: format!("no such permit `{id}`"),
+                        requires_human: false,
+                    },
                     false,
                 ),
                 Err(d) => (deny_response(&d), false),
@@ -1301,12 +1331,7 @@ pub fn serve(state_dir: &Path, bypass: bool) -> io::Result<()> {
 
 /// The serve loop with an explicit owner code (so tests can drive a KNOWN code without racing on a
 /// process-global env var). Owns the single `Broker` for this OS user. Blocking, single-connection.
-pub(crate) fn serve_inner(
-    state_dir: &Path,
-    owner_code: String,
-    print_owner: bool,
-    bypass: bool,
-) -> io::Result<()> {
+pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: bool, bypass: bool) -> io::Result<()> {
     std::fs::create_dir_all(state_dir)?;
     // P21: refuse to start if the state directory's filesystem cannot enforce owner-only permissions —
     // broker.key, secrets.json and the audit log would otherwise be readable by other local users.
@@ -1318,10 +1343,8 @@ pub(crate) fn serve_inner(
     {
         return Err(io::Error::other(msg));
     }
-    let key = load_or_create_key(key_path(state_dir))
-        .map_err(|e| io::Error::other(format!("broker key: {e}")))?;
-    let log = AuditLog::open(audit_dir(state_dir))
-        .map_err(|e| io::Error::other(format!("audit log: {e}")))?;
+    let key = load_or_create_key(key_path(state_dir)).map_err(|e| io::Error::other(format!("broker key: {e}")))?;
+    let log = AuditLog::open(audit_dir(state_dir)).map_err(|e| io::Error::other(format!("audit log: {e}")))?;
     let failed = Rc::new(Cell::new(false));
     let sink = TrackingSink::new(log, Rc::clone(&failed));
     let audit_lock = sink.held();
@@ -1592,11 +1615,7 @@ pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
 /// that accepted the connection but never replied (e.g. one hung by IPC-1), stalling the watchdog and
 /// disabling the heartbeat dead-man for every device — a safety fail-open. On Windows the connect
 /// already bounded this; the timeout makes both platforms fail closed at the same bound.
-pub fn request_timed(
-    state_dir: &Path,
-    body: ReqBody,
-    read_timeout: std::time::Duration,
-) -> io::Result<Response> {
+pub fn request_timed(state_dir: &Path, body: ReqBody, read_timeout: std::time::Duration) -> io::Result<Response> {
     let mut conn = broker_transport::connect(state_dir)?;
     conn.set_read_timeout(Some(read_timeout))?;
     write_frame(&mut conn, &Request::new(body))?;
@@ -1803,7 +1822,10 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
             Ok(Response::Status { pid, nodes, epoch }) => {
                 if json {
                     crate::cli::note_json_emitted();
-                    println!("{}", serde_json::json!({ "running": true, "pid": pid, "nodes": nodes, "epoch": epoch, "custody": "daemon" }));
+                    println!(
+                        "{}",
+                        serde_json::json!({ "running": true, "pid": pid, "nodes": nodes, "epoch": epoch, "custody": "daemon" })
+                    );
                 } else {
                     println!("broker running — pid {pid}, {nodes} node(s), epoch {epoch}, custody: daemon");
                 }
@@ -2020,12 +2042,8 @@ fn detach(cmd: &mut std::process::Command) {
 /// handle simply has nothing to clear.
 #[cfg(windows)]
 pub(crate) unsafe fn clear_std_handle_inheritance() {
-    use windows_sys::Win32::Foundation::{
-        SetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
-    };
-    use windows_sys::Win32::System::Console::{
-        GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
-    };
+    use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
     for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
         let h = GetStdHandle(id);
         if !h.is_null() && h != INVALID_HANDLE_VALUE {
@@ -2187,11 +2205,9 @@ mod tests {
         let state = temp_state("endofrun");
         let handle = start_daemon(&state);
         let mut c = BrokerClientCustody::issue_root(state.clone(), spec(&["Write"]), None).expect("a root");
-        let device = c
-            .attenuate(Authority::default(), delulu_broker::Holder::new("device", "arm0/elbow", ""))
-            .expect("a device node");
-        let plugin =
-            c.attenuate(Authority::default(), delulu_broker::Holder::new("plugin", "shout", "")).expect("a plugin node");
+        let device =
+            c.attenuate(Authority::default(), delulu_broker::Holder::new("device", "arm0/elbow", "")).expect("a device node");
+        let plugin = c.attenuate(Authority::default(), delulu_broker::Holder::new("plugin", "shout", "")).expect("a plugin node");
         c.end_of_run();
         let state_of = |node: &GrantId| match request(&state, ReqBody::NodeState { node: node.as_str().to_string() }) {
             Ok(Response::NodeState { state, .. }) => state,
@@ -2218,7 +2234,11 @@ mod tests {
             .filter(|r| {
                 r.action == "revoke"
                     && r.target.as_deref() == Some(node)
-                    && r.authority.as_ref().and_then(|a| a.get("why")).and_then(|w| w.as_str()).is_some_and(|w| w.starts_with("dead-man:"))
+                    && r.authority
+                        .as_ref()
+                        .and_then(|a| a.get("why"))
+                        .and_then(|w| w.as_str())
+                        .is_some_and(|w| w.starts_with("dead-man:"))
             })
             .collect()
     }
@@ -2272,8 +2292,14 @@ mod tests {
             .find(|r| r.action == "deadman-arm" && r.target.as_deref() == Some(node.as_str()))
             .expect("the arming is in the chain");
         let gap = fired[0].ts - arming.ts;
-        assert!(gap >= 299, "never before its period: fired {gap} ms after the arming (the test saw it {took:?} after the answer)");
-        eprintln!("measured: an idle daemon fired a 300 ms dead-man {gap} ms after it was armed ({} ms after the answer)", took.as_millis());
+        assert!(
+            gap >= 299,
+            "never before its period: fired {gap} ms after the arming (the test saw it {took:?} after the answer)"
+        );
+        eprintln!(
+            "measured: an idle daemon fired a 300 ms dead-man {gap} ms after it was armed ({} ms after the answer)",
+            took.as_millis()
+        );
     }
 
     /// **A beat sent in time keeps its dead-man, though the daemon answers it late** (routine run 22: `11c9d94`'s push run
@@ -2363,7 +2389,10 @@ mod tests {
         // throughput: CI's test job, running the suite in parallel, answered 45 requests in 1.6 s where a quiet
         // machine answers thousands (push run 38029067385 went red on a floor of 200). A slower handler only keeps
         // the queue fuller, which is the state this witness needs.
-        assert!(past >= 1, "the baseline — the loop was answering requests past the deadline ({served} answered, {past} after it)");
+        assert!(
+            past >= 1,
+            "the baseline — the loop was answering requests past the deadline ({served} answered, {past} after it)"
+        );
         eprintln!("measured: {served} listings of a 2,001-node tree answered ({past} after the deadline), and the dead-man fired among them");
     }
 
@@ -2721,7 +2750,8 @@ mod tests {
             holder_desc: "agent-1".to_string(),
             ..Default::default()
         };
-        let resp = request(&state, ReqBody::Delegate { parent: orch.clone(), authority: child_spec, multi: false, owner: None }).unwrap();
+        let resp = request(&state, ReqBody::Delegate { parent: orch.clone(), authority: child_spec, multi: false, owner: None })
+            .unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("expected Delegated, got {resp:?}") };
         let resp = request(&state, ReqBody::Redeem { token: token.clone(), peer: "pid:9".to_string() }).unwrap();
         assert!(matches!(&resp, Response::Redeemed { node } if node == &child), "redeem binds the delegated node: {resp:?}");
@@ -2730,18 +2760,28 @@ mod tests {
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1407"), "{resp:?}");
 
         // The redeemed child's synchronous op validates against live tree state.
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".to_string(), arg: Some("./out/x".to_string()) }).unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".to_string(), arg: Some("./out/x".to_string()) })
+                .unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }));
 
         // Expose through the daemon: the orchestrator (Declassify + API_KEY scope) gets the bytes;
         // the child (no Declassify) is denied — bytes never cross for it.
-        let resp = request(&state, ReqBody::Expose { node: orch.clone(), name: "API_KEY".to_string(), span: Some("t.delulu:1:2".to_string()) }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Expose { node: orch.clone(), name: "API_KEY".to_string(), span: Some("t.delulu:1:2".to_string()) },
+        )
+        .unwrap();
         assert!(matches!(&resp, Response::Exposed { bytes } if bytes == "hunter2"), "{resp:?}");
         let resp = request(&state, ReqBody::Expose { node: child, name: "API_KEY".to_string(), span: None }).unwrap();
         assert!(matches!(&resp, Response::Error { .. }), "a node without Declassify+scope must not expose: {resp:?}");
 
         // SecretMap runs broker-side and the derivative exposes for the authorized node.
-        let resp = request(&state, ReqBody::SecretMap { node: orch.clone(), name: "API_KEY".to_string(), op: "upper".to_string(), arg: None }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::SecretMap { node: orch.clone(), name: "API_KEY".to_string(), op: "upper".to_string(), arg: None },
+        )
+        .unwrap();
         let Response::Mapped { name: derived } = resp else { panic!("expected Mapped, got {resp:?}") };
         let resp = request(&state, ReqBody::Expose { node: orch, name: derived, span: None }).unwrap();
         assert!(matches!(&resp, Response::Exposed { bytes } if bytes == "HUNTER2"), "{resp:?}");
@@ -2786,7 +2826,10 @@ mod tests {
         stop_daemon(&state, handle);
         // Within the still-fresh window the cached snapshot answers (the honest ≤ one-interval
         // bound, spec §4.2) — then a stale cache + dead broker is DL1401 (fail closed).
-        assert!(matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow), "fresh cache answers within the epoch window");
+        assert!(
+            matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow),
+            "fresh cache answers within the epoch window"
+        );
         std::thread::sleep(std::time::Duration::from_millis(300)); // let the 250 ms window lapse
         match custody.check(Op::FsRead, Some("./data/x")) {
             CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1401"),
@@ -3044,10 +3087,8 @@ mod tests {
         let held = log.take_lock().expect("the test holds the chain");
         let approved = request(&state, approve(&asked_id));
         let late_ask = request(&state, ask(&late));
-        let denied = request(
-            &state,
-            ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: asked_id.clone(), comment: "no".into() },
-        );
+        let denied =
+            request(&state, ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: asked_id.clone(), comment: "no".into() });
         let unpermitted = request(&state, ReqBody::GuardPermitRevoke { owner: Some(TEST_OWNER.into()), id: permit_id.clone() });
         drop(held);
         let pending = request(&state, ReqBody::GuardPending);
@@ -3055,7 +3096,10 @@ mod tests {
         let asked_use = request(&state, use_of(&asked));
         let permitted_use = request(&state, use_of(&permitted));
         stop_daemon(&state, handle);
-        assert!(matches!(baseline, Ok(Response::Decision { allow: true, .. })), "the baseline: an approved use passes: {baseline:?}");
+        assert!(
+            matches!(baseline, Ok(Response::Decision { allow: true, .. })),
+            "the baseline: an approved use passes: {baseline:?}"
+        );
         assert_unrecorded("an approval", &approved, "refused");
         assert_unrecorded("a request", &late_ask, "refused");
         assert_unrecorded("a denial", &denied, "IS denied");
@@ -3082,7 +3126,8 @@ mod tests {
             holder_kind: "process".into(),
             ..Default::default()
         };
-        let Ok(Response::Issued { node: root }) = request(&state, ReqBody::Issue(wide(&["Read", "Write"], &["/a", "/b", "/c"]))) else {
+        let Ok(Response::Issued { node: root }) = request(&state, ReqBody::Issue(wide(&["Read", "Write"], &["/a", "/b", "/c"])))
+        else {
             panic!("issue")
         };
         let Ok(Response::Issued { node: agent }) =
@@ -3098,7 +3143,8 @@ mod tests {
             at: "p.delulu:3:5".into(),
             code: "DL0703".into(),
         };
-        let approve = |id: &str| ReqBody::ProposalApprove { id: id.to_string(), under: root.clone(), owner: None, ttl_millis: None };
+        let approve =
+            |id: &str| ReqBody::ProposalApprove { id: id.to_string(), under: root.clone(), owner: None, ttl_millis: None };
         // The baseline, with the chain free: two proposals filed, one of them approved.
         let Ok(Response::Proposed { id: kept, .. }) = request(&state, propose("/a")) else { panic!("propose") };
         let Ok(Response::Proposed { id: other, .. }) = request(&state, propose("/b")) else { panic!("propose") };
@@ -3264,16 +3310,22 @@ mod tests {
         let handle = start_daemon(&state);
         let monitor = issue(&state);
         let sibling = issue(&state);
-        let child = match request(&state, ReqBody::Attenuate { parent: monitor.clone(), authority: spec(&["Write"]), owner: None }) {
-            Ok(Response::Issued { node }) => node,
-            other => panic!("attenuate: {other:?}"),
+        let child =
+            match request(&state, ReqBody::Attenuate { parent: monitor.clone(), authority: spec(&["Write"]), owner: None }) {
+                Ok(Response::Issued { node }) => node,
+                other => panic!("attenuate: {other:?}"),
+            };
+        let quarantine = |caller: &str, target: &str| ReqBody::Quarantine {
+            caller: caller.into(),
+            target: target.into(),
+            why: "rule `envelope`".into(),
         };
-        let quarantine =
-            |caller: &str, target: &str| ReqBody::Quarantine { caller: caller.into(), target: target.into(), why: "rule `envelope`".into() };
         let across = request(&state, quarantine(&monitor, &sibling));
         let upward = request(&state, quarantine(&child, &monitor));
         let states = |state: &Path| match request(state, ReqBody::List) {
-            Ok(Response::Listed { nodes }) => nodes.into_iter().map(|n| (n.id, n.state)).collect::<std::collections::HashMap<_, _>>(),
+            Ok(Response::Listed { nodes }) => {
+                nodes.into_iter().map(|n| (n.id, n.state)).collect::<std::collections::HashMap<_, _>>()
+            }
             other => panic!("list: {other:?}"),
         };
         let before = states(&state);
@@ -3347,26 +3399,30 @@ mod tests {
         let Response::Issued { node: root } = resp else { panic!("issue root: {resp:?}") };
 
         // Criterion 3 (refusal): delegating the guarded slice WITHOUT the owner code is DL1410.
-        let resp = request(&state, ReqBody::Delegate {
-            parent: root.clone(),
-            authority: declassify_spec("delegate"),
-            multi: false,
-            owner: None,
-        }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Delegate { parent: root.clone(), authority: declassify_spec("delegate"), multi: false, owner: None },
+        )
+        .unwrap();
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1410"), "mint without owner is DL1410: {resp:?}");
 
         // Criterion 3 (allow): WITH the owner code the principal mints the slice.
-        let resp = request(&state, ReqBody::Delegate {
-            parent: root.clone(),
-            authority: declassify_spec("delegate"),
-            multi: false,
-            owner: Some(TEST_OWNER.to_string()),
-        }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Delegate {
+                parent: root.clone(),
+                authority: declassify_spec("delegate"),
+                multi: false,
+                owner: Some(TEST_OWNER.to_string()),
+            },
+        )
+        .unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("owner mint: {resp:?}") };
         let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
 
         // Criterion 1: the delegated child using declassify WITHOUT a permit is DL1410 naming the cmd.
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
         match resp {
             Response::Decision { allow: false, code, message, .. } => {
                 assert_eq!(code.as_deref(), Some("DL1410"));
@@ -3392,18 +3448,32 @@ mod tests {
         let handle = start_daemon(&state);
 
         // Wrong owner → DL1414.
-        let resp = request(&state, ReqBody::GuardPolicySet {
-            owner: Some("wrong".into()), class: "net".into(), pattern: "*".into(), tier: "guarded".into(),
-        }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some("wrong".into()),
+                class: "net".into(),
+                pattern: "*".into(),
+                tier: "guarded".into(),
+            },
+        )
+        .unwrap();
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1414"), "{resp:?}");
         // Missing owner → DL1414.
         let resp = request(&state, ReqBody::GuardBypass { owner: None, on: true }).unwrap();
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1414"), "{resp:?}");
 
         // Right owner → Ok, and the rule shows up in status (a read verb, no owner).
-        let resp = request(&state, ReqBody::GuardPolicySet {
-            owner: Some(TEST_OWNER.into()), class: "net".into(), pattern: "*".into(), tier: "guarded".into(),
-        }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "net".into(),
+                pattern: "*".into(),
+                tier: "guarded".into(),
+            },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::Ok), "{resp:?}");
         let resp = request(&state, ReqBody::GuardStatus).unwrap();
         let Response::GuardStatus { rules, .. } = resp else { panic!("status: {resp:?}") };
@@ -3430,13 +3500,21 @@ mod tests {
         let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
         let mut child_spec = spec.clone();
         child_spec.holder_kind = "delegate".into();
-        let resp = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) },
+        )
+        .unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
         let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
 
         // Guarded (declassify) refuses even when poisoned; ungated (fs_write) is unaffected.
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
-        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")), "poisoned guarded refuses: {resp:?}");
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(
+            matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")),
+            "poisoned guarded refuses: {resp:?}"
+        );
         let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }), "ungated unaffected: {resp:?}");
         // `guard status` reports the poison.
@@ -3458,9 +3536,16 @@ mod tests {
         let handle = start_daemon(&state);
 
         // Guard fs_read (an epoch-class axis) — owner-gated policy edit.
-        let resp = request(&state, ReqBody::GuardPolicySet {
-            owner: Some(TEST_OWNER.into()), class: "fs_read".into(), pattern: "*".into(), tier: "guarded".into(),
-        }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "fs_read".into(),
+                pattern: "*".into(),
+                tier: "guarded".into(),
+            },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::Ok));
 
         // Root with Read/fs_read; delegate a child (owner mints the now-guarded fs_read slice).
@@ -3475,7 +3560,11 @@ mod tests {
         let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
         let mut child_spec = root_spec.clone();
         child_spec.holder_kind = "delegate".into();
-        let resp = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) },
+        )
+        .unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
         let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
 
@@ -3485,9 +3574,12 @@ mod tests {
             ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()),
             delulu_broker::Scopes { fs_read: ["./data".to_string()].into_iter().collect(), ..Default::default() },
         );
-        let mut custody = BrokerClientCustody::for_node(state.clone(), delulu_broker::GrantId::from_trusted(child), authority, Some(250));
+        let mut custody =
+            BrokerClientCustody::for_node(state.clone(), delulu_broker::GrantId::from_trusted(child), authority, Some(250));
         match custody.check(Op::FsRead, Some("./data/x")) {
-            CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1410", "guarded epoch op routed synchronously and blocked: {}", d.message),
+            CustodyDecision::Deny(d) => {
+                assert_eq!(d.code, "DL1410", "guarded epoch op routed synchronously and blocked: {}", d.message)
+            }
             CustodyDecision::Allow => panic!("criterion 11: a guarded epoch op must not ride the snapshot"),
         }
 
@@ -3503,12 +3595,16 @@ mod tests {
     fn guarded_child(state: &Path) -> (String, String) {
         let resp = request(state, ReqBody::Issue(declassify_spec("process"))).unwrap();
         let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
-        let resp = request(state, ReqBody::Delegate {
-            parent: root.clone(),
-            authority: declassify_spec("delegate"),
-            multi: false,
-            owner: Some(TEST_OWNER.to_string()),
-        }).unwrap();
+        let resp = request(
+            state,
+            ReqBody::Delegate {
+                parent: root.clone(),
+                authority: declassify_spec("delegate"),
+                multi: false,
+                owner: Some(TEST_OWNER.to_string()),
+            },
+        )
+        .unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
         let _ = request(state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
         (root, child)
@@ -3524,28 +3620,55 @@ mod tests {
         let (_root, child) = guarded_child(&state);
 
         // Block.
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")));
 
         // Request (with why).
-        let resp = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "call home once".into() }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "call home once".into() },
+        )
+        .unwrap();
         let Response::GuardRequested { id, .. } = resp else { panic!("request: {resp:?}") };
         // A retried use is DL1411 carrying the id.
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
-        assert!(matches!(&resp, Response::Decision { allow: false, code, message, .. } if code.as_deref() == Some("DL1411") && message.as_ref().unwrap().contains(&id)));
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(
+            matches!(&resp, Response::Decision { allow: false, code, message, .. } if code.as_deref() == Some("DL1411") && message.as_ref().unwrap().contains(&id))
+        );
 
         // Approve (with comment) → the retried use succeeds.
-        let resp = request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id: id.clone(), ttl_millis: None, uses: None, comment: Some("ok, once".into()) }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardApprove {
+                owner: Some(TEST_OWNER.into()),
+                id: id.clone(),
+                ttl_millis: None,
+                uses: None,
+                comment: Some("ok, once".into()),
+            },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::GuardApproved { .. }), "{resp:?}");
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
         assert!(matches!(resp, Response::Decision { allow: true, .. }), "approved use succeeds: {resp:?}");
 
         // Criterion 5: deny path — a SECOND request, denied, then the retried use is DL1412 verbatim.
         // (Use a fresh delegated node so the existing permit does not honor it.)
         let (_r2, child2) = guarded_child(&state);
-        let resp = request(&state, ReqBody::GuardRequest { node: child2.clone(), uses: vec!["declassify:*".into()], why: "please".into() }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardRequest { node: child2.clone(), uses: vec!["declassify:*".into()], why: "please".into() },
+        )
+        .unwrap();
         let Response::GuardRequested { id: id2, .. } = resp else { panic!("request2: {resp:?}") };
-        let resp = request(&state, ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: id2, comment: "denied: too broad for an agent".into() }).unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: id2, comment: "denied: too broad for an agent".into() },
+        )
+        .unwrap();
         assert!(matches!(resp, Response::Ok), "{resp:?}");
         let resp = request(&state, ReqBody::Check { node: child2, op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
         match resp {
@@ -3560,11 +3683,8 @@ mod tests {
         // The whole daemon-written audit chain verifies, and it shows the guard event kinds.
         let stats = delulu_broker::verify(state.join("audit")).expect("guard audit chain verifies");
         assert!(stats.records >= 8, "block+request+approve+use+deny recorded: {stats:?}");
-        let actions: std::collections::BTreeSet<String> = delulu_broker::tail(state.join("audit"), 100)
-            .unwrap()
-            .into_iter()
-            .map(|r| r.action)
-            .collect();
+        let actions: std::collections::BTreeSet<String> =
+            delulu_broker::tail(state.join("audit"), 100).unwrap().into_iter().map(|r| r.action).collect();
         for a in ["guard_block", "guard_request", "guard_approve", "guard_permit_use", "guard_deny"] {
             assert!(actions.contains(a), "audit shows `{a}`: {actions:?}");
         }
@@ -3580,30 +3700,78 @@ mod tests {
         let state = temp_state("guard_c6");
         let handle = start_daemon(&state);
         // Start GUARDED so a permit can be minted through the normal request/approve flow.
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "guarded".into() }).unwrap();
+        request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "fs_write".into(),
+                pattern: "*".into(),
+                tier: "guarded".into(),
+            },
+        )
+        .unwrap();
         // Root + delegated child.
-        let root_spec = AuthoritySpec { effects: vec!["Write".into()], fs_write: vec!["./out".into()], holder_kind: "process".into(), holder_desc: "c6".into(), ..Default::default() };
+        let root_spec = AuthoritySpec {
+            effects: vec!["Write".into()],
+            fs_write: vec!["./out".into()],
+            holder_kind: "process".into(),
+            holder_desc: "c6".into(),
+            ..Default::default()
+        };
         let Response::Issued { node: root } = request(&state, ReqBody::Issue(root_spec.clone())).unwrap() else { panic!() };
         let mut child_spec = root_spec.clone();
         child_spec.holder_kind = "delegate".into();
-        let Response::Delegated { node: child, token } = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap() else { panic!() };
+        let Response::Delegated { node: child, token } = request(
+            &state,
+            ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) },
+        )
+        .unwrap() else {
+            panic!()
+        };
         let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
 
         // Mint a permit for fs_write:* while guarded…
-        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["fs_write:*".into()], why: "want it".into() }).unwrap() else { panic!("a guarded request is accepted") };
-        request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        let Response::GuardRequested { id, .. } = request(
+            &state,
+            ReqBody::GuardRequest { node: child.clone(), uses: vec!["fs_write:*".into()], why: "want it".into() },
+        )
+        .unwrap() else {
+            panic!("a guarded request is accepted")
+        };
+        request(
+            &state,
+            ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None },
+        )
+        .unwrap();
         // …the permit works while guarded…
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
         assert!(matches!(&resp, Response::Decision { allow: true, .. }), "permit works while guarded: {resp:?}");
 
         // …now SEAL it: the pre-existing permit is inert, sealed refuses DL1413…
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
-        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
-        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed with permit: {resp:?}");
+        request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "fs_write".into(),
+                pattern: "*".into(),
+                tier: "sealed".into(),
+            },
+        )
+        .unwrap();
+        let resp =
+            request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        assert!(
+            matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")),
+            "sealed with permit: {resp:?}"
+        );
         // …and under bypass.
         request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true }).unwrap();
         let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
-        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed under bypass: {resp:?}");
+        assert!(
+            matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")),
+            "sealed under bypass: {resp:?}"
+        );
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
@@ -4020,15 +4188,56 @@ mod tests {
         let (_root, child) = guarded_child(&state); // declassify:* is guarded by default
 
         // (A) Seal declassify, then a request is refused DL1413 at REQUEST time.
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
-        let resp = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() }).unwrap();
+        request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "declassify".into(),
+                pattern: "*".into(),
+                tier: "sealed".into(),
+            },
+        )
+        .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() },
+        )
+        .unwrap();
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1413"), "sealed request refused: {resp:?}");
 
         // (B) The race: unseal, request while guarded, RE-seal, then APPROVE is refused DL1413.
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "guarded".into() }).unwrap();
-        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() }).unwrap() else { panic!("a guarded request is accepted") };
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
-        let resp = request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "declassify".into(),
+                pattern: "*".into(),
+                tier: "guarded".into(),
+            },
+        )
+        .unwrap();
+        let Response::GuardRequested { id, .. } = request(
+            &state,
+            ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() },
+        )
+        .unwrap() else {
+            panic!("a guarded request is accepted")
+        };
+        request(
+            &state,
+            ReqBody::GuardPolicySet {
+                owner: Some(TEST_OWNER.into()),
+                class: "declassify".into(),
+                pattern: "*".into(),
+                tier: "sealed".into(),
+            },
+        )
+        .unwrap();
+        let resp = request(
+            &state,
+            ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None },
+        )
+        .unwrap();
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1413"), "sealed approve refused: {resp:?}");
         // No permit was minted for the sealed subset.
         let Response::GuardPermitList { permits } = request(&state, ReqBody::GuardPermits).unwrap() else { panic!() };
@@ -4047,8 +4256,17 @@ mod tests {
         let state = temp_state("guard_restart");
         let handle = start_daemon(&state);
         let (_root, child) = guarded_child(&state);
-        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "w".into() }).unwrap() else { panic!() };
-        request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        let Response::GuardRequested { id, .. } =
+            request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "w".into() })
+                .unwrap()
+        else {
+            panic!()
+        };
+        request(
+            &state,
+            ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None },
+        )
+        .unwrap();
         // The permit + request exist in this session.
         let Response::GuardPermitList { permits } = request(&state, ReqBody::GuardPermits).unwrap() else { panic!() };
         assert_eq!(permits.len(), 1, "one live permit in-session");

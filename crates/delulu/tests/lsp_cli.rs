@@ -39,8 +39,7 @@ impl Client {
             .iter()
             .enumerate()
             .map(|(i, r)| {
-                let uri =
-                    format!("file:///{}", r.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+                let uri = format!("file:///{}", r.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
                 json!({ "uri": uri, "name": format!("root{i}") })
             })
             .collect();
@@ -131,9 +130,7 @@ impl Client {
     fn wait_diagnostics(&mut self, uri: &str) -> Value {
         loop {
             let msg = self.read_message();
-            if msg["method"] == "textDocument/publishDiagnostics"
-                && msg["params"]["uri"] == uri
-            {
+            if msg["method"] == "textDocument/publishDiagnostics" && msg["params"]["uri"] == uri {
                 return msg["params"]["diagnostics"].clone();
             }
         }
@@ -389,8 +386,7 @@ fn criterion2_inlay_hints_on_unannotated_lambdas() {
     );
     let arr = hints.as_array().unwrap();
     assert!(
-        arr.iter().any(|h| h["label"].as_str().unwrap_or("").contains("Write")
-            && h["data"]["authority_lens"] == true),
+        arr.iter().any(|h| h["label"].as_str().unwrap_or("").contains("Write") && h["data"]["authority_lens"] == true),
         "the lambda's inferred row surfaces: {hints}"
     );
     c.shutdown();
@@ -402,24 +398,13 @@ fn document_symbols_include_actors_behaviors_and_tests() {
     let mut c = Client::start();
     c.open("file:///s.delulu", src);
     let _ = c.wait_diagnostics("file:///s.delulu");
-    let syms = c.request(
-        "textDocument/documentSymbol",
-        json!({ "textDocument": { "uri": "file:///s.delulu" } }),
-    );
-    let names: Vec<String> = syms
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["name"].as_str().unwrap().to_string())
-        .collect();
+    let syms = c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": "file:///s.delulu" } }));
+    let names: Vec<String> = syms.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap().to_string()).collect();
     assert!(names.contains(&"A".to_string()), "{names:?}");
     assert!(names.contains(&"test \"t\"".to_string()), "{names:?}");
     assert!(names.contains(&"f".to_string()), "{names:?}");
     let actor = &syms.as_array().unwrap().iter().find(|s| s["name"] == "A").unwrap();
-    assert!(
-        actor["children"].as_array().unwrap().iter().any(|c2| c2["name"] == "tick"),
-        "behaviors are children"
-    );
+    assert!(actor["children"].as_array().unwrap().iter().any(|c2| c2["name"] == "tick"), "behaviors are children");
     c.shutdown();
 }
 
@@ -489,8 +474,7 @@ fn criterion1_rename_updates_both_open_documents() {
             "context": { "includeDeclaration": true }
         }),
     );
-    let uris: Vec<&str> =
-        refs.as_array().unwrap().iter().map(|r| r["uri"].as_str().unwrap()).collect();
+    let uris: Vec<&str> = refs.as_array().unwrap().iter().map(|r| r["uri"].as_str().unwrap()).collect();
     assert!(uris.contains(&"file:///lib.delulu") && uris.contains(&"file:///app.delulu"), "{refs}");
 
     // rename: edits land in BOTH files.
@@ -548,10 +532,7 @@ fn semantic_tokens_carry_the_spec_named_kinds() {
     let mut c = Client::start();
     c.open("file:///t.delulu", src);
     let _ = c.wait_diagnostics("file:///t.delulu");
-    let toks = c.request(
-        "textDocument/semanticTokens/full",
-        json!({ "textDocument": { "uri": "file:///t.delulu" } }),
-    );
+    let toks = c.request("textDocument/semanticTokens/full", json!({ "textDocument": { "uri": "file:///t.delulu" } }));
     let data = toks["data"].as_array().unwrap();
     assert!(data.len() >= 5 * 5, "a real token stream: {} entries", data.len());
     let kinds: Vec<u64> = data.chunks(5).map(|c| c[3].as_u64().unwrap()).collect();
@@ -569,27 +550,17 @@ fn code_lenses_on_main_and_tests_and_the_authority_command() {
     let mut c = Client::start();
     c.open("file:///cl.delulu", src);
     let _ = c.wait_diagnostics("file:///cl.delulu");
-    let lenses = c.request(
-        "textDocument/codeLens",
-        json!({ "textDocument": { "uri": "file:///cl.delulu" } }),
-    );
-    let titles: Vec<String> = lenses
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|l| l["command"]["title"].as_str().unwrap().to_string())
-        .collect();
+    let lenses = c.request("textDocument/codeLens", json!({ "textDocument": { "uri": "file:///cl.delulu" } }));
+    let titles: Vec<String> =
+        lenses.as_array().unwrap().iter().map(|l| l["command"]["title"].as_str().unwrap().to_string()).collect();
     assert!(titles.iter().any(|t| t == "▶ run"), "{titles:?}");
     assert!(titles.iter().any(|t| t.starts_with("authority: ") && t.contains("Write")), "{titles:?}");
     assert!(titles.iter().any(|t| t == "▶ run test"), "{titles:?}");
 
     // The agent-facing command: the §10.5 report over the wire.
-    let report = c.request(
-        "workspace/executeCommand",
-        json!({ "command": "delulu.authority", "arguments": ["file:///cl.delulu"] }),
-    );
-    let effects: Vec<&str> =
-        report["effects"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
+    let report =
+        c.request("workspace/executeCommand", json!({ "command": "delulu.authority", "arguments": ["file:///cl.delulu"] }));
+    let effects: Vec<&str> = report["effects"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
     assert!(effects.contains(&"Write"), "the compiler-computed report: {report}");
     c.shutdown();
 }
@@ -647,10 +618,13 @@ fn completion_offers_declarations_with_their_signature_and_authority() {
     let _ = c.wait_diagnostics("file:///c.delulu");
 
     // typing `gr` on a fresh line
-    c.notify("textDocument/didChange", json!({
-        "textDocument": { "uri": "file:///c.delulu", "version": 2 },
-        "contentChanges": [{ "text": format!("{src}gr") }],
-    }));
+    c.notify(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": "file:///c.delulu", "version": 2 },
+            "contentChanges": [{ "text": format!("{src}gr") }],
+        }),
+    );
     let _ = c.wait_diagnostics("file:///c.delulu");
     let items = complete(&mut c, "file:///c.delulu", 4, 2);
     let greet = items.iter().find(|i| i["label"] == "greet").expect("`greet` must be offered for prefix `gr`");
@@ -721,7 +695,8 @@ fn completion_reaches_other_open_documents_but_ranks_local_names_first() {
     assert!(
         local["sortText"].as_str() < other["sortText"].as_str(),
         "a name in this document must sort before one from another: {} vs {}",
-        local["sortText"], other["sortText"]
+        local["sortText"],
+        other["sortText"]
     );
     c.shutdown();
 }
@@ -791,25 +766,18 @@ fn no_provider_answers_from_a_stale_analysis() {
     assert!(!n.contains(&"alpha".to_string()), "documentSymbol is answering from stale state: {n:?}");
 
     // Hover on the new name, at the position it now occupies.
-    let hov = c.request(
-        "textDocument/hover",
-        json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }),
-    );
+    let hov =
+        c.request("textDocument/hover", json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }));
     let md = hov["contents"]["value"].as_str().unwrap_or_default();
     assert!(md.contains("omega"), "hover must see the edit: {md}");
 
     // Definition of the old name must now find nothing anywhere.
-    let def = c.request(
-        "textDocument/definition",
-        json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }),
-    );
+    let def = c
+        .request("textDocument/definition", json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }));
     assert_eq!(def["uri"], uri, "definition resolves in the edited document: {def}");
 
     // Semantic tokens are delta-encoded from the text; a stale AST would misplace them.
-    let toks = c.request(
-        "textDocument/semanticTokens/full",
-        json!({ "textDocument": { "uri": uri } }),
-    );
+    let toks = c.request("textDocument/semanticTokens/full", json!({ "textDocument": { "uri": uri } }));
     assert!(!toks["data"].as_array().unwrap().is_empty(), "tokens must still be produced");
     c.shutdown();
 }
@@ -900,11 +868,7 @@ fn workspace_dir(tag: &str) -> std::path::PathBuf {
 }
 
 fn symbol_names(v: &Value) -> Vec<String> {
-    v.as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["name"].as_str().unwrap_or_default().to_string())
-        .collect()
+    v.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap_or_default().to_string()).collect()
 }
 
 /// The question "where is this declared in my project?" must be answerable without having already
@@ -957,10 +921,7 @@ fn an_open_buffer_wins_over_its_copy_on_disk() {
 
     let all = symbol_names(&c.request("workspace/symbol", json!({ "query": "" })));
     assert!(all.contains(&"renamed_in_buffer".to_string()), "the buffer is reported: {all:?}");
-    assert!(
-        !all.contains(&"on_disk_only".to_string()),
-        "the stale on-disk copy must not shadow the buffer: {all:?}"
-    );
+    assert!(!all.contains(&"on_disk_only".to_string()), "the stale on-disk copy must not shadow the buffer: {all:?}");
     assert_eq!(all.len(), 1, "and the file is reported once, not twice: {all:?}");
     c.shutdown();
 }
@@ -994,10 +955,7 @@ fn workspace_and_document_symbols_agree_on_what_exists() {
     let mut ws = symbol_names(&c.request("workspace/symbol", json!({ "query": "" })));
     flat.sort();
     ws.sort();
-    assert_eq!(
-        flat, ws,
-        "documentSymbol and workspace/symbol disagree about the declarations in one file"
-    );
+    assert_eq!(flat, ws, "documentSymbol and workspace/symbol disagree about the declarations in one file");
     c.shutdown();
 }
 
@@ -1005,11 +963,7 @@ fn workspace_and_document_symbols_agree_on_what_exists() {
 #[test]
 fn definition_reaches_a_file_that_was_never_opened() {
     let dir = workspace_dir("jump");
-    std::fs::write(
-        dir.join("src").join("lib.delulu"),
-        "module lib\npub fn shared_thing() -> Int { 7 }\n",
-    )
-    .unwrap();
+    std::fs::write(dir.join("src").join("lib.delulu"), "module lib\npub fn shared_thing() -> Int { 7 }\n").unwrap();
     let app = dir.join("src").join("app.delulu");
     std::fs::write(&app, "module app\nimport lib\nfn use_it() -> Int { lib.shared_thing() }\n").unwrap();
     let app_uri = format!("file:///{}", app.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
@@ -1094,12 +1048,8 @@ fn rename_refuses_rather_than_leaving_other_files_behind() {
     assert!(message.contains("other.delulu"), "and names the file to open: {message}");
 
     // Open the other file, and the same rename now goes through — across both.
-    let other_uri = message
-        .split_whitespace()
-        .find(|w| w.contains("other.delulu"))
-        .unwrap()
-        .trim_end_matches(['.', ','])
-        .to_string();
+    let other_uri =
+        message.split_whitespace().find(|w| w.contains("other.delulu")).unwrap().trim_end_matches(['.', ',']).to_string();
     c.open(&other_uri, &std::fs::read_to_string(dir.join("src").join("other.delulu")).unwrap());
     let _ = c.wait_diagnostics(&other_uri);
     let ok = c.request(
@@ -1155,8 +1105,7 @@ fn without_a_workspace_only_open_documents_are_searched() {
 #[test]
 fn incremental_edits_agree_with_a_full_replace() {
     let start = "module m\n\nfn alpha() -> Int { 1 }\nfn beta() -> Int { 2 }\ntest \"λ\" { assert(true) }\n";
-    let expected =
-        "module m\n\nfn alphaX() -> Int { 1 }\nfn gamma() -> Int { 3 }\ntest \"λABCD\" { assert(true) }\n";
+    let expected = "module m\n\nfn alphaX() -> Int { 1 }\nfn gamma() -> Int { 3 }\ntest \"λABCD\" { assert(true) }\n";
     let live = "file:///inc.delulu";
     let reference = "file:///ref.delulu";
 
@@ -1173,42 +1122,56 @@ fn incremental_edits_agree_with_a_full_replace() {
     };
 
     // 1. Insert inside a line: `alpha` becomes `alphaX`.
-    edit(&mut c, 2, json!([{
-        "range": { "start": { "line": 2, "character": 8 }, "end": { "line": 2, "character": 8 } },
-        "text": "X"
-    }]));
+    edit(
+        &mut c,
+        2,
+        json!([{
+            "range": { "start": { "line": 2, "character": 8 }, "end": { "line": 2, "character": 8 } },
+            "text": "X"
+        }]),
+    );
     // 2. Delete a whole line, range spanning the line boundary.
-    edit(&mut c, 3, json!([{
-        "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 4, "character": 0 } },
-        "text": ""
-    }]));
+    edit(
+        &mut c,
+        3,
+        json!([{
+            "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 4, "character": 0 } },
+            "text": ""
+        }]),
+    );
     // 3. Insert text containing a newline at the end of the document.
-    edit(&mut c, 4, json!([{
-        "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 3, "character": 0 } },
-        "text": "fn gamma() -> Int { 3 }\n"
-    }]));
+    edit(
+        &mut c,
+        4,
+        json!([{
+            "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 3, "character": 0 } },
+            "text": "fn gamma() -> Int { 3 }\n"
+        }]),
+    );
     // 4. Two changes in ONE notification, both immediately after the `λ` in the test name.
     //    Column 7 is the position after `λ` (byte 8); column 9 is the position after `λAB`
     //    (byte 10) and is only correct if the first change has ALREADY been applied. Counting
     //    columns in bytes lands inside `λ` on both, putting the inserted text before it:
     //    `test "ABCDλ"` instead of `test "λABCD"`.
-    edit(&mut c, 5, json!([
-        {
-            "range": { "start": { "line": 4, "character": 7 }, "end": { "line": 4, "character": 7 } },
-            "text": "AB"
-        },
-        {
-            "range": { "start": { "line": 4, "character": 9 }, "end": { "line": 4, "character": 9 } },
-            "text": "CD"
-        }
-    ]));
+    edit(
+        &mut c,
+        5,
+        json!([
+            {
+                "range": { "start": { "line": 4, "character": 7 }, "end": { "line": 4, "character": 7 } },
+                "text": "AB"
+            },
+            {
+                "range": { "start": { "line": 4, "character": 9 }, "end": { "line": 4, "character": 9 } },
+                "text": "CD"
+            }
+        ]),
+    );
 
     c.open(reference, expected);
     let _ = c.wait_diagnostics(reference);
 
-    let ask = |c: &mut Client, method: &str, uri: &str| {
-        c.request(method, json!({ "textDocument": { "uri": uri } }))
-    };
+    let ask = |c: &mut Client, method: &str, uri: &str| c.request(method, json!({ "textDocument": { "uri": uri } }));
     assert_eq!(
         ask(&mut c, "textDocument/semanticTokens/full", live),
         ask(&mut c, "textDocument/semanticTokens/full", reference),
@@ -1225,11 +1188,7 @@ fn incremental_edits_agree_with_a_full_replace() {
         .iter()
         .map(|s| s["name"].as_str().unwrap_or_default().to_string())
         .collect();
-    assert_eq!(
-        names,
-        ["alphaX", "gamma", "test \"λABCD\""],
-        "the edits produced the intended document: {names:?}"
-    );
+    assert_eq!(names, ["alphaX", "gamma", "test \"λABCD\""], "the edits produced the intended document: {names:?}");
     c.shutdown();
 }
 
@@ -1305,8 +1264,7 @@ fn reopening_a_changed_document_does_not_serve_the_closed_one() {
     c.open(uri, "module m\nfn after_close() -> Int { 2 }\n");
     let _ = c.wait_diagnostics(uri);
     let syms = c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": uri } }));
-    let names: Vec<&str> =
-        syms.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap_or_default()).collect();
+    let names: Vec<&str> = syms.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap_or_default()).collect();
     assert_eq!(names, ["after_close"], "the reopened document is analysed afresh: {names:?}");
     c.shutdown();
 }
@@ -1470,10 +1428,7 @@ fn an_already_formatted_document_produces_no_edits() {
     let mut c = Client::start();
     let uri = "file:///already_canonical.delulu";
     c.open(uri, &src);
-    let edits = c.request(
-        "textDocument/formatting",
-        json!({ "textDocument": { "uri": uri }, "options": {} }),
-    );
+    let edits = c.request("textDocument/formatting", json!({ "textDocument": { "uri": uri }, "options": {} }));
     assert_eq!(edits.as_array().unwrap().len(), 0, "canonical text needs no edit: {edits}");
     c.shutdown();
 }
@@ -1490,10 +1445,7 @@ fn an_unparseable_document_is_left_exactly_as_written() {
     let mut c = Client::start();
     let uri = "file:///broken.delulu";
     c.open(uri, broken);
-    let edits = c.request(
-        "textDocument/formatting",
-        json!({ "textDocument": { "uri": uri }, "options": {} }),
-    );
+    let edits = c.request("textDocument/formatting", json!({ "textDocument": { "uri": uri }, "options": {} }));
     assert_eq!(edits.as_array().unwrap().len(), 0, "a broken parse must not be rewritten: {edits}");
     c.shutdown();
 }
@@ -1508,10 +1460,7 @@ fn an_unparseable_document_is_left_exactly_as_written() {
 fn the_server_advertises_whole_document_formatting_and_not_range_formatting() {
     let c = Client::start();
     let caps = &c.capabilities;
-    assert_eq!(
-        caps["documentFormattingProvider"], true,
-        "without this the editor never offers Format Document: {caps}"
-    );
+    assert_eq!(caps["documentFormattingProvider"], true, "without this the editor never offers Format Document: {caps}");
     assert!(
         caps.get("documentRangeFormattingProvider").is_none(),
         "range formatting is not supported and must not be advertised: {caps}"
@@ -1538,24 +1487,13 @@ fn a_multi_root_workspace_indexes_every_folder_not_just_the_first() {
     let beta = tmp.join("beta");
     std::fs::create_dir_all(&alpha).unwrap();
     std::fs::create_dir_all(&beta).unwrap();
-    std::fs::write(
-        alpha.join("a.delulu"),
-        "module alpha\n\npub fn alpha_only_symbol() -> Int { 1 }\n",
-    )
-    .unwrap();
-    std::fs::write(
-        beta.join("b.delulu"),
-        "module beta\n\npub fn beta_only_symbol() -> Int { 2 }\n",
-    )
-    .unwrap();
+    std::fs::write(alpha.join("a.delulu"), "module alpha\n\npub fn alpha_only_symbol() -> Int { 1 }\n").unwrap();
+    std::fs::write(beta.join("b.delulu"), "module beta\n\npub fn beta_only_symbol() -> Int { 2 }\n").unwrap();
 
     let mut c = Client::start_in_all(&[alpha.as_path(), beta.as_path()]);
     let names = symbol_names(&c.request("workspace/symbol", json!({ "query": "only_symbol" })));
 
-    assert!(
-        names.iter().any(|n| n == "alpha_only_symbol"),
-        "the first folder was not indexed: {names:?}"
-    );
+    assert!(names.iter().any(|n| n == "alpha_only_symbol"), "the first folder was not indexed: {names:?}");
     assert!(
         names.iter().any(|n| n == "beta_only_symbol"),
         "the SECOND workspace folder was not indexed — multi-root workspaces would silently show \
@@ -1605,11 +1543,7 @@ fn a_code_action_with_no_edit_is_never_preferred() {
     // property about that action; the sweep is the property about the server.
     for a in actions.as_array().unwrap() {
         if a["edit"].is_null() {
-            assert_eq!(
-                a["isPreferred"], false,
-                "`{}` has no edit and is marked preferred: {a}",
-                a["data"]["repair_id"]
-            );
+            assert_eq!(a["isPreferred"], false, "`{}` has no edit and is marked preferred: {a}", a["data"]["repair_id"]);
         }
     }
     c.shutdown();

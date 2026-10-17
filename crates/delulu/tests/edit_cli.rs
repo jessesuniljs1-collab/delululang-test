@@ -39,8 +39,9 @@ fn edit(cwd: &Path, args: &[&str]) -> (i32, Value) {
         .env("DELULU_NO_FIRST_RUN", "1")
         .output()
         .unwrap();
-    let env: Value = serde_json::from_slice(&out.stdout)
-        .unwrap_or_else(|e| panic!("not one JSON envelope ({e}): {}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)));
+    let env: Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!("not one JSON envelope ({e}): {}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    });
     // Every answer — applied or refused — is what `delulu schema edit` says it is.
     for (schema, value) in [("envelope", &env), ("edit", &env["edit"])] {
         let f = cwd.join(format!(".answer-{schema}.json"));
@@ -88,7 +89,13 @@ fn a_repairs_edits_pass_straight_through_and_the_result_is_checked() {
     let f = dir.join("b.delulu");
     std::fs::write(&f, "module b\n\nfn main(root: Root) {\n    let c = root.console()\n    c.println(\"hi\")\n}\n").unwrap();
     let checked: Value = serde_json::from_slice(
-        &Command::new(bin()).args(["check", "b.delulu", "--json"]).current_dir(&dir).env("DELULU_NO_FIRST_RUN", "1").output().unwrap().stdout,
+        &Command::new(bin())
+            .args(["check", "b.delulu", "--json"])
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
     let repair = &checked["diagnostics"][0]["repairs"][0];
@@ -127,10 +134,19 @@ fn a_node_is_replaced_by_its_atlas_id_and_formatted_and_a_stale_id_is_refused() 
     std::fs::write(&f, PROGRAM).unwrap();
     // The id is the Atlas's own, not one this test spells.
     let atlas: Value = serde_json::from_slice(
-        &Command::new(bin()).args(["atlas", "m.delulu", "--json"]).current_dir(&dir).env("DELULU_NO_FIRST_RUN", "1").output().unwrap().stdout,
+        &Command::new(bin())
+            .args(["atlas", "m.delulu", "--json"])
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
-    let id = atlas["atlas"]["nodes"].as_array().unwrap().iter().find(|n| n["name"] == "a").unwrap()["id"].as_str().unwrap().to_string();
+    let id = atlas["atlas"]["nodes"].as_array().unwrap().iter().find(|n| n["name"] == "a").unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(id, "fn:m/m.a");
 
     let (code, env) = edit(&dir, &["m.delulu", "--expect-hash", &hash(&f), "--node", &id, "--with", "fn a()->Int{2}"]);
@@ -162,7 +178,8 @@ fn an_edit_that_widens_what_the_program_may_do_says_so() {
     let reads = "fn main(root: Root) ! {Read, Write} {\n    let out = root.console()\n    let fr = root.fs_read(\"./data\")\n    \
                  match fr.read_text(\"data/in.txt\") {\n        Ok(v) => out.println(v),\n        Err(_) => out.println(\"miss\"),\n    }\n}\n";
     std::fs::write(dir.join("main.txt"), reads).unwrap();
-    let (code, env) = edit(&dir, &["m.delulu", "--expect-hash", &hash(&f), "--node", "fn:m/m.main", "--with", "@main.txt", "--dry-run"]);
+    let (code, env) =
+        edit(&dir, &["m.delulu", "--expect-hash", &hash(&f), "--node", "fn:m/m.main", "--with", "@main.txt", "--dry-run"]);
     assert_eq!(code, 0, "{env:#}");
     let auth = &env["edit"]["authority"];
     assert_eq!(auth["before"]["effects"], json!(["Write"]));
@@ -259,7 +276,12 @@ fn every_atlas_node_in_the_examples_resolves_and_round_trips_through_its_own_tex
                 (Item::Type(t), None) if t.name.name == name && id.starts_with("type:") => Some(t.span),
                 (Item::Actor(a), Some((actor, member))) if a.name.name == actor => match member {
                     "new" => Some(a.ctor.span),
-                    m => a.behaviors.iter().find(|b| b.name.name == m).map(|b| b.span).or_else(|| a.fns.iter().find(|f| f.name.name == m).map(|f| f.span)),
+                    m => a
+                        .behaviors
+                        .iter()
+                        .find(|b| b.name.name == m)
+                        .map(|b| b.span)
+                        .or_else(|| a.fns.iter().find(|f| f.name.name == m).map(|f| f.span)),
                 },
                 _ => None,
             });

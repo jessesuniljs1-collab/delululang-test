@@ -108,11 +108,7 @@ fn doctor_never_writes_when_the_map_is_current() {
     let o = delulu(&["doctor"]);
     assert_eq!(o.status.code(), Some(0), "doctor should exit 0:\n{}", stdout(&o));
 
-    assert_eq!(
-        mtimes(&survey_dir),
-        before,
-        "doctor rewrote generated files on a healthy tree — running it must not be a change"
-    );
+    assert_eq!(mtimes(&survey_dir), before, "doctor rewrote generated files on a healthy tree — running it must not be a change");
 }
 
 fn mtimes(dir: &Path) -> Vec<(String, std::time::SystemTime)> {
@@ -165,10 +161,7 @@ fn outside_the_source_tree_the_repository_section_is_skipped() {
     // source tree it means, and that nothing which could not run is reported as having passed.
     assert!(out.contains("repository"), "the section is named, not dropped:\n{out}");
     assert!(out.contains("source tree"), "and it says which tree it means:\n{out}");
-    assert!(
-        !out.contains("survey freshness"),
-        "a check that could not run must not appear at all:\n{out}"
-    );
+    assert!(!out.contains("survey freshness"), "a check that could not run must not appear at all:\n{out}");
     let _ = std::fs::remove_dir_all(&elsewhere);
 }
 
@@ -258,9 +251,6 @@ fn a_signing_key_beside_the_state_it_protects_is_flagged() {
     std::fs::write(withkey.join("grant.key"), b"not-a-real-key").unwrap();
     let out = stdout(&doctor_in(&withkey));
     assert!(out.contains("anchor key custody"), "the custody check must appear:\n{out}");
-    assert!(
-        out.contains("another machine"),
-        "and must say where the private half belongs:\n{out}"
-    );
+    assert!(out.contains("another machine"), "and must say where the private half belongs:\n{out}");
     let _ = std::fs::remove_dir_all(&withkey);
 }

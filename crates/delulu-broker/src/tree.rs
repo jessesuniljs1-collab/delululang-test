@@ -552,11 +552,7 @@ impl Broker {
     /// so it is meaningful as an assertion only under `require_anchored_roots`.
     pub fn unjustified_root_nodes(&self) -> Vec<GrantId> {
         let adopted_ids: HashSet<&GrantId> = self.adopted.values().map(|(id, _)| id).collect();
-        self.nodes
-            .values()
-            .filter(|n| n.parent.is_none() && !adopted_ids.contains(&n.id))
-            .map(|n| n.id.clone())
-            .collect()
+        self.nodes.values().filter(|n| n.parent.is_none() && !adopted_ids.contains(&n.id)).map(|n| n.id.clone()).collect()
     }
 
     /// The **public** root-issuance API and the DISC-1 security boundary. In strict mode
@@ -565,12 +561,7 @@ impl Broker {
     /// creates a root exactly as before. **Every** external caller (the daemon's `Issue` dispatch, and
     /// any library user) goes through here; the raw [`Broker::issue`] primitive is `pub(crate)` and is
     /// reached only after verification (by [`Broker::adopt`]), so there is no public bypass of the gate.
-    pub fn issue_root(
-        &mut self,
-        holder: Holder,
-        authority: Authority,
-        ttl_millis: Option<i64>,
-    ) -> Result<GrantId, Denial> {
+    pub fn issue_root(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> Result<GrantId, Denial> {
         if let Some(anchor) = &self.strict_anchor {
             return Err(Denial::StrictRootRequiresAnchor { anchor: anchor.clone() });
         }
@@ -628,15 +619,7 @@ impl Broker {
                 "allow",
                 None,
             ),
-            Err(_) => self.record_op(
-                seq,
-                "attenuate",
-                Some(parent.as_str().to_string()),
-                None,
-                Some(auth_json),
-                "deny",
-                None,
-            ),
+            Err(_) => self.record_op(seq, "attenuate", Some(parent.as_str().to_string()), None, Some(auth_json), "deny", None),
         }
         res
     }
@@ -685,9 +668,8 @@ impl Broker {
         }
         // Fail closed: no child may be born under a dead parent — or under a dead ANCESTOR, which
         // is a different question once expiry is inherited (RFC 0001 F4).
-        let parent_eff = self
-            .effective_state_inherited(parent, now)
-            .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
+        let parent_eff =
+            self.effective_state_inherited(parent, now).unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
         let parent_node = self.nodes.get(parent).expect("presence checked immediately above");
         match parent_eff {
             EffState::Revoked { by_seq } => {
@@ -740,21 +722,14 @@ impl Broker {
     /// out-of-band monitor's quarantine names the rule that fired and the records it saw, because a
     /// monitor that revokes without saying what it saw is a monitor nobody can audit. The text is the
     /// revoker's, bounded; it decides nothing — the same self-or-descendant rule applies.
-    pub fn revoke_saying(
-        &mut self,
-        caller: &GrantId,
-        target: &GrantId,
-        why: Option<&str>,
-    ) -> Result<RevokeOutcome, Denial> {
+    pub fn revoke_saying(&mut self, caller: &GrantId, target: &GrantId, why: Option<&str>) -> Result<RevokeOutcome, Denial> {
         let (seq, res) = self.revoke_core(caller, target);
         let decision = if res.is_ok() { "allow" } else { "deny" };
         // Spec §4.2 (normative, playbook trap 3): the stated latency bound appears "in the audit
         // record of every revocation" — VERBATIM, and never a stronger claim. It rides in the
         // record's free-form JSON payload slot under a self-describing key (a revocation has no
         // authority payload of its own; flagged in spec §11 chunk-5 deviations).
-        let mut payload = res
-            .is_ok()
-            .then(|| serde_json::json!({ "revocation_takes_effect": delulu_diag::REVOCATION_BOUND }));
+        let mut payload = res.is_ok().then(|| serde_json::json!({ "revocation_takes_effect": delulu_diag::REVOCATION_BOUND }));
         if let Some(why) = why {
             let why = crate::bounded_text(why, 1024);
             payload.get_or_insert_with(|| serde_json::json!({}))["why"] = serde_json::json!(why);
@@ -820,12 +795,8 @@ impl Broker {
         // adopted chain becomes un-re-adoptable, so re-presenting the chain extended by a fresh
         // self-delegation — which has a new leaf fingerprint and would otherwise slip past the leaf
         // single-adoption check — can no longer bring the revoked authority back.
-        let retired: Vec<String> = newly_revoked
-            .iter()
-            .filter_map(|id| self.adopted_chain_fps.get(id))
-            .flatten()
-            .cloned()
-            .collect();
+        let retired: Vec<String> =
+            newly_revoked.iter().filter_map(|id| self.adopted_chain_fps.get(id)).flatten().cloned().collect();
         for fp in retired {
             self.revoked_adoption_fps.insert(fp);
         }
@@ -918,12 +889,8 @@ impl Broker {
         let mut i = 0;
         while i < out.len() {
             let current = out[i].clone();
-            let mut children: Vec<GrantId> = self
-                .nodes
-                .values()
-                .filter(|n| n.parent.as_ref() == Some(&current))
-                .map(|n| n.id.clone())
-                .collect();
+            let mut children: Vec<GrantId> =
+                self.nodes.values().filter(|n| n.parent.as_ref() == Some(&current)).map(|n| n.id.clone()).collect();
             children.sort();
             out.extend(children);
             i += 1;
@@ -964,8 +931,7 @@ impl Broker {
     /// A human-facing tree rendering (spec §3.2 `tree`). Includes the holder for display — this is
     /// the one place holder fields are read, and they are DATA, never a decision input.
     pub fn tree(&self) -> String {
-        let mut roots: Vec<&GrantId> =
-            self.nodes.values().filter(|n| n.parent.is_none()).map(|n| &n.id).collect();
+        let mut roots: Vec<&GrantId> = self.nodes.values().filter(|n| n.parent.is_none()).map(|n| &n.id).collect();
         roots.sort();
         let mut out = String::new();
         for root in roots {
@@ -985,8 +951,8 @@ impl Broker {
         // holder fields are display-only data (never a decision input).
         let holder_desc = &n.holder.desc; // KIND_IS_DATA: desc is descriptive metadata
         let holder_kind = &n.holder.kind; // KIND_IS_DATA: kind is stored/displayed, never switched on
-        // RW 4.42 (routine run 7): a scope and a holder are the delegating party's strings, and this text is
-        // printed on the owner's terminal — each field escaped onto its node's one line (TERMINAL-TEXT-1).
+                                          // RW 4.42 (routine run 7): a scope and a holder are the delegating party's strings, and this text is
+                                          // printed on the owner's terminal — each field escaped onto its node's one line (TERMINAL-TEXT-1).
         use delulu_diag::terminal_line;
         out.push_str(&format!(
             "{indent}{} [{}] {} ({}) — {}\n",
@@ -996,8 +962,7 @@ impl Broker {
             terminal_line(holder_kind),
             terminal_line(holder_desc),
         ));
-        let mut children: Vec<&GrantId> =
-            self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();
+        let mut children: Vec<&GrantId> = self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();
         children.sort();
         for child in children {
             self.render_node(child, depth + 1, out);
@@ -1068,10 +1033,20 @@ mod tests {
             None,
         );
         let mid = b
-            .attenuate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub"]), ..Default::default() }), holder(), None)
+            .attenuate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub"]), ..Default::default() }),
+                holder(),
+                None,
+            )
             .unwrap();
         let leaf = b
-            .attenuate(&mid, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub/deep"]), ..Default::default() }), holder(), None)
+            .attenuate(
+                &mid,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub/deep"]), ..Default::default() }),
+                holder(),
+                None,
+            )
             .unwrap();
 
         let out = b.revoke(&root, &mid).unwrap();
@@ -1087,11 +1062,8 @@ mod tests {
     #[test]
     fn attenuate_widening_rejected_with_correct_intersection() {
         let mut b = det_broker();
-        let root = b.issue(
-            holder(),
-            Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
-            None,
-        );
+        let root =
+            b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), None);
         // Child asks for Net (not held) and a wider path.
         let err = b
             .attenuate(
@@ -1150,9 +1122,7 @@ mod tests {
         let root = b.issue(holder(), Authority::new(eff(&["Read"]), Scopes::default()), None);
         let mid = b.attenuate(&root, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None).unwrap();
         b.revoke(&root, &mid).unwrap();
-        let err = b
-            .attenuate(&mid, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None)
-            .unwrap_err();
+        let err = b.attenuate(&mid, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None).unwrap_err();
         assert_eq!(err.code(), "DL1403");
     }
 
@@ -1165,17 +1135,35 @@ mod tests {
             let h = |k: &str| Holder::new(k, "desc", "peer");
             let root = b.issue(
                 h(kind),
-                Authority::new(eff(&["Read", "Net"]), Scopes { fs_read: names(&["./data"]), net: names(&["a.com"]), ..Default::default() }),
+                Authority::new(
+                    eff(&["Read", "Net"]),
+                    Scopes { fs_read: names(&["./data"]), net: names(&["a.com"]), ..Default::default() },
+                ),
                 None,
             );
             let c1 = b
-                .attenuate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub"]), ..Default::default() }), h(kind), None)
+                .attenuate(
+                    &root,
+                    Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub"]), ..Default::default() }),
+                    h(kind),
+                    None,
+                )
                 .unwrap();
             let _c2 = b
-                .attenuate(&root, Authority::new(eff(&["Net"]), Scopes { net: names(&["a.com"]), ..Default::default() }), h(kind), None)
+                .attenuate(
+                    &root,
+                    Authority::new(eff(&["Net"]), Scopes { net: names(&["a.com"]), ..Default::default() }),
+                    h(kind),
+                    None,
+                )
                 .unwrap();
             let _c3 = b
-                .attenuate(&c1, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub/x"]), ..Default::default() }), h(kind), None)
+                .attenuate(
+                    &c1,
+                    Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/sub/x"]), ..Default::default() }),
+                    h(kind),
+                    None,
+                )
                 .unwrap();
             // A rejected widening (consumes a seq, same for every kind).
             let _ = b.attenuate(&c1, Authority::new(eff(&["Net"]), Scopes::default()), h(kind), None);

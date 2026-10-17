@@ -76,12 +76,7 @@ fn the_generated_package_does_what_the_message_promises() {
     let message = stderr(&created);
     let pkg = w.join("myapp");
 
-    let steps: [&[&str]; 4] = [
-        &["check", "."],
-        &["test", "."],
-        &["authority", "."],
-        &["run", ".", "--grant", "console"],
-    ];
+    let steps: [&[&str]; 4] = [&["check", "."], &["test", "."], &["authority", "."], &["run", ".", "--grant", "console"]];
     for step in steps {
         let printed = format!("delulu {}", step.join(" "));
         assert!(message.contains(&printed), "the message must name `{printed}`:\n{message}");
@@ -126,11 +121,7 @@ fn a_new_library_is_provably_pure() {
     assert_eq!(tst.status.code(), Some(0), "{}", stderr(&tst));
 
     let auth = delulu_in(&pkg, &["authority", "."]);
-    assert!(
-        stdout(&auth).contains("provably pure"),
-        "a library that computes should hold nothing:\n{}",
-        stdout(&auth)
-    );
+    assert!(stdout(&auth).contains("provably pure"), "a library that computes should hold nothing:\n{}", stdout(&auth));
 }
 
 /// **The declared ceiling is exactly what the code does — no more.**
@@ -191,11 +182,7 @@ fn it_never_writes_into_a_non_empty_directory() {
     let o = delulu_in(&w, &["new", "myapp"]);
     assert_eq!(o.status.code(), Some(2), "it refuses:\n{}", stderr(&o));
     assert!(stderr(&o).contains("not empty"), "{}", stderr(&o));
-    assert_eq!(
-        read(&precious),
-        "module myapp\n// a whole afternoon's work\n",
-        "and does not touch what was there"
-    );
+    assert_eq!(read(&precious), "module myapp\n// a whole afternoon's work\n", "and does not touch what was there");
     assert!(!pkg.join("delulu.toml").exists(), "nor add to it");
 }
 
@@ -276,18 +263,9 @@ fn a_name_windows_reserves_as_a_device_is_refused_on_every_platform() {
     for name in ["con", "aux", "nul", "prn", "com1", "lpt9", "CON", "Aux"] {
         let o = delulu_in(&home, &["new", name]);
         let out = format!("{}{}", stdout(&o), stderr(&o));
-        assert!(
-            !o.status.success(),
-            "`delulu new {name}` must be refused — Windows cannot host that directory: {out}"
-        );
-        assert!(
-            out.contains("device name"),
-            "the refusal must say WHY, not leak an OS error: {out}"
-        );
-        assert!(
-            !home.join(name).exists(),
-            "nothing may be created for a name that cannot exist on a supported platform"
-        );
+        assert!(!o.status.success(), "`delulu new {name}` must be refused — Windows cannot host that directory: {out}");
+        assert!(out.contains("device name"), "the refusal must say WHY, not leak an OS error: {out}");
+        assert!(!home.join(name).exists(), "nothing may be created for a name that cannot exist on a supported platform");
     }
 }
 
@@ -318,13 +296,7 @@ fn bare_delulu_test_passes_inside_a_freshly_scaffolded_package() {
     let pkg = w.join("myapp");
 
     let bare = delulu_in(&pkg, &["test"]);
-    assert_eq!(
-        bare.status.code(),
-        Some(0),
-        "bare `delulu test` must pass in a scaffold:\n{}{}",
-        stdout(&bare),
-        stderr(&bare)
-    );
+    assert_eq!(bare.status.code(), Some(0), "bare `delulu test` must pass in a scaffold:\n{}{}", stdout(&bare), stderr(&bare));
     let reported = format!("{}{}", stdout(&bare), stderr(&bare));
     assert!(reported.contains("1 passed"), "and must actually RUN the test:\n{reported}");
 

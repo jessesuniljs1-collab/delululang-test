@@ -91,8 +91,19 @@ fn run_attested(d: &Path, launcher: &str, pinned: &str, report: &Path) -> Output
     delulu(
         d,
         &[
-            "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
-            "--sandbox-backend", launcher, "--require-attestation", pinned, "--report-out", report.to_str().unwrap(),
+            "run",
+            "w.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            &format!("fs.write={out}"),
+            "--sandbox",
+            "--sandbox-backend",
+            launcher,
+            "--require-attestation",
+            pinned,
+            "--report-out",
+            report.to_str().unwrap(),
         ],
     )
 }
@@ -151,7 +162,12 @@ fn every_attestation_that_does_not_hold_is_refused_before_the_program_is_sent() 
         // A launcher that ends without attesting: refused at once.
         (format!("external:{exe} --version"), public.clone(), "before it wrote an attestation", 8),
         // An attester that refuses to sign (no guarantee): it ends, and the host says so.
-        (format!("external:{exe} sandbox attest --key {seed} --attester a -- {exe} __guest --stdio-pipes"), public.clone(), "before it wrote an attestation", 8),
+        (
+            format!("external:{exe} sandbox attest --key {seed} --attester a -- {exe} __guest --stdio-pipes"),
+            public.clone(),
+            "before it wrote an attestation",
+            8,
+        ),
     ];
     for (i, (launcher, pinned, says, within)) in cases.iter().enumerate() {
         let t = std::time::Instant::now();
@@ -186,7 +202,19 @@ fn a_document_replayed_from_another_run_is_refused_on_its_nonce() {
         .current_dir(&d)
         .env("DELULU_ATTEST_NONCE", format!("{}01", "0".repeat(62)))
         .env("DELULU_ATTEST_OUT", &old)
-        .args(["sandbox", "attest", "--key", &seed, "--attester", "test-attester", "--guarantee", "no-network", "--", &exe, "--version"])
+        .args([
+            "sandbox",
+            "attest",
+            "--key",
+            &seed,
+            "--attester",
+            "test-attester",
+            "--guarantee",
+            "no-network",
+            "--",
+            &exe,
+            "--version",
+        ])
         .output()
         .unwrap();
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
@@ -247,7 +275,8 @@ fn a_document_written_in_place_is_refused_in_words_that_name_the_rename() {
 #[test]
 fn the_flag_is_refused_where_it_cannot_apply_and_a_dry_run_says_it_was_required() {
     let d = lab("usage");
-    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n").unwrap();
+    std::fs::write(d.join("h.delulu"), "module h\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"hi\")\n}\n")
+        .unwrap();
     let (_, public) = keygen(&d, "attester");
     let exe = exe();
     let launcher = format!("external:{exe} __guest --stdio-pipes");
@@ -255,7 +284,10 @@ fn the_flag_is_refused_where_it_cannot_apply_and_a_dry_run_says_it_was_required(
         (vec!["--require-attestation", public.as_str()], "describes a sandboxed run"),
         (vec!["--sandbox", "--require-attestation", public.as_str()], "is for an external launcher"),
         (vec!["--sandbox", "--isolation", "microvm", "--require-attestation", public.as_str()], "is for an external launcher"),
-        (vec!["--sandbox", "--sandbox-backend", launcher.as_str(), "--require-attestation", "abc"], "is not an ed25519 public key"),
+        (
+            vec!["--sandbox", "--sandbox-backend", launcher.as_str(), "--require-attestation", "abc"],
+            "is not an ed25519 public key",
+        ),
         (vec!["--sandbox", "--sandbox-backend", launcher.as_str(), "--require-attestation"], "--require-attestation"),
     ] {
         let mut a = vec!["run", "h.delulu", "--grant", "console"];
@@ -268,11 +300,26 @@ fn the_flag_is_refused_where_it_cannot_apply_and_a_dry_run_says_it_was_required(
     // A dry run launches nothing, so it verifies nothing — and says the attestation was required.
     let r = delulu(
         &d,
-        &["run", "h.delulu", "--grant", "console", "--sandbox", "--mode", "audit", "--sandbox-backend", &launcher, "--require-attestation", &public],
+        &[
+            "run",
+            "h.delulu",
+            "--grant",
+            "console",
+            "--sandbox",
+            "--mode",
+            "audit",
+            "--sandbox-backend",
+            &launcher,
+            "--require-attestation",
+            &public,
+        ],
     );
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
     let v: serde_json::Value = serde_json::from_slice(&r.stdout).unwrap();
-    assert_eq!(v["sandbox"]["attestation"], serde_json::json!({ "key": public, "attester": null, "guarantees": [], "verified": false }));
+    assert_eq!(
+        v["sandbox"]["attestation"],
+        serde_json::json!({ "key": public, "attester": null, "guarantees": [], "verified": false })
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -345,8 +392,17 @@ fn a_launcher_cannot_make_the_host_open_a_pipe_or_follow_a_link() {
             .env("DELULU_HOME", d.join("home"))
             .env("DELULU_NO_FIRST_RUN", "1")
             .args([
-                "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
-                "--sandbox-backend", &format!("external:{}", script.display()), "--require-attestation", &public,
+                "run",
+                "w.delulu",
+                "--grant",
+                "console",
+                "--grant",
+                &format!("fs.write={out}"),
+                "--sandbox",
+                "--sandbox-backend",
+                &format!("external:{}", script.display()),
+                "--require-attestation",
+                &public,
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -402,9 +458,21 @@ fn an_attester_that_vouches_for_each_property_by_name_meets_hostile_agent_and_th
         delulu(
             &d,
             &[
-                "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
-                "--sandbox-backend", launcher, "--sandbox-profile", "hostile-agent", "--require-attestation", &public,
-                "--report-out", report.to_str().unwrap(),
+                "run",
+                "w.delulu",
+                "--grant",
+                "console",
+                "--grant",
+                &format!("fs.write={out}"),
+                "--sandbox",
+                "--sandbox-backend",
+                launcher,
+                "--sandbox-profile",
+                "hostile-agent",
+                "--require-attestation",
+                &public,
+                "--report-out",
+                report.to_str().unwrap(),
             ],
         )
     };

@@ -65,8 +65,16 @@ fn call(id: i64, name: &str, arguments: Value) -> Value {
 #[test]
 fn the_server_speaks_the_protocol_and_answers_with_the_clis_own_json() {
     let dir = scratch("proto");
-    std::fs::write(dir.join("bad.delulu"), "module b\n\nfn main(root: Root) {\n    let c = root.console()\n    c.println(\"hi\")\n}\n").unwrap();
-    std::fs::write(dir.join("ok.delulu"), "module w\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"hi\")\n}\n").unwrap();
+    std::fs::write(
+        dir.join("bad.delulu"),
+        "module b\n\nfn main(root: Root) {\n    let c = root.console()\n    c.println(\"hi\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("ok.delulu"),
+        "module w\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"hi\")\n}\n",
+    )
+    .unwrap();
     let replies = converse(
         &dir,
         &[
@@ -97,10 +105,24 @@ fn the_server_speaks_the_protocol_and_answers_with_the_clis_own_json() {
     // The list: read-only tools, none of them an effector, outside the source tree no Survey.
     let tools = reply(&replies, 2)["result"]["tools"].as_array().unwrap().clone();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    for want in ["check", "authority", "why", "explain", "atlas", "atlas_query", "atlas_chain", "toolchain", "schema", "sandbox_probe", "sandbox_policy", "examples"] {
+    for want in [
+        "check",
+        "authority",
+        "why",
+        "explain",
+        "atlas",
+        "atlas_query",
+        "atlas_chain",
+        "toolchain",
+        "schema",
+        "sandbox_probe",
+        "sandbox_policy",
+        "examples",
+    ] {
         assert!(names.contains(&want), "`{want}` is offered: {names:?}");
     }
-    for never in ["run", "test", "grants", "broker", "fix", "fmt", "build", "edit", "survey_query", "survey_diff", "doctor_check"] {
+    for never in ["run", "test", "grants", "broker", "fix", "fmt", "build", "edit", "survey_query", "survey_diff", "doctor_check"]
+    {
         assert!(!names.contains(&never), "`{never}` must not be offered here: {names:?}");
     }
     for t in &tools {
@@ -159,8 +181,12 @@ fn inside_the_source_tree_the_survey_and_doctor_are_tools() {
             call(6, "survey_diff", json!({ "rev": "--output=x" })),
         ],
     );
-    let names: Vec<String> =
-        reply(&replies, 1)["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
+    let names: Vec<String> = reply(&replies, 1)["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
     for want in ["survey_query", "survey_impact", "survey_diff", "doctor_check"] {
         assert!(names.contains(&want.to_string()), "{want}: {names:?}");
     }

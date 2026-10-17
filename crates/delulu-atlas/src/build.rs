@@ -102,8 +102,7 @@ impl Atlas {
         let mut edges: BTreeSet<Edge> = BTreeSet::new();
 
         // module name -> package name (for resolving qualified fns and imports to ids).
-        let module_pkg: BTreeMap<String, String> =
-            input.modules.iter().map(|m| (m.name.clone(), m.package.clone())).collect();
+        let module_pkg: BTreeMap<String, String> = input.modules.iter().map(|m| (m.name.clone(), m.package.clone())).collect();
         // type name -> its type-node ids (for uses_type resolution; ambiguous names are skipped).
         let mut type_by_name: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new(); // name -> [(module, id)]
 
@@ -138,11 +137,7 @@ impl Atlas {
             for imp in &mv.module.imports {
                 let target = imp.path.dotted();
                 if let Some(tpkg) = module_pkg.get(&target) {
-                    edges.insert(Edge {
-                        from: mid.clone(),
-                        to: mod_id(tpkg, &target),
-                        kind: EdgeKind::Imports,
-                    });
+                    edges.insert(Edge { from: mid.clone(), to: mod_id(tpkg, &target), kind: EdgeKind::Imports });
                 }
             }
         }
@@ -172,21 +167,13 @@ impl Atlas {
             fnode.effects = facts.effects.iter().map(|e| e.name().to_string()).collect();
             fnode.span = fn_span.get(qual).cloned();
             nodes.insert(fid.clone(), fnode);
-            edges.insert(Edge {
-                from: mod_id(pkg, modname),
-                to: fid.clone(),
-                kind: EdgeKind::Contains,
-            });
+            edges.insert(Edge { from: mod_id(pkg, modname), to: fid.clone(), kind: EdgeKind::Contains });
 
             // calls: resolve each callee name to its owning module (checked fact — no re-lexing).
             for callee in &facts.callees {
                 if let Some(owner) = input.program.call_owner.get(modname).and_then(|o| o.get(callee)) {
                     if let Some(opkg) = module_pkg.get(owner) {
-                        edges.insert(Edge {
-                            from: fid.clone(),
-                            to: fn_id(opkg, owner, callee),
-                            kind: EdgeKind::Calls,
-                        });
+                        edges.insert(Edge { from: fid.clone(), to: fn_id(opkg, owner, callee), kind: EdgeKind::Calls });
                     }
                 }
             }
@@ -209,10 +196,13 @@ impl Atlas {
                 }
                 for n in &names {
                     if let Some(cands) = type_by_name.get(n) {
-                        let target = cands
-                            .iter()
-                            .find(|(m, _)| m == modname2)
-                            .or_else(|| if cands.len() == 1 { cands.first() } else { None });
+                        let target = cands.iter().find(|(m, _)| m == modname2).or_else(|| {
+                            if cands.len() == 1 {
+                                cands.first()
+                            } else {
+                                None
+                            }
+                        });
                         if let Some((_, tid)) = target {
                             edges.insert(Edge { from: fid.clone(), to: tid.clone(), kind: EdgeKind::UsesType });
                         }

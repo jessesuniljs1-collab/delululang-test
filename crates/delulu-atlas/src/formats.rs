@@ -29,13 +29,9 @@ fn kind_color(kind: NodeKind) -> &'static str {
 /// A function's dominant-effect color (the HTML colors functions "by effect row" — §1 adopt/improve).
 fn effect_color(effects: &[String]) -> &'static str {
     // Priority order: the most authority-bearing effect wins the color.
-    for (name, color) in [
-        ("Declassify", "#9d4edd"),
-        ("ForeignCall", "#b5651d"),
-        ("Net", "#ff595e"),
-        ("Write", "#ff924c"),
-        ("Read", "#1982c4"),
-    ] {
+    for (name, color) in
+        [("Declassify", "#9d4edd"), ("ForeignCall", "#b5651d"), ("Net", "#ff595e"), ("Write", "#ff924c"), ("Read", "#1982c4")]
+    {
         if effects.iter().any(|e| e == name) {
             return color;
         }
@@ -64,11 +60,7 @@ impl Atlas {
                 NodeKind::Foreign => "hexagon",
                 NodeKind::Grant => "octagon",
             };
-            let color = if n.kind == NodeKind::Function {
-                effect_color(&n.effects)
-            } else {
-                kind_color(n.kind)
-            };
+            let color = if n.kind == NodeKind::Function { effect_color(&n.effects) } else { kind_color(n.kind) };
             let _ = writeln!(
                 out,
                 "  \"{}\" [label=\"{}\", shape={shape}, fillcolor=\"{color}\"];",
@@ -77,10 +69,7 @@ impl Atlas {
             );
         }
         for e in &self.edges {
-            let dashed = matches!(
-                e.kind,
-                EdgeKind::Performs | EdgeKind::Requires | EdgeKind::Declassifies | EdgeKind::Delegates
-            );
+            let dashed = matches!(e.kind, EdgeKind::Performs | EdgeKind::Requires | EdgeKind::Declassifies | EdgeKind::Delegates);
             let style = if dashed { ", style=dashed, color=\"#888888\"" } else { "" };
             let _ = writeln!(
                 out,
@@ -112,22 +101,11 @@ impl Atlas {
         // declarations and C34's phantom ceiling: safe, and misleading. So the artifact describes
         // itself. `%%` is a mermaid comment; renderers drop it, humans and agents reading the source
         // see it, and it comes after `graph LR` so the declaration stays first.
-        let _ = writeln!(
-            out,
-            "  %% MODULE-LEVEL overview: packages and modules only. Functions, effects, capabilities,"
-        );
-        let _ = writeln!(
-            out,
-            "  %% and call edges are NOT shown here — use `--format dot`, `json`, or `tree` for those."
-        );
+        let _ = writeln!(out, "  %% MODULE-LEVEL overview: packages and modules only. Functions, effects, capabilities,");
+        let _ = writeln!(out, "  %% and call edges are NOT shown here — use `--format dot`, `json`, or `tree` for those.");
         // Stable short ids `n0, n1, …` for the module-level nodes, assigned in id order.
         let mut short: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
-        for (idx, n) in self
-            .nodes
-            .iter()
-            .filter(|n| matches!(n.kind, NodeKind::Package | NodeKind::Module))
-            .enumerate()
-        {
+        for (idx, n) in self.nodes.iter().filter(|n| matches!(n.kind, NodeKind::Package | NodeKind::Module)).enumerate() {
             let sid = format!("n{idx}");
             let kindword = if n.kind == NodeKind::Package { "package" } else { "module" };
             let _ = writeln!(out, "  {sid}[\"{kindword} {}\"]", mermaid_escape(&n.name));
@@ -149,11 +127,7 @@ impl Atlas {
         let collapsed = self.nodes.len() > HTML_NODE_CAP;
         // The data actually embedded: full graph, or a module-level reduction when collapsed.
         let (nodes, edges): (Vec<&Node>, Vec<&crate::model::Edge>) = if collapsed {
-            let ns: Vec<&Node> = self
-                .nodes
-                .iter()
-                .filter(|n| matches!(n.kind, NodeKind::Package | NodeKind::Module))
-                .collect();
+            let ns: Vec<&Node> = self.nodes.iter().filter(|n| matches!(n.kind, NodeKind::Package | NodeKind::Module)).collect();
             let keep: std::collections::BTreeSet<&str> = ns.iter().map(|n| n.id.as_str()).collect();
             let es: Vec<&crate::model::Edge> = self
                 .edges
@@ -190,10 +164,7 @@ impl Atlas {
             if i > 0 {
                 data_edges.push(',');
             }
-            let auth = matches!(
-                e.kind,
-                EdgeKind::Performs | EdgeKind::Requires | EdgeKind::Declassifies | EdgeKind::Delegates
-            );
+            let auth = matches!(e.kind, EdgeKind::Performs | EdgeKind::Requires | EdgeKind::Declassifies | EdgeKind::Delegates);
             let _ = write!(
                 data_edges,
                 "{{\"from\":{},\"to\":{},\"kind\":{},\"auth\":{}}}",
@@ -377,18 +348,36 @@ mod tests {
         assert!(a.nodes.iter().any(|n| n.kind == NodeKind::Effect), "premise: an effect exists");
 
         let m = a.render_mermaid();
-        assert!(m.starts_with("graph LR"), "the diagram declaration stays first:
-{m}");
-        assert!(m.contains("%% MODULE-LEVEL"), "the scope note is a mermaid comment:
-{m}");
-        assert!(m.contains("NOT shown"), "it says what is MISSING, not only what is present:
-{m}");
-        assert!(m.contains("--format dot"), "it points at a format that shows the rest:
-{m}");
-        assert!(!m.contains("main"), "premise: the function really is absent from the diagram:
-{m}");
-        assert!(m.contains("n0["), "the nodes still render:
-{m}");
+        assert!(
+            m.starts_with("graph LR"),
+            "the diagram declaration stays first:
+{m}"
+        );
+        assert!(
+            m.contains("%% MODULE-LEVEL"),
+            "the scope note is a mermaid comment:
+{m}"
+        );
+        assert!(
+            m.contains("NOT shown"),
+            "it says what is MISSING, not only what is present:
+{m}"
+        );
+        assert!(
+            m.contains("--format dot"),
+            "it points at a format that shows the rest:
+{m}"
+        );
+        assert!(
+            !m.contains("main"),
+            "premise: the function really is absent from the diagram:
+{m}"
+        );
+        assert!(
+            m.contains("n0["),
+            "the nodes still render:
+{m}"
+        );
     }
 
     #[test]
@@ -428,10 +417,7 @@ mod tests {
     #[test]
     fn html_collapses_above_the_node_cap() {
         // Synthesize a graph larger than the cap: 1 package, 1 module, and many functions.
-        let mut nodes = vec![
-            Node::new("pkg:big", NodeKind::Package, "big"),
-            Node::new("mod:big/big", NodeKind::Module, "big"),
-        ];
+        let mut nodes = vec![Node::new("pkg:big", NodeKind::Package, "big"), Node::new("mod:big/big", NodeKind::Module, "big")];
         let mut edges = vec![Edge { from: "pkg:big".into(), to: "mod:big/big".into(), kind: EdgeKind::Contains }];
         for i in 0..(HTML_NODE_CAP + 5) {
             let id = format!("fn:big/big.f{i:05}");
@@ -456,4 +442,3 @@ mod tests {
         assert!(!h.contains("fn:big/big.f00000"), "functions dropped in the collapsed view");
     }
 }
-

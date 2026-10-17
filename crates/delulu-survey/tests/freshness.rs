@@ -20,18 +20,17 @@ fn repo_root() -> PathBuf {
 
 fn committed(name: &str) -> String {
     let p = repo_root().join("docs/survey").join(name);
-    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("docs/survey/{name} is missing ({e}) — run `cargo run -p delulu-survey -- build`"))
+    std::fs::read_to_string(&p)
+        .unwrap_or_else(|e| panic!("docs/survey/{name} is missing ({e}) — run `cargo run -p delulu-survey -- build`"))
 }
 
 /// The gate. Every generated channel must match what is committed.
 #[test]
 fn the_committed_map_matches_the_tree() {
     let s = Survey::build(&repo_root());
-    for (name, fresh) in [
-        ("SURVEY.md", render::markdown(&s)),
-        ("DISCREPANCIES.md", render::discrepancies(&s)),
-        ("survey.json", render::json(&s)),
-    ] {
+    for (name, fresh) in
+        [("SURVEY.md", render::markdown(&s)), ("DISCREPANCIES.md", render::discrepancies(&s)), ("survey.json", render::json(&s))]
+    {
         let on_disk = committed(name);
         if on_disk != fresh {
             let (a, b) = first_difference(&on_disk, &fresh);
@@ -99,8 +98,7 @@ fn the_map_satisfies_every_invariant_it_claims() {
     let checks = delulu_survey::integrity(&s);
     assert!(!checks.is_empty(), "the integrity list is empty — nothing is being checked at all");
 
-    let failed: Vec<String> =
-        checks.iter().filter(|c| !c.ok).map(|c| format!("{}: {}", c.name, c.detail)).collect();
+    let failed: Vec<String> = checks.iter().filter(|c| !c.ok).map(|c| format!("{}: {}", c.name, c.detail)).collect();
     assert!(
         failed.is_empty(),
         "{} invariant(s) broken:\n  {}\n\nAn edge nobody can check is a guess with better \
@@ -155,10 +153,7 @@ fn every_workspace_member_is_in_the_map() {
             }
             let Some(entry) = t.trim_end_matches(',').strip_prefix('"') else { continue };
             let name = entry.trim_end_matches('"').rsplit('/').next().unwrap_or_default();
-            assert!(
-                s.node(&format!("crate:{name}")).is_some(),
-                "workspace member `{name}` is missing from the Survey"
-            );
+            assert!(s.node(&format!("crate:{name}")).is_some(), "workspace member `{name}` is missing from the Survey");
         }
     }
 }
@@ -185,10 +180,7 @@ fn newest_input() -> String {
                 if name != "target" && name != ".git" && name != "survey" {
                     walk(&p, best);
                 }
-            } else if matches!(
-                p.extension().and_then(|s| s.to_str()),
-                Some("rs") | Some("md") | Some("toml") | Some("delulu")
-            ) {
+            } else if matches!(p.extension().and_then(|s| s.to_str()), Some("rs") | Some("md") | Some("toml") | Some("delulu")) {
                 if let Ok(t) = e.metadata().and_then(|m| m.modified()) {
                     let rel = p.strip_prefix(repo_root()).unwrap_or(&p).display().to_string();
                     if best.as_ref().is_none_or(|(bt, _)| t > *bt) {
@@ -202,14 +194,10 @@ fn newest_input() -> String {
     walk(&repo_root(), &mut best);
     match best {
         Some((t, rel)) => match std::time::SystemTime::now().duration_since(t) {
-            Ok(d) if d.as_secs() < 300 => format!(
-                "The newest input is `{rel}`, modified {} SECONDS ago — while this suite was running.",
-                d.as_secs()
-            ),
-            Ok(d) => format!(
-                "The newest input is `{rel}`, modified {} minutes ago.",
-                d.as_secs() / 60
-            ),
+            Ok(d) if d.as_secs() < 300 => {
+                format!("The newest input is `{rel}`, modified {} SECONDS ago — while this suite was running.", d.as_secs())
+            }
+            Ok(d) => format!("The newest input is `{rel}`, modified {} minutes ago.", d.as_secs() / 60),
             Err(_) => format!("The newest input is `{rel}` (its timestamp is in the future)."),
         },
         None => "No inputs could be examined to date the change.".to_string(),

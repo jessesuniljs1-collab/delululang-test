@@ -85,11 +85,7 @@ fn ml_dsa_65_siggen_matches_nist_byte_for_byte() {
         }
         for t in g["tests"].as_array().unwrap() {
             let esk = ExpandedSigningKey::<MlDsa65>::from_expanded(&hex(field(t, "sk")).as_slice().try_into().unwrap());
-            let rnd: ml_dsa::B32 = if det {
-                Default::default()
-            } else {
-                hex(field(t, "rnd")).as_slice().try_into().unwrap()
-            };
+            let rnd: ml_dsa::B32 = if det { Default::default() } else { hex(field(t, "rnd")).as_slice().try_into().unwrap() };
             let sig: Signature<MlDsa65> = match (iface, mu) {
                 ("internal", true) => esk.sign_mu_deterministic(hex(field(t, "mu")).as_slice().try_into().unwrap()),
                 ("internal", false) => esk.sign_internal(&[&hex(field(t, "message"))], &rnd),

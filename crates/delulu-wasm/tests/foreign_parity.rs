@@ -100,17 +100,10 @@ fn run_both(src: &str, foreign_grants: &[(&str, &str)], max_ret: usize) -> (Run,
         trace: Some(wsink.clone()),
         ..HostConfig::default()
     };
-    let wasm_run = Run {
-        result: run_main(&wasm, &cfg).map_err(|e| wasm_code(&e.message())),
-        trace: wsink.records(),
-    };
+    let wasm_run = Run { result: run_main(&wasm, &cfg).map_err(|e| wasm_code(&e.message())), trace: wsink.records() };
 
     // ----- interpreter (reference) -----
-    let grants = Grants {
-        console: true,
-        foreign_c: grant_map,
-        ..Default::default()
-    };
+    let grants = Grants { console: true, foreign_c: grant_map, ..Default::default() };
     let isink = TraceSink::new();
     set_capture(true);
     let interp = Interp::new(&checked.module)
@@ -118,10 +111,7 @@ fn run_both(src: &str, foreign_grants: &[(&str, &str)], max_ret: usize) -> (Run,
         .with_trace(isink.clone());
     let iout = interp.run_main(Value::Root(Rc::new(grants.build_root())));
     let printed = take_capture().unwrap_or_default();
-    let interp_run = Run {
-        result: iout.map(|_| printed).map_err(|f| f.code.to_string()),
-        trace: isink.records(),
-    };
+    let interp_run = Run { result: iout.map(|_| printed).map_err(|f| f.code.to_string()), trace: isink.records() };
 
     (wasm_run, interp_run)
 }
@@ -157,9 +147,15 @@ fn cos_happy_path_matches_across_engines() {
     // Trace shape: exactly [ForeignCall dl_cos, Write println], seq 0 and 1 on both engines.
     let (w, _) = run_both(&src, &[("fixture", fixture_path())], MAX);
     assert_eq!(w.trace.len(), 2, "{:#?}", w.trace);
-    assert_eq!((w.trace[0].effect.as_str(), w.trace[0].op.as_str(), w.trace[0].cap_kind.as_str()), ("ForeignCall", "dl_cos", "fixture"));
+    assert_eq!(
+        (w.trace[0].effect.as_str(), w.trace[0].op.as_str(), w.trace[0].cap_kind.as_str()),
+        ("ForeignCall", "dl_cos", "fixture")
+    );
     assert_eq!(w.trace[0].detail.as_deref(), Some("fixture.dl_cos"));
-    assert_eq!((w.trace[1].effect.as_str(), w.trace[1].op.as_str(), w.trace[1].cap_kind.as_str()), ("Write", "println", "Console"));
+    assert_eq!(
+        (w.trace[1].effect.as_str(), w.trace[1].op.as_str(), w.trace[1].cap_kind.as_str()),
+        ("Write", "println", "Console")
+    );
     assert_eq!(w.trace[0].seq, 0);
     assert_eq!(w.trace[1].seq, 1);
 }

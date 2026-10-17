@@ -39,11 +39,7 @@ fn assert_valid(dir: &Path, schema: &str, what: &str, value: &serde_json::Value)
     std::fs::write(&file, serde_json::to_string_pretty(value).unwrap()).unwrap();
     let o = delulu(dir, &["schema", "validate", schema, file.to_str().unwrap(), "--json"]);
     let v = json_of(&o);
-    assert_eq!(
-        v["validate"]["valid"], true,
-        "{what} is not a valid `{schema}`: {}\n{value:#}",
-        v["validate"]["errors"]
-    );
+    assert_eq!(v["validate"]["valid"], true, "{what} is not a valid `{schema}`: {}\n{value:#}", v["validate"]["errors"]);
     assert_eq!(o.status.code(), Some(0));
 }
 
@@ -103,7 +99,11 @@ fn the_authority_report_and_the_atlas_match_their_schemas() {
 fn a_diagnostic_and_its_repair_match_their_schemas() {
     let dir = scratch("diag");
     // `println` needs `Write`, which `main` does not declare: DL0501 with a typed repair.
-    std::fs::write(dir.join("bad.delulu"), "module b\n\nfn main(root: Root) {\n    let c = root.console()\n    c.println(\"hi\")\n}\n").unwrap();
+    std::fs::write(
+        dir.join("bad.delulu"),
+        "module b\n\nfn main(root: Root) {\n    let c = root.console()\n    c.println(\"hi\")\n}\n",
+    )
+    .unwrap();
     let v = json_of(&delulu(&dir, &["check", "bad.delulu", "--json"]));
     let diags = v["diagnostics"].as_array().expect("diagnostics");
     assert!(diags.iter().any(|d| d["repairs"].as_array().is_some_and(|r| !r.is_empty())), "{v:#}");
@@ -124,11 +124,7 @@ fn every_kind_of_run_report_and_the_policy_preview_match_their_schemas() {
     let dir = scratch("run");
     corpus(&dir);
     let grant = "fs.write=./out";
-    for (what, extra) in [
-        ("l0", vec![]),
-        ("sandboxed", vec!["--sandbox"]),
-        ("audit", vec!["--sandbox", "--mode", "audit"]),
-    ] {
+    for (what, extra) in [("l0", vec![]), ("sandboxed", vec!["--sandbox"]), ("audit", vec!["--sandbox", "--mode", "audit"])] {
         let report = dir.join(format!("{what}.report.json"));
         let mut args = vec!["run", "writer.delulu", "--grant", grant, "--report-out", report.to_str().unwrap()];
         args.extend(extra);
@@ -149,7 +145,11 @@ fn every_kind_of_run_report_and_the_policy_preview_match_their_schemas() {
 #[test]
 fn a_refused_runs_report_matches_the_run_report_schema() {
     let dir = scratch("refused");
-    std::fs::write(dir.join("refused.delulu"), "module r\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n").unwrap();
+    std::fs::write(
+        dir.join("refused.delulu"),
+        "module r\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n",
+    )
+    .unwrap();
     for (what, extra) in [("l0", vec![]), ("sandboxed", vec!["--sandbox"])] {
         let report = dir.join(format!("{what}.refused.json"));
         let mut args = vec!["run", "refused.delulu", "--report-out", report.to_str().unwrap()];
@@ -172,7 +172,19 @@ fn the_toolchain_description_and_the_schema_listing_are_valid() {
     assert_valid(&dir, "toolchain", "toolchain", &v["toolchain"]);
     let list = json_of(&delulu(&dir, &["schema", "--json"]));
     let names: Vec<&str> = list["schemas"].as_array().unwrap().iter().filter_map(|s| s["name"].as_str()).collect();
-    for n in ["envelope", "diagnostic", "repair", "authority", "atlas", "sandbox", "policy", "run-report", "toolchain", "edit", "chain"] {
+    for n in [
+        "envelope",
+        "diagnostic",
+        "repair",
+        "authority",
+        "atlas",
+        "sandbox",
+        "policy",
+        "run-report",
+        "toolchain",
+        "edit",
+        "chain",
+    ] {
         assert!(names.contains(&n), "`{n}` is listed");
         let doc = json_of(&delulu(&dir, &["schema", n, "--json"]));
         assert_eq!(doc["document"]["$id"], format!("delulu:schema/{n}"));

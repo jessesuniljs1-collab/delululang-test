@@ -13,6 +13,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — the archive's notices and bill of materials, 2026-10-17
 
+- **Changed (D-V2-145): the Rust source is formatted by rustfmt** (`rustfmt.toml`, checked in CI). Contributors run
+  `cargo fmt --all`. No behaviour changes.
+
 - **Added (D-V2-143): every toolchain archive carries `THIRD-PARTY-NOTICES.txt` and `SBOM.cdx.json`** — the licence and
   notice texts of every crate the binary links, the C code they bundle and the Rust standard library, and the same crates
   as a CycloneDX bill of materials, generated for the archive's target from the build's own graph. Packaging now refuses

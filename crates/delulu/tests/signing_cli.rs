@@ -109,9 +109,7 @@ fn scaffold_pkg(dir: &Path, version: &str) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(
         dir.join("delulu.toml"),
-        format!(
-            "[package]\nname = \"widget\"\nversion = \"{version}\"\n\n[authority]\neffects = [\"Write\"]\n"
-        ),
+        format!("[package]\nname = \"widget\"\nversion = \"{version}\"\n\n[authority]\neffects = [\"Write\"]\n"),
     )
     .unwrap();
     std::fs::write(
@@ -138,31 +136,19 @@ fn criterion9_publish_catches_widening_bump_and_add_reads_the_index_line() {
     // The package at 1.1.0 now performs Write — a minor bump that WIDENS authority.
     let pkg = dir.join("widget");
     scaffold_pkg(&pkg, "1.1.0");
-    let o = delulu(
-        &dir,
-        &home,
-        &["publish", "--dry-run", pkg.to_str().unwrap(), "--index", index.to_str().unwrap(), "--json"],
-    );
+    let o = delulu(&dir, &home, &["publish", "--dry-run", pkg.to_str().unwrap(), "--index", index.to_str().unwrap(), "--json"]);
     assert_eq!(o.status.code(), Some(1), "widening minor bump must be refused");
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["code"], "DL1003", "the semver-authority law fires: {v}");
 
     // A MAJOR bump to 2.0.0 is allowed (widening authority is semver-major).
     scaffold_pkg(&pkg, "2.0.0");
-    let ok = delulu(
-        &dir,
-        &home,
-        &["publish", "--dry-run", pkg.to_str().unwrap(), "--index", index.to_str().unwrap(), "--json"],
-    );
+    let ok = delulu(&dir, &home, &["publish", "--dry-run", pkg.to_str().unwrap(), "--index", index.to_str().unwrap(), "--json"]);
     assert!(ok.status.success(), "a major bump publishes: {}", String::from_utf8_lossy(&ok.stdout));
     let okv: Value = serde_json::from_slice(&ok.stdout).unwrap();
     let index_line: Value = serde_json::from_str(okv["index_line"].as_str().unwrap()).unwrap();
-    let effects: Vec<String> = index_line["effects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect();
+    let effects: Vec<String> =
+        index_line["effects"].as_array().unwrap().iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
     assert!(effects.iter().any(|e| e == "Write"), "the new index line carries the authority summary: {okv}");
 
     // `add` renders the authority from the index line ALONE — no package, no download.

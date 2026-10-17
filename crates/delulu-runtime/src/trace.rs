@@ -190,10 +190,7 @@ impl TraceSink {
 
     /// A sink that retains at most `limit` records and counts the rest. For diagnostic tracing only.
     pub fn bounded(limit: usize) -> TraceSink {
-        TraceSink(
-            Rc::new(RefCell::new(Vec::new())),
-            Rc::new(Cap { limit: Some(limit), dropped: std::cell::Cell::new(0) }),
-        )
+        TraceSink(Rc::new(RefCell::new(Vec::new())), Rc::new(Cap { limit: Some(limit), dropped: std::cell::Cell::new(0) }))
     }
 
     /// How many records were dropped by the cap. `0` for an unbounded sink.
@@ -284,10 +281,7 @@ pub fn assert_trace(allowed_effects: &BTreeSet<String>, records: &[TraceRecord])
         .iter()
         .filter(|r| !allowed_effects.contains(&r.effect))
         .map(|r| {
-            format!(
-                "seq {}: effect `{}` (op `{}.{}`) is not in the statically computed row",
-                r.seq, r.effect, r.cap_kind, r.op
-            )
+            format!("seq {}: effect `{}` (op `{}.{}`) is not in the statically computed row", r.seq, r.effect, r.cap_kind, r.op)
         })
         .collect()
 }
@@ -474,8 +468,24 @@ mod tests {
     fn assert_trace_flags_effects_outside_the_allowed_row() {
         let allowed: BTreeSet<String> = ["Write"].into_iter().map(String::from).collect();
         let records = vec![
-            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None, ..Default::default() },
-            TraceRecord { seq: 1, effect: "Net".into(), op: "get".into(), cap_kind: "Http".into(), detail: None, span: None, ..Default::default() },
+            TraceRecord {
+                seq: 0,
+                effect: "Write".into(),
+                op: "println".into(),
+                cap_kind: "Console".into(),
+                detail: None,
+                span: None,
+                ..Default::default()
+            },
+            TraceRecord {
+                seq: 1,
+                effect: "Net".into(),
+                op: "get".into(),
+                cap_kind: "Http".into(),
+                detail: None,
+                span: None,
+                ..Default::default()
+            },
         ];
         let violations = assert_trace(&allowed, &records);
         assert_eq!(violations.len(), 1);
@@ -487,8 +497,24 @@ mod tests {
     fn assert_trace_is_empty_when_every_effect_is_allowed() {
         let allowed: BTreeSet<String> = ["Write", "Read"].into_iter().map(String::from).collect();
         let records = vec![
-            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None, ..Default::default() },
-            TraceRecord { seq: 1, effect: "Read".into(), op: "read_text".into(), cap_kind: "FsRead".into(), detail: None, span: None, ..Default::default() },
+            TraceRecord {
+                seq: 0,
+                effect: "Write".into(),
+                op: "println".into(),
+                cap_kind: "Console".into(),
+                detail: None,
+                span: None,
+                ..Default::default()
+            },
+            TraceRecord {
+                seq: 1,
+                effect: "Read".into(),
+                op: "read_text".into(),
+                cap_kind: "FsRead".into(),
+                detail: None,
+                span: None,
+                ..Default::default()
+            },
         ];
         assert!(assert_trace(&allowed, &records).is_empty());
     }

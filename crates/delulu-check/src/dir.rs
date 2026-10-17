@@ -94,9 +94,9 @@ impl DirError {
     pub fn message(&self) -> String {
         match self {
             DirError::Malformed(w) => format!("DIR payload is not decodable: {w}"),
-            DirError::UnsupportedVersion { found, supported } => format!(
-                "DIR wire-format version {found} is not supported by this toolchain (v{supported}) — rebuild the plugin"
-            ),
+            DirError::UnsupportedVersion { found, supported } => {
+                format!("DIR wire-format version {found} is not supported by this toolchain (v{supported}) — rebuild the plugin")
+            }
             DirError::PrimTableMismatch { found, supported } => format!(
                 "DIR was checked against primitive-table version {found}, but this toolchain is v{supported} — rebuild the plugin"
             ),
@@ -162,19 +162,12 @@ impl Dir {
     /// Decode DIR bytes with full hostile-input hardening: bad CBOR, an unsupported version, or a
     /// structurally impossible AST all return an `Err` — never a panic.
     pub fn decode(bytes: &[u8]) -> Result<Dir, DirError> {
-        let dir: Dir =
-            ciborium::from_reader(bytes).map_err(|e| DirError::Malformed(e.to_string()))?;
+        let dir: Dir = ciborium::from_reader(bytes).map_err(|e| DirError::Malformed(e.to_string()))?;
         if dir.dir_version != DIR_VERSION {
-            return Err(DirError::UnsupportedVersion {
-                found: dir.dir_version,
-                supported: DIR_VERSION,
-            });
+            return Err(DirError::UnsupportedVersion { found: dir.dir_version, supported: DIR_VERSION });
         }
         if dir.prim_table_version != PRIM_TABLE_VERSION {
-            return Err(DirError::PrimTableMismatch {
-                found: dir.prim_table_version,
-                supported: PRIM_TABLE_VERSION,
-            });
+            return Err(DirError::PrimTableMismatch { found: dir.prim_table_version, supported: PRIM_TABLE_VERSION });
         }
         // Structural hardening: the checker relies on a handful of AST invariants (chiefly that
         // every name path has at least one segment — `Path::span`/`segs[0]` would otherwise panic).
@@ -235,44 +228,29 @@ pub fn verify(bytes: &[u8]) -> Result<Dir, DirError> {
     // (1) Re-checking must be clean. Any error from resolve or check refutes the DIR — including the
     // row-subset boundary check (DL0501) that catches a row narrower than the code actually needs.
     if let Some(d) = rdiags.iter().chain(result.diags.iter()).find(|d| d.is_error()) {
-        return Err(DirError::VerifyFailed(format!(
-            "re-checking the code raised {}: {}",
-            d.code, d.message
-        )));
+        return Err(DirError::VerifyFailed(format!("re-checking the code raised {}: {}", d.code, d.message)));
     }
 
     // (2) The stored facts/types/rows must be exactly what honest re-checking produces. Comparing
     // the whole recomputed projection catches any forged authority claim.
     let recomputed = Dir::from_checked(&dir.module, &result);
     if recomputed.facts != dir.facts {
-        return Err(DirError::VerifyFailed(
-            "stored authority facts disagree with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("stored authority facts disagree with the re-checked code".into()));
     }
     if recomputed.fn_types != dir.fn_types {
-        return Err(DirError::VerifyFailed(
-            "stored function types disagree with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("stored function types disagree with the re-checked code".into()));
     }
     if recomputed.node_types != dir.node_types {
-        return Err(DirError::VerifyFailed(
-            "a stored node type disagrees with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("a stored node type disagrees with the re-checked code".into()));
     }
     if recomputed.node_rows != dir.node_rows {
-        return Err(DirError::VerifyFailed(
-            "a stored node effect row disagrees with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("a stored node effect row disagrees with the re-checked code".into()));
     }
     if recomputed.main_present != dir.main_present || recomputed.main_row != dir.main_row {
-        return Err(DirError::VerifyFailed(
-            "stored `main` facts disagree with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("stored `main` facts disagree with the re-checked code".into()));
     }
     if recomputed.foreign_binds != dir.foreign_binds {
-        return Err(DirError::VerifyFailed(
-            "stored foreign bind sites disagree with the re-checked code".into(),
-        ));
+        return Err(DirError::VerifyFailed("stored foreign bind sites disagree with the re-checked code".into()));
     }
 
     Ok(dir)
@@ -573,14 +551,10 @@ mod tests {
             let dir = deserialize(&bytes).unwrap_or_else(|e| panic!("decode `{src}`: {}", e.message()));
 
             // The CheckResult data survives the round-trip exactly.
-            let want_facts: BTreeMap<String, FnFacts> =
-                c.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            let want_fn_types: BTreeMap<String, Type> =
-                c.result.fn_types.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            let want_node_types: BTreeMap<u32, Type> =
-                c.result.node_types.iter().map(|(k, v)| (k.0, v.clone())).collect();
-            let want_node_rows: BTreeMap<u32, Row> =
-                c.result.node_rows.iter().map(|(k, v)| (k.0, v.clone())).collect();
+            let want_facts: BTreeMap<String, FnFacts> = c.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let want_fn_types: BTreeMap<String, Type> = c.result.fn_types.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let want_node_types: BTreeMap<u32, Type> = c.result.node_types.iter().map(|(k, v)| (k.0, v.clone())).collect();
+            let want_node_rows: BTreeMap<u32, Row> = c.result.node_rows.iter().map(|(k, v)| (k.0, v.clone())).collect();
             assert_eq!(dir.facts, want_facts, "facts round-trip: {src}");
             assert_eq!(dir.fn_types, want_fn_types, "fn_types round-trip: {src}");
             assert_eq!(dir.node_types, want_node_types, "node_types round-trip: {src}");
@@ -685,8 +659,7 @@ mod tests {
             let bytes = serialize(&c.module, &c.result);
             let verified = verify(&bytes).unwrap_or_else(|e| panic!("verify `{src}`: {}", e.message()));
 
-            let want_facts: BTreeMap<String, FnFacts> =
-                c.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let want_facts: BTreeMap<String, FnFacts> = c.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             assert_eq!(verified.facts, want_facts, "verify must agree with check_source: {src}");
         }
     }
@@ -819,8 +792,7 @@ mod tests {
         );
         let bytes = serialize(&c.module, &c.result);
         let orig = verify(&bytes).expect("the untampered DIR verifies");
-        let (of, oft, ont, onr) =
-            (orig.facts.clone(), orig.fn_types.clone(), orig.node_types.clone(), orig.node_rows.clone());
+        let (of, oft, ont, onr) = (orig.facts.clone(), orig.fn_types.clone(), orig.node_types.clone(), orig.node_rows.clone());
 
         // RW 5.6 (V2 P7): natively EVERY bit of every byte; under Miri — where each `verify` is a full
         // re-check, and this was the test in flight when the crate's 240-minute run was cancelled
@@ -866,10 +838,7 @@ mod tests {
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
         let bytes = serialize(&c.module, &c.result);
         let dir = verify(&bytes).expect("a test-stripped DIR verifies");
-        assert!(
-            !dir.module.items.iter().any(|it| matches!(it, Item::Test(_))),
-            "the artifact must carry no test blocks"
-        );
+        assert!(!dir.module.items.iter().any(|it| matches!(it, Item::Test(_))), "the artifact must carry no test blocks");
         assert!(dir.facts.contains_key("double"), "the real surface survives the strip");
     }
 

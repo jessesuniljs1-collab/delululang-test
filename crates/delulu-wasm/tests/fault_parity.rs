@@ -41,8 +41,7 @@ fn wasm_fault_detail(src: &str) -> String {
     }
 }
 
-const DIVZERO: &str =
-    "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 / 0)) }\n";
+const DIVZERO: &str = "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(7 / 0)) }\n";
 const OVERFLOW: &str =
     "module m\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(str(9223372036854775807 + 1)) }\n";
 const RECUR: &str =
@@ -72,10 +71,7 @@ fn the_two_engines_agree_on_arithmetic_fault_codes() {
     for (src, code) in [(DIVZERO, "DL0902"), (OVERFLOW, "DL0901")] {
         assert_eq!(interp_fault_code(src), code, "the interpreter must fault with {code}");
         let wasm = wasm_fault_detail(src);
-        assert!(
-            wasm.contains(code),
-            "the WASM engine must report {code} for the same fault (parity, invariant 15), got: {wasm}"
-        );
+        assert!(wasm.contains(code), "the WASM engine must report {code} for the same fault (parity, invariant 15), got: {wasm}");
     }
 }
 

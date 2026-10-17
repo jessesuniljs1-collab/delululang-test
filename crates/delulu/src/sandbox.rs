@@ -79,11 +79,8 @@ pub fn probe() -> Vec<Level> {
         detail: "none can be configured in this build (PS-D)".into(),
     }];
 
-    let l4 = vec![Attempt {
-        what: "an attester for the guest image",
-        ok: false,
-        detail: "attestation is deferred (PS-D-02)".into(),
-    }];
+    let l4 =
+        vec![Attempt { what: "an attester for the guest image", ok: false, detail: "attestation is deferred (PS-D-02)".into() }];
 
     vec![
         l0,
@@ -101,13 +98,12 @@ pub fn probe() -> Vec<Level> {
 #[cfg(target_os = "linux")]
 fn l2_attempts() -> Vec<Attempt> {
     let mut out = vec![attempt("KVM", attempt_open_kvm())];
-    let vmm = crate::microvm::locate_vmm()
-        .and_then(|p| crate::microvm::vmm_version(&p).map(|v| format!("{v} at {}", p.display())));
+    let vmm =
+        crate::microvm::locate_vmm().and_then(|p| crate::microvm::vmm_version(&p).map(|v| format!("{v} at {}", p.display())));
     out.push(attempt("a microVM monitor", vmm));
     let image = crate::microvm::read_image().and_then(|img| {
-        crate::microvm::verify(&img).map(|_| {
-            format!("kernel {} in {}, checked against its manifest", img.kernel_version, img.dir.display())
-        })
+        crate::microvm::verify(&img)
+            .map(|_| format!("kernel {} in {}, checked against its manifest", img.kernel_version, img.dir.display()))
     });
     out.push(attempt("the guest image", image));
     let launch = if out.iter().all(|a| a.ok) {
@@ -191,9 +187,8 @@ mod win {
         CreateRestrictedToken, DISABLE_MAX_PRIVILEGE, TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY,
     };
     use windows_sys::Win32::System::JobObjects::{
-        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        JOB_OBJECT_LIMIT_PROCESS_MEMORY,
+        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -308,11 +303,8 @@ fn one_of(rest: &[String], flag: &str) -> Result<Option<String>, String> {
 fn profile_flag(rest: &[String]) -> Result<crate::policy::Profile, String> {
     let mut it = rest.iter();
     while let Some(a) = it.next() {
-        let name = if a == "--sandbox-profile" {
-            it.next().cloned()
-        } else {
-            a.strip_prefix("--sandbox-profile=").map(str::to_string)
-        };
+        let name =
+            if a == "--sandbox-profile" { it.next().cloned() } else { a.strip_prefix("--sandbox-profile=").map(str::to_string) };
         if let Some(name) = name {
             return crate::policy::Profile::parse(&name).ok_or(name);
         }
@@ -350,8 +342,7 @@ fn cmd_status(json: bool) -> i32 {
         if dir.exists() {
             let mut found: Vec<delulu_broker::audit::AuditRecord> = Vec::new();
             for action in ["sandbox-launch", "sandbox-death"] {
-                let filter =
-                    delulu_broker::audit::QueryFilter { node: None, action: Some(action.to_string()), effect: None };
+                let filter = delulu_broker::audit::QueryFilter { node: None, action: Some(action.to_string()), effect: None };
                 match delulu_broker::audit::query(&dir, &filter) {
                     Ok(rs) => found.extend(rs),
                     // A chain that cannot be read is reported as itself, never as "no sandbox has run
@@ -426,10 +417,9 @@ fn cmd_status(json: bool) -> i32 {
         crate::breakglass::Policy::Absent => {
             "none — the sandbox is chosen per run (`sandbox require` makes it required)".to_string()
         }
-        crate::breakglass::Policy::Required(p) => format!(
-            "the sandbox is REQUIRED; break-glass keys pinned: {}; tickets spent: {spent}",
-            p.break_glass_keys.len()
-        ),
+        crate::breakglass::Policy::Required(p) => {
+            format!("the sandbox is REQUIRED; break-glass keys pinned: {}; tickets spent: {spent}", p.break_glass_keys.len())
+        }
         crate::breakglass::Policy::Unreadable(why) => format!("UNREADABLE ({why}) — treated as required, with no key"),
     };
     // The column is padded by the format, not by spaces inside a literal.
@@ -475,7 +465,9 @@ impl Shaping {
             run_as: one_of(rest, "--run-as")?,
         };
         if !openshell && (!s.grants.is_empty() || s.workdir.is_some() || s.binary.is_some() || s.run_as.is_some()) {
-            return Err("`--grant`, `--workdir`, `--binary` and `--run-as` shape an OpenShell export; pass `--format openshell`".into());
+            return Err(
+                "`--grant`, `--workdir`, `--binary` and `--run-as` shape an OpenShell export; pass `--format openshell`".into()
+            );
         }
         Ok(s)
     }
@@ -568,9 +560,9 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
     // The OpenShell export's flags belong to `sandbox policy` alone: `sandbox status --grant x` would
     // otherwise run and ignore them (they are documented for `sandbox`, so the dispatcher lets them by).
     if verbs.first() != Some(&"policy") {
-        if let Some(bad) = rest.iter().find(|a| {
-            OPENSHELL_FLAGS.iter().any(|f| *a == f || a.strip_prefix(f).is_some_and(|r| r.starts_with('=')))
-        }) {
+        if let Some(bad) =
+            rest.iter().find(|a| OPENSHELL_FLAGS.iter().any(|f| *a == f || a.strip_prefix(f).is_some_and(|r| r.starts_with('='))))
+        {
             eprintln!("error: `{bad}` belongs to `sandbox policy <file> --format openshell` only");
             eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
             return 2;
@@ -591,10 +583,19 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
             if json {
                 crate::cli::print_success_envelope("sandbox", to_json(&levels));
             } else {
-                println!("sandbox levels on this host ({} {}) — every line is an attempt:", std::env::consts::OS, std::env::consts::ARCH);
+                println!(
+                    "sandbox levels on this host ({} {}) — every line is an attempt:",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                );
                 for l in &levels {
                     match l.first_missing() {
-                        None => println!("  L{} {:<9} present — {}", l.level, l.name, l.attempts.iter().map(|a| a.detail.as_str()).collect::<Vec<_>>().join("; ")),
+                        None => println!(
+                            "  L{} {:<9} present — {}",
+                            l.level,
+                            l.name,
+                            l.attempts.iter().map(|a| a.detail.as_str()).collect::<Vec<_>>().join("; ")
+                        ),
                         Some(a) => println!("  L{} {:<9} absent  — first missing: {}: {}", l.level, l.name, a.what, a.detail),
                     }
                 }

@@ -204,9 +204,7 @@ impl ProcessAdapter {
         // enough; the poison stops us from ever speaking to a stream whose framing is in doubt.
         if self.rx.try_recv().is_ok() {
             self.poisoned = true;
-            return Err(AdapterError::Protocol(
-                "unsolicited output before a request — adapter is misframed".to_string(),
-            ));
+            return Err(AdapterError::Protocol("unsolicited output before a request — adapter is misframed".to_string()));
         }
         if writeln!(self.stdin, "{request}").is_err() || self.stdin.flush().is_err() {
             self.poisoned = true;
@@ -363,9 +361,7 @@ impl LineTransport {
 impl crate::verified_adapter::Transport for LineTransport {
     fn exchange(&mut self, frame: &str, within: Duration) -> Result<String, AdapterError> {
         if self.rx.try_recv().is_ok() {
-            return Err(AdapterError::Protocol(
-                "unsolicited output before a frame — the line is misframed".to_string(),
-            ));
+            return Err(AdapterError::Protocol("unsolicited output before a frame — the line is misframed".to_string()));
         }
         if writeln!(self.stdin, "{frame}").is_err() || self.stdin.flush().is_err() {
             return Err(AdapterError::Closed);
@@ -468,10 +464,7 @@ mod tests {
             Err(AdapterError::Refused(r)) => assert!(r.contains("hard stop"), "{r}"),
             other => panic!("expected a refusal, got {other:?}"),
         }
-        assert!(
-            !a.is_poisoned(),
-            "an adapter saying no is an adapter WORKING; only failures poison it"
-        );
+        assert!(!a.is_poisoned(), "an adapter saying no is an adapter WORKING; only failures poison it");
     }
 
     #[test]
@@ -489,10 +482,7 @@ mod tests {
         for bad in ["VAL not-a-number", "VAL NaN", "VAL inf", "hello", ""] {
             let mut a = echo_adapter(&responder(bad));
             let got = a.read("arm0/strain");
-            assert!(
-                matches!(got, Err(AdapterError::Protocol(_))),
-                "`{bad}` must be a protocol error, got {got:?}"
-            );
+            assert!(matches!(got, Err(AdapterError::Protocol(_))), "`{bad}` must be a protocol error, got {got:?}");
             assert!(a.is_poisoned(), "`{bad}` must poison the adapter");
         }
     }
@@ -503,10 +493,7 @@ mod tests {
         for bad in ["ok", "OKAY", "ACK", "true", "1", ""] {
             let mut a = echo_adapter(&responder(bad));
             let got = a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]);
-            assert!(
-                matches!(got, Err(AdapterError::Protocol(_))),
-                "`{bad}` must NOT be accepted as success, got {got:?}"
-            );
+            assert!(matches!(got, Err(AdapterError::Protocol(_))), "`{bad}` must NOT be accepted as success, got {got:?}");
         }
     }
 
@@ -519,10 +506,7 @@ mod tests {
         let got = a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]);
         let waited = t0.elapsed();
         assert_eq!(got, Err(AdapterError::Timeout));
-        assert!(
-            waited < EXCHANGE_TIMEOUT * 3,
-            "the deadline must bound the wait; waited {waited:?}"
-        );
+        assert!(waited < EXCHANGE_TIMEOUT * 3, "the deadline must bound the wait; waited {waited:?}");
 
         // Rule 3: poisoned stays poisoned. A late reply must never be attributed to a later command.
         assert!(a.is_poisoned());
@@ -535,10 +519,7 @@ mod tests {
         // Exits immediately: the pipe closes before any request is answered.
         let mut a = echo_adapter("exit");
         let got = a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]);
-        assert!(
-            matches!(got, Err(AdapterError::Closed) | Err(AdapterError::Timeout)),
-            "a dead adapter must fail, got {got:?}"
-        );
+        assert!(matches!(got, Err(AdapterError::Closed) | Err(AdapterError::Timeout)), "a dead adapter must fail, got {got:?}");
         assert!(a.is_poisoned());
     }
 
@@ -583,9 +564,7 @@ mod tests {
     fn flood_line(size: usize) -> String {
         #[cfg(windows)]
         {
-            format!(
-                "import sys\nsys.stdin.readline()\nsys.stdout.write('ERR ' + 'x' * {size} + '\\n')\nsys.stdout.flush()\n"
-            )
+            format!("import sys\nsys.stdin.readline()\nsys.stdout.write('ERR ' + 'x' * {size} + '\\n')\nsys.stdout.flush()\n")
         }
         #[cfg(not(windows))]
         {
@@ -608,10 +587,7 @@ mod tests {
             !matches!(got, Ok(_) | Err(AdapterError::Refused(_))),
             "an oversize reply line must NOT be accepted as a value (Ok/Refused); got {got:?}"
         );
-        assert!(
-            a.is_poisoned(),
-            "an adapter that floods a single line past the cap must be poisoned, not trusted again"
-        );
+        assert!(a.is_poisoned(), "an adapter that floods a single line past the cap must be poisoned, not trusted again");
     }
 
     /// Rule 3 forbids a reply being attributed to the wrong command. A late reply after a timeout is

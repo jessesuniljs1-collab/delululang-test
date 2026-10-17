@@ -535,9 +535,7 @@ pub fn unsupported_surface(program: &str) -> Option<String> {
     for item in &checked.module.items {
         match item {
             delulu_syntax::ast::Item::Actor(_) if !missing.contains(&"actors") => missing.push("actors"),
-            delulu_syntax::ast::Item::Foreign(_) if !missing.contains(&"foreign code") => {
-                missing.push("foreign code")
-            }
+            delulu_syntax::ast::Item::Foreign(_) if !missing.contains(&"foreign code") => missing.push("foreign code"),
             _ => {}
         }
     }
@@ -718,8 +716,7 @@ fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> 
     if let Some(code) = crate::cli::refuse_unknown_flags("run", opts) {
         return Some(code);
     }
-    let dropped: Vec<&str> =
-        opts.seen_flags.iter().map(String::as_str).filter(|f| !APPLIED_UNDER_SANDBOX.contains(f)).collect();
+    let dropped: Vec<&str> = opts.seen_flags.iter().map(String::as_str).filter(|f| !APPLIED_UNDER_SANDBOX.contains(f)).collect();
     if dropped.is_empty() {
         return None;
     }
@@ -948,8 +945,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         };
         let mut spec = crate::cli::authority_spec_from_grants(&grants, file);
         spec.budget = Some(
-            delulu_broker::BudgetScope { memory_bytes: limits.memory_bytes, cpu_seconds: limits.cpu_seconds }
-                .to_grant_string(),
+            delulu_broker::BudgetScope { memory_bytes: limits.memory_bytes, cpu_seconds: limits.cpu_seconds }.to_grant_string(),
         );
         match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
             Ok(c) => custody = Some(c),
@@ -1092,12 +1088,7 @@ pub fn run_sandboxed_cli(args: &[String]) -> i32 {
 /// Landlock and seccomp, per platform) and holds no capability of its own — it can only ask. (This
 /// comment said the guest had "no OS jail yet, which PS-A2 adds" until 2026-09-25, a phase after
 /// PS-A2 added it.)
-pub fn spawn_and_serve(
-    program: &str,
-    root: Rc<RootVal>,
-    seed: u64,
-    fixed_clock_ms: Option<i64>,
-) -> io::Result<i32> {
+pub fn spawn_and_serve(program: &str, root: Rc<RootVal>, seed: u64, fixed_clock_ms: Option<i64>) -> io::Result<i32> {
     spawn_and_serve_with(
         program,
         root,
@@ -1446,9 +1437,8 @@ fn serve_under(
     // its own watchdog, which honours the same number) and, on Windows, the processor-time ceiling
     // read from the job's accounting: the job's own limit fires late (SANDBOX-CPU-LATE-1).
     #[cfg(windows)]
-    let cpu_watch: Option<(CpuReader, std::time::Duration)> = jail
-        .cpu_probe()
-        .map(|p| (Box::new(move || p.used()) as CpuReader, std::time::Duration::from_secs(limits.cpu_seconds)));
+    let cpu_watch: Option<(CpuReader, std::time::Duration)> =
+        jail.cpu_probe().map(|p| (Box::new(move || p.used()) as CpuReader, std::time::Duration::from_secs(limits.cpu_seconds)));
     #[cfg(not(windows))]
     let cpu_watch: Option<(CpuReader, std::time::Duration)> = None;
     let watch = match (limits.wall_seconds, cpu_watch, memory_watch, child.killer()) {
@@ -1457,19 +1447,21 @@ fn serve_under(
     };
     let launch_words = applied.clone();
     // D-V2-87: the statement checked above, so at level 3 a claim that names a property can meet it.
-    let need = crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external, attested: attested.as_ref() };
-    let served = converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, devices, &mut evidence)
-        // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
-        // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
-        // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
-        // own words, and keeps its type.)
-        .map_err(|e| {
-            if crate::boundary::is_refusal(&e) {
-                e
-            } else {
-                io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024))
-            }
-        });
+    let need =
+        crate::boundary::Requirement { profile, launch: &launch_words, measured_by_host: !external, attested: attested.as_ref() };
+    let served =
+        converse(&mut child, &dir, program, &generation, &need, root, seed, fixed_clock_ms, custody, devices, &mut evidence)
+            // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
+            // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
+            // chain. Escaped and bounded here, once, before any of them. (A profile's refusal is the host's
+            // own words, and keeps its type.)
+            .map_err(|e| {
+                if crate::boundary::is_refusal(&e) {
+                    e
+                } else {
+                    io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024))
+                }
+            });
     // D-V2-59: refused before the program was sent, because the boundary lacks what the profile requires.
     let refused = served.as_ref().err().is_some_and(crate::boundary::is_refusal);
     // The red-team pass on `/3` (F4): a conversation that failed ENDS the guest, and one that said
@@ -2168,7 +2160,10 @@ fn in_words(e: io::Error) -> io::Error {
         // RW 4.32: not silence — a frame begun and not finished within the frame deadline.
         _ if delulu_runtime::channel::FrameTooSlow::is(&e) => io::Error::new(
             io::ErrorKind::TimedOut,
-            format!("the guest {}, and the channel's deadline ended the run", e.get_ref().map_or_else(String::new, |x| x.to_string())),
+            format!(
+                "the guest {}, and the channel's deadline ended the run",
+                e.get_ref().map_or_else(String::new, |x| x.to_string())
+            ),
         ),
         io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => io::Error::new(
             io::ErrorKind::TimedOut,
@@ -2297,7 +2292,11 @@ pub fn attempt_launch() -> Result<String, String> {
         let mut s = String::new();
         let _ = err.read_to_string(&mut s);
         let s = s.trim();
-        if s.is_empty() { how } else { format!("{how}: {}", s.lines().next().unwrap_or(s)) }
+        if s.is_empty() {
+            how
+        } else {
+            format!("{how}: {}", s.lines().next().unwrap_or(s))
+        }
     };
 
     // The probe's guest is killed on purpose, and a killed guest says so on its standard error. That
@@ -2533,7 +2532,12 @@ struct Stop {
 /// processor time and peak memory. Anything else stays unnamed ("closed the channel without saying
 /// goodbye"), because a record that guesses which limit fired would be read as a measurement.
 #[allow(unused_variables)]
-fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: StopEvidence, jail: &crate::jail::Jail) -> Option<Stop> {
+fn stop_reason(
+    st: &std::process::ExitStatus,
+    limits: crate::jail::Limits,
+    ev: StopEvidence,
+    jail: &crate::jail::Jail,
+) -> Option<Stop> {
     let budgets = "Budgets are the operator's, set per run with `--limits";
     if let Some(source) = ev.wall_fired {
         if let Some(w) = limits.wall_seconds {
@@ -2543,7 +2547,9 @@ fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: S
             });
         }
         return Some(Stop {
-            message: "the run was stopped: the microVM passed its wall-clock ceiling (twice its processor time, at least a minute)".to_string(),
+            message:
+                "the run was stopped: the microVM passed its wall-clock ceiling (twice its processor time, at least a minute)"
+                    .to_string(),
             json: serde_json::json!({ "dimension": "wall", "source": source }),
         });
     }
@@ -2597,7 +2603,10 @@ fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: S
         // OS's own accounting of the reaped guest shows the budget spent.
         if st.signal() == Some(libc::SIGKILL) {
             if let Some(used) = ev.guest_cpu.filter(|u| u.as_secs_f64() >= limits.cpu_seconds as f64 * 0.95) {
-                return Some(cpu(Some(used), "the operating system's processor-time limit (SIGKILL), with the time the OS accounted"));
+                return Some(cpu(
+                    Some(used),
+                    "the operating system's processor-time limit (SIGKILL), with the time the OS accounted",
+                ));
             }
         }
     }
@@ -2633,11 +2642,9 @@ fn limit_kill_reason(status: &std::process::ExitStatus) -> Option<String> {
         if let Some(sig) = status.signal() {
             return Some(match sig {
                 libc::SIGXCPU => "killed by SIGXCPU — the processor-time ceiling fired".to_string(),
-                libc::SIGKILL => {
-                    "killed by SIGKILL — a hard ceiling, the host's death signal, or an operator; the \
+                libc::SIGKILL => "killed by SIGKILL — a hard ceiling, the host's death signal, or an operator; the \
                      status cannot tell which"
-                        .to_string()
-                }
+                    .to_string(),
                 other => format!("killed by signal {other}"),
             });
         }
@@ -2774,10 +2781,7 @@ fn append_audit(
     // running one, and two runs in parallel could each take the same.
     let entry = AuditEntry {
         seq: 0,
-        ts: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or_default(),
+        ts: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or_default(),
         actor_node: None,
         action: action.to_string(),
         target,
@@ -2825,14 +2829,19 @@ mod tests {
         use delulu_runtime::channel::Refusal;
         // `é` is two bytes, 21 and 22: offset 22 is inside it.
         let program = "fn main(root: Root) {\u{e9}\n    let c = root.console()\n}\n";
-        let at = |file: u32, start: u32, end: u32| Refusal { code: "DL0703".into(), message: "not granted".into(), file, start, end };
+        let at =
+            |file: u32, start: u32, end: u32| Refusal { code: "DL0703".into(), message: "not granted".into(), file, start, end };
         let call = program.find("root.console()").unwrap() as u32;
         let good = at(0, call, call + 14);
         let d = super::host_refusal_diagnostics(program, "p.delulu", Some(1), Some(&good));
         assert_eq!(d.len(), 1, "{d:?}");
         assert_eq!(d[0]["code"], "DL0703");
         let s = &d[0]["spans"][0];
-        assert_eq!((s["file"].as_str(), s["start"]["line"].as_u64(), s["start"]["col"].as_u64()), (Some("p.delulu"), Some(2), Some(13)), "{d:?}");
+        assert_eq!(
+            (s["file"].as_str(), s["start"]["line"].as_u64(), s["start"]["col"].as_u64()),
+            (Some("p.delulu"), Some(2), Some(13)),
+            "{d:?}"
+        );
         for (why, bad) in [
             ("starting inside a character", at(0, 22, call)),
             ("ending inside a character", at(0, 21, 22)),
@@ -2898,7 +2907,9 @@ mod tests {
     /// `5bd76aa`: the host wrote until the guest hung up, 15 s later.
     #[test]
     fn a_guest_that_stops_reading_an_answer_cannot_hold_its_host() {
-        use delulu_runtime::channel::{read_frame, write_frame, HostChannel, ReqBody, Request, Response, WireValue, CHANNEL_VERSION};
+        use delulu_runtime::channel::{
+            read_frame, write_frame, HostChannel, ReqBody, Request, Response, WireValue, CHANNEL_VERSION,
+        };
         use std::sync::mpsc;
         let base = std::env::temp_dir().join(format!("dl-hold-{}-{}", std::process::id(), channel_tag()));
         let dir = base.join("data");
@@ -2911,8 +2922,14 @@ mod tests {
         // The guest: it asks for a read capability, then for the big file's text, and then — until it is told
         // to stop, or for 20 s — reads nothing, or a little at a time.
         fn guest<C: io::Read + io::Write>(mut g: C, dir: String, sip: Option<usize>, stop: mpsc::Receiver<()>) {
-            let ask = |g: &mut C, seq: u64, body: ReqBody| write_frame(g, &Request { version: CHANNEL_VERSION.into(), seq, body }).unwrap();
-            ask(&mut g, 1, ReqBody::RootMethod { method: "fs_read".into(), args: vec![WireValue::Str(dir)], file: 0, start: 0, end: 1 });
+            let ask = |g: &mut C, seq: u64, body: ReqBody| {
+                write_frame(g, &Request { version: CHANNEL_VERSION.into(), seq, body }).unwrap()
+            };
+            ask(
+                &mut g,
+                1,
+                ReqBody::RootMethod { method: "fs_read".into(), args: vec![WireValue::Str(dir)], file: 0, start: 0, end: 1 },
+            );
             let handle = match read_frame::<Response>(&mut g).unwrap() {
                 Response::Ok(WireValue::Cap { handle, .. }) => handle,
                 other => panic!("the host minted no capability: {other:?}"),
@@ -2946,7 +2963,10 @@ mod tests {
             g.join().unwrap();
             let said = in_words(served.expect_err("the conversation cannot have ended well")).to_string();
             assert!(took < std::time::Duration::from_secs(8), "{what}: the guest held its host for {took:?} ({said})");
-            assert!(said.contains("did not take the host's answer whole within 800ms"), "{what}: in words that say what the guest did: {said}");
+            assert!(
+                said.contains("did not take the host's answer whole within 800ms"),
+                "{what}: in words that say what the guest did: {said}"
+            );
         };
 
         for (name, sip) in [("never reads", None), ("reads a little at a time", Some(4096usize))] {
@@ -2954,7 +2974,11 @@ mod tests {
             {
                 let (host_end, guest_end) = std::os::unix::net::UnixStream::pair().unwrap();
                 let shown = dir.display().to_string();
-                check(&format!("{name}, a socket pair"), Box::new(bounded(host_end, within).unwrap()), Box::new(move |stop| guest(guest_end, shown, sip, stop)));
+                check(
+                    &format!("{name}, a socket pair"),
+                    Box::new(bounded(host_end, within).unwrap()),
+                    Box::new(move |stop| guest(guest_end, shown, sip, stop)),
+                );
             }
             let state = base.join(if sip.is_some() { "s" } else { "n" });
             std::fs::create_dir_all(&state).unwrap();
@@ -2969,11 +2993,15 @@ mod tests {
             let g = std::thread::spawn(move || run_guest(stop_rx));
             listening.recv().unwrap();
             let conn = bounded_by_name(crate::broker_transport::connect(&state).unwrap(), within).unwrap();
-            check(&format!("{name}, by name"), Box::new(conn), Box::new(move |stop: mpsc::Receiver<()>| {
-                let _ = stop.recv();
-                let _ = stop_fwd.send(());
-                g.join().unwrap();
-            }));
+            check(
+                &format!("{name}, by name"),
+                Box::new(conn),
+                Box::new(move |stop: mpsc::Receiver<()>| {
+                    let _ = stop.recv();
+                    let _ = stop_fwd.send(());
+                    g.join().unwrap();
+                }),
+            );
         }
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -2983,8 +3011,7 @@ mod tests {
     #[test]
     fn a_guest_inherits_no_environment_and_no_standard_input() {
         let (cmd, _) = guest_command(std::path::Path::new("delulu"), std::path::Path::new("chan"));
-        let names: Vec<String> =
-            cmd.get_envs().map(|(k, _)| k.to_string_lossy().to_string()).collect();
+        let names: Vec<String> = cmd.get_envs().map(|(k, _)| k.to_string_lossy().to_string()).collect();
         // Read from the one list the spawn uses: a second copy here went stale twice, and a test
         // that disagrees with the code it guards is worse than no test (CI runs 35390738394 and
         // 35396024254 were red on exactly that).

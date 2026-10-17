@@ -531,7 +531,20 @@ fn the_chains_seq_is_one_numbering_across_a_restart_and_a_sandboxed_run() {
     let o = delulu_in(
         &f.cwd,
         &f.state,
-        &["run", "prober.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--grant", GRANT, "--broker-profile", "sim", "--no-prompt"],
+        &[
+            "run",
+            "prober.delulu",
+            "--sandbox",
+            "--broker",
+            "daemon",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--broker-profile",
+            "sim",
+            "--no-prompt",
+        ],
     );
     assert!(o.status.success(), "the sandboxed run: {}\n{}", stdout(&o), stderr(&o));
     let (late, _) = delegate(&f, &[]);
@@ -552,10 +565,8 @@ fn the_chains_seq_is_one_numbering_across_a_restart_and_a_sandboxed_run() {
         .unwrap_or_else(|| panic!("the revoked node names the seq that revoked it: {listed}"));
 
     let recs = all_records(&f);
-    let revoke = recs
-        .iter()
-        .find(|r| r["action"] == "revoke" && r["target"] == late.as_str())
-        .expect("the revocation is in the chain");
+    let revoke =
+        recs.iter().find(|r| r["action"] == "revoke" && r["target"] == late.as_str()).expect("the revocation is in the chain");
     assert_eq!(
         revoke["seq"].as_u64(),
         Some(by_seq),
@@ -1146,10 +1157,7 @@ fn a_stopped_monitor_is_a_dead_one_and_says_so_when_it_resumes() {
     assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("revoked", "revoked"), "{states:?}");
     let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}"));
     assert_eq!(status.code(), Some(1), "a monitor whose dead-man fired did not end as asked: {report}\n{:?}", mon.stderr_seen);
-    assert!(
-        report["ended"].as_str().unwrap_or("").contains("dead-man revoked"),
-        "and it says why: {report}"
-    );
+    assert!(report["ended"].as_str().unwrap_or("").contains("dead-man revoked"), "and it says why: {report}");
 }
 
 /// **The dead-man's key is closed to the monitor's own user** (D-V2-106 item 2). The key that lets a beat
@@ -1230,7 +1238,10 @@ fn a_monitor_waiting_on_a_held_daemon_is_not_revoked_by_its_own_dead_man() {
     let _ = waiting.join();
     std::thread::sleep(std::time::Duration::from_millis(300));
     let states = node_states(&f);
-    assert_eq!(states[&node].0, "live", "a monitor that was only waiting on the daemon was revoked by its own dead-man: {states:?}");
+    assert_eq!(
+        states[&node].0, "live",
+        "a monitor that was only waiting on the daemon was revoked by its own dead-man: {states:?}"
+    );
     let (v, seen) = stop_monitor(&f, &node, m);
     assert!(v["ended"].as_str().is_some_and(|e| !e.contains("dead-man")), "{v:#}\n{seen:?}");
 }
@@ -1275,11 +1286,31 @@ fn the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other() {
     let ticket = f.state.parent().unwrap().join("t.ticket").display().to_string();
     let hello = f.cwd.join("hello.delulu").display().to_string();
     let o = operator(&[
-        "sandbox", "ticket", "--key", &key, "--ttl", "15m", "--reason", "the pump controller is down", "--out", &ticket,
-        "--program", &hello,
+        "sandbox",
+        "ticket",
+        "--key",
+        &key,
+        "--ttl",
+        "15m",
+        "--reason",
+        "the pump controller is down",
+        "--out",
+        &ticket,
+        "--program",
+        &hello,
     ]);
     assert!(o.status.success(), "sandbox ticket: {}", stderr(&o));
-    let o = operator(&["run", "hello.delulu", "--lease", &glass_token, "--broker-profile", "sim", "--break-glass", &ticket, "--no-prompt"]);
+    let o = operator(&[
+        "run",
+        "hello.delulu",
+        "--lease",
+        &glass_token,
+        "--broker-profile",
+        "sim",
+        "--break-glass",
+        &ticket,
+        "--no-prompt",
+    ]);
     let (so, se) = (stdout(&o), stderr(&o));
     // The baseline is the glass broken, never the program's output: the monitor polls every 25 ms, and on a loaded machine it
     // quarantines the run before its first console write (DL1403) — routine run 19's own full suite saw exactly that.

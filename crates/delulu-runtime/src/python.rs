@@ -31,9 +31,9 @@
 use crate::value::Value;
 
 #[cfg(not(feature = "python"))]
-use delulu_diag::Span;
-#[cfg(not(feature = "python"))]
 use crate::value::Fault;
+#[cfg(not(feature = "python"))]
+use delulu_diag::Span;
 
 /// Whether an import `name` is permitted by a granted allowlist. Patterns are either an exact module
 /// name (`"numpy"`) or a `prefix.*` wildcard (`"numpy.*"` matches `numpy` and any `numpy.<sub>`).
@@ -248,18 +248,8 @@ mod with_python {
     /// exception's type name; `message` is its `str()` — both untrusted (invariant 21), so the
     /// message is length-bounded by `py_err_value`.
     fn pyerr_to_value(py: Python<'_>, e: PyErr, max: usize) -> Value {
-        let kind = e
-            .get_type(py)
-            .name()
-            .ok()
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "PyError".to_string());
-        let message = e
-            .value(py)
-            .str()
-            .ok()
-            .and_then(|s| s.extract::<String>().ok())
-            .unwrap_or_default();
+        let kind = e.get_type(py).name().ok().map(|n| n.to_string()).unwrap_or_else(|| "PyError".to_string());
+        let message = e.value(py).str().ok().and_then(|s| s.extract::<String>().ok()).unwrap_or_default();
         py_err_value(&kind, &message, max)
     }
 
@@ -327,6 +317,12 @@ pub fn ensure_available() -> Result<(), String> {
 }
 
 #[cfg(not(feature = "python"))]
-pub fn call_python_cap(_cap: &crate::value::CapVal, _method: &str, _args: &[Value], _max: usize, span: Span) -> Result<Value, Fault> {
+pub fn call_python_cap(
+    _cap: &crate::value::CapVal,
+    _method: &str,
+    _args: &[Value],
+    _max: usize,
+    span: Span,
+) -> Result<Value, Fault> {
     Err(Fault::at("DL1307", "embedded Python is unavailable in this build", span))
 }

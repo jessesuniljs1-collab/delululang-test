@@ -47,9 +47,9 @@ use delulu_syntax::ast::*;
 
 use crate::actors::{actor_table, behavior_export_name, ctor_export_name, ActorTable};
 use wasm_encoder::{
-    BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
-    FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection,
-    MemoryType, Module as WasmModule, TypeSection, ValType,
+    BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function, FunctionSection,
+    GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection, MemoryType, Module as WasmModule, TypeSection,
+    ValType,
 };
 
 #[derive(Clone, Debug)]
@@ -85,10 +85,10 @@ impl CompileError {
 /// or arithmetic on a capability. `Unit` occupies zero stack slots.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
-    I64,   // Int
-    I32,   // Bool
-    F64,   // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
-    Str,   // i32 pointer into linear memory
+    I64,    // Int
+    I32,    // Bool
+    F64,    // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
+    Str,    // i32 pointer into linear memory
     Cap,    // i32 host handle (Console)
     Clock,  // i32 host handle (Clock, Phase 3k)
     Rand,   // i32 host handle (Rand, Phase 3l)
@@ -101,7 +101,7 @@ enum Ty {
     ForeignLoad,
     Foreign(u32),
     ForeignPtr,
-    Unit,   // no value
+    Unit, // no value
     // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field…]` in the heap.
     // `Result`/`Option` carry their payload scalars inline; user/prelude enums (Phase 3o Checkpoint 3)
     // are `Enum(id)` where `id` indexes the module's `EnumEnv` (so nested enums work — e.g. an
@@ -320,10 +320,8 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         ],
     );
     // Foreign lib method signatures (params/return lowered to `Ty`). Ordered to match `foreign_by_name`.
-    let mut foreign_libs: Vec<ForeignLibInfo> = vec![
-        ForeignLibInfo { name: String::new(), methods: Vec::new() };
-        env.foreign_by_name.len()
-    ];
+    let mut foreign_libs: Vec<ForeignLibInfo> =
+        vec![ForeignLibInfo { name: String::new(), methods: Vec::new() }; env.foreign_by_name.len()];
     for it in &module.items {
         if let Item::Foreign(fd) = it {
             if let Some(&id) = env.foreign_by_name.get(&fd.name.name) {
@@ -354,7 +352,10 @@ fn build_enum_env(module: &Module) -> EnumEnv {
                             for ft in &v.fields {
                                 match wasm_ty(&env, ft).and_then(ty_to_scalar) {
                                     Some(s) => payloads.push(s),
-                                    None => { ok = false; break; }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
                                 }
                             }
                             // A ctor with a non-scalar payload makes the enum non-compilable; leave it
@@ -376,10 +377,8 @@ fn build_enum_env(module: &Module) -> EnumEnv {
 
 fn set_ctors(env: &mut EnumEnv, name: &str, ctors: &[(&str, Vec<Scalar>)]) {
     if let Some(&id) = env.by_name.get(name) {
-        env.descs[id as usize].ctors = ctors
-            .iter()
-            .map(|(n, p)| EnumCtorDesc { name: (*n).to_string(), payloads: p.clone() })
-            .collect();
+        env.descs[id as usize].ctors =
+            ctors.iter().map(|(n, p)| EnumCtorDesc { name: (*n).to_string(), payloads: p.clone() }).collect();
     }
 }
 
@@ -435,10 +434,19 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         // An actor reference is an i64 host-side slot id (Stage 7 phase 7h).
         Ty::ActorRef(_) => Some(ValType::I64),
         // Str/Cap/variant handles are all i32 (a pointer or a host handle).
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::FsRead | Ty::Root
-        | Ty::ForeignLoad | Ty::Foreign(_) | Ty::ForeignPtr | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
-            Some(ValType::I32)
-        }
+        Ty::I32
+        | Ty::Str
+        | Ty::Cap
+        | Ty::Clock
+        | Ty::Rand
+        | Ty::FsRead
+        | Ty::Root
+        | Ty::ForeignLoad
+        | Ty::Foreign(_)
+        | Ty::ForeignPtr
+        | Ty::Result(..)
+        | Ty::Option(..)
+        | Ty::Enum(_) => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -538,9 +546,7 @@ fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
             Expr::If { cond, then_, else_, .. } => {
                 in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
             }
-            Expr::Match { scrutinee, arms, .. } => {
-                in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names))
-            }
+            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names)),
             Expr::Try { inner, .. } => in_expr(inner, names),
             Expr::Block(b) => in_block(b, names),
             _ => false,
@@ -564,10 +570,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 /// Compile with the checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g). The
 /// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
 /// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
-pub fn compile_module_with(
-    module: &Module,
-    foreign_binds: &HashMap<NodeId, String>,
-) -> Result<Vec<u8>, CompileError> {
+pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, String>) -> Result<Vec<u8>, CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
     let env = build_enum_env(module);
 
@@ -667,7 +670,7 @@ pub fn compile_module_with(
         n_imports += 4;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
-    // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
+                                // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
 
     // Collect string literals into a length-prefixed linear-memory image.
@@ -756,7 +759,10 @@ pub fn compile_module_with(
         types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // foreign_bind(load, name_ptr) -> Result[M,ForeignErr] cell ptr
         foreign_call_ty = next_type + 2;
         // foreign_call(lib, method_ptr, args_ptr, argc, file, start, end) -> i64 (marshalled return)
-        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]);
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I64],
+        );
         float_to_str_ty = next_type + 3;
         types.ty().function([ValType::F64], [ValType::I32]); // float_to_str(x) -> str ptr (matches Value::Float display)
         next_type += 4;
@@ -881,10 +887,7 @@ pub fn compile_module_with(
     // The bump-heap pointer: a mutable i32 global starting just past the interned literals.
     let heap_start = data.len() as i32;
     let mut globals = GlobalSection::new();
-    globals.global(
-        GlobalType { val_type: ValType::I32, mutable: true, shared: false },
-        &ConstExpr::i32_const(heap_start),
-    );
+    globals.global(GlobalType { val_type: ValType::I32, mutable: true, shared: false }, &ConstExpr::i32_const(heap_start));
 
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
@@ -913,7 +916,19 @@ pub fn compile_module_with(
     }
     for (actor_idx, decl, params, body, _) in &member_plans {
         code.function(&compile_actor_member(
-            *actor_idx, decl, params, body, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds,
+            *actor_idx,
+            decl,
+            params,
+            body,
+            &env,
+            &generics,
+            &index,
+            &str_off,
+            arith_base,
+            imp,
+            actor_imp,
+            &table,
+            foreign_binds,
         )?);
     }
 
@@ -1102,7 +1117,18 @@ impl<'a> Cx<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports, actor_imp: ActorImports, actors: &'a ActorTable, foreign_binds: &'a HashMap<NodeId, String>) -> Result<Function, CompileError> {
+fn compile_fn<'a>(
+    f: &FnDecl,
+    env: &'a EnumEnv,
+    generics: &'a HashMap<String, FnDecl>,
+    index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
+    str_off: &'a HashMap<String, u32>,
+    arith_base: u32,
+    imp: Imports,
+    actor_imp: ActorImports,
+    actors: &'a ActorTable,
+    foreign_binds: &'a HashMap<NodeId, String>,
+) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -1347,14 +1373,9 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
 /// Resolve a `self` field to `(field index, lowered type, self-slot local)` in the current actor
 /// context, or an honest error if outside an actor member / no such field.
 fn self_field(cx: &Cx, name: &str) -> Result<(u32, Ty, u32), CompileError> {
-    let ctx = cx
-        .actor
-        .as_ref()
-        .ok_or_else(|| CompileError::Unsupported("`self` outside an actor member".into()))?;
-    let (fidx, fty) = *ctx
-        .fields
-        .get(name)
-        .ok_or_else(|| CompileError::Unsupported(format!("this actor has no field `{name}`")))?;
+    let ctx = cx.actor.as_ref().ok_or_else(|| CompileError::Unsupported("`self` outside an actor member".into()))?;
+    let (fidx, fty) =
+        *ctx.fields.get(name).ok_or_else(|| CompileError::Unsupported(format!("this actor has no field `{name}`")))?;
     Ok((fidx, fty, ctx.self_slot))
 }
 
@@ -1440,7 +1461,10 @@ fn compile_send(actor_idx: u32, method: &str, args: &[Expr], cx: &mut Cx) -> Res
     })?;
     let arity = cx.actors.actors[actor_idx as usize].behaviors[beh_idx as usize].arity;
     if args.len() != arity {
-        return Err(CompileError::Unsupported(format!("send `{method}` with {} args (the behaviour expects {arity})", args.len())));
+        return Err(CompileError::Unsupported(format!(
+            "send `{method}` with {} args (the behaviour expects {arity})",
+            args.len()
+        )));
     }
     if cx.actor_imp.send == u32::MAX {
         return Err(CompileError::Unsupported("a behaviour send without the actor host interface".into()));
@@ -1502,7 +1526,13 @@ fn fval_tag(t: Ty) -> i32 {
 /// runs `foreign::call` host-side — one code path with the interpreter), and decode the marshalled
 /// i64 return per the declared return type. A `ForeignErr::BadReturn` becomes a host-recorded DL1306
 /// refusal surfaced after the run (never a trap from inside the callback).
-fn compile_foreign_call(lib_id: u32, method: &str, args: &[Expr], span: delulu_diag::Span, cx: &mut Cx) -> Result<Ty, CompileError> {
+fn compile_foreign_call(
+    lib_id: u32,
+    method: &str,
+    args: &[Expr],
+    span: delulu_diag::Span,
+    cx: &mut Cx,
+) -> Result<Ty, CompileError> {
     if cx.imp.foreign_call == u32::MAX {
         return Err(CompileError::Unsupported("a foreign call without the foreign host interface".into()));
     }
@@ -1627,7 +1657,8 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
             if compile_expr(cond, cx)? != Ty::I32 {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
             }
-            let else_ = else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
+            let else_ =
+                else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
             let bt = match wasm_valtype(expected) {
                 Some(v) => BlockType::Result(v),
                 None => BlockType::Empty,
@@ -1663,7 +1694,11 @@ fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<
         .ok_or_else(|| CompileError::Unsupported(format!("`{name}` is not a constructor of {expected:?}")))?;
     let payloads = ctors[tag].1.clone();
     if args.len() != payloads.len() {
-        return Err(CompileError::Unsupported(format!("constructor `{name}` with {} args (expected {})", args.len(), payloads.len())));
+        return Err(CompileError::Unsupported(format!(
+            "constructor `{name}` with {} args (expected {})",
+            args.len(),
+            payloads.len()
+        )));
     }
     let cell = variant_cell_size(&ctors);
 
@@ -1725,7 +1760,8 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
             _ => return Err(CompileError::Unsupported("a `match` pattern the WASM backend can't compile".into())),
         }
     }
-    let arm_idx = |t: usize| arm_for_tag[t].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()));
+    let arm_idx =
+        |t: usize| arm_for_tag[t].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()));
 
     let result_ty = match expected {
         Some(t) => t,
@@ -1756,7 +1792,15 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
     Ok(result_ty)
 }
 
-fn compile_arm(arm: &Arm, payloads: &[Scalar], sp: u32, scrut_ty: Ty, cx: &mut Cx, result_ty: Ty, expected_mode: bool) -> Result<(), CompileError> {
+fn compile_arm(
+    arm: &Arm,
+    payloads: &[Scalar],
+    sp: u32,
+    scrut_ty: Ty,
+    cx: &mut Cx,
+    result_ty: Ty,
+    expected_mode: bool,
+) -> Result<(), CompileError> {
     cx.scopes.push(HashMap::new());
     match &arm.pattern {
         // `Ctor(f0, f1, …)` — bind each field named by a `Bind` pattern at its slot.
@@ -1923,7 +1967,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if ct != Ty::I32 {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
             }
-            let else_ = else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
+            let else_ =
+                else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
             let then_ty = block_result_ty(then_)?;
             let bt = match wasm_valtype(then_ty) {
                 Some(v) => BlockType::Result(v),
@@ -2124,8 +2169,16 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     // Stage 4 phase 4g: `str(Bool)` selects the interned "true"/"false" literal (matches
                     // `Value::Bool.display()`). Available with the foreign interface (which interns them).
                     Ty::I32 => {
-                        let t = *cx.str_off.get("true").ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))? as i32;
-                        let f = *cx.str_off.get("false").ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))? as i32;
+                        let t = *cx
+                            .str_off
+                            .get("true")
+                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))?
+                            as i32;
+                        let f = *cx
+                            .str_off
+                            .get("false")
+                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))?
+                            as i32;
                         cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
                         cx.emit(Instruction::I32Const(t));
                         cx.emit(Instruction::Else);
@@ -2133,7 +2186,9 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         cx.emit(Instruction::End);
                         Ok(Ty::Str)
                     }
-                    _ => Err(CompileError::Unsupported("str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into())),
+                    _ => Err(CompileError::Unsupported(
+                        "str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into(),
+                    )),
                 };
             }
             // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
@@ -2151,7 +2206,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 (e.0, e.1.clone(), e.2)
             };
             if args.len() != ptys.len() {
-                return Err(CompileError::Unsupported(format!("`{name}` called with {} args (expected {})", args.len(), ptys.len())));
+                return Err(CompileError::Unsupported(format!(
+                    "`{name}` called with {} args (expected {})",
+                    args.len(),
+                    ptys.len()
+                )));
             }
             // Compile each argument at its declared parameter type, so a variant constructor passed
             // directly (`f(Some(x))`, `f(Say("hi"))`) knows its type.
@@ -2238,9 +2297,7 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::Method { name, .. } if name.name == "rand" => Ok(Ty::Rand),
         Expr::Method { name, args, .. } if name.name == "int" && args.len() == 2 => Ok(Ty::I64),
         // `str(...)` always yields a Str — type it precisely so it can tail an `if` branch.
-        Expr::Call { callee, .. }
-            if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") =>
-        {
+        Expr::Call { callee, .. } if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") => {
             Ok(Ty::Str)
         }
         // Var/Call are context-dependent; default I64 for typing. A mismatch is caught by the
@@ -2316,11 +2373,22 @@ fn ovf_add_fn() -> Function {
     build(
         &[(1, ValType::I64)], // local 2 = r
         &[
-            LocalGet(0), LocalGet(1), I64Add, LocalSet(2),
-            LocalGet(0), LocalGet(2), I64Xor,
-            LocalGet(1), LocalGet(2), I64Xor,
-            I64And, I64Const(0), I64LtS,
-            If(BlockType::Empty), Unreachable, End,
+            LocalGet(0),
+            LocalGet(1),
+            I64Add,
+            LocalSet(2),
+            LocalGet(0),
+            LocalGet(2),
+            I64Xor,
+            LocalGet(1),
+            LocalGet(2),
+            I64Xor,
+            I64And,
+            I64Const(0),
+            I64LtS,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
             LocalGet(2),
         ],
     )
@@ -2332,11 +2400,22 @@ fn ovf_sub_fn() -> Function {
     build(
         &[(1, ValType::I64)], // local 2 = r
         &[
-            LocalGet(0), LocalGet(1), I64Sub, LocalSet(2),
-            LocalGet(0), LocalGet(1), I64Xor,
-            LocalGet(0), LocalGet(2), I64Xor,
-            I64And, I64Const(0), I64LtS,
-            If(BlockType::Empty), Unreachable, End,
+            LocalGet(0),
+            LocalGet(1),
+            I64Sub,
+            LocalSet(2),
+            LocalGet(0),
+            LocalGet(1),
+            I64Xor,
+            LocalGet(0),
+            LocalGet(2),
+            I64Xor,
+            I64And,
+            I64Const(0),
+            I64LtS,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
             LocalGet(2),
         ],
     )
@@ -2350,17 +2429,33 @@ fn ovf_mul_fn() -> Function {
     build(
         &[(1, ValType::I64)], // local 2 = r
         &[
-            LocalGet(0), LocalGet(1), I64Mul, LocalSet(2),
+            LocalGet(0),
+            LocalGet(1),
+            I64Mul,
+            LocalSet(2),
             Block(BlockType::Empty),
-            LocalGet(0), I64Eqz, BrIf(0), // a == 0 -> no overflow
-            LocalGet(0), I64Const(-1), I64Eq,
+            LocalGet(0),
+            I64Eqz,
+            BrIf(0), // a == 0 -> no overflow
+            LocalGet(0),
+            I64Const(-1),
+            I64Eq,
             If(BlockType::Empty),
-            LocalGet(1), I64Const(i64::MIN), I64Eq,
-            If(BlockType::Empty), Unreachable, End,
+            LocalGet(1),
+            I64Const(i64::MIN),
+            I64Eq,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
             Else,
-            LocalGet(2), LocalGet(0), I64DivS,
-            LocalGet(1), I64Ne,
-            If(BlockType::Empty), Unreachable, End,
+            LocalGet(2),
+            LocalGet(0),
+            I64DivS,
+            LocalGet(1),
+            I64Ne,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
             End,
             End, // block
             LocalGet(2),
@@ -2375,13 +2470,24 @@ fn chk_rem_fn() -> Function {
     build(
         &[],
         &[
-            LocalGet(1), I64Eqz,
-            If(BlockType::Empty), Unreachable, End,
-            LocalGet(0), I64Const(i64::MIN), I64Eq,
-            LocalGet(1), I64Const(-1), I64Eq,
+            LocalGet(1),
+            I64Eqz,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
+            LocalGet(0),
+            I64Const(i64::MIN),
+            I64Eq,
+            LocalGet(1),
+            I64Const(-1),
+            I64Eq,
             I32And,
-            If(BlockType::Empty), Unreachable, End,
-            LocalGet(0), LocalGet(1), I64RemS,
+            If(BlockType::Empty),
+            Unreachable,
+            End,
+            LocalGet(0),
+            LocalGet(1),
+            I64RemS,
         ],
     )
 }
@@ -2406,23 +2512,47 @@ fn concat_fn(heap_global: u32) -> Function {
     build(
         &[(4, ValType::I32)],
         &[
-            LocalGet(0), I32Load(u32_at()), LocalSet(2), // len_a = mem[a]
-            LocalGet(1), I32Load(u32_at()), LocalSet(3), // len_b = mem[b]
-            LocalGet(2), LocalGet(3), I32Add, LocalSet(5), // total = len_a + len_b
-            GlobalGet(heap_global), LocalSet(4),           // result_ptr = heap
-            LocalGet(4), LocalGet(5), I32Store(u32_at()),  // mem[result_ptr] = total
+            LocalGet(0),
+            I32Load(u32_at()),
+            LocalSet(2), // len_a = mem[a]
+            LocalGet(1),
+            I32Load(u32_at()),
+            LocalSet(3), // len_b = mem[b]
+            LocalGet(2),
+            LocalGet(3),
+            I32Add,
+            LocalSet(5), // total = len_a + len_b
+            GlobalGet(heap_global),
+            LocalSet(4), // result_ptr = heap
+            LocalGet(4),
+            LocalGet(5),
+            I32Store(u32_at()), // mem[result_ptr] = total
             // copy a's bytes: dst = result_ptr+4, src = a+4, len = len_a
-            LocalGet(4), I32Const(4), I32Add,
-            LocalGet(0), I32Const(4), I32Add,
+            LocalGet(4),
+            I32Const(4),
+            I32Add,
+            LocalGet(0),
+            I32Const(4),
+            I32Add,
             LocalGet(2),
             MemoryCopy { src_mem: 0, dst_mem: 0 },
             // copy b's bytes: dst = result_ptr+4+len_a, src = b+4, len = len_b
-            LocalGet(4), I32Const(4), I32Add, LocalGet(2), I32Add,
-            LocalGet(1), I32Const(4), I32Add,
+            LocalGet(4),
+            I32Const(4),
+            I32Add,
+            LocalGet(2),
+            I32Add,
+            LocalGet(1),
+            I32Const(4),
+            I32Add,
             LocalGet(3),
             MemoryCopy { src_mem: 0, dst_mem: 0 },
             // heap = result_ptr + 4 + total
-            LocalGet(4), I32Const(4), I32Add, LocalGet(5), I32Add,
+            LocalGet(4),
+            I32Const(4),
+            I32Add,
+            LocalGet(5),
+            I32Add,
             GlobalSet(heap_global),
             LocalGet(4), // return result_ptr
         ],
@@ -2442,64 +2572,122 @@ fn int_to_str_fn(heap_global: u32) -> Function {
         &[(2, ValType::I64), (5, ValType::I32)],
         &[
             // sign = n < 0
-            LocalGet(0), I64Const(0), I64LtS, LocalSet(3),
+            LocalGet(0),
+            I64Const(0),
+            I64LtS,
+            LocalSet(3),
             // mag = sign ? (0 - n) : n
             LocalGet(3),
             If(BlockType::Result(ValType::I64)),
-            I64Const(0), LocalGet(0), I64Sub,
+            I64Const(0),
+            LocalGet(0),
+            I64Sub,
             Else,
             LocalGet(0),
             End,
             LocalSet(1),
             // count decimal digits of mag (unsigned); mag == 0 counts as one digit
-            I32Const(0), LocalSet(4),
-            LocalGet(1), LocalSet(2), // tmp = mag
-            LocalGet(1), I64Eqz,
+            I32Const(0),
+            LocalSet(4),
+            LocalGet(1),
+            LocalSet(2), // tmp = mag
+            LocalGet(1),
+            I64Eqz,
             If(BlockType::Empty),
-            I32Const(1), LocalSet(4),
+            I32Const(1),
+            LocalSet(4),
             Else,
             Block(BlockType::Empty),
             Loop(BlockType::Empty),
-            LocalGet(2), I64Eqz, BrIf(1), // tmp == 0 -> done
-            LocalGet(2), I64Const(10), I64DivU, LocalSet(2), // tmp /= 10
-            LocalGet(4), I32Const(1), I32Add, LocalSet(4),   // count++
+            LocalGet(2),
+            I64Eqz,
+            BrIf(1), // tmp == 0 -> done
+            LocalGet(2),
+            I64Const(10),
+            I64DivU,
+            LocalSet(2), // tmp /= 10
+            LocalGet(4),
+            I32Const(1),
+            I32Add,
+            LocalSet(4), // count++
             Br(0),
             End,
             End,
             End,
             // total_len = count + sign
-            LocalGet(4), LocalGet(3), I32Add, LocalSet(7),
+            LocalGet(4),
+            LocalGet(3),
+            I32Add,
+            LocalSet(7),
             // ptr = heap; store total_len header
-            GlobalGet(heap_global), LocalSet(5),
-            LocalGet(5), LocalGet(7), I32Store(u32_at()),
+            GlobalGet(heap_global),
+            LocalSet(5),
+            LocalGet(5),
+            LocalGet(7),
+            I32Store(u32_at()),
             // if sign, write '-' at ptr+4
             LocalGet(3),
             If(BlockType::Empty),
-            LocalGet(5), I32Const(4), I32Add, I32Const(45), I32Store8(byte_at()),
+            LocalGet(5),
+            I32Const(4),
+            I32Add,
+            I32Const(45),
+            I32Store8(byte_at()),
             End,
             // pos = ptr + 4 + sign + count - 1  (position of the last digit)
-            LocalGet(5), I32Const(4), I32Add, LocalGet(3), I32Add, LocalGet(4), I32Add, I32Const(1), I32Sub, LocalSet(6),
+            LocalGet(5),
+            I32Const(4),
+            I32Add,
+            LocalGet(3),
+            I32Add,
+            LocalGet(4),
+            I32Add,
+            I32Const(1),
+            I32Sub,
+            LocalSet(6),
             // write digits from least-significant at `pos` downward; mag == 0 writes a single '0'
-            LocalGet(1), LocalSet(2), // tmp = mag
-            LocalGet(1), I64Eqz,
+            LocalGet(1),
+            LocalSet(2), // tmp = mag
+            LocalGet(1),
+            I64Eqz,
             If(BlockType::Empty),
-            LocalGet(6), I32Const(48), I32Store8(byte_at()),
+            LocalGet(6),
+            I32Const(48),
+            I32Store8(byte_at()),
             Else,
             Block(BlockType::Empty),
             Loop(BlockType::Empty),
-            LocalGet(2), I64Eqz, BrIf(1),
+            LocalGet(2),
+            I64Eqz,
+            BrIf(1),
             // mem[pos] = '0' + (tmp % 10)
             LocalGet(6),
-            LocalGet(2), I64Const(10), I64RemU, I32WrapI64, I32Const(48), I32Add,
+            LocalGet(2),
+            I64Const(10),
+            I64RemU,
+            I32WrapI64,
+            I32Const(48),
+            I32Add,
             I32Store8(byte_at()),
-            LocalGet(6), I32Const(1), I32Sub, LocalSet(6), // pos--
-            LocalGet(2), I64Const(10), I64DivU, LocalSet(2), // tmp /= 10
+            LocalGet(6),
+            I32Const(1),
+            I32Sub,
+            LocalSet(6), // pos--
+            LocalGet(2),
+            I64Const(10),
+            I64DivU,
+            LocalSet(2), // tmp /= 10
             Br(0),
             End,
             End,
             End,
             // heap = ptr + 4 + total_len ; return ptr
-            LocalGet(5), I32Const(4), I32Add, LocalGet(7), I32Add, GlobalSet(heap_global),
+            LocalGet(5),
+            I32Const(4),
+            I32Add,
+            LocalGet(7),
+            I32Add,
+            GlobalSet(heap_global),
             LocalGet(5),
         ],
     )

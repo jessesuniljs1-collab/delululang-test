@@ -74,8 +74,7 @@ fn as_boundary(req: &str) -> Option<String> {
         return (lib != "LOGICAL").then(|| format!("foreign.c={lib}:/opt/lib/lib{lib}.so"));
     }
     if let Some(dev) = req.strip_prefix("actuator=").and_then(|r| r.strip_suffix(":DIM=lo..hi")) {
-        return (dev != "DEVICE")
-            .then(|| format!("actuator={dev}:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"));
+        return (dev != "DEVICE").then(|| format!("actuator={dev}:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"));
     }
     let placeholder = ["=PATH", "=HOST", "=DEVICE", "=PATTERN"].iter().any(|p| req.ends_with(p));
     (!placeholder).then(|| req.to_string())
@@ -201,7 +200,11 @@ fn a_scope_the_source_computes_is_exceeds_against_none_and_inconclusive_against_
     let f = f.to_str().unwrap();
     let (code, v) = within(f, &["console".to_string()]);
     assert_eq!((code, v["result"].as_str()), (1, Some("exceeds")), "no secret in the boundary: {v:#}");
-    assert_eq!((v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()), (Some("secret:NAME=VALUE"), Some(6)), "{v:#}");
+    assert_eq!(
+        (v["counterexample"]["grant"].as_str(), v["counterexample"]["at"]["line"].as_u64()),
+        (Some("secret:NAME=VALUE"), Some(6)),
+        "{v:#}"
+    );
     let (code, v) = within(f, &["console".to_string(), "secret:API_KEY=v".to_string()]);
     assert_eq!((code, v["result"].as_str()), (1, Some("inconclusive")), "the right name, but not one the checker read: {v:#}");
 
@@ -235,11 +238,7 @@ fn every_request_is_named_in_source_order_and_the_first_call_is_the_counterexamp
         .iter()
         .map(|f| (f["grant"].as_str().unwrap(), f["at"]["line"].as_u64().unwrap()))
         .collect();
-    assert_eq!(
-        order,
-        [("console", 44), ("fs.read=./config", 48), ("fs.write=./out", 49), ("net=example.com", 50)],
-        "{v:#}"
-    );
+    assert_eq!(order, [("console", 44), ("fs.read=./config", 48), ("fs.write=./out", 49), ("net=example.com", 50)], "{v:#}");
     assert_eq!(v["counterexample"]["grant"], "console", "{v:#}");
 }
 
@@ -254,7 +253,10 @@ fn a_boundary_file_says_what_the_flags_say_and_every_form_that_cannot_answer_ref
     let o = delulu(&["authority", file, "--within-file", b.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     let text = out(&o);
-    assert!(text.starts_with("exceeds:") && text.contains("fs.write=./out") && text.contains("05_capabilities.delulu:49:"), "{text}");
+    assert!(
+        text.starts_with("exceeds:") && text.contains("fs.write=./out") && text.contains("05_capabilities.delulu:49:"),
+        "{text}"
+    );
     std::fs::write(&b, "fs.read=./config\nfs.write=./out\nconsole\nnet=example.com\n").unwrap();
     let o = delulu(&["authority", file, "--within-file", b.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
@@ -357,11 +359,19 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
         assert_eq!((code, v["findings"].as_array().unwrap().len()), (0, 0), "`{example}` against itself: {v:#}");
     }
     // A wider scope in a kind OLD already grants is a scope expansion; a narrower one is no finding.
-    let old = write("old.grants", &["fs.read=./data", "net=example.com", "actuator=arm0/elbow:angle_deg=-30..30,heartbeat_ms=200,ttl_ms=60000,fail=hold"]);
+    let old = write(
+        "old.grants",
+        &["fs.read=./data", "net=example.com", "actuator=arm0/elbow:angle_deg=-30..30,heartbeat_ms=200,ttl_ms=60000,fail=hold"],
+    );
     let new = write(
         "new.grants",
-        &["fs.read=./data/sub", "fs.read=./other", "net=example.com", "net=api.example.com",
-          "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"],
+        &[
+            "fs.read=./data/sub",
+            "fs.read=./other",
+            "net=example.com",
+            "net=api.example.com",
+            "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold",
+        ],
     );
     let (code, v) = diff(&old, &new);
     assert_eq!(code, 1, "{v:#}");
@@ -376,7 +386,10 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
         [
             ("scope_expansion".to_string(), "fs.read=./other".to_string()),
             ("scope_expansion".to_string(), "net=api.example.com".to_string()),
-            ("device_reach_expansion".to_string(), "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold".to_string()),
+            (
+                "device_reach_expansion".to_string(),
+                "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold".to_string()
+            ),
         ],
         "the narrower `./data/sub` and the unchanged host are no finding; a widened envelope is: {v:#}"
     );
@@ -386,7 +399,11 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     // A change that only narrows — a subdirectory, the same host, a tighter envelope — adds nothing.
     let narrower = write(
         "narrower.grants",
-        &["fs.read=./data/sub", "net=example.com", "actuator=arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold"],
+        &[
+            "fs.read=./data/sub",
+            "net=example.com",
+            "actuator=arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold",
+        ],
     );
     let (code, v) = diff(&old, &narrower);
     assert_eq!((code, v["findings"].as_array().unwrap().len(), v["adds"].as_bool()), (0, 0, Some(false)), "{v:#}");
@@ -422,11 +439,19 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     }
     let s_none = write("s-none.grants", &["secret:K=v"]);
     let (code, v) = diff(&s_none, &s_a);
-    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("secret_reach_expansion")), "an audience where none was: {v:#}");
+    assert_eq!(
+        (code, v["findings"][0]["category"].as_str()),
+        (1, Some("secret_reach_expansion")),
+        "an audience where none was: {v:#}"
+    );
     assert_eq!(diff(&s_a, &s_none).0, 0, "no audience is the bottom: sent nowhere");
     assert_eq!(diff(&s_a, &s_a).0, 0, "the same audience adds nothing");
     let (code, v) = diff(&s_none, &write("s-other.grants", &["secret:J@a.example.com=v"]));
-    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("scope_expansion")), "another secret is scope, as before: {v:#}");
+    assert_eq!(
+        (code, v["findings"][0]["category"].as_str()),
+        (1, Some("scope_expansion")),
+        "another secret is scope, as before: {v:#}"
+    );
     // P9-05 (b), D-V2-139: a path is scope. A path under a granted host, or under a granted path, adds nothing; the whole
     // host where OLD granted a path, or a sibling path, is `scope_expansion` naming the entry.
     let p_v1 = write("p-v1.grants", &["net=api.example.com/v1/**"]);
@@ -439,7 +464,11 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     ] {
         let (code, v) = diff(&p_v1, &wider);
         let f = &v["findings"][0];
-        assert_eq!((code, f["category"].as_str(), f["grant"].as_str()), (1, Some("scope_expansion"), Some(entry)), "{why}: {v:#}");
+        assert_eq!(
+            (code, f["category"].as_str(), f["grant"].as_str()),
+            (1, Some("scope_expansion"), Some(entry)),
+            "{why}: {v:#}"
+        );
     }
     // The same order for special-use reach: a path of a special-use host is within it; the host itself is not within one
     // of its paths.
@@ -453,7 +482,11 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     assert!(out(&o).contains("device_reach_expansion") && out(&o).contains("fs.read=./other"), "{}", out(&o));
     let o = delulu(&["grants", "diff", "g_1", &new]);
-    assert!(o.status.code() == Some(2) && out(&o).contains("not a file with a node"), "a node beside a file is refused: {}", out(&o));
+    assert!(
+        o.status.code() == Some(2) && out(&o).contains("not a file with a node"),
+        "a node beside a file is refused: {}",
+        out(&o)
+    );
     for args in [vec!["grants", "diff", &old], vec!["grants", "diff", &old, &new, "--bogus"]] {
         let o = delulu(&args);
         assert_eq!(o.status.code(), Some(2), "{args:?}: {}", out(&o));
@@ -616,7 +649,11 @@ fn a_nodes_secret_carries_its_audience_and_a_wider_one_is_secret_reach() {
     assert_eq!(code, 1, "{v:#}");
     let f = &v["findings"].as_array().unwrap_or_else(|| panic!("{v:#}"))[..];
     assert_eq!(f.len(), 1, "{v:#}");
-    assert_eq!((f[0]["category"].as_str(), f[0]["grant"].as_str()), (Some("secret_reach_expansion"), Some("K@b.example.com:8443")), "{v:#}");
+    assert_eq!(
+        (f[0]["category"].as_str(), f[0]["grant"].as_str()),
+        (Some("secret_reach_expansion"), Some("K@b.example.com:8443")),
+        "{v:#}"
+    );
     assert_eq!(diff(&new, &old).0, 0, "fewer origins add nothing");
     assert_eq!(diff(&old, &bottom).0, 0, "no audience is the bottom: sent nowhere adds nothing");
     let (code, v) = diff(&bottom, &old);
@@ -681,12 +718,28 @@ fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
         json_of(&o)["node"].as_str().unwrap().to_string()
     };
     let arm = "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold";
-    let old = delegate(&["--effects", "Read,Net", "--fs-read", "./data", "--net", "example.com", "--budget", "mem=1048576,cpu=10"]);
+    let old =
+        delegate(&["--effects", "Read,Net", "--fs-read", "./data", "--net", "example.com", "--budget", "mem=1048576,cpu=10"]);
     let new = delegate(&[
-        "--effects", "Read,Write,Net,Actuate", "--fs-read", "./data/sub", "--fs-read", "./other", "--fs-write", "./data",
-        "--net", "example.com", "--net", "api.example.com", "--device", arm, "--budget", "mem=2097152,cpu=10",
+        "--effects",
+        "Read,Write,Net,Actuate",
+        "--fs-read",
+        "./data/sub",
+        "--fs-read",
+        "./other",
+        "--fs-write",
+        "./data",
+        "--net",
+        "example.com",
+        "--net",
+        "api.example.com",
+        "--device",
+        arm,
+        "--budget",
+        "mem=2097152,cpu=10",
     ]);
-    let narrow_arm = delegate(&["--effects", "Actuate", "--device", "arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold"]);
+    let narrow_arm =
+        delegate(&["--effects", "Actuate", "--device", "arm0/elbow:angle_deg=-10..10,heartbeat_ms=200,ttl_ms=60000,fail=hold"]);
     let unbudgeted = delegate(&["--effects", "Read,Net", "--fs-read", "./data", "--net", "example.com"]);
     let diff = |a: &str, b: &str| -> (i32, Vec<(String, String)>) {
         let o = run(&["grants", "diff", a, b, "--json"]);
@@ -706,7 +759,15 @@ fn grants_diff_between_two_nodes_names_effect_scope_device_and_budget_reach() {
     let cats: Vec<&str> = found.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(
         cats,
-        ["effect_expansion", "effect_expansion", "scope_expansion", "scope_expansion", "scope_expansion", "device_reach_expansion", "budget_expansion"],
+        [
+            "effect_expansion",
+            "effect_expansion",
+            "scope_expansion",
+            "scope_expansion",
+            "scope_expansion",
+            "device_reach_expansion",
+            "budget_expansion"
+        ],
         "{found:?}"
     );
     let grants: Vec<&str> = found.iter().map(|(_, g)| g.as_str()).collect();
@@ -779,7 +840,9 @@ fn a_sandboxed_refused_runs_report_records_the_hosts_refusal_at_the_ordinary_run
     std::fs::create_dir_all(&dir).unwrap();
     let (plain, boxed) = (dir.join("plain.json"), dir.join("sandboxed.json"));
     let read = |p: &Path| -> Value { serde_json::from_str(&std::fs::read_to_string(p).expect("a report is written")).unwrap() };
-    for (target, grants) in [("examples/guide/05_capabilities.delulu", &["--grant", "console"][..]), ("examples/greeter", &[][..])] {
+    for (target, grants) in
+        [("examples/guide/05_capabilities.delulu", &["--grant", "console"][..]), ("examples/greeter", &[][..])]
+    {
         let mut args = vec!["run", target];
         args.extend_from_slice(grants);
         let o = delulu(&[&args[..], &["--report-out", plain.to_str().unwrap()]].concat());
@@ -792,12 +855,24 @@ fn a_sandboxed_refused_runs_report_records_the_hosts_refusal_at_the_ordinary_run
         assert_eq!(sd["code"], pd["code"], "{target}: the host's refusal is in its report: {s:#}");
         assert_eq!(sd["message"], pd["message"], "{target}: {s:#}");
         let (ps, ss) = (&pd["spans"][0], &sd["spans"][0]);
-        assert_eq!((&ss["file"], &ss["start"], &ss["end"]), (&ps["file"], &ps["start"], &ps["end"]), "{target}: the same call: {s:#}\n{p:#}");
+        assert_eq!(
+            (&ss["file"], &ss["start"], &ss["end"]),
+            (&ps["file"], &ps["start"], &ps["end"]),
+            "{target}: the same call: {s:#}\n{p:#}"
+        );
         assert_eq!(s["diagnostics"].as_array().map(Vec::len), Some(1), "{target}: {s:#}");
         assert_eq!(s["summary"]["errors"], 1, "{target}: {s:#}");
     }
     // A clean sandboxed run's report still carries none.
-    let o = delulu(&["run", "docs/book/samples/01_hello.delulu", "--sandbox", "--grant", "console", "--report-out", boxed.to_str().unwrap()]);
+    let o = delulu(&[
+        "run",
+        "docs/book/samples/01_hello.delulu",
+        "--sandbox",
+        "--grant",
+        "console",
+        "--report-out",
+        boxed.to_str().unwrap(),
+    ]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     assert_eq!(read(&boxed)["diagnostics"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(&dir);
@@ -924,12 +999,8 @@ fn grants_propose_names_the_dropped_grants_call_for_every_kind() {
         Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(&dir).args(args).env("DELULU_NO_COLOR", "1").output().unwrap()
     };
     let o = run(&["authority", "mints.delulu", "--json"]);
-    let required: Vec<String> = json_of(&o)["authority"]["required_grants"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|g| g.as_str().unwrap().to_string())
-        .collect();
+    let required: Vec<String> =
+        json_of(&o)["authority"]["required_grants"].as_array().unwrap().iter().map(|g| g.as_str().unwrap().to_string()).collect();
     // A secret's line carries its value's placeholder; a run is given one.
     let given = |g: &str| g.replace("=VALUE", "=hunter2");
     assert_eq!(required.len(), 8, "{required:?}");
@@ -1041,7 +1112,19 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     assert!(o.status.success(), "broker start: {}", out(&o));
     let guard = BrokerGuard(state.clone());
     // The operator's node R (no `./out` write), and the agent's lease under it: the console only.
-    let o = run(&["grants", "delegate", "--effects", "Read,Write,Net", "--fs-read", "./config", "--net", "example.com", "--ttl", "1h", "--json"]);
+    let o = run(&[
+        "grants",
+        "delegate",
+        "--effects",
+        "Read,Write,Net",
+        "--fs-read",
+        "./config",
+        "--net",
+        "example.com",
+        "--ttl",
+        "1h",
+        "--json",
+    ]);
     assert!(o.status.success(), "{}", out(&o));
     let root = json_of(&o)["parent"].as_str().unwrap().to_string();
     let o = run(&["grants", "delegate", "--parent", &root, "--effects", "Write", "--ttl", "1h", "--json"]);
@@ -1078,11 +1161,21 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     let listed = proposals();
     assert_eq!(listed.len(), 1, "{listed:?}");
     let entry = &listed[0];
-    assert_eq!((entry["id"].as_str(), entry["node"].as_str(), entry["status"].as_str()), (Some(id.as_str()), Some(agent.as_str()), Some("pending")));
+    assert_eq!(
+        (entry["id"].as_str(), entry["node"].as_str(), entry["status"].as_str()),
+        (Some(id.as_str()), Some(agent.as_str()), Some("pending"))
+    );
     assert_eq!(entry["asks"]["effects"], serde_json::json!(["Read"]), "it asks for the read and nothing else: {entry:#}");
-    assert!(entry["asks"]["fs_read"].as_array().is_some_and(|a| a.len() == 1 && a[0].as_str().unwrap().ends_with("config")), "{entry:#}");
+    assert!(
+        entry["asks"]["fs_read"].as_array().is_some_and(|a| a.len() == 1 && a[0].as_str().unwrap().ends_with("config")),
+        "{entry:#}"
+    );
     assert_eq!(entry["call"], "root.fs_read(\"./config\")", "the proposer's account, kept as data: {entry:#}");
-    assert_eq!(entry["mints"]["effects"], serde_json::json!(["Read", "Write"]), "the approver reads the whole new node: {entry:#}");
+    assert_eq!(
+        entry["mints"]["effects"],
+        serde_json::json!(["Read", "Write"]),
+        "the approver reads the whole new node: {entry:#}"
+    );
     // Filing granted nothing: the agent's node is as it was, and the same lease is refused at the same call.
     assert_eq!(inspect(&agent), before, "filing a proposal changes no node");
     // The proposer cannot approve its own widening: under its own node the approval is not ⊑ it.
@@ -1099,7 +1192,11 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     assert_eq!((n["parent"].as_str(), &n["effects"]), (Some(root.as_str()), &serde_json::json!(["Read", "Write"])), "{n:#}");
     assert_eq!(inspect(&agent), before, "the proposer's node is never widened: the program is re-run");
     let listed = proposals();
-    assert_eq!((listed[0]["status"].as_str(), listed[0]["approved"]["node"].as_str()), (Some("approved"), Some(approved.as_str())), "{listed:?}");
+    assert_eq!(
+        (listed[0]["status"].as_str(), listed[0]["approved"]["node"].as_str()),
+        (Some("approved"), Some(approved.as_str())),
+        "{listed:?}"
+    );
     assert_eq!(listed[0]["mints"], Value::Null, "a decided proposal mints nothing more");
     // A decided proposal is not decided again.
     let o = run(&["grants", "approve", &id, "--parent", &root, "--json"]);
@@ -1118,7 +1215,11 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     let o = run(&["grants", "reject", &id2, "--reason", "writes stay with the operator", "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     let rejected = proposals().into_iter().find(|p| p["id"] == id2.as_str()).unwrap();
-    assert_eq!((rejected["status"].as_str(), rejected["reason"].as_str()), (Some("rejected"), Some("writes stay with the operator")), "{rejected:#}");
+    assert_eq!(
+        (rejected["status"].as_str(), rejected["reason"].as_str()),
+        (Some("rejected"), Some("writes stay with the operator")),
+        "{rejected:#}"
+    );
     let o = run(&["grants", "reject", &id2, "--reason", "again", "--json"]);
     assert_eq!(o.status.code(), Some(1), "a decided proposal is not rejected again: {}", out(&o));
     // A proposal filed from a node that is revoked before its approval mints nothing; one from a revoked node is not filed.
@@ -1147,7 +1248,11 @@ fn a_proposal_is_filed_approved_under_the_approvers_node_and_rejected_with_a_rea
     let filed = proposals().len();
     let o = run(&["grants", "propose", "r3.json", "--node", &agent, "--json"]);
     let p = json_of(&o);
-    assert_eq!((o.status.code(), &p["proposal"], &p["filed"]), (Some(1), &serde_json::json!(["sensor=bay0/temp"]), &Value::Null), "{p:#}");
+    assert_eq!(
+        (o.status.code(), &p["proposal"], &p["filed"]),
+        (Some(1), &serde_json::json!(["sensor=bay0/temp"]), &Value::Null),
+        "{p:#}"
+    );
     assert!(p["not_filed"].as_str().unwrap_or("").contains("no form in a lease node"), "{p:#}");
     assert_eq!(proposals().len(), filed, "nothing filed");
     drop(guard);
@@ -1193,14 +1298,32 @@ fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guard
         json_of(&o)
     };
     // The operator's root R, and the standing boundary B under it: the read of `./config` with the console, and `Declassify S`.
-    let root = delegate(&["--effects", "Read,Write,Net,Declassify", "--fs-read", "./config", "--net", "example.com", "--declassify", "S"])
-        ["parent"].as_str().unwrap().to_string();
-    let b = delegate(&["--parent", &root, "--effects", "Read,Write,Declassify", "--fs-read", "./config", "--declassify", "S"])["node"]
-        .as_str().unwrap().to_string();
+    let root = delegate(&[
+        "--effects",
+        "Read,Write,Net,Declassify",
+        "--fs-read",
+        "./config",
+        "--net",
+        "example.com",
+        "--declassify",
+        "S",
+    ])["parent"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let b = delegate(&["--parent", &root, "--effects", "Read,Write,Declassify", "--fs-read", "./config", "--declassify", "S"])
+        ["node"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Three agents under R, each refused at the `./config` read; one report, filed for each node.
     let a1 = delegate(&["--parent", &root, "--effects", "Write"]);
-    let a2 = delegate(&["--parent", &root, "--effects", "Write,Net", "--net", "example.com"])["node"].as_str().unwrap().to_string();
-    let a3 = delegate(&["--parent", &root, "--effects", "Write,Declassify", "--declassify", "S"])["node"].as_str().unwrap().to_string();
+    let a2 =
+        delegate(&["--parent", &root, "--effects", "Write,Net", "--net", "example.com"])["node"].as_str().unwrap().to_string();
+    let a3 = delegate(&["--parent", &root, "--effects", "Write,Declassify", "--declassify", "S"])["node"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let o = run(&["run", "caps.delulu", "--lease", a1["token"].as_str().unwrap(), "--report-out", "r.json"]);
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));
     let file = |node: &str| -> String {
@@ -1223,7 +1346,8 @@ fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guard
     assert!(approved[0]["token"].is_string(), "{v:#}");
     let n1 = approved[0]["node"].as_str().unwrap().to_string();
     let pending = v["pending"].as_array().unwrap();
-    let left = |id: &str| pending.iter().find(|p| p["proposal"] == id).cloned().unwrap_or_else(|| panic!("{id} left pending: {v:#}"));
+    let left =
+        |id: &str| pending.iter().find(|p| p["proposal"] == id).cloned().unwrap_or_else(|| panic!("{id} left pending: {v:#}"));
     let (l2, l3) = (left(&p2), left(&p3));
     assert_eq!(l2["code"], "DL0802", "beyond B: {l2:#}");
     let found: Vec<(String, String)> = l2["findings"]
@@ -1240,11 +1364,19 @@ fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guard
     assert_eq!(l3["code"], "DL1410", "within B, but guarded — the Guard's, not the boundary's: {l3:#}");
     assert_eq!(l3["findings"], serde_json::json!([]), "{l3:#}");
     let n = json_of(&run(&["grants", "inspect", &n1, "--json"]))["node"].clone();
-    assert_eq!((n["parent"].as_str(), &n["effects"]), (Some(b.as_str()), &serde_json::json!(["Read", "Write"])), "under B: {n:#}");
+    assert_eq!(
+        (n["parent"].as_str(), &n["effects"]),
+        (Some(b.as_str()), &serde_json::json!(["Read", "Write"])),
+        "under B: {n:#}"
+    );
     // A second pass approves nothing more, and says the same of what is left.
     let o = run(&["grants", "auto-approve", "--parent", &b, "--json"]);
     let v = json_of(&o);
-    assert_eq!((o.status.code(), v["approved"].as_array().map(Vec::len), v["pending"].as_array().map(Vec::len)), (Some(1), Some(0), Some(2)), "{v:#}");
+    assert_eq!(
+        (o.status.code(), v["approved"].as_array().map(Vec::len), v["pending"].as_array().map(Vec::len)),
+        (Some(1), Some(0), Some(2)),
+        "{v:#}"
+    );
     // With nothing pending, there is nothing to leave: exit 0.
     for id in [&p2, &p3] {
         assert!(run(&["grants", "reject", id, "--reason", "not automatically"]).status.success());

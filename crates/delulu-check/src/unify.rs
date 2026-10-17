@@ -72,15 +72,9 @@ impl InferCtx {
             Type::List(inner) => Type::List(Box::new(self.apply_type(&inner))),
             Type::Option(inner) => Type::Option(Box::new(self.apply_type(&inner))),
             Type::Map(k, v) => Type::Map(Box::new(self.apply_type(&k)), Box::new(self.apply_type(&v))),
-            Type::Result(o, e) => {
-                Type::Result(Box::new(self.apply_type(&o)), Box::new(self.apply_type(&e)))
-            }
-            Type::Record(id, args) => {
-                Type::Record(id, args.iter().map(|a| self.apply_type(a)).collect())
-            }
-            Type::Sum(id, args) => {
-                Type::Sum(id, args.iter().map(|a| self.apply_type(a)).collect())
-            }
+            Type::Result(o, e) => Type::Result(Box::new(self.apply_type(&o)), Box::new(self.apply_type(&e))),
+            Type::Record(id, args) => Type::Record(id, args.iter().map(|a| self.apply_type(a)).collect()),
+            Type::Sum(id, args) => Type::Sum(id, args.iter().map(|a| self.apply_type(a)).collect()),
             Type::Fn { params, ret, row } => Type::Fn {
                 params: params.iter().map(|p| self.apply_type(p)).collect(),
                 ret: Box::new(self.apply_type(&ret)),
@@ -88,9 +82,7 @@ impl InferCtx {
             },
             Type::Secret(inner) => Type::Secret(Box::new(self.apply_type(&inner))),
             Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_type(&inner))),
-            Type::Actor(name, args) => {
-                Type::Actor(name, args.iter().map(|a| self.apply_type(a)).collect())
-            }
+            Type::Actor(name, args) => Type::Actor(name, args.iter().map(|a| self.apply_type(a)).collect()),
             other => other,
         }
     }
@@ -184,8 +176,7 @@ impl InferCtx {
             (Type::Plugin(x), Type::Plugin(y)) => self.unify_type(x, y),
             (Type::Verified, Type::Verified) | (Type::Contained, Type::Contained) => Ok(()),
             (Type::Cap(x), Type::Cap(y)) if x == y => Ok(()),
-            (Type::Record(id1, a1), Type::Record(id2, a2))
-            | (Type::Sum(id1, a1), Type::Sum(id2, a2))
+            (Type::Record(id1, a1), Type::Record(id2, a2)) | (Type::Sum(id1, a1), Type::Sum(id2, a2))
                 if id1 == id2 && a1.len() == a2.len() =>
             {
                 for (x, y) in a1.iter().zip(a2) {
@@ -193,10 +184,9 @@ impl InferCtx {
                 }
                 Ok(())
             }
-            (
-                Type::Fn { params: p1, ret: r1, row: row1 },
-                Type::Fn { params: p2, ret: r2, row: row2 },
-            ) if p1.len() == p2.len() => {
+            (Type::Fn { params: p1, ret: r1, row: row1 }, Type::Fn { params: p2, ret: r2, row: row2 })
+                if p1.len() == p2.len() =>
+            {
                 for (x, y) in p1.iter().zip(p2) {
                     self.unify_type(x, y)?;
                 }
@@ -262,16 +252,10 @@ impl InferCtx {
     fn occurs_type(&self, v: u32, t: &Type) -> bool {
         match self.resolve_type_shallow(t) {
             Type::Var(TypeVar(w)) => w == v,
-            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => {
-                self.occurs_type(v, &inner)
-            }
+            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => self.occurs_type(v, &inner),
             Type::Result(a, b) | Type::Map(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),
-            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => {
-                args.iter().any(|a| self.occurs_type(v, a))
-            }
-            Type::Fn { params, ret, .. } => {
-                params.iter().any(|p| self.occurs_type(v, p)) || self.occurs_type(v, &ret)
-            }
+            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => args.iter().any(|a| self.occurs_type(v, a)),
+            Type::Fn { params, ret, .. } => params.iter().any(|p| self.occurs_type(v, p)) || self.occurs_type(v, &ret),
             _ => false,
         }
     }
@@ -304,10 +288,7 @@ mod tests {
     fn type_mismatch_is_reported() {
         let mut cx = InferCtx::new();
         assert_eq!(cx.unify_type(&Type::Int, &Type::Bool), Err(UnifyError::Type));
-        assert_eq!(
-            cx.unify_type(&Type::Cap(ResourceKind::FsRead), &Type::Cap(ResourceKind::FsWrite)),
-            Err(UnifyError::Type)
-        );
+        assert_eq!(cx.unify_type(&Type::Cap(ResourceKind::FsRead), &Type::Cap(ResourceKind::FsWrite)), Err(UnifyError::Type));
     }
 
     #[test]

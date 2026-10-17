@@ -42,7 +42,8 @@ fn get(addr: SocketAddr, within: Duration) -> Result<String, String> {
     let t = Instant::now();
     let mut s = TcpStream::connect_timeout(&addr, within).map_err(|e| format!("connect: {e}"))?;
     s.set_read_timeout(Some(within)).unwrap();
-    s.write_all(b"GET /index/nothing-here HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").map_err(|e| format!("write: {e}"))?;
+    s.write_all(b"GET /index/nothing-here HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        .map_err(|e| format!("write: {e}"))?;
     let mut out = String::new();
     match s.read_to_string(&mut out) {
         Ok(_) => Ok(out.lines().next().unwrap_or("").to_string()),
@@ -92,9 +93,7 @@ fn a_line_with_no_end_is_cut_at_its_bound() {
     let sent = s.write_all(&vec![b'A'; 1 << 20]);
     let mut out = String::new();
     let read = s.read_to_string(&mut out).map(|_| ());
-    let reset = |r: &std::io::Result<()>| {
-        matches!(r, Err(e) if matches!(e.kind(), std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe))
-    };
+    let reset = |r: &std::io::Result<()>| matches!(r, Err(e) if matches!(e.kind(), std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe));
     assert!(out.starts_with("HTTP/1.1 431") || reset(&sent) || reset(&read), "cut, not read on: {out:?} {sent:?} {read:?}");
     assert!(t.elapsed() < Duration::from_secs(5), "{:?}", t.elapsed());
     assert_eq!(get(addr, Duration::from_secs(3)).as_deref(), Ok("HTTP/1.1 404 Not Found"), "and it still serves");
@@ -139,7 +138,8 @@ fn a_request_dribbled_past_its_bound_is_dropped() {
             }
         }
     }
-    let dropped = dropped.unwrap_or_else(|| panic!("the whole dribbled request was read, {:?} after its bound began", t.elapsed()));
+    let dropped =
+        dropped.unwrap_or_else(|| panic!("the whole dribbled request was read, {:?} after its bound began", t.elapsed()));
     assert!(dropped < Duration::from_secs(4), "dropped at {dropped:?}, against a 1 s bound and 2 s reads");
     let _ = std::fs::remove_dir_all(&root);
 }

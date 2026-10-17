@@ -65,9 +65,7 @@ fn strip_positions(v: &mut serde_json::Value) {
     // (`Pattern::Wildcard(Span)` serializes the span as a bare `{file,start,end}` object).
     // No AST struct has exactly those three fields, so the shape is unambiguous.
     let is_span_object = |v: &serde_json::Value| {
-        v.as_object().is_some_and(|m| {
-            m.len() == 3 && m.contains_key("file") && m.contains_key("start") && m.contains_key("end")
-        })
+        v.as_object().is_some_and(|m| m.len() == 3 && m.contains_key("file") && m.contains_key("start") && m.contains_key("end"))
     };
     match v {
         serde_json::Value::Object(map) => {
@@ -132,14 +130,7 @@ impl<'a> Printer<'a> {
                 line_starts.push(i as u32 + 1);
             }
         }
-        Printer {
-            line_starts,
-            comments: comments.into(),
-            out: String::new(),
-            indent: 0,
-            src_len: src.len() as u32,
-            _src: src,
-        }
+        Printer { line_starts, comments: comments.into(), out: String::new(), indent: 0, src_len: src.len() as u32, _src: src }
     }
 
     fn line_of(&self, pos: u32) -> usize {
@@ -220,11 +211,7 @@ impl<'a> Printer<'a> {
     /// same source line (a trailing comment travels with its line).
     fn attach_same_line(&mut self, end: u32) {
         let line = self.line_of(end);
-        while self
-            .comments
-            .front()
-            .is_some_and(|c| !c.own_line && c.start >= end && self.line_of(c.start) == line)
-        {
+        while self.comments.front().is_some_and(|c| !c.own_line && c.start >= end && self.line_of(c.start) == line) {
             let c = self.comments.pop_front().expect("front checked");
             self.attach_trailing(&c.text);
         }
@@ -403,11 +390,7 @@ impl<'a> Printer<'a> {
                         if v.fields.is_empty() {
                             v.name.name.clone()
                         } else {
-                            format!(
-                                "{}({})",
-                                v.name.name,
-                                v.fields.iter().map(type_text).collect::<Vec<_>>().join(", ")
-                            )
+                            format!("{}({})", v.name.name, v.fields.iter().map(type_text).collect::<Vec<_>>().join(", "))
                         }
                     })
                     .collect();
@@ -635,9 +618,7 @@ impl<'a> Printer<'a> {
                 self.line("}");
                 Some(())
             }
-            Expr::Recover { target, body, .. }
-                if !flat_fits(self, value) || body.stmts.len() > 1 =>
-            {
+            Expr::Recover { target, body, .. } if !flat_fits(self, value) || body.stmts.len() > 1 => {
                 let t = match target {
                     Some(r) => format!("{} ", r.name()),
                     None => String::new(),
@@ -647,9 +628,7 @@ impl<'a> Printer<'a> {
                 self.line("}");
                 Some(())
             }
-            Expr::Lambda { params, ret, row, body, .. }
-                if !flat_fits(self, value) || body.stmts.len() > 1 =>
-            {
+            Expr::Lambda { params, ret, row, body, .. } if !flat_fits(self, value) || body.stmts.len() > 1 => {
                 let ps: Vec<String> = params.iter().map(param_text).collect();
                 let mut h = format!("{head}fn({})", ps.join(", "));
                 if let Some(r) = ret {
@@ -811,18 +790,11 @@ fn type_text(t: &TypeExpr) -> String {
             if args.is_empty() {
                 path.dotted()
             } else {
-                format!(
-                    "{}[{}]",
-                    path.dotted(),
-                    args.iter().map(type_text).collect::<Vec<_>>().join(", ")
-                )
+                format!("{}[{}]", path.dotted(), args.iter().map(type_text).collect::<Vec<_>>().join(", "))
             }
         }
         TypeExpr::Fn { params, ret, row, .. } => {
-            let mut s = format!(
-                "fn({})",
-                params.iter().map(type_text).collect::<Vec<_>>().join(", ")
-            );
+            let mut s = format!("fn({})", params.iter().map(type_text).collect::<Vec<_>>().join(", "));
             if let Some(r) = ret {
                 s.push_str(" -> ");
                 s.push_str(&type_text(r));
@@ -867,11 +839,7 @@ fn pattern_text(p: &Pattern) -> String {
             if fields.is_empty() {
                 path.dotted()
             } else {
-                format!(
-                    "{}({})",
-                    path.dotted(),
-                    fields.iter().map(pattern_text).collect::<Vec<_>>().join(", ")
-                )
+                format!("{}({})", path.dotted(), fields.iter().map(pattern_text).collect::<Vec<_>>().join(", "))
             }
         }
     }
@@ -954,24 +922,14 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
     let (text, prec) = match e {
         Expr::Lit { kind, .. } => (lit_text(kind), 8),
         Expr::Var { path, .. } => (path.dotted(), 8),
-        Expr::List { items, .. } => (
-            format!(
-                "[{}]",
-                items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")
-            ),
-            8,
-        ),
+        Expr::List { items, .. } => {
+            (format!("[{}]", items.iter().map(|i| expr_flat(i, 0, false)).collect::<Vec<_>>().join(", ")), 8)
+        }
         Expr::Record { path, fields, .. } => {
-            let body = fields
-                .iter()
-                .map(|(n, v)| format!("{}: {}", n.name, expr_flat(v, 0, false)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let s = if fields.is_empty() {
-                format!("{} {{}}", path.dotted())
-            } else {
-                format!("{} {{ {} }}", path.dotted(), body)
-            };
+            let body =
+                fields.iter().map(|(n, v)| format!("{}: {}", n.name, expr_flat(v, 0, false))).collect::<Vec<_>>().join(", ");
+            let s =
+                if fields.is_empty() { format!("{} {{}}", path.dotted()) } else { format!("{} {{ {} }}", path.dotted(), body) };
             if no_struct {
                 return format!("({s})");
             }
@@ -979,32 +937,14 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
         }
         Expr::Call { callee, args, .. } => {
             let c = expr_flat(callee, 7, no_struct);
-            (
-                format!(
-                    "{c}({})",
-                    args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")
-                ),
-                7,
-            )
+            (format!("{c}({})", args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 7)
         }
         Expr::Method { recv, name, args, .. } => {
             let r = expr_flat(recv, 7, no_struct);
-            (
-                format!(
-                    "{r}.{}({})",
-                    name.name,
-                    args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")
-                ),
-                7,
-            )
+            (format!("{r}.{}({})", name.name, args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")), 7)
         }
-        Expr::Field { recv, name, .. } => {
-            (format!("{}.{}", expr_flat(recv, 7, no_struct), name.name), 7)
-        }
-        Expr::Index { recv, index, .. } => (
-            format!("{}[{}]", expr_flat(recv, 7, no_struct), expr_flat(index, 0, false)),
-            7,
-        ),
+        Expr::Field { recv, name, .. } => (format!("{}.{}", expr_flat(recv, 7, no_struct), name.name), 7),
+        Expr::Index { recv, index, .. } => (format!("{}[{}]", expr_flat(recv, 7, no_struct), expr_flat(index, 0, false)), 7),
         Expr::Try { inner, .. } => (format!("{}?", expr_flat(inner, 7, no_struct)), 7),
         Expr::Unary { op, operand, .. } => {
             let o = match op {
@@ -1038,9 +978,7 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
             let s = expr_flat(scrutinee, 0, true);
             let a = arms
                 .iter()
-                .map(|arm| {
-                    format!("{} => {}", pattern_text(&arm.pattern), expr_flat(&arm.body, 0, false))
-                })
+                .map(|arm| format!("{} => {}", pattern_text(&arm.pattern), expr_flat(&arm.body, 0, false)))
                 .collect::<Vec<_>>()
                 .join(", ");
             (format!("match {s} {{ {a} }}"), 0)
@@ -1062,11 +1000,7 @@ fn expr_flat(e: &Expr, min_prec: u8, no_struct: bool) -> String {
         }
         Expr::Block(b) => (block_flat(b), 0),
         Expr::Spawn { actor, args, .. } => (
-            format!(
-                "spawn {}({})",
-                actor.dotted(),
-                args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")
-            ),
+            format!("spawn {}({})", actor.dotted(), args.iter().map(|a| expr_flat(a, 0, false)).collect::<Vec<_>>().join(", ")),
             6,
         ),
         Expr::Consume { name, .. } => (format!("consume {}", name.name), 6),
@@ -1158,10 +1092,7 @@ mod tests {
         let (m1, d1) = crate::parse_file(0, src);
         assert!(d1.iter().all(|d| !d.is_error()), "law harness needs clean input: {d1:?}");
         let (m2, d2) = crate::parse_file(0, &out);
-        assert!(
-            d2.iter().all(|d| !d.is_error()),
-            "formatted output must reparse clean:\n{out}\n{d2:?}"
-        );
+        assert!(d2.iter().all(|d| !d.is_error()), "formatted output must reparse clean:\n{out}\n{d2:?}");
         let (f1, f2) = (ast_fingerprint(&m1), ast_fingerprint(&m2));
         if f1 != f2 {
             let at = f1.bytes().zip(f2.bytes()).position(|(a, b)| a != b).unwrap_or(f1.len().min(f2.len()));
@@ -1178,10 +1109,7 @@ mod tests {
             "comment attachment moved:\n--- input ---\n{src}\n--- output ---\n{out}"
         );
         let out2 = format_source(0, &out).expect("formatted output reparses");
-        assert_eq!(
-            out, out2,
-            "IDEMPOTENCE violated:\n--- first ---\n{out}\n--- second ---\n{out2}"
-        );
+        assert_eq!(out, out2, "IDEMPOTENCE violated:\n--- first ---\n{out}\n--- second ---\n{out2}");
         out
     }
 
@@ -1204,18 +1132,14 @@ mod tests {
             fn f() -> Int { 1 }
 ";
         let out = laws(src);
-        let body = out
-            .split_once("// First paragraph.")
-            .expect("the first paragraph survives")
-            .1;
-        let between = body
-            .split_once("// Second paragraph")
-            .expect("the second paragraph survives")
-            .0;
+        let body = out.split_once("// First paragraph.").expect("the first paragraph survives").1;
+        let between = body.split_once("// Second paragraph").expect("the second paragraph survives").0;
         assert!(
-            between.contains("
+            between.contains(
+                "
 
-"),
+"
+            ),
             "the blank line between the two comment paragraphs must survive:
 {out}"
         );
@@ -1238,9 +1162,13 @@ fn f() -> Int { 1 }
 ";
         let out = laws(src);
         let mid = out.split_once("// A.").unwrap().1.split_once("// B.").unwrap().0;
-        assert_eq!(mid, "
+        assert_eq!(
+            mid,
+            "
 
-", "runs of blank lines collapse to exactly one: {mid:?}");
+",
+            "runs of blank lines collapse to exactly one: {mid:?}"
+        );
     }
 
     #[test]
@@ -1260,15 +1188,20 @@ fn f() -> Int { 1 }
         let out = laws(src);
         let after = out.split_once("// trailing").expect("the trailing comment survives").1;
         assert!(
-            !after.starts_with("
+            !after.starts_with(
+                "
 
 
-"),
+"
+            ),
             "a trailing comment must not add a paragraph break on top of item separation:
 {out}"
         );
-        assert!(after.contains("// own-line"), "the own-line comment survives:
-{out}");
+        assert!(
+            after.contains("// own-line"),
+            "the own-line comment survives:
+{out}"
+        );
     }
 
     #[test]
@@ -1382,10 +1315,7 @@ fn f() -> Int { 1 }
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
         let mut checked = 0;
         let mut examined = 0;
-        let mut stack = vec![
-            root.join("tests"),
-            root.join("examples"),
-        ];
+        let mut stack = vec![root.join("tests"), root.join("examples")];
         while let Some(dir) = stack.pop() {
             let Ok(entries) = std::fs::read_dir(&dir) else { continue };
             for e in entries.flatten() {
@@ -1459,8 +1389,7 @@ fn f() -> Int { 1 }
         let d = depth - 1;
         match r.below(12) {
             0 => {
-                let op = ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||"]
-                    [r.below(13) as usize];
+                let op = ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||"][r.below(13) as usize];
                 format!("{} {op} {}", gen_expr(r, d), gen_expr(r, d))
             }
             1 => format!("-{}", gen_expr(r, d)),
@@ -1562,10 +1491,7 @@ fn f() -> Int { 1 }
                 eprintln!("fmt fuzz: {checked}/{n} clean programs law-checked");
             }
         }
-        assert!(
-            checked >= n * 9 / 10,
-            "the generator must produce overwhelmingly parseable programs ({checked}/{n})"
-        );
+        assert!(checked >= n * 9 / 10, "the generator must produce overwhelmingly parseable programs ({checked}/{n})");
     }
 
     /// The always-on slice of the criterion-4 gate.

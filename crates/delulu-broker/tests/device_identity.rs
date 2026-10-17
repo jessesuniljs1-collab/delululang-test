@@ -62,10 +62,7 @@ fn a_mismatched_key_makes_enforcement_and_attestation_disagree() {
     let auth = Authority { effects: Default::default(), scopes: s.clone() };
 
     // ENFORCEMENT reads the key.
-    assert!(
-        device_scope::grants_device(&s.device, "sat0/safe"),
-        "grants_device keys on the map key (device_scope.rs:302)"
-    );
+    assert!(device_scope::grants_device(&s.device, "sat0/safe"), "grants_device keys on the map key (device_scope.rs:302)");
     assert!(
         !device_scope::grants_device(&s.device, "sat0/arm"),
         "the value's own field grants nothing — enforcement never reads it"
@@ -74,10 +71,7 @@ fn a_mismatched_key_makes_enforcement_and_attestation_disagree() {
     // ATTESTATION reads the value's field. This string is what a certificate signature covers and
     // what lands in the hash-chained audit record.
     let json = auth.to_json().to_string();
-    assert!(
-        json.contains("sat0/arm"),
-        "to_json emits the VALUE's device field (authority.rs:78); got {json}"
-    );
+    assert!(json.contains("sat0/arm"), "to_json emits the VALUE's device field (authority.rs:78); got {json}");
     assert!(
         !json.contains("sat0/safe"),
         "the key the broker actually enforces on does not appear in the signed bytes at all; \
@@ -108,10 +102,7 @@ fn the_json_read_side_rekeys_on_the_device_field() {
         rebuilt.insert(d.device.clone(), d); // mirrors cert.rs:286
     }
 
-    assert!(
-        rebuilt.contains_key("sat0/arm"),
-        "after the round trip the map is keyed by the device the value describes"
-    );
+    assert!(rebuilt.contains_key("sat0/arm"), "after the round trip the map is keyed by the device the value describes");
     assert!(
         !rebuilt.contains_key("sat0/safe"),
         "the bogus key does not survive a certificate load — this is what bounds the severity"

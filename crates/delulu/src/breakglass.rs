@@ -429,12 +429,9 @@ pub fn gate(command: &str, sandboxed: bool, ticket: Option<&str>, program: Optio
                     Err(2)
                 }
                 Ok(a) => {
-                    if let Err(e) = crate::guest::audit_required(
-                        "break-glass",
-                        "allow",
-                        Some(a.fingerprint.clone()),
-                        Some(record(&a)),
-                    ) {
+                    if let Err(e) =
+                        crate::guest::audit_required("break-glass", "allow", Some(a.fingerprint.clone()), Some(record(&a)))
+                    {
                         eprintln!("error: break-glass refused: {}. Nothing ran.", Refusal::CannotRecord(e).explain());
                         return Err(2);
                     }
@@ -460,7 +457,12 @@ pub fn record(a: &Accepted) -> serde_json::Value {
 
 fn banner(a: &Accepted) {
     eprintln!("BREAK-GLASS: this program runs WITHOUT the sandbox this host requires.");
-    eprintln!("  ticket   {} (key {}…), valid until {}", &a.fingerprint[..16], &a.body.key[..16], delulu_broker::render_ts_utc(a.body.not_after_ms));
+    eprintln!(
+        "  ticket   {} (key {}…), valid until {}",
+        &a.fingerprint[..16],
+        &a.body.key[..16],
+        delulu_broker::render_ts_utc(a.body.not_after_ms)
+    );
     eprintln!("  reason   {}", a.body.reason);
     eprintln!("  Authority, custody, the Guard and the budget are unchanged; only the sandbox is not applied.");
     eprintln!("  The ticket is spent, and the use is in the audit chain as `break-glass`.");
@@ -576,7 +578,9 @@ pub fn cmd_release(args: &[String], json: bool) -> i32 {
     let path = match value(args, "--break-glass") {
         Ok(v) if v.len() == 1 => v[0],
         Ok(_) => {
-            eprintln!("error: `sandbox release` needs exactly one `--break-glass TICKET` (a `policy-off` ticket the operator signed)");
+            eprintln!(
+                "error: `sandbox release` needs exactly one `--break-glass TICKET` (a `policy-off` ticket the operator signed)"
+            );
             return 2;
         }
         Err(e) => {
@@ -608,7 +612,9 @@ pub fn cmd_release(args: &[String], json: bool) -> i32 {
             return 2;
         }
     };
-    if let Err(e) = crate::guest::audit_required("break-glass", "allow", Some(accepted.fingerprint.clone()), Some(record(&accepted))) {
+    if let Err(e) =
+        crate::guest::audit_required("break-glass", "allow", Some(accepted.fingerprint.clone()), Some(record(&accepted)))
+    {
         eprintln!("error: release refused: {}. The policy stands.", Refusal::CannotRecord(e).explain());
         return 2;
     }
@@ -617,9 +623,16 @@ pub fn cmd_release(args: &[String], json: bool) -> i32 {
         return 2;
     }
     if json {
-        crate::cli::print_success_envelope("sandbox", serde_json::json!({ "subcommand": "release", "ticket": record(&accepted) }));
+        crate::cli::print_success_envelope(
+            "sandbox",
+            serde_json::json!({ "subcommand": "release", "ticket": record(&accepted) }),
+        );
     } else {
-        println!("ok: this host no longer requires the sandbox (released by ticket {}…: {})", &accepted.fingerprint[..16], accepted.body.reason);
+        println!(
+            "ok: this host no longer requires the sandbox (released by ticket {}…: {})",
+            &accepted.fingerprint[..16],
+            accepted.body.reason
+        );
     }
     0
 }
@@ -667,7 +680,9 @@ pub fn cmd_ticket(args: &[String], json: bool) -> i32 {
     };
     let release = args.iter().any(|a| a == "--release");
     if release == program.is_some() {
-        eprintln!("error: a ticket either lets one program run (`--program FILE`) or releases the policy (`--release`) — exactly one");
+        eprintln!(
+            "error: a ticket either lets one program run (`--program FILE`) or releases the policy (`--release`) — exactly one"
+        );
         return 2;
     }
     let Some(ttl) = ttl_ms(&ttl) else {
@@ -711,20 +726,24 @@ pub fn cmd_ticket(args: &[String], json: bool) -> i32 {
         }
     }
     if json {
-        crate::cli::print_success_envelope("sandbox", serde_json::json!({ "subcommand": "ticket", "ticket": ticket, "fingerprint": ticket.fingerprint() }));
+        crate::cli::print_success_envelope(
+            "sandbox",
+            serde_json::json!({ "subcommand": "ticket", "ticket": ticket, "fingerprint": ticket.fingerprint() }),
+        );
     } else if out.is_none() {
         println!("{text}");
     } else {
-        println!("ok: wrote a `{relax}` ticket, valid until {} ({}…)", delulu_broker::render_ts_utc(ticket.body.not_after_ms), &ticket.fingerprint()[..16]);
+        println!(
+            "ok: wrote a `{relax}` ticket, valid until {} ({}…)",
+            delulu_broker::render_ts_utc(ticket.body.not_after_ms),
+            &ticket.fingerprint()[..16]
+        );
     }
     0
 }
 
 pub fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or_default()
 }
 
 pub fn encode_hex(b: &[u8]) -> String {

@@ -560,8 +560,7 @@ pub struct QueryFilter {
 impl QueryFilter {
     fn matches(&self, r: &AuditRecord) -> bool {
         if let Some(node) = &self.node {
-            let hit = r.actor_node.as_deref() == Some(node.as_str())
-                || r.target.as_deref() == Some(node.as_str());
+            let hit = r.actor_node.as_deref() == Some(node.as_str()) || r.target.as_deref() == Some(node.as_str());
             if !hit {
                 return false;
             }
@@ -652,8 +651,7 @@ fn verify_unlocked(dir: &Path) -> Result<VerifiedStats, AuditError> {
             if line.trim().is_empty() {
                 continue;
             }
-            let v: Value = serde_json::from_str(line)
-                .map_err(|e| AuditError::corrupt(0, format!("malformed JSON line: {e}")))?;
+            let v: Value = serde_json::from_str(line).map_err(|e| AuditError::corrupt(0, format!("malformed JSON line: {e}")))?;
             if v.get("seq").is_none() {
                 // Header line (or any non-record) — not part of the chain.
                 continue;
@@ -665,10 +663,7 @@ fn verify_unlocked(dir: &Path) -> Result<VerifiedStats, AuditError> {
                 return Err(AuditError::corrupt(seq.unwrap_or(0), "record missing seq/hash/prev_hash"));
             };
             if prev != expected_prev {
-                return Err(AuditError::corrupt(
-                    seq,
-                    format!("prev_hash chain break: expected {expected_prev}, found {prev}"),
-                ));
+                return Err(AuditError::corrupt(seq, format!("prev_hash chain break: expected {expected_prev}, found {prev}")));
             }
             let mut body = v.clone();
             body.as_object_mut().unwrap().remove("hash");
@@ -838,10 +833,9 @@ pub fn parse_bundle(text: &str) -> Result<Bundle, AuditError> {
         if line.is_empty() {
             continue;
         }
-        let v: Value = serde_json::from_str(line)
-            .map_err(|e| AuditError::corrupt(i as u64, format!("line {i} is not JSON: {e}")))?;
-        let r = AuditRecord::from_value(&v)
-            .ok_or_else(|| AuditError::corrupt(i as u64, format!("line {i} is not a record")))?;
+        let v: Value =
+            serde_json::from_str(line).map_err(|e| AuditError::corrupt(i as u64, format!("line {i} is not JSON: {e}")))?;
+        let r = AuditRecord::from_value(&v).ok_or_else(|| AuditError::corrupt(i as u64, format!("line {i} is not a record")))?;
         records.push(r);
     }
     Ok(Bundle { records })
@@ -994,11 +988,7 @@ fn last_record_hash(path: &Path) -> Result<Option<String>, AuditError> {
 }
 
 fn append_line(path: &Path, line: &str) -> Result<(), AuditError> {
-    let mut f = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(AuditError::io)?;
+    let mut f = fs::OpenOptions::new().create(true).append(true).open(path).map_err(AuditError::io)?;
     f.write_all(line.as_bytes()).map_err(AuditError::io)?;
     f.write_all(b"\n").map_err(AuditError::io)?;
     Ok(())

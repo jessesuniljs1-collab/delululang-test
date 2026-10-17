@@ -66,7 +66,12 @@ fn apply(src: &str, mut edits: Vec<RangeEdit>) -> Result<String, String> {
             return Err(format!("edit {i}: its range ends before it starts ({}..{})", e.start, e.end));
         }
         if e.end > src.len() {
-            return Err(format!("edit {i}: its range {}..{} runs past the end of the file ({} bytes)", e.start, e.end, src.len()));
+            return Err(format!(
+                "edit {i}: its range {}..{} runs past the end of the file ({} bytes)",
+                e.start,
+                e.end,
+                src.len()
+            ));
         }
         if !src.is_char_boundary(e.start) || !src.is_char_boundary(e.end) {
             return Err(format!("edit {i}: {}..{} splits a character", e.start, e.end));
@@ -203,7 +208,8 @@ fn canonical_item(text: &str, kind: Kind) -> Result<String, String> {
     if !fits {
         return Err(wrong());
     }
-    let formatted = delulu_syntax::fmt::format_source(0, &wrapped).map_err(|_| "the replacement could not be formatted".to_string())?;
+    let formatted =
+        delulu_syntax::fmt::format_source(0, &wrapped).map_err(|_| "the replacement could not be formatted".to_string())?;
     if !kind.in_actor() {
         return Ok(formatted.strip_prefix(HEADER).unwrap_or(&formatted).trim().to_string());
     }
@@ -262,7 +268,8 @@ fn text_or_file(v: &str) -> Result<String, String> {
 /// Replace `path` with `bytes` in one rename, so a reader sees the old file or the new one.
 fn write_atomically(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
-    let tmp = dir.join(format!(".{}.delulu-edit-{}", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), std::process::id()));
+    let tmp =
+        dir.join(format!(".{}.delulu-edit-{}", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"), std::process::id()));
     std::fs::write(&tmp, bytes)?;
     if let Ok(meta) = std::fs::metadata(path) {
         let _ = std::fs::set_permissions(&tmp, meta.permissions());
@@ -284,7 +291,16 @@ struct Args {
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
-    let mut a = Args { file: String::new(), expect: None, edits: None, node: None, with: None, dry_run: false, if_checks: false, json: false };
+    let mut a = Args {
+        file: String::new(),
+        expect: None,
+        edits: None,
+        node: None,
+        with: None,
+        dry_run: false,
+        if_checks: false,
+        json: false,
+    };
     let mut i = 0;
     let mut files = Vec::new();
     while i < rest.len() {
@@ -375,7 +391,8 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
     }
 
     let (edited, count, node) = if let Some(spec) = &a.edits {
-        let parsed = text_or_file(spec).and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| format!("the edits are not JSON: {e}")));
+        let parsed = text_or_file(spec)
+            .and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| format!("the edits are not JSON: {e}")));
         match parsed.and_then(|v| parse_edits(&v)).and_then(|edits| {
             let n = edits.len();
             apply(&src, edits).map(|s| (s, n))
@@ -428,7 +445,13 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
         println!("{}", serde_json::to_string_pretty(&env).expect("the edit envelope serializes"));
     } else {
         crate::cli::print_diagnostics("edit", &checked.diagnostics, &map, None, false);
-        let what = if written { "written" } else if a.dry_run { "not written (--dry-run)" } else { "not written (--if-checks: it does not check)" };
+        let what = if written {
+            "written"
+        } else if a.dry_run {
+            "not written (--dry-run)"
+        } else {
+            "not written (--if-checks: it does not check)"
+        };
         println!("{}: {count} edit(s) applied, {what}; hash {new_hash}", a.file);
         if let Some(added) = authority["widened"].as_array().filter(|w| !w.is_empty()) {
             let added: Vec<String> = added.iter().map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).collect();
@@ -462,7 +485,8 @@ mod tests {
     fn the_edit_list_is_the_repair_shape_and_nothing_else() {
         let ok = serde_json::json!([{ "file": "x", "range": { "start_byte": 0, "end_byte": 1 }, "insert": "y" }]);
         assert_eq!(parse_edits(&ok).unwrap(), vec![e(0, 1, "y")]);
-        assert!(parse_edits(&serde_json::json!([{ "range": { "start_byte": 0, "end_byte": 1 }, "insert": "y", "extra": 1 }])).is_err());
+        assert!(parse_edits(&serde_json::json!([{ "range": { "start_byte": 0, "end_byte": 1 }, "insert": "y", "extra": 1 }]))
+            .is_err());
         assert!(parse_edits(&serde_json::json!({ "range": {} })).is_err());
     }
 
@@ -509,18 +533,34 @@ actor A {
         assert!(resolve_node(src, "fn:m/m.A.gone").unwrap_err().contains("stale"));
         assert!(resolve_node(src, "fn:m/m.B.hit").unwrap_err().contains("stale"));
         let be = canonical_item("be hit(k:Int){self.n=self.n+k*2}", Kind::ActorBe).unwrap();
-        assert_eq!(be, "be hit(k: Int) {
+        assert_eq!(
+            be,
+            "be hit(k: Int) {
         self.n = self.n + k * 2
-    }", "indented for the member depth it lands at");
+    }",
+            "indented for the member depth it lands at"
+        );
         assert_eq!(apply(src, vec![e_at(s, e, &be)]).unwrap().matches("k * 2").count(), 1);
         // Exactly one member of the kind, and nothing else: no second member, no field, no constructor
         // brought in beside a behavior, no behavior where a constructor was addressed.
-        assert!(canonical_item("be hit(k: Int) {}
-be other() {}", Kind::ActorBe).is_err());
-        assert!(canonical_item("var x: Int
-be hit(k: Int) {}", Kind::ActorBe).is_err());
-        assert!(canonical_item("new() {}
-be hit(k: Int) {}", Kind::ActorBe).is_err());
+        assert!(canonical_item(
+            "be hit(k: Int) {}
+be other() {}",
+            Kind::ActorBe
+        )
+        .is_err());
+        assert!(canonical_item(
+            "var x: Int
+be hit(k: Int) {}",
+            Kind::ActorBe
+        )
+        .is_err());
+        assert!(canonical_item(
+            "new() {}
+be hit(k: Int) {}",
+            Kind::ActorBe
+        )
+        .is_err());
         assert!(canonical_item("be hit(k: Int) {}", Kind::ActorNew).is_err());
         assert!(canonical_item("fn get() -> Int { 1 }", Kind::ActorBe).is_err());
         assert!(canonical_item("new() { self.n = 1 }", Kind::ActorNew).unwrap().starts_with("new() {"));

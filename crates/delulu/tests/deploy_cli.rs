@@ -69,7 +69,8 @@ fn scaffold_broken_pkg(dir: &Path) {
     )
     .unwrap();
     // Unclosed function body: the file ends mid-statement with no closing braces at all.
-    std::fs::write(src.join("main.delulu"), "module broken\nfn main(root: Root) ! {Write} {\n  let out = root.console()\n").unwrap();
+    std::fs::write(src.join("main.delulu"), "module broken\nfn main(root: Root) ! {Write} {\n  let out = root.console()\n")
+        .unwrap();
 }
 
 /// An environment profile file — the SAME `[authority]\neffects = [...]` shape a package's own
@@ -147,10 +148,7 @@ fn a_plan_within_the_ceiling_is_approved() {
         text.contains(&format!("deploy plan: approved — 2 service(s) within {env_str}'s EFFECT ceiling")),
         "the exact approved summary line:\n{text}"
     );
-    assert!(
-        text.contains("compared: effects; NOT compared:"),
-        "and the approval carries its own scope:\n{text}"
-    );
+    assert!(text.contains("compared: effects; NOT compared:"), "and the approval carries its own scope:\n{text}");
 }
 
 /// A service that performs `Net` when the environment profile's ceiling names only `Write` is

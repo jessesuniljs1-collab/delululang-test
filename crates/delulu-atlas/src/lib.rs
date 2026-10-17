@@ -20,8 +20,8 @@ mod render;
 pub use build::{class_of_kind, recompute_gods, BuildInput, ModuleView, PackageView};
 pub use formats::HTML_NODE_CAP;
 pub use model::{
-    effect_id, fn_id, foreign_c_id, foreign_py_id, grant_id, mod_id, pkg_id, resource_id, type_id,
-    Atlas, Edge, EdgeKind, God, Node, NodeKind, SpanLoc, CAVEAT_CUSTODY, CAVEAT_STATIC, SCHEMA,
+    effect_id, fn_id, foreign_c_id, foreign_py_id, grant_id, mod_id, pkg_id, resource_id, type_id, Atlas, Edge, EdgeKind, God,
+    Node, NodeKind, SpanLoc, CAVEAT_CUSTODY, CAVEAT_STATIC, SCHEMA,
 };
 pub use query::Resolved;
 pub use render::{tokens, DEFAULT_BUDGET, QUERYING_FOOTER};
@@ -98,10 +98,7 @@ mod tests {
         let helper = fn_id("app", "app", "helper");
         assert!(a.edges.iter().any(|e| e.from == main && e.to == helper && e.kind == EdgeKind::Calls));
         // helper performs Write.
-        assert!(a
-            .edges
-            .iter()
-            .any(|e| e.from == helper && e.to == effect_id("Write") && e.kind == EdgeKind::Performs));
+        assert!(a.edges.iter().any(|e| e.from == helper && e.to == effect_id("Write") && e.kind == EdgeKind::Performs));
         // fib is pure.
         let fib = a.node(&fn_id("app", "app", "fib")).unwrap();
         assert_eq!(fib.pure, Some(true));
@@ -111,12 +108,8 @@ mod tests {
     fn authority_parity_effects_match_delulu_authority() {
         // Criterion 5: the union of `performs` over reachable functions equals `delulu authority`.
         let a = atlas_of(SAMPLE);
-        let auth_effects: std::collections::BTreeSet<String> = a.authority["effects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_string())
-            .collect();
+        let auth_effects: std::collections::BTreeSet<String> =
+            a.authority["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         // Reachable functions from main via calls edges.
         let main = fn_id("app", "app", "main");
         let mut reach = std::collections::BTreeSet::new();
@@ -216,10 +209,7 @@ mod tests {
         assert!(a.node(&foreign_c_id("sin")).is_some(), "declared-but-uncalled symbol still a node");
         // compute → cos edge, kind foreign.
         let compute = fn_id("m", "m", "compute");
-        assert!(a
-            .edges
-            .iter()
-            .any(|e| e.from == compute && e.to == foreign_c_id("cos") && e.kind == EdgeKind::Foreign));
+        assert!(a.edges.iter().any(|e| e.from == compute && e.to == foreign_c_id("cos") && e.kind == EdgeKind::Foreign));
         // No edge to the uncalled symbol, and none from the pure function.
         assert!(!a.edges.iter().any(|e| e.to == foreign_c_id("sin") && e.kind == EdgeKind::Foreign));
         let pure = fn_id("m", "m", "pure_math");
@@ -241,10 +231,7 @@ mod tests {
         assert_eq!(numpy.kind, NodeKind::Foreign);
         assert_eq!(numpy.name, "numpy");
         let work = fn_id("m", "m", "work");
-        assert!(a
-            .edges
-            .iter()
-            .any(|e| e.from == work && e.to == foreign_py_id("numpy") && e.kind == EdgeKind::Foreign));
+        assert!(a.edges.iter().any(|e| e.from == work && e.to == foreign_py_id("numpy") && e.kind == EdgeKind::Foreign));
         // `call_method("mean", …)` is a PyObj call, not an import — no `foreign:py:mean` node.
         assert!(a.node(&foreign_py_id("mean")).is_none(), "only literal imports mint py nodes");
         // Determinism: nodes remain id-sorted with the foreign nodes in place.
@@ -264,10 +251,7 @@ mod tests {
         ]});
         a.attach_custody(overlay, 10);
         assert!(a.node("grant:g_root").is_some(), "grant nodes added");
-        assert!(a
-            .edges
-            .iter()
-            .any(|e| e.from == "grant:g_root" && e.to == "grant:g_agent" && e.kind == EdgeKind::Delegates));
+        assert!(a.edges.iter().any(|e| e.from == "grant:g_root" && e.to == "grant:g_agent" && e.kind == EdgeKind::Delegates));
         assert!(a.caveats.iter().any(|c| c == CAVEAT_CUSTODY), "the custody caveat ships verbatim");
         assert!(a.custody.is_some());
         // Determinism preserved: nodes still id-sorted.

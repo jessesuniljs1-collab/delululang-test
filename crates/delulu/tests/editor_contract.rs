@@ -105,9 +105,7 @@ fn commands_the_client_registers(src: &str) -> BTreeSet<String> {
 fn commands_the_manifest_declares(pkg: &serde_json::Value) -> BTreeSet<String> {
     pkg["contributes"]["commands"]
         .as_array()
-        .map(|a| {
-            a.iter().filter_map(|c| c["command"].as_str().map(str::to_string)).collect()
-        })
+        .map(|a| a.iter().filter_map(|c| c["command"].as_str().map(str::to_string)).collect())
         .unwrap_or_default()
 }
 
@@ -152,8 +150,7 @@ fn a_command_the_client_library_registers_is_not_registered_again_by_the_extensi
 fn every_lens_the_server_emits_is_a_command_the_editor_can_actually_run() {
     let server = lens_commands_the_server_emits(&read("crates/delulu/src/lsp.rs"));
     let client = commands_the_client_registers(&read("editors/vscode/extension.js"));
-    let pkg: serde_json::Value =
-        serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
+    let pkg: serde_json::Value = serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
     let manifest = commands_the_manifest_declares(&pkg);
 
     assert!(
@@ -190,8 +187,7 @@ fn every_lens_the_server_emits_is_a_command_the_editor_can_actually_run() {
 /// LICENSE file beside it is a distribution problem, not a cosmetic one.
 #[test]
 fn the_extension_manifest_agrees_with_the_workspace_it_ships_from() {
-    let pkg: serde_json::Value =
-        serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
+    let pkg: serde_json::Value = serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
     let cargo = read("Cargo.toml");
 
     let field = |key: &str| -> String {
@@ -240,8 +236,7 @@ fn the_extension_manifest_agrees_with_the_workspace_it_ships_from() {
 /// looks inert but is really "which program do I launch" — is easy to reintroduce.
 #[test]
 fn no_setting_that_names_an_executable_can_be_set_by_a_workspace() {
-    let pkg: serde_json::Value =
-        serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
+    let pkg: serde_json::Value = serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
 
     let props = pkg["contributes"]["configuration"]["properties"]
         .as_object()
@@ -307,9 +302,7 @@ fn the_commands_that_execute_workspace_code_check_workspace_trust() {
          the workspace's own code in Restricted Mode"
     );
     for cmd in ["delulu.run", "delulu.test.run"] {
-        let at = js
-            .find(&format!("registerCommand(\"{cmd}\""))
-            .unwrap_or_else(|| panic!("{cmd} is no longer registered"));
+        let at = js.find(&format!("registerCommand(\"{cmd}\"")).unwrap_or_else(|| panic!("{cmd} is no longer registered"));
         let body = &js[at..];
         let end = body.find("runInTerminal").unwrap_or(body.len());
         assert!(
@@ -333,10 +326,7 @@ fn the_client_never_builds_a_shell_command_string_from_a_path() {
         "extension.js uses `sendText(...)`, which hands a STRING to the user's shell. Paths \
          interpolated into it are shell syntax — build an argv array (`shellArgs`) instead."
     );
-    assert!(
-        js.contains("shellArgs"),
-        "extension.js no longer passes an argv array; the injection-safe execution path is gone"
-    );
+    assert!(js.contains("shellArgs"), "extension.js no longer passes an argv array; the injection-safe execution path is gone");
     // The fsPath must never appear inside a template literal — that is the interpolation shape.
     for line in js.lines() {
         let l = line.trim();
@@ -362,8 +352,7 @@ fn the_client_never_builds_a_shell_command_string_from_a_path() {
 /// it, requiring that every field the matcher claims to extract actually comes out.
 #[test]
 fn the_problem_matcher_matches_real_compiler_output() {
-    let pkg: serde_json::Value =
-        serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
+    let pkg: serde_json::Value = serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
     let matcher = pkg["contributes"]["problemMatchers"]
         .as_array()
         .and_then(|a| a.first())
@@ -374,11 +363,7 @@ fn the_problem_matcher_matches_real_compiler_output() {
     let dir = std::env::temp_dir().join(format!("delulu_matcher_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("bad.delulu");
-    std::fs::write(
-        &file,
-        "module bad\n\nfn f(out: Cap[Console]) {\n    out.println(\"undeclared\")\n}\n",
-    )
-    .unwrap();
+    std::fs::write(&file, "module bad\n\nfn f(out: Cap[Console]) {\n    out.println(\"undeclared\")\n}\n").unwrap();
 
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_delulu"))
         .env("DELULU_NO_FIRST_RUN", "1")
@@ -401,15 +386,12 @@ fn the_problem_matcher_matches_real_compiler_output() {
     assert!(loc_re.contains("-->"), "the location pattern no longer looks for `-->`: {loc_re}");
 
     let lines: Vec<&str> = text.lines().collect();
-    let msg_at = lines
-        .iter()
-        .position(|l| l.starts_with("error[DL") && l.contains("]: "))
-        .unwrap_or_else(|| {
-            panic!(
-                "`delulu check` printed no line of the form `error[DLxxxx]: …`, which is what the \
+    let msg_at = lines.iter().position(|l| l.starts_with("error[DL") && l.contains("]: ")).unwrap_or_else(|| {
+        panic!(
+            "`delulu check` printed no line of the form `error[DLxxxx]: …`, which is what the \
                  extension's problem matcher keys on. Output was:\n{text}"
-            )
-        });
+        )
+    });
     let loc = lines.get(msg_at + 1).copied().unwrap_or("");
     assert!(
         loc.trim_start().starts_with("--> "),

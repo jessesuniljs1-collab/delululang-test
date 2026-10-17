@@ -344,13 +344,7 @@ pub fn parse_target(url: &str) -> Result<Target, Reason> {
         Some(p) => parse_port(p)?,
     };
     let ip = parse_host(host_text)?;
-    Ok(Target {
-        url: url.to_string(),
-        host: host_text.to_string(),
-        port,
-        ip,
-        authority_end: "https://".len() + end,
-    })
+    Ok(Target { url: url.to_string(), host: host_text.to_string(), port, ip, authority_end: "https://".len() + end })
 }
 
 fn parse_port(p: &str) -> Result<u16, Reason> {
@@ -402,9 +396,7 @@ fn parse_host(h: &str) -> Result<Option<IpAddr>, Reason> {
     if last.bytes().all(|b| b.is_ascii_digit()) || last.starts_with("0x") {
         return match h.parse::<Ipv4Addr>() {
             Ok(v4) if v4.to_string() == h => Ok(Some(IpAddr::V4(v4))),
-            _ => Err(Reason::Malformed(
-                "a number-shaped host that is not a canonical dotted-quad IPv4 address",
-            )),
+            _ => Err(Reason::Malformed("a number-shaped host that is not a canonical dotted-quad IPv4 address")),
         };
     }
     Ok(None)
@@ -445,7 +437,9 @@ pub fn parse_audience(entry: &str) -> Result<Audience, String> {
     }
     match parse_target(&format!("https://{entry}")) {
         Ok(t) => Ok(Audience { host: t.host, port: t.port }),
-        Err(Reason::Userinfo) => Err(format!("`{entry}`: a second `@` — an audience member is HOST[:PORT], and a secret's name holds no `@`")),
+        Err(Reason::Userinfo) => {
+            Err(format!("`{entry}`: a second `@` — an audience member is HOST[:PORT], and a secret's name holds no `@`"))
+        }
         Err(r) => Err(format!("`{entry}`: {}", r.explain().trim_start_matches("the URL is refused rather than normalized: "))),
     }
 }
@@ -901,7 +895,11 @@ pub struct SecretHeader<'a> {
 impl std::fmt::Debug for SecretHeader<'_> {
     // The bytes are never formatted, here or anywhere.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SecretHeader").field("header", &self.header).field("name", &self.name).field("audience", &self.audience).finish()
+        f.debug_struct("SecretHeader")
+            .field("header", &self.header)
+            .field("name", &self.name)
+            .field("audience", &self.audience)
+            .finish()
     }
 }
 
@@ -964,7 +962,8 @@ pub fn request_with_secret(
             _ => false,
         };
         let carry_secret = send
-            && secret.is_some_and(|s| here.as_ref().is_some_and(|(h, p)| s.audience.iter().any(|a| a.host == *h && a.port == *p)));
+            && secret
+                .is_some_and(|s| here.as_ref().is_some_and(|(h, p)| s.audience.iter().any(|a| a.host == *h && a.port == *p)));
         let mut hop_headers: Vec<(String, String)> = if send { headers.clone() } else { Vec::new() };
         let mut secret_name: Option<&str> = None;
         if let (true, Some(sh), Some(s)) = (carry_secret, &secret_header, secret) {
@@ -1278,11 +1277,7 @@ pub(crate) mod real {
             let status = resp.status().as_u16();
             let peer = resp.remote_addr();
             if (300..400).contains(&status) {
-                let location = resp
-                    .headers()
-                    .get(reqwest::header::LOCATION)
-                    .and_then(|v| v.to_str().ok())
-                    .map(str::to_string);
+                let location = resp.headers().get(reqwest::header::LOCATION).and_then(|v| v.to_str().ok()).map(str::to_string);
                 return Ok(Fetched { status, location, body: Vec::new(), peer });
             }
             if resp.content_length().is_some_and(|n| n > max_body) {

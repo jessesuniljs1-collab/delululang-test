@@ -178,8 +178,7 @@ impl Doc {
                 continue;
             };
             let at = |p: &Value| {
-                pos_to_byte(&self.text, p["line"].as_u64().unwrap_or(0), p["character"].as_u64().unwrap_or(0))
-                    as usize
+                pos_to_byte(&self.text, p["line"].as_u64().unwrap_or(0), p["character"].as_u64().unwrap_or(0)) as usize
             };
             let (a, b) = (at(&r["start"]), at(&r["end"]));
             // The protocol says start ≤ end. Normalising rather than trusting it is deliberate:
@@ -272,10 +271,7 @@ impl Workspace {
             }
             let Ok(text) = std::fs::read_to_string(&path) else { continue };
             let (module, _diags) = delulu_syntax::parse_file(0, &text);
-            index.insert(
-                path.clone(),
-                Indexed { uri: path_to_uri(&path), text, mtime, module: Rc::new(module) },
-            );
+            index.insert(path.clone(), Indexed { uri: path_to_uri(&path), text, mtime, module: Rc::new(module) });
         }
     }
 }
@@ -378,8 +374,7 @@ impl Server {
         self.workspace.refresh();
         let open = self.uris();
         let index = self.workspace.index.borrow();
-        let mut files: Vec<&Indexed> =
-            index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
+        let mut files: Vec<&Indexed> = index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
         files.sort_by(|a, b| a.uri.cmp(&b.uri));
         for e in files {
             f(&e.uri, &e.text, &e.module);
@@ -555,10 +550,8 @@ impl Server {
                 if more > 0 { format!(", and {more} more") } else { String::new() }
             ));
         }
-        let is_decl = self
-            .uris()
-            .into_iter()
-            .any(|uri| self.analyze(uri).is_some_and(|a| decl_name_span(&a.module, &word).is_some()));
+        let is_decl =
+            self.uris().into_iter().any(|uri| self.analyze(uri).is_some_and(|a| decl_name_span(&a.module, &word).is_some()));
         if !is_decl {
             return Err("only module-level names (fn/type/effect/const/actor) can be renamed — a \
                  local rename needs shadow-aware resolution the server does not have, so it is \
@@ -570,9 +563,7 @@ impl Server {
             let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { continue };
             let edits: Vec<Value> = name_occurrences(&a.module, &word)
                 .into_iter()
-                .map(|sp| {
-                    json!({ "range": byte_range(text, sp.start, sp.end), "newText": new_name })
-                })
+                .map(|sp| json!({ "range": byte_range(text, sp.start, sp.end), "newText": new_name }))
                 .collect();
             if !edits.is_empty() {
                 changes.insert(uri.to_string(), Value::Array(edits));
@@ -718,7 +709,11 @@ impl Server {
                         .map(|fa| {
                             let mut es: Vec<&str> = fa.effects.iter().map(|e| e.name()).collect();
                             es.sort();
-                            if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+                            if es.is_empty() {
+                                "pure".to_string()
+                            } else {
+                                format!("{{{}}}", es.join(", "))
+                            }
                         })
                         .unwrap_or_default();
                     // The lens names `delulu.showAuthority`, the EDITOR's command — deliberately
@@ -786,11 +781,7 @@ impl Server {
         if a.has_errors() {
             return json!({ "error": "the document has check errors — fix them first" });
         }
-        delulu_check::authority_report(
-            &a.module.name.dotted(),
-            &a.result,
-            &delulu_check::ScopeInfo::default(),
-        )
+        delulu_check::authority_report(&a.module.name.dotted(), &a.result, &delulu_check::ScopeInfo::default())
     }
 
     /// The signature of the call being written, with the parameter under the cursor marked.
@@ -806,8 +797,7 @@ impl Server {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
         let Some(text) = self.text(uri) else { return Value::Null };
         let pos = &params["position"];
-        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0))
-            as usize)
+        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0)) as usize)
             .min(text.len());
         let Some((callee, active)) = enclosing_call(text, at) else { return Value::Null };
 
@@ -849,8 +839,7 @@ impl Server {
 
         self.workspace.refresh();
         let index = self.workspace.index.borrow();
-        let mut files: Vec<&Indexed> =
-            index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
+        let mut files: Vec<&Indexed> = index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
         // Sorted, for the same reason `definition` is: an answer must not depend on a hash seed.
         files.sort_by(|a, b| a.uri.cmp(&b.uri));
         for e in files {
@@ -866,8 +855,7 @@ impl Server {
         let uri = params["textDocument"]["uri"].as_str()?;
         let text = self.text(uri)?;
         let pos = &params["position"];
-        let byte =
-            pos_to_byte(text, pos["line"].as_u64()?, pos["character"].as_u64()?) as usize;
+        let byte = pos_to_byte(text, pos["line"].as_u64()?, pos["character"].as_u64()?) as usize;
         let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
         let b = text.as_bytes();
         if byte >= b.len() || !is_word(b[byte]) {
@@ -901,8 +889,7 @@ impl Server {
             return json!({ "isIncomplete": false, "items": [] });
         };
         let pos = &params["position"];
-        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0))
-            as usize)
+        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0)) as usize)
             .min(text.len());
 
         // The word already typed. The client filters on it too, but sending it as `filterText`
@@ -974,7 +961,11 @@ impl Server {
                             .map(|fa| {
                                 let mut es: Vec<&str> = fa.effects.iter().map(|e| e.name()).collect();
                                 es.sort_unstable();
-                                if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+                                if es.is_empty() {
+                                    "pure".to_string()
+                                } else {
+                                    format!("{{{}}}", es.join(", "))
+                                }
                             })
                             .unwrap_or_default();
                         let doc = format!("```delulu\nfn {}: {sig}\n```\nauthority: {authority}", f.name.name);
@@ -984,9 +975,7 @@ impl Server {
                     Item::Effect(e) => push(&e.name.name, COMPLETION_ENUM, rank, "effect".into(), None),
                     Item::Const(c) => push(&c.name.name, COMPLETION_CONSTANT, rank, "const".into(), None),
                     Item::Actor(a) => push(&a.name.name, COMPLETION_CLASS, rank, "actor".into(), None),
-                    Item::Foreign(fd) => {
-                        push(&fd.name.name, COMPLETION_MODULE, rank, "foreign block".into(), None)
-                    }
+                    Item::Foreign(fd) => push(&fd.name.name, COMPLETION_MODULE, rank, "foreign block".into(), None),
                     Item::Test(_) => {}
                 }
             }
@@ -1002,12 +991,8 @@ impl Server {
     /// Re-check the document and push its diagnostics — the compiler's own, verbatim.
     fn publish(&self, uri: &str) {
         let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else { return };
-        let diags: Vec<Value> =
-            checked.diagnostics.iter().map(|d| lsp_diagnostic(text, d)).collect();
-        notify(
-            "textDocument/publishDiagnostics",
-            json!({ "uri": uri, "diagnostics": diags }),
-        );
+        let diags: Vec<Value> = checked.diagnostics.iter().map(|d| lsp_diagnostic(text, d)).collect();
+        notify("textDocument/publishDiagnostics", json!({ "uri": uri, "diagnostics": diags }));
     }
 
     /// Hover: a fn declaration name shows its full signature + transitive authority; any
@@ -1095,14 +1080,12 @@ impl Server {
             return json!([]);
         };
         let range = &params["range"];
-        let lo = pos_to_byte(text, range["start"]["line"].as_u64().unwrap_or(0), range["start"]["character"].as_u64().unwrap_or(0));
+        let lo =
+            pos_to_byte(text, range["start"]["line"].as_u64().unwrap_or(0), range["start"]["character"].as_u64().unwrap_or(0));
         let hi = pos_to_byte(text, range["end"]["line"].as_u64().unwrap_or(0), range["end"]["character"].as_u64().unwrap_or(0));
         let mut actions = Vec::new();
         for d in &checked.diagnostics {
-            let overlaps = d
-                .primary_span()
-                .map(|sp| sp.start <= hi && lo <= sp.end)
-                .unwrap_or(true);
+            let overlaps = d.primary_span().map(|sp| sp.start <= hi && lo <= sp.end).unwrap_or(true);
             if !overlaps {
                 continue;
             }
@@ -1185,9 +1168,7 @@ impl Server {
                     actor["children"] = Value::Array(children);
                     out.push(actor);
                 }
-                Item::Test(t) => {
-                    out.push(sym(&format!("test \"{}\"", t.name), 12, t.span.start, t.span.end, text))
-                }
+                Item::Test(t) => out.push(sym(&format!("test \"{}\"", t.name), 12, t.span.start, t.span.end, text)),
             }
         }
         Value::Array(out)
@@ -1204,17 +1185,10 @@ impl Server {
             if let delulu_syntax::ast::Expr::Lambda { row: None, body, .. } = e {
                 // The lambda EXPRESSION is pure (making a closure does nothing); the
                 // inferred row the lens shows is the FUNCTION'S — inside its type.
-                if let Some(delulu_check::Type::Fn { row, .. }) =
-                    checked.result.node_types.get(&e.id())
-                {
-                    let mut es: Vec<String> =
-                        row.effects.iter().map(|x| x.name().to_string()).collect();
+                if let Some(delulu_check::Type::Fn { row, .. }) = checked.result.node_types.get(&e.id()) {
+                    let mut es: Vec<String> = row.effects.iter().map(|x| x.name().to_string()).collect();
                     es.sort();
-                    let label = if es.is_empty() {
-                        "! {}".to_string()
-                    } else {
-                        format!("! {{{}}}", es.join(", "))
-                    };
+                    let label = if es.is_empty() { "! {}".to_string() } else { format!("! {{{}}}", es.join(", ")) };
                     hints.push(json!({
                         "position": byte_to_pos(text, body.span.start),
                         "label": label,
@@ -1321,7 +1295,11 @@ fn byte_to_pos(text: &str, byte: u32) -> Value {
 fn row_words(effects: &std::collections::BTreeSet<delulu_check::Effect>) -> String {
     let mut es: Vec<&str> = effects.iter().map(|e| e.name()).collect();
     es.sort();
-    if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+    if es.is_empty() {
+        "pure".to_string()
+    } else {
+        format!("{{{}}}", es.join(", "))
+    }
 }
 
 /// The server's read-only Guard view (P4-07): `workspace/executeCommand` with this name answers
@@ -1369,13 +1347,7 @@ const SYM_CONSTANT: u32 = 14;
 ///
 /// An empty query means "everything", which is what an editor sends when its symbol palette first
 /// opens and what an agent sends to enumerate a project.
-fn emit_symbols(
-    out: &mut Vec<Value>,
-    query: &str,
-    uri: &str,
-    text: &str,
-    module: &delulu_syntax::ast::Module,
-) {
+fn emit_symbols(out: &mut Vec<Value>, query: &str, uri: &str, text: &str, module: &delulu_syntax::ast::Module) {
     use delulu_syntax::ast::Item;
     let mut push = |name: &str, kind: u32, sp: delulu_diag::Span, container: Option<&str>| {
         if !query.is_empty() && !name.to_lowercase().contains(query) {
@@ -1407,9 +1379,7 @@ fn emit_symbols(
                     push(&f.name.name, SYM_METHOD, f.name.span, Some(&a.name.name));
                 }
             }
-            Item::Test(t) => {
-                push(&format!("test \"{}\"", t.name), SYM_FUNCTION, t.name_span, None)
-            }
+            Item::Test(t) => push(&format!("test \"{}\"", t.name), SYM_FUNCTION, t.name_span, None),
         }
     }
 }
@@ -1428,8 +1398,7 @@ fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
     let rest = uri.strip_prefix("file://").or_else(|| uri.strip_prefix("file:"))?;
     let rest = rest.strip_prefix('/').unwrap_or(rest);
     let decoded = percent_decode(rest);
-    let is_drive = decoded.as_bytes().get(1) == Some(&b':')
-        && decoded.as_bytes().first().is_some_and(u8::is_ascii_alphabetic);
+    let is_drive = decoded.as_bytes().get(1) == Some(&b':') && decoded.as_bytes().first().is_some_and(u8::is_ascii_alphabetic);
     Some(std::path::PathBuf::from(if is_drive { decoded } else { format!("/{decoded}") }))
 }
 
@@ -1439,9 +1408,7 @@ fn path_to_uri(p: &std::path::Path) -> String {
     let mut out = String::from("file:///");
     for b in s.trim_start_matches('/').bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => {
-                out.push(b as char)
-            }
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => out.push(b as char),
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -1512,10 +1479,7 @@ fn pos_to_byte(text: &str, line: u64, character: u64) -> u32 {
 /// The compiler's diagnostic, in LSP clothes: same code, same primary span, same message
 /// (en-US — the machine surface is locale-invariant; catalogs are terminal-human only).
 fn lsp_diagnostic(text: &str, d: &Diagnostic) -> Value {
-    let (start, end) = d
-        .primary_span()
-        .map(|s| (s.start, s.end))
-        .unwrap_or((0, 0));
+    let (start, end) = d.primary_span().map(|s| (s.start, s.end)).unwrap_or((0, 0));
     json!({
         "range": byte_range(text, start, end),
         "severity": if d.is_error() { 1 } else { 2 },
@@ -1644,12 +1608,7 @@ type Callable<'a> = (
 
 /// A `SignatureHelp` for `name`, if this module declares it — including actor behaviours and
 /// actor functions, which are called the same way and deserve the same help.
-fn signature_of(
-    text: &str,
-    module: &delulu_syntax::ast::Module,
-    name: &str,
-    active: usize,
-) -> Option<Value> {
+fn signature_of(text: &str, module: &delulu_syntax::ast::Module, name: &str, active: usize) -> Option<Value> {
     use delulu_syntax::ast::Item;
     let mut candidates: Vec<Callable> = Vec::new();
     for item in &module.items {
@@ -1704,11 +1663,8 @@ fn authority_line(row: &Option<delulu_syntax::ast::RowExpr>) -> String {
     match row {
         None => "authority: pure — this call cannot affect anything".to_string(),
         Some(r) => {
-            let mut es: Vec<String> = r
-                .effects
-                .iter()
-                .map(|p| p.segs.last().map(|s| s.name.clone()).unwrap_or_default())
-                .collect();
+            let mut es: Vec<String> =
+                r.effects.iter().map(|p| p.segs.last().map(|s| s.name.clone()).unwrap_or_default()).collect();
             es.sort();
             format!("authority: {{{}}}", es.join(", "))
         }
@@ -1716,8 +1672,18 @@ fn authority_line(row: &Option<delulu_syntax::ast::RowExpr>) -> String {
 }
 
 const SEMANTIC_TOKEN_TYPES: [&str; 12] = [
-    "keyword", "function", "type", "variable", "string", "number", "comment", "operator",
-    "effect", "rcap", "capability", "secret",
+    "keyword",
+    "function",
+    "type",
+    "variable",
+    "string",
+    "number",
+    "comment",
+    "operator",
+    "effect",
+    "rcap",
+    "capability",
+    "secret",
 ];
 const TOK_KEYWORD: u32 = 0;
 const TOK_FUNCTION: u32 = 1;
@@ -1776,10 +1742,7 @@ fn classify_type(t: &delulu_syntax::ast::TypeExpr, toks: &mut Vec<(u32, u32, u32
 // ===== name resolution (deviation 3: declaration + reference walk) =========
 
 /// The name span of a module-level declaration named `word`, if this module declares it.
-fn decl_name_span(
-    module: &delulu_syntax::ast::Module,
-    word: &str,
-) -> Option<delulu_diag::Span> {
+fn decl_name_span(module: &delulu_syntax::ast::Module, word: &str) -> Option<delulu_diag::Span> {
     use delulu_syntax::ast::Item;
     module.items.iter().find_map(|item| match item {
         Item::Fn(f) if f.name.name == word => Some(f.name.span),
@@ -1794,10 +1757,7 @@ fn decl_name_span(
 /// Every occurrence of the module-level name `word` in this module: the declaration plus
 /// value references (bare or as a qualified path's final segment), type references, row
 /// effect references, and spawn targets. Local binders are deliberately NOT visited.
-fn name_occurrences(
-    module: &delulu_syntax::ast::Module,
-    word: &str,
-) -> Vec<delulu_diag::Span> {
+fn name_occurrences(module: &delulu_syntax::ast::Module, word: &str) -> Vec<delulu_diag::Span> {
     use delulu_syntax::ast::{Item, TypeExpr};
     let mut out = Vec::new();
     if let Some(sp) = decl_name_span(module, word) {
@@ -1810,11 +1770,7 @@ fn name_occurrences(
             }
         }
     };
-    fn type_paths(
-        t: &TypeExpr,
-        word: &str,
-        out: &mut Vec<delulu_diag::Span>,
-    ) {
+    fn type_paths(t: &TypeExpr, word: &str, out: &mut Vec<delulu_diag::Span>) {
         match t {
             TypeExpr::Named { path, args, .. } => {
                 if let Some(last) = path.segs.last() {
@@ -1872,16 +1828,12 @@ fn name_occurrences(
     walk_exprs(module, &mut |e| {
         use delulu_syntax::ast::Expr;
         match e {
-            Expr::Var { path, .. } | Expr::Record { path, .. } | Expr::Spawn { actor: path, .. } => {
-                path_hit(path, &mut out)
-            }
+            Expr::Var { path, .. } | Expr::Record { path, .. } | Expr::Spawn { actor: path, .. } => path_hit(path, &mut out),
             // Dotted chains are Method/Field Go-selector style (`lib.greet(x)` is a
             // Method with recv `lib`), so a qualified reference to a module-level name
             // lands HERE — the deviation-3 walk's approximation includes same-named
             // record methods, recorded openly.
-            Expr::Method { name, .. } | Expr::Field { name, .. } if name.name == word => {
-                out.push(name.span)
-            }
+            Expr::Method { name, .. } | Expr::Field { name, .. } if name.name == word => out.push(name.span),
             _ => {}
         }
     });

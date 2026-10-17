@@ -108,10 +108,8 @@ fn build_is_deterministic_across_runs() {
 fn manifest_export_mismatch_is_dl1501_and_no_artifact() {
     // The manifest undersells the code's row ({Read} in code, pure in manifest): still DL1501 —
     // the manifest never overrides the code, in either direction. Refusal honesty: no artifact.
-    let manifest = MANIFEST.replace(
-        "fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}",
-        "fn(Cap[FsRead], Str) -> Result[Str, IoErr]",
-    );
+    let manifest =
+        MANIFEST.replace("fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}", "fn(Cap[FsRead], Str) -> Result[Str, IoErr]");
     let dir = scaffold("mismatch", &manifest, CODE);
     let o = delulu(&["plugin", "build", dir.to_str().unwrap(), "--json"]);
     assert_eq!(o.status.code(), Some(1), "a mismatched manifest must refuse");
@@ -226,7 +224,8 @@ fn multi_module_plugin_package_is_refused_cleanly() {
 #[test]
 fn dwx_build_still_works_beside_dpx() {
     let src = std::env::temp_dir().join(format!("delulu_dwx_beside_{}.delulu", std::process::id()));
-    std::fs::write(&src, "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"still fine\") }\n").unwrap();
+    std::fs::write(&src, "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"still fine\") }\n")
+        .unwrap();
     let out = std::env::temp_dir().join(format!("delulu_dwx_beside_{}.dwx", std::process::id()));
     let o = delulu(&["build", src.to_str().unwrap(), "--target", "wasm", "-o", out.to_str().unwrap()]);
     assert!(o.status.success(), "{}", stderr(&o));

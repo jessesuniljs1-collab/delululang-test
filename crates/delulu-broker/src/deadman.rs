@@ -90,11 +90,9 @@ impl DeadmanRefusal {
                 format!("a dead-man is already armed on `{node}` — only its holder may disarm it, with the key arming returned")
             }
             DeadmanRefusal::WrongKey => format!("the key does not match the dead-man armed on `{node}`"),
-            DeadmanRefusal::Period => format!(
-                "a dead-man's period is {} ms to {} ms",
-                MIN_PERIOD.as_millis(),
-                MAX_PERIOD.as_millis()
-            ),
+            DeadmanRefusal::Period => {
+                format!("a dead-man's period is {} ms to {} ms", MIN_PERIOD.as_millis(), MAX_PERIOD.as_millis())
+            }
             DeadmanRefusal::Fired(f) => format!(
                 "the dead-man on `{node}` fired: no beat within {} ms — `{node}` and its subtree were revoked by audit seq {}",
                 f.period.as_millis(),
@@ -147,10 +145,8 @@ impl Broker {
             "allow",
             None,
         );
-        self.deadmen.insert(
-            node.clone(),
-            Deadman { period, deadline, key_hash: blake3::hash(key.as_bytes()), armed_seq: seq, beats: 0 },
-        );
+        self.deadmen
+            .insert(node.clone(), Deadman { period, deadline, key_hash: blake3::hash(key.as_bytes()), armed_seq: seq, beats: 0 });
         Ok((seq, key))
     }
 
@@ -274,17 +270,12 @@ impl Broker {
     /// cause in the record. A dead-man whose node is no longer live (an operator revoked it, its lease
     /// expired) has nothing left to stop, and is dropped without a record.
     pub fn fire_expired_deadmen(&mut self, now: Instant) -> Vec<Fired> {
-        let gone: Vec<GrantId> = self
-            .deadmen
-            .keys()
-            .filter(|n| !matches!(self.effective_state(n), Some(EffState::Live)))
-            .cloned()
-            .collect();
+        let gone: Vec<GrantId> =
+            self.deadmen.keys().filter(|n| !matches!(self.effective_state(n), Some(EffState::Live))).cloned().collect();
         for n in gone {
             self.deadmen.remove(&n);
         }
-        let mut due: Vec<GrantId> =
-            self.deadmen.iter().filter(|(_, d)| d.deadline <= now).map(|(n, _)| n.clone()).collect();
+        let mut due: Vec<GrantId> = self.deadmen.iter().filter(|(_, d)| d.deadline <= now).map(|(n, _)| n.clone()).collect();
         due.sort();
         due.iter().filter_map(|n| self.fire_deadman(n)).collect()
     }
@@ -450,7 +441,10 @@ mod tests {
         assert_eq!(b.arm_deadman(&m, MIN_PERIOD - Duration::from_millis(1), t0).map(|_| ()), Err(DeadmanRefusal::Period));
         assert_eq!(b.arm_deadman(&m, MAX_PERIOD + Duration::from_millis(1), t0).map(|_| ()), Err(DeadmanRefusal::Period));
         b.revoke(&root, &m).unwrap();
-        assert!(matches!(b.arm_deadman(&run, P, t0), Err(DeadmanRefusal::Tree(Denial::Revoked { .. }))), "a revoked ancestor counts");
+        assert!(
+            matches!(b.arm_deadman(&run, P, t0), Err(DeadmanRefusal::Tree(Denial::Revoked { .. }))),
+            "a revoked ancestor counts"
+        );
         assert!(b.next_deadman_deadline().is_none());
     }
 }

@@ -15,11 +15,7 @@ fn temp_dwx(tag: &str) -> PathBuf {
 }
 
 fn delulu(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .current_dir(workspace_root())
-        .args(args)
-        .output()
-        .expect("failed to run delulu")
+    Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(workspace_root()).args(args).output().expect("failed to run delulu")
 }
 
 fn stdout(o: &Output) -> String {

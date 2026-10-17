@@ -78,8 +78,15 @@ fn a_guest_that_never_confirms_its_boundary_is_never_sent_the_program() {
     let r = delulu(
         &d,
         &[
-            "run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console",
-            "--report-out", report.to_str().unwrap(),
+            "run",
+            "c.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &format!("external:{}", script.display()),
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
         ],
     );
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
@@ -138,9 +145,8 @@ fn every_sandboxed_run_has_a_fresh_generation_in_its_report_and_its_launch_recor
     let chain: serde_json::Value = serde_json::from_slice(&q.stdout).unwrap_or_else(|_| panic!("{}", text(&q)));
     let records = chain["records"].as_array().unwrap_or_else(|| panic!("{chain}"));
     for g in &seen {
-        let of = |action: &str| {
-            records.iter().filter(|r| r["action"] == action && r["authority"]["generation"] == g.as_str()).count()
-        };
+        let of =
+            |action: &str| records.iter().filter(|r| r["action"] == action && r["authority"]["generation"] == g.as_str()).count();
         assert_eq!(of("sandbox-launch"), 1, "one launch record names generation {g}: {chain}");
         assert_eq!(of("sandbox-death"), 1, "one death record names generation {g}: {chain}");
         assert!(
@@ -202,8 +208,15 @@ fn an_external_launchers_properties_are_unknown() {
     let r = delulu(
         &d,
         &[
-            "run", "h.delulu", "--sandbox", "--sandbox-backend", &format!("external:{exe} __guest --stdio-pipes"),
-            "--grant", "console", "--report-out", report.to_str().unwrap(),
+            "run",
+            "h.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &format!("external:{exe} __guest --stdio-pipes"),
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
         ],
     );
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
@@ -264,9 +277,16 @@ fn a_guest_whose_channel_failed_is_ended_not_waited_for() {
     std::fs::write(&script, "#!/bin/sh\nexec >&-\nexec sleep 40\n").unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     let t = std::time::Instant::now();
-    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console"]);
+    let r = delulu(
+        &d,
+        &["run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console"],
+    );
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
-    assert!(t.elapsed() < std::time::Duration::from_secs(20), "the host waited for a guest it should have ended: {:?}", t.elapsed());
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(20),
+        "the host waited for a guest it should have ended: {:?}",
+        t.elapsed()
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -290,7 +310,20 @@ fn a_confirmed_guest_that_never_takes_the_program_did_not_run_it() {
         "n = int.from_bytes(i.read(4), 'little')\nassert len(i.read(n)) == n\nos.close(0)\nos.close(1)\ntime.sleep(0.5)",
     );
     let report = d.join("r.json");
-    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    let r = delulu(
+        &d,
+        &[
+            "run",
+            "c.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &launcher,
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
+        ],
+    );
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
     assert_eq!(v["outcome"]["ran"], false, "the program was never sent: {v}");
@@ -311,7 +344,10 @@ fn a_program_larger_than_the_channel_carries_is_refused_before_a_guest_exists() 
     let d = lab("huge");
     std::fs::write(
         d.join("c.delulu"),
-        format!("module c\n\nfn main(root: Root) ! {{Write}} {{\n    root.console().println(\"{}\")\n}}\n", "x".repeat(17 * 1024 * 1024)),
+        format!(
+            "module c\n\nfn main(root: Root) ! {{Write}} {{\n    root.console().println(\"{}\")\n}}\n",
+            "x".repeat(17 * 1024 * 1024)
+        ),
     )
     .unwrap();
     let t = std::time::Instant::now();
@@ -335,19 +371,43 @@ fn a_guests_words_reach_the_operator_escaped_and_bounded() {
     let evil = format!("x\nseq 4 sandbox-death allow FORGED\x1b[31mRED\x1b[0m\r{}", "y".repeat(1_000_000));
     let launcher = fake_guest(&d, &[evil.as_str()], "time.sleep(0.5)");
     let report = d.join("r.json");
-    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    let r = delulu(
+        &d,
+        &[
+            "run",
+            "c.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &launcher,
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
+        ],
+    );
     assert_eq!(r.status.code(), Some(1), "{}", text(&r));
     let stderr = String::from_utf8_lossy(&r.stderr).to_string();
-    assert!(!stderr.contains('\x1b') && !stderr.contains("\nseq 4"), "raw guest text on the terminal: {:?}", &stderr[..stderr.len().min(400)]);
+    assert!(
+        !stderr.contains('\x1b') && !stderr.contains("\nseq 4"),
+        "raw guest text on the terminal: {:?}",
+        &stderr[..stderr.len().min(400)]
+    );
     assert!(stderr.len() < 16 * 1024, "a megabyte of guest text on the terminal: {} bytes", stderr.len());
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
     for entry in v["sandbox"]["denied"].as_array().unwrap() {
         let e = entry.as_str().unwrap();
-        assert!(e.len() <= 1024 && !e.contains('\n') && !e.contains('\x1b'), "an unbounded or raw entry: {:?}", &e[..e.len().min(200)]);
+        assert!(
+            e.len() <= 1024 && !e.contains('\n') && !e.contains('\x1b'),
+            "an unbounded or raw entry: {:?}",
+            &e[..e.len().min(200)]
+        );
     }
     let q = delulu(&d, &["audit", "query"]);
     let chain = String::from_utf8_lossy(&q.stdout).to_string();
-    assert!(!chain.contains("FORGED\n") && !chain.lines().any(|l| l.trim_start().starts_with("seq 4 sandbox-death allow")), "a forged row: {chain}");
+    assert!(
+        !chain.contains("FORGED\n") && !chain.lines().any(|l| l.trim_start().starts_with("seq 4 sandbox-death allow")),
+        "a forged row: {chain}"
+    );
     assert!(chain.len() < 64 * 1024, "{} bytes of chain text", chain.len());
     let _ = std::fs::remove_dir_all(&d);
 }
@@ -368,13 +428,26 @@ fn hostile_agent_refuses_a_boundary_that_lacks_a_property_before_the_program_is_
     let r = delulu(
         &d,
         &[
-            "run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--sandbox-profile", "hostile-agent",
-            "--grant", "console", "--report-out", report.to_str().unwrap(),
+            "run",
+            "c.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &launcher,
+            "--sandbox-profile",
+            "hostile-agent",
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
         ],
     );
     assert_eq!(r.status.code(), Some(2), "{}", text(&r));
     assert!(text(&r).contains("DL1408"), "{}", text(&r));
-    assert!(text(&r).contains("filesystem_confinement") && text(&r).contains("hostile-agent"), "it names what is missing: {}", text(&r));
+    assert!(
+        text(&r).contains("filesystem_confinement") && text(&r).contains("hostile-agent"),
+        "it names what is missing: {}",
+        text(&r)
+    );
     assert!(!String::from_utf8_lossy(&r.stdout).contains(&canary), "the program never ran: {}", text(&r));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
     assert_eq!(v["outcome"]["ran"], false, "{v}");
@@ -400,8 +473,15 @@ fn an_external_guests_own_words_are_its_own_not_the_hosts() {
     let r = delulu(
         &d,
         &[
-            "run", "h.delulu", "--sandbox", "--sandbox-backend", &format!("external:{exe} __guest --stdio-pipes"),
-            "--grant", "console", "--report-out", report.to_str().unwrap(),
+            "run",
+            "h.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &format!("external:{exe} __guest --stdio-pipes"),
+            "--grant",
+            "console",
+            "--report-out",
+            report.to_str().unwrap(),
         ],
     );
     assert_eq!(r.status.code(), Some(0), "{}", text(&r));
@@ -575,7 +655,15 @@ fn an_external_launcher_ends_when_its_host_is_killed() {
         .env("DELULU_STATE_DIR", d.join("s"))
         .env("DELULU_HOME", d.join("home"))
         .env("DELULU_NO_FIRST_RUN", "1")
-        .args(["run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console"])
+        .args([
+            "run",
+            "c.delulu",
+            "--sandbox",
+            "--sandbox-backend",
+            &format!("external:{}", script.display()),
+            "--grant",
+            "console",
+        ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -633,9 +721,8 @@ fn an_external_launcher_ends_when_its_host_is_killed_on_windows() {
     let pidfile = d.join("launcher.pid");
     let p = pidfile.display().to_string();
     assert!(!p.contains(char::is_whitespace), "the launcher's words are split on whitespace: {p}");
-    let launcher = format!(
-        "external:powershell -NoProfile -NonInteractive -Command $PID | Out-File -Encoding ascii {p}; Start-Sleep 60"
-    );
+    let launcher =
+        format!("external:powershell -NoProfile -NonInteractive -Command $PID | Out-File -Encoding ascii {p}; Start-Sleep 60");
     let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .current_dir(&d)
         .env("DELULU_STATE_DIR", d.join("s"))
@@ -720,8 +807,10 @@ fn the_death_record_names_the_words_the_guest_confirmed_with() {
             .map(|w| w.as_str().unwrap().to_string())
             .collect();
         if tag == "l3" {
-            let reported: Vec<String> =
-                v["sandbox"]["guest_reported"].as_array().map(|a| a.iter().map(|w| w.as_str().unwrap().to_string()).collect()).unwrap_or_default();
+            let reported: Vec<String> = v["sandbox"]["guest_reported"]
+                .as_array()
+                .map(|a| a.iter().map(|w| w.as_str().unwrap().to_string()).collect())
+                .unwrap_or_default();
             assert_eq!(words, reported, "{tag}: the chain and the report agree: {death}\n{v}");
         } else {
             let applied = v["sandbox"].to_string();

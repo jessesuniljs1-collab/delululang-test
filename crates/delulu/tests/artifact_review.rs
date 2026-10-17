@@ -103,11 +103,7 @@ fn a_tampered_artifact_is_refused_identically_by_authority_and_by_run() {
 #[test]
 fn a_source_command_handed_an_artifact_says_so_instead_of_leaking_an_encoding_error() {
     let dir = rig("src");
-    for cmd in [
-        vec!["check", "frag.dwx"],
-        vec!["why", "Write", "frag.dwx"],
-        vec!["atlas", "frag.dwx"],
-    ] {
+    for cmd in [vec!["check", "frag.dwx"], vec!["why", "Write", "frag.dwx"], vec!["atlas", "frag.dwx"]] {
         let o = delulu(&dir, &cmd);
         assert!(!o.status.success(), "{cmd:?} must refuse an artifact");
         let e = stderr(&o);
@@ -127,11 +123,7 @@ fn a_source_command_handed_an_artifact_says_so_instead_of_leaking_an_encoding_er
     std::fs::copy(dir.join("frag.dwx"), dir.join("renamed.delulu")).unwrap();
     let o = delulu(&dir, &["check", "renamed.delulu"]);
     assert!(!o.status.success());
-    assert!(
-        stderr(&o).contains("compiled `.dwx` artifact"),
-        "a renamed artifact is still an artifact: {}",
-        stderr(&o)
-    );
+    assert!(stderr(&o).contains("compiled `.dwx` artifact"), "a renamed artifact is still an artifact: {}", stderr(&o));
 }
 
 /// C66. `fmt` on a file it will not format must not report success.
@@ -142,16 +134,8 @@ fn fmt_refuses_a_file_it_cannot_format_instead_of_reporting_zero_work_done() {
 
     for f in ["notes.txt", "frag.dwx"] {
         let o = delulu(&dir, &["fmt", f]);
-        assert!(
-            !o.status.success(),
-            "`fmt {f}` reported success having done nothing — the C26 shape: {}",
-            stdout(&o)
-        );
-        assert!(
-            stderr(&o).contains("not a `.delulu` source file"),
-            "`fmt {f}` must say why: {}",
-            stderr(&o)
-        );
+        assert!(!o.status.success(), "`fmt {f}` reported success having done nothing — the C26 shape: {}", stdout(&o));
+        assert!(stderr(&o).contains("not a `.delulu` source file"), "`fmt {f}` must say why: {}", stderr(&o));
     }
 
     // And the behaviour that must NOT change: a DIRECTORY is filtered, because filtering is the

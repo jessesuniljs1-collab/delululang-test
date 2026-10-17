@@ -86,9 +86,7 @@ pub fn parse_manifest(src: &str) -> Manifest {
             // P2 (D-V2-27): the hash ceiling. Lower-cased on the way in, because a hash is compared
             // to decide whether code may load, and two spellings of one hash deciding differently is
             // the campaign's recurring shape (a security decision on an unnormalized representation).
-            ("plugins", "allow") => {
-                m.plugins_allow = values.into_iter().map(|h| h.trim().to_ascii_lowercase()).collect()
-            }
+            ("plugins", "allow") => m.plugins_allow = values.into_iter().map(|h| h.trim().to_ascii_lowercase()).collect(),
             _ => {}
         }
     }
@@ -98,22 +96,13 @@ pub fn parse_manifest(src: &str) -> Manifest {
 fn parse_toml_strings(val: &str) -> Vec<String> {
     let body = val.trim();
     let inner = body.strip_prefix('[').and_then(|s| s.strip_suffix(']')).unwrap_or(body);
-    inner
-        .split(',')
-        .map(|s| s.trim().trim_matches('"').to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
+    inner.split(',').map(|s| s.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect()
 }
 
 impl Manifest {
     /// A `ScopeInfo` for the authority report, from the manifest's declared scopes.
     pub fn scope_info(&self) -> ScopeInfo {
-        ScopeInfo {
-            fs_read: self.fs_read.clone(),
-            fs_write: self.fs_write.clone(),
-            net: self.net.clone(),
-            ..Default::default()
-        }
+        ScopeInfo { fs_read: self.fs_read.clone(), fs_write: self.fs_write.clone(), net: self.net.clone(), ..Default::default() }
     }
 
     /// DL0701: `main`'s effect row must be within the manifest's declared effects.
@@ -258,9 +247,9 @@ impl Grants {
     /// Parse one `--grant` argument. Returns an error string on malformed input.
     pub fn add(&mut self, spec: &str) -> Result<(), String> {
         if let Some(rest) = spec.strip_prefix("secret:") {
-            let (head, source) = rest.split_once('=').ok_or_else(|| {
-                format!("grant `{spec}` needs a value: `--grant {spec}=VALUE` or `--grant {spec}=env:VAR`")
-            })?;
+            let (head, source) = rest
+                .split_once('=')
+                .ok_or_else(|| format!("grant `{spec}` needs a value: `--grant {spec}=VALUE` or `--grant {spec}=env:VAR`"))?;
             // P9-04 (c), D-V2-131: `NAME@AUDIENCE` — split at the FIRST `@`, so a name never holds one, and
             // an audience member holding a second is refused by its own parse (as userinfo), never read
             // as another host. The value is everything after the first `=`, `@` and all.
@@ -352,9 +341,10 @@ impl Grants {
                 // `mathlib:C:\lib\libm.dll` keeps its drive-letter colon (spec §4.1). A bare name
                 // (`mathlib:libm.dll`) resolves via the OS loader rules at bind time.
                 "foreign.c" => {
-                    let (name, path) = v.trim().split_once(':').ok_or_else(|| {
-                        format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)")
-                    })?;
+                    let (name, path) = v
+                        .trim()
+                        .split_once(':')
+                        .ok_or_else(|| format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)"))?;
                     let (name, path) = (name.trim(), path.trim());
                     if name.is_empty() || path.is_empty() {
                         return Err(format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)"));
@@ -373,8 +363,8 @@ impl Grants {
                 // checked against it. The DL1911 attestation gate runs later, at the pre-flight,
                 // because it needs the adapter registry and not just the string.
                 "compute" => {
-                    let env = crate::value::ComputeEnvelope::parse(v.trim())
-                        .map_err(|e| format!("bad compute grant `{spec}`: {e}"))?;
+                    let env =
+                        crate::value::ComputeEnvelope::parse(v.trim()).map_err(|e| format!("bad compute grant `{spec}`: {e}"))?;
                     self.computes.push(env);
                 }
                 // Stage 10 (10e): `sensor=DEVICE` — reads are `Read` under this device scope.
@@ -492,12 +482,7 @@ impl Grants {
     }
 
     pub fn scope_info(&self) -> ScopeInfo {
-        ScopeInfo {
-            fs_read: self.fs_read.clone(),
-            fs_write: self.fs_write.clone(),
-            net: self.net.clone(),
-            ..Default::default()
-        }
+        ScopeInfo { fs_read: self.fs_read.clone(), fs_write: self.fs_write.clone(), net: self.net.clone(), ..Default::default() }
     }
 }
 
@@ -543,12 +528,25 @@ mod tests {
     #[test]
     fn a_net_grant_may_name_a_path_pattern() {
         let mut g = Grants::default();
-        for ok in ["net=api.example.com/v1/**", "net=api.example.com/repos/*/issues", "net=*.example.com/assets/**", "net.special=127.0.0.1/health"] {
+        for ok in [
+            "net=api.example.com/v1/**",
+            "net=api.example.com/repos/*/issues",
+            "net=*.example.com/assets/**",
+            "net.special=127.0.0.1/health",
+        ] {
             assert!(g.add(ok).is_ok(), "`{ok}`: {:?}", Grants::default().add(ok));
         }
         assert!(g.net.iter().any(|n| n == "api.example.com/v1/**") && g.net_special == ["127.0.0.1/health"], "{:?}", g.net);
-        for bad in ["net=api.example.com/", "net=api.example.com//x", "net=api.example.com/v1*/x", "net=api.example.com/**/x",
-                    "net=api.example.com/a/../b", "net=api.example.com/a%2Fb", "net=api.example.com/a;b", "net=/v1/**"] {
+        for bad in [
+            "net=api.example.com/",
+            "net=api.example.com//x",
+            "net=api.example.com/v1*/x",
+            "net=api.example.com/**/x",
+            "net=api.example.com/a/../b",
+            "net=api.example.com/a%2Fb",
+            "net=api.example.com/a;b",
+            "net=/v1/**",
+        ] {
             let e = Grants::default().add(bad).unwrap_err();
             assert!(e.contains("path is refused") || e.contains("names no host"), "`{bad}`: {e}");
         }
@@ -563,9 +561,22 @@ mod tests {
     #[test]
     fn the_grant_property_holds_over_a_seeded_corpus() {
         let seeds: Vec<Vec<u8>> = [
-            "console", "clock", "rand", "declassify", "fs.read=./data", "fs.write=C:/out", "net=example.com", "net=a.example.com/v1/*/x/**",
-            "net.special=localhost", "secret:TOKEN=abc", "plugin=./plugins", "foreign.c=m:/usr/lib/libm.so",
-            "sensor=temp:lo=0,hi=5", "fs.read=", "=", "",
+            "console",
+            "clock",
+            "rand",
+            "declassify",
+            "fs.read=./data",
+            "fs.write=C:/out",
+            "net=example.com",
+            "net=a.example.com/v1/*/x/**",
+            "net.special=localhost",
+            "secret:TOKEN=abc",
+            "plugin=./plugins",
+            "foreign.c=m:/usr/lib/libm.so",
+            "sensor=temp:lo=0,hi=5",
+            "fs.read=",
+            "=",
+            "",
         ]
         .iter()
         .map(|s| s.as_bytes().to_vec())
@@ -804,11 +815,7 @@ mod tests {
         let diags = m.check_main_row(&row);
         assert_eq!(diags.len(), 1, "exactly one undeclared effect: {diags:?}");
         assert_eq!(diags[0].code, "DL0701");
-        assert!(
-            diags[0].message.contains("`Net`"),
-            "the refusal names the exceeding effect: {}",
-            diags[0].message
-        );
+        assert!(diags[0].message.contains("`Net`"), "the refusal names the exceeding effect: {}", diags[0].message);
         // And the honest converse: a row within the ceiling produces nothing.
         let mut ok = std::collections::BTreeSet::new();
         ok.insert(Effect::Write);

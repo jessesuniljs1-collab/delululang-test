@@ -43,13 +43,7 @@ impl Atlas {
     /// The plain `tree` overview for a terminal (color is layered on by the caller in A3).
     pub fn render_tree(&self) -> String {
         let mut out = String::new();
-        let _ = writeln!(
-            out,
-            "atlas: {}  ({} nodes, {} edges)",
-            self.root,
-            self.nodes.len(),
-            self.edges.len()
-        );
+        let _ = writeln!(out, "atlas: {}  ({} nodes, {} edges)", self.root, self.nodes.len(), self.edges.len());
         let _ = writeln!(out);
 
         for pkg in self.nodes.iter().filter(|n| n.kind == NodeKind::Package) {
@@ -69,11 +63,7 @@ impl Atlas {
                     .collect();
                 let _ = writeln!(out, "  module {}  ({} fn)", m.name, fns.len());
                 for f in fns {
-                    let row = if f.effects.is_empty() {
-                        "!{}".to_string()
-                    } else {
-                        format!("!{{{}}}", f.effects.join(", "))
-                    };
+                    let row = if f.effects.is_empty() { "!{}".to_string() } else { format!("!{{{}}}", f.effects.join(", ")) };
                     let tag = if f.pure == Some(true) { "  [pure]" } else { "" };
                     let _ = writeln!(out, "    fn {} {}{}", f.name, row, tag);
                 }
@@ -117,8 +107,7 @@ impl Atlas {
                 for c in caps {
                     let kind = c.get("kind").and_then(|k| k.as_str()).unwrap_or("?");
                     let scopes = strs(c.get("scopes"));
-                    let scope_str =
-                        if scopes.is_empty() { "(scope granted at runtime)".into() } else { scopes.join(", ") };
+                    let scope_str = if scopes.is_empty() { "(scope granted at runtime)".into() } else { scopes.join(", ") };
                     let _ = writeln!(out, "    - {kind:<8} {scope_str}");
                 }
             }
@@ -140,11 +129,7 @@ impl Atlas {
                 if abi == "python" {
                     let allow = strs(e.get("allowlist"));
                     let seen = strs(e.get("imports_seen"));
-                    lines.push(format!(
-                        "- python: allowlist [{}]; imports seen [{}]",
-                        allow.join(", "),
-                        seen.join(", ")
-                    ));
+                    lines.push(format!("- python: allowlist [{}]; imports seen [{}]", allow.join(", "), seen.join(", ")));
                 } else {
                     let lib = e.get("lib").and_then(|l| l.as_str()).unwrap_or("?");
                     let syms = strs(e.get("symbols"));
@@ -162,10 +147,8 @@ impl Atlas {
     /// lines are packed in document order into what remains; anything dropped is announced —
     /// explicit over silent, always (criteria 3 & 4; A3.2).
     pub fn render_digest(&self, budget: usize) -> String {
-        let packages: Vec<&crate::model::Node> =
-            self.nodes.iter().filter(|n| n.kind == NodeKind::Package).collect();
-        let modules: Vec<&crate::model::Node> =
-            self.nodes.iter().filter(|n| n.kind == NodeKind::Module).collect();
+        let packages: Vec<&crate::model::Node> = self.nodes.iter().filter(|n| n.kind == NodeKind::Package).collect();
+        let modules: Vec<&crate::model::Node> = self.nodes.iter().filter(|n| n.kind == NodeKind::Module).collect();
 
         // ----- the floor: title + footer (notice joins them only when truncating) ---------------
         let title = format!("# Atlas of `{}`\n\n", self.root);
@@ -259,8 +242,7 @@ impl Atlas {
         // respects the cap as far as the floor allows.
         const NOTICE_RESERVE: usize = 260;
         let char_budget = budget.saturating_mul(4);
-        let remaining =
-            char_budget.saturating_sub(title.chars().count() + footer.chars().count() + NOTICE_RESERVE);
+        let remaining = char_budget.saturating_sub(title.chars().count() + footer.chars().count() + NOTICE_RESERVE);
         let mut kept = String::new();
         let mut kept_lines = 0usize;
         let total_lines = body.split_inclusive('\n').count();
@@ -294,7 +276,5 @@ impl Atlas {
 }
 
 fn strs(v: Option<&Value>) -> Vec<String> {
-    v.and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }

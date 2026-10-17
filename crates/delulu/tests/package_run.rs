@@ -74,17 +74,12 @@ fn a_four_package_seven_module_program_runs_and_produces_the_right_answer() {
     let dir = scratch("tier4");
     copy_tree(&repo_root().join("tests/corpus/tier4-multimodule"), &dir);
     let station = dir.join("station");
-    write(
-        &station,
-        "data/telemetry.txt",
-        "bay3=21.5\nbay4=8.25\n\nbay5=41.0\nbroken\nbay6=abc\n",
-    );
+    write(&station, "data/telemetry.txt", "bay3=21.5\nbay4=8.25\n\nbay5=41.0\nbroken\nbay6=abc\n");
     std::fs::create_dir_all(station.join("out")).unwrap();
 
     let o = delulu(
         &station,
-        &["run", ".", "--grant", "console", "--grant", "fs.read=./data", "--grant",
-          "fs.write=./out", "--no-prompt"],
+        &["run", ".", "--grant", "console", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"],
     );
     assert!(o.status.success(), "the package must run: {}\n{}", stdout(&o), stderr(&o));
     let s = stdout(&o);

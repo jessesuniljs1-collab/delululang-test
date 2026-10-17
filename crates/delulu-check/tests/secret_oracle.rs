@@ -66,12 +66,7 @@
 use delulu_check::check_source;
 
 fn error_codes(src: &str) -> Vec<String> {
-    check_source(0, src)
-        .diagnostics
-        .iter()
-        .filter(|d| d.is_error())
-        .map(|d| d.code.to_string())
-        .collect()
+    check_source(0, src).diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
 }
 
 /// One bit of the plaintext, extracted with no `Declassify` anywhere.
@@ -136,9 +131,7 @@ fn verify_cannot_be_turned_into_an_oracle_against_a_chosen_plaintext() {
 /// The legitimate declassification path still works and still declares its effect.
 #[test]
 fn the_honest_declassification_path_is_still_accepted() {
-    let cs = error_codes(
-        "module m\nfn ok(d: Cap[Declassify], s: Secret[Str]) -> Str ! {Declassify} { s.expose(d) }\n",
-    );
+    let cs = error_codes("module m\nfn ok(d: Cap[Declassify], s: Secret[Str]) -> Str ! {Declassify} { s.expose(d) }\n");
     assert!(cs.is_empty(), "the honest path must stay open, got {cs:?}");
 }
 
@@ -146,9 +139,7 @@ fn the_honest_declassification_path_is_still_accepted() {
 /// secret, with the result kept sealed, is the whole point of the operation.
 #[test]
 fn mapping_a_secret_to_a_secret_is_still_accepted() {
-    let cs = error_codes(
-        "module m\nfn ok(s: Secret[Str]) -> Secret[Str] { s.map(fn(x: Str) -> Str { x.trim() }) }\n",
-    );
+    let cs = error_codes("module m\nfn ok(s: Secret[Str]) -> Secret[Str] { s.map(fn(x: Str) -> Str { x.trim() }) }\n");
     assert!(cs.is_empty(), "Secret.map must stay usable, got {cs:?}");
 }
 
@@ -175,13 +166,8 @@ fn the_declared_oracle_is_accepted_but_visible() {
 /// `verify` must carry the effect at the point of use, not merely somewhere up the call chain.
 #[test]
 fn verify_alone_requires_the_declassify_declaration() {
-    let cs = error_codes(
-        "module m\nfn cmp(a: Secret[Str], b: Secret[Str]) -> Bool { a.verify(b) }\n",
-    );
-    assert!(
-        cs.iter().any(|c| c == "DL0501"),
-        "a bare `verify` in an undeclared function must be DL0501, got {cs:?}"
-    );
+    let cs = error_codes("module m\nfn cmp(a: Secret[Str], b: Secret[Str]) -> Bool { a.verify(b) }\n");
+    assert!(cs.iter().any(|c| c == "DL0501"), "a bare `verify` in an undeclared function must be DL0501, got {cs:?}");
 }
 
 /// An impure mapper is already refused (DL0603) and must stay refused.

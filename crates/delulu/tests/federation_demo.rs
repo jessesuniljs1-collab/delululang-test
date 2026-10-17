@@ -38,8 +38,17 @@ const WHEELS: &str = "actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=60000
 
 fn run_demo() -> String {
     let o = delulu(&[
-        "run", &demo(), "--grant", "console", "--grant", HGA, "--grant", WHEELS,
-        "--broker-profile", "sim", "--no-prompt",
+        "run",
+        &demo(),
+        "--grant",
+        "console",
+        "--grant",
+        HGA,
+        "--grant",
+        WHEELS,
+        "--broker-profile",
+        "sim",
+        "--no-prompt",
     ]);
     assert!(o.status.success(), "the demo must run: {}", String::from_utf8_lossy(&o.stderr));
     String::from_utf8_lossy(&o.stdout).to_string()
@@ -88,14 +97,8 @@ fn the_orbital_values_match_the_closed_forms_computed_with_libm() {
 
     let got_period = value(&out, "period (min)");
     let got_drift = value(&out, "nodal drift");
-    assert!(
-        (got_period - period_min).abs() < 1e-9,
-        "period: DeluluLang {got_period}, libm {period_min}"
-    );
-    assert!(
-        (got_drift - drift_deg_day).abs() < 1e-9,
-        "J2 nodal regression: DeluluLang {got_drift}, libm {drift_deg_day}"
-    );
+    assert!((got_period - period_min).abs() < 1e-9, "period: DeluluLang {got_period}, libm {period_min}");
+    assert!((got_drift - drift_deg_day).abs() < 1e-9, "J2 nodal regression: DeluluLang {got_drift}, libm {drift_deg_day}");
 
     // Sanity on the model itself, loosely — a LEO period is minutes, not hours, and a prograde
     // orbit's node regresses (westward). These would catch a units or sign error that agreed with
@@ -114,7 +117,10 @@ fn the_pass_geometry_is_self_consistent() {
     let mut samples: Vec<(i64, i64, i64)> = Vec::new();
     for line in out.lines().filter(|l| l.trim_start().starts_with("t=")) {
         let num = |p: &str, s: &str| -> i64 {
-            line.split(p).nth(1).and_then(|r| r.split(s).next()).and_then(|v| v.trim().parse().ok())
+            line.split(p)
+                .nth(1)
+                .and_then(|r| r.split(s).next())
+                .and_then(|v| v.trim().parse().ok())
                 .unwrap_or_else(|| panic!("cannot read `{p}` from `{line}`"))
         };
         samples.push((num("t=", "s"), num("elev=", "deg"), num("range=", "km")));
@@ -125,12 +131,7 @@ fn the_pass_geometry_is_self_consistent() {
     //    means; it is not something the program is told.
     let peak = samples.iter().max_by_key(|(_, e, _)| *e).expect("a peak");
     assert!(peak.1 > 80, "the scenario is a near-overhead pass; peak elevation {} deg", peak.1);
-    assert!(
-        (peak.2 - 420).abs() <= 2,
-        "at {} deg elevation the range must be the 420 km altitude, got {} km",
-        peak.1,
-        peak.2
-    );
+    assert!((peak.2 - 420).abs() <= 2, "at {} deg elevation the range must be the 420 km altitude, got {} km", peak.1, peak.2);
 
     // 2. A circular orbit over a station gives a SYMMETRIC pass. Compare the samples either side of
     //    the peak: an asymmetry means a folding error in the range reduction.
@@ -140,7 +141,10 @@ fn the_pass_geometry_is_self_consistent() {
         assert!(
             (before.1 - after.1).abs() <= 1,
             "pass must be symmetric about the zenith: t={} elev={} vs t={} elev={}",
-            before.0, before.1, after.0, after.1
+            before.0,
+            before.1,
+            after.0,
+            after.1
         );
     }
 
@@ -164,8 +168,21 @@ fn the_navigation_stack_holds_no_capabilities_at_all() {
     // Every orbital function must be listed as PURE. If one ever acquired an effect, the physics
     // would have started touching the world and this test is where that surfaces.
     for f in [
-        "sqrt", "sin", "cos", "asin", "mean_motion", "raan_rate", "sat_x", "sat_y", "sat_z",
-        "stn_x", "stn_y", "stn_z", "elevation_rad", "range_km", "period_s",
+        "sqrt",
+        "sin",
+        "cos",
+        "asin",
+        "mean_motion",
+        "raan_rate",
+        "sat_x",
+        "sat_y",
+        "sat_z",
+        "stn_x",
+        "stn_y",
+        "stn_z",
+        "elevation_rad",
+        "range_km",
+        "period_s",
     ] {
         assert!(text.contains(f), "`{f}` must appear among the pure fns:\n{text}");
     }

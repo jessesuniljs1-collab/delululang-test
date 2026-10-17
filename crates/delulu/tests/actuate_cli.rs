@@ -77,15 +77,7 @@ fn run_arm(tag: &str, decl: &str, lit: &str, grant: &str) -> Output {
     let dir = scratch(tag);
     let f = dir.join("arm.delulu");
     std::fs::write(&f, arm_program(decl, lit)).unwrap();
-    delulu(&[
-        "run",
-        &f.to_string_lossy(),
-        "--grant",
-        "console",
-        "--grant",
-        grant,
-        "--trace-effects",
-    ])
+    delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant", grant, "--trace-effects"])
 }
 
 /// The happy path, and the audit record that proves it happened. Both bounds are inclusive, so
@@ -93,22 +85,14 @@ fn run_arm(tag: &str, decl: &str, lit: &str, grant: &str) -> Output {
 /// device, because a trace that cannot say which actuator moved is not an audit.
 #[test]
 fn an_in_envelope_command_succeeds_and_traces_the_actuate() {
-    let o = run_arm(
-        "ok",
-        ELBOW_DECL,
-        "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }",
-        ARM_GRANT,
-    );
+    let o = run_arm("ok", ELBOW_DECL, "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }", ARM_GRANT);
     assert!(o.status.success(), "an in-envelope command runs: {o:?}");
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "COMMANDED");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("\"effect\":\"Actuate\""), "the effect is traced: {err}");
     assert!(err.contains("\"op\":\"command\""), "the op is traced: {err}");
     assert!(err.contains("arm0/elbow"), "the record names the device: {err}");
-    assert!(
-        !err.contains("command.refused"),
-        "nothing was refused, so nothing claims it was: {err}"
-    );
+    assert!(!err.contains("command.refused"), "nothing was refused, so nothing claims it was: {err}");
 }
 
 /// Out of range on a dimension the envelope DOES bound. The value is a `Result`, the process
@@ -117,16 +101,8 @@ fn an_in_envelope_command_succeeds_and_traces_the_actuate() {
 /// purpose: an attempt that was refused is still an attempt, and hiding it would hide intent.
 #[test]
 fn an_out_of_envelope_command_is_refused_as_a_value_and_traced_dl1904() {
-    let o = run_arm(
-        "range",
-        ELBOW_DECL,
-        "Elbow { angle_deg: 200.0, velocity_dps: 4.0 }",
-        ARM_GRANT,
-    );
-    assert!(
-        o.status.success(),
-        "the command dies, not the process — a refusal is never a fault: {o:?}"
-    );
+    let o = run_arm("range", ELBOW_DECL, "Elbow { angle_deg: 200.0, velocity_dps: 4.0 }", ARM_GRANT);
+    assert!(o.status.success(), "the command dies, not the process — a refusal is never a fault: {o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("REFUSED"), "the program saw an Envelope error: {out}");
     assert!(out.contains("200"), "the refusal names the offending value: {out}");
@@ -145,34 +121,21 @@ fn an_out_of_envelope_command_is_refused_as_a_value_and_traced_dl1904() {
 /// envelope grants everything it forgot to mention. Unbounded means REFUSED.
 #[test]
 fn a_dimension_the_envelope_never_bounded_is_refused_not_waved_through() {
-    let o = run_arm(
-        "unknown-dim",
-        "type Torque { torque_nm: Float }",
-        "Torque { torque_nm: 0.5 }",
-        ARM_GRANT,
-    );
+    let o = run_arm("unknown-dim", "type Torque { torque_nm: Float }", "Torque { torque_nm: 0.5 }", ARM_GRANT);
     assert!(o.status.success(), "still a value, still not a fault: {o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(
         out.contains("REFUSED") && out.contains("torque_nm"),
         "an unbounded dimension is refused BY NAME — 0.5 is inside no range at all: {out}"
     );
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("DL1904"),
-        "and the refusal is auditable like any other"
-    );
+    assert!(String::from_utf8_lossy(&o.stderr).contains("DL1904"), "and the refusal is auditable like any other");
 }
 
 /// A non-numeric field cannot be bounded by a numeric envelope, so it is refused rather than
 /// ignored. Same law, different shape: the envelope's answer to "I cannot tell" is always no.
 #[test]
 fn a_non_numeric_field_is_refused_because_no_range_can_bound_it() {
-    let o = run_arm(
-        "non-numeric",
-        "type Mode { angle_deg: Str }",
-        "Mode { angle_deg: \"fast\" }",
-        ARM_GRANT,
-    );
+    let o = run_arm("non-numeric", "type Mode { angle_deg: Str }", "Mode { angle_deg: \"fast\" }", ARM_GRANT);
     assert!(o.status.success());
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(
@@ -194,10 +157,7 @@ fn minting_a_device_the_grant_never_named_is_dl0703() {
         "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }",
         "actuator=arm1/gripper:width_mm=0..80,heartbeat_ms=60000,ttl_ms=60000,fail=hold",
     );
-    assert!(
-        !o.status.success(),
-        "an ungranted device is a fault at the mint, not a refusal at the command"
-    );
+    assert!(!o.status.success(), "an ungranted device is a fault at the mint, not a refusal at the command");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("DL0703"), "ungranted authority is DL0703: {err}");
     assert!(err.contains("arm0/elbow"), "the refusal names what was asked for: {err}");
@@ -209,18 +169,10 @@ fn minting_a_device_the_grant_never_named_is_dl0703() {
 fn an_actuate_program_with_no_actuator_grant_refuses_at_the_pre_flight() {
     let dir = scratch("no-grant");
     let f = dir.join("arm.delulu");
-    std::fs::write(
-        &f,
-        arm_program(ELBOW_DECL, "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }"),
-    )
-    .unwrap();
+    std::fs::write(&f, arm_program(ELBOW_DECL, "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }")).unwrap();
     let o = delulu(&["run", &f.to_string_lossy(), "--grant", "console"]);
     assert!(!o.status.success(), "no grant, no run");
-    assert_eq!(
-        String::from_utf8_lossy(&o.stdout).trim(),
-        "",
-        "the program never reached its first println"
-    );
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "", "the program never reached its first println");
 }
 
 /// Invariant 50: no fabricated measurements. The null adapter — what a run gets when it binds no
@@ -249,15 +201,7 @@ fn an_unbound_sensor_reads_no_device_never_a_fabricated_number() {
          }\n",
     )
     .unwrap();
-    let o = delulu(&[
-        "run",
-        &f.to_string_lossy(),
-        "--grant",
-        "console",
-        "--grant",
-        "sensor=arm0/angle",
-        "--trace-effects",
-    ]);
+    let o = delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant", "sensor=arm0/angle", "--trace-effects"]);
     assert!(o.status.success(), "an honest `no device` is not an error: {o:?}");
     assert_eq!(
         String::from_utf8_lossy(&o.stdout).trim(),
@@ -297,8 +241,7 @@ fn device_grant_strings_round_trip_between_the_runtime_and_broker_parsers() {
     for spec in specs {
         let rt = delulu_runtime::value::ActuatorEnvelope::parse(spec)
             .unwrap_or_else(|e| panic!("runtime parse of `{spec}` failed: {e}"));
-        let br = delulu_broker::device_scope::parse(spec)
-            .unwrap_or_else(|e| panic!("broker parse of `{spec}` failed: {e}"));
+        let br = delulu_broker::device_scope::parse(spec).unwrap_or_else(|e| panic!("broker parse of `{spec}` failed: {e}"));
 
         // The two parsers agree on every field they both carry.
         assert_eq!(rt.device, br.device, "device name: {spec}");
@@ -308,11 +251,7 @@ fn device_grant_strings_round_trip_between_the_runtime_and_broker_parsers() {
         assert_eq!(rt.fail_state.name(), br.fail, "fail-state: {spec}");
         assert_eq!(rt.dims.len(), br.dims.len(), "dimension count: {spec}");
         for (d, lo, hi) in &rt.dims {
-            assert_eq!(
-                br.dims.get(d),
-                Some(&(*lo, *hi)),
-                "dimension `{d}` disagrees between the parsers: {spec}"
-            );
+            assert_eq!(br.dims.get(d), Some(&(*lo, *hi)), "dimension `{d}` disagrees between the parsers: {spec}");
         }
         // And the broker's canonical rendering re-parses to the same thing on BOTH sides, so the
         // string that actually travels to the grant tree is a fixed point.
@@ -337,7 +276,11 @@ fn device_grant_strings_round_trip_between_the_runtime_and_broker_parsers() {
 /// is the same defect P10 found in the conformance coverage gate, in a different subsystem.
 const ENVELOPE_CORPUS: &[(&str, bool, &str)] = &[
     // ----- legal: the grammar's full span --------------------------------------------------------
-    ("arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold", true, "several dims, negative bound"),
+    (
+        "arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold",
+        true,
+        "several dims, negative bound",
+    ),
     ("arm0/wrist:torque_nm=0..2.5,rate_hz=50,heartbeat_ms=100,ttl_ms=1000,fail=coast", true, "fractional bound, rate"),
     ("sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=safe-park", true, "safe-park"),
     ("d0:x=0..0,heartbeat_ms=1,ttl_ms=1,fail=hold", true, "a single-point interval is a real interval"),
@@ -442,9 +385,9 @@ fn a_malformed_device_grant_string_refuses_rather_than_widening() {
     use delulu_broker::{Authority, Op, Scopes};
     // Every one of these is rejected by the broker parser; none may become "unbounded".
     let malformed = [
-        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000",   // no fail-state
-        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,fail=hold",      // no ttl
-        "arm0/elbow:heartbeat_ms=200,ttl_ms=60000,fail=hold",           // bounds nothing
+        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000", // no fail-state
+        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,fail=hold",    // no ttl
+        "arm0/elbow:heartbeat_ms=200,ttl_ms=60000,fail=hold",         // bounds nothing
         "arm0/elbow:angle_deg=NaN..95,heartbeat_ms=200,ttl_ms=1,fail=hold", // non-finite bound
         "arm0/elbow:angle_deg=95..-30,heartbeat_ms=200,ttl_ms=60000,fail=hold", // inverted
         "arm0/elbow:angle_deg=-30..95,heartbeat_ms=60000,ttl_ms=200,fail=hold", // ttl < heartbeat
@@ -470,10 +413,7 @@ fn a_malformed_device_grant_string_refuses_rather_than_widening() {
             )
             .expect("a non-strict broker issues a root");
         let d = b.check(&node, Op::Actuate, Some("arm0/elbow"));
-        assert!(
-            d.denial().is_some(),
-            "a dropped envelope must refuse the device, never leave it unbounded: {spec}"
-        );
+        assert!(d.denial().is_some(), "a dropped envelope must refuse the device, never leave it unbounded: {spec}");
         assert_eq!(d.denial().unwrap().code(), "DL0904");
     }
 }

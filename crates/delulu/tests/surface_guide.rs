@@ -39,10 +39,7 @@ fn the_guide_carries_the_spec_caveats_verbatim() {
 #[test]
 fn the_guide_states_the_no_semantics_invariant() {
     let guide = flat(&repo("docs/design/STAGE8_SURFACE_GUIDE.md"));
-    assert!(
-        guide.contains("Nothing here changes what programs mean"),
-        "the guide must lead with invariant 38"
-    );
+    assert!(guide.contains("Nothing here changes what programs mean"), "the guide must lead with invariant 38");
     // The welcome text is never reproduced in the guide (it is not a machine surface, but
     // the guide is a doc — the law lives in locale.rs, pinned there).
     assert!(!guide.contains("Delulu Gang"), "the guide does not reproduce the welcome text");

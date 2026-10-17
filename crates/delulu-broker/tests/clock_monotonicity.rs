@@ -54,10 +54,7 @@ fn moving_the_clock_backwards_cannot_resurrect_an_expired_grant() {
     let root = b.issue_root(Holder::new("test", "operator", "root"), empty_authority(), Some(5_000)).unwrap();
 
     // t = 1,000 — alive, before its deadline.
-    assert!(
-        matches!(b.effective_state(&root), Some(EffState::Live)),
-        "the grant is live before its deadline"
-    );
+    assert!(matches!(b.effective_state(&root), Some(EffState::Live)), "the grant is live before its deadline");
 
     // t = 9,000 — the deadline has passed.
     assert!(
@@ -91,12 +88,7 @@ fn expiry_still_works_normally_while_the_clock_moves_forward() {
         clock.set(t);
         let st = b.effective_state(&root).expect("node exists");
         let live = matches!(st, EffState::Live);
-        assert_eq!(
-            live,
-            t < 100,
-            "at t={t} the grant should be {}",
-            if t < 100 { "live" } else { "expired" }
-        );
+        assert_eq!(live, t < 100, "at t={t} the grant should be {}", if t < 100 { "live" } else { "expired" });
     }
 }
 

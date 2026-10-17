@@ -41,11 +41,8 @@ impl ScopeInfo {
 /// Compute the report as JSON. `program` is the module name; `scopes` comes from the manifest.
 pub fn authority_report(program: &str, result: &CheckResult, scopes: &ScopeInfo) -> Value {
     // Reachable functions from `main` (or all functions if there is no main — e.g. a library).
-    let reachable: BTreeSet<String> = if result.main_present {
-        reachable_from(result, "main")
-    } else {
-        result.facts.keys().cloned().collect()
-    };
+    let reachable: BTreeSet<String> =
+        if result.main_present { reachable_from(result, "main") } else { result.facts.keys().cloned().collect() };
 
     let mut effects: BTreeSet<Effect> = BTreeSet::new();
     let mut cap_kinds: BTreeSet<ResourceKind> = BTreeSet::new();
@@ -80,8 +77,7 @@ pub fn authority_report(program: &str, result: &CheckResult, scopes: &ScopeInfo)
         }));
     }
 
-    let mut pure_functions: Vec<String> =
-        result.facts.iter().filter(|(_, f)| f.pure).map(|(n, _)| n.clone()).collect();
+    let mut pure_functions: Vec<String> = result.facts.iter().filter(|(_, f)| f.pure).map(|(n, _)| n.clone()).collect();
     pure_functions.sort();
 
     // A stable, sorted effect list.

@@ -102,11 +102,8 @@ fn the_two_grant_lost_link_pattern_delegates_a_bounded_corridor_end_to_end() {
     let _guard = DaemonGuard { state: state.clone() };
 
     // ----- 1. the mission grant: a delegation that CARRIES an envelope ---------------------------
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &["grants", "delegate", "--effects", "Actuate,Write", "--device", MISSION, "--multi", "--json"],
-    );
+    let o =
+        delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Actuate,Write", "--device", MISSION, "--multi", "--json"]);
     assert!(o.status.success(), "mission delegate failed: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
     let mission_token = v["token"].as_str().expect("lease token").to_string();
@@ -122,11 +119,7 @@ fn the_two_grant_lost_link_pattern_delegates_a_bounded_corridor_end_to_end() {
     );
 
     // ----- 2. a run under that lease commands the machine, bounded by the delegation -------------
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &["run", "uav.delulu", "--lease", &mission_token, "--broker-profile", "sim", "--no-prompt"],
-    );
+    let o = delulu_in(&cwd, &state, &["run", "uav.delulu", "--lease", &mission_token, "--broker-profile", "sim", "--no-prompt"]);
     assert!(o.status.success(), "a refusal is a value; the run exits 0: {}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("small COMMANDED"), "3° is inside the ±25° mission corridor:\n{out}");
@@ -137,8 +130,16 @@ fn the_two_grant_lost_link_pattern_delegates_a_bounded_corridor_end_to_end() {
         &cwd,
         &state,
         &[
-            "grants", "delegate", "--parent", &mission_node, "--effects", "Actuate,Write",
-            "--device", LOSTLINK, "--multi", "--json",
+            "grants",
+            "delegate",
+            "--parent",
+            &mission_node,
+            "--effects",
+            "Actuate,Write",
+            "--device",
+            LOSTLINK,
+            "--multi",
+            "--json",
         ],
     );
     assert!(o.status.success(), "the narrower corridor must delegate: {}", stderr(&o));
@@ -147,39 +148,26 @@ fn the_two_grant_lost_link_pattern_delegates_a_bounded_corridor_end_to_end() {
 
     // Under the lost-link grant the SAME program keeps flying, but the large deflection is refused.
     // Nothing in the program changed; only the authority it holds did.
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &["run", "uav.delulu", "--lease", &lostlink_token, "--broker-profile", "sim", "--no-prompt"],
-    );
+    let o = delulu_in(&cwd, &state, &["run", "uav.delulu", "--lease", &lostlink_token, "--broker-profile", "sim", "--no-prompt"]);
     assert!(o.status.success(), "the aircraft keeps its control loop: {}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("small COMMANDED"), "3° is inside the ±5° return corridor:\n{out}");
-    assert!(
-        out.contains("large REFUSED"),
-        "20° is OUTSIDE the ±5° corridor and must be refused as a value:\n{out}"
-    );
+    assert!(out.contains("large REFUSED"), "20° is OUTSIDE the ±5° corridor and must be refused as a value:\n{out}");
 
     // ----- 4. anomaly response attenuates; it never widens ---------------------------------------
     // A child asking for MORE deflection than its parent holds is DL0802 at delegation time, so a
     // widened corridor cannot be minted at all — never mind used.
     let wider = "uav0/rudder:deflect_deg=-90..90,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &["grants", "delegate", "--parent", &mission_node, "--effects", "Actuate", "--device", wider],
-    );
+    let o =
+        delulu_in(&cwd, &state, &["grants", "delegate", "--parent", &mission_node, "--effects", "Actuate", "--device", wider]);
     assert!(!o.status.success(), "a wider corridor must not delegate:\n{}", stdout(&o));
     let err = stderr(&o);
     assert!(err.contains("DL0802"), "widening is the attenuation failure, by code:\n{err}");
 
     // A device the parent never granted at all is equally refused — not silently dropped.
     let other = "uav0/elevator:deflect_deg=-5..5,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &["grants", "delegate", "--parent", &mission_node, "--effects", "Actuate", "--device", other],
-    );
+    let o =
+        delulu_in(&cwd, &state, &["grants", "delegate", "--parent", &mission_node, "--effects", "Actuate", "--device", other]);
     assert!(!o.status.success(), "a device the parent never held must not delegate:\n{}", stdout(&o));
     assert!(stderr(&o).contains("DL0802"), "…and it fails the same way: {}", stderr(&o));
 
@@ -188,16 +176,20 @@ fn the_two_grant_lost_link_pattern_delegates_a_bounded_corridor_end_to_end() {
         &cwd,
         &state,
         &[
-            "run", "uav.delulu", "--lease", &lostlink_token, "--grant",
-            &format!("actuator={wider}"), "--broker-profile", "sim", "--no-prompt",
+            "run",
+            "uav.delulu",
+            "--lease",
+            &lostlink_token,
+            "--grant",
+            &format!("actuator={wider}"),
+            "--broker-profile",
+            "sim",
+            "--no-prompt",
         ],
     );
     assert_eq!(o.status.code(), Some(2), "a local envelope under a lease is a usage error");
     let err = stderr(&o);
-    assert!(
-        err.contains("comes FROM the delegation"),
-        "the refusal says WHY, and points at `grants delegate --device`:\n{err}"
-    );
+    assert!(err.contains("comes FROM the delegation"), "the refusal says WHY, and points at `grants delegate --device`:\n{err}");
 }
 
 /// A malformed `--device` must be reported at the prompt with the parser's own message, never

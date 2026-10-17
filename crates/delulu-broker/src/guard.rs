@@ -157,14 +157,8 @@ fn class_use_effect(class: GuardClass) -> Option<Effect> {
 /// is `Some`). [`GuardPolicy::tier_for_subset`] iterates these to resolve an `effect:E` request back
 /// to the axis rules its covered uses would hit. Kept beside `class_use_effect` so the two cannot
 /// drift; a missing entry only ever UNDER-seals, which a falsification test guards against.
-const EFFECT_BEARING_CLASSES: [GuardClass; 6] = [
-    GuardClass::FsRead,
-    GuardClass::FsWrite,
-    GuardClass::Net,
-    GuardClass::Declassify,
-    GuardClass::ForeignC,
-    GuardClass::Device,
-];
+const EFFECT_BEARING_CLASSES: [GuardClass; 6] =
+    [GuardClass::FsRead, GuardClass::FsWrite, GuardClass::Net, GuardClass::Declassify, GuardClass::ForeignC, GuardClass::Device];
 
 /// Whether an `effect:<pattern>` rule or request denotes any real effect at use time: `*` (all
 /// effects) or an exact effect name. A pattern that names no effect — a typo like `Declasify`, or a
@@ -245,7 +239,8 @@ pub fn dead_pattern_reason(class: GuardClass, pattern: &str) -> Option<String> {
     if class == GuardClass::Declassify {
         let pair_ok = |p: &str| {
             p.split_once('@').is_some_and(|(name, origin)| {
-                !name.is_empty() && origin.rsplit_once(':').is_some_and(|(host, port)| !host.is_empty() && port.parse::<u16>().is_ok())
+                !name.is_empty()
+                    && origin.rsplit_once(':').is_some_and(|(host, port)| !host.is_empty() && port.parse::<u16>().is_ok())
             })
         };
         if pattern.contains('*') || (pattern.contains('@') && !pair_ok(pattern)) {
@@ -404,9 +399,9 @@ impl GuardPolicy {
     /// ADDED never loosens: every gate takes the strongest tier of the rules that match it. A rule removed or lowered may
     /// leave another to hold the same gate; it still counts, which can only undo an edit that was harmless.
     pub fn loosened_by(&self, after: &GuardPolicy) -> bool {
-        self.rules.iter().any(|r| {
-            after.rules.iter().find(|a| a.class == r.class && a.pattern == r.pattern).is_none_or(|a| a.tier < r.tier)
-        })
+        self.rules
+            .iter()
+            .any(|r| after.rules.iter().find(|a| a.class == r.class && a.pattern == r.pattern).is_none_or(|a| a.tier < r.tier))
     }
 
     /// Remove the rule for `class:pattern`. Returns whether one was removed.
@@ -761,9 +756,13 @@ pub enum GuardVerdict {
     /// Allowed via a matching permit → action `guard_permit_use`.
     PermitUse,
     /// Allowed under bypass → action `guard_bypassed_use`, agent-side warn note.
-    BypassedUse { note: String },
+    BypassedUse {
+        note: String,
+    },
     /// `warn` tier → action `guard_warn`, agent-side warn note.
-    Warn { note: String },
+    Warn {
+        note: String,
+    },
     /// Refused (guarded no-permit / pending / denied / sealed) → action `guard_block`.
     Block(Denial),
 }
@@ -843,9 +842,9 @@ impl Broker {
             return GuardVerdict::Ungated;
         };
         match tier {
-            GuardTier::Warn => GuardVerdict::Warn {
-                note: format!("guard warn: `{rule}` used by delegated node `{node}` (audited)"),
-            },
+            GuardTier::Warn => {
+                GuardVerdict::Warn { note: format!("guard warn: `{rule}` used by delegated node `{node}` (audited)") }
+            }
             GuardTier::Sealed => GuardVerdict::Block(Denial::GuardSealed { node: node.clone(), rule }),
             GuardTier::Guarded => {
                 // Bypass lifts guarded to audited-and-warned; it NEVER lifts sealed (checked above).
@@ -863,12 +862,7 @@ impl Broker {
                 }
                 self.guard_gc();
                 // A matching permit honors the use (and decrements a bounded use count).
-                if let Some(idx) = self
-                    .guard
-                    .permits
-                    .iter()
-                    .position(|p| p.node == *node && p.subset.covers_use(op, arg))
-                {
+                if let Some(idx) = self.guard.permits.iter().position(|p| p.node == *node && p.subset.covers_use(op, arg)) {
                     if let Some(rem) = self.guard.permits[idx].remaining_uses.as_mut() {
                         *rem = rem.saturating_sub(1);
                     }
@@ -886,23 +880,16 @@ impl Broker {
                 // DL1411 with the new id, and once the new request's single-use permit was spent the
                 // old denial resurfaced instead of DL1410. Fail-closed either way, but the holder and
                 // the principal were told the wrong thing about the principal's own latest decision.
-                if let Some(req) =
-                    self.guard.requests.iter().rev().find(|r| r.node == *node && r.subset.covers_use(op, arg))
-                {
+                if let Some(req) = self.guard.requests.iter().rev().find(|r| r.node == *node && r.subset.covers_use(op, arg)) {
                     return match &req.status {
-                        ReqStatus::Pending => GuardVerdict::Block(Denial::GuardPending {
-                            node: node.clone(),
-                            request_id: req.id.clone(),
-                        }),
-                        ReqStatus::Denied { comment } => GuardVerdict::Block(Denial::GuardDenied {
-                            node: node.clone(),
-                            comment: comment.clone(),
-                        }),
+                        ReqStatus::Pending => {
+                            GuardVerdict::Block(Denial::GuardPending { node: node.clone(), request_id: req.id.clone() })
+                        }
+                        ReqStatus::Denied { comment } => {
+                            GuardVerdict::Block(Denial::GuardDenied { node: node.clone(), comment: comment.clone() })
+                        }
                         // An approved-but-consumed request falls through to a fresh DL1410.
-                        ReqStatus::Approved => GuardVerdict::Block(Denial::GuardBlocked {
-                            node: node.clone(),
-                            rule,
-                        }),
+                        ReqStatus::Approved => GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule }),
                     };
                 }
                 GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule })
@@ -916,12 +903,7 @@ impl Broker {
     /// authority (a parent's own USE permit does not cover minting; the mint needs its own approval).
     /// Records one `guard_block` on refusal (consuming a seq); records nothing on pass (`delegate`
     /// records its own event).
-    pub fn guard_check_mint(
-        &mut self,
-        child_authority: &Authority,
-        parent: &GrantId,
-        owner: Option<&str>,
-    ) -> Result<(), Denial> {
+    pub fn guard_check_mint(&mut self, child_authority: &Authority, parent: &GrantId, owner: Option<&str>) -> Result<(), Denial> {
         let Some((tier, rule)) = self.guard.policy.tier_for_mint(child_authority) else {
             return Ok(()); // nothing guarded in the child spec
         };
@@ -941,11 +923,7 @@ impl Broker {
         // A poisoned store extends no trust (criterion 10) — skip permits, refuse.
         if !self.guard.poisoned {
             self.guard_gc();
-            let covered = self
-                .guard
-                .permits
-                .iter()
-                .any(|p| p.node == *parent && mint_within_subset(&p.subset, child_authority));
+            let covered = self.guard.permits.iter().any(|p| p.node == *parent && mint_within_subset(&p.subset, child_authority));
             if covered {
                 return Ok(());
             }
@@ -978,25 +956,12 @@ impl Broker {
         self.guard.policy.set(class, pattern, tier);
         self.bump_epoch();
         let seq = self.consume_seq();
-        self.record_op(
-            seq,
-            "guard_policy_edit",
-            None,
-            Some(format!("set {label} {}", tier.wire_name())),
-            None,
-            "allow",
-            None,
-        );
+        self.record_op(seq, "guard_policy_edit", None, Some(format!("set {label} {}", tier.wire_name())), None, "allow", None);
         Ok(())
     }
 
     /// `guard policy unset class:pattern` (owner-gated). Bumps the epoch and records the edit.
-    pub fn guard_policy_unset(
-        &mut self,
-        owner: Option<&str>,
-        class: GuardClass,
-        pattern: &str,
-    ) -> Result<bool, Denial> {
+    pub fn guard_policy_unset(&mut self, owner: Option<&str>, class: GuardClass, pattern: &str) -> Result<bool, Denial> {
         if !self.guard.owner_ok(owner) {
             return Err(Denial::GuardOwner { detail: "policy unset".into() });
         }
@@ -1071,12 +1036,7 @@ impl Broker {
     /// explaining itself is free). Records `guard_request` (with the `why`). A repeat request for the
     /// same (node, subset) that is still pending returns the existing id (dedup). Returns `(id,
     /// deduped)`.
-    pub fn guard_request(
-        &mut self,
-        node: &GrantId,
-        subset: GuardSubset,
-        why: String,
-    ) -> Result<(String, bool), Denial> {
+    pub fn guard_request(&mut self, node: &GrantId, subset: GuardSubset, why: String) -> Result<(String, bool), Denial> {
         // A sealed subset is not runtime-approvable (addendum §2.6): refuse the request the same way
         // use-time (DL1413) and mint-time do, BEFORE queueing it. Checked ahead of dedup so a seal set
         // AFTER a first request still refuses retries. This is fail-fast; `guard_approve` re-checks —
@@ -1086,11 +1046,8 @@ impl Broker {
             return Err(Denial::GuardSealed { node: node.clone(), rule });
         }
         self.guard_gc();
-        if let Some(r) = self
-            .guard
-            .requests
-            .iter()
-            .find(|r| r.node == *node && r.subset == subset && r.status == ReqStatus::Pending)
+        if let Some(r) =
+            self.guard.requests.iter().find(|r| r.node == *node && r.subset == subset && r.status == ReqStatus::Pending)
         {
             return Ok((r.id.clone(), true));
         }
@@ -1145,9 +1102,7 @@ impl Broker {
             return Err(Denial::GuardOwner { detail: "approve".into() });
         }
         self.guard_gc();
-        let Some(pos) =
-            self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending)
-        else {
+        let Some(pos) = self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending) else {
             return Ok(None);
         };
         let subset = self.guard.requests[pos].subset.clone();
@@ -1193,23 +1148,13 @@ impl Broker {
             return Err(Denial::GuardOwner { detail: "deny".into() });
         }
         self.guard_gc();
-        let Some(pos) =
-            self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending)
-        else {
+        let Some(pos) = self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending) else {
             return Ok(false);
         };
         let node = self.guard.requests[pos].node.clone();
         self.guard.requests[pos].status = ReqStatus::Denied { comment: comment.clone() };
         let seq = self.consume_seq();
-        self.record_op(
-            seq,
-            "guard_deny",
-            Some(node.as_str().to_string()),
-            Some(comment),
-            None,
-            "deny",
-            None,
-        );
+        self.record_op(seq, "guard_deny", Some(node.as_str().to_string()), Some(comment), None, "deny", None);
         Ok(true)
     }
 
@@ -1243,9 +1188,8 @@ fn mint_within_subset(subset: &GuardSubset, auth: &Authority) -> bool {
     // Every dimension item that the mint requests must be covered by some subset entry of the same
     // class (or an `effect`-class entry for effects). Only guarded-eligible items need coverage, but
     // requiring coverage of ALL requested items is the conservative (never-widening) choice.
-    let covered_in = |class: GuardClass, item: &str| {
-        subset.0.iter().any(|(c, p)| *c == class && pattern_matches(class, p, Some(item)))
-    };
+    let covered_in =
+        |class: GuardClass, item: &str| subset.0.iter().any(|(c, p)| *c == class && pattern_matches(class, p, Some(item)));
     let s = &auth.scopes;
     let dims: [(GuardClass, &BTreeSet<String>); 7] = [
         (GuardClass::FsRead, &s.fs_read),
@@ -1309,7 +1253,9 @@ mod tests {
         let back = GuardPolicy::from_json(&v).unwrap();
         assert_eq!(back, p);
         // A structurally broken store fails to parse (→ poisoned at the daemon).
-        assert!(GuardPolicy::from_json(&json!({ "rules": [ { "class": "bogus", "pattern": "*", "tier": "guarded" } ] })).is_none());
+        assert!(
+            GuardPolicy::from_json(&json!({ "rules": [ { "class": "bogus", "pattern": "*", "tier": "guarded" } ] })).is_none()
+        );
     }
 
     #[test]
@@ -1334,7 +1280,12 @@ mod tests {
             None,
         );
         let child = b
-            .attenuate(&root, Authority::new(eff(&["Declassify"]), Scopes { declassify: names(&["API_KEY"]), ..Default::default() }), holder(), None)
+            .attenuate(
+                &root,
+                Authority::new(eff(&["Declassify"]), Scopes { declassify: names(&["API_KEY"]), ..Default::default() }),
+                holder(),
+                None,
+            )
             .unwrap();
         match b.guard_verdict_use(&child, Op::Declassify, Some("API_KEY")) {
             GuardVerdict::Block(d) => {
@@ -1352,9 +1303,18 @@ mod tests {
         // Criterion 6 (unit form): sealed refuses even under bypass.
         let mut b = broker().with_bypass(true);
         b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Sealed).unwrap();
-        let root = b.issue(holder(), Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), None);
+        let root = b.issue(
+            holder(),
+            Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+            None,
+        );
         let child = b
-            .attenuate(&root, Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), holder(), None)
+            .attenuate(
+                &root,
+                Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+                holder(),
+                None,
+            )
             .unwrap();
         match b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")) {
             GuardVerdict::Block(d) => assert_eq!(d.code(), "DL1413"),
@@ -1374,16 +1334,17 @@ mod tests {
         // could not fail to compile when RFC 0001 F1 added the 8th dimension, and `use_axis_class`
         // ended in `_ => None`, so `Op::Actuate` was born ungated on its own axis and nothing said so.
         let mut b = broker();
-        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed)
-            .unwrap();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed).unwrap();
 
         let scopes = || Scopes {
-            device: ["sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park",
-                "sat0/led:brightness=0..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park"]
-                .iter()
-                .map(|g| crate::device_scope::parse(g).expect("device grant parses"))
-                .map(|d| (d.device.clone(), d))
-                .collect(),
+            device: [
+                "sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park",
+                "sat0/led:brightness=0..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park",
+            ]
+            .iter()
+            .map(|g| crate::device_scope::parse(g).expect("device grant parses"))
+            .map(|d| (d.device.clone(), d))
+            .collect(),
             ..Default::default()
         };
         let root = b.issue(holder(), Authority::new(eff(&["Actuate"]), scopes()), None);
@@ -1406,17 +1367,25 @@ mod tests {
         // The mint half: a child requesting a sealed device cannot be minted without the owner code,
         // exactly as for every other dimension. Before C31 this mint was invisible to the guard.
         let mut b = broker();
-        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed)
-            .unwrap();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed).unwrap();
         let dev = |g: &str| {
             let d = crate::device_scope::parse(g).expect("device grant parses");
             Scopes { device: [(d.device.clone(), d)].into_iter().collect(), ..Default::default() }
         };
-        let root = b.issue(holder(), Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park")), None);
-        let child_auth = Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-1..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park"));
+        let root = b.issue(
+            holder(),
+            Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park")),
+            None,
+        );
+        let child_auth =
+            Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-1..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park"));
         let d = b.guard_check_mint(&child_auth, &root, None).unwrap_err();
         assert_eq!(d.code(), "DL1413", "minting a sealed device must be refused");
-        assert!(d.to_diagnostic().message.contains("device:sat0/thruster"), "the rule must be named: {}", d.to_diagnostic().message);
+        assert!(
+            d.to_diagnostic().message.contains("device:sat0/thruster"),
+            "the rule must be named: {}",
+            d.to_diagnostic().message
+        );
     }
 
     #[test]
@@ -1469,12 +1438,13 @@ mod tests {
         let (_root, child) = declassify_root_and_child(&mut b);
 
         // Blocked first (no permit).
-        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::Block(d) if d.code() == "DL1410"));
+        assert!(
+            matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::Block(d) if d.code() == "DL1410")
+        );
 
         // Request (with why) → pending; a retried use is DL1411 carrying the request id.
         let subset = GuardSubset::parse(&["declassify:foo".to_string()]).unwrap();
-        let (id, deduped) =
-            b.guard_request(&child, subset.clone(), "need the api key to call home".into()).unwrap();
+        let (id, deduped) = b.guard_request(&child, subset.clone(), "need the api key to call home".into()).unwrap();
         assert!(!deduped);
         match b.guard_verdict_use(&child, Op::Declassify, Some("foo")) {
             GuardVerdict::Block(d) => {
@@ -1493,14 +1463,17 @@ mod tests {
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
 
         // Criterion 5: a SECOND request (bar) → deny (comment required) → DL1412 carrying the comment.
-        let (id3, _) = b
-            .guard_request(&child, GuardSubset::parse(&["declassify:bar".to_string()]).unwrap(), "and bar too".into())
-            .unwrap();
+        let (id3, _) =
+            b.guard_request(&child, GuardSubset::parse(&["declassify:bar".to_string()]).unwrap(), "and bar too".into()).unwrap();
         assert!(b.guard_deny(Some("gow1_testowner"), &id3, "no — bar is out of bounds".into()).unwrap());
         match b.guard_verdict_use(&child, Op::Declassify, Some("bar")) {
             GuardVerdict::Block(d) => {
                 assert_eq!(d.code(), "DL1412");
-                assert!(d.to_diagnostic().message.contains("no — bar is out of bounds"), "DL1412 carries the comment verbatim: {}", d.to_diagnostic().message);
+                assert!(
+                    d.to_diagnostic().message.contains("no — bar is out of bounds"),
+                    "DL1412 carries the comment verbatim: {}",
+                    d.to_diagnostic().message
+                );
             }
             _ => panic!("a denied request must yield DL1412"),
         }
@@ -1537,14 +1510,15 @@ mod tests {
     fn a_permit_covers_only_its_own_subset() {
         let mut b = broker();
         let (_root, child) = declassify_root_and_child(&mut b);
-        let (id, _) = b
-            .guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "foo only".into())
-            .unwrap();
+        let (id, _) =
+            b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "foo only".into()).unwrap();
         b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         // foo is covered…
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
         // …bar is NOT (the permit for foo does not widen to bar) → a fresh DL1410.
-        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("bar")), GuardVerdict::Block(d) if d.code() == "DL1410"));
+        assert!(
+            matches!(b.guard_verdict_use(&child, Op::Declassify, Some("bar")), GuardVerdict::Block(d) if d.code() == "DL1410")
+        );
     }
 
     /// Criterion 6 (unit): a `sealed` rule refuses DL1413 even with a pre-existing approved permit —
@@ -1560,19 +1534,36 @@ mod tests {
         let mut b = broker();
         // Start GUARDED so a permit can be minted through the normal request/approve flow…
         b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Guarded).unwrap();
-        let root = b.issue(holder(), Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), None);
-        b.guard_check_mint(&Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), &root, Some("gow1_testowner")).unwrap();
-        let child = b.attenuate(&root, Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), holder(), None).unwrap();
-        let (id, _) = b
-            .guard_request(&child, GuardSubset::parse(&["fs_write:*".to_string()]).unwrap(), "want it".into())
+        let root = b.issue(
+            holder(),
+            Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+            None,
+        );
+        b.guard_check_mint(
+            &Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+            &root,
+            Some("gow1_testowner"),
+        )
+        .unwrap();
+        let child = b
+            .attenuate(
+                &root,
+                Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+                holder(),
+                None,
+            )
             .unwrap();
+        let (id, _) =
+            b.guard_request(&child, GuardSubset::parse(&["fs_write:*".to_string()]).unwrap(), "want it".into()).unwrap();
         b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         // …the permit works while guarded…
         assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::PermitUse));
         // …now SEAL the class. The pre-existing permit becomes inert: use-time refuses DL1413 before
         // any permit is consulted, so the seal is airtight even against an approval that predates it.
         b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Sealed).unwrap();
-        assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Block(d) if d.code() == "DL1413"));
+        assert!(
+            matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Block(d) if d.code() == "DL1413")
+        );
     }
 
     // F-CUSTODY-1: a sealed subset is NOT runtime-approvable. Split into focused cases so that
@@ -1660,15 +1651,27 @@ mod tests {
             ((st >> 33) as usize) % n
         };
         let classes = [
-            GuardClass::Declassify, GuardClass::FsWrite, GuardClass::Net,
-            GuardClass::ForeignC, GuardClass::Device, GuardClass::Effect,
+            GuardClass::Declassify,
+            GuardClass::FsWrite,
+            GuardClass::Net,
+            GuardClass::ForeignC,
+            GuardClass::Device,
+            GuardClass::Effect,
         ];
         // Include real effect names as patterns so the effect cross-cut actually fires, plus tokens.
         let pats = ["*", "Declassify", "Write", "Net", "Actuate", "a", "b"];
         let tiers = [GuardTier::Warn, GuardTier::Guarded, GuardTier::Sealed];
         let ops = [
-            Op::Declassify, Op::FsWrite, Op::Net, Op::ForeignBind, Op::Actuate,
-            Op::FsRead, Op::Clock, Op::Rand, Op::Console, Op::PluginLoad,
+            Op::Declassify,
+            Op::FsWrite,
+            Op::Net,
+            Op::ForeignBind,
+            Op::Actuate,
+            Op::FsRead,
+            Op::Clock,
+            Op::Rand,
+            Op::Console,
+            Op::PluginLoad,
         ];
         // The arg universe: every non-`*` pattern present, plus a fresh token that only `*`-rules
         // match, plus `None` (arg-less ops). Sealing depends only on WHICH rules match, so this finite
@@ -1686,22 +1689,22 @@ mod tests {
             for _ in 0..(1 + next(4)) {
                 policy.set(classes[next(classes.len())], pats[next(pats.len())].to_string(), tiers[next(tiers.len())]);
             }
-            let items: Vec<(GuardClass, String)> = (0..(1 + next(3)))
-                .map(|_| (classes[next(classes.len())], pats[next(pats.len())].to_string()))
-                .collect();
+            let items: Vec<(GuardClass, String)> =
+                (0..(1 + next(3))).map(|_| (classes[next(classes.len())], pats[next(pats.len())].to_string())).collect();
             let subset = GuardSubset(items);
 
             let closed_sealed = matches!(policy.tier_for_subset(&subset), Some((GuardTier::Sealed, _)));
             let oracle_sealed = ops.iter().any(|&op| {
                 args.iter().any(|&arg| {
-                    subset.covers_use(op, arg)
-                        && matches!(policy.tier_for_use(op, arg), Some((GuardTier::Sealed, _)))
+                    subset.covers_use(op, arg) && matches!(policy.tier_for_use(op, arg), Some((GuardTier::Sealed, _)))
                 })
             });
             assert_eq!(
-                closed_sealed, oracle_sealed,
+                closed_sealed,
+                oracle_sealed,
                 "tier_for_subset disagreed with the use-time oracle:\n  rules={:?}\n  subset={:?}",
-                policy.rules(), subset.labels()
+                policy.rules(),
+                subset.labels()
             );
         }
     }
@@ -1712,9 +1715,8 @@ mod tests {
     fn permits_are_session_scoped_and_revocable() {
         let mut b = broker();
         let (_root, child) = declassify_root_and_child(&mut b);
-        let (id, _) = b
-            .guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "why".into())
-            .unwrap();
+        let (id, _) =
+            b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "why".into()).unwrap();
         let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
         // Revoke (owner-gated) → the use is blocked again.
@@ -1732,13 +1734,27 @@ mod tests {
         let mut b = broker().with_guard_policy(GuardPolicy::default_policy(), true);
         let root = b.issue(
             holder(),
-            Authority::new(eff(&["Declassify", "Write"]), Scopes { declassify: names(&["K"]), fs_write: names(&["./out"]), ..Default::default() }),
+            Authority::new(
+                eff(&["Declassify", "Write"]),
+                Scopes { declassify: names(&["K"]), fs_write: names(&["./out"]), ..Default::default() },
+            ),
             None,
         );
         let child = b
-            .attenuate(&root, Authority::new(eff(&["Declassify", "Write"]), Scopes { declassify: names(&["K"]), fs_write: names(&["./out"]), ..Default::default() }), holder(), None)
+            .attenuate(
+                &root,
+                Authority::new(
+                    eff(&["Declassify", "Write"]),
+                    Scopes { declassify: names(&["K"]), fs_write: names(&["./out"]), ..Default::default() },
+                ),
+                holder(),
+                None,
+            )
             .unwrap();
-        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("K")), GuardVerdict::Block(_)), "guarded refuses when poisoned");
+        assert!(
+            matches!(b.guard_verdict_use(&child, Op::Declassify, Some("K")), GuardVerdict::Block(_)),
+            "guarded refuses when poisoned"
+        );
         assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Ungated), "ungated unaffected");
         assert!(b.guard_poisoned());
     }
@@ -1777,7 +1793,12 @@ mod tests {
     #[test]
     fn a_path_seal_matches_the_same_path_however_it_is_spelled() {
         let win = "C:\\Users\\j\\out\\secret.txt";
-        for spelling in ["C:/Users/j/out/secret.txt", "C:\\Users\\j\\out\\secret.txt", "C:/Users/j/./out/secret.txt", "C:/Users/j/tmp/../out/secret.txt"] {
+        for spelling in [
+            "C:/Users/j/out/secret.txt",
+            "C:\\Users\\j\\out\\secret.txt",
+            "C:/Users/j/./out/secret.txt",
+            "C:/Users/j/tmp/../out/secret.txt",
+        ] {
             assert!(
                 pattern_matches(GuardClass::FsWrite, spelling, Some(win)),
                 "`{spelling}` and `{win}` are the same file, so one seal must cover both"

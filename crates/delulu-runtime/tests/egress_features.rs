@@ -13,14 +13,8 @@
 use std::collections::BTreeSet;
 
 /// Enabled for a reason recorded in D-V2-30, plus what those two imply inside reqwest.
-const ALLOWED: &[&str] = &[
-    "blocking",
-    "rustls-tls-native-roots",
-    "rustls-tls-native-roots-no-provider",
-    "__rustls",
-    "__rustls-ring",
-    "__tls",
-];
+const ALLOWED: &[&str] =
+    &["blocking", "rustls-tls-native-roots", "rustls-tls-native-roots-no-provider", "__rustls", "__rustls-ring", "__tls"];
 
 /// Refused, each for a reason recorded beside the dependency. `default` is here because it carries
 /// `default-tls` (OpenSSL/native-tls), `charset`, `http2` and `system-proxy` all at once.
@@ -101,10 +95,7 @@ fn no_refused_reqwest_feature_is_enabled_anywhere_in_the_resolved_graph() {
 #[test]
 fn the_manifest_names_exactly_the_features_the_ruling_allows() {
     let text = std::fs::read_to_string(repo().join("crates/delulu-runtime/Cargo.toml")).unwrap();
-    let line = text
-        .lines()
-        .find(|l| l.trim_start().starts_with("reqwest ="))
-        .expect("the reqwest dependency line");
+    let line = text.lines().find(|l| l.trim_start().starts_with("reqwest =")).expect("the reqwest dependency line");
     assert!(line.contains("default-features = false"), "{line}");
     assert!(line.contains("features = [\"blocking\", \"rustls-tls-native-roots\"]"), "{line}");
     for f in REFUSED {

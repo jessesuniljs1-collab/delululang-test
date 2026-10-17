@@ -81,9 +81,7 @@ impl Budget {
                 "mem" => b.memory_bytes = n,
                 "cpu" => b.cpu_seconds = n,
                 "wall" => b.wall_seconds = Some(n),
-                other => {
-                    return Err(format!("`--limits {other}=…` is not a limit this command knows (mem, cpu, wall)"))
-                }
+                other => return Err(format!("`--limits {other}=…` is not a limit this command knows (mem, cpu, wall)")),
             }
         }
         Ok(b)
@@ -98,9 +96,8 @@ impl Budget {
     /// own control, `budget_scope.rs`), so `--limits wall=` keeps its ordinary meaning.
     pub fn under_delegation(spec: Option<&str>, ceiling: &delulu_broker::BudgetScope) -> Result<Budget, String> {
         let asked = Budget::parse(spec)?;
-        let named = |key: &str| {
-            spec.is_some_and(|s| s.split(',').any(|p| p.split_once('=').is_some_and(|(k, _)| k.trim() == key)))
-        };
+        let named =
+            |key: &str| spec.is_some_and(|s| s.split(',').any(|p| p.split_once('=').is_some_and(|(k, _)| k.trim() == key)));
         let pick = |key: &str, asked: u64, ceiling: u64, unit: &dyn Fn(u64) -> String| -> Result<u64, String> {
             if !named(key) {
                 return Ok(ceiling);

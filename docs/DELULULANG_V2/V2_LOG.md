@@ -6072,3 +6072,28 @@ produced the notices for four targets (Windows 257 linked packages / 150 texts; 
 files, both new files in the archive. `distribution.rs` 10 passed; its new assertion witnessed red against the old
 script. The three workflows parse. The release dry run on the runners: read in the next commit. Gates: in the commit
 message.
+
+## 2026-10-17 — rustfmt adopted (D-V2-145)
+
+**What.** `rustfmt.toml` (`max_width = 130`, `use_small_heuristics = "Max"`), `cargo fmt --all` over the workspace (283
+files), `cargo fmt --all -- --check` in CI's `lints` job, `CONTRIBUTING.md` §6, RW 7.9 closed. Measured before choosing:
+the default style disagreed with the tree 7,065 times; the chosen two options, 2,371.
+
+**Checked.** Over the whole diff, the comment lines removed and added carry the same text — rustfmt does not wrap
+comments — except three that differed only by a UTF-8 byte-order mark rustfmt removed. Two of those showed
+double-encoded characters on BOTH sides (`â€”` for `—`, `Â§` for `§` — `actors_promise.rs`, `actors_trace.rs`, from long
+ago): corrected here, 14 characters. The core-invariance snapshot pins what the compiler says about the shipped
+programs, not the Rust text, so it cannot move with formatting — and the suite says it did not.
+
+**What the reformat found.** The first suite after it: 2,241 passed, 2 failed — both gates that read Rust layout.
+`json_contract`'s sweep searched for `vec!["device"`, which rustfmt had broken across lines (now matched with whitespace
+removed). `cli_contract`'s prefix gate read `eprintln!("…` on one line only, so every message long enough to wrap had
+always escaped it; rustfmt joined one, and the gate — taught to read the next line — found **three error lines with no
+`error:` prefix** (`unknown command` twice, the `refused` closing line of `check`), now prefixed. A formatter run is a
+cheap way to learn which gates read layout. Gates: in the commit message.
+
+**Also read.** `bfb5a84`'s push run `39036694401` and `6e0637e`'s `39037513753` — success on every job. The release dry
+run on `6e0637e` (`39037514962`, by hand) — success on all four targets through the new reusable `release-build.yml`;
+each runner generated the notices and the SBOM (Windows 257 linked packages / 248 components, Linux x86-64 257 / 248,
+macOS arm64 253 / 244, Linux arm64 245 components) and passed the install gate. D-V2-143's machinery works on every
+release target.

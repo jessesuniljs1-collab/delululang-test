@@ -80,8 +80,17 @@ fn doctor_has_a_sandbox_section_that_agrees_with_the_probe() {
     let sandbox: Vec<&serde_json::Value> = checks.iter().filter(|c| c["section"] == "sandbox").collect();
     let names: Vec<&str> = sandbox.iter().filter_map(|c| c["name"].as_str()).collect();
     for want in [
-        "backend", "level available", "KVM", "OS primitives", "network enforcement", "filesystem enforcement",
-        "identity separation", "resource controls", "profile", "break-glass", "relaxed restrictions",
+        "backend",
+        "level available",
+        "KVM",
+        "OS primitives",
+        "network enforcement",
+        "filesystem enforcement",
+        "identity separation",
+        "resource controls",
+        "profile",
+        "break-glass",
+        "relaxed restrictions",
     ] {
         assert!(names.contains(&want), "the sandbox section names `{want}`: {names:?}");
     }

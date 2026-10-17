@@ -126,9 +126,7 @@ impl SecretStore {
         let mut n = self.next_derived.borrow_mut();
         let name = format!("s_derived_{:08x}", *n);
         *n += 1;
-        self.derived
-            .borrow_mut()
-            .insert(name.clone(), DerivedSecret { value: value.into(), source: source.into() });
+        self.derived.borrow_mut().insert(name.clone(), DerivedSecret { value: value.into(), source: source.into() });
         name
     }
 
@@ -146,8 +144,7 @@ impl SecretStore {
         let entries = self.entries.borrow();
         let map: serde_json::Map<String, serde_json::Value> =
             entries.iter().map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone()))).collect();
-        let text = serde_json::to_string_pretty(&serde_json::Value::Object(map))
-            .expect("secret store serializes");
+        let text = serde_json::to_string_pretty(&serde_json::Value::Object(map)).expect("secret store serializes");
         write_secret_file(path, text.as_bytes())
     }
 }
@@ -175,9 +172,9 @@ fn write_secret_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt as _;
     let mut open = std::fs::OpenOptions::new();
     open.write(true).create(true).mode(0o600); // owner-only, like the broker key
-    // Non-blocking, and truncated only once it is known to be a regular file (RW 4.38's remainder):
-    // opening a FIFO for writing waits for a reader, and `secrets set` waited with it. Not under Miri,
-    // whose `open` takes a short list of flags and which never makes a FIFO.
+                                               // Non-blocking, and truncated only once it is known to be a regular file (RW 4.38's remainder):
+                                               // opening a FIFO for writing waits for a reader, and `secrets set` waited with it. Not under Miri,
+                                               // whose `open` takes a short list of flags and which never makes a FIFO.
     #[cfg(not(miri))]
     open.custom_flags(libc::O_NONBLOCK);
     let not_regular = || std::io::Error::other(crate::audit::NotRegular(path.to_path_buf(), "the secret store"));
@@ -212,25 +209,11 @@ impl Broker {
     /// carries the `Declassify` effect and whose `secrets` scope covers the (source of the) name.
     /// Always consumes one audit seq and emits one `"expose"` record — allow or deny — carrying the
     /// calling `span` (invariant 26; feedback quality for agents).
-    pub fn expose(
-        &mut self,
-        node_id: &GrantId,
-        name: &str,
-        store: &SecretStore,
-        span: Option<String>,
-    ) -> Result<String, Denial> {
+    pub fn expose(&mut self, node_id: &GrantId, name: &str, store: &SecretStore, span: Option<String>) -> Result<String, Denial> {
         let seq = self.consume_seq();
         let result = self.expose_inner(node_id, name, store);
         let decision = if result.is_ok() { "allow" } else { "deny" };
-        self.record_op(
-            seq,
-            "expose",
-            Some(node_id.as_str().to_string()),
-            Some(name.to_string()),
-            None,
-            decision,
-            span,
-        );
+        self.record_op(seq, "expose", Some(node_id.as_str().to_string()), Some(name.to_string()), None, decision, span);
         result
     }
 
@@ -389,7 +372,11 @@ impl Broker {
         };
         // 1. Authority: the node live, the secret in scope and in the store, the pair in its audience.
         let checked = self.live_authority(node_id).and_then(|authority| {
-            let out = |dimension: &'static str, arg: &str| Denial::OutOfScope { node: node_id.clone(), dimension, arg: arg.to_string() };
+            let out = |dimension: &'static str, arg: &str| Denial::OutOfScope {
+                node: node_id.clone(),
+                dimension,
+                arg: arg.to_string(),
+            };
             let Some(source) = &source else { return Err(out("secrets.store", name)) };
             if !authority.scopes.secrets.contains(source) {
                 return Err(out("secrets", name));
@@ -436,28 +423,16 @@ impl Broker {
         let authority = self.live_authority(node_id)?;
         // The Declassify effect gates byte-crossing (defense in depth; the checker bounds kind).
         if !authority.effects.contains(&delulu_check::Effect::Declassify) {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "effects",
-                arg: "Declassify".to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "effects", arg: "Declassify".to_string() });
         }
         // Scope: the node's `secrets` set must cover the ROOT SOURCE of the name — a `Secret.map`
         // derivative is exposable iff its source is (deriving never widens authority).
         let Some(source) = store.source_of(name) else {
             // Unknown to the store (fail closed) — distinct dimension so the message is honest.
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "secrets.store",
-                arg: name.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets.store", arg: name.to_string() });
         };
         if !authority.scopes.secrets.contains(&source) {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "secrets",
-                arg: name.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets", arg: name.to_string() });
         }
         store.get(name).ok_or_else(|| Denial::OutOfScope {
             node: node_id.clone(),
@@ -482,53 +457,27 @@ impl Broker {
         let seq = self.consume_seq();
         let result = self.secret_map_inner(node_id, name, op, store);
         let decision = if result.is_ok() { "allow" } else { "deny" };
-        self.record_op(
-            seq,
-            "secret_map",
-            Some(node_id.as_str().to_string()),
-            Some(format!("{name}:{op}")),
-            None,
-            decision,
-            None,
-        );
+        self.record_op(seq, "secret_map", Some(node_id.as_str().to_string()), Some(format!("{name}:{op}")), None, decision, None);
         result
     }
 
     fn secret_map_inner(&self, node_id: &GrantId, name: &str, op: &str, store: &SecretStore) -> Result<String, Denial> {
         let authority = self.live_authority(node_id)?;
         let Some(source) = store.source_of(name) else {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "secrets.store",
-                arg: name.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets.store", arg: name.to_string() });
         };
         if !authority.scopes.secrets.contains(&source) {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "secrets",
-                arg: name.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets", arg: name.to_string() });
         }
         let Some(value) = store.get(name) else {
-            return Err(Denial::OutOfScope {
-                node: node_id.clone(),
-                dimension: "secrets.store",
-                arg: name.to_string(),
-            });
+            return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets.store", arg: name.to_string() });
         };
         // The whitelist (fail closed on anything else).
         let mapped = match op {
             "trim" => value.trim().to_string(),
             "upper" => value.to_uppercase(),
             "lower" => value.to_lowercase(),
-            other => {
-                return Err(Denial::OutOfScope {
-                    node: node_id.clone(),
-                    dimension: "secret.map",
-                    arg: other.to_string(),
-                })
-            }
+            other => return Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secret.map", arg: other.to_string() }),
         };
         Ok(store.insert_derived(mapped, source))
     }
@@ -544,11 +493,7 @@ impl Broker {
             EffState::Expired { ttl_millis, now_millis } => {
                 Err(Denial::Expired { node: node_id.clone(), ttl_millis, now_millis })
             }
-            EffState::Live => Ok(self
-                .inspect(node_id)
-                .expect("effective_state implies the node exists")
-                .authority
-                .clone()),
+            EffState::Live => Ok(self.inspect(node_id).expect("effective_state implies the node exists").authority.clone()),
         }
     }
 }
@@ -681,11 +626,8 @@ mod tests {
     /// A broker + sink + a root node holding Declassify over {API_KEY} and a store with two secrets.
     fn expose_fixture() -> (Broker, crate::audit::MemSink, GrantId, SecretStore) {
         let sink = crate::audit::MemSink::new();
-        let mut b = Broker::with_sources(
-            Box::new(SeqIdSource::new()),
-            Box::new(Rc::new(ManualClock::new(1000))),
-        )
-        .with_sink(Box::new(sink.clone()));
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_sink(Box::new(sink.clone()));
         let root = b.issue(
             Holder::new("process", "app", "pid:1"),
             Authority::new(eff(&["Declassify"]), Scopes { secrets: names(&["API_KEY"]), ..Default::default() }),
@@ -784,7 +726,12 @@ mod tests {
         let auth = || {
             Authority::new(
                 eff(&["Net"]),
-                Scopes { net: names(&["a.com"]), secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() },
+                Scopes {
+                    net: names(&["a.com"]),
+                    secrets: names(&["K"]),
+                    secret_to: names(&["K@a.com:443"]),
+                    ..Default::default()
+                },
             )
         };
         let root = b.issue(Holder::new("process", "app", "pid:1"), auth(), None);
@@ -792,9 +739,15 @@ mod tests {
         store.set("K", "hunter2-8f2c").unwrap();
         store.set("OTHER", "nope").unwrap();
         let code = |r: Result<String, Denial>| r.map_err(|d| d.code()).err();
-        assert_eq!(b.send_secret_guarded(&root, "K", "a.com:443", &store, Some("p.delulu:4:9".into())).0.unwrap(), "hunter2-8f2c");
+        assert_eq!(
+            b.send_secret_guarded(&root, "K", "a.com:443", &store, Some("p.delulu:4:9".into())).0.unwrap(),
+            "hunter2-8f2c"
+        );
         let last = sink.records().last().cloned().unwrap();
-        assert_eq!((last.action.as_str(), last.decision.as_str(), last.target.as_deref()), ("send", "allow", Some("K@a.com:443")));
+        assert_eq!(
+            (last.action.as_str(), last.decision.as_str(), last.target.as_deref()),
+            ("send", "allow", Some("K@a.com:443"))
+        );
         assert_eq!(last.span.as_deref(), Some("p.delulu:4:9"));
         assert_eq!(code(b.send_secret_guarded(&root, "K", "b.com:443", &store, None).0), Some("DL0904"), "another origin");
         assert_eq!(code(b.send_secret_guarded(&root, "K", "a.com:8443", &store, None).0), Some("DL0904"), "another port");
@@ -814,11 +767,19 @@ mod tests {
         };
         // D-V2-137: a permit for another destination does not buy this one (a permit on the NAME would — see below).
         approve(&mut b, "K@a.com:8443");
-        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1410"), "another origin's permit");
+        assert_eq!(
+            code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0),
+            Some("DL1410"),
+            "another origin's permit"
+        );
         approve(&mut b, "K@a.com:443");
         assert_eq!(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0.unwrap(), "hunter2-8f2c");
         b.revoke(&root, &child).unwrap();
-        assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1403"), "it ends with the node");
+        assert_eq!(
+            code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0),
+            Some("DL1403"),
+            "it ends with the node"
+        );
         // No record holds a byte of either secret.
         for r in sink.records() {
             let text = serde_json::to_string(&r.to_value()).unwrap();
@@ -837,7 +798,12 @@ mod tests {
         let auth = || {
             Authority::new(
                 eff(&["Net"]),
-                Scopes { net: names(&["a.com"]), secrets: names(&["K"]), secret_to: names(&["K@a.com:443"]), ..Default::default() },
+                Scopes {
+                    net: names(&["a.com"]),
+                    secrets: names(&["K"]),
+                    secret_to: names(&["K@a.com:443"]),
+                    ..Default::default()
+                },
             )
         };
         let root = b.issue(Holder::new("process", "app", "pid:1"), auth(), None);
@@ -854,13 +820,23 @@ mod tests {
         approve(&mut b, "K");
         assert!(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0.is_ok(), "the name's permit covers a send");
         // A seal on the name refuses every send of it, a pair's permit included.
-        b.guard_policy_set(Some("gow1_testowner"), crate::guard::GuardClass::Declassify, "K".into(), crate::guard::GuardTier::Sealed)
-            .unwrap();
+        b.guard_policy_set(
+            Some("gow1_testowner"),
+            crate::guard::GuardClass::Declassify,
+            "K".into(),
+            crate::guard::GuardTier::Sealed,
+        )
+        .unwrap();
         approve(&mut b, "K@a.com:443");
         assert_eq!(code(b.send_secret_guarded(&child, "K", "a.com:443", &store, None).0), Some("DL1413"), "sealed by name");
         // A pair pattern no send's token can match is refused when it is set (`NAME@host:port` exactly, or the name).
         for dead in ["K@*", "K@a.com", "K@a.com:*", "K*"] {
-            let r = b.guard_policy_set(Some("gow1_testowner"), crate::guard::GuardClass::Declassify, dead.into(), crate::guard::GuardTier::Sealed);
+            let r = b.guard_policy_set(
+                Some("gow1_testowner"),
+                crate::guard::GuardClass::Declassify,
+                dead.into(),
+                crate::guard::GuardTier::Sealed,
+            );
             assert!(matches!(r, Err(Denial::DeadGuardPattern { .. })), "`{dead}` can never match a send: {r:?}");
         }
     }
@@ -895,11 +871,8 @@ mod tests {
     #[test]
     fn expose_requires_declassify_effect_and_a_live_node() {
         let sink = crate::audit::MemSink::new();
-        let mut b = Broker::with_sources(
-            Box::new(SeqIdSource::new()),
-            Box::new(Rc::new(ManualClock::new(1000))),
-        )
-        .with_sink(Box::new(sink.clone()));
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_sink(Box::new(sink.clone()));
         // No Declassify effect.
         let node = b.issue(
             Holder::new("process", "app", "pid:1"),

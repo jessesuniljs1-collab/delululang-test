@@ -91,12 +91,7 @@ fn chain(name: &str, archetype: &str, job: &str) -> Chain {
         is_app: true,
         depends_on: Some(app_dep.clone()),
         effects: vec!["Write".into()],
-        manifest: manifest(
-            &pkg_name(None),
-            "bin",
-            &["Write"],
-            Some((&app_dep, &format!("../{app_dep}"), &[])),
-        ),
+        manifest: manifest(&pkg_name(None), "bin", &["Write"], Some((&app_dep, &format!("../{app_dep}"), &[]))),
         source_path: "src/main.delulu".into(),
         source: format!(
             "module {}\nimport {app_dep}\n\n\
@@ -115,10 +110,9 @@ fn chain(name: &str, archetype: &str, job: &str) -> Chain {
         let me = pkg_name(Some(layer));
         let below = LAYERS.get(i + 1).map(|l| pkg_name(Some(l)));
         let (body, dep_line) = match (&below, LAYERS.get(i + 1)) {
-            (Some(b), Some(next_layer)) => (
-                format!("  {}(root, x)\n", entry_name(next_layer)),
-                Some((b.clone(), format!("../{b}"))),
-            ),
+            (Some(b), Some(next_layer)) => {
+                (format!("  {}(root, x)\n", entry_name(next_layer)), Some((b.clone(), format!("../{b}"))))
+            }
             // The leaf does the actual work of the archetype.
             _ => ("  x.trim()\n".to_string(), None),
         };
@@ -129,12 +123,7 @@ fn chain(name: &str, archetype: &str, job: &str) -> Chain {
             is_app: false,
             depends_on: below.clone(),
             effects: vec![],
-            manifest: manifest(
-                &me,
-                "lib",
-                &[],
-                dep_line.as_ref().map(|(n, p)| (n.as_str(), p.as_str(), &[][..])),
-            ),
+            manifest: manifest(&me, "lib", &[], dep_line.as_ref().map(|(n, p)| (n.as_str(), p.as_str(), &[][..]))),
             source_path: "src/lib.delulu".into(),
             // Every layer receives `root` and passes it down. This is a common real-world shape —
             // and an anti-pattern the authority report is designed to expose: a library holding
@@ -163,9 +152,7 @@ fn manifest(name: &str, kind: &str, effects: &[&str], dep: Option<(&str, &str, &
     );
     if let Some((dname, dpath, deffects)) = dep {
         let de = deffects.iter().map(|e| format!("\"{e}\"")).collect::<Vec<_>>().join(", ");
-        s.push_str(&format!(
-            "\n[dependencies]\n{dname} = {{ path = \"{dpath}\", authority = {{ effects = [{de}] }} }}\n"
-        ));
+        s.push_str(&format!("\n[dependencies]\n{dname} = {{ path = \"{dpath}\", authority = {{ effects = [{de}] }} }}\n"));
     }
     s
 }
@@ -216,11 +203,7 @@ mod tests {
         for c in build() {
             for p in c.libs() {
                 assert!(p.effects.is_empty(), "library `{}` is not pure to begin with", p.name);
-                assert!(
-                    !p.source.contains("console"),
-                    "library `{}` performs an effect before injection",
-                    p.name
-                );
+                assert!(!p.source.contains("console"), "library `{}` performs an effect before injection", p.name);
             }
         }
     }

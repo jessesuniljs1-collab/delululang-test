@@ -95,19 +95,13 @@ fn a_grant_missing_a_dead_man_term_is_refused_and_says_which_one() {
         ("actuator=arm0/elbow:angle_deg=0..90,ttl_ms=1000,fail=hold", "heartbeat_ms"),
         ("actuator=arm0/elbow:angle_deg=0..90,heartbeat_ms=100,fail=hold", "ttl_ms"),
         ("actuator=arm0/elbow:angle_deg=0..90,heartbeat_ms=100,ttl_ms=1000", "fail="),
-        (
-            "actuator=arm0/elbow:angle_deg=0..90,heartbeat_ms=1000,ttl_ms=100,fail=hold",
-            "shorter than",
-        ),
+        ("actuator=arm0/elbow:angle_deg=0..90,heartbeat_ms=1000,ttl_ms=100,fail=hold", "shorter than"),
     ];
     for (grant, expected) in cases {
         let o = delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant", grant]);
         assert!(!o.status.success(), "an incomplete device grant must not run: {grant}");
         let err = String::from_utf8_lossy(&o.stderr);
-        assert!(
-            err.contains(expected),
-            "the refusal for `{grant}` must name `{expected}`, got: {err}"
-        );
+        assert!(err.contains(expected), "the refusal for `{grant}` must name `{expected}`, got: {err}");
     }
 }
 
@@ -333,10 +327,7 @@ fn a_program_that_stops_beating_loses_its_device_mid_run() {
     // The refusal is NOT a DL1904: an auditor counting envelope refusals must not find a lost
     // device in the tally.
     let revoked = err.find("command.revoked").expect("the refused command is traced");
-    assert!(
-        !err[revoked..].contains("DL1904"),
-        "a dead lease is not an envelope refusal and must not borrow its code: {err}"
-    );
+    assert!(!err[revoked..].contains("DL1904"), "a dead lease is not an envelope refusal and must not borrow its code: {err}");
 }
 
 /// The control, and the test that makes the one above mean anything. Identical program, identical
@@ -364,10 +355,7 @@ fn the_same_program_keeps_its_device_when_the_heartbeat_allows_the_work() {
         "a generous heartbeat over the same work keeps the device: the revocation above was \
          caused by the heartbeat, not by the phase: {out}"
     );
-    assert!(
-        !String::from_utf8_lossy(&o.stderr).contains("lease.revoked"),
-        "nothing was revoked, so nothing claims it was"
-    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("lease.revoked"), "nothing was revoked, so nothing claims it was");
 }
 
 /// `rate_hz` stops being decorative — build-order D10f named this gap in 10e and said it would
@@ -420,7 +408,7 @@ fn mirror_program() -> String {
      \x20   c.println(show(strain.read()))\n\
      \x20   c.println(show(strain.read()))\n\
      }\n"
-        .to_string()
+    .to_string()
 }
 
 const MIRROR_GRANTS: [&str; 3] = [
@@ -431,8 +419,7 @@ const MIRROR_GRANTS: [&str; 3] = [
 
 fn run_mirror(tag: &str, extra: &[&str]) -> Output {
     let f = write_prog(tag, "mirror.delulu", &mirror_program());
-    let mut args: Vec<String> =
-        vec!["run".into(), f.to_string_lossy().into_owned(), "--grant".into(), "console".into()];
+    let mut args: Vec<String> = vec!["run".into(), f.to_string_lossy().into_owned(), "--grant".into(), "console".into()];
     for g in MIRROR_GRANTS {
         args.push("--grant".into());
         args.push(g.to_string());
@@ -512,23 +499,12 @@ fn sim_signoff(tag: &str) -> (PathBuf, PathBuf) {
 #[test]
 fn a_hardware_profile_with_no_signoff_record_is_refused_dl1905() {
     let f = write_prog("hw-nosignoff", "arm.delulu", &burner_program(1));
-    let o = delulu(&[
-        "run",
-        &f.to_string_lossy(),
-        "--grant",
-        "console",
-        "--grant",
-        GATE_GRANT,
-        "--broker-profile",
-        "hw:acme-arm",
-    ]);
+    let o =
+        delulu(&["run", &f.to_string_lossy(), "--grant", "console", "--grant", GATE_GRANT, "--broker-profile", "hw:acme-arm"]);
     assert!(!o.status.success(), "no approval, no hardware");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("DL1905"), "the refusal is the allocated code: {err}");
-    assert!(
-        String::from_utf8_lossy(&o.stdout).trim().is_empty(),
-        "the program never ran a line: {o:?}"
-    );
+    assert!(String::from_utf8_lossy(&o.stdout).trim().is_empty(), "the program never ran a line: {o:?}");
 }
 
 /// An edit after sign-off is a different program at the end of a wire that moves something. The
@@ -585,10 +561,7 @@ fn a_matching_signoff_passes_the_gate_and_then_stops_for_want_of_an_adapter() {
         &approval.to_string_lossy(),
     ]);
     let err = String::from_utf8_lossy(&o.stderr);
-    assert!(
-        err.contains("device sign-off: OK"),
-        "the gate must be seen to PASS, or its refusals prove nothing: {err}"
-    );
+    assert!(err.contains("device sign-off: OK"), "the gate must be seen to PASS, or its refusals prove nothing: {err}");
     assert!(!err.contains("DL1905"), "a matching artifact is not a DL1905: {err}");
     assert!(
         err.contains("--adapter-cmd") && err.contains("hw:acme-arm"),
@@ -623,14 +596,8 @@ fn a_faulted_sim_run_writes_no_signoff() {
         &approval.to_string_lossy(),
     ]);
     assert!(!o.status.success(), "the run faults at the mint");
-    assert!(
-        !approval.exists(),
-        "a run that did not complete cleanly approves nothing for hardware"
-    );
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("sign-off withheld"),
-        "and the omission is stated, not silent: {o:?}"
-    );
+    assert!(!approval.exists(), "a run that did not complete cleanly approves nothing for hardware");
+    assert!(String::from_utf8_lossy(&o.stderr).contains("sign-off withheld"), "and the omission is stated, not silent: {o:?}");
 }
 
 /// A sign-off can only come from a simulation. A null-adapter run commanded nothing and observed
@@ -650,8 +617,5 @@ fn a_run_with_no_simulator_cannot_sign_an_artifact_off() {
         &approval.to_string_lossy(),
     ]);
     assert!(!approval.exists(), "no simulator, no approval");
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("--broker-profile sim"),
-        "the refusal says what was missing: {o:?}"
-    );
+    assert!(String::from_utf8_lossy(&o.stderr).contains("--broker-profile sim"), "the refusal says what was missing: {o:?}");
 }

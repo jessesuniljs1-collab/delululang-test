@@ -151,7 +151,11 @@ fn guard_cli_approval_flow_verbs() {
     let owner = extract_owner_code(&format!("{}{}", stdout(&o), stderr(&o))).expect("owner code");
 
     // A delegated node holding guarded (declassify) authority — the principal mints it with --owner.
-    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"],
+    );
     assert!(o.status.success(), "delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
     let node = v["node"].as_str().unwrap().to_string();
@@ -183,7 +187,11 @@ fn guard_cli_approval_flow_verbs() {
     assert!(stdout(&o).contains(&permit), "permits lists the permit: {}", stdout(&o));
 
     // `guard deny` requires --comment.
-    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"],
+    );
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
     let node2 = v["node"].as_str().unwrap().to_string();
     let o = delulu_in(&cwd, &state, &["guard", "request", &node2, "--use", "declassify:*", "--why", "again"]);

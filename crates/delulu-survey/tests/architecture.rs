@@ -28,12 +28,8 @@ fn repo_root() -> PathBuf {
 #[test]
 fn the_survey_depends_on_no_sibling_crate() {
     let s = Survey::build(&repo_root());
-    let siblings: Vec<&str> = s
-        .out("crate:delulu-survey")
-        .into_iter()
-        .filter(|e| e.kind == EdgeKind::DependsOn)
-        .map(|e| e.to.as_str())
-        .collect();
+    let siblings: Vec<&str> =
+        s.out("crate:delulu-survey").into_iter().filter(|e| e.kind == EdgeKind::DependsOn).map(|e| e.to.as_str()).collect();
 
     assert!(
         siblings.is_empty(),
@@ -53,16 +49,12 @@ fn the_survey_depends_on_no_sibling_crate() {
 fn the_cli_knows_about_the_survey_and_not_the_reverse() {
     let s = Survey::build(&repo_root());
 
-    let cli_uses_survey = s
-        .out("crate:delulu")
-        .into_iter()
-        .any(|e| e.kind == EdgeKind::DependsOn && e.to == "crate:delulu-survey");
+    let cli_uses_survey =
+        s.out("crate:delulu").into_iter().any(|e| e.kind == EdgeKind::DependsOn && e.to == "crate:delulu-survey");
     assert!(cli_uses_survey, "`delulu doctor` needs the Survey; the CLI should declare it");
 
-    let survey_uses_cli = s
-        .out("crate:delulu-survey")
-        .into_iter()
-        .any(|e| e.kind == EdgeKind::DependsOn && e.to == "crate:delulu");
+    let survey_uses_cli =
+        s.out("crate:delulu-survey").into_iter().any(|e| e.kind == EdgeKind::DependsOn && e.to == "crate:delulu");
     assert!(!survey_uses_cli, "delulu-survey depends on the CLI — the direction has been inverted");
 }
 

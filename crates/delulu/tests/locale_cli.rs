@@ -120,8 +120,7 @@ fn criterion6_each_machine_channel_alone_suppresses_the_first_run() {
     ] {
         let ctx = Ctx::fresh(tag);
         let file = ctx.program.to_str().unwrap().to_string();
-        let args: Vec<&str> =
-            args.iter().map(|a| if *a == "PROGRAM" { file.as_str() } else { *a }).collect();
+        let args: Vec<&str> = args.iter().map(|a| if *a == "PROGRAM" { file.as_str() } else { *a }).collect();
         let o = ctx.run(&args, tty, &extra, None);
         let t = text(&o);
         assert!(!t.contains(PICKER_HEAD), "channel `{tag}` must suppress the picker: {t}");
@@ -141,12 +140,7 @@ fn locale_priority_flag_beats_env_beats_config() {
     assert!(text(&o).contains("no cap 💀"), "env wins over config: {}", text(&o));
 
     // flag beats env:
-    let o2 = ctx.run(
-        &["check", &file, "--locale", "en-US"],
-        false,
-        &[("DELULU_LOCALE", "delulu-slang")],
-        None,
-    );
+    let o2 = ctx.run(&["check", &file, "--locale", "en-US"], false, &[("DELULU_LOCALE", "delulu-slang")], None);
     let t2 = text(&o2);
     assert!(t2.contains("performs effect"), "flag wins — en-US prose: {t2}");
     assert!(!t2.contains("no cap"), "{t2}");
@@ -169,13 +163,9 @@ fn criterion7_json_bytes_identical_across_locales_human_differs() {
     std::fs::write(&ctx.config, "welcomed = true\n").unwrap();
 
     let en = ctx.run(&["check", &file, "--json"], false, &[("DELULU_LOCALE", "en-US")], None);
-    let slang =
-        ctx.run(&["check", &file, "--json"], false, &[("DELULU_LOCALE", "delulu-slang")], None);
+    let slang = ctx.run(&["check", &file, "--json"], false, &[("DELULU_LOCALE", "delulu-slang")], None);
     assert_eq!(en.stdout, slang.stdout, "the machine envelope is locale-invariant, byte-for-byte");
-    assert!(
-        String::from_utf8_lossy(&en.stdout).contains("performs effect"),
-        "and it speaks en-US"
-    );
+    assert!(String::from_utf8_lossy(&en.stdout).contains("performs effect"), "and it speaks en-US");
 
     let en_h = ctx.run(&["check", &file], false, &[("DELULU_LOCALE", "en-US")], None);
     let slang_h = ctx.run(&["check", &file], false, &[("DELULU_LOCALE", "delulu-slang")], None);

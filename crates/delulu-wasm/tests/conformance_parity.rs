@@ -26,12 +26,7 @@ fn run_both(src: &str, cfg: HostConfig) -> (String, String) {
         set_rand_seed(s);
     }
     set_capture(true);
-    let g = Grants {
-        console: cfg.console,
-        clock: cfg.clock,
-        rand: cfg.rand,
-        ..Default::default()
-    };
+    let g = Grants { console: cfg.console, clock: cfg.clock, rand: cfg.rand, ..Default::default() };
     let interp = Interp::new(&checked.module);
     interp.run_main(Value::Root(Rc::new(g.build_root()))).expect("interp run");
     let interp_out = take_capture().expect("capture was on");
@@ -64,7 +59,17 @@ fn everything_together_matches() {
         \x20 out.println(\"roll=\" + str(r.int(1, 7)))\n\
         \x20 out.println(\"roll=\" + str(r.int(1, 7)))\n\
         }\n";
-    let out = assert_parity(src, HostConfig { console: true, clock: true, rand: true, fixed_clock_ms: Some(1_700_000_000_000), rand_seed: Some(7), ..HostConfig::default() });
+    let out = assert_parity(
+        src,
+        HostConfig {
+            console: true,
+            clock: true,
+            rand: true,
+            fixed_clock_ms: Some(1_700_000_000_000),
+            rand_seed: Some(7),
+            ..HostConfig::default()
+        },
+    );
     // Spot-check the deterministic parts (clock is fixed; fib(10) = 55).
     assert!(out.contains("fib=55"), "{out}");
     assert!(out.contains("t=1700000000000"), "{out}");
@@ -108,10 +113,7 @@ fn random_console_programs_match_across_engines() {
         let wasm_res = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() });
 
         set_capture(true);
-        let g = Grants {
-            console: true,
-            ..Default::default()
-        };
+        let g = Grants { console: true, ..Default::default() };
         let interp = Interp::new(&checked.module);
         let interp_res = interp.run_main(Value::Root(Rc::new(g.build_root())));
         let interp_out = take_capture().unwrap_or_default();
@@ -124,10 +126,16 @@ fn random_console_programs_match_across_engines() {
                 }
             }
             (Err(_), Err(_)) => {} // both faulted — consistent (the generator is fault-free, so rare)
-            _ => mismatches.push(format!("seed {seed}: one engine faulted: wasm={wasm_res:?} interp_ok={}\n{src}", interp_res.is_ok())),
+            _ => mismatches
+                .push(format!("seed {seed}: one engine faulted: wasm={wasm_res:?} interp_ok={}\n{src}", interp_res.is_ok())),
         }
     }
-    assert!(mismatches.is_empty(), "console parity broken ({} cases):\n{}", mismatches.len(), mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n"));
+    assert!(
+        mismatches.is_empty(),
+        "console parity broken ({} cases):\n{}",
+        mismatches.len(),
+        mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n")
+    );
     assert!(compared > 1500, "the generator produced too few comparable programs: {compared}");
 }
 
@@ -145,7 +153,7 @@ fn fragment_external_programs_are_compile_errors() {
     let cases = [
         "module m\nfn f(n: Int) -> Int { match n { _ => n } }\n", // match
         "module m\nfn f() -> Int { len(range(0, 5)) }\n",         // list builtins (range/len)
-        "module m\nfn f(s: Str) -> Str { s.trim() }\n",          // an unsupported Str method
+        "module m\nfn f(s: Str) -> Str { s.trim() }\n",           // an unsupported Str method
     ];
     for src in cases {
         let checked = check_source(0, src);

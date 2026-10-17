@@ -121,12 +121,7 @@ fn a_malformed_compute_grant_is_refused_rather_than_partially_understood() {
     for (from, to) in bad {
         let grant = FULL.replace(from, to);
         let o = run_with("malformed", &grant);
-        assert_eq!(
-            o.status.code(),
-            Some(2),
-            "`{to}` must be refused, never silently accepted:\n{}",
-            stderr(&o)
-        );
+        assert_eq!(o.status.code(), Some(2), "`{to}` must be refused, never silently accepted:\n{}", stderr(&o));
     }
 }
 
@@ -147,10 +142,7 @@ fn an_adapter_that_cannot_attest_below_itself_is_refused_the_grant() {
         err.contains("below-adapter") && err.contains("silently single"),
         "the refusal must say what claim it is protecting:\n{err}"
     );
-    assert!(
-        err.contains("waive-attestation"),
-        "and how a human may accept single enforcement deliberately:\n{err}"
-    );
+    assert!(err.contains("waive-attestation"), "and how a human may accept single enforcement deliberately:\n{err}");
 }
 
 /// THE SKIP BRANCH. An adapter this build has never heard of is refused — not trusted, not
@@ -174,12 +166,7 @@ fn an_unknown_adapter_is_refused_because_it_cannot_attest_what_it_is_not() {
     // decision about enforcement depth, not permission to load an adapter that does not exist.
     let waived = format!("{grant},waive-attestation");
     let o = run_with("unknown-waived", &waived);
-    assert_eq!(
-        o.status.code(),
-        Some(1),
-        "a waiver must not conjure an adapter this build does not have:\n{}",
-        stderr(&o)
-    );
+    assert_eq!(o.status.code(), Some(1), "a waiver must not conjure an adapter this build does not have:\n{}", stderr(&o));
     assert!(stderr(&o).contains("DL1911"), "{}", stderr(&o));
 }
 
@@ -201,10 +188,7 @@ fn a_kernel_format_the_adapter_does_not_accept_is_refused() {
 fn an_explicit_human_waiver_lets_the_grant_through() {
     let o = run_with("waived", FULL);
     let err = stderr(&o);
-    assert!(
-        !err.contains("DL1911"),
-        "an explicitly waived grant must be issued, not refused again:\n{err}"
-    );
+    assert!(!err.contains("DL1911"), "an explicitly waived grant must be issued, not refused again:\n{err}");
 }
 
 /// `class` is the one optional term, and deliberately so: it is display-only taxonomy that
@@ -254,7 +238,6 @@ fn main(root: Root) ! {Write, ForeignCall} {
 }
 ";
 
-
 /// `memory_bytes=64` holds eight `f64`s — so the four- and three-element dispatches land and the
 /// nine-element one does not. One run exercises all four outcomes the error sum can produce.
 #[test]
@@ -269,9 +252,7 @@ fn dispatch_lands_inside_the_envelope_and_is_refused_outside_it() {
     );
     let prog = dir.join("cd.delulu");
     std::fs::write(&prog, DISPATCH_PROG).unwrap();
-    let o = delulu(&[
-        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", &grant, "--no-prompt",
-    ]);
+    let o = delulu(&["run", &prog.to_string_lossy(), "--grant", "console", "--grant", &grant, "--no-prompt"]);
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     let err = stderr(&o);
     assert!(o.status.success(), "a refused dispatch is a value, not a fault:\n{out}\n{err}");
@@ -287,10 +268,7 @@ fn dispatch_lands_inside_the_envelope_and_is_refused_outside_it() {
     // The refusal telemetry distinguishes the two: an auditor counting DL1907s is counting
     // devices driven past their envelope, NOT programs that named a kernel they never held.
     assert!(err.contains("DL1907 gpu0/reduce_sum"), "the envelope refusal is DL1907:\n{err}");
-    assert!(
-        err.contains("kernel-not-granted gpu0/not_granted"),
-        "an unknown kernel must NOT be stamped DL1907:\n{err}"
-    );
+    assert!(err.contains("kernel-not-granted gpu0/not_granted"), "an unknown kernel must NOT be stamped DL1907:\n{err}");
 }
 
 /// The `kernel_ms` budget, and the honest thing about it: it is enforced *after* the fact, on the
@@ -317,9 +295,7 @@ fn a_kernel_that_overruns_its_time_budget_is_refused_and_its_result_discarded() 
          format=refkernel-1,kernel=burn:{burn},waive-attestation"
     );
     let tight = format!("compute=gpu0:{base},kernel_ms=0..1");
-    let o = delulu(&[
-        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", &tight, "--no-prompt",
-    ]);
+    let o = delulu(&["run", &prog.to_string_lossy(), "--grant", "console", "--grant", &tight, "--no-prompt"]);
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(
         out.contains("ENV:") && out.contains("kernel_ms=0..1"),
@@ -330,9 +306,7 @@ fn a_kernel_that_overruns_its_time_budget_is_refused_and_its_result_discarded() 
     // The control: the SAME kernel under a budget that accommodates it. Without this, a broker
     // that refused every `burn` would pass the assertion above.
     let generous = format!("compute=gpu0:{base},kernel_ms=0..60000");
-    let o = delulu(&[
-        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", &generous, "--no-prompt",
-    ]);
+    let o = delulu(&["run", &prog.to_string_lossy(), "--grant", "console", "--grant", &generous, "--no-prompt"]);
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(out.contains("OK"), "the same kernel must land under a budget that fits it:\n{out}");
 }
@@ -363,9 +337,7 @@ fn grant_for(kernel_path: &str) -> String {
 fn run_dispatch(dir: &Path, grant: &str) -> Output {
     let prog = dir.join("k.delulu");
     std::fs::write(&prog, DISPATCH_ONE).unwrap();
-    delulu(&[
-        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", grant, "--no-prompt",
-    ])
+    delulu(&["run", &prog.to_string_lossy(), "--grant", "console", "--grant", grant, "--no-prompt"])
 }
 
 const DISPATCH_ONE: &str = "\
@@ -428,10 +400,7 @@ fn an_artifact_edited_after_signing_no_longer_verifies() {
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(err.contains("DL1912"), "a bad signature is DL1912, not DL1913:\n{err}");
-    assert!(
-        err.contains("not what it claims"),
-        "the refusal names substitution rather than blaming the format:\n{err}"
-    );
+    assert!(err.contains("not what it claims"), "the refusal names substitution rather than blaming the format:\n{err}");
 }
 
 /// THE LAUNDERING TEST. A DeluluLang source file, signed correctly, is still not a kernel.
@@ -542,9 +511,7 @@ fn an_actor_dispatches_through_the_runs_compute_broker() {
          let w = spawn Worker()\n  w.go(root.console(), root.compute(\"gpu0\"))\n}\n",
     )
     .unwrap();
-    let o = delulu(&[
-        "run", &prog.to_string_lossy(), "--grant", "console", "--grant", &grant_for(&path), "--no-prompt",
-    ]);
+    let o = delulu(&["run", &prog.to_string_lossy(), "--grant", "console", "--grant", &grant_for(&path), "--no-prompt"]);
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(o.status.success(), "{out}\n{}", stderr(&o));
     assert_eq!(out.trim(), "OK 10.0", "the actor's dispatch reaches the bound adapter:\n{out}\n{}", stderr(&o));

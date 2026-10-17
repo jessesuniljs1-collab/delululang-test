@@ -200,9 +200,8 @@ pub fn parse(text: &str) -> Result<Certificate, Denial> {
     let get = |k: &str| -> Result<String, Denial> {
         f.get(k).map(|s| s.to_string()).ok_or_else(|| bad(&format!("missing field `{k}`")))
     };
-    let num = |k: &str| -> Result<i64, Denial> {
-        get(k)?.parse::<i64>().map_err(|_| bad(&format!("field `{k}` is not an integer")))
-    };
+    let num =
+        |k: &str| -> Result<i64, Denial> { get(k)?.parse::<i64>().map_err(|_| bad(&format!("field `{k}` is not an integer"))) };
     let authority_text = get("authority")?;
     let authority_json: serde_json::Value =
         serde_json::from_str(&authority_text).map_err(|e| bad(&format!("authority is not JSON: {e}")))?;
@@ -258,10 +257,7 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
         let eff = delulu_check::Effect::core_from_name(name).ok_or_else(|| unknown("the effect", name))?;
         effects.insert(eff);
     }
-    let scopes_obj = obj
-        .get("scopes")
-        .and_then(|x| x.as_object())
-        .ok_or_else(|| bad("no `scopes` object"))?;
+    let scopes_obj = obj.get("scopes").and_then(|x| x.as_object()).ok_or_else(|| bad("no `scopes` object"))?;
     let mut scopes = Scopes::default();
     for (key, val) in scopes_obj {
         let list = || -> Result<BTreeSet<String>, Denial> {
@@ -284,8 +280,7 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
             "secret_to" => scopes.secret_to = list()?,
             "device" => {
                 for spec in list()? {
-                    let d = device_scope::parse(&spec)
-                        .map_err(|e| bad(&format!("device scope `{spec}`: {e}")))?;
+                    let d = device_scope::parse(&spec).map_err(|e| bad(&format!("device scope `{spec}`: {e}")))?;
                     scopes.device.insert(d.device.clone(), d);
                 }
             }
@@ -298,9 +293,7 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
                     return Err(bad(&format!("scope `budget` must hold exactly one budget, found {}", specs.len())));
                 }
                 let spec = specs.into_iter().next().expect("length checked");
-                scopes.budget = Some(
-                    crate::budget_scope::BudgetScope::parse(&spec).map_err(|e| bad(&e))?,
-                );
+                scopes.budget = Some(crate::budget_scope::BudgetScope::parse(&spec).map_err(|e| bad(&e))?);
             }
             other => return Err(unknown("the scope dimension", other)),
         }
@@ -348,10 +341,8 @@ pub fn verify_chain(
             });
         }
         // 3. Signature, and that the SIGNER is the named issuer.
-        let signer = verifier.verify(&c.alg, &c.signing_bytes(), &c.sig).ok_or_else(|| {
-            Denial::CertUntrusted {
-                detail: format!("certificate {i}'s signature does not verify over its own bytes"),
-            }
+        let signer = verifier.verify(&c.alg, &c.signing_bytes(), &c.sig).ok_or_else(|| Denial::CertUntrusted {
+            detail: format!("certificate {i}'s signature does not verify over its own bytes"),
         })?;
         if signer != c.issuer {
             return Err(Denial::CertUntrusted {
@@ -364,11 +355,7 @@ pub fn verify_chain(
         }
         // 4. Validity window. Checked per certificate: a chain is only as live as its shortest hop.
         if now_millis < c.not_before || now_millis >= c.not_after {
-            return Err(Denial::CertExpired {
-                not_before: c.not_before,
-                not_after: c.not_after,
-                now_millis,
-            });
+            return Err(Denial::CertExpired { not_before: c.not_before, not_after: c.not_after, now_millis });
         }
         match prev {
             // 1. Root of the chain: must be anchored, and the anchor must be one we configured.
@@ -628,15 +615,7 @@ impl crate::tree::Broker {
         // Remember the whole chain's fingerprints so revoking this node retires the credential (P20-R4).
         self.record_adopted_chain(&node, chain_fps);
         let seq = self.consume_seq();
-        self.record_op(
-            seq,
-            "adopt",
-            Some(node.as_str().to_string()),
-            Some(fingerprint),
-            None,
-            "allow",
-            None,
-        );
+        self.record_op(seq, "adopt", Some(node.as_str().to_string()), Some(fingerprint), None, "allow", None);
         Ok(node)
     }
 
@@ -670,21 +649,15 @@ impl crate::tree::Broker {
     ) -> Result<(i64, Renewal), Denial> {
         if !verifier.supports(&receipt.alg) {
             return Err(Denial::CertUnsupported {
-                detail: format!(
-                    "contact receipt is signed with `{}`, which this build cannot verify",
-                    receipt.alg
-                ),
+                detail: format!("contact receipt is signed with `{}`, which this build cannot verify", receipt.alg),
             });
         }
-        let signer = verifier.verify(&receipt.alg, &receipt.signing_bytes(), &receipt.sig).ok_or_else(
-            || Denial::CertUntrusted { detail: "contact receipt signature does not verify".into() },
-        )?;
+        let signer = verifier
+            .verify(&receipt.alg, &receipt.signing_bytes(), &receipt.sig)
+            .ok_or_else(|| Denial::CertUntrusted { detail: "contact receipt signature does not verify".into() })?;
         if signer != receipt.issuer {
             return Err(Denial::CertUntrusted {
-                detail: format!(
-                    "contact receipt names issuer `{}` but was signed by `{signer}`",
-                    receipt.issuer
-                ),
+                detail: format!("contact receipt names issuer `{}` but was signed by `{signer}`", receipt.issuer),
             });
         }
         // Strict mode (DISC-1) pins the anchor for RENEWAL too, mirroring `adopt`. Otherwise a
@@ -697,10 +670,7 @@ impl crate::tree::Broker {
         };
         if !effective_anchors.contains(&receipt.issuer) {
             return Err(Denial::CertUntrusted {
-                detail: format!(
-                    "contact receipt issuer `{}` is not a configured trust anchor",
-                    receipt.issuer
-                ),
+                detail: format!("contact receipt issuer `{}` is not a configured trust anchor", receipt.issuer),
             });
         }
         // The receipt names the credential it renews, so a receipt for a harmless grant cannot be
@@ -723,15 +693,7 @@ impl crate::tree::Broker {
         let before = self.inspect(&node).and_then(|n| n.ttl_millis);
         let in_force = self.extend_ttl(&node, deadline).ok_or(Denial::UnknownNode { node: node.clone() })?;
         let seq = self.consume_seq();
-        self.record_op(
-            seq,
-            "renew",
-            Some(node.as_str().to_string()),
-            Some(receipt.certificate.clone()),
-            None,
-            "allow",
-            None,
-        );
+        self.record_op(seq, "renew", Some(node.as_str().to_string()), Some(receipt.certificate.clone()), None, "allow", None);
         Ok((in_force, Renewal { node, ttl_millis: before }))
     }
 
@@ -808,11 +770,7 @@ mod tests {
 
     fn auth(effects: &[&str], device: &[&str]) -> Authority {
         let scopes = Scopes {
-            device: device
-                .iter()
-                .map(|s| device_scope::parse(s).unwrap())
-                .map(|d| (d.device.clone(), d))
-                .collect(),
+            device: device.iter().map(|s| device_scope::parse(s).unwrap()).map(|d| (d.device.clone(), d)).collect(),
             ..Default::default()
         };
         Authority::new(effects.iter().map(|n| Effect::core_from_name(n).unwrap()), scopes)
@@ -1008,10 +966,7 @@ mod tests {
     /// A broker plus a handle to its clock, so a test can advance time with no sleeps.
     fn broker_clocked(now: i64) -> (crate::tree::Broker, std::rc::Rc<crate::time::ManualClock>) {
         let clock = std::rc::Rc::new(crate::time::ManualClock::new(now));
-        let b = crate::tree::Broker::with_sources(
-            Box::new(crate::ids::SeqIdSource::new()),
-            Box::new(clock.clone()),
-        );
+        let b = crate::tree::Broker::with_sources(Box::new(crate::ids::SeqIdSource::new()), Box::new(clock.clone()));
         (b, clock)
     }
     fn holder() -> crate::tree::Holder {
@@ -1186,9 +1141,7 @@ mod tests {
         let root = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000));
 
         // 1. Adopt [root]; the authority is live.
-        let node = b
-            .adopt(std::slice::from_ref(&root), &anchors(&["ground"]), &FakeVerifier, holder())
-            .expect("adopts");
+        let node = b.adopt(std::slice::from_ref(&root), &anchors(&["ground"]), &FakeVerifier, holder()).expect("adopts");
         assert!(b.check(&node, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow());
 
         // 2. The operator revokes it. The node grants nothing afterward.
@@ -1200,16 +1153,14 @@ mod tests {
 
         // 3. THE ATTACK: extend the chain by one self-delegation the vehicle key can mint offline,
         //    then re-adopt. This is the exact move that undid the revocation before the fix.
-        let child =
-            cert("vehicle", "vehicle", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 10_000));
+        let child = cert("vehicle", "vehicle", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 10_000));
         let err = b
             .adopt(&[root.clone(), child], &anchors(&["ground"]), &FakeVerifier, holder())
             .expect_err("adopting an extension of a revoked chain must be refused");
         assert_eq!(err.code(), "DL1415", "must refuse as untrusted, got {err:?}");
 
         // 4. A SECOND, different extension is refused too — every extension shares the anchored root.
-        let child2 =
-            cert("vehicle", "other", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 9_500));
+        let child2 = cert("vehicle", "other", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 9_500));
         assert!(
             b.adopt(&[root.clone(), child2], &anchors(&["ground"]), &FakeVerifier, holder()).is_err(),
             "no extension of the revoked credential may adopt"
@@ -1244,16 +1195,12 @@ mod tests {
             // test by making the certificate canonical before it was ever signed.
             Authority {
                 effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
-                scopes: Scopes {
-                    fs_read: paths.iter().map(|s| s.to_string()).collect(),
-                    ..Default::default()
-                },
+                scopes: Scopes { fs_read: paths.iter().map(|s| s.to_string()).collect(), ..Default::default() },
             }
         }
 
         let root = cert("ground", "vehicle", ANCHOR, fs_auth(&["data"]), (0, 10_000));
-        let leaf =
-            cert("vehicle", "payload", &root.fingerprint(), fs_auth(&[r".\data\sub"]), (0, 10_000));
+        let leaf = cert("vehicle", "payload", &root.fingerprint(), fs_auth(&[r".\data\sub"]), (0, 10_000));
         let chain = vec![root, leaf];
 
         // 1. A non-canonical spelling does not break verification.
@@ -1276,18 +1223,12 @@ mod tests {
              would then hash differently from the identical grant issued locally",
             stored.authority.scopes.fs_read
         );
-        assert_eq!(
-            stored.authority.scopes.fs_read,
-            ["./data/sub".to_string()].into_iter().collect::<BTreeSet<_>>()
-        );
+        assert_eq!(stored.authority.scopes.fs_read, ["./data/sub".to_string()].into_iter().collect::<BTreeSet<_>>());
 
         // 3. And it means exactly what it meant on the wire.
         let inside = Authority {
             effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
-            scopes: Scopes {
-                fs_read: ["./data/sub/deep".to_string()].into_iter().collect(),
-                ..Default::default()
-            },
+            scopes: Scopes { fs_read: ["./data/sub/deep".to_string()].into_iter().collect(), ..Default::default() },
         };
         assert!(
             crate::authority::attenuation_check(&inside, &stored.authority).is_ok(),
@@ -1295,10 +1236,7 @@ mod tests {
         );
         let outside = Authority {
             effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
-            scopes: Scopes {
-                fs_read: ["./other".to_string()].into_iter().collect(),
-                ..Default::default()
-            },
+            scopes: Scopes { fs_read: ["./other".to_string()].into_iter().collect(), ..Default::default() },
         };
         assert!(
             crate::authority::attenuation_check(&outside, &stored.authority).is_err(),
@@ -1314,11 +1252,7 @@ mod tests {
         let leaf = cert("vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 9_000));
         let mut b = broker_at(500);
         let node = b.adopt(&[root, leaf], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
-        assert_eq!(
-            b.inspect(&node).unwrap().ttl_millis,
-            Some(2_000),
-            "the root's earlier expiry bounds the adopted node"
-        );
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(2_000), "the root's earlier expiry bounds the adopted node");
     }
 
     /// **Revocation must not be undoable by replay.** Without single-adoption, an operator's
@@ -1367,10 +1301,7 @@ mod tests {
         b2.restore_revoked_adoption_fps(snapshot);
         let err = b2.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
         assert_eq!(err.code(), "DL1415");
-        assert!(
-            format!("{err:?}").to_lowercase().contains("revoked"),
-            "refused specifically as a revoked credential: {err:?}"
-        );
+        assert!(format!("{err:?}").to_lowercase().contains("revoked"), "refused specifically as a revoked credential: {err:?}");
     }
 
     /// **ADOPT-REPLAY-1 fail-closed**: if the persisted denylist was unreadable at startup, the daemon
@@ -1408,16 +1339,16 @@ mod tests {
         // time rather than a stack overflow.
         let nested = format!("{}{}", "[".repeat(600), "]".repeat(600));
         let cases: Vec<String> = vec![
-            String::new(),                               // empty
-            "dlcert1".to_string(),                       // magic only, no fields
-            "dlcert1\nno-colon-line".to_string(),        // a line with no `key: value`
-            "dlcert1\nalg: ed25519".to_string(),         // missing required fields
-            valid.replace("not_after: 1000", "not_after: 99999999999999999999999999999"), // i64 overflow
+            String::new(),                                                                      // empty
+            "dlcert1".to_string(),                                                              // magic only, no fields
+            "dlcert1\nno-colon-line".to_string(),                                               // a line with no `key: value`
+            "dlcert1\nalg: ed25519".to_string(),                                                // missing required fields
+            valid.replace("not_after: 1000", "not_after: 99999999999999999999999999999"),       // i64 overflow
             valid.replace("nonce: nn", "nonce: nn\nuplink_ttl_ms: 99999999999999999999999999"), // u64 overflow
-            valid.replace(auth, "not-json"),             // authority is not JSON
-            valid.replace(auth, &nested),                // authority nested past the recursion limit
-            valid.replace("sig: 00", "sig: abc"),        // odd-length hex
-            valid.replace("sig: 00", "sig: zz"),         // even-length but not hex
+            valid.replace(auth, "not-json"),                                                    // authority is not JSON
+            valid.replace(auth, &nested),         // authority nested past the recursion limit
+            valid.replace("sig: 00", "sig: abc"), // odd-length hex
+            valid.replace("sig: 00", "sig: zz"),  // even-length but not hex
             valid.replace("not_before: 0", "not_before: not-a-number"), // non-numeric int field
         ];
         for c in &cases {
@@ -1429,7 +1360,8 @@ mod tests {
             String::new(),
             "dlrcpt1".to_string(),
             "dlrcpt1\nno-colon".to_string(),
-            "dlrcpt1\nalg: ed25519\nissuer: a\ncertificate: c\nnot_after: 99999999999999999999999999\nnonce: n\nsig: 00".to_string(),
+            "dlrcpt1\nalg: ed25519\nissuer: a\ncertificate: c\nnot_after: 99999999999999999999999999\nnonce: n\nsig: 00"
+                .to_string(),
             "dlrcpt1\nalg: ed25519\nissuer: a\ncertificate: c\nnot_after: 10\nnonce: n\nsig: xyz".to_string(),
         ];
         for r in &receipts {
@@ -1443,13 +1375,7 @@ mod tests {
         // Unknown anchor.
         assert!(broker_at(500).adopt(&chain, &anchors(&["nobody"]), &FakeVerifier, holder()).is_err());
         // Outside the window: the broker's OWN clock decides, not the presenter's.
-        assert_eq!(
-            broker_at(50_000)
-                .adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder())
-                .unwrap_err()
-                .code(),
-            "DL1417"
-        );
+        assert_eq!(broker_at(50_000).adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err().code(), "DL1417");
         // Empty chain grants nothing.
         assert!(broker_at(500).adopt(&[], &anchors(&["ground"]), &FakeVerifier, holder()).is_err());
     }
@@ -1482,9 +1408,8 @@ mod tests {
     #[test]
     fn the_tightest_uplink_term_anywhere_in_the_chain_applies() {
         let root = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 90_000), Some(5_000));
-        let leaf = cert_uplink(
-            "vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 90_000), Some(2_000),
-        );
+        let leaf =
+            cert_uplink("vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 90_000), Some(2_000));
         let mut b = broker_at(1_000);
         let node = b.adopt(&[root, leaf], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
         assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(3_000), "1000 + the tighter 2000");
@@ -1502,16 +1427,12 @@ mod tests {
         assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(1_500));
 
         // Contact: the lease moves forward.
-        let got = b
-            .renew(&receipt("ground", &fp, 4_000), &anchors(&["ground"]), &FakeVerifier)
-            .expect("a valid receipt renews");
+        let got = b.renew(&receipt("ground", &fp, 4_000), &anchors(&["ground"]), &FakeVerifier).expect("a valid receipt renews");
         assert_eq!(got, 4_000);
         assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(4_000));
 
         // A receipt that reaches past the certificate is CLAMPED to it, not honoured.
-        let got = b
-            .renew(&receipt("ground", &fp, 999_999), &anchors(&["ground"]), &FakeVerifier)
-            .unwrap();
+        let got = b.renew(&receipt("ground", &fp, 999_999), &anchors(&["ground"]), &FakeVerifier).unwrap();
         assert_eq!(got, 8_000, "the certificate window is the ceiling a receipt cannot lift");
     }
 
@@ -1525,9 +1446,7 @@ mod tests {
         let node = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
         b.renew(&receipt("ground", &fp, 6_000), &anchors(&["ground"]), &FakeVerifier).unwrap();
         // An attacker replays a stale receipt with an earlier deadline.
-        let got = b
-            .renew(&receipt("ground", &fp, 2_000), &anchors(&["ground"]), &FakeVerifier)
-            .unwrap();
+        let got = b.renew(&receipt("ground", &fp, 2_000), &anchors(&["ground"]), &FakeVerifier).unwrap();
         assert_eq!(got, 6_000, "the lease did not move backwards");
         assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(6_000));
     }
@@ -1549,9 +1468,8 @@ mod tests {
         assert_eq!(b.inspect(&root).unwrap().ttl_millis, Some(1_500));
 
         // The vehicle delegates itself a child with NO deadline of its own — the escape attempt.
-        let child = b
-            .attenuate(&root, auth(&["Actuate"], &[WIDE]), holder(), None)
-            .expect("delegating within the lease is legitimate");
+        let child =
+            b.attenuate(&root, auth(&["Actuate"], &[WIDE]), holder(), None).expect("delegating within the lease is legitimate");
         assert!(b.inspect(&child).unwrap().ttl_millis.is_none(), "the child carries no TTL itself");
         assert!(b.check(&child, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow());
 
@@ -1656,7 +1574,7 @@ mod tests {
         for text in [
             "",
             "not-a-cert\nalg: test-sig\n",
-            "dlcert1\nalg: test-sig\n",                       // missing everything else
+            "dlcert1\nalg: test-sig\n", // missing everything else
             "dlcert1\nalg: x\nissuer: a\nsubject: b\nparent: anchor\nnot_before: nope\n",
         ] {
             assert!(parse(text).is_err(), "must refuse: {text:?}");
@@ -1725,30 +1643,17 @@ mod tests {
             declassify: ["API_KEY".to_string()].into_iter().collect(),
             foreign_c: ["libm".to_string()].into_iter().collect(),
             foreign_python: ["numpy".to_string()].into_iter().collect(),
-            device: [device_scope::parse(
-                "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold",
-            )
-            .unwrap()]
-            .into_iter()
-            .map(|d| (d.device.clone(), d))
-            .collect(),
+            device: [device_scope::parse("arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold").unwrap()]
+                .into_iter()
+                .map(|d| (d.device.clone(), d))
+                .collect(),
             budget: Some(crate::budget_scope::BudgetScope { memory_bytes: 268_435_456, cpu_seconds: 60 }),
             secret_to: ["API_KEY@api.example.com:443".to_string()].into_iter().collect(),
         };
         // Exhaustive by construction: a new field breaks this pattern at compile time. (It did, for
         // `budget` at PS-B-05, which is how the dimension got its serialization decided.)
-        let Scopes {
-            fs_read,
-            fs_write,
-            net,
-            secrets,
-            declassify,
-            foreign_c,
-            foreign_python,
-            device,
-            budget,
-            secret_to,
-        } = &scopes;
+        let Scopes { fs_read, fs_write, net, secrets, declassify, foreign_c, foreign_python, device, budget, secret_to } =
+            &scopes;
         for (what, empty) in [
             ("fs_read", fs_read.is_empty()),
             ("fs_write", fs_write.is_empty()),
@@ -1765,9 +1670,7 @@ mod tests {
         }
 
         let original = Authority::new(
-            ["Read", "Write", "Net", "Declassify", "ForeignCall", "Actuate"]
-                .iter()
-                .map(|n| Effect::core_from_name(n).unwrap()),
+            ["Read", "Write", "Net", "Declassify", "ForeignCall", "Actuate"].iter().map(|n| Effect::core_from_name(n).unwrap()),
             scopes.clone(),
         );
         let json = original.to_json();
@@ -1777,7 +1680,18 @@ mod tests {
         // And the rendering a human reads must mention every non-empty dimension, since it is the
         // same hand-written list and feeds DL0802's repair text.
         let compact = original.render_compact();
-        for needle in ["fs.read", "fs.write", "net", "secrets", "secret_to", "declassify", "foreign.c", "foreign.python", "device", "budget"] {
+        for needle in [
+            "fs.read",
+            "fs.write",
+            "net",
+            "secrets",
+            "secret_to",
+            "declassify",
+            "foreign.c",
+            "foreign.python",
+            "device",
+            "budget",
+        ] {
             assert!(compact.contains(needle), "`render_compact` omits `{needle}`: {compact}");
         }
     }

@@ -74,8 +74,7 @@ fn atlas_json_is_a_versioned_envelope_with_stable_ids() {
     let _ = std::fs::remove_dir_all(&dir);
     let o = delulu(&["atlas", DEMO, "--out", dir.to_str().unwrap()]);
     assert!(o.status.success(), "atlas --out: {}", stderr(&o));
-    let bare: Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.join("atlas.json")).unwrap()).unwrap();
+    let bare: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("atlas.json")).unwrap()).unwrap();
     assert_eq!(bare["atlas"], "atlas/1", "the bundle file is the bare document");
     let reread = delulu(&["atlas", dir.join("atlas.json").to_str().unwrap(), "--json"]);
     assert!(reread.status.success(), "the bare file is readable: {}", stderr(&reread));
@@ -101,10 +100,7 @@ fn digest_has_budget_ordering_authority_gods_caveats_and_footer() {
     assert!(d.contains("delulu atlas node <name-or-id>"), "footer teaches the verbs verbatim");
     assert!(d.contains("## God nodes"), "god nodes present");
     assert!(d.contains("Authority (mirrors `delulu authority`)"), "authority table present");
-    assert!(
-        d.contains("static map of checked facts, not a runtime trace"),
-        "the verbatim caveat ships"
-    );
+    assert!(d.contains("static map of checked facts, not a runtime trace"), "the verbatim caveat ships");
     assert!(d.contains("chars/4 heuristic"), "the budget is stated as a heuristic");
     // Default budget respected (chars/4 ≤ 2000).
     assert!(d.chars().count() / 4 <= 2000, "digest respects the default 2000-token budget");
@@ -192,12 +188,7 @@ fn digest_honors_budget_through_the_binary() {
     assert!(budgeted.contains("## Querying further"), "footer survives truncation");
     assert!(budgeted.contains("delulu atlas node <name-or-id>"), "the verbs are still taught");
     // (c) dramatically smaller than unbudgeted.
-    assert!(
-        budgeted.len() < unbudgeted.len() / 2,
-        "dramatically smaller: {} vs {} chars",
-        budgeted.len(),
-        unbudgeted.len()
-    );
+    assert!(budgeted.len() < unbudgeted.len() / 2, "dramatically smaller: {} vs {} chars", budgeted.len(), unbudgeted.len());
     // (d) deterministic: byte-identical rerun.
     let again = stdout(&delulu(&["atlas", target, "--format", "digest", "--budget", "100"]));
     assert_eq!(budgeted, again, "byte-identical across runs");
@@ -211,23 +202,15 @@ fn digest_honors_budget_through_the_binary() {
 fn atlas_authority_matches_delulu_authority_exactly() {
     let env: Value = serde_json::from_str(&stdout(&delulu(&["atlas", DEMO, "--json"]))).unwrap();
     let atlas: Value = env["atlas"].clone();
-    let authority: Value =
-        serde_json::from_str(&stdout(&delulu(&["authority", DEMO, "--json"]))).unwrap();
+    let authority: Value = serde_json::from_str(&stdout(&delulu(&["authority", DEMO, "--json"]))).unwrap();
     // The atlas embeds the authority report's compiler-computed fields verbatim; `delulu authority`
     // additionally stamps run-mode decorations (custody/foreign_isolation) that the atlas omits.
     for key in ["effects", "capabilities", "secrets", "foreign_calls", "pure_functions"] {
-        assert_eq!(
-            atlas["authority"][key], authority["authority"][key],
-            "authority parity on `{key}`"
-        );
+        assert_eq!(atlas["authority"][key], authority["authority"][key], "authority parity on `{key}`");
     }
     // And the graph's performs edges reach exactly those effects.
-    let effects: std::collections::BTreeSet<String> = authority["authority"]["effects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
+    let effects: std::collections::BTreeSet<String> =
+        authority["authority"]["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
     let performs: std::collections::BTreeSet<String> = atlas["edges"]
         .as_array()
         .unwrap()
@@ -258,8 +241,7 @@ fn refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph() {
     let o = delulu(&["atlas", REJECT, "--json"]);
     assert_eq!(o.status.code(), Some(1));
     let v: Value = serde_json::from_str(&stdout(&o)).expect("a diagnostics envelope is valid JSON");
-    let codes: Vec<&str> =
-        v["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap()).collect();
+    let codes: Vec<&str> = v["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap()).collect();
     assert!(codes.contains(&"DL1780"), "DL1780 in the envelope: {codes:?}");
     assert!(v.get("atlas").is_none(), "no atlas schema on refusal");
 }
@@ -319,9 +301,11 @@ fn foreign_boundary_appears_in_atlas_json_with_nodes_and_edges() {
     assert_eq!(numpy["name"], "numpy");
     // The function→foreign edge, from the ForeignCall-rowed function that imports it.
     assert!(
-        v["edges"].as_array().unwrap().iter().any(|e| e["kind"] == "foreign"
-            && e["from"] == "fn:numpy_mean/numpy_mean.mean_of"
-            && e["to"] == "foreign:py:numpy"),
+        v["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "foreign" && e["from"] == "fn:numpy_mean/numpy_mean.mean_of" && e["to"] == "foreign:py:numpy"),
         "mean_of --foreign--> numpy edge present"
     );
     // Query verbs route through the boundary.

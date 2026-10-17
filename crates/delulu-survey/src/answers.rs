@@ -57,13 +57,7 @@ pub fn envelope(verb: &str, payload: Value) -> Value {
 
 /// Up to ten node ids that contain `id` in their id or name — the "did you mean" of a miss.
 pub fn near(survey: &Survey, id: &str) -> Vec<String> {
-    survey
-        .nodes
-        .iter()
-        .filter(|n| n.id.contains(id) || n.name.contains(id))
-        .map(|n| n.id.clone())
-        .take(10)
-        .collect()
+    survey.nodes.iter().filter(|n| n.id.contains(id) || n.name.contains(id)).map(|n| n.id.clone()).take(10).collect()
 }
 
 /// `query` (both directions) or `rdeps` (what points at it only): the node, its edges with their

@@ -98,15 +98,7 @@ impl Broker {
                 Ok((child, token))
             }
             Err(d) => {
-                self.record_op(
-                    seq,
-                    "delegate",
-                    Some(parent.as_str().to_string()),
-                    None,
-                    Some(auth_json),
-                    "deny",
-                    None,
-                );
+                self.record_op(seq, "delegate", Some(parent.as_str().to_string()), None, Some(auth_json), "deny", None);
                 Err(d)
             }
         }
@@ -124,11 +116,7 @@ impl Broker {
     }
 
     /// [`Broker::redeem`], with what it changed — for the daemon to put back if the record is lost (RW 4.61's rest).
-    pub fn redeem_undoable(
-        &mut self,
-        token: &Token,
-        peer_desc: impl Into<String>,
-    ) -> Result<(GrantId, Redemption), Denial> {
+    pub fn redeem_undoable(&mut self, token: &Token, peer_desc: impl Into<String>) -> Result<(GrantId, Redemption), Denial> {
         let seq = self.consume_seq();
         let peer_desc = peer_desc.into();
         let result = self.redeem_inner(token, &peer_desc);
@@ -201,18 +189,14 @@ impl Broker {
         // Constant-time MAC check: compare blake3::Hash values, never hex strings.
         let expected = blake3::keyed_hash(&key, &payload_bytes);
         if expected != blake3::Hash::from_bytes(mac_bytes) {
-            return Err(Denial::TokenInvalid {
-                detail: "MAC verification failed (bad, tampered, or rotated-away key)".into(),
-            });
+            return Err(Denial::TokenInvalid { detail: "MAC verification failed (bad, tampered, or rotated-away key)".into() });
         }
         // Decode the (authenticated) payload.
         let Some(claims) = TokenClaims::parse(&payload_bytes) else {
             return Err(Denial::TokenInvalid { detail: "unreadable token payload".into() });
         };
         if claims.v != TOKEN_V {
-            return Err(Denial::TokenInvalid {
-                detail: format!("unsupported token version {}", claims.v),
-            });
+            return Err(Denial::TokenInvalid { detail: format!("unsupported token version {}", claims.v) });
         }
         let node = GrantId::from_trusted(claims.node);
         // The bound node must still exist (fail-closed: a token for a vanished node grants nothing).
@@ -239,10 +223,7 @@ impl Broker {
         //
         // Placed before the nonce is burned and before any state is written, so a refused redemption
         // mutates nothing.
-        match self
-            .effective_state_inherited(&node, now)
-            .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now })
-        {
+        match self.effective_state_inherited(&node, now).unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now }) {
             EffState::Revoked { by_seq } => {
                 return Err(Denial::Revoked { node: node.clone(), by_seq });
             }
@@ -254,19 +235,13 @@ impl Broker {
         // The TOKEN's own expiry (DL1402) — a separate bound from the node's, and deliberately so: a
         // short-lived token may be minted against a long-lived node.
         if now >= claims.exp_millis {
-            return Err(Denial::Expired {
-                node: node.clone(),
-                ttl_millis: claims.exp_millis,
-                now_millis: now,
-            });
+            return Err(Denial::Expired { node: node.clone(), ttl_millis: claims.exp_millis, now_millis: now });
         }
         // Single-redemption (DL1407) unless minted `multi`.
         let mut spent = None;
         if !claims.multi {
             if self.is_redeemed(&claims.nonce) {
-                return Err(Denial::TokenInvalid {
-                    detail: "single-use token already redeemed".into(),
-                });
+                return Err(Denial::TokenInvalid { detail: "single-use token already redeemed".into() });
             }
             self.mark_redeemed(&claims.nonce);
             spent = Some(claims.nonce.clone());
@@ -363,10 +338,7 @@ pub fn load_or_create_key(path: impl AsRef<Path>) -> std::io::Result<[u8; 32]> {
     }
     let bytes = std::fs::read(path)?;
     if bytes.len() != 32 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "broker key file is not exactly 32 bytes",
-        ));
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "broker key file is not exactly 32 bytes"));
     }
     let mut k = [0u8; 32];
     k.copy_from_slice(&bytes);
@@ -442,9 +414,23 @@ mod tests {
         let mut minting = broker(clock);
         let root = root_with_readnet(&mut minting);
         let (_, t1) = minting
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap();
-        let (_, t2) = minting.delegate(&root, Authority::new(eff(&["Net"]), Scopes { net: names(&["a.com"]), ..Default::default() }), holder(), Some(5_000), true).unwrap();
+        let (_, t2) = minting
+            .delegate(
+                &root,
+                Authority::new(eff(&["Net"]), Scopes { net: names(&["a.com"]), ..Default::default() }),
+                holder(),
+                Some(5_000),
+                true,
+            )
+            .unwrap();
         let seeds = vec![t1.as_str().as_bytes().to_vec(), t2.as_str().as_bytes().to_vec(), b"dlt1_".to_vec(), vec![]];
         let mut s: u64 = 0x1EA5_E70C_E0F2_2A11;
         let mut next = || {
@@ -516,11 +502,8 @@ mod tests {
             .with_key([7u8; 32])
             .with_sink(Box::new(sink.clone()));
         let parent_budget = BudgetScope { memory_bytes: 1 << 30, cpu_seconds: 300 };
-        let root = b.issue(
-            holder(),
-            Authority::new(eff(&["Read"]), Scopes { budget: Some(parent_budget), ..Default::default() }),
-            None,
-        );
+        let root =
+            b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { budget: Some(parent_budget), ..Default::default() }), None);
 
         // Named nothing: inherits the parent's budget.
         let (inherit, _) = b.delegate(&root, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None, false).unwrap();
@@ -536,14 +519,26 @@ mod tests {
         // Named a smaller one: kept as named.
         let small = BudgetScope { memory_bytes: 1 << 28, cpu_seconds: 60 };
         let (narrow, _) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { budget: Some(small), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { budget: Some(small), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap();
         assert_eq!(b.inspect(&narrow).unwrap().authority.scopes.budget, Some(small));
 
         // Named a larger one: refused, and the repair is the meet — never wider than either side.
         let greedy = BudgetScope { memory_bytes: 1 << 32, cpu_seconds: 60 };
         let err = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { budget: Some(greedy), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { budget: Some(greedy), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap_err();
         assert_eq!(err.code(), "DL0802");
         let inter = err.intersection().expect("DL0802 carries the intersection");
@@ -577,7 +572,13 @@ mod tests {
         let mut b = broker(clock);
         let root = root_with_readnet(&mut b);
         let (_c, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap();
         assert!(b.redeem(&token, "peer-1").is_ok());
         let err = b.redeem(&token, "peer-2").unwrap_err();
@@ -591,7 +592,13 @@ mod tests {
         let mut b = broker(clock);
         let root = root_with_readnet(&mut b);
         let (_c, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, true)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                true,
+            )
             .unwrap();
         assert!(b.redeem(&token, "peer-1").is_ok());
         assert!(b.redeem(&token, "peer-2").is_ok(), "a multi token redeems repeatedly");
@@ -604,7 +611,13 @@ mod tests {
         let root = root_with_readnet(&mut b);
         // TTL deadline at 5000 ms.
         let (_c, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), Some(5000), false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                Some(5000),
+                false,
+            )
             .unwrap();
         clock.set(6000); // advance the fake clock past the deadline — no sleep
         let err = b.redeem(&token, "peer").unwrap_err();
@@ -617,7 +630,13 @@ mod tests {
         let mut b = broker(clock);
         let root = root_with_readnet(&mut b);
         let (_c, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap();
         b.rotate_key(); // the outstanding token's MAC no longer verifies
         let err = b.redeem(&token, "peer").unwrap_err();
@@ -630,7 +649,13 @@ mod tests {
         let mut b = broker(clock);
         let root = root_with_readnet(&mut b);
         let (_c, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .unwrap();
         // Flip one hex nibble in the payload half → MAC mismatch.
         let s = token.as_str();
@@ -680,17 +705,26 @@ mod tests {
         let mut b = broker(clock.clone());
         let root = root_with_readnet(&mut b);
         let (child, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .expect("delegate");
         b.revoke(&root, &child).expect("revoke");
-        assert!(
-            matches!(b.redeem(&token, "peer"), Err(Denial::Revoked { .. })),
-            "a token for a revoked node must be refused"
-        );
+        assert!(matches!(b.redeem(&token, "peer"), Err(Denial::Revoked { .. })), "a token for a revoked node must be refused");
 
         // (2) the node's own TTL passed
         let (_c2, t2) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), Some(2_000), false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                Some(2_000),
+                false,
+            )
             .expect("delegate2");
         clock.set(5_000);
         assert!(matches!(b.redeem(&t2, "peer"), Err(Denial::Expired { .. })), "expired node");
@@ -705,7 +739,13 @@ mod tests {
             Some(2_000),
         );
         let (_c3, t3) = b3
-            .delegate(&root3, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root3,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .expect("delegate3");
         clock3.set(9_000);
         assert!(
@@ -721,7 +761,13 @@ mod tests {
             None,
         );
         let (_c4, t4) = b4
-            .delegate(&root4, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root4,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .expect("delegate4");
         b4.revoke(&root4, &root4).expect("revoke root");
         assert!(
@@ -736,15 +782,19 @@ mod tests {
         // a different broker therefore fails at the MAC — before the payload is even read — which is
         // what stops a token from being a bearer credential with global reach. (`with_key` here makes
         // the two keys differ deterministically; in production each broker's key is OS-random.)
-        let mut a = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000)))
-            .with_key([1u8; 32]);
+        let mut a = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000))).with_key([1u8; 32]);
         let root = root_with_readnet(&mut a);
         let (_child, token) = a
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .expect("delegate");
 
-        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000)))
-            .with_key([2u8; 32]);
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000))).with_key([2u8; 32]);
         // Give the second broker a node with the SAME id, so the failure cannot be "unknown node" —
         // it has to be the MAC.
         let _same_id = root_with_readnet(&mut b);
@@ -765,7 +815,13 @@ mod tests {
         let mut b = broker(clock);
         let root = root_with_readnet(&mut b);
         let (child, token) = b
-            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .delegate(
+                &root,
+                Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+                holder(),
+                None,
+                false,
+            )
             .expect("delegate");
         b.revoke(&root, &child).expect("revoke");
         let before = b.outcome_json();

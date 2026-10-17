@@ -19,9 +19,41 @@ use std::process::{Command, Output};
 /// Every run-once subcommand. Kept explicit so that adding a subcommand and forgetting the contract
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "device", "edit", "examples", "explain",
-    "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "monitor", "morph", "new",
-    "plugin", "publish", "run", "sandbox", "schema", "secrets", "sign", "skill", "test", "toolchain", "verify-sig",
+    "add",
+    "atlas",
+    "audit",
+    "authority",
+    "build",
+    "check",
+    "completions",
+    "deploy",
+    "device",
+    "edit",
+    "examples",
+    "explain",
+    "fix",
+    "fleet",
+    "fmt",
+    "grants",
+    "guard",
+    "keygen",
+    "locale",
+    "lock",
+    "login",
+    "monitor",
+    "morph",
+    "new",
+    "plugin",
+    "publish",
+    "run",
+    "sandbox",
+    "schema",
+    "secrets",
+    "sign",
+    "skill",
+    "test",
+    "toolchain",
+    "verify-sig",
     "why",
 ];
 
@@ -45,12 +77,7 @@ const NOT_SWEPT: &[&str] = &[
 
 /// Argument shapes that make a command fail. Each is something a real caller produces: no argument
 /// at all, a path that does not exist, a duplicated flag, a malformed flag.
-const FAILING_SHAPES: &[&[&str]] = &[
-    &[],
-    &["/nonexistent/delulu-json-contract/x.delulu"],
-    &["--json"],
-    &["---"],
-];
+const FAILING_SHAPES: &[&[&str]] = &[&[], &["/nonexistent/delulu-json-contract/x.delulu"], &["--json"], &["---"]];
 
 fn run(args: &[&str]) -> Output {
     let home = std::env::temp_dir().join(format!("delulu_json_contract_{}", std::process::id()));
@@ -147,16 +174,12 @@ fn a_failure_envelope_carries_the_fields_a_caller_keys_on() {
     // report zero — that is the field a caller branches on before reading anything else.
     let out = run(&["check", "/nonexistent/delulu-json-contract/x.delulu", "--json"]);
     assert_ne!(out.status.code(), Some(0));
-    let v: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("a failure must still be one JSON object");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a failure must still be one JSON object");
     assert_eq!(v["command"], "check");
     assert_eq!(v["schema"], 1);
     assert!(v["delulu_version"].is_string(), "{v}");
     assert!(v["diagnostics"].is_array(), "{v}");
-    assert_ne!(
-        v["summary"]["errors"], 0,
-        "a failed command must not report summary.errors == 0: {v}"
-    );
+    assert_ne!(v["summary"]["errors"], 0, "a failed command must not report summary.errors == 0: {v}");
 }
 
 #[test]
@@ -196,10 +219,7 @@ fn every_dispatched_subcommand_is_documented_and_swept() {
             missing_from_help.push(sub);
         }
     }
-    assert!(
-        missing_from_help.is_empty(),
-        "these subcommands exist but `--help` does not list them: {missing_from_help:?}"
-    );
+    assert!(missing_from_help.is_empty(), "these subcommands exist but `--help` does not list them: {missing_from_help:?}");
 
     // The other direction, which this gate did not check for its whole life. Above proves every
     // NAMED command is documented; it cannot notice a command the dispatcher accepts that nobody
@@ -209,10 +229,8 @@ fn every_dispatched_subcommand_is_documented_and_swept() {
     //
     // This is the campaign's recurring shape (C31/C34/C35/C44/C52): a hand-maintained list falls
     // behind the thing that defines it. The definition here is the dispatch `match`, so read it.
-    let src = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("cli.rs"),
-    )
-    .expect("cli.rs must be readable — it is the definition this gate reads");
+    let src = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("cli.rs"))
+        .expect("cli.rs must be readable — it is the definition this gate reads");
 
     let body = src
         .split_once("fn run_inner")
@@ -248,10 +266,8 @@ fn every_dispatched_subcommand_is_documented_and_swept() {
         dispatched.len()
     );
 
-    let unswept: Vec<&String> = dispatched
-        .iter()
-        .filter(|d| !SUBCOMMANDS.contains(&d.as_str()) && !NOT_SWEPT.contains(&d.as_str()))
-        .collect();
+    let unswept: Vec<&String> =
+        dispatched.iter().filter(|d| !SUBCOMMANDS.contains(&d.as_str()) && !NOT_SWEPT.contains(&d.as_str())).collect();
     assert!(
         unswept.is_empty(),
         "the dispatcher accepts these, but neither SUBCOMMANDS nor NOT_SWEPT names them, so no \
@@ -290,15 +306,8 @@ fn doctor_reporting_a_problem_still_emits_exactly_one_object() {
     let code = out.status.code().unwrap_or(-1);
 
     assert!(!panicked(&out), "doctor panicked:\n{}", String::from_utf8_lossy(&out.stderr));
-    assert_ne!(
-        code, 0,
-        "the fixture must actually produce a problem, or this test proves nothing:\n{stdout}"
-    );
-    assert_eq!(
-        count_json_values(&stdout),
-        1,
-        "doctor exited {code} and put more than one JSON object on stdout:\n{stdout}"
-    );
+    assert_ne!(code, 0, "the fixture must actually produce a problem, or this test proves nothing:\n{stdout}");
+    assert_eq!(count_json_values(&stdout), 1, "doctor exited {code} and put more than one JSON object on stdout:\n{stdout}");
 }
 
 // ----- the SUCCESS envelope (NE-05) --------------------------------------------------------------
@@ -344,16 +353,9 @@ fn fixture() -> std::path::PathBuf {
     // A dependency to `add --path`, and the package that adds it.
     let dep = d.join("dep");
     std::fs::create_dir_all(dep.join("src")).unwrap();
-    std::fs::write(
-        dep.join("delulu.toml"),
-        "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
-    )
-    .unwrap();
-    std::fs::write(
-        dep.join("src").join("dep.delulu"),
-        "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n",
-    )
-    .unwrap();
+    std::fs::write(dep.join("delulu.toml"), "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n")
+        .unwrap();
+    std::fs::write(dep.join("src").join("dep.delulu"), "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n").unwrap();
 
     let pkg = d.join("pkg");
     std::fs::create_dir_all(pkg.join("src")).unwrap();
@@ -435,10 +437,7 @@ fn every_json_success_emits_the_documented_envelope() {
     let built = run_in(&repo, &["plugin", "build", "examples/plugin_shout", "-o", &dpx.display().to_string()]);
     assert_eq!(built.status.code(), Some(0), "fixture plugin: {}", String::from_utf8_lossy(&built.stderr));
     let dwx = pkg.join("pkg.dwx");
-    let wasm = run_in(
-        &pkg,
-        &["build", "src/main.delulu", "--target", "wasm", "-o", &dwx.display().to_string()],
-    );
+    let wasm = run_in(&pkg, &["build", "src/main.delulu", "--target", "wasm", "-o", &dwx.display().to_string()]);
     assert_eq!(wasm.status.code(), Some(0), "fixture .dwx: {}", String::from_utf8_lossy(&wasm.stderr));
     let locked = run_in(&pkg, &["lock", "."]);
     assert_eq!(locked.status.code(), Some(0), "fixture lockfile: {}", String::from_utf8_lossy(&locked.stderr));
@@ -446,9 +445,13 @@ fn every_json_success_emits_the_documented_envelope() {
     // second, named one (a `keygen` that would overwrite a key refuses, correctly).
     let kg = run_in(&pkg, &["keygen"]);
     assert_eq!(kg.status.code(), Some(0), "fixture key: {}", String::from_utf8_lossy(&kg.stderr));
-    std::fs::write(pkg.join("env.toml"), "[authority]
+    std::fs::write(
+        pkg.join("env.toml"),
+        "[authority]
 effects = [\"Write\"]
-").unwrap();
+",
+    )
+    .unwrap();
     // P9-02: two grant files for `grants diff`, the second a narrowing of the first — it adds nothing, so the
     // command succeeds (exit 0) and its success envelope is the one exercised.
     std::fs::write(pkg.join("old.grants"), "console\nfs.read=./data\n").unwrap();
@@ -475,8 +478,15 @@ effects = [\"Write\"]
         // verb a sweep can drive: `device sim` without it reads standard input until it ends.
         (
             "device-sim",
-            vec!["device", "sim", "--seed", "1", "--actuator",
-                 "arm0/elbow:angle_deg=-1..1,heartbeat_ms=1000,ttl_ms=1000,fail=hold", "--json"],
+            vec![
+                "device",
+                "sim",
+                "--seed",
+                "1",
+                "--actuator",
+                "arm0/elbow:angle_deg=-1..1,heartbeat_ms=1000,ttl_ms=1000,fail=hold",
+                "--json",
+            ],
             Cwd::Pkg,
             "device",
         ),
@@ -509,7 +519,12 @@ effects = [\"Write\"]
         // P4-10: the shipped examples, each with its authority report.
         ("examples", vec!["examples", "--json"], Cwd::Pkg, "examples"),
         // P4-04: a checked edit — no edits, dry run, so the fixture is left as it was.
-        ("edit", vec!["edit", "src/main.delulu", "--expect-hash", &main_hash, "--edits", "[]", "--dry-run", "--json"], Cwd::Pkg, "edit"),
+        (
+            "edit",
+            vec!["edit", "src/main.delulu", "--expect-hash", &main_hash, "--edits", "[]", "--dry-run", "--json"],
+            Cwd::Pkg,
+            "edit",
+        ),
         ("schema-one", vec!["schema", "diagnostic", "--json"], Cwd::Pkg, "schema"),
         ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),
@@ -552,11 +567,7 @@ effects = [\"Write\"]
         bad.extend(assert_envelope(label, &so, want));
     }
     let _ = std::fs::remove_dir_all(pkg.parent().unwrap());
-    assert!(
-        bad.is_empty(),
-        "`--json` promises the same five fields on success as on failure:\n  {}",
-        bad.join("\n  ")
-    );
+    assert!(bad.is_empty(), "`--json` promises the same five fields on success as on failure:\n  {}", bad.join("\n  "));
 }
 
 /// NE-06: `explain` accepted `--json` and ignored it. The option parser exempted the flag from its
@@ -605,11 +616,9 @@ fn explain_answers_on_the_machine_channel_for_all_three_registries() {
     }
     // An allocated code carries `disposition: null` — it was allocated, so there is nothing to
     // dispose of — while an unallocated one names the disposition. The two must not look alike.
-    let allocated: serde_json::Value =
-        serde_json::from_slice(&run(&["explain", "DL0501", "--json"]).stdout).unwrap();
+    let allocated: serde_json::Value = serde_json::from_slice(&run(&["explain", "DL0501", "--json"]).stdout).unwrap();
     assert!(allocated["explain"]["disposition"].is_null());
-    let retired: serde_json::Value =
-        serde_json::from_slice(&run(&["explain", "DL0503", "--json"]).stdout).unwrap();
+    let retired: serde_json::Value = serde_json::from_slice(&run(&["explain", "DL0503", "--json"]).stdout).unwrap();
     assert_eq!(retired["explain"]["disposition"], "retired");
 }
 
@@ -668,11 +677,8 @@ fn a_report_shaped_failure_never_claims_zero_errors() {
     )
     .unwrap();
     // A test that fails at runtime, and an environment profile the package exceeds.
-    std::fs::write(
-        pkg.join("failing.delulu"),
-        "module failing\n\ntest \"two is three\" {\n    assert_eq(str(2), str(3))\n}\n",
-    )
-    .unwrap();
+    std::fs::write(pkg.join("failing.delulu"), "module failing\n\ntest \"two is three\" {\n    assert_eq(str(2), str(3))\n}\n")
+        .unwrap();
     std::fs::write(pkg.join("pure-env.toml"), "[authority]\neffects = []\n").unwrap();
 
     let run_in = |args: &[&str]| -> Output {
@@ -701,10 +707,7 @@ fn a_report_shaped_failure_never_claims_zero_errors() {
         let code = out.status.code().unwrap_or(-1);
         let so = String::from_utf8_lossy(&out.stdout).to_string();
         if code == 0 {
-            bad.push(format!(
-                "{label}: `delulu {}` exited 0, so this case witnesses nothing:\n{so}",
-                args.join(" ")
-            ));
+            bad.push(format!("{label}: `delulu {}` exited 0, so this case witnesses nothing:\n{so}", args.join(" ")));
             continue;
         }
         if count_json_values(&so) != 1 {
@@ -731,9 +734,7 @@ fn a_report_shaped_failure_never_claims_zero_errors() {
 fn every_subcommand_is_either_success_swept_or_excused_in_writing() {
     let src = std::fs::read_to_string(std::path::Path::new(file!()))
         .or_else(|_| {
-            std::fs::read_to_string(
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("json_contract.rs"),
-            )
+            std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("json_contract.rs"))
         })
         .expect("this test file must be readable — it is the table this gate reads");
     let table = src
@@ -741,12 +742,17 @@ fn every_subcommand_is_either_success_swept_or_excused_in_writing() {
         .map(|(_, rest)| rest.split_once("\n    ];").map(|(t, _)| t).unwrap_or(rest))
         .expect("the success table must be present");
     assert!(table.len() > 500, "the table scan broke, and a gate that reads nothing passes everything");
+    // Matched with the whitespace removed: a formatter breaks `vec!["device", "sim", …]` across lines (D-V2-145), and a
+    // gate that read the layout instead of the invocation would call a swept subcommand unswept.
+    let squeeze = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let table = squeeze(table);
 
     // The broker verbs are swept by their own test, which needs a running daemon (P1-F2).
-    let broker_sweep = src
-        .split_once("fn broker_verbs_emit_the_documented_envelope()")
-        .map(|(_, rest)| rest)
-        .expect("the broker success sweep must be present");
+    let broker_sweep = squeeze(
+        src.split_once("fn broker_verbs_emit_the_documented_envelope()")
+            .map(|(_, rest)| rest)
+            .expect("the broker success sweep must be present"),
+    );
     let mut missing: Vec<&str> = Vec::new();
     for sub in SUBCOMMANDS {
         let swept = table.contains(&format!("vec![\"{sub}\""))
@@ -821,16 +827,9 @@ fn no_manifest_shape_makes_a_package_command_panic() {
         let dep = case.join("dep");
         std::fs::create_dir_all(pkg.join("src")).unwrap();
         std::fs::create_dir_all(dep.join("src")).unwrap();
-        std::fs::write(
-            dep.join("delulu.toml"),
-            "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
-        )
-        .unwrap();
-        std::fs::write(
-            dep.join("src").join("main.delulu"),
-            "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n",
-        )
-        .unwrap();
+        std::fs::write(dep.join("delulu.toml"), "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n")
+            .unwrap();
+        std::fs::write(dep.join("src").join("main.delulu"), "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n").unwrap();
         std::fs::write(pkg.join("delulu.toml"), manifest).unwrap();
         std::fs::write(
             pkg.join("src").join("main.delulu"),
@@ -927,8 +926,7 @@ fn broker_verbs_emit_the_documented_envelope() {
     let started = go(&["broker", "start"]);
     assert!(started.status.success(), "broker start: {}", String::from_utf8_lossy(&started.stderr));
     let daemon = SweepDaemon { state: state.clone() };
-    let start_text =
-        format!("{}{}", String::from_utf8_lossy(&started.stdout), String::from_utf8_lossy(&started.stderr));
+    let start_text = format!("{}{}", String::from_utf8_lossy(&started.stdout), String::from_utf8_lossy(&started.stderr));
     let owner = {
         let i = start_text.find("gow1_").expect("broker start prints the guard owner code");
         let tail = &start_text[i..];
@@ -948,11 +946,7 @@ fn broker_verbs_emit_the_documented_envelope() {
         let label = argv.join(" ").replace(owner.as_str(), "<owner>");
         driven.push(format!("{} {}", args[0], args[1]));
         if out.status.code() != Some(0) {
-            bad.push(format!(
-                "`delulu {label}` exited {:?}:\n{}\n{so}",
-                out.status.code(),
-                String::from_utf8_lossy(&out.stderr)
-            ));
+            bad.push(format!("`delulu {label}` exited {:?}:\n{}\n{so}", out.status.code(), String::from_utf8_lossy(&out.stderr)));
             return serde_json::Value::Null;
         }
         if count_json_values(&so) != 1 {
@@ -1000,8 +994,20 @@ fn broker_verbs_emit_the_documented_envelope() {
     let vehicle = vp["pubkey"].as_str().unwrap_or("").to_string();
     step(
         &[
-            "grants", "certify", "--subject", &vehicle, "--effects", "Write", "--ttl", "1h", "--uplink-ttl", "1h",
-            "--key", &gk, "--out", "c.dlcert",
+            "grants",
+            "certify",
+            "--subject",
+            &vehicle,
+            "--effects",
+            "Write",
+            "--ttl",
+            "1h",
+            "--uplink-ttl",
+            "1h",
+            "--key",
+            &gk,
+            "--out",
+            "c.dlcert",
         ],
         "grants certify",
     );
@@ -1042,7 +1048,10 @@ fn broker_verbs_emit_the_documented_envelope() {
     assert!(r["subcommand"] == "reject" && r["reason"] == "sweep", "{r}");
     // P9-03 step 4 (D-V2-126): nothing is left pending, so the standing node approves nothing and leaves nothing (exit 0).
     let aa = step(&["grants", "auto-approve", "--parent", &approver], "grants");
-    assert!(aa["subcommand"] == "auto-approve" && aa["approved"] == serde_json::json!([]) && aa["pending"] == serde_json::json!([]), "{aa}");
+    assert!(
+        aa["subcommand"] == "auto-approve" && aa["approved"] == serde_json::json!([]) && aa["pending"] == serde_json::json!([]),
+        "{aa}"
+    );
 
     // ----- monitor (P8-04): a watch bounded by `--for`, so a sweep can drive it to its one envelope ---
     let m = step(&["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60"], "monitor");
@@ -1051,7 +1060,20 @@ fn broker_verbs_emit_the_documented_envelope() {
     assert_eq!(m["on_monitor_death"], "quarantine", "{m}");
     assert!(m["deadman"]["armed_seq"].is_u64() && m["deadman"]["disarmed_seq"].is_u64(), "{m}");
     let m = step(
-        &["monitor", "watch", "--node", &node, "--rule", "envelope", "--poll", "20", "--for", "60", "--on-monitor-death", "continue"],
+        &[
+            "monitor",
+            "watch",
+            "--node",
+            &node,
+            "--rule",
+            "envelope",
+            "--poll",
+            "20",
+            "--for",
+            "60",
+            "--on-monitor-death",
+            "continue",
+        ],
         "monitor",
     );
     assert!(m["on_monitor_death"] == "continue" && m["deadman"].is_null(), "`continue` arms nothing: {m}");
@@ -1090,8 +1112,11 @@ fn run_report_is_the_documented_envelope() {
          out.println(\"{\\\"sandbox\\\":{\\\"backend\\\":\\\"microvm\\\",\\\"level\\\":4,\\\"break_glass\\\":true}}\")\n}\n",
     )
     .unwrap();
-    std::fs::write(d.join("bad.delulu"), "module bad\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(nope)\n}\n")
-        .unwrap();
+    std::fs::write(
+        d.join("bad.delulu"),
+        "module bad\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(nope)\n}\n",
+    )
+    .unwrap();
     let go = |args: &[&str]| -> Output {
         Command::new(env!("CARGO_BIN_EXE_delulu"))
             .args(args)
@@ -1157,11 +1182,7 @@ fn run_report_is_the_documented_envelope() {
 
     // Inside a writable grant — by any spelling — the report (and the trace) are refused, and
     // nothing runs.
-    for (flag, path) in [
-        ("--report-out", "out/r.json"),
-        ("--report-out", "rep/../out/r.json"),
-        ("--trace-out", "out/t.txt"),
-    ] {
+    for (flag, path) in [("--report-out", "out/r.json"), ("--report-out", "rep/../out/r.json"), ("--trace-out", "out/t.txt")] {
         let mut args = vec!["run", "fake.delulu", "--grant", "console", "--grant", "fs.write=./out", flag, path];
         if flag == "--trace-out" {
             args.push("--trace-effects");

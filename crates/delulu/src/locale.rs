@@ -25,8 +25,7 @@ pub const WELCOME_ATTRIBUTION: &str = "— Jesse, The Creator of DeluluLang";
 
 /// The two picker lines (spec §6.2) — fixed spec text, shown before any locale exists, so
 /// they render in en-US always.
-const PICKER_TITLE: &str =
-    "pick your compiler's vibe (changes human text only — codes & JSON never change):";
+const PICKER_TITLE: &str = "pick your compiler's vibe (changes human text only — codes & JSON never change):";
 const PICKER_OPTIONS: &str = "  1) English (US)   2) Delulu Slang        [1]: ";
 
 static LOCALE: OnceLock<String> = OnceLock::new();
@@ -190,9 +189,7 @@ pub fn init_locale(args: &[String]) -> (Vec<String>, Vec<String>) {
 
     if !json && !machine_cmd && !ci && !no_first_run && interactive && !welcomed {
         // The picker runs only when nothing above it in the priority chain decided already.
-        let locale_pinned = flag.is_some()
-            || std::env::var("DELULU_LOCALE").is_ok()
-            || config_locale.is_some();
+        let locale_pinned = flag.is_some() || std::env::var("DELULU_LOCALE").is_ok() || config_locale.is_some();
         if !locale_pinned {
             picked = Some(run_picker());
         }
@@ -201,11 +198,8 @@ pub fn init_locale(args: &[String]) -> (Vec<String>, Vec<String>) {
     }
 
     // Priority: --locale > DELULU_LOCALE > config > picker choice > en-US.
-    let chosen = flag
-        .or_else(|| std::env::var("DELULU_LOCALE").ok())
-        .or(config_locale)
-        .or(picked)
-        .unwrap_or_else(|| "en-US".to_string());
+    let chosen =
+        flag.or_else(|| std::env::var("DELULU_LOCALE").ok()).or(config_locale).or(picked).unwrap_or_else(|| "en-US".to_string());
     let known = matches!(chosen.as_str(), "en-US" | "delulu-slang")
         || match installed_catalog(&chosen) {
             Some(cat) => {
@@ -235,7 +229,11 @@ fn run_picker() -> String {
     let _ = std::io::stdout().flush();
     let mut line = String::new();
     let _ = std::io::stdin().read_line(&mut line);
-    if line.trim() == "2" { "delulu-slang".to_string() } else { "en-US".to_string() }
+    if line.trim() == "2" {
+        "delulu-slang".to_string()
+    } else {
+        "en-US".to_string()
+    }
 }
 
 /// The welcome, in a plain box, both locales identically (spec §6.3). Stdout is the human's
@@ -287,7 +285,7 @@ mod tests {
             "is not possible. There's nothing wrong with being delulu. Anyway, u can't ",
             "decide what others think abt u. So start building with everything u've got. ",
             "Welcome to the Delulu Gang",
-            "\u{1F426}\u{200D}\u{1F525}", // 🐦‍🔥 (bird + ZWJ + fire — one glyph, three scalars)
+            "\u{1F426}\u{200D}\u{1F525}",  // 🐦‍🔥 (bird + ZWJ + fire — one glyph, three scalars)
             "\u{1F525}\u{1FAE1}\u{1F680}", // 🔥🫡🚀
         );
         assert_eq!(WELCOME_TEXT, expected, "the welcome text is law — revert, never edit");

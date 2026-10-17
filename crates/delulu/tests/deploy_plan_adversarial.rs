@@ -101,10 +101,7 @@ fn write_service(dir: &Path, module: &str, effects: &[&str]) {
     let declared: Vec<String> = set.iter().map(|e| format!("\"{e}\"")).collect();
     std::fs::write(
         dir.join("delulu.toml"),
-        format!(
-            "[package]\nname = \"{module}\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [{}]\n",
-            declared.join(", ")
-        ),
+        format!("[package]\nname = \"{module}\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [{}]\n", declared.join(", ")),
     )
     .unwrap();
 }
@@ -134,10 +131,7 @@ fn plan(services: &[(&str, PathBuf)], env: &Path, json: bool) -> Output {
 
 /// A service's sorted effect list from a `deploy plan --json` `services` array, found by name.
 fn service_effects(services: &[Value], name: &str) -> Vec<String> {
-    let s = services
-        .iter()
-        .find(|s| s["name"] == name)
-        .unwrap_or_else(|| panic!("missing service `{name}` among: {services:?}"));
+    let s = services.iter().find(|s| s["name"] == name).unwrap_or_else(|| panic!("missing service `{name}` among: {services:?}"));
     let mut es: Vec<String> = s["effects"]
         .as_array()
         .unwrap_or_else(|| panic!("service `{name}` has no effects array: {s}"))
@@ -321,11 +315,7 @@ fn an_unreadable_env_file_refuses_a_real_service_rather_than_approving_it() {
 
     let o = plan(&[("writersvc", svc)], &env, false);
     let text = combined(&o);
-    assert_ne!(
-        o.status.code(),
-        Some(0),
-        "an unreadable env file must never be treated as an unconstrained profile:\n{text}"
-    );
+    assert_ne!(o.status.code(), Some(0), "an unreadable env file must never be treated as an unconstrained profile:\n{text}");
 }
 
 // ----- 5. a service that fails its own check is a plain error, not DL1909 -----------------------
@@ -558,10 +548,7 @@ fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
     let human = plan(&[("scoped", svc.clone())], &env, false);
     assert!(human.status.success(), "the fixture approves: {}", combined(&human));
     let text = String::from_utf8_lossy(&human.stdout);
-    assert!(
-        text.contains("compared: effects") && text.contains("NOT compared"),
-        "the human verdict names its own scope: {text}"
-    );
+    assert!(text.contains("compared: effects") && text.contains("NOT compared"), "the human verdict names its own scope: {text}");
     assert!(
         text.contains("capability scopes") && text.contains("foreign holes"),
         "and names what it did NOT compare, specifically: {text}"
@@ -573,8 +560,5 @@ fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
     let v: Value = serde_json::from_slice(&machine.stdout).expect("deploy plan --json is valid JSON");
     assert_eq!(v["approved"], serde_json::json!(true), "{v}");
     assert_eq!(v["compared"], serde_json::json!(["effects"]), "the scope is machine-readable: {v}");
-    assert!(
-        v["not_compared"].as_array().is_some_and(|xs| xs.len() == 2),
-        "so is what was left out: {v}"
-    );
+    assert!(v["not_compared"].as_array().is_some_and(|xs| xs.len() == 2), "so is what was left out: {v}");
 }

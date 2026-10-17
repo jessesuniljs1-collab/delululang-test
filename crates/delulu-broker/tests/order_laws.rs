@@ -16,8 +16,7 @@ use delulu_broker::authority::{attenuation_check, Authority, Scopes};
 
 /// Spellings chosen so that several denote the SAME resolved path:
 ///   `./data`, `data`, `./data/`, `.\data`  all resolve to [Name("data")]
-const UNIVERSE: &[&str] =
-    &["./data", "data", "./data/", r".\data", "./data/sub", "./other", "./data/../secret"];
+const UNIVERSE: &[&str] = &["./data", "data", "./data/", r".\data", "./data/sub", "./other", "./data/../secret"];
 
 fn set(items: &[&str]) -> BTreeSet<String> {
     items.iter().map(|s| s.to_string()).collect()
@@ -87,10 +86,7 @@ fn the_element_relation_is_a_preorder() {
         for y in UNIVERSE {
             for z in UNIVERSE {
                 if elem_leq(x, y) && elem_leq(y, z) {
-                    assert!(
-                        elem_leq(x, z),
-                        "transitivity failed: {x:?} <= {y:?} <= {z:?} but not {x:?} <= {z:?}"
-                    );
+                    assert!(elem_leq(x, z), "transitivity failed: {x:?} <= {y:?} <= {z:?} but not {x:?} <= {z:?}");
                 }
             }
         }
@@ -110,13 +106,7 @@ fn the_set_order_is_reflexive_and_transitive() {
             }
             for c in &sets {
                 if leq(b, c) {
-                    assert!(
-                        leq(a, c),
-                        "transitivity failed: {} <= {} <= {} but not <= the last",
-                        show(a),
-                        show(b),
-                        show(c)
-                    );
+                    assert!(leq(a, c), "transitivity failed: {} <= {} <= {} but not <= the last", show(a), show(b), show(c));
                 }
             }
         }
@@ -182,13 +172,7 @@ fn the_meet_is_symmetric_as_the_comment_claims() {
         for b in &sets {
             let (ab, ba) = (meet(a, b), meet(b, a));
             if ab != ba {
-                counterexamples.push(format!(
-                    "  A={} B={}  ->  A^B={}  B^A={}",
-                    show(a),
-                    show(b),
-                    show(&ab),
-                    show(&ba)
-                ));
+                counterexamples.push(format!("  A={} B={}  ->  A^B={}  B^A={}", show(a), show(b), show(&ab), show(&ba)));
             }
         }
     }
@@ -277,10 +261,7 @@ fn equivalent_authorities_serialize_identically() {
     for a in &sets {
         for b in &sets {
             if leq(a, b) && leq(b, a) {
-                let (ja, jb) = (
-                    auth(a).canonicalized().to_json().to_string(),
-                    auth(b).canonicalized().to_json().to_string(),
-                );
+                let (ja, jb) = (auth(a).canonicalized().to_json().to_string(), auth(b).canonicalized().to_json().to_string());
                 if ja != jb {
                     counterexamples.push(format!("  {} -> {}\n  {} -> {}", show(a), ja, show(b), jb));
                 }

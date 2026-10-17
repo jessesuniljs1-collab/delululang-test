@@ -75,9 +75,8 @@ pub const EXCLUDED_DIRS: &[(&str, &str)] = &[
 /// node in the committed map until the first CI run (2026-09-14) built the map from a fresh clone
 /// and counted one node fewer. `tests/clean_checkout.rs` asks git which files it ignores, so the next
 /// artifact that belongs in this list fails a test before it can reach a commit.
-pub const EXCLUDED_FILE_EXTENSIONS: &[(&str, &str)] = &[
-    ("vsix", "the packaged VS Code extension — build output of `npm run package`, gitignored"),
-];
+pub const EXCLUDED_FILE_EXTENSIONS: &[(&str, &str)] =
+    &[("vsix", "the packaged VS Code extension — build output of `npm run package`, gitignored")];
 
 /// The Survey's own output, excluded because it must not map itself.
 ///
@@ -96,8 +95,7 @@ pub const OUTPUT_DIR: &str = "docs/survey";
 /// resolves, so the map does not depend on whether it has been generated yet. Note that
 /// `docs/survey/README.md` is *not* here — it is written by hand, so it is walked and its links are
 /// checked like any other document's.
-pub const OUTPUT_FILES: &[&str] =
-    &["docs/survey/SURVEY.md", "docs/survey/DISCREPANCIES.md", "docs/survey/survey.json"];
+pub const OUTPUT_FILES: &[&str] = &["docs/survey/SURVEY.md", "docs/survey/DISCREPANCIES.md", "docs/survey/survey.json"];
 
 /// The V1 historical archive, created in phase V2-0 (2026-09-17).
 ///
@@ -295,8 +293,8 @@ pub struct Survey {
 /// The health API, re-exported so a caller writes `delulu_survey::inspect` rather than reaching
 /// into a module path. [`health`] documents the boundary these draw.
 pub use health::{
-    find_source_tree, find_source_tree_from, inspect, integrity, outputs, stale_outputs, sync_outputs, tally,
-    Integrity, Repair, RepoHealth, Tally,
+    find_source_tree, find_source_tree_from, inspect, integrity, outputs, stale_outputs, sync_outputs, tally, Integrity, Repair,
+    RepoHealth, Tally,
 };
 
 impl Survey {
@@ -601,13 +599,7 @@ impl Builder {
     }
 
     pub fn edge(&mut self, kind: EdgeKind, from: &str, to: &str, file: &str, line: u32) {
-        self.edges.insert(Edge {
-            kind,
-            from: from.to_string(),
-            to: to.to_string(),
-            file: file.to_string(),
-            line,
-        });
+        self.edges.insert(Edge { kind, from: from.to_string(), to: to.to_string(), file: file.to_string(), line });
     }
 
     pub fn finding(&mut self, severity: Severity, class: &str, file: &str, line: u32, message: String, remedy: &str) {
@@ -660,12 +652,6 @@ impl Builder {
         facts.rulings = self.defined_rulings.len() as u32;
         facts.findings_recorded = self.defined_findings.len() as u32;
 
-        Survey {
-            schema: SCHEMA,
-            facts,
-            nodes,
-            edges: self.edges.into_iter().collect(),
-            findings: self.findings,
-        }
+        Survey { schema: SCHEMA, facts, nodes, edges: self.edges.into_iter().collect(), findings: self.findings }
     }
 }

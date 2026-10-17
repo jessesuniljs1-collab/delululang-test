@@ -172,13 +172,13 @@ fn endpoint_host(grant: &str, host: &str) -> Result<Option<String>, Refused> {
     if h.starts_with('[') {
         return Err(Refused::Unrepresentable(format!("`--grant {grant}` is an IPv6 address; this export does not map one yet")));
     }
-    let canonical = |name: &str| {
-        delulu_runtime::egress::parse_target(&format!("https://{name}/")).is_ok_and(|t| t.host == name)
-    };
+    let canonical = |name: &str| delulu_runtime::egress::parse_target(&format!("https://{name}/")).is_ok_and(|t| t.host == name);
     match h.strip_prefix("*.") {
         Some(suffix) => {
             if suffix.contains('*') {
-                return Err(Refused::Unrepresentable(format!("`--grant {grant}`: a wildcard is written only as the first label")));
+                return Err(Refused::Unrepresentable(format!(
+                    "`--grant {grant}`: a wildcard is written only as the first label"
+                )));
             }
             if !canonical(suffix) {
                 return Ok(None);
@@ -354,8 +354,16 @@ pub(crate) fn export(
         ),
     }));
     if !hosts.is_empty() {
-        let added_ro: Vec<&str> = BASELINE_READ_ONLY.iter().copied().filter(|p| !read_only.iter().any(|r| r == p) && !read_write.iter().any(|r| r == p)).collect();
-        let added_rw: Vec<&str> = BASELINE_READ_WRITE.iter().copied().filter(|p| !read_only.iter().any(|r| r == p) && !read_write.iter().any(|r| r == p)).collect();
+        let added_ro: Vec<&str> = BASELINE_READ_ONLY
+            .iter()
+            .copied()
+            .filter(|p| !read_only.iter().any(|r| r == p) && !read_write.iter().any(|r| r == p))
+            .collect();
+        let added_rw: Vec<&str> = BASELINE_READ_WRITE
+            .iter()
+            .copied()
+            .filter(|p| !read_only.iter().any(|r| r == p) && !read_write.iter().any(|r| r == p))
+            .collect();
         notes.push(format!(
             "OpenShell adds its baseline paths to a policy with a network rule unless the policy lists them: read-only {}, \
              read-write {} (where they exist) — run a boundary check on the EFFECTIVE policy (`openshell policy get --base`)",
@@ -371,11 +379,8 @@ pub(crate) fn export(
         );
     }
 
-    let rules: Vec<(String, String)> = hosts
-        .iter()
-        .enumerate()
-        .map(|(i, (h, _))| (format!("delulu_https_{}", i + 1), h.clone()))
-        .collect();
+    let rules: Vec<(String, String)> =
+        hosts.iter().enumerate().map(|(i, (h, _))| (format!("delulu_https_{}", i + 1), h.clone())).collect();
     let endpoint = |h: &str| {
         json!({
             "host": h, "port": PORT, "protocol": "rest", "enforcement": "enforce",
@@ -403,7 +408,11 @@ pub(crate) fn export(
     y.push_str("# its grants do not; `delulu sandbox policy --format openshell --json` accounts for every grant.\n");
     y.push_str(&format!("# program: {}\n", quote(&program)));
     for u in &unrepresented {
-        y.push_str(&format!("# not represented: {} — {}\n", quote(u["what"].as_str().unwrap_or("")), u["why"].as_str().unwrap_or("")));
+        y.push_str(&format!(
+            "# not represented: {} — {}\n",
+            quote(u["what"].as_str().unwrap_or("")),
+            u["why"].as_str().unwrap_or("")
+        ));
     }
     for o in &omitted {
         y.push_str(&format!("# omitted: {} — {}\n", quote(o["grant"].as_str().unwrap_or("")), o["why"].as_str().unwrap_or("")));
@@ -486,7 +495,11 @@ fn yaml_of(policy: &Value) -> String {
         y.push_str(&format!("  {}:\n    endpoints:\n", quote(name)));
         for ep in rule["endpoints"].as_array().into_iter().flatten() {
             y.push_str(&format!("      - host: {}\n        port: {}\n", s(&ep["host"]), ep["port"]));
-            y.push_str(&format!("        protocol: {}\n        enforcement: {}\n        rules:\n", s(&ep["protocol"]), s(&ep["enforcement"])));
+            y.push_str(&format!(
+                "        protocol: {}\n        enforcement: {}\n        rules:\n",
+                s(&ep["protocol"]),
+                s(&ep["enforcement"])
+            ));
             for r in ep["rules"].as_array().into_iter().flatten() {
                 y.push_str(&format!(
                     "          - allow:\n              method: {}\n              path: {}\n",
@@ -547,9 +560,17 @@ mod tests {
                 Err(Refused::Unrepresentable(why)) => {
                     // Refused by name: only for a grant this export has no mapping for.
                     assert!(
-                        grants.iter().any(|g| ["foreign.", "plugin", "exec.native", "actuator", "sensor", "compute", "net.special"]
-                            .iter()
-                            .any(|k| g.starts_with(k))),
+                        grants.iter().any(|g| [
+                            "foreign.",
+                            "plugin",
+                            "exec.native",
+                            "actuator",
+                            "sensor",
+                            "compute",
+                            "net.special"
+                        ]
+                        .iter()
+                        .any(|k| g.starts_with(k))),
                         "{path}: refused without a grant it cannot map: {why}"
                     );
                     continue;
@@ -611,7 +632,11 @@ mod tests {
                 assert!(n >= 1, "{path}: `{g}` was dropped in silence: {:#}", e.payload);
             }
             assert!(
-                e.payload["omitted"].as_array().unwrap().iter().all(|m| !e.payload["emitted"].as_array().unwrap().iter().any(|x| x["grant"] == m["grant"])),
+                e.payload["omitted"].as_array().unwrap().iter().all(|m| !e.payload["emitted"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|x| x["grant"] == m["grant"])),
                 "{path}: a grant both emitted and omitted"
             );
         }

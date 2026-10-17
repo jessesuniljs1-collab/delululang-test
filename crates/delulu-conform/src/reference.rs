@@ -70,10 +70,12 @@ pub fn generate(root: &Path) -> BTreeMap<String, String> {
 fn semantics_chapter(cov: &Coverage, num: &str, title: &str) -> String {
     let mut s = banner("`delulu_conform::rules::RULES` (enforcement cross-checked against the diagnostic registry)");
     s.push_str(&format!("# §{num} {title}\n\n"));
-    s.push_str("Each statement below is normative and carries a stable anchor id that conformance \
+    s.push_str(
+        "Each statement below is normative and carries a stable anchor id that conformance \
                 metadata can cite. **Enforced by** names the diagnostics that make the rule bite; \
                 a rule counts as covered only when *every* one of them has both an accepting and a \
-                rejecting witness.\n\n");
+                rejecting witness.\n\n",
+    );
     for r in crate::rules::RULES.iter().filter(|r| r.chapter == num) {
         s.push_str(&format!("## `{}`\n\n{}\n\n", r.anchor, r.statement));
         let codes: Vec<String> = r.enforced_by.iter().map(|c| format!("`{c}`")).collect();
@@ -90,7 +92,8 @@ fn semantics_chapter(cov: &Coverage, num: &str, title: &str) -> String {
 /// The reference index.
 fn index_chapter(cov: &Coverage) -> String {
     let mut s = banner("the chapter list and a live coverage run");
-    s.push_str("# The DeluluLang language reference\n\nThis reference is **generated in part**: \
+    s.push_str(
+        "# The DeluluLang language reference\n\nThis reference is **generated in part**: \
                 the grammar, tokens, primitive table, diagnostics registry, audit rules, CLI \
                 contracts and normative rule statements are all extracted from the compiler source \
                 by `delulu-conform --reference`. A change to the implementation that would stale a \
@@ -98,7 +101,8 @@ fn index_chapter(cov: &Coverage) -> String {
                 Every normative statement carries a stable anchor id (`ref.rule.*`, `ref.diag.*`, \
                 `ref.prim.*`, `ref.grammar.*`, `ref.audit.*`, `ref.cli.*`), and each anchor's \
                 conformance status is reported next to it — invariant 42: *a behavior not covered \
-                by a test is not stable, and the reference says so per item.*\n\n");
+                by a test is not stable, and the reference says so per item.*\n\n",
+    );
     s.push_str(&format!(
         "**Coverage today: {} of {} anchors ({:.1}%).** See [coverage.md](coverage.md).\n\n",
         cov.covered(),
@@ -111,7 +115,8 @@ fn index_chapter(cov: &Coverage) -> String {
         let n = crate::rules::RULES.iter().filter(|r| r.chapter == *num).count();
         s.push_str(&format!("- [§{num} {title}](semantics-{slug}.md) — {n} rule(s)\n"));
     }
-    s.push_str("\n## Extracted from the implementation\n\n\
+    s.push_str(
+        "\n## Extracted from the implementation\n\n\
                 - [Tokens](tokens.md)\n\
                 - [Grammar productions](grammar.md)\n\
                 - [The primitive table](primitives.md)\n\
@@ -123,15 +128,18 @@ fn index_chapter(cov: &Coverage) -> String {
                 ```\n\
                 cargo run -p delulu-conform -- --reference        # rewrite these chapters\n\
                 cargo run -p delulu-conform -- --check-reference  # fail if they are stale\n\
-                ```\n");
+                ```\n",
+    );
     s
 }
 
 fn tokens_chapter() -> String {
     let mut s = banner("`delulu_syntax::token` (the `TokenKind` enum and its keyword table)");
-    s.push_str("# Tokens\n\nThe complete lexical surface. Every row is a `TokenKind` variant; the\n\
+    s.push_str(
+        "# Tokens\n\nThe complete lexical surface. Every row is a `TokenKind` variant; the\n\
                 index is fenced against the enum by a drift guard in `token.rs`, so a token cannot\n\
-                be added, renamed or removed without this chapter changing with it.\n\n");
+                be added, renamed or removed without this chapter changing with it.\n\n",
+    );
     s.push_str("| Token | Lexeme | Description |\n|---|---|---|\n");
     for t in delulu_syntax::token::token_index() {
         let lex = match t.lexeme {
@@ -140,11 +148,12 @@ fn tokens_chapter() -> String {
         };
         s.push_str(&format!("| `{}` | {} | {} |\n", t.variant, lex, t.describe.replace('|', "\\|")));
     }
-    s.push_str("\n## Reserved words\n\nLexed as identifiers and refused at declaration sites \
+    s.push_str(
+        "\n## Reserved words\n\nLexed as identifiers and refused at declaration sites \
                 (`DL0106`), so a member name like `root.secret(…)` stays legal while `secret` \
-                cannot be *declared*:\n\n");
-    let reserved: Vec<String> =
-        delulu_syntax::token::RESERVED.iter().map(|r| format!("`{r}`")).collect();
+                cannot be *declared*:\n\n",
+    );
+    let reserved: Vec<String> = delulu_syntax::token::RESERVED.iter().map(|r| format!("`{r}`")).collect();
     s.push_str(&reserved.join(", "));
     s.push('\n');
     s
@@ -152,7 +161,8 @@ fn tokens_chapter() -> String {
 
 fn grammar_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_syntax::grammar::GRAMMAR_PRODUCTIONS` (fenced against `parser.rs`)");
-    s.push_str("# Grammar productions\n\nThe parser is hand-written recursive descent, so this is \
+    s.push_str(
+        "# Grammar productions\n\nThe parser is hand-written recursive descent, so this is \
                 the index of its productions: one row per user-facing production, each backed by a \
                 `parse_<name>` function that a drift guard verifies exists.\n\n\
                 **This is an index, not the grammar.** The normative EBNF lives in the stage \
@@ -164,7 +174,8 @@ fn grammar_chapter(cov: &Coverage) -> String {
                 spellings a reader expects. A test \
                 (`every_grammar_production_is_defined_in_a_normative_specification`) checks in both \
                 directions that every anchor below leads to a real production — an index that does \
-                not lead anywhere is not an index.\n\n");
+                not lead anywhere is not an index.\n\n",
+    );
     s.push_str(&coverage_line(cov, Category::Grammar));
     s.push_str("| Production | Defined as | Anchor | Coverage |\n|---|---|---|---|\n");
     for p in delulu_syntax::grammar::GRAMMAR_PRODUCTIONS {
@@ -178,11 +189,13 @@ fn grammar_chapter(cov: &Coverage) -> String {
 
 fn primitives_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_check::prim_table::PRIM_TABLE` (fenced against `check::method_sig`)");
-    s.push_str("# The primitive table\n\nEvery primitive operation, by receiver. **Arity is \
+    s.push_str(
+        "# The primitive table\n\nEvery primitive operation, by receiver. **Arity is \
                 normative**: the checker refuses a call carrying more arguments than the row \
                 states (`DL0403`), and the column is proven in both directions against that gate.\n\n\
                 Capability operations are the only source of primitive effects (T-CapOp), which is \
-                why this table is the checker's single source of truth rather than prose.\n\n");
+                why this table is the checker's single source of truth rather than prose.\n\n",
+    );
     s.push_str(&coverage_line(cov, Category::Prim));
     let mut current = "";
     for e in delulu_check::prim_table::PRIM_TABLE {
@@ -198,54 +211,52 @@ fn primitives_chapter(cov: &Coverage) -> String {
 
 fn diagnostics_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_diag::REGISTRY` (the diagnostic code registry)");
-    s.push_str("# Diagnostics\n\nEvery diagnostic code, with its title and its conformance status.\n\n\
+    s.push_str(
+        "# Diagnostics\n\nEvery diagnostic code, with its title and its conformance status.\n\n\
                 A code's **rejecting** witness proves it fires when it should; its **accepting** \
                 witness proves it does *not* fire on valid input. A diagnostic that always fires is \
-                as broken as one that never fires, so invariant 42 requires both.\n\n");
+                as broken as one that never fires, so invariant 42 requires both.\n\n",
+    );
     s.push_str(&coverage_line(cov, Category::Diag));
-    s.push_str("Codes marked other than `covered` are **not stable**: the classification of every \
+    s.push_str(
+        "Codes marked other than `covered` are **not stable**: the classification of every \
                 such code — shadowed by a more general code, producible but untested, or \
-                unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.\n\n");
+                unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.\n\n",
+    );
     s.push_str("| Code | Title | Anchor | Coverage |\n|---|---|---|---|\n");
     for c in delulu_diag::REGISTRY {
         let a = format!("ref.diag.{}", c.code);
-        s.push_str(&format!(
-            "| `{}` | {} | `{a}` | {} |\n",
-            c.code,
-            c.title.replace('|', "\\|"),
-            status(cov, &a)
-        ));
+        s.push_str(&format!("| `{}` | {} | `{a}` | {} |\n", c.code, c.title.replace('|', "\\|"), status(cov, &a)));
     }
 
     // The other half of the question. A reader who meets a code in a specification or an old
     // build order and looks it up here used to find nothing, which reads identically to a typo.
-    s.push_str("\n## Codes this compiler cannot emit\n\n\
+    s.push_str(
+        "\n## Codes this compiler cannot emit\n\n\
                 These `DLxxxx` are named somewhere in this repository but are **not** in the table \
                 above. Each carries a recorded disposition, so a code you cannot find is an \
                 answered question rather than a dead end — `delulu explain <code>` prints the \
                 reason, and a code in neither table is reported by the Survey as unexplained.\n\n\
                 `specified-not-implemented` marks a **real gap**: a specification names the code \
                 and nothing raises it. Those are kept visible rather than closed by inventing a \
-                code or editing the specification to match.\n\n");
+                code or editing the specification to match.\n\n",
+    );
     s.push_str("| Code | Disposition | Why |\n|---|---|---|\n");
     for u in delulu_diag::UNALLOCATED {
-        s.push_str(&format!(
-            "| `{}` | `{}` | {} |\n",
-            u.code,
-            u.disposition.word(),
-            u.why.replace('|', "\\|")
-        ));
+        s.push_str(&format!("| `{}` | `{}` | {} |\n", u.code, u.disposition.word(), u.why.replace('|', "\\|")));
     }
     s
 }
 
 fn audit_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_conform::AUDIT_RULES` (cross-checked against `SOUNDNESS_AUDIT.md`)");
-    s.push_str("# The audit rules\n\nThe soundness audit's rules R-1…R-7 — the properties the \
+    s.push_str(
+        "# The audit rules\n\nThe soundness audit's rules R-1…R-7 — the properties the \
                 laundering suite exists to attack. Each rule's rejecting witness is an exploit \
                 attempt that must fail; its accepting witness is the legitimate program that must \
                 still pass.\n\nThe normative statement of each rule lives in \
-                `docs/design/SOUNDNESS_AUDIT.md`; this chapter records enforcement and coverage.\n\n");
+                `docs/design/SOUNDNESS_AUDIT.md`; this chapter records enforcement and coverage.\n\n",
+    );
     s.push_str(&coverage_line(cov, Category::Audit));
     s.push_str("| Rule | Anchor | Coverage |\n|---|---|---|\n");
     for r in crate::AUDIT_RULES {
@@ -257,11 +268,13 @@ fn audit_chapter(cov: &Coverage) -> String {
 
 fn cli_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_conform::CLI_SUBCOMMANDS` (fenced against the `delulu` dispatch)");
-    s.push_str("# CLI contracts\n\nEvery subcommand of the `delulu` binary. Exit codes and the \
+    s.push_str(
+        "# CLI contracts\n\nEvery subcommand of the `delulu` binary. Exit codes and the \
                 `--json` envelopes are part of the stability contract from 1.0 (invariant 43).\n\n\
                 A subcommand's **accepting** witness is a valid invocation that succeeds; its \
                 **rejecting** witness is an invalid one that must refuse with a nonzero exit and an \
-                honest message — never a silent success, never a panic.\n\n");
+                honest message — never a silent success, never a panic.\n\n",
+    );
     s.push_str(&coverage_line(cov, Category::Cli));
     s.push_str("| Subcommand | Anchor | Coverage |\n|---|---|---|\n");
     for c in crate::CLI_SUBCOMMANDS {
@@ -273,10 +286,12 @@ fn cli_chapter(cov: &Coverage) -> String {
 
 fn coverage_chapter(cov: &Coverage) -> String {
     let mut s = banner("a live `delulu-conform --coverage` run");
-    s.push_str("# Conformance coverage\n\nInvariant 42: *the conformance suite is the \
+    s.push_str(
+        "# Conformance coverage\n\nInvariant 42: *the conformance suite is the \
                 specification's executable form.* This chapter is the machine's own account of how \
                 much of the reference is executable today. It is generated from a live coverage \
-                run — it cannot flatter itself.\n\n");
+                run — it cannot flatter itself.\n\n",
+    );
     s.push_str(&format!(
         "**{} of {} anchors ({:.1}%)** carry both an accepting and a rejecting witness.\n\n",
         cov.covered(),

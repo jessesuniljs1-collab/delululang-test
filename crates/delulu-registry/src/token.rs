@@ -86,12 +86,7 @@ impl Store {
             // token file knows the registry needs attention.
             format!("dlt_INSECURE_FALLBACK_{}_{}", owner, self.counter)
         };
-        self.tokens.push(Token {
-            value: value.clone(),
-            owner: owner.to_string(),
-            scopes,
-            revoked: false,
-        });
+        self.tokens.push(Token { value: value.clone(), owner: owner.to_string(), scopes, revoked: false });
         self.persist(path);
         value
     }

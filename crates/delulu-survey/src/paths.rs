@@ -172,7 +172,6 @@ pub fn normalize(p: &str) -> Option<String> {
     }
 }
 
-
 /// Blank out `` `code spans` `` so their contents cannot be mistaken for Markdown syntax.
 ///
 /// This repository writes a great deal of Delulu and Rust inline, and generic syntax such as
@@ -323,10 +322,8 @@ mod tests {
     /// a document that exists at `docs/<x>` is never shadowed by an older copy of the same name.
     #[test]
     fn the_present_tree_is_read_before_the_archive() {
-        let idx = PathIndex::new(&[
-            file("docs/playbooks/STAGE8_PLAYBOOK.md"),
-            file("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"),
-        ]);
+        let idx =
+            PathIndex::new(&[file("docs/playbooks/STAGE8_PLAYBOOK.md"), file("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md")]);
         assert_eq!(
             idx.resolve("docs/playbooks/STAGE8_PLAYBOOK.md", "", None),
             Resolution::Found("docs/playbooks/STAGE8_PLAYBOOK.md".to_string())

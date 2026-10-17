@@ -146,11 +146,7 @@ fn the_run_reports_what_the_jail_enforced() {
 fn a_guest_started_without_a_channel_refuses_to_run() {
     let o = delulu(&["__guest"]);
     assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("without a channel directory"),
-        "{}",
-        String::from_utf8_lossy(&o.stderr)
-    );
+    assert!(String::from_utf8_lossy(&o.stderr).contains("without a channel directory"), "{}", String::from_utf8_lossy(&o.stderr));
 }
 
 /// A guest that is reached but never told what to run gives up on its deadline rather than waiting

@@ -448,8 +448,7 @@ pub fn code_title(code: &str) -> Option<&'static str> {
 /// explain text (Stage 4 trap 1). The word "sandbox" is deliberately absent: Stage 4 bounds
 /// reachability, not behavior, and every foreign diagnostic links forward to Stage 5 for actual
 /// containment.
-const FOREIGN_CAVEAT: &str =
-    "Honesty (spec §10): Foreign code is outside the effect guarantee; the language bounds \
+const FOREIGN_CAVEAT: &str = "Honesty (spec §10): Foreign code is outside the effect guarantee; the language bounds \
      reachability (grant + capability + ForeignCall in every row), not behavior. Containment of \
      behavior is process-level until Stage 5's foreign workers, and microVM-level after.";
 
@@ -469,8 +468,7 @@ pub const GUARD_POLICY_BOUND: &str = "guard policy changes take effect: synchron
 
 /// The Guard honesty caveat (addendum §2.8, spec §10 tradition), carried VERBATIM by every guard
 /// explain body and the `E-GUARD` topic. `warn` tier and bypass are awareness, not enforcement.
-pub const GUARD_CAVEAT: &str =
-    "Honesty (addendum §2.8, spec §10): The guard supervises what DeluluLang programs holding \
+pub const GUARD_CAVEAT: &str = "Honesty (addendum §2.8, spec §10): The guard supervises what DeluluLang programs holding \
      DELEGATED grants can do. It does not defend against a malicious same-OS-user process that never \
      speaks Delulu — the same honesty as DL1401's \"not against the OS user\". The owner code raises \
      the bar only while the principal keeps it out of agent-visible context. The `warn` tier and \
@@ -479,8 +477,7 @@ pub const GUARD_CAVEAT: &str =
 /// The exact banner printed whenever guard bypass is ENABLED (`--dangerously-bypass-guard` or
 /// `delulu guard bypass on`), echoing Claude Code's `--dangerously-skip-permissions` shape
 /// (addendum §2.6, spec-fixed text).
-pub const GUARD_BYPASS_BANNER: &str =
-    "!! GUARD BYPASSED — --dangerously-bypass-guard !!\n\
+pub const GUARD_BYPASS_BANNER: &str = "!! GUARD BYPASSED — --dangerously-bypass-guard !!\n\
      The guard is the approval checkpoint between delegated agents and the classes where a mistake \
      is catastrophic or the type system's guarantees end: declassification of secrets, and native \
      (foreign) code. Bypassing it means any agent holding any lease uses those classes WITHOUT YOUR \
@@ -1773,18 +1770,9 @@ mod unallocated_tests {
         for u in UNALLOCATED {
             assert_eq!(u.code.len(), 6, "{} is not a DLxxxx code", u.code);
             assert!(u.code.starts_with("DL"), "{} is not a DLxxxx code", u.code);
-            assert!(
-                u.code[2..].chars().all(|c| c.is_ascii_digit()),
-                "{} is not a DLxxxx code",
-                u.code
-            );
+            assert!(u.code[2..].chars().all(|c| c.is_ascii_digit()), "{} is not a DLxxxx code", u.code);
             // Shorter than a registry title would be; long enough that "retired" alone cannot pass.
-            assert!(
-                u.why.len() >= 80,
-                "{} has a {}-char reason — say what it was and why it is not here",
-                u.code,
-                u.why.len()
-            );
+            assert!(u.why.len() >= 80, "{} has a {}-char reason — say what it was and why it is not here", u.code, u.why.len());
         }
     }
 
@@ -1926,10 +1914,8 @@ mod tests {
     /// (2 = DL1508, 3 = single-module, 4 = annotation form, 7 = Windows, 8 = DL1510/DL1511).
     #[test]
     fn plugin_codes_and_e_plugin_topic() {
-        for code in [
-            "DL1501", "DL1502", "DL1503", "DL1504", "DL1505", "DL1506", "DL1507", "DL1508",
-            "DL1509", "DL1510", "DL1511",
-        ] {
+        for code in ["DL1501", "DL1502", "DL1503", "DL1504", "DL1505", "DL1506", "DL1507", "DL1508", "DL1509", "DL1510", "DL1511"]
+        {
             assert!(is_registered(code), "{code} must be registered");
         }
         let (title, body) = topic_explain("PLUGIN").expect("E-PLUGIN topic exists");
@@ -1958,10 +1944,7 @@ mod tests {
     /// deviation notes (3 = worker-owned, 7 = move-by-rebuild).
     #[test]
     fn actor_codes_and_e_actor_topic() {
-        for code in [
-            "DL1601", "DL1602", "DL1603", "DL1604", "DL1605", "DL1606", "DL1607", "DL1608",
-            "DL1610",
-        ] {
+        for code in ["DL1601", "DL1602", "DL1603", "DL1604", "DL1605", "DL1606", "DL1607", "DL1608", "DL1610"] {
             assert!(is_registered(code), "{code} must be registered");
         }
         assert!(!is_registered("DL1609"), "DL1609 is deliberately absent (spec §10 table skips it)");
@@ -1969,7 +1952,10 @@ mod tests {
         assert!(title.contains("data-race freedom"), "the guarantee named in the title");
         // Spec §11 caveats, verbatim.
         assert!(body.contains("bounded by their Stage-4/5/6 layers, not by rcaps"), "§11: scope of the guarantee");
-        assert!(body.contains("Deadlock, livelock, starvation, and mailbox exhaustion are not prevented"), "§11: liveness never claimed");
+        assert!(
+            body.contains("Deadlock, livelock, starvation, and mailbox exhaustion are not prevented"),
+            "§11: liveness never claimed"
+        );
         assert!(body.contains("the guarantee is race freedom, not liveness"), "§11: race freedom, full stop");
         assert!(body.contains("Unbounded mailboxes can exhaust memory; backpressure is post-1.0"), "§11: OOM honesty");
         assert!(body.contains("adopted from Pony's proven design"), "§11: provenance");
@@ -2013,10 +1999,7 @@ mod tests {
                 None => thin.push((c.code, 0)),
             }
         }
-        assert!(
-            thin.is_empty(),
-            "these codes have no long-form explanation (criterion 7 requires 100%): {thin:?}"
-        );
+        assert!(thin.is_empty(), "these codes have no long-form explanation (criterion 7 requires 100%): {thin:?}");
     }
 
     /// THE SKIP-BRANCH CASE (house rule 3): the coverage check must be able to FAIL. If
@@ -2045,10 +2028,7 @@ mod tests {
         for code in ["DL1702", "DL1703", "DL1704", "DL1705", "DL1706", "DL1707"] {
             assert!(code_explain(code).is_some(), "{code} needs an explain body");
         }
-        assert!(
-            code_explain("DL1706").unwrap().contains("DL1003"),
-            "DL1706 links the semver-authority law it enforces"
-        );
+        assert!(code_explain("DL1706").unwrap().contains("DL1003"), "DL1706 links the semver-authority law it enforces");
         assert!(
             code_explain("DL1703").unwrap().contains("invariant 41"),
             "DL1703 cites the tests-hold-no-ambient-authority invariant"
@@ -2081,8 +2061,10 @@ mod tests {
         assert!(title.contains("Atlas"));
         // The verbatim static caveat (addendum §2.6) ships in the explain body.
         assert!(
-            body.contains("static map of checked facts, not a runtime trace; calls through function \
-                 values may be under-approximated"),
+            body.contains(
+                "static map of checked facts, not a runtime trace; calls through function \
+                 values may be under-approximated"
+            ),
             "the verbatim caveat must appear: {body}"
         );
         assert!(body.contains("DL1780") && body.contains("DL1781"), "refusal codes documented");

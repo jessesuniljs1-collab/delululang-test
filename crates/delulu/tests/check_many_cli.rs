@@ -20,11 +20,7 @@ fn scratch(tag: &str) -> PathBuf {
     std::fs::create_dir_all(&d).unwrap();
     // One clean module, one with two real errors, one more clean module.
     std::fs::write(d.join("a.delulu"), "module a\n\nfn one() -> Int { 1 }\n").unwrap();
-    std::fs::write(
-        d.join("bad.delulu"),
-        "module bad\n\nfn oops() -> Int { this_does_not_exist() }\n",
-    )
-    .unwrap();
+    std::fs::write(d.join("bad.delulu"), "module bad\n\nfn oops() -> Int { this_does_not_exist() }\n").unwrap();
     std::fs::write(d.join("c.delulu"), "module c\n\nfn two() -> Int { 2 }\n").unwrap();
     d
 }
@@ -40,11 +36,7 @@ fn delulu_in(cwd: &Path, args: &[&str]) -> Output {
 }
 
 fn text(o: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    )
+    format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))
 }
 
 /// **The defect, stated as a test.** A file that was passed and not looked at must never be
@@ -55,12 +47,7 @@ fn text(o: &Output) -> String {
 fn a_second_file_is_checked_and_not_silently_dropped() {
     let d = scratch("drop");
     let o = delulu_in(&d, &["check", "a.delulu", "bad.delulu"]);
-    assert_eq!(
-        o.status.code(),
-        Some(1),
-        "a file with errors was passed; exit 0 would be a false clean:\n{}",
-        text(&o)
-    );
+    assert_eq!(o.status.code(), Some(1), "a file with errors was passed; exit 0 would be a false clean:\n{}", text(&o));
 
     let t = text(&o);
     assert!(t.contains("DL0301"), "the second file's error is reported:\n{t}");
@@ -135,11 +122,7 @@ fn a_missing_file_among_several_is_refused() {
     let o = delulu_in(&d, &["check", "a.delulu", "not_here.delulu"]);
     assert_eq!(o.status.code(), Some(2), "{}", text(&o));
     assert!(text(&o).contains("cannot read"), "{}", text(&o));
-    assert!(
-        !text(&o).contains("checked clean"),
-        "nothing may be reported clean when the run did not finish:\n{}",
-        text(&o)
-    );
+    assert!(!text(&o).contains("checked clean"), "nothing may be reported clean when the run did not finish:\n{}", text(&o));
 }
 
 /// A package is checked as a whole; mixing one with loose files would blur which manifest ceiling
@@ -148,11 +131,8 @@ fn a_missing_file_among_several_is_refused() {
 fn a_package_directory_may_not_be_mixed_with_loose_files() {
     let d = scratch("mixed");
     std::fs::create_dir_all(d.join("pkg").join("src")).unwrap();
-    std::fs::write(
-        d.join("pkg").join("delulu.toml"),
-        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nkind = \"lib\"\n",
-    )
-    .unwrap();
+    std::fs::write(d.join("pkg").join("delulu.toml"), "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nkind = \"lib\"\n")
+        .unwrap();
     std::fs::write(d.join("pkg").join("src").join("pkg.delulu"), "module pkg\n").unwrap();
 
     let o = delulu_in(&d, &["check", "pkg", "a.delulu"]);
@@ -178,10 +158,7 @@ fn single_path_commands_refuse_a_second_path() {
         let t = text(&o);
         assert_eq!(o.status.code(), Some(2), "`{}` must refuse:\n{t}", args.join(" "));
         assert!(t.contains("takes one path"), "`{}`:\n{t}", args.join(" "));
-        assert!(
-            t.contains("silently ignored"),
-            "the refusal says why it is a refusal:\n{t}"
-        );
+        assert!(t.contains("silently ignored"), "the refusal says why it is a refusal:\n{t}");
     }
 }
 

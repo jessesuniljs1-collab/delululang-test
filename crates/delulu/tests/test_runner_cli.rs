@@ -63,13 +63,7 @@ fn criterion5_pure_tests_run_effects_traced_and_undeclared_is_refused() {
     let v: Value = serde_json::from_slice(&o.stdout).expect("test --json is valid JSON");
 
     let by_name = |name: &str| -> Value {
-        v["tests"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|t| t["name"] == name)
-            .cloned()
-            .unwrap_or(Value::Null)
+        v["tests"].as_array().unwrap().iter().find(|t| t["name"] == name).cloned().unwrap_or(Value::Null)
     };
 
     // The pure test passed carrying ZERO traced effects (invariant 41: it held nothing).
@@ -80,17 +74,13 @@ fn criterion5_pure_tests_run_effects_traced_and_undeclared_is_refused() {
     // The Write test passed and its actual effect list is IN the report (review surface).
     let wrote = by_name("writes within the ceiling");
     assert_eq!(wrote["status"], "pass", "{wrote}");
-    let traced: Vec<&str> =
-        wrote["effects_traced"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
+    let traced: Vec<&str> = wrote["effects_traced"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
     assert!(traced.contains(&"Write"), "effects_traced carries Write even on pass: {wrote}");
 
     // The undeclared-Net file was refused (DL0501 at check) — the runner reports it failed
     // and never ran it.
     let net = by_name("sneaky net");
-    assert!(
-        net.is_null() || net["status"] == "check-failed",
-        "the undeclared-Net test must be refused, not run"
-    );
+    assert!(net.is_null() || net["status"] == "check-failed", "the undeclared-Net test must be refused, not run");
     assert!(
         v["tests"].as_array().unwrap().iter().any(|t| t["status"] == "check-failed"),
         "the net.delulu file failed to check: {}",
@@ -103,18 +93,18 @@ fn criterion5_pure_tests_run_effects_traced_and_undeclared_is_refused() {
     // said only `status: "check-failed"` — the machine channel named a failure and withheld its
     // cause. The diagnostics now ride in the envelope, with code, span and repairs, and under
     // `--json` nothing human-rendered goes to stderr at all.
-    let codes: Vec<&str> =
-        v["diagnostics"].as_array().expect("the test envelope carries diagnostics")
-            .iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    let codes: Vec<&str> = v["diagnostics"]
+        .as_array()
+        .expect("the test envelope carries diagnostics")
+        .iter()
+        .map(|d| d["code"].as_str().unwrap_or(""))
+        .collect();
     assert!(codes.contains(&"DL0501"), "the real refusal is in the envelope: {}", v["diagnostics"]);
     let first = &v["diagnostics"][0];
     assert!(first["spans"][0]["start"]["byte"].is_number(), "with a byte span: {first}");
     assert!(first["repairs"].is_array(), "and its repairs: {first}");
     let err = String::from_utf8_lossy(&o.stderr);
-    assert!(
-        !err.contains("DL0501"),
-        "under --json the human render must not also go to stderr: {err}"
-    );
+    assert!(!err.contains("DL0501"), "under --json the human render must not also go to stderr: {err}");
     assert_eq!(v["summary"]["errors"], v["summary"]["failed"], "errors tracks the run's verdict");
 }
 
@@ -137,25 +127,15 @@ fn a_test_exceeding_the_package_ceiling_is_dl1703() {
     // The human channel still renders it; the machine channel now carries it as a diagnostic with
     // a code and a span rather than as a message string with the code spliced into prose (NE-08).
     let human = delulu(&dir, &["test"], None);
-    assert!(
-        String::from_utf8_lossy(&human.stderr).contains("DL1703"),
-        "exceeding the ceiling is DL1703 on the human channel"
-    );
+    assert!(String::from_utf8_lossy(&human.stderr).contains("DL1703"), "exceeding the ceiling is DL1703 on the human channel");
     let v: Value = serde_json::from_slice(&o.stdout).expect("one envelope");
-    let codes: Vec<&str> = v["diagnostics"].as_array().expect("diagnostics array")
-        .iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    let codes: Vec<&str> =
+        v["diagnostics"].as_array().expect("diagnostics array").iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
     assert!(codes.contains(&"DL1703"), "exceeding the ceiling is DL1703: {}", v["diagnostics"]);
-    assert!(
-        v["diagnostics"][0]["spans"][0]["start"]["line"].is_number(),
-        "and it names where: {}",
-        v["diagnostics"][0]
-    );
+    assert!(v["diagnostics"][0]["spans"][0]["start"]["line"].is_number(), "and it names where: {}", v["diagnostics"][0]);
     let failed = v["tests"].as_array().unwrap().iter().find(|t| t["status"] == "fail").expect("a failed test");
     assert_eq!(failed["failure"]["code"], "DL1703", "the failure names the code as a field: {failed}");
-    assert!(
-        !String::from_utf8_lossy(&o.stderr).contains("DL1703"),
-        "under --json nothing human-rendered goes to stderr"
-    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("DL1703"), "under --json nothing human-rendered goes to stderr");
     assert_eq!(o.status.code(), Some(1));
 }
 
@@ -220,14 +200,9 @@ fn criterion5_broker_session_is_revoked_at_end() {
     // trail is the point). Its per-file child is revoked in the same sweep.
     let tree = delulu(&dir, &["grants", "tree"], Some(&state));
     let tree_out = String::from_utf8_lossy(&tree.stdout);
-    let session_line = tree_out
-        .lines()
-        .find(|l| l.contains(session))
-        .unwrap_or_else(|| panic!("the session node is in the tree: {tree_out}"));
-    assert!(
-        session_line.contains("revoked"),
-        "the test-session node must be revoked at run end: {session_line}"
-    );
+    let session_line =
+        tree_out.lines().find(|l| l.contains(session)).unwrap_or_else(|| panic!("the session node is in the tree: {tree_out}"));
+    assert!(session_line.contains("revoked"), "the test-session node must be revoked at run end: {session_line}");
     assert!(
         tree_out.lines().any(|l| l.contains("test-file") && l.contains("revoked")),
         "the per-file child was transitively revoked too: {tree_out}"
@@ -242,11 +217,8 @@ fn a_package_reached_by_path_is_tested_with_all_its_modules() {
     let dir = tmp("pkgpath");
     let pkg = dir.join("pk2");
     std::fs::create_dir_all(pkg.join("src")).unwrap();
-    std::fs::write(
-        pkg.join("delulu.toml"),
-        "[package]\nname = \"pk2\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
-    )
-    .unwrap();
+    std::fs::write(pkg.join("delulu.toml"), "[package]\nname = \"pk2\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n")
+        .unwrap();
     std::fs::write(pkg.join("src").join("util.delulu"), "module pk2.util\n\npub fn double(x: Int) -> Int {\n    x * 2\n}\n")
         .unwrap();
     std::fs::write(
@@ -332,8 +304,10 @@ fn test_authority_flag_is_a_ceiling_that_can_only_narrow_a_package() {
     // Equal, and narrower-in-scope: accepted.
     let (code, _, out) = run(&pkg, &["test", "--test-authority", "effects = [\"Write\"]", "--json"]);
     assert_eq!(code, Some(0), "{out}");
-    let (code, _, out) =
-        run(&pkg, &["test", "--test-authority", "effects = [\"Write\"]", "--test-authority", "fs.read = [\"./fixtures/sub\"]", "--json"]);
+    let (code, _, out) = run(
+        &pkg,
+        &["test", "--test-authority", "effects = [\"Write\"]", "--test-authority", "fs.read = [\"./fixtures/sub\"]", "--json"],
+    );
     assert_eq!(code, Some(0), "{out}");
     // Wider — by an effect, or by a scope outside the package's (spelled with `..` too) — is DL1703
     // BEFORE any test runs: no `tests` array at all.
@@ -379,12 +353,8 @@ fn every_route_to_a_test_file_meets_its_packages_ceiling() {
         "module t\n\ntest \"writes\" ! {Write} {\n    let out = test_root.console()\n    out.println(\"hi\")\n}\n",
     )
     .unwrap();
-    let routes: [(&Path, &str); 4] = [
-        (&dir, "pk"),
-        (&pk, "tests/t.delulu"),
-        (&dir, "pk/tests/t.delulu"),
-        (&dir, "other/../pk/tests/t.delulu"),
-    ];
+    let routes: [(&Path, &str); 4] =
+        [(&dir, "pk"), (&pk, "tests/t.delulu"), (&dir, "pk/tests/t.delulu"), (&dir, "other/../pk/tests/t.delulu")];
     for flag in [true, false] {
         for (cwd, target) in routes {
             let mut args = vec!["test", target];

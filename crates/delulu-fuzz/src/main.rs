@@ -16,11 +16,7 @@ fn main() -> ExitCode {
 
     eprintln!(
         "generated={} accepted={} rejected={} unexpected_rejections={} check_only={}",
-        report.generated,
-        report.accepted,
-        report.rejected,
-        report.unexpected_rejections,
-        report.accepted_check_only
+        report.generated, report.accepted, report.rejected, report.unexpected_rejections, report.accepted_check_only
     );
 
     if report.is_sound() {
@@ -35,7 +31,11 @@ fn main() -> ExitCode {
         );
         ExitCode::SUCCESS
     } else {
-        eprintln!("UNSOUND — {} soundness violation(s), {} missed rejection(s):", report.soundness_violations.len(), report.missed_rejections.len());
+        eprintln!(
+            "UNSOUND — {} soundness violation(s), {} missed rejection(s):",
+            report.soundness_violations.len(),
+            report.missed_rejections.len()
+        );
         for (seed, detail) in report.soundness_violations.iter().take(5) {
             eprintln!("  [seed {seed}] {detail}");
         }

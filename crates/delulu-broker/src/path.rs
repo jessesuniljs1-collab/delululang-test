@@ -103,13 +103,8 @@ pub fn canonicalize_set<'a, I>(paths: I) -> std::collections::BTreeSet<String>
 where
     I: IntoIterator<Item = &'a String>,
 {
-    let spelled: std::collections::BTreeSet<String> =
-        paths.into_iter().map(|p| canonicalize(p)).collect();
-    spelled
-        .iter()
-        .filter(|x| !spelled.iter().any(|y| y != *x && is_descendant_or_equal(x, y)))
-        .cloned()
-        .collect()
+    let spelled: std::collections::BTreeSet<String> = paths.into_iter().map(|p| canonicalize(p)).collect();
+    spelled.iter().filter(|x| !spelled.iter().any(|y| y != *x && is_descendant_or_equal(x, y))).cloned().collect()
 }
 
 /// Render resolved segments back to a path string that re-resolves to the same segments.
@@ -118,11 +113,19 @@ fn render(segs: &[Seg]) -> String {
         None => ".".to_string(),
         Some(Seg::Root) => {
             let rest = join_tail(&segs[1..]);
-            if rest.is_empty() { "/".to_string() } else { format!("/{rest}") }
+            if rest.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{rest}")
+            }
         }
         Some(Seg::Drive(d)) => {
             let rest = join_tail(&segs[1..]);
-            if rest.is_empty() { format!("{d}/") } else { format!("{d}/{rest}") }
+            if rest.is_empty() {
+                format!("{d}/")
+            } else {
+                format!("{d}/{rest}")
+            }
         }
         // A relative path ALWAYS carries the `./` prefix. Without it a leading component that
         // happens to look like a drive letter re-resolves as a drive: `./C:` is `[Name("C:")]`, a
@@ -202,9 +205,7 @@ where
     C: IntoIterator<Item = &'a String>,
     P: IntoIterator<Item = &'a String> + Clone,
 {
-    child
-        .into_iter()
-        .all(|c| parent.clone().into_iter().any(|p| is_descendant_or_equal(c, p)))
+    child.into_iter().all(|c| parent.clone().into_iter().any(|p| is_descendant_or_equal(c, p)))
 }
 
 #[cfg(test)]
@@ -263,7 +264,7 @@ mod tests {
         assert!(!is_descendant_or_equal("/usr/lib", "usr/lib")); // absolute vs relative differ
         assert!(is_descendant_or_equal(r"C:\libs\a", r"C:\libs"));
         assert!(!is_descendant_or_equal(r"D:\libs\a", r"C:\libs")); // different drive
-        // `..` cannot rise above a filesystem root (matches real filesystems).
+                                                                    // `..` cannot rise above a filesystem root (matches real filesystems).
         assert!(is_descendant_or_equal("/usr/../usr/lib", "/usr/lib"));
         assert!(is_descendant_or_equal("/../etc", "/etc"));
     }
@@ -277,17 +278,11 @@ mod tests {
     #[test]
     fn path_meet_is_never_wider_than_either_side() {
         // ./data ∩ ./data/sub = ./data/sub (the narrower).
-        assert_eq!(
-            intersect_path_sets(&set(&["./data"]), &set(&["./data/sub"])),
-            set(&["./data/sub"])
-        );
+        assert_eq!(intersect_path_sets(&set(&["./data"]), &set(&["./data/sub"])), set(&["./data/sub"]));
         // Disjoint subtrees meet to nothing.
         assert!(intersect_path_sets(&set(&["./data"]), &set(&["./other"])).is_empty());
         // Multiple roots: only the overlapping pair contributes, narrower side.
-        assert_eq!(
-            intersect_path_sets(&set(&["./a", "./b/c"]), &set(&["./b", "./z"])),
-            set(&["./b/c"])
-        );
+        assert_eq!(intersect_path_sets(&set(&["./a", "./b/c"]), &set(&["./b", "./z"])), set(&["./b/c"]));
     }
 
     /// Adversarial spellings. Anything whose canonical form could plausibly re-resolve differently
@@ -295,24 +290,90 @@ mod tests {
     /// separators/empties that `resolve` silently drops.
     const CORPUS: &[&str] = &[
         // empties and bare anchors
-        "", ".", "./", ".//", "/", "//", "///", "\\", ".\\", "..", "../", "./..", "../..", "..\\..",
+        "",
+        ".",
+        "./",
+        ".//",
+        "/",
+        "//",
+        "///",
+        "\\",
+        ".\\",
+        "..",
+        "../",
+        "./..",
+        "../..",
+        "..\\..",
         // ordinary relative
-        "data", "./data", "./data/", "data/", ".\\data", ".\\data\\", "./data//sub", "./data/sub",
-        "data/sub/", "./other", "a", "./a/b/c", "a/b/c/",
+        "data",
+        "./data",
+        "./data/",
+        "data/",
+        ".\\data",
+        ".\\data\\",
+        "./data//sub",
+        "./data/sub",
+        "data/sub/",
+        "./other",
+        "a",
+        "./a/b/c",
+        "a/b/c/",
         // `..` interactions
-        "./data/../secret", "./data/x/../y", "./data/../../etc", "../foo", "../../foo", "a/../b",
-        "a/../../b", "/..", "/../..", "/a/../..", "/a/../b", "./a/../..", "a/b/../../..",
+        "./data/../secret",
+        "./data/x/../y",
+        "./data/../../etc",
+        "../foo",
+        "../../foo",
+        "a/../b",
+        "a/../../b",
+        "/..",
+        "/../..",
+        "/a/../..",
+        "/a/../b",
+        "./a/../..",
+        "a/b/../../..",
         // rooted and drive-anchored
-        "/usr/lib", "/usr/lib/", "/usr//lib", "\\usr\\lib", "C:", "C:/", "C:\\", "C:/a", "C:\\a\\b",
-        "c:/a", "C:extra", "C:/a/../..", "D:\\libs",
+        "/usr/lib",
+        "/usr/lib/",
+        "/usr//lib",
+        "\\usr\\lib",
+        "C:",
+        "C:/",
+        "C:\\",
+        "C:/a",
+        "C:\\a\\b",
+        "c:/a",
+        "C:extra",
+        "C:/a/../..",
+        "D:\\libs",
         // components that LOOK like anchors — the widening trap `render`'s `./` prefix exists for
-        "./C:", "./C:/x", "a/C:", "a/../C:", "./c:", "./C:/../D:", "././C:",
+        "./C:",
+        "./C:/x",
+        "a/C:",
+        "a/../C:",
+        "./c:",
+        "./C:/../D:",
+        "././C:",
         // dot-ish names that are NOT `.` or `..`
-        "...", "....", "./...", "a..b", "..a", "a..", "./.git", "./.hidden/x",
+        "...",
+        "....",
+        "./...",
+        "a..b",
+        "..a",
+        "a..",
+        "./.git",
+        "./.hidden/x",
         // whitespace and unicode
-        "a b/c", " ", "./ /x", "日本/データ", "./日本/../データ", "./naïve/café",
+        "a b/c",
+        " ",
+        "./ /x",
+        "日本/データ",
+        "./日本/../データ",
+        "./naïve/café",
         // separators only
-        "/////", "\\\\\\", "./\\/.\\/",
+        "/////",
+        "\\\\\\",
+        "./\\/.\\/",
     ];
 
     /// A deterministic LCG. Reproducibility beats quality here: a failing case must replay
@@ -321,8 +382,7 @@ mod tests {
 
     impl Rng {
         fn next(&mut self) -> u64 {
-            self.0 =
-                self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
             self.0 >> 16
         }
         fn pick<'a>(&mut self, xs: &[&'a str]) -> &'a str {
@@ -334,10 +394,8 @@ mod tests {
     /// interesting: separators of both kinds, `.`/`..`, empty segments, and anchor lookalikes.
     fn random_path(rng: &mut Rng) -> String {
         const HEAD: &[&str] = &["", "./", "/", "C:", "C:/", ".\\", "//", "d:"];
-        const SEG: &[&str] = &[
-            "a", "data", "sub", "..", ".", "C:", "c:", "...", ".git", "naïve", "x y", "日本", "",
-            "database", "Data",
-        ];
+        const SEG: &[&str] =
+            &["a", "data", "sub", "..", ".", "C:", "c:", "...", ".git", "naïve", "x y", "日本", "", "database", "Data"];
         const SEP: &[&str] = &["/", "\\", "//", "/./"];
         let mut s = String::from(rng.pick(HEAD));
         let n = 1 + (rng.next() % 7) as usize;
@@ -415,8 +473,7 @@ mod tests {
         // RW 5.6 (V2 P7): 3,000 generated sets natively; 30 under Miri, where this was the test in
         // flight when the crate's 240-minute run was cancelled (run 35147900141).
         for i in 0..if cfg!(miri) { 30u32 } else { 3_000 } {
-            let raw: BTreeSet<String> =
-                (0..1 + (rng.next() % 4) as usize).map(|_| random_path(&mut rng)).collect();
+            let raw: BTreeSet<String> = (0..1 + (rng.next() % 4) as usize).map(|_| random_path(&mut rng)).collect();
             let canon = canonicalize_set(&raw);
 
             assert!(!canon.is_empty(), "iteration {i}: {raw:?} canonicalized to nothing");
@@ -474,11 +531,7 @@ mod tests {
         for a in CORPUS {
             for b in CORPUS {
                 if resolve(a) == resolve(b) {
-                    assert_eq!(
-                        canonicalize(a),
-                        canonicalize(b),
-                        "{a:?} and {b:?} resolve alike but canonicalize apart"
-                    );
+                    assert_eq!(canonicalize(a), canonicalize(b), "{a:?} and {b:?} resolve alike but canonicalize apart");
                 }
             }
         }
@@ -517,10 +570,7 @@ mod tests {
             // `Up` never follows a `Name` — the module doc-comment's claim about the shape.
             let first_name = segs.iter().position(|s| matches!(s, Seg::Name(_)));
             if let Some(n) = first_name {
-                assert!(
-                    !segs[n..].iter().any(|s| matches!(s, Seg::Up)),
-                    "{p:?} put an Up after a Name: {segs:?}"
-                );
+                assert!(!segs[n..].iter().any(|s| matches!(s, Seg::Up)), "{p:?} put an Up after a Name: {segs:?}");
             }
         }
     }

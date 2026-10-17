@@ -94,13 +94,9 @@ fn deleting_the_last_records_is_now_detected() {
 
     truncate_by(&dir, 2);
 
-    let err = audit::verify(&dir)
-        .expect_err("TRUNCATION MUST BE DETECTED — the anchor still says five records");
+    let err = audit::verify(&dir).expect_err("TRUNCATION MUST BE DETECTED — the anchor still says five records");
     let msg = format!("{err}");
-    assert!(
-        msg.contains("anchor"),
-        "the error must name the anchor disagreement, got: {msg}"
-    );
+    assert!(msg.contains("anchor"), "the error must name the anchor disagreement, got: {msg}");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -113,10 +109,7 @@ fn reopening_a_truncated_log_refuses() {
     write_chain(&dir, 4);
     truncate_by(&dir, 1);
 
-    assert!(
-        AuditLog::open(&dir).is_err(),
-        "opening a log that disagrees with its own anchor must fail, not silently re-anchor"
-    );
+    assert!(AuditLog::open(&dir).is_err(), "opening a log that disagrees with its own anchor must fail, not silently re-anchor");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -134,10 +127,7 @@ fn modifying_a_record_in_place_is_caught() {
     assert_ne!(tampered, text, "the fixture must actually change something");
     fs::write(&day, tampered).expect("write");
 
-    assert!(
-        audit::verify(&dir).is_err(),
-        "an in-place edit MUST be detected — that is what the chain is for"
-    );
+    assert!(audit::verify(&dir).is_err(), "an in-place edit MUST be detected — that is what the chain is for");
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -155,8 +145,7 @@ fn an_attacker_who_also_rewrites_the_anchor_is_not_caught() {
     let surviving = lines.last().expect("a record survives");
     let v: serde_json::Value = serde_json::from_str(surviving).expect("record parses");
     let head = v["hash"].as_str().expect("hash present");
-    fs::write(dir.join("ANCHOR.json"), format!("{{\"head\":\"{head}\",\"records\":3}}\n"))
-        .expect("rewrite anchor");
+    fs::write(dir.join("ANCHOR.json"), format!("{{\"head\":\"{head}\",\"records\":3}}\n")).expect("rewrite anchor");
 
     assert!(
         audit::verify(&dir).is_ok(),

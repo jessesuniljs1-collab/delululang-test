@@ -62,8 +62,21 @@ impl Outcome {
 /// `exec.native`, which a program never requires (invariant 45). The coverage names each one, so a
 /// reader sees what was decided and what the program never asked for.
 pub(crate) const DIMENSIONS: &[&str] = &[
-    "console", "clock", "rand", "declassify", "fs.read", "fs.write", "net", "net.special", "secret", "foreign.c",
-    "foreign.python", "actuator", "sensor", "compute", "plugin",
+    "console",
+    "clock",
+    "rand",
+    "declassify",
+    "fs.read",
+    "fs.write",
+    "net",
+    "net.special",
+    "secret",
+    "foreign.c",
+    "foreign.python",
+    "actuator",
+    "sensor",
+    "compute",
+    "plugin",
 ];
 
 /// One request the boundary does not plainly cover.
@@ -217,8 +230,7 @@ fn decide(ask: &Ask, root: &RootVal, boundary: &Grants) -> (Outcome, String) {
             } else {
                 (
                     Outcome::Inconclusive,
-                    "the program embeds Python and names no import the checker can read; the boundary allows some"
-                        .to_string(),
+                    "the program embeds Python and names no import the checker can read; the boundary allows some".to_string(),
                 )
             }
         }
@@ -265,11 +277,8 @@ fn finding_json(map: &SourceMap, f: &Finding) -> Json {
 
 /// The `within` object of the authority envelope: additive, beside every field the report had.
 pub(crate) fn verdict_json(v: &Verdict, boundary: &[String], map: &SourceMap) -> Json {
-    let coverage: serde_json::Map<String, Json> = v
-        .coverage
-        .iter()
-        .map(|(d, o)| (d.clone(), json!(o.map_or("not-requested", |o| o.name()))))
-        .collect();
+    let coverage: serde_json::Map<String, Json> =
+        v.coverage.iter().map(|(d, o)| (d.clone(), json!(o.map_or("not-requested", |o| o.name())))).collect();
     json!({
         "result": v.outcome.name(),
         "boundary": boundary,
@@ -349,9 +358,8 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
         };
         delulu_runtime::prim::call_root_method(&root, method, &args, span).map(|_| ()).map_err(|f| f.message)
     };
-    let devices = |g: &Grants| {
-        crate::brokerd::spec_to_authority(&crate::cli::authority_spec_from_grants(g, "diff")).scopes.device
-    };
+    let devices =
+        |g: &Grants| crate::brokerd::spec_to_authority(&crate::cli::authority_spec_from_grants(g, "diff")).scopes.device;
     let mut out = Vec::new();
     for line in new_lines {
         let mut one = Grants::default();
@@ -360,7 +368,13 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
         let none = |what: &str| Err(format!("OLD grants no {what}"));
         let covered: Result<(), String> = match dimension.as_str() {
             "console" | "clock" | "rand" | "declassify" => mint(&dimension, None),
-            "exec.native" => if old.exec_native { Ok(()) } else { none("native emission") },
+            "exec.native" => {
+                if old.exec_native {
+                    Ok(())
+                } else {
+                    none("native emission")
+                }
+            }
             "fs.read" => one.fs_read.iter().try_for_each(|p| mint("fs_read", Some(p))),
             "fs.write" => one.fs_write.iter().try_for_each(|p| mint("fs_write", Some(p))),
             // `net.special=` puts its host in `net` too: decided once, as special-use reach.
@@ -381,18 +395,28 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
                 }
                 let old_to = old.secret_audiences.get(n).map(Vec::as_slice).unwrap_or(&[]);
                 match one.secret_audiences.get(n).into_iter().flatten().find(|a| !old_to.contains(a)) {
-                    Some(a) => Err(format!("NEW lets the secret `{n}` be sent to `{a}`, which OLD's audience for it does not name")),
+                    Some(a) => {
+                        Err(format!("NEW lets the secret `{n}` be sent to `{a}`, which OLD's audience for it does not name"))
+                    }
                     None => Ok(()),
                 }
             }),
             "foreign.c" => one.foreign_c.keys().try_for_each(|l| {
-                if old.foreign_c.contains_key(l) { Ok(()) } else { Err(format!("OLD grants no foreign library `{l}`")) }
+                if old.foreign_c.contains_key(l) {
+                    Ok(())
+                } else {
+                    Err(format!("OLD grants no foreign library `{l}`"))
+                }
             }),
             // A pattern by exact string (the broker's rule); a plain module name as an import is matched.
             "foreign.python" => one.foreign_python.iter().try_for_each(|p| {
                 let ok = old.foreign_python.contains(p)
                     || (!p.contains('*') && delulu_runtime::python::allowlist_allows(&old.foreign_python, p));
-                if ok { Ok(()) } else { Err(format!("OLD's Python allowlist does not allow `{p}`")) }
+                if ok {
+                    Ok(())
+                } else {
+                    Err(format!("OLD's Python allowlist does not allow `{p}`"))
+                }
             }),
             "actuator" => {
                 let (n, o) = (devices(&one), devices(old));
@@ -420,7 +444,11 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
                         && c.formats.iter().all(|f| o.formats.contains(f))
                         && c.kernels.iter().all(|(k, _)| o.kernels.iter().any(|(ok, _)| ok == k))
                         && (!c.waived || o.waived);
-                    if within { Ok(()) } else { Err(format!("its envelope is wider than OLD's for `{}`", c.device)) }
+                    if within {
+                        Ok(())
+                    } else {
+                        Err(format!("its envelope is wider than OLD's for `{}`", c.device))
+                    }
                 }
             }),
             "plugin" => one.plugins.iter().try_for_each(|p| {
@@ -820,8 +848,16 @@ mod tests {
         let paths: Vec<String> =
             ["a", "a/b", "a/b/c", "a/x", "d", "d/e"].iter().map(|p| base.join(p).to_string_lossy().to_string()).collect();
         // P9-05 (b), D-V2-139: path-scoped entries too — the runtime's mint and the lattice must order them alike.
-        let hosts = ["example.com", "api.example.com", "cdn.example.org", "api.example.com/v1/**", "api.example.com/v1/*/x",
-                     "api.example.com/v1/items/x", "api.example.com/v2/**", "api.example.com/**"];
+        let hosts = [
+            "example.com",
+            "api.example.com",
+            "cdn.example.org",
+            "api.example.com/v1/**",
+            "api.example.com/v1/*/x",
+            "api.example.com/v1/items/x",
+            "api.example.com/v2/**",
+            "api.example.com/**",
+        ];
         let names = ["API_KEY", "DB_PASS"];
         // A small deterministic generator (xorshift) — inputs generated, not written (§11.2).
         let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -921,7 +957,11 @@ mod tests {
         let c = v.counterexample().expect("a counterexample");
         assert_eq!(c.grant, "fs.read=./first", "the first call in the source, not the first in the list: {v:?}");
         let order: Vec<&str> = v.findings.iter().map(|f| f.grant.as_str()).collect();
-        assert_eq!(order, ["fs.read=./first", "fs.read=./middle", "fs.read=./last", "net=HOST", ""], "source order, unplaced last: {v:?}");
+        assert_eq!(
+            order,
+            ["fs.read=./first", "fs.read=./middle", "fs.read=./last", "net=HOST", ""],
+            "source order, unplaced last: {v:?}"
+        );
         assert_eq!(v.findings.len(), 5, "every request that is not within is named: {v:?}");
         assert_eq!(v.coverage["net"], Some(Outcome::Inconclusive));
         assert_eq!(v.coverage["Teleport"], Some(Outcome::Unsupported));
@@ -978,7 +1018,16 @@ mod tests {
             // them as an effect and in the foreign section, each with its own grant form).
             let on_a_line = match k {
                 K::Declassify | K::ForeignLoad | K::Python => false,
-                K::FsRead | K::FsWrite | K::Console | K::Http | K::Clock | K::Rand | K::PluginHost | K::Actuator | K::Sensor | K::Compute => true,
+                K::FsRead
+                | K::FsWrite
+                | K::Console
+                | K::Http
+                | K::Clock
+                | K::Rand
+                | K::PluginHost
+                | K::Actuator
+                | K::Sensor
+                | K::Compute => true,
             };
             if !on_a_line {
                 continue;
@@ -987,7 +1036,8 @@ mod tests {
             let (reqs, unsupported) = crate::cli::requirements(&report, &walk);
             assert!(!reqs.is_empty() && unsupported.is_empty(), "{}: {reqs:?} {unsupported:?}", k.name());
         }
-        let report = json!({ "capabilities": [{ "kind": "Teleport", "scopes": [] }], "effects": [], "secrets": [], "foreign_calls": [] });
+        let report =
+            json!({ "capabilities": [{ "kind": "Teleport", "scopes": [] }], "effects": [], "secrets": [], "foreign_calls": [] });
         let (reqs, unsupported) = crate::cli::requirements(&report, &walk);
         assert!(reqs.is_empty() && unsupported == ["Teleport"], "{reqs:?} {unsupported:?}");
         assert_eq!(verdict(&reqs, &unsupported, &grants(&["console"])).outcome, Outcome::Unsupported);

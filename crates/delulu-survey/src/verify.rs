@@ -50,8 +50,7 @@ fn describes_the_present(rel: &str) -> bool {
     {
         return false; // records of what was true at a moment, and still are records of it
     }
-    matches!(rel, "README.md" | "CONTRIBUTING.md" | "SECURITY.md" | "GOVERNANCE.md")
-        || rel.starts_with("docs/")
+    matches!(rel, "README.md" | "CONTRIBUTING.md" | "SECURITY.md" | "GOVERNANCE.md") || rel.starts_with("docs/")
 }
 
 /// Facts a document might quote, and what the tree actually says.
@@ -74,12 +73,7 @@ fn measured(files: &[ScannedFile], b: &Builder) -> Vec<Fact> {
         (&["lines of Rust", "lines of rust"], rust_lines as u64, "lines of Rust", None),
         (&["Rust files"], rust_files as u64, "Rust files", None),
         (&["files"], rust_files as u64, "Rust files", Some("crates")),
-        (
-            &["registered codes", "diagnostic codes"],
-            b.defined_codes.len() as u64,
-            "registered diagnostic codes",
-            None,
-        ),
+        (&["registered codes", "diagnostic codes"], b.defined_codes.len() as u64, "registered diagnostic codes", None),
     ]
 }
 
@@ -110,16 +104,14 @@ fn quoted_counts_match_the_tree(files: &[ScannedFile], b: &mut Builder) {
             // records how a figure CHANGED has to be able to quote the old one. The marker is an
             // explicit ISO date on the line: deliberate, greppable, and not something a stale figure
             // acquires by accident.
-            let dated_history = joined
-                .match_indices("20")
-                .any(|(k, _)| {
-                    let b = joined.as_bytes();
-                    k + 10 <= b.len()
-                        && b[k + 2].is_ascii_digit()
-                        && b[k + 3].is_ascii_digit()
-                        && b[k + 4] == b'-'
-                        && b[k + 7] == b'-'
-                });
+            let dated_history = joined.match_indices("20").any(|(k, _)| {
+                let b = joined.as_bytes();
+                k + 10 <= b.len()
+                    && b[k + 2].is_ascii_digit()
+                    && b[k + 3].is_ascii_digit()
+                    && b[k + 4] == b'-'
+                    && b[k + 7] == b'-'
+            });
             if dated_history {
                 continue;
             }
@@ -142,11 +134,7 @@ fn quoted_counts_match_the_tree(files: &[ScannedFile], b: &mut Builder) {
                         claimed == *actual
                     };
                     if !ok {
-                        hits.push((
-                            f.rel.clone(),
-                            lineno,
-                            format!("says {claimed} {label}; the tree has {actual}"),
-                        ));
+                        hits.push((f.rel.clone(), lineno, format!("says {claimed} {label}; the tree has {actual}")));
                     }
                 }
                 // Test counts come from `cargo test`, not from reading files. The Survey will not
@@ -270,9 +258,7 @@ fn dependencies_agree_with_source(b: &mut Builder) {
                 // Attribute the use to the crate that owns the file.
                 if let Some(owner) = owning_crate(&e.file) {
                     used.entry(format!("crate:{owner}")).or_default().insert(e.to.clone());
-                    first_use
-                        .entry((format!("crate:{owner}"), e.to.clone()))
-                        .or_insert((e.file.clone(), e.line));
+                    first_use.entry((format!("crate:{owner}"), e.to.clone())).or_insert((e.file.clone(), e.line));
                 }
             }
             _ => {}
@@ -345,12 +331,8 @@ fn owning_crate(file: &str) -> Option<String> {
 /// Still a note rather than an error: the remedy is to record a decision, and a check that fails
 /// the build over an unrecorded one would be graded harsher than the facts warrant.
 fn cited_codes_are_registered(b: &mut Builder) {
-    let unregistered: Vec<String> = b
-        .cited_codes
-        .difference(&b.defined_codes)
-        .filter(|c| !b.dispositioned_codes.contains(*c))
-        .cloned()
-        .collect();
+    let unregistered: Vec<String> =
+        b.cited_codes.difference(&b.defined_codes).filter(|c| !b.dispositioned_codes.contains(*c)).cloned().collect();
     if unregistered.is_empty() {
         return;
     }
@@ -499,11 +481,7 @@ fn resolve_ruling_citations(b: &mut Builder) {
 /// The highest-numbered stage among the namespaces that allocate a number — "the latest stage",
 /// compared numerically so `S10` beats `S9` rather than losing to it alphabetically.
 fn latest_stage(namespaces: &[String]) -> String {
-    namespaces
-        .iter()
-        .max_by_key(|s| s.trim_start_matches('S').parse::<u32>().unwrap_or(0))
-        .cloned()
-        .unwrap_or_default()
+    namespaces.iter().max_by_key(|s| s.trim_start_matches('S').parse::<u32>().unwrap_or(0)).cloned().unwrap_or_default()
 }
 
 fn resolve_finding_citations(b: &mut Builder) {
@@ -528,22 +506,15 @@ fn resolve_finding_citations(b: &mut Builder) {
             "c-token-not-a-campaign-finding",
             "docs",
             0,
-            format!(
-                "these `C<n>` tokens are not campaign findings and were not linked: {}",
-                listed.join(", ")
-            ),
+            format!("these `C<n>` tokens are not campaign findings and were not linked: {}", listed.join(", ")),
             "no action if these are C-language references; otherwise the ledger is missing a row",
         );
     }
 }
 
 fn every_crate_is_a_member(files: &[ScannedFile], b: &mut Builder) {
-    let members: BTreeSet<String> = b
-        .edges
-        .iter()
-        .filter(|e| e.from == "workspace")
-        .map(|e| e.to.trim_start_matches("crate:").to_string())
-        .collect();
+    let members: BTreeSet<String> =
+        b.edges.iter().filter(|e| e.from == "workspace").map(|e| e.to.trim_start_matches("crate:").to_string()).collect();
 
     for f in files {
         if f.kind != FileKind::Manifest || f.rel == "Cargo.toml" {

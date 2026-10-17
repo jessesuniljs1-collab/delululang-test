@@ -21,13 +21,9 @@ use serde_json::{json, Value};
 use delulu_runtime::SignatureStatus;
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("DELULU_HOME")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .or_else(|| std::env::var_os("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".delulu"))
-        })
+    std::env::var_os("DELULU_HOME").map(PathBuf::from).or_else(|| {
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".delulu"))
+    })
 }
 
 pub(crate) fn keys_dir() -> Option<PathBuf> {
@@ -226,10 +222,7 @@ pub fn cmd_keygen(rest: &[String]) -> i32 {
     let pub_path = key_path.with_extension("pub");
     let _ = std::fs::write(&pub_path, format!("{pubhex}\n"));
     if json {
-        crate::cli::print_success_envelope(
-            "keygen",
-            json!({ "key": key_path.display().to_string(), "public_key": pubhex }),
-        );
+        crate::cli::print_success_envelope("keygen", json!({ "key": key_path.display().to_string(), "public_key": pubhex }));
     } else {
         println!("keygen: wrote {} (public key {pubhex})", key_path.display());
         println!("  keep the private key secret; distribute {}", pub_path.display());
@@ -331,11 +324,8 @@ pub fn cmd_verify_sig(rest: &[String]) -> i32 {
             return 1;
         }
     };
-    let policy = if require_hybrid {
-        delulu_runtime::pqc::Policy::HybridRequired
-    } else {
-        delulu_runtime::pqc::Policy::AcceptClassical
-    };
+    let policy =
+        if require_hybrid { delulu_runtime::pqc::Policy::HybridRequired } else { delulu_runtime::pqc::Policy::AcceptClassical };
     // `pqc::verify` subsumes `verify_detached`: given a legacy 96-byte signature under
     // `Policy::AcceptClassical`/`unstable=false` (the defaults), it calls the SAME
     // `verify_detached` internally and returns the same signer/reason — so the default path
@@ -351,9 +341,7 @@ pub fn cmd_verify_sig(rest: &[String]) -> i32 {
     // `--key <hex>`: the signature must ALSO be by exactly this key (pin the identity).
     if let (SignatureStatus::Valid { signer }, Some(want)) = (&status, &expect_key) {
         if !signer.eq_ignore_ascii_case(want.trim()) {
-            let d = SignatureStatus::Invalid {
-                reason: format!("signed by {signer}, but --key pinned {want}"),
-            };
+            let d = SignatureStatus::Invalid { reason: format!("signed by {signer}, but --key pinned {want}") };
             report_sig("verify-sig", &artifact, &d, json);
             return 1;
         }
@@ -462,9 +450,7 @@ pub fn cmd_login(rest: &[String]) -> i32 {
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
     let mut out = String::new();
     for line in existing.lines().filter(|l| !l.trim().is_empty()) {
-        let keep = serde_json::from_str::<Value>(line)
-            .map(|v| v["registry"].as_str() != Some(registry.as_str()))
-            .unwrap_or(true);
+        let keep = serde_json::from_str::<Value>(line).map(|v| v["registry"].as_str() != Some(registry.as_str())).unwrap_or(true);
         if keep {
             out.push_str(line);
             out.push('\n');
@@ -480,10 +466,7 @@ pub fn cmd_login(rest: &[String]) -> i32 {
 
     if json {
         // The token itself is deliberately absent from the output.
-        crate::cli::print_success_envelope(
-            "login",
-            json!({ "registry": registry, "stored": path.display().to_string() }),
-        );
+        crate::cli::print_success_envelope("login", json!({ "registry": registry, "stored": path.display().to_string() }));
     } else {
         println!("login: token stored for {registry}");
         println!("  credentials: {} (not echoed)", path.display());
@@ -533,10 +516,7 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
 
     // The authority this build actually computes (the summary the index line will carry).
     let this_authority = authority_of(&pkg);
-    let effects = this_authority
-        .as_ref()
-        .and_then(|a| a.get("effects").and_then(Value::as_array).cloned())
-        .unwrap_or_default();
+    let effects = this_authority.as_ref().and_then(|a| a.get("effects").and_then(Value::as_array).cloned()).unwrap_or_default();
 
     // The prior index line for this package, if the index has one.
     let prior = index.as_deref().and_then(|dir| read_index_line(dir, &name));
@@ -766,7 +746,11 @@ fn add_path_dependency(dir: &str, accept: bool, json: bool) -> i32 {
         println!("add: {name} (path {rel})");
         println!(
             "  granted: {}",
-            if effects.is_empty() { "nothing — it is provably pure".to_string() } else { format!("{{{}}}", effects.join(", ")) }
+            if effects.is_empty() {
+                "nothing — it is provably pure".to_string()
+            } else {
+                format!("{{{}}}", effects.join(", "))
+            }
         );
         println!("  pinned in delulu.toml; `delulu check .` verifies it");
     }

@@ -16,9 +16,7 @@ use delulu_syntax::ast::*;
 use crate::authority::ScopeInfo;
 use crate::check::{check_module, FnFacts};
 use crate::package::Package;
-use crate::resolve::{
-    classify_generics, ConstSig, DeclTable, ForeignDef, ForeignFnDef, FnSig, TypeDef, TypeDefKind,
-};
+use crate::resolve::{classify_generics, ConstSig, DeclTable, FnSig, ForeignDef, ForeignFnDef, TypeDef, TypeDefKind};
 use crate::ty::{Effect, ResourceKind, Type, TypeDefId};
 
 /// The checked program: diagnostics plus whole-program facts keyed by qualified name (`mod::fn`).
@@ -268,8 +266,7 @@ pub fn program_authority(program: &Program, program_name: &str, scopes: &ScopeIn
         capabilities.push(json!({ "kind": k.name(), "scopes": scopes.for_kind(*k) }));
     }
 
-    let mut pure_functions: Vec<String> =
-        program.facts.iter().filter(|(_, f)| f.pure).map(|(n, _)| n.clone()).collect();
+    let mut pure_functions: Vec<String> = program.facts.iter().filter(|(_, f)| f.pure).map(|(n, _)| n.clone()).collect();
     pure_functions.sort();
 
     let effect_names: Vec<&str> = effects.iter().map(|e| e.name()).collect();
@@ -330,9 +327,7 @@ fn reachable_qualified(program: &Program) -> HashSet<String> {
 
 pub(crate) fn build_kind(kind: &TypeDeclKind) -> TypeDefKind {
     match kind {
-        TypeDeclKind::Record(fields) => {
-            TypeDefKind::Record(fields.iter().map(|f| (f.name.name.clone(), f.ty.clone())).collect())
-        }
+        TypeDeclKind::Record(fields) => TypeDefKind::Record(fields.iter().map(|f| (f.name.name.clone(), f.ty.clone())).collect()),
         TypeDeclKind::Sum(variants) => {
             TypeDefKind::Sum(variants.iter().map(|v| (v.name.name.clone(), v.fields.clone())).collect())
         }
@@ -452,10 +447,7 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
     // and not a reason string: you clamp a bad setpoint and retry, but when you no longer hold
     // the device you STOP (build-order D11b). `NoDevice` is the honest answer from a device
     // surface with no adapter attached.
-    gtypes.push(mk(
-        "ActuateErr",
-        &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])],
-    ));
+    gtypes.push(mk("ActuateErr", &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])]));
     // Stage 10 (10h, Track F): the compute-dispatch error sum. **Appended LAST in both prelude
     // paths** — the order law (`the_two_prelude_paths_agree_on_every_type_id`) means a new prelude
     // type goes on the END or every later type's `TypeDefId` shifts under it.
@@ -469,10 +461,7 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
     // is naming a kernel this grant never carried, which is a different mistake from asking too
     // much of one it did. `NoAdapter` is the honest answer from a compute surface with no adapter
     // attached: absence, never a fabricated result (invariant 50's rule, applied to silicon).
-    gtypes.push(mk(
-        "ComputeErr",
-        &[("KernelEnvelope", &["Str"]), ("UnknownKernel", &["Str"]), ("NoAdapter", &[])],
-    ));
+    gtypes.push(mk("ComputeErr", &[("KernelEnvelope", &["Str"]), ("UnknownKernel", &["Str"]), ("NoAdapter", &[])]));
 }
 
 fn dummy() -> delulu_diag::Span {
@@ -480,8 +469,7 @@ fn dummy() -> delulu_diag::Span {
 }
 
 pub(crate) fn dup(module: &str, what: &str, name: &str, span: delulu_diag::Span) -> Diagnostic {
-    Diagnostic::error("DL0302", format!("duplicate {what} `{name}` in module `{module}`"))
-        .with_span(span, "already defined")
+    Diagnostic::error("DL0302", format!("duplicate {what} `{name}` in module `{module}`")).with_span(span, "already defined")
 }
 
 pub(crate) fn insert_unique_type(
@@ -521,7 +509,11 @@ mod tests {
     #[test]
     fn cross_module_call_type_checks_and_authority_crosses_the_graph() {
         let dir = scratch("xmod");
-        write(&dir, "src/util.delulu", "module app.util\npub fn announce(out: Cap[Console]) ! {Write} { out.println(\"hi from util\") }\n");
+        write(
+            &dir,
+            "src/util.delulu",
+            "module app.util\npub fn announce(out: Cap[Console]) ! {Write} { out.println(\"hi from util\") }\n",
+        );
         write(
             &dir,
             "src/main.delulu",
@@ -533,10 +525,12 @@ mod tests {
         assert!(!program.has_errors(), "check: {:?}", program.diagnostics);
 
         let report = program_authority(&program, "app", &ScopeInfo::default());
-        let effects: Vec<String> = report["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        let effects: Vec<String> =
+            report["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert_eq!(effects, vec!["Write"], "Write must cross the module boundary from main → util.announce");
         // announce (in app.util) is reachable and effectful; it is NOT in pure_functions.
-        let pure: Vec<String> = report["pure_functions"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        let pure: Vec<String> =
+            report["pure_functions"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(!pure.contains(&"app.util::announce".to_string()));
     }
 
@@ -561,11 +555,7 @@ mod tests {
         assert!(diags.is_empty(), "{diags:?}");
         let mut whole: Vec<TypeDef> = Vec::new();
         push_prelude(&mut whole);
-        assert_eq!(
-            single.types.len(),
-            whole.len(),
-            "the two prelude paths must register the same number of types"
-        );
+        assert_eq!(single.types.len(), whole.len(), "the two prelude paths must register the same number of types");
         for (i, w) in whole.iter().enumerate() {
             let s = &single.types[i];
             assert_eq!(s.name, w.name, "prelude TypeDefId({i}) disagrees between the two paths");
@@ -585,7 +575,11 @@ mod tests {
     #[test]
     fn pub_type_crosses_modules() {
         let dir = scratch("pubtype");
-        write(&dir, "src/geom.delulu", "module geom\npub type Point { x: Int, y: Int }\npub fn origin() -> Point { Point { x: 0, y: 0 } }\n");
+        write(
+            &dir,
+            "src/geom.delulu",
+            "module geom\npub type Point { x: Int, y: Int }\npub fn origin() -> Point { Point { x: 0, y: 0 } }\n",
+        );
         write(&dir, "src/main.delulu", "module app\nimport geom\nfn get_x() -> Int { let p = origin()\n p.x }\n");
         let pkg = load_package(&dir);
         let program = check_program(&pkg);

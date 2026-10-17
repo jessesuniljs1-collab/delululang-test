@@ -26,8 +26,24 @@ use crate::unify::{InferCtx, UnifyError};
 /// routed to the builtin instead, and the only symptom was a type error at the call site
 /// naming a type the author never wrote. `resolve.rs` refuses the redefinition (DL0302) so the
 /// collision is reported where it is caused. See `HARDENING_CAMPAIGN.md` C11.
-pub const PRELUDE_BUILTINS: &[&str] =
-    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "parse_float", "range", "push", "Map"];
+pub const PRELUDE_BUILTINS: &[&str] = &[
+    "Ok",
+    "Err",
+    "Some",
+    "None",
+    "load",
+    "assert",
+    "assert_eq",
+    "str",
+    "len",
+    "int",
+    "float",
+    "parse_int",
+    "parse_float",
+    "range",
+    "push",
+    "Map",
+];
 
 /// The builtin TYPE names [`Checker::lower_type`] intercepts before it ever consults user scope.
 ///
@@ -44,8 +60,23 @@ pub const PRELUDE_BUILTINS: &[&str] =
 /// without ever failing. `Root`, `Cap`, `Secret`, and `Plugin` are on this list, so the mislead
 /// lands squarely on the authority-bearing types.
 pub const PRELUDE_TYPES: &[&str] = &[
-    "Int", "Float", "Bool", "Str", "Unit", "Root", "List", "Option", "Result", "Secret", "Cap",
-    "ForeignPtr", "PyObj", "Plugin", "Verified", "Contained", "Map",
+    "Int",
+    "Float",
+    "Bool",
+    "Str",
+    "Unit",
+    "Root",
+    "List",
+    "Option",
+    "Result",
+    "Secret",
+    "Cap",
+    "ForeignPtr",
+    "PyObj",
+    "Plugin",
+    "Verified",
+    "Contained",
+    "Map",
 ];
 
 /// The core effect names [`Checker::lower_row`] intercepts before it consults `user_effects` —
@@ -57,11 +88,8 @@ pub const PRELUDE_TYPES: &[&str] = &[
 /// they had declared a private effect had in fact written the one that grants filesystem and
 /// console reach — and the authority report could not tell the reader otherwise, because by the
 /// time it ran there was only ever one `Write`.
-pub const CORE_EFFECT_NAMES: &[&str] = &[
-    "Read", "Write", "Net", "Clock", "Rand", "Declassify", "ForeignCall", "Load", "Async",
-    "Actuate",
-];
-
+pub const CORE_EFFECT_NAMES: &[&str] =
+    &["Read", "Write", "Net", "Clock", "Rand", "Declassify", "ForeignCall", "Load", "Async", "Actuate"];
 
 /// What the checker learned about one function, for the authority report and reachability.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -278,8 +306,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // over the settled types so it never participates in unification (build-order deviation 4).
     let fn_types_settled: HashMap<String, Type> =
         checker.fn_types.iter().map(|(k, v)| (k.clone(), checker.cx.apply_type(v))).collect();
-    let (rcap_diags, iso_moves) =
-        crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
+    let (rcap_diags, iso_moves) = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
     checker.diags.extend(rcap_diags);
 
     // A body's row tails settle only now; each resolves to the concrete effects it bound to.
@@ -425,8 +452,7 @@ impl<'a> Checker<'a> {
         let genv = self.make_genv(&sig);
 
         // Lower the signature.
-        let param_types: Vec<Type> =
-            f.params.iter().map(|p| self.lower_type(&p.ty, &genv, &mut FnFacts::default())).collect();
+        let param_types: Vec<Type> = f.params.iter().map(|p| self.lower_type(&p.ty, &genv, &mut FnFacts::default())).collect();
         let ret = match &f.ret {
             Some(t) => self.lower_type(t, &genv, &mut FnFacts::default()),
             None => Type::Unit,
@@ -445,11 +471,7 @@ impl<'a> Checker<'a> {
         }
 
         // Record the function's static type (rows never erase — invariant 3).
-        let fn_ty = Type::Fn {
-            params: param_types.clone(),
-            ret: Box::new(ret.clone()),
-            row: declared_row.clone(),
-        };
+        let fn_ty = Type::Fn { params: param_types.clone(), ret: Box::new(ret.clone()), row: declared_row.clone() };
         self.fn_types.insert(f.name.name.clone(), fn_ty);
 
         let mut ctx = FnCtx {
@@ -537,11 +559,8 @@ impl<'a> Checker<'a> {
         for (fname, _, _) in &adef.fields {
             if !assigned.contains(fname) {
                 self.diags.push(
-                    Diagnostic::error(
-                        "DL0405",
-                        format!("actor `{}`'s constructor never assigns field `{fname}`", a.name.name),
-                    )
-                    .with_span(a.ctor.span, "every field must be assigned in `new`"),
+                    Diagnostic::error("DL0405", format!("actor `{}`'s constructor never assigns field `{fname}`", a.name.name))
+                        .with_span(a.ctor.span, "every field must be assigned in `new`"),
                 );
             }
         }
@@ -562,8 +581,7 @@ impl<'a> Checker<'a> {
         genv: &Genv,
         self_ty: &Type,
     ) {
-        let param_types: Vec<Type> =
-            params.iter().map(|p| self.lower_type(&p.ty, genv, &mut FnFacts::default())).collect();
+        let param_types: Vec<Type> = params.iter().map(|p| self.lower_type(&p.ty, genv, &mut FnFacts::default())).collect();
         let ret_ty = match ret {
             Some(t) => self.lower_type(t, genv, &mut FnFacts::default()),
             None => Type::Unit,
@@ -624,8 +642,7 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        let missing: Vec<Effect> =
-            body_effects.iter().filter(|e| !declared_resolved.effects.contains(*e)).cloned().collect();
+        let missing: Vec<Effect> = body_effects.iter().filter(|e| !declared_resolved.effects.contains(*e)).cloned().collect();
         if !missing.is_empty() || uncovered_tail {
             let list = missing.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
             let msg = if missing.is_empty() {
@@ -784,10 +801,7 @@ impl<'a> Checker<'a> {
             self.diags.push(
                 Diagnostic::error(
                     "DL1301",
-                    format!(
-                        "type `{}` cannot be marshalled across the foreign boundary",
-                        render_type_expr(t)
-                    ),
+                    format!("type `{}` cannot be marshalled across the foreign boundary", render_type_expr(t)),
                 )
                 .with_span(t.span(), "only Int, Float, Bool, Str, Unit, and ForeignPtr marshal"),
             );
@@ -892,10 +906,7 @@ impl<'a> Checker<'a> {
             return;
         }
         let is_alias = |name: &str| {
-            self.table
-                .type_ix
-                .get(name)
-                .is_some_and(|&id| matches!(self.table.type_def(id).kind, TypeDefKind::Alias(_)))
+            self.table.type_ix.get(name).is_some_and(|&id| matches!(self.table.type_def(id).kind, TypeDefKind::Alias(_)))
         };
         let mut edges: HashMap<String, Vec<String>> = HashMap::new();
         for (name, t) in &targets {
@@ -1078,8 +1089,7 @@ impl<'a> Checker<'a> {
             }
         }
 
-        let missing: Vec<Effect> =
-            body_effects.difference(&declared_resolved.effects).cloned().collect();
+        let missing: Vec<Effect> = body_effects.difference(&declared_resolved.effects).cloned().collect();
         if !missing.is_empty() || uncovered_tail {
             let list = missing.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
             let msg = if missing.is_empty() {
@@ -1092,8 +1102,7 @@ impl<'a> Checker<'a> {
                     list
                 )
             };
-            let mut diag = Diagnostic::error("DL0501", msg)
-                .with_span(subj.head_span, "declared row is here");
+            let mut diag = Diagnostic::error("DL0501", msg).with_span(subj.head_span, "declared row is here");
             if !missing.is_empty() {
                 // Catalog args (Stage 8, spec §6.1): `{fn}` carries the full subject desc so
                 // localized prose stays honest for `test` blocks too.
@@ -1106,15 +1115,18 @@ impl<'a> Checker<'a> {
         }
 
         // DL0502: a declared concrete effect the body never performs (narrowing → safe).
-        let unused: Vec<Effect> =
-            declared_resolved.effects.difference(&body_effects).cloned().collect();
+        let unused: Vec<Effect> = declared_resolved.effects.difference(&body_effects).cloned().collect();
         if let Some(row) = subj.row.filter(|_| !unused.is_empty()) {
             let list = unused.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
             self.diags.push(
                 Diagnostic::warning(
                     "DL0502",
-                    format!("{} declares effect{} `{}` it never performs", subj.desc,
-                        if unused.len() == 1 { "" } else { "s" }, list),
+                    format!(
+                        "{} declares effect{} `{}` it never performs",
+                        subj.desc,
+                        if unused.len() == 1 { "" } else { "s" },
+                        list
+                    ),
                 )
                 .with_arg("fn", subj.desc.clone())
                 .with_arg("effect", list.clone())
@@ -1371,7 +1383,9 @@ impl<'a> Checker<'a> {
             // `{Async} ∪ row(A.new)` — creating an actor is itself the Async effect, and the
             // constructor's effects are causally the spawner's (invariant 35).
             Expr::Spawn { actor, args, span, .. } => self.check_spawn(actor, args, *span, ctx),
-            Expr::Consume { name, span, .. } => (self.check_var(&Path { segs: vec![name.clone()] }, *span, ctx), RowAcc::default()),
+            Expr::Consume { name, span, .. } => {
+                (self.check_var(&Path { segs: vec![name.clone()] }, *span, ctx), RowAcc::default())
+            }
             Expr::Recover { body, .. } => self.check_block(body, ctx),
         }
     }
@@ -1392,7 +1406,9 @@ impl<'a> Checker<'a> {
                 return t;
             }
             // Nullary constructors.
-            if name.as_str() == "None" { return Type::Option(Box::new(self.cx.fresh_type())) }
+            if name.as_str() == "None" {
+                return Type::Option(Box::new(self.cx.fresh_type()));
+            }
             // A nullary user/prelude variant constructor used as a value (`Red`, `NotFound`, …).
             if let Some((id, fields)) = self.table.variant_ctor(name) {
                 if fields.is_empty() {
@@ -1419,8 +1435,7 @@ impl<'a> Checker<'a> {
             }
         }
         self.diags.push(
-            Diagnostic::error("DL0301", format!("unknown name `{}`", path.dotted()))
-                .with_span(span, "not found in this scope"),
+            Diagnostic::error("DL0301", format!("unknown name `{}`", path.dotted())).with_span(span, "not found in this scope"),
         );
         self.fresh_poisoned()
     }
@@ -1465,12 +1480,21 @@ impl<'a> Checker<'a> {
         };
         let def = self.table.type_def(id).clone();
         let TypeDefKind::Record(deffields) = &def.kind else {
-            self.diags.push(Diagnostic::error("DL0401", format!("`{name}` is not a record type")).with_span(span, "not a record"));
+            self.diags
+                .push(Diagnostic::error("DL0401", format!("`{name}` is not a record type")).with_span(span, "not a record"));
             return (self.cx.fresh_type(), acc);
         };
         // Fresh type args for the record's generics.
         let mut genv = Genv::default();
-        let args: Vec<Type> = def.generics.iter().map(|g| { let v = self.cx.fresh_type(); genv.types.insert(g.clone(), v.clone()); v }).collect();
+        let args: Vec<Type> = def
+            .generics
+            .iter()
+            .map(|g| {
+                let v = self.cx.fresh_type();
+                genv.types.insert(g.clone(), v.clone());
+                v
+            })
+            .collect();
         for (fname, fexpr) in fields {
             let (ft, fr) = self.check_expr(fexpr, ctx);
             acc.add_row_acc(&fr);
@@ -1511,8 +1535,11 @@ impl<'a> Checker<'a> {
                     let mut acc = RowAcc::default();
                     if args.len() != fields.len() {
                         self.diags.push(
-                            Diagnostic::error("DL0403", format!("constructor `{name}` expects {} field(s), found {}", fields.len(), args.len()))
-                                .with_span(span, "wrong number of arguments"),
+                            Diagnostic::error(
+                                "DL0403",
+                                format!("constructor `{name}` expects {} field(s), found {}", fields.len(), args.len()),
+                            )
+                            .with_span(span, "wrong number of arguments"),
                         );
                     }
                     for (arg, fty) in args.iter().zip(&fields) {
@@ -1569,7 +1596,13 @@ impl<'a> Checker<'a> {
     fn check_builtin_call(&mut self, name: &str, args: &[Expr], span: Span, ctx: &mut FnCtx) -> Option<(Type, RowAcc)> {
         let mut acc = RowAcc::default();
         let check_args = |slf: &mut Self, ctx: &mut FnCtx, acc: &mut RowAcc| -> Vec<Type> {
-            args.iter().map(|a| { let (t, r) = slf.check_expr(a, ctx); acc.add_row_acc(&r); slf.cx.apply_type(&t) }).collect()
+            args.iter()
+                .map(|a| {
+                    let (t, r) = slf.check_expr(a, ctx);
+                    acc.add_row_acc(&r);
+                    slf.cx.apply_type(&t)
+                })
+                .collect()
         };
         match name {
             "Ok" => {
@@ -1653,15 +1686,10 @@ impl<'a> Checker<'a> {
                     self.expect_type(a, b, span, "assert_eq compares two values of one type");
                     // R-5: opaque types have no structural equality — comparing secrets in
                     // tests is refused exactly like `==` refuses it everywhere else.
-                    if self.is_opaque(a, &mut HashSet::new())
-                        || self.is_opaque(b, &mut HashSet::new())
-                    {
+                    if self.is_opaque(a, &mut HashSet::new()) || self.is_opaque(b, &mut HashSet::new()) {
                         self.diags.push(
-                            Diagnostic::error(
-                                "DL0605",
-                                "opaque types (Secret/Cap/Root) have no structural equality",
-                            )
-                            .with_span(span, "use `Secret.verify` for secrets"),
+                            Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
+                                .with_span(span, "use `Secret.verify` for secrets"),
                         );
                     }
                 }
@@ -1685,12 +1713,16 @@ impl<'a> Checker<'a> {
             }
             "int" => {
                 let ts = check_args(self, ctx, &mut acc);
-                if let Some(t) = ts.first() { self.expect_type(&Type::Float, t, span, "int() expects a Float"); }
+                if let Some(t) = ts.first() {
+                    self.expect_type(&Type::Float, t, span, "int() expects a Float");
+                }
                 Some((Type::Int, acc))
             }
             "float" => {
                 let ts = check_args(self, ctx, &mut acc);
-                if let Some(t) = ts.first() { self.expect_type(&Type::Int, t, span, "float() expects an Int"); }
+                if let Some(t) = ts.first() {
+                    self.expect_type(&Type::Int, t, span, "float() expects an Int");
+                }
                 Some((Type::Float, acc))
             }
             "parse_int" => {
@@ -1736,7 +1768,15 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_method(&mut self, recv: &Expr, name: &Ident, args: &[Expr], span: Span, node_id: NodeId, ctx: &mut FnCtx) -> (Type, RowAcc) {
+    fn check_method(
+        &mut self,
+        recv: &Expr,
+        name: &Ident,
+        args: &[Expr],
+        span: Span,
+        node_id: NodeId,
+        ctx: &mut FnCtx,
+    ) -> (Type, RowAcc) {
         let (rt, mut acc) = self.check_expr(recv, ctx);
         let rt = self.cx.apply_type(&rt);
         // Capture literal secret names for the authority report (`root.secret("NAME")`).
@@ -1840,7 +1880,12 @@ impl<'a> Checker<'a> {
                         self.diags.push(
                             Diagnostic::error(
                                 "DL0403",
-                                format!("behavior `{aname}.{}` expects {} argument(s), found {}", name.name, beh.params.len(), arg_tys.len()),
+                                format!(
+                                    "behavior `{aname}.{}` expects {} argument(s), found {}",
+                                    name.name,
+                                    beh.params.len(),
+                                    arg_tys.len()
+                                ),
                             )
                             .with_span(span, "wrong number of arguments"),
                         );
@@ -1877,7 +1922,12 @@ impl<'a> Checker<'a> {
                         self.diags.push(
                             Diagnostic::error(
                                 "DL0403",
-                                format!("`{aname}.{}` expects {} argument(s), found {}", name.name, sig.params.len(), arg_tys.len()),
+                                format!(
+                                    "`{aname}.{}` expects {} argument(s), found {}",
+                                    name.name,
+                                    sig.params.len(),
+                                    arg_tys.len()
+                                ),
                             )
                             .with_span(span, "wrong number of arguments"),
                         );
@@ -1905,20 +1955,12 @@ impl<'a> Checker<'a> {
             // arguments per position, but can never see surplus ones — without this,
             // `root.console(1,2,3,4,5)` minted a cap and ignored the noise (fail-open skip branch).
             if let Some(label) = prim_receiver_label(&rt) {
-                if let Some(entry) = crate::prim_table::PRIM_TABLE
-                    .iter()
-                    .find(|e| e.receiver == label && e.method == name.name)
-                {
+                if let Some(entry) = crate::prim_table::PRIM_TABLE.iter().find(|e| e.receiver == label && e.method == name.name) {
                     if arg_tys.len() > entry.arity as usize {
                         self.diags.push(
                             Diagnostic::error(
                                 "DL0403",
-                                format!(
-                                    "`{label}.{}` expects {} argument(s), found {}",
-                                    name.name,
-                                    entry.arity,
-                                    arg_tys.len()
-                                ),
+                                format!("`{label}.{}` expects {} argument(s), found {}", name.name, entry.arity, arg_tys.len()),
                             )
                             .with_span(span, "wrong number of arguments"),
                         );
@@ -1956,7 +1998,14 @@ impl<'a> Checker<'a> {
     /// effects (T-CapOp) — this table is that single source of truth for the checker.
     /// The arity column of `prim_table::PRIM_TABLE` is enforced by the caller's gate; per-position
     /// types are enforced here via `expect_arg`.
-    fn method_sig(&mut self, recv: &Type, method: &str, args: &[(Type, Span)], span: Span, ctx: &mut FnCtx) -> Option<(Type, Option<Effect>, Option<ResourceKind>)> {
+    fn method_sig(
+        &mut self,
+        recv: &Type,
+        method: &str,
+        args: &[(Type, Span)],
+        span: Span,
+        ctx: &mut FnCtx,
+    ) -> Option<(Type, Option<Effect>, Option<ResourceKind>)> {
         let io = Type::Sum(self.table.io_err(), vec![]);
         let net = Type::Sum(self.table.net_err(), vec![]);
         let ok_str_io = || Type::result(Type::Str, io.clone());
@@ -2018,11 +2067,7 @@ impl<'a> Checker<'a> {
                     "python" => {
                         self.expect_arg(args, 0, &Type::Cap(ResourceKind::ForeignLoad), span);
                         let ferr = Type::Sum(self.table.foreign_err(), vec![]);
-                        return Some((
-                            Type::result(Type::Cap(ResourceKind::Python), ferr),
-                            None,
-                            Some(ResourceKind::Python),
-                        ));
+                        return Some((Type::result(Type::Cap(ResourceKind::Python), ferr), None, Some(ResourceKind::Python)));
                     }
                     _ => return None,
                 };
@@ -2043,9 +2088,18 @@ impl<'a> Checker<'a> {
                 _ => None,
             },
             Type::Cap(ResourceKind::FsRead) => match method {
-                "read_text" => { self.expect_arg(args, 0, &Type::Str, span); Some((ok_str_io(), Some(Effect::Read), None)) }
-                "list_dir" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::result(Type::List(Box::new(Type::Str)), io), Some(Effect::Read), None)) }
-                "narrow" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::Cap(ResourceKind::FsRead), None, None)) }
+                "read_text" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((ok_str_io(), Some(Effect::Read), None))
+                }
+                "list_dir" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::result(Type::List(Box::new(Type::Str)), io), Some(Effect::Read), None))
+                }
+                "narrow" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::Cap(ResourceKind::FsRead), None, None))
+                }
                 _ => None,
             },
             Type::Cap(ResourceKind::FsWrite) => match method {
@@ -2057,7 +2111,10 @@ impl<'a> Checker<'a> {
                 _ => None,
             },
             Type::Cap(ResourceKind::Http) => match method {
-                "get" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::result(Type::Str, net), Some(Effect::Net), None)) }
+                "get" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::result(Type::Str, net), Some(Effect::Net), None))
+                }
                 // P9-04 (a), D-V2-128: the request with headers. The URL stays argument ONE, so every
                 // place that decides a fetch on its URL (the custody gate, the refusal note) reads it
                 // where it reads `get`'s; the headers are a `Map[Str, Str]`, judged by the egress client.
@@ -2152,7 +2209,11 @@ impl<'a> Checker<'a> {
                 _ => None,
             },
             Type::Cap(ResourceKind::Rand) => match method {
-                "int" => { self.expect_arg(args, 0, &Type::Int, span); self.expect_arg(args, 1, &Type::Int, span); Some((Type::Int, Some(Effect::Rand), None)) }
+                "int" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Int, span);
+                    Some((Type::Int, Some(Effect::Rand), None))
+                }
                 "float" => Some((Type::Float, Some(Effect::Rand), None)),
                 _ => None,
             },
@@ -2167,10 +2228,22 @@ impl<'a> Checker<'a> {
                         self.expect_arg(args, 0, &Type::Str, span);
                         Some((Type::result(Type::PyObj, pyerr()), Some(Effect::ForeignCall), None))
                     }
-                    "of_int" => { self.expect_arg(args, 0, &Type::Int, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
-                    "of_float" => { self.expect_arg(args, 0, &Type::Float, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
-                    "of_str" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
-                    "of_bool" => { self.expect_arg(args, 0, &Type::Bool, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
+                    "of_int" => {
+                        self.expect_arg(args, 0, &Type::Int, span);
+                        Some((Type::PyObj, Some(Effect::ForeignCall), None))
+                    }
+                    "of_float" => {
+                        self.expect_arg(args, 0, &Type::Float, span);
+                        Some((Type::PyObj, Some(Effect::ForeignCall), None))
+                    }
+                    "of_str" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        Some((Type::PyObj, Some(Effect::ForeignCall), None))
+                    }
+                    "of_bool" => {
+                        self.expect_arg(args, 0, &Type::Bool, span);
+                        Some((Type::PyObj, Some(Effect::ForeignCall), None))
+                    }
                     "list" => {
                         // A DeluluLang closure can never become a Python value (spec §4.4 / R-6a):
                         // a function-typed element is DL1302, not a plain type mismatch.
@@ -2180,10 +2253,22 @@ impl<'a> Checker<'a> {
                         self.expect_arg(args, 0, &Type::List(Box::new(Type::PyObj)), span);
                         Some((Type::PyObj, Some(Effect::ForeignCall), None))
                     }
-                    "to_int" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Int, pyerr()), Some(Effect::ForeignCall), None)) }
-                    "to_float" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Float, pyerr()), Some(Effect::ForeignCall), None)) }
-                    "to_str" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Str, pyerr()), Some(Effect::ForeignCall), None)) }
-                    "to_bool" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Bool, pyerr()), Some(Effect::ForeignCall), None)) }
+                    "to_int" => {
+                        self.expect_arg(args, 0, &Type::PyObj, span);
+                        Some((Type::result(Type::Int, pyerr()), Some(Effect::ForeignCall), None))
+                    }
+                    "to_float" => {
+                        self.expect_arg(args, 0, &Type::PyObj, span);
+                        Some((Type::result(Type::Float, pyerr()), Some(Effect::ForeignCall), None))
+                    }
+                    "to_str" => {
+                        self.expect_arg(args, 0, &Type::PyObj, span);
+                        Some((Type::result(Type::Str, pyerr()), Some(Effect::ForeignCall), None))
+                    }
+                    "to_bool" => {
+                        self.expect_arg(args, 0, &Type::PyObj, span);
+                        Some((Type::result(Type::Bool, pyerr()), Some(Effect::ForeignCall), None))
+                    }
                     _ => None,
                 }
             }
@@ -2310,9 +2395,19 @@ impl<'a> Checker<'a> {
             Type::Str => match method {
                 "len" => Some((Type::Int, None, None)),
                 "trim" => Some((Type::Str, None, None)),
-                "contains" | "starts_with" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::Bool, None, None)) }
-                "split" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::List(Box::new(Type::Str)), None, None)) }
-                "slice" => { self.expect_arg(args, 0, &Type::Int, span); self.expect_arg(args, 1, &Type::Int, span); Some((Type::Str, None, None)) }
+                "contains" | "starts_with" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::Bool, None, None))
+                }
+                "split" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    Some((Type::List(Box::new(Type::Str)), None, None))
+                }
+                "slice" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Int, span);
+                    Some((Type::Str, None, None))
+                }
                 // P3 (D-V2-29). Full-Unicode case mapping, and NOT a security normalization: see the
                 // warning in the reference. `ss` in German uppercases to two letters, so these do not
                 // round-trip, and four of P22's defects were security decisions taken on a
@@ -2399,8 +2494,14 @@ impl<'a> Checker<'a> {
             Type::List(elem) => match method {
                 "len" => Some((Type::Int, None, None)),
                 "is_empty" => Some((Type::Bool, None, None)),
-                "get" => { self.expect_arg(args, 0, &Type::Int, span); Some((Type::Option(elem.clone()), None, None)) }
-                "push" => { self.expect_arg(args, 0, elem, span); Some((Type::Unit, None, None)) }
+                "get" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    Some((Type::Option(elem.clone()), None, None))
+                }
+                "push" => {
+                    self.expect_arg(args, 0, elem, span);
+                    Some((Type::Unit, None, None))
+                }
                 // Mutating, like `push` — and registered in `MUTATING_METHODS` so the rcap pass
                 // refuses it through a `val` reference. `pop` returns what it removed rather than
                 // `Unit`, because a caller that cannot see the element would have to `get` before
@@ -2689,10 +2790,9 @@ impl<'a> Checker<'a> {
                 let found = {
                     let def = self.table.type_def(id);
                     match &def.kind {
-                        TypeDefKind::Record(fields) => fields
-                            .iter()
-                            .find(|(n, _)| *n == field.name)
-                            .map(|(_, ty)| (ty.clone(), def.generics.clone())),
+                        TypeDefKind::Record(fields) => {
+                            fields.iter().find(|(n, _)| *n == field.name).map(|(_, ty)| (ty.clone(), def.generics.clone()))
+                        }
                         _ => None,
                     }
                 };
@@ -2727,7 +2827,10 @@ impl<'a> Checker<'a> {
         match op {
             UnOp::Neg => {
                 if !t.is_numeric() && !matches!(t, Type::Var(_)) {
-                    self.diags.push(Diagnostic::error("DL0401", format!("cannot negate `{}`", self.ty(&t))).with_span(operand.span(), "expected Int or Float"));
+                    self.diags.push(
+                        Diagnostic::error("DL0401", format!("cannot negate `{}`", self.ty(&t)))
+                            .with_span(operand.span(), "expected Int or Float"),
+                    );
                 }
                 (t, r)
             }
@@ -2847,7 +2950,14 @@ impl<'a> Checker<'a> {
         (result_ty, acc)
     }
 
-    fn check_pattern(&mut self, pat: &Pattern, scrut: &Type, ctx: &mut FnCtx, covered: &mut HashSet<String>, has_wildcard: &mut bool) {
+    fn check_pattern(
+        &mut self,
+        pat: &Pattern,
+        scrut: &Type,
+        ctx: &mut FnCtx,
+        covered: &mut HashSet<String>,
+        has_wildcard: &mut bool,
+    ) {
         match pat {
             Pattern::Wildcard(_) => *has_wildcard = true,
             Pattern::Bind(name) => {
@@ -2864,8 +2974,11 @@ impl<'a> Checker<'a> {
                 let field_tys = self.variant_field_types(scrut, &vname, *span);
                 if field_tys.len() != fields.len() {
                     self.diags.push(
-                        Diagnostic::error("DL0403", format!("variant `{vname}` binds {} field(s), pattern has {}", field_tys.len(), fields.len()))
-                            .with_span(*span, "wrong number of fields"),
+                        Diagnostic::error(
+                            "DL0403",
+                            format!("variant `{vname}` binds {} field(s), pattern has {}", field_tys.len(), fields.len()),
+                        )
+                        .with_span(*span, "wrong number of fields"),
                     );
                 }
                 for (fp, ft) in fields.iter().zip(field_tys) {
@@ -2880,12 +2993,18 @@ impl<'a> Checker<'a> {
             Type::Result(ok, err) => match vname {
                 "Ok" => vec![*ok],
                 "Err" => vec![*err],
-                _ => { self.bad_variant(vname, "Result", span); vec![] }
+                _ => {
+                    self.bad_variant(vname, "Result", span);
+                    vec![]
+                }
             },
             Type::Option(inner) => match vname {
                 "Some" => vec![*inner],
                 "None" => vec![],
-                _ => { self.bad_variant(vname, "Option", span); vec![] }
+                _ => {
+                    self.bad_variant(vname, "Option", span);
+                    vec![]
+                }
             },
             Type::Sum(id, args) => {
                 let def = self.table.type_def(id).clone();
@@ -2912,9 +3031,8 @@ impl<'a> Checker<'a> {
     }
 
     fn bad_variant(&mut self, vname: &str, ty: &str, span: Span) {
-        self.diags.push(
-            Diagnostic::error("DL0405", format!("`{ty}` has no variant `{vname}`")).with_span(span, "unknown variant"),
-        );
+        self.diags
+            .push(Diagnostic::error("DL0405", format!("`{ty}` has no variant `{vname}`")).with_span(span, "unknown variant"));
     }
 
     fn check_exhaustive(&mut self, scrut: &Type, covered: &HashSet<String>, has_wildcard: bool, span: Span) {
@@ -2949,7 +3067,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_lambda(&mut self, params: &[Param], ret: Option<&TypeExpr>, row: Option<&RowExpr>, body: &Block, ctx: &mut FnCtx) -> (Type, RowAcc) {
+    fn check_lambda(
+        &mut self,
+        params: &[Param],
+        ret: Option<&TypeExpr>,
+        row: Option<&RowExpr>,
+        body: &Block,
+        ctx: &mut FnCtx,
+    ) -> (Type, RowAcc) {
         let param_types: Vec<Type> = params.iter().map(|p| self.lower_type(&p.ty, &ctx.genv, &mut ctx.facts)).collect();
         // A lambda body is checked in the enclosing function's local scope plus its params.
         ctx.push_scope();
@@ -3074,7 +3199,10 @@ impl<'a> Checker<'a> {
                     let name = &path.segs[0].name;
                     if let Some(v) = genv.types.get(name) {
                         if !args.is_empty() {
-                            self.diags.push(Diagnostic::error("DL0406", format!("type parameter `{name}` takes no arguments")).with_span(*span, "unexpected type arguments"));
+                            self.diags.push(
+                                Diagnostic::error("DL0406", format!("type parameter `{name}` takes no arguments"))
+                                    .with_span(*span, "unexpected type arguments"),
+                            );
                         }
                         return v.clone();
                     }
@@ -3122,8 +3250,11 @@ impl<'a> Checker<'a> {
                         let type_arity = adef.generics.iter().filter(|g| !row_kinded.contains(*g)).count();
                         if args.len() != type_arity {
                             self.diags.push(
-                                Diagnostic::error("DL0406", format!("actor `{name}` expects {type_arity} type argument(s), found {}", args.len()))
-                                    .with_span(*span, "wrong number of type arguments"),
+                                Diagnostic::error(
+                                    "DL0406",
+                                    format!("actor `{name}` expects {type_arity} type argument(s), found {}", args.len()),
+                                )
+                                .with_span(*span, "wrong number of type arguments"),
                             );
                         }
                         let targs: Vec<Type> = args.iter().map(|a| self.lower_type(a, genv, facts)).collect();
@@ -3142,7 +3273,13 @@ impl<'a> Checker<'a> {
                     if let Some(&id) = self.table.type_ix.get(name) {
                         let def = self.table.type_def(id).clone();
                         if args.len() != def.generics.len() {
-                            self.diags.push(Diagnostic::error("DL0406", format!("type `{name}` expects {} argument(s), found {}", def.generics.len(), args.len())).with_span(*span, "wrong number of type arguments"));
+                            self.diags.push(
+                                Diagnostic::error(
+                                    "DL0406",
+                                    format!("type `{name}` expects {} argument(s), found {}", def.generics.len(), args.len()),
+                                )
+                                .with_span(*span, "wrong number of type arguments"),
+                            );
                         }
                         let targs: Vec<Type> = args.iter().map(|a| self.lower_type(a, genv, facts)).collect();
                         return match def.kind {
@@ -3153,9 +3290,7 @@ impl<'a> Checker<'a> {
                             // has already been reported at its declaration by `check_type_aliases`,
                             // so this yields a fresh variable and lets checking continue rather than
                             // reporting the same cycle once per use site.
-                            TypeDefKind::Alias(_) if self.cyclic_aliases.contains(name) => {
-                                self.cx.fresh_type()
-                            }
+                            TypeDefKind::Alias(_) if self.cyclic_aliases.contains(name) => self.cx.fresh_type(),
                             TypeDefKind::Alias(inner) => {
                                 let mut agenv = Genv::default();
                                 for (g, a) in def.generics.iter().zip(&targs) {
@@ -3226,7 +3361,10 @@ impl<'a> Checker<'a> {
                     return Type::Cap(k);
                 }
             }
-            self.diags.push(Diagnostic::error("DL0307", format!("`{}` is not a capability resource kind", path.dotted())).with_span(*ispan, "unknown resource kind"));
+            self.diags.push(
+                Diagnostic::error("DL0307", format!("`{}` is not a capability resource kind", path.dotted()))
+                    .with_span(*ispan, "unknown resource kind"),
+            );
         } else {
             self.diags.push(Diagnostic::error("DL0307", "`Cap` expects a resource kind name").with_span(span, "here"));
         }
@@ -3242,14 +3380,20 @@ impl<'a> Checker<'a> {
             } else if self.table.user_effects.contains(name) {
                 effects.insert(Effect::User(name.clone()));
             } else {
-                self.diags.push(Diagnostic::error("DL0306", format!("unknown effect `{name}`")).with_span(path.span(), "not a declared effect"));
+                self.diags.push(
+                    Diagnostic::error("DL0306", format!("unknown effect `{name}`"))
+                        .with_span(path.span(), "not a declared effect"),
+                );
             }
         }
         let tail = match &r.tail {
             Some(t) => match genv.rows.get(&t.name) {
                 Some(v) => Some(*v),
                 None => {
-                    self.diags.push(Diagnostic::error("DL0306", format!("unknown effect-row variable `{}`", t.name)).with_span(t.span, "not a row generic"));
+                    self.diags.push(
+                        Diagnostic::error("DL0306", format!("unknown effect-row variable `{}`", t.name))
+                            .with_span(t.span, "not a row generic"),
+                    );
                     None
                 }
             },
@@ -3260,10 +3404,20 @@ impl<'a> Checker<'a> {
 
     fn note_caps_in(&self, ty: &Type, facts: &mut FnFacts) {
         match ty {
-            Type::Cap(k) => { facts.cap_kinds.insert(*k); }
+            Type::Cap(k) => {
+                facts.cap_kinds.insert(*k);
+            }
             Type::List(t) | Type::Option(t) | Type::Secret(t) => self.note_caps_in(t, facts),
-            Type::Result(a, b) => { self.note_caps_in(a, facts); self.note_caps_in(b, facts); }
-            Type::Fn { params, ret, .. } => { for p in params { self.note_caps_in(p, facts); } self.note_caps_in(ret, facts); }
+            Type::Result(a, b) => {
+                self.note_caps_in(a, facts);
+                self.note_caps_in(b, facts);
+            }
+            Type::Fn { params, ret, .. } => {
+                for p in params {
+                    self.note_caps_in(p, facts);
+                }
+                self.note_caps_in(ret, facts);
+            }
             _ => {}
         }
     }
@@ -3310,9 +3464,7 @@ impl<'a> Checker<'a> {
             // composite type that forgets this arm falls into the `_` below, where opaque becomes
             // `false` and `Map[Str, Secret[Str]] == m` is silently admitted. That is the shape of
             // the skip-branch rule — write the case where the checker could not tell.
-            Type::Result(a, b) | Type::Map(a, b) => {
-                self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting)
-            }
+            Type::Result(a, b) | Type::Map(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
                 if args.iter().any(|a| self.is_opaque(a, visiting)) {
                     return true;
@@ -3327,7 +3479,9 @@ impl<'a> Checker<'a> {
                 }
                 let opaque = match &def.kind {
                     TypeDefKind::Record(fields) => fields.iter().any(|(_, ft)| self.type_expr_opaque(ft, &genv, visiting)),
-                    TypeDefKind::Sum(variants) => variants.iter().any(|(_, fts)| fts.iter().any(|ft| self.type_expr_opaque(ft, &genv, visiting))),
+                    TypeDefKind::Sum(variants) => {
+                        variants.iter().any(|(_, fts)| fts.iter().any(|ft| self.type_expr_opaque(ft, &genv, visiting)))
+                    }
                     TypeDefKind::Alias(inner) => self.type_expr_opaque(inner, &genv, visiting),
                 };
                 visiting.remove(&id);
@@ -3348,7 +3502,9 @@ impl<'a> Checker<'a> {
                     }
                     match name.as_str() {
                         "Secret" | "Cap" | "Root" | "ForeignPtr" | "PyObj" => return true,
-                        "List" | "Option" => return args.first().map(|a| self.type_expr_opaque(a, genv, visiting)).unwrap_or(false),
+                        "List" | "Option" => {
+                            return args.first().map(|a| self.type_expr_opaque(a, genv, visiting)).unwrap_or(false)
+                        }
                         "Result" => return args.iter().any(|a| self.type_expr_opaque(a, genv, visiting)),
                         _ => {}
                     }
@@ -3383,14 +3539,7 @@ impl<'a> Checker<'a> {
     /// `expect_type` with a caller-supplied code for the plain-mismatch case. The specific codes
     /// the registry allocates (DL0408 for a non-Bool condition) must actually be reachable, or
     /// they are frozen at 1.0 as codes nothing can ever produce.
-    fn expect_type_coded(
-        &mut self,
-        expected: &Type,
-        actual: &Type,
-        span: Span,
-        msg: &str,
-        mismatch_code: Option<&'static str>,
-    ) {
+    fn expect_type_coded(&mut self, expected: &Type, actual: &Type, span: Span, msg: &str, mismatch_code: Option<&'static str>) {
         match self.cx.unify_type(expected, actual) {
             Ok(()) => {}
             Err(e) => {
@@ -3399,8 +3548,7 @@ impl<'a> Checker<'a> {
                 // A secret used where its plain type is expected is the "secret cannot flow"
                 // case (§6.4 rule 1) — reported as DL0602, not a generic type mismatch.
                 if secret_mismatch(&ea, &aa) {
-                    let inner =
-                        if matches!(ea, Type::Secret(_)) { self.ty(&aa) } else { self.ty(&ea) };
+                    let inner = if matches!(ea, Type::Secret(_)) { self.ty(&aa) } else { self.ty(&ea) };
                     self.diags.push(
                         Diagnostic::error(
                             "DL0602",
@@ -3463,15 +3611,12 @@ impl<'a> Checker<'a> {
 /// `M(τ)`'s allowlist, by name — the ONE list. Both engines lower foreign signatures by type name
 /// (`delulu_runtime::interp::lower_foreign_sig`, shared with the WASM host), so this list and
 /// `FKind::from_type_name` are two halves of one rule and must never drift apart.
-pub const MARSHALLABLE_TYPE_NAMES: &[&str] =
-    &["Int", "Float", "Bool", "Str", "Unit", "ForeignPtr"];
+pub const MARSHALLABLE_TYPE_NAMES: &[&str] = &["Int", "Float", "Bool", "Str", "Unit", "ForeignPtr"];
 
 fn is_marshallable_type_expr(t: &TypeExpr) -> bool {
     match t {
         TypeExpr::Named { path, args, .. } => {
-            args.is_empty()
-                && path.segs.len() == 1
-                && MARSHALLABLE_TYPE_NAMES.contains(&path.segs[0].name.as_str())
+            args.is_empty() && path.segs.len() == 1 && MARSHALLABLE_TYPE_NAMES.contains(&path.segs[0].name.as_str())
         }
         TypeExpr::Fn { .. } => false,
         // An rcap prefix never appears in a foreign signature (the FFI predates rcaps and
@@ -3520,9 +3665,7 @@ fn type_contains_var(t: &Type) -> bool {
         Type::List(e) | Type::Option(e) | Type::Secret(e) | Type::Plugin(e) => type_contains_var(e),
         Type::Result(o, e) => type_contains_var(o) || type_contains_var(e),
         Type::Record(_, args) | Type::Sum(_, args) => args.iter().any(type_contains_var),
-        Type::Fn { params, ret, .. } => {
-            params.iter().any(type_contains_var) || type_contains_var(ret)
-        }
+        Type::Fn { params, ret, .. } => params.iter().any(type_contains_var) || type_contains_var(ret),
         _ => false,
     }
 }

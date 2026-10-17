@@ -49,11 +49,8 @@ fn scratch(tag: &str) -> PathBuf {
 /// device gate does — this is the SAME record type `--broker-profile hw:<adapter> --approved`
 /// reads, just written directly rather than produced by a `sim` run.
 fn write_approval(dir: &Path, artifact: &str, hash: &str) -> PathBuf {
-    let approval = delulu_runtime::Approval {
-        artifact: artifact.to_string(),
-        hash: hash.to_string(),
-        profile: "fleet-test".to_string(),
-    };
+    let approval =
+        delulu_runtime::Approval { artifact: artifact.to_string(), hash: hash.to_string(), profile: "fleet-test".to_string() };
     let path = dir.join("approved.json");
     std::fs::write(&path, approval.to_json()).unwrap();
     path
@@ -202,15 +199,8 @@ fn omitting_approved_entirely_is_also_a_dl1905_refusal() {
     let previous = dir.join("previous.bin");
     std::fs::write(&previous, b"fleet payload v0").unwrap();
 
-    let o = delulu(&[
-        "fleet",
-        "update",
-        &artifact.to_string_lossy(),
-        "--members",
-        "3",
-        "--previous",
-        &previous.to_string_lossy(),
-    ]);
+    let o =
+        delulu(&["fleet", "update", &artifact.to_string_lossy(), "--members", "3", "--previous", &previous.to_string_lossy()]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(err.contains("DL1905"), "{err}");
@@ -281,20 +271,13 @@ fn a_health_gate_failure_triggers_rollback_and_stops_further_staging() {
     assert_eq!(v["failed_member"].as_u64(), Some(2));
 
     let events = v["events"].as_array().expect("events array");
-    let staged: Vec<u64> = events
-        .iter()
-        .filter(|e| e["op"] == "member.staged")
-        .map(|e| e["member"].as_u64().unwrap())
-        .collect();
+    let staged: Vec<u64> = events.iter().filter(|e| e["op"] == "member.staged").map(|e| e["member"].as_u64().unwrap()).collect();
     assert_eq!(staged, vec![0, 1, 2], "members 3 and 4 must never be staged:\n{out}");
     assert!(
         !events.iter().any(|e| e["member"].as_u64() == Some(3) || e["member"].as_u64() == Some(4)),
         "no event at all — staged, passed, failed — may mention members 3 or 4:\n{out}"
     );
-    let rollback = events
-        .iter()
-        .find(|e| e["op"] == "rollout.rolled_back")
-        .expect("the rollback is journaled");
+    let rollback = events.iter().find(|e| e["op"] == "rollout.rolled_back").expect("the rollback is journaled");
     assert_eq!(rollback["member"].as_u64(), Some(2), "the rollback names which member triggered it");
     assert!(
         rollback["detail"].as_str().unwrap().contains(&previous_hash),
@@ -374,15 +357,8 @@ fn malformed_or_missing_required_flags_are_usage_errors_not_dl1905() {
     ]);
     assert_eq!(o.status.code(), Some(2), "a missing --members must be a usage error:\n{}", stderr(&o));
 
-    let o = delulu(&[
-        "fleet",
-        "update",
-        &artifact.to_string_lossy(),
-        "--members",
-        "3",
-        "--approved",
-        &approved.to_string_lossy(),
-    ]);
+    let o =
+        delulu(&["fleet", "update", &artifact.to_string_lossy(), "--members", "3", "--approved", &approved.to_string_lossy()]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(2), "a missing --previous must be a usage error, not DL1905:\n{err}");
     assert!(!err.contains("DL1905"), "{err}");

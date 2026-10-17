@@ -188,8 +188,12 @@ fn devices_plugins_and_actors_are_on_the_chain_with_the_scopes_the_code_names() 
     let f = f.to_string_lossy().to_string();
     let v = json_of(&["atlas", "chain", &f, "--json"]);
     let c = &v["chain"];
-    let devices: Vec<(&str, &Value)> =
-        c["devices"]["devices"].as_array().unwrap().iter().map(|d| (d["class"].as_str().unwrap(), &d["requested_scopes"])).collect();
+    let devices: Vec<(&str, &Value)> = c["devices"]["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| (d["class"].as_str().unwrap(), &d["requested_scopes"]))
+        .collect();
     assert_eq!(
         devices,
         vec![("actuator", &json!(["arm0/elbow"])), ("compute", &json!(["gpu0"])), ("sensor", &json!(["bay0/temp"]))],
@@ -205,19 +209,28 @@ fn devices_plugins_and_actors_are_on_the_chain_with_the_scopes_the_code_names() 
     assert_eq!(arm["requested_scopes"], json!(["arm0/elbow"]));
     let console = atlas["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "res:console:stdio").unwrap();
     assert!(console.get("requested_scopes").is_none(), "no scopes, no attribute: {console}");
-    assert!(atlas["edges"].as_array().unwrap().iter().any(|e| e["from"] == "fn:rig/rig.main" && e["to"] == "res:sensor:*" && e["kind"] == "requires"));
+    assert!(atlas["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["from"] == "fn:rig/rig.main" && e["to"] == "res:sensor:*" && e["kind"] == "requires"));
 
     let actors = json_of(&["atlas", "chain", "examples/guide/06_actors.delulu", "--json"])["chain"]["actors"].clone();
     let names: Vec<&str> = actors["actors"].as_array().unwrap().iter().map(|a| a["actor"].as_str().unwrap()).collect();
     assert_eq!(names, vec!["Supervisor", "Worker"]);
-    assert!(actors["async_performed_by"].as_array().unwrap().iter().any(|f| f == "fn:guide.actors/guide.actors.Supervisor.dispatch"));
+    assert!(actors["async_performed_by"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f == "fn:guide.actors/guide.actors.Supervisor.dispatch"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn the_profile_is_the_sandboxs_and_a_package_is_asked_about_its_flattened_program() {
     let t = "examples/guide/04_effects.delulu";
-    let hostile = json_of(&["atlas", "chain", t, "--sandbox-profile", "hostile-agent", "--json"])["chain"]["sandbox_policy"].clone();
+    let hostile =
+        json_of(&["atlas", "chain", t, "--sandbox-profile", "hostile-agent", "--json"])["chain"]["sandbox_policy"].clone();
     let policy = json_of(&["sandbox", "policy", t, "--sandbox-profile", "hostile-agent", "--json"])["policy"].clone();
     assert_eq!(hostile["profile"], "hostile-agent");
     assert_eq!(hostile["policy_hash"], policy["policy_hash"]);
@@ -233,8 +246,7 @@ fn the_profile_is_the_sandboxs_and_a_package_is_asked_about_its_flattened_progra
     std::fs::create_dir_all(&dir).unwrap();
     let saved = dir.join("atlas.json");
     std::fs::write(&saved, serde_json::to_string(&json_of(&["atlas", t, "--json"])["atlas"]).unwrap()).unwrap();
-    let from_saved =
-        json_of(&["atlas", "chain", saved.to_str().unwrap(), "--json"])["chain"]["sandbox_policy"].clone();
+    let from_saved = json_of(&["atlas", "chain", saved.to_str().unwrap(), "--json"])["chain"]["sandbox_policy"].clone();
     assert_eq!(from_saved["carried"], Value::Null);
     assert!(from_saved["carried_note"].as_str().unwrap().contains("no sandboxed run"), "{from_saved}");
     let _ = std::fs::remove_dir_all(&dir);

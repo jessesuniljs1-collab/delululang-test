@@ -27,11 +27,7 @@ fn delulu(dir: &Path, args: &[&str]) -> Output {
 }
 
 fn combined(o: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    )
+    format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))
 }
 
 /// A minimal, clean package at a chosen version. The advisory scan iterates every workspace
@@ -120,14 +116,8 @@ fn deny_advisories_with_no_feed_refuses_rather_than_passing() {
     // No feed written at all.
     let out = delulu(&dir, &["build", ".", "--deny-advisories"]);
     let all = combined(&out);
-    assert!(
-        !out.status.success(),
-        "a CI gate with no feed to check must not report a clean pass:\n{all}"
-    );
-    assert!(
-        all.contains("no advisory feed"),
-        "the refusal should say the feed was missing:\n{all}"
-    );
+    assert!(!out.status.success(), "a CI gate with no feed to check must not report a clean pass:\n{all}");
+    assert!(all.contains("no advisory feed"), "the refusal should say the feed was missing:\n{all}");
 }
 
 #[test]
@@ -147,16 +137,10 @@ fn deny_advisories_with_an_unparseable_record_refuses() {
     scaffold_pkg(&dir, "myapp", "1.0.0");
     // A feed that parses as JSON but whose single record is missing `affected` — a half-record the
     // scanner will not silently treat as "matches nothing" under the gate.
-    write_feed(
-        &dir,
-        "{ \"advisories\": [ { \"id\": \"DLSA-x\", \"package\": \"myapp\" } ] }",
-    );
+    write_feed(&dir, "{ \"advisories\": [ { \"id\": \"DLSA-x\", \"package\": \"myapp\" } ] }");
     let out = delulu(&dir, &["build", ".", "--deny-advisories"]);
     let all = combined(&out);
-    assert!(
-        !out.status.success(),
-        "an unparseable record under the gate must refuse, not pass:\n{all}"
-    );
+    assert!(!out.status.success(), "an unparseable record under the gate must refuse, not pass:\n{all}");
     assert!(all.contains("cannot parse") || all.contains("unparseable"), "reason should name the bad record:\n{all}");
 }
 
@@ -171,10 +155,7 @@ fn advisory_feed_flag_points_at_an_explicit_file() {
     std::fs::create_dir_all(feed.parent().unwrap()).unwrap();
     std::fs::write(&feed, advisory_feed("myapp", &["1.0.0"], "1.0.1")).unwrap();
 
-    let out = delulu(
-        &dir,
-        &["build", ".", "--deny-advisories", "--advisory-feed", &feed.to_string_lossy()],
-    );
+    let out = delulu(&dir, &["build", ".", "--deny-advisories", "--advisory-feed", &feed.to_string_lossy()]);
     let all = combined(&out);
     assert!(!out.status.success(), "the explicit feed should be consulted and the gate should fail:\n{all}");
     assert!(all.contains("DL1903"), "the match from the explicit feed should fire:\n{all}");
