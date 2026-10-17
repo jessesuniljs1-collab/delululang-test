@@ -17,7 +17,7 @@
 
   It refuses a snapshot that carries the word the owner banned, or a file over 50 MB, and logs why.
 
-  Install (a task for the current user, every 10 minutes for 7 days):  powershell -File scripts\autosave.ps1 -Install
+  Install (a task for the current user, every 10 minutes for 7 hours): powershell -File scripts\autosave.ps1 -Install
   Remove:                                                               powershell -File scripts\autosave.ps1 -Uninstall
   One run by hand:                                                      powershell -File scripts\autosave.ps1
   Log: %LOCALAPPDATA%\DeluluLang\autosave.log
@@ -26,7 +26,7 @@ param(
     [string]$Repo = (Split-Path -Parent $PSScriptRoot),
     [switch]$Install,
     [switch]$Uninstall,
-    [int]$Days = 7,
+    [int]$Hours = 7,
     [int]$Minutes = 10,
     [string]$Branch = 'autosave/laptop'
 )
@@ -59,13 +59,13 @@ if ($Install) {
     $arg = "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$copy`" -Repo `"$repoFull`" -Branch `"$Branch`""
     $action = New-ScheduledTaskAction -Execute $conhost -Argument $arg
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-        -RepetitionInterval (New-TimeSpan -Minutes $Minutes) -RepetitionDuration (New-TimeSpan -Days $Days)
+        -RepetitionInterval (New-TimeSpan -Minutes $Minutes) -RepetitionDuration (New-TimeSpan -Hours $Hours)
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
         -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force `
         -Description "DeluluLang: push branches ahead of GitHub and snapshot uncommitted work to $Branch (scripts/autosave.ps1)" | Out-Null
-    Say "installed: every $Minutes min for $Days days, repo $repoFull, branch $Branch"
-    "installed: every $Minutes min for $Days days; log $Log"
+    Say "installed: every $Minutes min for $Hours hours, repo $repoFull, branch $Branch"
+    "installed: every $Minutes min for $Hours hours; log $Log"
     exit 0
 }
 

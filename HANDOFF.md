@@ -593,14 +593,14 @@ wins, and you should update the memory to match.
   laptop is away.
 - **Everything reaches GitHub even when a session stops** (owner, 2026-10-17: *"Can u run something parellely so that
   everything will get pushed to github repo even if usage limit hits"*): `scripts/autosave.ps1 -Install` registers a
-  Windows Task Scheduler job, `DeluluLang-autosave`, that runs every 10 minutes for 7 days outside Claude (no usage spent).
+  Windows Task Scheduler job, `DeluluLang-autosave`, that runs every 10 minutes for 7 hours (the owner: *"Maybe next 7 hrs is enough"*; `-Hours N` sets another span) outside Claude (no usage spent).
   It pushes every local branch that is ahead of its upstream (a plain push, never a force; a diverged branch is only
   logged) and snapshots uncommitted work — tracked edits and new unignored files — to `autosave/laptop`, through a
   private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
   so the branch only fast-forwards. It refuses a snapshot carrying the banned word (guard falsified with a probe token)
   or a file over 50 MB. Log: `%LOCALAPPDATA%\DeluluLang\autosave.log`. **A snapshot is not a verified commit — never
   merge it**; the next session recovers from it (`docs/CLOUD_ROUTINE.md` step 1). A laptop session re-runs `-Install`
-  when the task's 7 days have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it.
+  when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it.
 - **Since the 2.0.0 launch (D-V2-153) `origin` is `github.com/jessesuniljs1-collab/DeluluLang`, branch `main`**; the
   rest of this bullet is the rule as it stood before, for the archive's history. **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
