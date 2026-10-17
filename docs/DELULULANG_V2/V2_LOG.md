@@ -5898,3 +5898,14 @@ refused before the broker (0 `send` records, 0 connections). Each finding re-rea
 
 `0f73f09`'s CI `38731264861` — success on every job; `actors_pingpong` arm64 MEASURED 2.99x (control 4.11x). `22501f6`'s
 CI `38736592686` — success on every job (16; `miri-slow` and `heavy-gates` skipped on a push), arm64 `actors_pingpong` MEASURED 2.99x (control 4.12x), and `ocsf` `38736592620` success: **`master` green at the end of the run**.
+
+## 2026-10-17 — the owner is back: the laptop synced to `b82a145`; the routine's merged branches deleted
+
+The cloud period (2026-09-28 → 2026-10-16) is over. The laptop fast-forwarded from `cfbfbdc` (`Cloud handoff (10)`) to
+`b82a145` — 281 commits, the 25 routine runs — with no line-ending drift; the Survey matches the tree and `doctor --check`
+passes on Windows (29 checks) and in WSL (26 checks, KVM available). `master` is green on GitHub: `b82a145`'s push run
+`38739567829`, and the nightly `38869800819`, whose `miri-slow` and `heavy-gates` passed. At the owner's word, the 23
+`claude/*` branches whose tips `master` already holds were deleted from GitHub; the two holding a superseded commit cited
+by hash (`7d6a22b`, `d3f0d52`) were kept. The routine is disabled; the owner had edited its prompt (quoted in
+`docs/CLOUD_SYNC_LOG.md`, whose 2026-10-17 entry has the details and the branch list). Not redone on the laptop, for the
+owner's word: the full suite on Windows and in WSL, the WSL microVM guest images, the editor's end-to-end test.

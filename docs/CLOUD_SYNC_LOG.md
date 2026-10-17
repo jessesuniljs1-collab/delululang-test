@@ -36,7 +36,9 @@ it on `origin` was made in the cloud and is listed below.
 7. Carry each entry's **"For the laptop's memory"** items into
    `C:\Users\jesse\.claude\projects\D--nelan-DeluluLang\memory\` (or tell the laptop session to read
    `HANDOFF.md` §11, which holds them too).
-8. Delete no branch and no entry here: this log stays as the record of the cloud period.
+8. Delete no entry here: this log stays as the record of the cloud period. **Branches:** on 2026-10-17 the
+   owner chose to delete the routine's `claude/*` branches whose tips `master` already holds, and to keep the
+   two whose one commit `master` lacks is cited by hash (that day's entry lists every branch and its tip).
 
 ## The closing entry — the cloud period, 2026-09-28 → 2026-10-16
 
@@ -114,8 +116,9 @@ WSL. **Memory:** every lesson is in `HANDOFF.md` §11 (§11.4 the findings, §11
 changed in two files (`cloud-period-2026-09-28.md`, `delulu-ipc-deadman-findings.md`) — copy both into the laptop's memory
 directory, or have the laptop session read §11.
 
-**The routine** keeps firing until it is paused at [claude.ai/code/routines](https://claude.ai/code/routines); from
-2026-10-16 each fire only checks this section and stops, unless the owner extends the dates.
+**The routine** is disabled (read 2026-10-17: `enabled: false`; its last run, run 25, ended 2026-10-15 and succeeded),
+and **the laptop was synced on 2026-10-17** — the entry of that day. Were it enabled again, a fire on or after
+2026-10-16 only checks this section and stops, unless the owner extends the dates.
 
 ## Entry template
 
@@ -3178,3 +3181,49 @@ directory, or have the laptop session read §11.
   RW 4.58's O2/O4, RW 4.49's first two items; (5) a boundary over a `.dwx`. **For the owner:** D-V2-115 to D-V2-137, option
   (c). **From 2026-10-16 a run only refreshes the closing entry and stops** (`docs/CLOUD_ROUTINE.md` step 0), unless the owner
   extends the dates.
+
+### 2026-10-17 — the laptop synced to `b82a145`; the routine's 23 merged branches deleted (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `b82a145`
+- Commits: (1) this entry's commit — the records
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (this entry; step 8 of *Syncing the laptop*; the closing entry's routine
+  paragraph), `docs/DELULULANG_V2/V2_LOG.md`, `docs/assistant-memory/MEMORY.md` (its first three lines), `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- **The sync** (the procedure above): the laptop clean at the baseline `cfbfbdc` (`Cloud handoff (10)`); `git fetch` put
+  `origin/master` 281 commits ahead and 0 behind — 92 by `Claude`, 189 by `jessesuniljs1-collab` through its no-reply
+  address, every one co-authored by Claude (273 name Opus 5.5, 8 name Opus 5); `git merge --ff-only` to `b82a145`. Step 4:
+  no `w/crlf` file. `master`, `rc/1.0.0-drill` and the `v1.0.0` tag identical on the laptop and on GitHub
+  (`git ls-remote`). `git config core.hooksPath scripts/hooks` set (run 15's map check).
+- Survey and doctor: **Windows** — `survey check` ok (1,506 nodes, 14,547 edges), `doctor --check` 29 checks passed. **WSL**
+  (Ubuntu 20.04, the `D:` checkout, an ext4 target) — `survey check` ok, `survey findings` 0 errors (14 warnings, 38 notes),
+  `doctor --check` 26 checks passed, KVM available. After this entry's last edit: in the commit message.
+- Verified (CI, read): `b82a145`'s push run `38739567829` — success on every job (`miri-slow` and `heavy-gates` skipped on a
+  push); the nightly `38869800819` on `b82a145` (2026-10-16) — success on every job, `miri-slow` on all three crates and
+  `heavy-gates` included; the nightly `39013724751` (2026-10-17) was still running when this entry was written.
+- **Branches** — the owner, 2026-10-17: *"claude routines made lot of branches. If not needed, should we remove them"*; asked
+  to choose, the owner chose to delete the 23 merged branches and keep two. Deleted from GitHub, each checked with `git merge-base
+  --is-ancestor <branch> origin/master` immediately before (nothing lost: every tip is in `master`'s history). To recreate
+  one: `git push origin <tip>:refs/heads/claude/<name>`. Name and tip: `compassionate-pasteur-02il9s` `381fed8`, `friendly-thompson-c0cg57` `7940188`, `friendly-thompson-gsorc5` `dcf4fcb`, `friendly-thompson-w49pvi` `f33183c`, `happy-pascal-44t471` `ed7f7b6`, `happy-pascal-a1e0hm` `742b11b`, `happy-pascal-f86pm9` `b77c64d`, `jolly-hamilton-7fd30a` `6dbc54c`, `jolly-hamilton-dcf4b2` `ed95f0d`, `jolly-hamilton-mcawx1` `7a895f0`, `jolly-hamilton-vwdips` `f912084`, `jolly-hamilton-w805xo` `2cb3f87`, `stoic-ptolemy-1lso0u` `e936ea5`, `stoic-ptolemy-uyw9g4` `f446bfa`, `wonderful-hamilton-mjutjd` `9fc4d86`, `zealous-carson-qm5vah` `b82a145`, `zealous-carson-tidpo3` `41ce7c1`, `zealous-keller-an8lk9` `fc95094`, `zealous-keller-ekmk5a` `b7a5c3b`, `zealous-keller-kkuv5g` `21421ec`, `zealous-keller-r6to2u` `48ef512`, `zealous-keller-uym82b` `ae84188`, `zealous-keller-v2rh0i` `e95acf1`.
+  **Kept:** `claude/wonderful-hamilton-bo8k53` `7d6a22b` and `claude/friendly-thompson-vz6m23` `d3f0d52` — one commit each
+  that `master` lacks, superseded since run 10 and cited by hash in `V2_LOG.md` and this file. A cloud session makes a branch
+  of its own on every fire, so a routine enabled again will make more.
+- **The routine** (`trig_01GG41tCGxZXyt7bZUid8Vuu`, read 2026-10-17): `enabled: false`; last run 2026-10-15, session
+  `cse_011TZbDxBVJVmBTVyDeiWhGb` (run 25), succeeded. The owner edited its prompt during the period; the lines added,
+  verbatim: *"Check CI Runs (In GitHub Runners) if it are failure or success. If CI Run is failure make necessary changes to
+  make it successful."*, *"Before starting check all previous routines or sessions works, Also check if it was completed and
+  working before session limit hit. If not complete it and make it work. Also Check Last Commits Before Starting."*, *"Record
+  everything to .md files. Always use and update Survey and Doctor."*, *"Always Commit as jessesuniljs1-collab OR both
+  jessesuniljs1-collab and claude to my github repo."*, and after the closing-entry line *"(Doesn't means to stop
+  everything, Dates may be extended)"*. The Claude-Docs connector is attached to it again (cleared on 2026-09-28; a routine
+  needs none). The owner says routines are now called **scheduled tasks** in the product.
+- Redo on the laptop — **not done**, each for the owner's word (CI ran the whole suite at `b82a145` on Windows, Linux, macOS
+  and arm64): the full suite on Windows and in WSL; rebuilding the WSL microVM guest images (`~/microvm-image-a`, `-b`);
+  `node editors/vscode/e2e.js` on Windows.
+- For the laptop's memory: done — `cloud-period-2026-09-28.md` and `delulu-ipc-deadman-findings.md` copied from
+  `docs/assistant-memory/` (the laptop's copies were still the `cfbfbdc` versions), and the index's first three lines brought
+  up to date.
+- Open / next: the closing entry's list — (1) **P9-05 step (a)**, path scopes in the grammar and the egress client; (2) RW
+  4.65–4.67; proposing a secret's audience in `--grants`' lines; (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW
+  4.49's first two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-49 and D-V2-59, D-V2-110 to D-V2-137, P8-04's
+  option (c); whether the routine (now a scheduled task) runs again, and with which dates.
