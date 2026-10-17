@@ -11,21 +11,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## [2.0.0] — DeluluLang V2 (dated by the launch commit)
-
-**Breaking** (D-V2-149) — each can stop a 1.x program, driver or deployment: a hardware driver must print `READY` before
-its first command (RW 4.19); an ordinary `run` is held to 1 GiB of memory and five minutes of processor time unless
-`--limits` sets others; a secret's name can no longer hold `@`; a compiled program or a Contained plugin may no longer use
-the WebAssembly 3.0 features the engine enabled by default; on Windows a foreign library no longer falls back to the
-application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value.
-
-**History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
-and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
-`jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
-
-The sections below are V2's development record, newest first, exactly as each was written when its change landed.
-
-### a driver says READY before the program runs, 2026-10-17
+## Unreleased — a driver says READY before the program runs, 2026-10-17
 
 - **Breaking for driver authors (RW 4.19, D-V2-147): a hardware driver prints `READY` on its own line before anything
   else**, once it can accept commands. The host waits for it before the program's `main` runs, for
@@ -34,7 +20,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   same holds for a Verified driver's `--adapter-transport`; `delulu device sim` says `READY` itself. **To upgrade a
   1.x driver: print `READY` (and flush) when it is ready.**
 
-### the archive's notices and bill of materials, 2026-10-17
+## Unreleased — the archive's notices and bill of materials, 2026-10-17
 
 - **Changed (D-V2-145): the Rust source is formatted by rustfmt** (`rustfmt.toml`, checked in CI). Contributors run
   `cargo fmt --all`. No behaviour changes.
@@ -47,7 +33,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Changed (D-V2-144):** the release's build and attestation run in a reusable workflow (`release-build.yml`), so an
   archive's provenance names it as the signer.
 
-### network grants scoped to paths, 2026-10-17
+## Unreleased — network grants scoped to paths, 2026-10-17
 
 - **Added (P9-05 (b), D-V2-139): a path can be narrowed, never widened.** A delegation can narrow a host to its paths —
   `grants delegate --parent g_X --net api.example.com/v1/**` under a node granted `api.example.com` — and the reverse is
@@ -66,7 +52,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   repair. Under `--broker daemon` the grant means the same, and a secret is never fetched from the broker for a path outside
   the scope; `delulu sandbox policy --format openshell` refuses a path-scoped grant rather than export its host alone.
 
-### a secret's audience in the grant tree, 2026-10-15
+## Unreleased — a secret's audience in the grant tree, 2026-10-15
 
 - **Fixed (NET-WILDCARD-1, D-V2-136): a pattern `net` grant now means the same under `--broker daemon` as embedded.**
   `--grant net=*.example.com` let an embedded run reach `api.example.com` and refused the same run under the daemon
@@ -96,7 +82,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   `delulu audit export --format ocsf` names an allowed `send` as HTTP Activity (4002), its destination the event's
   `dst_endpoint`.
 
-### a secret in a request, only to where its grant says, 2026-10-14
+## Unreleased — a secret in a request, only to where its grant says, 2026-10-14
 
 - **Fixed (MAP-HANDLE-1, D-V2-132): `Secret.map` under `--broker daemon` or `--lease` ran its function over an EMPTY
   string** — the secret's bytes are the broker's and never in the program's process — so `s.map(f).expose(d)` printed
@@ -119,7 +105,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Added: `delulu grants diff` reports `secret_reach_expansion`** when NEW lets a secret OLD grants be sent to a host or
   port OLD's audience for it does not name (between two grant files; two lease nodes wait for P9-04 (d)).
 
-### a refused operation says so in the trace; rustls 0.23.46, 2026-10-14
+## Unreleased — a refused operation says so in the trace; rustls 0.23.46, 2026-10-14
 
 - **Fixed (RW 4.62): `--trace-effects` listed an operation that was refused as if it had happened.** A trace record is
   the operation's DISPATCH; when it was then refused — by the broker's custody (a revoked lease, a guarded or sealed use),
@@ -130,7 +116,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Security (dependencies): `rustls` 0.23.45 → 0.23.46** for RUSTSEC-2026-0346, -0347, -0348 and -0349 (published
   2026-10-14). No source change.
 
-### a request with headers, 2026-10-14
+## Unreleased — a request with headers, 2026-10-14
 
 - **New (P9-04 step (a)): `Cap[Http].get_with(url, headers)`** — a GET carrying headers (`headers` is a `Map[Str, Str]`).
   Every check `get` makes still holds, and the headers are held to rules of their own before anything is resolved: each
@@ -145,7 +131,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Changed:** the operator's note for a request that was not delivered reads `note: the request to `URL` was not
   delivered: …`, for `get` and `get_with` alike.
 
-### a busy broker no longer kills a healthy monitor, 2026-10-13
+## Unreleased — a busy broker no longer kills a healthy monitor, 2026-10-13
 
 - **Fixed (DEADMAN-BUSY-1): a monitor's dead-man fired while the broker daemon, not the monitor, was busy.** The daemon
   answers one request at a time; while it was held on one (for example, one waiting for the audit chain another writer held),
@@ -154,7 +140,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   thread of its own; and its first period starts when the arming is answered, not before its record was written. A dead,
   killed or stopped monitor is still quarantined as before (D-V2-127).
 
-### `delulu grants auto-approve`, 2026-10-13
+## Unreleased — `delulu grants auto-approve`, 2026-10-13
 
 - **New (P9-03): `delulu grants auto-approve --parent g_ID [--ttl D]`** — the operator's standing delegation is a node:
   every pending proposal whose mint is within it is approved under it, each other one left pending with its code and what
@@ -162,7 +148,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   not read): guarded authority is approved by a person, one proposal at a time. Revoking the node revokes everything it
   approved. Exit 0 when nothing is left pending, 1 when something is (D-V2-126).
 
-### proposals filed, approved and rejected, 2026-10-13
+## Unreleased — proposals filed, approved and rejected, 2026-10-13
 
 - **New (P9-03): `delulu grants propose REPORT --node g_ID`** files the proposal with the broker as the request of the node the
   refused run held. It grants nothing. A grant a lease node cannot carry (a sensor, a compute device) is proposed and NOT
@@ -175,7 +161,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   changed; the approval prints a new lease token, and the program is re-run under it.
 - **New: `delulu grants reject pp_ID --reason ".."`** — the reason is kept for the proposer, in `grants proposals --json`.
 
-### `--within` and `grants propose` for a package, 2026-10-13
+## Unreleased — `--within` and `grants propose` for a package, 2026-10-13
 
 - **New: `delulu authority DIR --within BOUNDARY` answers for a package directory** — the package's requirement list, the
   one `authority DIR --grants` names, decided against the boundary as for a file; the counterexample's call named in its
@@ -183,7 +169,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **New: `delulu grants propose REPORT` reads a package run's report** — the refused call found in the flattened text the
   run executed, and its requirement proposed (D-V2-124).
 
-### `delulu grants propose REPORT`, 2026-10-13
+## Unreleased — `delulu grants propose REPORT`, 2026-10-13
 
 - **New (P9-03): `delulu grants propose REPORT`** — the narrowest grant for the call a refused run was refused at, read
   from the run's `--report-out` report (ordinary or sandboxed) and the program's source: that call's own static
@@ -192,7 +178,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Fixed: a refused run's report was never checked against the `run-report` schema** — the schema test ran only
   programs that succeed. Both kinds of refused report are now validated.
 
-### a sandboxed run's report records the host's refusal, 2026-10-13
+## Unreleased — a sandboxed run's report records the host's refusal, 2026-10-13
 
 - **Fixed: `delulu run --sandbox --report-out F` recorded no diagnostic for a refused run** — the host wrote
   `diagnostics: []` and the refusal reached only the guest's standard error. The host now records its own refusal of the
@@ -200,13 +186,13 @@ The sections below are V2's development record, newest first, exactly as each wa
   since D-V2-121: the same code, message and span, in the same file (a package's flattened text named as the ordinary run
   names it). A guest's own fault (an assertion) is the guest's word and stays out of the host's report (D-V2-122).
 
-### a refused run's report records the refusal, 2026-10-12
+## Unreleased — a refused run's report records the refusal, 2026-10-12
 
 - **Fixed: `delulu run --report-out F` recorded no diagnostic for a refused run** — `diagnostics: []`, while the refusal
   (DL0703, say) reached only the terminal. The report now carries the fault that ended the run with the call's span, so a
   tool can tell which call was refused and compute the narrowest grant from it (D-V2-121, P9-03's first step).
 
-### `delulu grants diff OLD NEW`, 2026-10-12
+## Unreleased — `delulu grants diff OLD NEW`, 2026-10-12
 
 - **New (P9-02): `delulu grants diff OLD NEW`** names what a change of grant set ADDS — OLD and NEW are files of grants, one a
   line — by category and with no severity grade: `effect_expansion`, `scope_expansion`, `special_use_reach` and
@@ -215,7 +201,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **New: `delulu grants diff g_OLD g_NEW`** compares two lease nodes through the broker that holds them — the same categories,
   and `budget_expansion` for a budget the old node does not bound (D-V2-120).
 
-### `delulu authority FILE --within BOUNDARY`, 2026-10-12
+## Unreleased — `delulu authority FILE --within BOUNDARY`, 2026-10-12
 
 - **New (P9-01): `delulu authority FILE --within GRANT…` / `--within-file FILE`** asks whether everything a program asks for
   is inside a boundary written in the `--grant` grammar — the boundary is only checked against, never granted. The answer is
@@ -227,20 +213,20 @@ The sections below are V2's development record, newest first, exactly as each wa
   --grants` (`secrets: []`), while running it refused DL0703 at that call. The list now carries `--grant secret:NAME=VALUE`
   beside the names it can read.
 
-### a run report says when a guest's devices never started, 2026-10-12
+## Unreleased — a run report says when a guest's devices never started, 2026-10-12
 
 - **Fixed (RW 4.60): a sandboxed run whose guest never asked its host for anything said nothing about its devices** — no
   `devices` entry at all, so "nothing happened to the arm" and "the arm was never started" read the same. Each planned device
   is now journaled `device.not-started` in the report's `devices` (D-V2-117).
 
-### `delulu monitor watch --rule break-glass`, 2026-10-12
+## Unreleased — `delulu monitor watch --rule break-glass`, 2026-10-12
 
 - **New: `--rule break-glass`** for `delulu monitor watch`: the monitor quarantines a run under its node that runs under a
   break-glass ticket — outside the sandbox the host requires. A lease run that breaks the glass now records its use on its own
   node (`break-glass-run`) once its lease is redeemed and before its program runs; if that record cannot be written the run
   does not run (D-V2-116).
 
-### no broker operation is answered as recorded when its record was lost, 2026-10-12
+## Unreleased — no broker operation is answered as recorded when its record was lost, 2026-10-12
 
 - **Fixed (RW 4.61): when another writer held the audit chain too long, twelve broker daemon operations answered success with
   no audit record.** One that loosens custody is now undone and refused (DL1401): `guard policy set` lowering a tier and
@@ -251,20 +237,20 @@ The sections below are V2's development record, newest first, exactly as each wa
   force and says the chain lacks its record: a new or raised guard rule, `guard deny`, `guard permits revoke` and `broker
   rotate-key` (D-V2-115).
 
-### a guard bypass is never in force without its record, 2026-10-11
+## Unreleased — a guard bypass is never in force without its record, 2026-10-11
 
 - **Fixed (RW 4.61): when another writer held the audit chain too long, `delulu guard bypass on` answered `ok` and the bypass was
   in force with no audit record.** It is now refused (DL1401) and the guard stays in force; `guard bypass off` still turns the
   bypass off and says the chain lacks its record (D-V2-114). Under contention a monitor's dead-man or the guard's other edits may
   still answer success for a lost record (RW 4.61, open).
 
-### `delulu monitor watch --rule special-use`, 2026-10-11
+## Unreleased — `delulu monitor watch --rule special-use`, 2026-10-11
 
 - **New: `--rule special-use`** for `delulu monitor watch`: the monitor quarantines a run under its node the first time the
   run's fetch is refused for reaching a loopback, private, link-local or metadata address (D-V2-113). Use it beside
   `envelope` and `denies=N/MS`.
 
-### a refused fetch is in the audit chain, 2026-10-11
+## Unreleased — a refused fetch is in the audit chain, 2026-10-11
 
 - **Fixed (RW 4.46): under the broker daemon, a fetch the egress client refused** — a granted name that resolved to a
   loopback or private address, a URL carrying userinfo, a redirect off the grant — **was recorded only as an allowed use of
@@ -273,7 +259,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   every refusal of a run, however many requests came before it. A network failure (a timeout, a TLS error, an HTTP status)
   is not recorded as a refusal.
 
-### a lost device-refusal or adoption record is never answered as success, 2026-10-11
+## Unreleased — a lost device-refusal or adoption record is never answered as success, 2026-10-11
 
 - **Fixed (RW 4.58): when another writer held the audit chain too long, a device command the run's envelope refused was
   reported to the broker as recorded when it was not**, so no warning said the chain lacked it; it is now said once on stderr.
@@ -281,7 +267,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   written is now refused (DL1401) within one wait, and the certificate can be adopted again once the chain is free. Every daemon
   operation now waits for a busy audit chain at most once — an e-stop's revoke at most 5 s, where it could wait 10 s (D-V2-111).
 
-### a sandboxed program's own check no longer costs it its first heartbeat, 2026-10-11
+## Unreleased — a sandboxed program's own check no longer costs it its first heartbeat, 2026-10-11
 
 - **Fixed (RW 4.59): under `--sandbox`, a control program whose check took longer than its actuator's `heartbeat_ms` lost the
   actuator before its first command** (`REVOKED … (missed-heartbeat)`), where the same program run without `--sandbox` commanded
@@ -289,28 +275,28 @@ The sections below are V2's development record, newest first, exactly as each wa
   check, just before `main` (D-V2-110). A guest that never asks for anything never starts them, and its device grants are
   revoked at the run's end all the same.
 
-### a lost audit record is never answered as success, 2026-10-10
+## Unreleased — a lost audit record is never answered as success, 2026-10-10
 
 - **Fixed (RW 4.58): when another writer held the audit chain too long, `delulu grants revoke` printed `ok … (audit seq N)` for a
   record that was never written**, and a new grant could be created with no record of it. A revoke still takes effect, but now
   warns that the chain does not hold it and exits 1 (`--json`: `unrecorded`); a grant whose creation could not be recorded is
   refused and withdrawn.
 
-### a plugin's revoke stops its running export, 2026-10-10
+## Unreleased — a plugin's revoke stops its running export, 2026-10-10
 
 - **Fixed (RW 4.56): `delulu grants revoke` of a plugin's grant did not stop an export that was already running** — a plugin
   driving an arm in a loop kept commanding it (96 of 120 commands after the revoke), though the command said the revoke takes
   effect before the next use. It does now: the export's next actuator command is refused as an e-stop refuses one, and any other
   effect ends it.
 
-### a closure's names are its own module's, 2026-10-10
+## Unreleased — a closure's names are its own module's, 2026-10-10
 
 - **Fixed (RW 4.55, CLOSURE-SCOPE-1 — security): a callback passed to a Verified plugin export called the PLUGIN's function of
   the same name**, with the capabilities the callback had captured — a plugin with no grant could write a file of its choosing,
   or read a secret, through a host callback. A closure now resolves its names in the module that built it, whoever calls it; a
   closure a plugin returns runs the plugin's functions, not the host's.
 
-### a dead monitor stops its runs, 2026-10-10
+## Unreleased — a dead monitor stops its runs, 2026-10-10
 
 - **Added (P8-04 step 5, D-V2-106): `delulu monitor watch --on-monitor-death quarantine|continue` and `--death-after MS`.** A
   monitor arms a dead-man on its own node in the broker daemon and beats it every poll; if it is killed, stopped or hangs, the
@@ -321,12 +307,12 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Changed:** a monitor whose node is no longer in the broker's tree (the broker was restarted) now ends with an error instead of
   watching nothing; one whose node its own dead-man revoked exits 1 and says so.
 
-### a plugin's grant ends with its run, 2026-10-10
+## Unreleased — a plugin's grant ends with its run, 2026-10-10
 
 - **Fixed (RW 4.51): after a run under `--broker daemon` that loaded a plugin, `delulu grants list` still showed the
   plugin's grant as live** — a grant nobody held. It is revoked when the run ends now, as a run's device grants already were.
 
-### the audit chain: true references under contention, and a chain that survives midnight, 2026-10-10
+## Unreleased — the audit chain: true references under contention, and a chain that survives midnight, 2026-10-10
 
 - **Fixed (RW 4.48): with sandboxed runs writing beside the broker daemon, a node's or an answer's audit seq could name
   another writer's record** (a `sandbox-death` where the node's own `issue` belonged — 2 or 3 in 72 parallel runs). The
@@ -336,7 +322,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   and the daemon, which then refuses what it cannot record — reported the chain as truncated. A record is now filed with the
   chain's newest day when its own is older; it keeps its own time stamp.
 
-### plugins under the broker daemon; a plugin's effects governed as its host's are, 2026-10-10
+## Unreleased — plugins under the broker daemon; a plugin's effects governed as its host's are, 2026-10-10
 
 - **Fixed: no plugin could be called under `--broker daemon`** — every `p.get` answered `Revoked` because the daemon was
   never asked whether the plugin's grant was still live. It is asked on every call now, so `unload` and `grants revoke`
@@ -346,7 +332,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   reaching a device; and under the daemon each of a plugin's uses is checked and recorded in the audit chain, as the host's
   own use of the same capability is.
 
-### an actor's effects are governed as `main`'s are, 2026-10-10
+## Unreleased — an actor's effects are governed as `main`'s are, 2026-10-10
 
 - **Fixed (RW 4.47): effects performed inside an actor now answer to the run's broker and devices.** Under `--broker daemon`
   or `--lease`, an actor's uses are checked against the broker and recorded in the audit chain, and revoking the run — or
@@ -355,7 +341,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   and an actor's `dispatch` reaches the bound compute adapter instead of answering `NoAdapter`. A program whose actors
   command faster than the grant's `rate_hz` now sees those commands refused, as `main`'s always were.
 
-### the monitor never quarantines its own node; a known gap for actors, 2026-10-09
+## Unreleased — the monitor never quarantines its own node; a known gap for actors, 2026-10-09
 
 - **Fixed: `delulu monitor watch --rule denies=N/MS` could revoke its own node** — and so every run under it — when the
   monitor's node itself had a request refused (for example a delegation wider than it holds). Only runs under the node are
@@ -365,14 +351,14 @@ The sections below are V2's development record, newest first, exactly as each wa
   reported as commanded without reaching a device. Until this is fixed, do not rely on revocation or the audit chain for a
   program's actors.
 
-### fixed: a plain-`http://` fetch under the broker daemon, 2026-10-09
+## Unreleased — fixed: a plain-`http://` fetch under the broker daemon, 2026-10-09
 
 - **Fixed: `http.get("http://…")` under `--broker daemon` (and in every `--lease` run) killed the program** with
   ``DL0904 … does not grant `http` in scope `net` ``. Only `https://` is ever fetched, and without the daemon such a call
   returns `Err(Refused)` — the value your program can handle. It now returns that value under the daemon too, sandboxed
   or not, and the audit chain no longer records a refused use of a host called `http`.
 
-### V2 P8-04: an out-of-band monitor quarantines a run that misbehaves, 2026-10-09
+## Unreleased — V2 P8-04: an out-of-band monitor quarantines a run that misbehaves, 2026-10-09
 
 - **New: `delulu monitor watch --node g_ID --rule envelope|denies=N/MS [--poll MS] [--for MS] [--json]`.** Mint a monitor
   node with `delulu grants delegate`, delegate each run's lease under it (`grants delegate --parent g_ID`), and start the
@@ -386,7 +372,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   13 ms after the triggering refusal was recorded, at a 25 ms poll. What happens when the monitor itself dies is not built
   yet.
 
-### V2 P8-04 (first step): the audit chain records a device command its envelope refused, 2026-10-09
+## Unreleased — V2 P8-04 (first step): the audit chain records a device command its envelope refused, 2026-10-09
 
 - **Fixed: a device command your actuator's envelope refused was recorded in the audit chain as allowed.** The broker
   records `use allow` when it confirms your run may command the device; the envelope then judges the command's values in
@@ -400,7 +386,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   increasing; a daemon that restarts continues the chain's numbering; and a revoked node's "revoked by audit seq N" names
   the record that is there. A chain written before this keeps its repeated seqs (export it whole once).
 
-### V2 P8-03: the reference simulator can be run as a device, 2026-10-05
+## Unreleased — V2 P8-03: the reference simulator can be run as a device, 2026-10-05
 
 - **New: `delulu device sim [--seed N] [--actuator DEVICE:dim=lo..hi,...] [--sensor NAME] [--json]`** runs the in-tree
   simulator as a *device* on its standard input and output, speaking the `CMD`/`READ` line protocol a driver's transport
@@ -412,7 +398,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - `--json` describes the bench instead of serving it. It models no physics, nothing physical moves, and it says so.
 - The simulator is now `delulu_runtime::sim`, shared by the broker and the device process, so an in-process `sim` run and
   a run through the device process read the same numbers from the same seed — asserted by a test.
-### V2 P8-02: a hardware driver may be a signed Verified plugin, 2026-10-05
+## Unreleased — V2 P8-02: a hardware driver may be a signed Verified plugin, 2026-10-05
 
 - `delulu run --broker-profile hw:NAME --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX` runs a driver
   whose LOGIC is a Verified-class plugin: its bytes are read once, its embedded signature must verify under the key you
@@ -427,7 +413,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   a driver and is refused the same way.
 - `examples/line_driver` is the reference driver — the `CMD`/`READ` line protocol as a Verified plugin — and
   `--adapter-dpx` works under `--sandbox` too, so a sandboxed control program drives a device through the host's driver.
-### V2 P8-01: a control program runs in a sandboxed guest, 2026-10-05
+## Unreleased — V2 P8-01: a control program runs in a sandboxed guest, 2026-10-05
 
 - **New: `delulu run --sandbox` carries actuators and sensors.** A program that commands an actuator or reads a sensor
   used to be refused under the sandbox ("it uses Actuator. Nothing ran."). It now runs as a jailed guest holding a handle
@@ -445,7 +431,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   `--broker-profile hw:ADAPTER` used to be accepted and ignored; they now refuse the run (exit 2, naming each), with or
   without `--sandbox` (D-V2-95).
 
-### V2 PS-E-01 (first step): a sandbox guest confirms its boundary before it is sent the program, 2026-09-28
+## Unreleased — V2 PS-E-01 (first step): a sandbox guest confirms its boundary before it is sent the program, 2026-09-28
 
 - **Fixed: a sandboxed guest was handed the program before it had confined itself.** The host's first
   frame was the program, and the guest locked itself down and reported what it applied only afterwards —
@@ -689,7 +675,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   name is refused by OpenShell. Running the sandboxed GUEST inside OpenShell (an `external:` launcher) does not work
   yet — the guest's own syscall filter is refused there, and it stops before the program is sent.
 
-### V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
+## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 
 - **`delulu run --sandbox --sandbox-backend external:CMD --require-attestation HEX`**: the run refuses to
   serve a guest unless the launcher's attester signed a statement over this run's fresh nonce with the
@@ -723,7 +709,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   calculus gains the **higher-order primitive** (`map`, `fold` …) whose missing rule was C88. Paper only:
   nothing new is machine-checked, and the language itself does not change.
 
-### V2 PS-D-01: an external launcher carries the sandbox (L3), 2026-09-28
+## Unreleased — V2 PS-D-01: an external launcher carries the sandbox (L3), 2026-09-28
 
 - **`delulu run --sandbox --sandbox-backend external:CMD`**: a boundary DeluluLang does not build — Docker
   with gVisor, Kata, a cloud sandbox, `ssh` — runs the guest and carries its channel on standard input and
@@ -743,7 +729,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   truncated (AUDIT-LOCK-TAKEOVER-1, found by the `miri-slow` run). The lock is now the operating system's,
   released when its holder exits or dies; a writer that cannot get it in time records nothing and says so.
 
-### V2 P7 (first half): NIST known-answer tests, parser fuzzing, Miri in budget, 2026-09-27
+## Unreleased — V2 P7 (first half): NIST known-answer tests, parser fuzzing, Miri in budget, 2026-09-27
 
 - **The NIST ACVP vectors are checked byte-exact** (`nist_kat.rs`): ML-DSA-65 keyGen, sigGen and sigVer and
   ML-KEM-768 keyGen and encaps/decaps, against NIST's own answer keys, with their provenance asserted. PQC
@@ -757,7 +743,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **P5 closed:** the release workflow's dry run built, checked and installed all four targets and published
   nothing.
 
-### V2 P5d: `Secret.verify` under a lease, and broker secrets stored while it runs, 2026-09-27
+## Unreleased — V2 P5d: `Secret.verify` under a lease, and broker secrets stored while it runs, 2026-09-27
 
 - **Fixed: `Secret.verify` under a lease returned a made-up `false`** (VERIFY-FABRICATED-1, found by the
   Sonnet 5 testers on Windows and Linux independently). A leased program's secrets are broker handles
@@ -773,7 +759,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - CI after P5c: a lease's resolved scope now meets a program path spelled from an 8.3 working directory
   (Windows runners); "broker unreachable" is said in words on Linux and macOS.
 
-### V2 P5c: the Guard decides on the real path; sandbox stops are named, 2026-09-27
+## Unreleased — V2 P5c: the Guard decides on the real path; sandbox stops are named, 2026-09-27
 
 - **Security, fixed: a sealed directory could be reached by another name** (GUARD-ALIAS-1). The Guard
   and the broker decided on the path as the program spelled it, and the filesystem followed links: a link
@@ -794,7 +780,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   and a new request, a retry said "denied" instead of "pending", and a spent single-use permit brought the
   old denial back. The latest request now decides.
 
-### V2 P5b: what the multi-OS agent pass found, 2026-09-27
+## Unreleased — V2 P5b: what the multi-OS agent pass found, 2026-09-27
 
 - **Security, fixed: a Guard rule on a directory sealed only the directory entry** (GUARD-SCOPE-1,
   D-V2-43). `guard policy set "fs_read:/srv/app/secret" sealed` let a lease holder read
@@ -818,7 +804,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   path they could not read; each says what is wrong in words now, and a test sweeps every command.
   `--grant fs.read` without a value says it needs one, and `--limits` names its units.
 
-### V2 P5: the distribution, and a package that runs sandboxed, 2026-09-27
+## Unreleased — V2 P5: the distribution, and a package that runs sandboxed, 2026-09-27
 
 - **The release workflow** (`.github/workflows/release.yml`, ruling D-V2-42): the portable archive on
   Linux x86-64 and arm64, macOS arm64 and Windows x64, each checked to be its target, to name its commit,
@@ -839,14 +825,14 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Fixed: a sandboxed program that did not check** was refused without its diagnostics; the host now
   prints them, and no guest is started.
 
-### V2 P6: the documentation, consolidated, 2026-09-27
+## Unreleased — V2 P6: the documentation, consolidated, 2026-09-27
 
 - **`HANDOFF.md` is a current briefing** (1,201 → 522 lines, D-V2-41): where things stand, the standing
   rules, what DeluluLang is, how to work here, and the project's memory. Its historical sections are
   kept verbatim, under their original numbers, in `docs/archive/v1/HANDOFF_HISTORY.md`.
 - README's status and commands, and the Book's Chapters 9, 13 and 20, brought to V2's state.
 
-### V2 PS-C: the microVM runs, 2026-09-27
+## Unreleased — V2 PS-C: the microVM runs, 2026-09-27
 
 - **P4b–e is complete** (CI `36261139018`, and the closure commit's `36262232077`, green on every job).
 - **`delulu run <file> --isolation microvm` runs the program in a microVM (PS-C, D-V2-39)** on Linux
@@ -881,7 +867,7 @@ The sections below are V2's development record, newest first, exactly as each wa
   accept; two channel errors in plain words ("the guest closed the channel without saying goodbye");
   and the launch record and run report now name the image booted, by hash.
 
-### V2 P4b–e opens: the toolchain describes itself, 2026-09-26
+## Unreleased — V2 P4b–e opens: the toolchain describes itself, 2026-09-26
 
 - **PS-B is complete** (CI `36173241488` green on every job).
 - **`delulu toolchain [--json]` (P4-02, D-V2-38)** — every command with the options its help documents, the ten effects, every `--grant` form with an example that parses, the primitive table, budgets and sandbox profiles, the isolation levels, the channel version, every diagnostic code and explanation topic — read from the binary's own tables, so it cannot describe a flag that does not exist.
@@ -899,39 +885,39 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **`main` must take the `Root` or nothing** — `fn main(r: Cap[FsRead])`, `fn main(n: Int)` and `fn main(root: Root, n: Int)` used to check clean and then fault at run time as a "checker bug" (DL0907); they are now refused at check time (DL0401, DL0403). Found by the benchmark. No program that ran before is affected.
 - The Agent Skill now states `main`'s signature and the standard functions a first program needs — both measured gaps.
 
-### V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
+## Unreleased — V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
 
 - **PS-B-03b (D-V2-37)** — on Linux, where the host allows user namespaces, a `run --sandbox` guest runs as a per-run subordinate uid in its own user namespace with no supplementary groups or capabilities: none of the files only the operator's account may read, the state directory included (T14, measured with a control, falsified twice). No runtime copy: the binary is executed through a descriptor and the channel is an inherited socket. Where the host forbids it (Ubuntu 23.10+'s AppArmor default) the guest runs as the operator, the run says why, and `doctor` repeats the reason. `DEPLOYMENT.md` gives the one sysctl an operator may choose to lift. REMAINING_WORK 4.21 closed.
 - **PS-B-04 (D-V2-36)** — channel batching is NOT built: measured on the three CI runners against a rule fixed first (50 µs per effect), it fails on Linux (19.5 µs) and macOS (19.8 µs) and passes only on Windows (66.9 µs), and batching would change when an effect is observed everywhere. The Windows transport was fixed instead: one overlapped duplex pipe read directly with a real deadline on the host, direct reads and a silence watchdog in the guest. Workstation: 48.6 → 28.9 µs per effect. Writes to a guest are now bounded too. `measurements/sandbox-channel/` holds the script, the record and a manual three-OS workflow.
 - Every channel frame (sandbox and broker) is written in one call instead of two.
 - **Found and fixed (RW 4.23):** a Linux run report did not count the layers the guest applies to itself (Landlock, seccomp). The guest now reports them as its first request, in words the host checks against a fixed list, before the program runs; the channel is `delulu-sandbox-channel/2`.
 
-### V2 PS-B-06: BREAK-GLASS, 2026-09-25
+## Unreleased — V2 PS-B-06: BREAK-GLASS, 2026-09-25
 
 - **PS-B-06 (D-V2-09 owner principle; D-V2-35)** — `delulu sandbox require --break-glass-key HEX` makes the sandbox mandatory on a host (`run` without `--sandbox`, `test` and `repl` refuse). `delulu sandbox ticket` mints an Ed25519-signed ticket for one program (by the hash of its bytes), at most a day, and `run --break-glass T` spends it: banner, `break_glass` in the run report, a `break-glass` audit record, and no run if the record cannot be written. `sandbox release` needs a `policy-off` ticket. Refused tickets are recorded too. `doctor` and `sandbox status` report the policy, spent tickets, and a pinned key whose private half is still on the host.
 
-### V2 PS-B-03: a sandbox guest with an identity of its own (Windows), 2026-09-25
+## Unreleased — V2 PS-B-03: a sandbox guest with an identity of its own (Windows), 2026-09-25
 
 - **PS-B-03 (D-V2-34)** — on Windows a `run --sandbox` guest runs as a per-run AppContainer with no capabilities: no network of any kind (the Job Object never took it away) and none of the operator's files, the state directory included. It runs from a runtime copy readable by AppContainers, and its channel moves to inherited pipes. Measured against T14 with a control and falsified by a launch without the container. A host that cannot give the identity says so and runs the guest as before; the report's `posture.identity` and `limitations` follow what was applied.
 - macOS: the guest's Seatbelt profile refuses the state directory (T14), measured with a control. Linux under a subordinate uid was REMAINING_WORK 4.21 (built in PS-B-03b, above).
 - `sandbox probe` proves a contained guest by a round trip on its channel; `doctor`'s identity line is read from that attempt. `DEPLOYMENT.md` gains the separate-account recipe per platform.
 
-### V2 PS-B-05: a budget is an authority dimension, 2026-09-25
+## Unreleased — V2 PS-B-05: a budget is an authority dimension, 2026-09-25
 
 - **PS-B-05 (D-V2-08 owner direction; D-V2-33)** — memory and processor time join `⊑` as its tenth dimension (`delulu-broker/src/budget_scope.rs`): componentwise `≤`, componentwise-minimum meet, absence as the top. `grants delegate --budget mem=BYTES,cpu=SECONDS`; a delegation that names none inherits its parent's; one that names more is DL0802 with the meet. A `run --lease` is held to its node's budget (also its default; `--limits` may only ask for less). A `--broker daemon` run's root records its budget. An unreadable budget on the wire becomes the smallest, never none. Unbudgeted authorities serialize byte-identically to before.
 - The Z3 model carries all ten dimensions (it modelled seven set dimensions while claiming nine): **26 obligations**, and CI now requires three model mutants to fail.
 - **Fixed:** `run --sandbox` silently dropped most of `run`'s flags — `--lease` was never redeemed, `--broker daemon` got embedded custody, and even a misspelled flag or a second file was accepted. Refused now, before anything runs.
 - **CI:** PS-B-01's Windows failure was a cold Python start inside the adapter's 2000 ms (measured: 4251 ms cold, 177 ms warm; CPU starvation reproduced nothing). The test driver runs `python -I -S`, started once before it is timed; `EXCHANGE_TIMEOUT` unchanged. The product's version of the problem is `REMAINING_WORK.md` 4.19 (owner).
 
-### V2 PS-B-01: every run has a budget, 2026-09-25
+## Unreleased — V2 PS-B-01: every run has a budget, 2026-09-25
 
 - **PS-B-01 (D-V2-25 owner; D-V2-32)** — an ordinary `run` is held to 1 GiB of memory and 5 minutes of processor time unless `--limits mem=BYTES,cpu=SECONDS,wall=SECONDS` sets others; zero and unknown dimensions are refused before the run. A host watchdog samples the process every 25 ms, on every engine; a run that spends a budget is stopped with exit 1, and the run report's `outcome.stopped_by` names the dimension, the budget and the measurement. The report's `sandbox.limits` is the applied budget (was `null`). `--limits` without `--sandbox` is applied rather than refused. NE-22 and REMAINING_WORK 4.15 closed; C-06 flipped — the flooded actor mailbox is stopped at a 256 MiB budget.
 
-### thirteen messages that printed a gap mid-sentence, 2026-09-25
+## Unreleased — thirteen messages that printed a gap mid-sentence, 2026-09-25
 
 - Four `explain` texts (DL1908, DL1910, DL1912, DL1913), two `run` refusals, the broker's and the checker's narrowing repairs, four plugin faults and a test message printed a run of spaces in the middle of a sentence: a line continuation whose newline had been flattened in the source. Restored; the checker's repair `reason` in `check --json` changes accordingly (snapshot re-blessed, two cases, reviewed). A gate decodes every string literal as the compiler does and fails on the shape. The one instance in an entrenched file (`crates/delulu-conform/src/lib.rs:515`) is left for the owner and named by the gate.
 
-### V2 PS-B-02: the network client, 2026-09-25
+## Unreleased — V2 PS-B-02: the network client, 2026-09-25
 
 - **PS-B-02 (D-V2-30 owner; D-V2-31)** — `http.get` fetches over verified HTTPS (reqwest over rustls, the platform trust store; TLS never implemented here, no plain-HTTP path). One host-side client serves L0 and every `--sandbox` guest; the guest has no socket and no resolver. Per request and per redirect hop: a strict URL spelling (anything a URL parser would rewrite is refused, not normalized), userinfo refused, the allowlist with its dot boundary, the name resolved once host-side, EVERY candidate address classified, special-use addresses refused unless the host was granted with `net.special=`, the checked addresses pinned with a client that cannot resolve anything itself, proxy variables ignored, the response bounded (8 MiB), 5 redirects, 30 s. NE-17 and REMAINING_WORK 4.12/4.16 closed; C-03 flipped.
 - The program sees `NetErr`'s three variants only; `Refused` is opaque. The machine-readable reason is the operator's: stderr (`[egress: <code>]`), the run report's new `egress` object (L0 and `--sandbox`), and a guest's `sandbox.denied`.
@@ -942,31 +928,31 @@ The sections below are V2's development record, newest first, exactly as each wa
 - `doctor`: a `network client` line with the platform's trust-root count; the `network enforcement` and `profile` lines corrected (the latter still said profiles "arrive with PS-A").
 - Gates: feature accounting from the RESOLVED graph (`cargo metadata`), not the manifest comment; four mutants falsified (certificate checks off, proxy variables honoured, client-side redirects, a client that resolves for itself).
 
-### V2 PS-B opens: the TLS dependency, measured first, 2026-09-20
+## Unreleased — V2 PS-B opens: the TLS dependency, measured first, 2026-09-20
 
 - **D-V2-30 (owner, resolving D-NE-28)** — `reqwest` over `rustls` with an explicitly named feature set, behind a default-on `net` feature; the `cargo deny` pass taken before any code used it: 222 -> 303 distinct dependencies, 14 -> 15 licenses (`BSL-1.0`, a selectable disjunction), all four checks ok (`measurements/dependency-egress/RECORD.md`).
 
-### V2 P3: the standard library, 2026-09-20
+## Unreleased — V2 P3: the standard library, 2026-09-20
 
 - **P3 (D-V2-29)** — `List` 4 -> 15 methods, `Str` 6 -> 10, and `Map[K, V]` (new, 8 methods); 23 new anchors, each with an accepting and a rejecting witness: coverage 353/353. Four deliberate refusals with their reasons (`sort` on `List[Float]`, `contains` on an opaque element, a non-scalar `Map` key, no WASM lowering). `PRIM_TABLE_VERSION` 4 -> 5.
 - **MAP-PARAM-1** — `List.map`/`Secret.map` never checked their callback's parameter type, so a type error escaped to run time. **ARITY-LABEL-1** — `actuator`/`sensor`/`compute` never had the normative arity gate. Both closed as a class.
 
-### V2 P4a: the Agent Skill, 2026-09-20
+## Unreleased — V2 P4a: the Agent Skill, 2026-09-20
 
 - **P4a (D-V2-28, answering D-NE-5)** — `skills/delulu/SKILL.md` and `delulu skill [--json]`, which prints the same bytes from the binary. Every command the skill teaches is derived from the binary's own `--help`, so the two cannot drift.
 
-### V2 P2: a running program loads a plugin, 2026-09-20
+## Unreleased — V2 P2: a running program loads a plugin, 2026-09-20
 
 - **P2 (D-V2-27)** — NE-01 closed: `root.plugin_host()` with `--grant plugin=PATH`, and the package's `[plugins] allow` hash list checked against the bytes in hand; `verify` and `load` share one load sequence; every refusal is a `PluginErr` value. RW 4.11 closed.
 - A pre-existing checker panic fixed: the `deps.rs` prelude index held 2 of its 7 entries.
 
-### V2 PS-A: the L1 process sandbox, 2026-09-20
+## Unreleased — V2 PS-A: the L1 process sandbox, 2026-09-20
 
 - **PS-A (D-V2-25, D-V2-26)** — `run --sandbox` runs the program as a guest holding no authority of its own: every capability is a host-minted handle and every effect one canonical-CBOR frame the host performs under the ordinary checks (`delulu-sandbox-channel/1`). Under it, per platform: a Job Object and restricted token (Windows), a deny-default Seatbelt profile (macOS), rlimits, no-new-privs, Landlock and seccomp (Linux).
 - Profiles `dev`, `contained` (default), `hostile-agent`; `--limits` may only narrow; `--mode audit`; `sandbox policy --json`. The run report carries what the host applied: `host_guarantees`, `posture`, `limitations`, `denied`. Audit records `sandbox-launch`, `channel-violation`, `sandbox-limit`, `sandbox-death`.
 - Refusals rather than silent downgrades: conflicting `--sandbox` answers, sandbox-only flags without `--sandbox`, and any surface the channel cannot carry yet. Opt-in until PS-B/PS-C widen the channel (D-V2-26).
 
-### V2 PS-0: sandbox truth, probes and the cheap hardenings, 2026-09-18
+## Unreleased — V2 PS-0: sandbox truth, probes and the cheap hardenings, 2026-09-18
 
 - **PS-0-01** — README, `GETTING_STARTED.md` §6 and the Book say `http.get` has no network client; `run --help`, the run label and the authority report say `--isolation process` isolates foreign code only; REMAINING_WORK 4.12–4.16.
 - **PS-0-02 (D-V2-21)** — `run --report-out <path>`: the runtime writes a `command: "run"` envelope with the `sandbox` object and the outcome in every outcome; the path (and `--trace-out`) is refused inside any `fs.write` grant and opened without following a final symlink.
@@ -978,7 +964,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **PS-0-08** — `host-capability-probe.yml` gains three dispatch-only experiments: KVM + Firecracker booted to `/init`, a differential Seatbelt probe, a restricted-token child in a Job Object.
 - **PS-0-09 (D-NE-28, owner)** — special-use addresses and names are refused under `--grant net=` in every spelling (normalized, `inet_aton` forms included) and granted only by `--grant net.special=HOST`.
 
-### V2 P1-F: P1's follow-ups, 2026-09-18
+## Unreleased — V2 P1-F: P1's follow-ups, 2026-09-18
 
 - **P1-F1 (D-V2-19)** — `unknown name` (DL0301) is no longer followed by DL0404 on the checker's own placeholder type: an inference variable born from a reported error is poisoned and not re-reported; `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.
 - **P1-F2** — every `grants` and `guard` verb prints its `--json` success inside the standard envelope (existing keys unchanged, at the top level); a broker-backed sweep drives each verb.
@@ -987,7 +973,7 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **P1-F5 (RW 6.13)** — under `--trace-effects` a filesystem record carries `resolved_path` and `scope_root` (additive; interpreter and WASM); `IoErr` is unchanged.
 - **P1-F6 (D-NE-17, owner 2026-09-18)** — `delulu test --test-authority <row>`, in the manifest's `[test-authority]` syntax: the only ceiling for a file outside a package; inside one it may only narrow the package's ceiling (a wider row is DL1703 before any test runs).
 
-### V2 phase P1: machine-contract truth, 2026-09-18
+## Unreleased — V2 phase P1: machine-contract truth, 2026-09-18
 
 Every machine-facing promise in `docs/for-agents.md` is now true or is now named as untrue, and the
 walls a first program hits are gone. **No language-semantics change**: the accepted language is
@@ -996,7 +982,7 @@ fields (P1-02, P1-06, P1-08) moved. Findings are `NE-nn` from
 `docs/archive/v1/NEXT_EVOLUTION_2026/VERIFICATION_FINDINGS.md`; tasks are `P1-nn` from
 `docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`.
 
-#### Added
+### Added
 
 - **P1-02 — the success half of the `--json` envelope is gated.** `json_contract.rs` gained
   `every_json_success_emits_the_documented_envelope` (33 real invocations against a fixture),
@@ -1034,7 +1020,7 @@ fields (P1-02, P1-06, P1-08) moved. Findings are `NE-nn` from
   and carries a mutant so it cannot pass vacuously. It found `measurements/METHODOLOGY.md`
   unaccounted.
 
-#### Changed
+### Changed
 
 - **P1-04 — one overflow site, one diagnostic.** A 200-deep parenthesised expression produced **145
   errors for one cause**: 73 × `DL0210`, one per level past the cap, plus 72 × `DL0404` from the
@@ -1067,13 +1053,13 @@ fields (P1-02, P1-06, P1-08) moved. Findings are `NE-nn` from
   effectful single-file test needs a package `[test-authority]`, and that
   `delulu test --test-authority` does not exist (NE-13; D-NE-17 is the owner's).
 
-#### Not done here
+### Not done here
 
 - **P1-11** (`[run-authority]` in `delulu.toml`) is deferred by D-V2-17: it is a new operator-side
   grant source and is ruled with the loading grant grammar in P2. Not implemented, and not documented
   as coming.
 
-### the testing repository made public, 2026-09-17
+## Unreleased — the testing repository made public, 2026-09-17
 
 The owner made the testing repository (`HANDOFF.md` §1.1) public; the project's final public
 repository will be a different one. The language code did not change; `.github/workflows/ci.yml` did.
@@ -1113,7 +1099,7 @@ public **testing** repository, and nothing is released (README, `HANDOFF.md`, `Q
   `HANDOFF.md` §1 and §11.1): the local repository and GitHub stay in sync without a push being asked
   for each time. The final public repository's gate is unaffected.
 
-### the first push, and what the first CI run found, 2026-09-14
+## Unreleased — the first push, and what the first CI run found, 2026-09-14
 
 The repository was pushed for the first time, to a **private** testing remote (`HANDOFF.md` §1.1),
 which switched on `.github/workflows/ci.yml` after its whole life as prepared-but-unexecuted YAML. The
@@ -1122,7 +1108,7 @@ in the language. No numbered ruling covers these entries:
 each was authorized by the owner on the day, in the session that made it, and is recorded in
 `HANDOFF.md` §1.1.
 
-#### Security
+### Security
 
 - **wasmtime 47.0.3 → 47.0.4** (lockfile only; `Cargo.toml` still says `"47"`). `cargo deny` failed on
   two advisories published after its last clean run (2026-08-07): **RUSTSEC-2026-0268**, a
@@ -1131,7 +1117,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   uses — it depends on no `wasmtime-wasi` and makes no WASI calls — but the gate blocks on any new
   advisory by design, and the patch release closes both without a reachability argument to maintain.
 
-#### CI
+### CI
 
 - **Every Miri job had been unable to run at all.** They installed nightly and then ran a bare
   `cargo miri`, which the pin in `rust-toolchain.toml` (1.96.1) overrides — and Miri is nightly-only.
@@ -1149,7 +1135,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   Before, a manual run re-ran the whole push matrix as well, so checking those two cost a full run
   on top. Every push, pull-request and nightly run starts exactly the jobs it did before.
 
-#### Reproducibility — two artifacts had been recorded from the development machine, not from git
+### Reproducibility — two artifacts had been recorded from the development machine, not from git
 
 - **The core-invariance snapshot counted carriage returns no checkout contains.** 58 tracked files had
   CRLF line endings on the development machine while git stores them as LF — `.gitattributes`
@@ -1165,7 +1151,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   `crates/delulu-survey/tests/clean_checkout.rs` asks git which files the Survey reads that git
   ignores; it failed naming the file before the fix, and passes after it.
 
-#### Platforms
+### Platforms
 
 - **macOS: the first real attempt, and its first blocker.** CI's macOS runner stopped building
   `libffi-sys` 2.3.0, which compiles the libffi it bundles (3.4.4) — and current Apple clang rejects
@@ -1176,7 +1162,7 @@ each was authorized by the owner on the day, in the session that made it, and is
 - **arm64: the first execution on any ARM target.** Linux aarch64 ran all 124 test binaries — 1,649
   passed — and its only failures were the two artifacts above. In the next run it passed outright.
 
-#### Found by the second run (`34836508713`)
+### Found by the second run (`34836508713`)
 
 - **`broker start` names a socket path the kernel cannot hold, before spawning anything.** That
   refusal — byte count, platform limit, remedy — had always existed, inside the detached daemon, whose
@@ -1199,7 +1185,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   an `unsafe` block. `delulu-atlas`, `delulu-diag` and the FFI decoder, where the real `unsafe` is,
   still run on every push. The new job's 240-minute budget is not yet confirmed by a run.
 
-#### The third run (`34841317790`)
+### The third run (`34841317790`)
 
 - **macOS, Linux x86-64 and Linux arm64 green end to end** — the whole suite (1,657 tests, 0
   failed), the CLI sweep, the fuzz campaign and every other gate. REMAINING_WORK 7.1, *macOS has never
@@ -1207,7 +1193,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   runner because its PowerShell fake driver started too slowly for the 2000 ms exchange budget — the
   cause `hw_adapter_cli` hit in run 2 — so the adapter's unit-test drivers are Python now too.
 
-#### The fourth run (`34844151767`)
+### The fourth run (`34844151767`)
 
 - **Windows green end to end on CI for the first time** — 1,647 tests, 0 failed, and every gate after
   them; the Python fake drivers held. Linux x86-64 and arm64 were green again. Every operating system
@@ -1224,7 +1210,7 @@ each was authorized by the owner on the day, in the session that made it, and is
   measured and rejected (it shrinks the stall a drive survives from about 100 ms to 60–70 ms), and so
   was the stepped clock, which never runs the wall-clock watchdog.
 
-#### The fifth run (`34849980129`)
+### The fifth run (`34849980129`)
 
 - **The first run with no failures** — every job green, all three operating systems in one run:
   1,657 tests on macOS and on Linux (x86-64 and arm64) and 1,647 on Windows, which compiles ten
@@ -1232,12 +1218,12 @@ each was authorized by the owner on the day, in the session that made it, and is
   clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder. The
   dead-man test fixed after run 4 passed on every platform. REMAINING_WORK 7.2 is closed.
 
-### containment + deployment hardening, 2026-08-10
+## Unreleased — containment + deployment hardening, 2026-08-10
 
 Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can
 do to your system, so no major bump is implied (Constitution invariant 10).
 
-#### Security — filesystem containment, the Guard, and the dependency pin
+### Security — filesystem containment, the Guard, and the dependency pin
 
 - **A dangling symlink escaped filesystem containment** (`SYMLINK-DANGLE-1`, high). `canonicalize`
   fails identically for "absent name" and "broken link", so the nearest-existing-ancestor walk
@@ -1258,14 +1244,14 @@ do to your system, so no major bump is implied (Constitution invariant 10).
 - **A relative `PATH` entry re-opened the planted-binary hole** (`SERVERPATH-REL-1`) in the VS Code
   extension's server lookup. Relative `PATH` entries are skipped.
 
-#### Robustness — a valid program could abort the host
+### Robustness — a valid program could abort the host
 
 - **Deep value teardown recursed the native stack** (`INTERP-DROP-1`). `MAX_DEPTH` bounds *call*
   depth; nothing bounded *data* depth, so a 5,000,000-deep recursive value aborted the process
   *after* the program had finished — violating `ref.rule.runtime.faults-are-diagnostics`. Teardown is
   now iterative (the destructor lives on the variant payload, so depth becomes breadth).
 
-#### Deployment — strict anchored-root mode is now usable, recorded, and checkable
+### Deployment — strict anchored-root mode is now usable, recorded, and checkable
 
 - **`grants certify` refuses a relative filesystem scope** (`CERT-SCOPE-REL-1`). A relative scope
   named a location only the signing machine could mean, so the credential adopted cleanly and then
@@ -1285,9 +1271,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   worth, how to verify it, honest platform status, and the recorded ruling on why strict mode is not
   yet the default.
 
-### production-readiness pass, 2026-08-09
+## Unreleased — production-readiness pass, 2026-08-09
 
-#### Maintenance — replace a deprecated wasmtime API, no behavior change
+### Maintenance — replace a deprecated wasmtime API, no behavior change
 
 - The plugin sandbox disables guest backtraces on Windows to avoid a wasmtime host fastfail
   (`crates/delulu-wasm/src/limits.rs`). wasmtime 47 deprecated `Config::wasm_backtrace`; per
@@ -1296,7 +1282,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   an authority widening; no ruling required). The deprecation warning is eliminated;
   `clippy --workspace --all-targets` is clean on Linux and `clippy -p delulu-wasm` clean on Windows.
 
-#### Security/robustness — the hardware adapter fails closed on a misframed stream
+### Security/robustness — the hardware adapter fails closed on a misframed stream
 
 - The line-protocol hardware adapter (`crates/delulu-runtime/src/adapter.rs`) assumed exactly one
   reply line per command but did not enforce it. An untrusted adapter that emitted an **extra** line
@@ -1312,7 +1298,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   reaches the adapter (`crates/delulu-runtime/src/device.rs`); this hardens reply *attribution*
   under a misbehaving adapter, matching the module's own stated rule.
 
-#### Security — `broker rotate-key` now persists, so a restart cannot resurrect old tokens
+### Security — `broker rotate-key` now persists, so a restart cannot resurrect old tokens
 
 - `delulu broker rotate-key` regenerated the lease-MAC key only in the daemon's memory and never
   rewrote `broker.key` on disk — witnessed by a byte-identical hash before and after. The daemon
@@ -1325,14 +1311,14 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   delulu-broker 144/0, broker/grants/dead-man CLI green, clippy clean. `Broker::rotate_key` now
   returns the new key and `rotate_key_to` applies a caller-persisted one.
 
-#### Conformance — DL1421 witnessed, generated reference regenerated (commit `e5ae9ec`)
+### Conformance — DL1421 witnessed, generated reference regenerated (commit `e5ae9ec`)
 
 - The full-workspace suite surfaced `DL1421` (strict root issuance) shipping without a conformance
   witness (99.7% coverage) and a drifted generated reference. Both fixed; coverage back to 100%.
 
-### P21 cross-account boundary, tested with a real second UID, 2026-08-08
+## Unreleased — P21 cross-account boundary, tested with a real second UID, 2026-08-08
 
-#### Security — VERIFIED: a separate OS account is a real boundary (on a POSIX filesystem)
+### Security — VERIFIED: a separate OS account is a real boundary (on a POSIX filesystem)
 
 - The DISC-1 and IPC-1/DEADMAN-1 residuals both rest on one claim — *"the boundary is a separate OS
   account"* — that had only ever been asserted (every prior test ran same-uid on one account).
@@ -1342,7 +1328,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   socket connect, and `kill` — while the same-uid control succeeds on all four. Reproducible
   red-team scripts + raw transcripts: `docs/security/red-team-p21-crossaccount-2026-08-08/`.
 
-#### Security — FINDING P21-F1: the boundary is a property of the filesystem, and silent when absent
+### Security — FINDING P21-F1: the boundary is a property of the filesystem, and silent when absent
 
 - On a non-POSIX mount (9p/DrvFs under WSL; NFS-without-mapping, SMB, exFAT/FAT by the same
   mechanism) `chmod 0600/0700` is a **silent no-op** — a separate account read a "0600" file and the
@@ -1351,7 +1337,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   to serve there, but only after writing the world-readable key.) Category 7: an OS/filesystem
   property — but it is no longer *silent* (see the hardening below).
 
-#### Security — hardening: fail closed when the filesystem can't keep secrets owner-only (mitigates P21-F1)
+### Security — hardening: fail closed when the filesystem can't keep secrets owner-only (mitigates P21-F1)
 
 - Two layers, both unix-only (Windows ACL hardening remains the documented v0.8 gap):
   - **Fail-closed (pre-write).** Before writing a private key (`keygen`) or starting the broker,
@@ -1372,7 +1358,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   (`docs/security/red-team-p21-crossaccount-2026-08-08/`). Windows bin 69/0 + doctor_cli 7/0 +
   evidence 3/0; Linux bin 74/0; clippy clean; Survey 0 error / 0 warning.
 
-#### Documentation
+### Documentation
 
 - `docs/MATHEMATICS.md` §12 gains item 13: the verification and the filesystem dependency, recorded
   without inflating the category (a reproducible demonstration, not a proof; the guarantee stays
@@ -1381,9 +1367,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   corrected — one wrong crate, two wrong file — line ranges rendered as prose) so the Survey
   resolves them; provenance notes added. No claim changed.
 
-### P20 evidence-honesty campaign, 2026-08-08
+## Unreleased — P20 evidence-honesty campaign, 2026-08-08
 
-#### Documentation — FIXED: the evidence documents denied evidence that exists
+### Documentation — FIXED: the evidence documents denied evidence that exists
 
 - **Five statements across three documents said this project has no machine-checked proof. It has
   one, and re-running it takes 35 seconds.** `docs/QUESTIONS.md` — the page README sends an evaluator
@@ -1419,7 +1405,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   kept: an attacker who rewrites the anchor too is still not caught, and monotonicity is not
   accuracy. §12's terse *"Detected: no"* now says detected **by the chain's own links**: no.
 
-#### Documentation — FIXED: two counts, one of which was right all along
+### Documentation — FIXED: two counts, one of which was right all along
 
 - **`scripts/cli-sweep.sh` is 27 cases, and two of the four documents saying "22" were correct when
   written.** Measured by running it — `SWEEP OK — 27/27 cases, 0 problems` — and traced through
@@ -1434,7 +1420,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   finding C9. The row is removed from *"Blocked on the owner"* and the fact recorded in its place
   rather than silently deleted. Changing the licence stays owner-reserved; deciding it is done.
 
-#### Documentation — FIXED under lead approval, inside an ENTRENCHED file
+### Documentation — FIXED under lead approval, inside an ENTRENCHED file
 
 - **`docs/design/DELULU_CORE.md`'s binding honesty clause contradicted its own §9.** The Status
   block said a machine-checked proof *"is **not** claimed to exist yet"*; the §9 box 260 lines later
@@ -1455,7 +1441,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   byte-identical, no rule, judgment, theorem or reduction moves, and the edit *narrows* the
   document's claim of what is unmechanized to exactly what §9 already said.
 
-#### Added
+### Added
 
 - **`crates/delulu/tests/evidence_claims.rs` — the evidence gate.** What this repository may *say*
   about its own verification is now decided by what it *contains*. The gate reads
@@ -1488,9 +1474,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   shaped after `docs/survey/REMOVALS.md` for the same reason that file exists: the one thing you
   cannot reconstruct after the fact is **what the person doing it checked first**.
 
-### Tier 1 iteration: `for` / `break` / `continue`, 2026-08-08 (owner-directed)
+## Unreleased — Tier 1 iteration: `for` / `break` / `continue`, 2026-08-08 (owner-directed)
 
-#### Language — ADDED: bounded iteration (`for x in xs`, `break`, `continue`)
+### Language — ADDED: bounded iteration (`for x in xs`, `break`, `continue`)
 
 - **`for <var> in <iter> { … }` iterates a `List[T]`, binding `<var>: T` to each element**, and
   **`break` / `continue`** now work — in both `for` **and** `while`, which previously could not be
@@ -1528,9 +1514,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   output; zero existing bytes changed), across 300+ recorded cases. This was owner-directed; the
   other reserved-word tiers were declined with written reasons rather than built hastily.
 
-### P20 red team, broker & certificates, 2026-08-08
+## Unreleased — P20 red team, broker & certificates, 2026-08-08
 
-#### Security — IPC-1 + DEADMAN-1: bound the broker read (multi-agent red team of the untested surfaces)
+### Security — IPC-1 + DEADMAN-1: bound the broker read (multi-agent red team of the untested surfaces)
 
 - **Multi-agent red team** (2× Haiku 4.5 attacking, head chef holding authority and re-verifying every
   claim) of the broker IPC daemon, the device dead-man/e-stop, and the WASM host. WASM: clean
@@ -1553,7 +1539,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   connections or kill the daemon — the *indefinite* hang is what's closed; run untrusted agents as a
   separate OS user.
 
-#### Security — DISC-1: opt-in anchor-verified root issuance (a same-user vulnerability, mitigated not "fixed")
+### Security — DISC-1: opt-in anchor-verified root issuance (a same-user vulnerability, mitigated not "fixed")
 
 - **Discovered + proven:** the Guard gates *delegated* grants but not **root** creation, and unsigned
   root issuance (`ReqBody::Issue`, reached by `grants delegate` auto-root and `run --grant`) is ungated
@@ -1575,7 +1561,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   This is NOT "DISC-1 fixed"; making strict mode the default is a fundamental change reserved for a
   major version (migration analysis in the trust-boundary doc).
 
-#### Security — HARDENED (findings F-CUSTODY-1, F-CUSTODY-2 from the multi-agent custody red team)
+### Security — HARDENED (findings F-CUSTODY-1, F-CUSTODY-2 from the multi-agent custody red team)
 
 - **F-CUSTODY-1: a sealed guard class is now refused at request AND approval time, not only at use
   time.** The approval *workflow* previously minted a permit for a `sealed` class. That permit was
@@ -1602,7 +1588,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   back to `~/.delulu/audit` only when no state dir is set; an explicit `--dir` still overrides both.
   Pinned by a pure-resolver unit test and verified live.
 
-#### Security — FIXED (CRITICAL, finding P20-R4): revocation evaded by extending a revoked chain
+### Security — FIXED (CRITICAL, finding P20-R4): revocation evaded by extending a revoked chain
 
 - **An operator's revocation of an adopted federation node could be undone within the same broker
   lifetime by extending the certificate chain by one self-delegation.** Reproduced end-to-end against
@@ -1635,9 +1621,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   the grant tree does not persist), and revocation still cannot cross a partition (that bound is the
   uplink lease, unchanged).
 
-### P20 zero-trust red team, 2026-08-08
+## Unreleased — P20 zero-trust red team, 2026-08-08
 
-#### Language — CHANGED (narrows what compiles): type nesting is capped at 128 levels (DL0211)
+### Language — CHANGED (narrows what compiles): type nesting is capped at 128 levels (DL0211)
 
 - **A deeply nested type was a denial-of-service surface, and at greater depth a hard crash**
   (red-team finding P20-R3). `DL0210` caps *expression* nesting; nothing bounded a *type*. A
@@ -1665,7 +1651,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
 
 
 
-#### Security — DOCUMENTED BOUNDARY (red-team finding P20-R1): hardlinks escape fs containment
+### Security — DOCUMENTED BOUNDARY (red-team finding P20-R1): hardlinks escape fs containment
 
 - **A hardlink planted inside a granted directory reads and writes the file it shares content with,
   even when that content also lives outside the grant.** Observed end-to-end against the real binary:
@@ -1682,7 +1668,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   the `containment_tests` module in `crates/delulu-runtime/src/prim.rs`; full threat model in `HARDENING_CAMPAIGN.md`
   P20-R1, and the boundary is named in `docs/QUESTIONS.md` §1.7.
 
-#### Security — VERIFIED HELD: adversarial multi-agent authority test
+### Security — VERIFIED HELD: adversarial multi-agent authority test
 
 - **Four AI agents (2× Sonnet 5, 2× Haiku 4.5) were run as adversarial DeluluLang programmers**, each
   given a constraint the principal imposed and a mandate to exceed it; their programs were then run
@@ -1693,9 +1679,9 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   version reporting `exposure: … declassifiable` in `delulu authority`. Zero ambient authority held
   throughout (every ungranted capability was `DL0703`). Recorded in `HARDENING_CAMPAIGN.md` P20.
 
-### P19 ecosystem campaign, 2026-08-07 (editor surface)
+## Unreleased — P19 ecosystem campaign, 2026-08-07 (editor surface)
 
-#### Editor — FIXED: the language server never started (regression from P18)
+### Editor — FIXED: the language server never started (regression from P18)
 
 - **The VS Code extension shipped with a language server that could not start.** `extension.js`
   registered `delulu.authority`, which a language client *also* registers on the server's behalf for
@@ -1713,7 +1699,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   register them — so it did not merely miss the bug, it demanded it. Both halves are fixed, and
   `editors/vscode/e2e.js` now launches a real VS Code against a real server.
 
-#### Editor — NEW: Format Document works
+### Editor — NEW: Format Document works
 
 - **The language server now implements `textDocument/formatting`.** `delulu fmt` has a canonical
   style, a law suite and a 100k-program gate behind it, and no editor could reach any of it: the
@@ -1726,7 +1712,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   fires exactly when the file is mid-edit and broken. Range formatting is deliberately **not**
   advertised: the formatter's contract is over a complete parse.
 
-#### Editor — NEW: the atlas, snippets, tasks, a problem matcher and a status bar
+### Editor — NEW: the atlas, snippets, tasks, a problem matcher and a status bar
 
 - **Authority atlas in a panel.** *DeluluLang: Show authority atlas* renders `delulu atlas --format
   html` beside the file — the call graph with each function's effect row on it. The generated
@@ -1743,7 +1729,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   on every error line beginning `error:`, which is why that convention is now a test.
 - **A status bar item**, so a language server that failed to start is visible rather than quiet.
 
-#### CLI — a mistyped command now says what you meant
+### CLI — a mistyped command now says what you meant
 
 - **`delulu chekc` answers "did you mean `check`?"** instead of printing the name and then a hundred
   lines of usage — which answers *what happened* and buries *how to fix it* under everything the tool
@@ -1753,7 +1739,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
 - **`delulu help <cmd>` now shows that command's help.** It ignored its argument and printed the full
   usage, which made the suggestion above point at something that did not work.
 
-#### Verification — Miri was aimed at the wrong crates
+### Verification — Miri was aimed at the wrong crates
 
 - **`delulu-runtime`'s raw-pointer decoding now runs under Miri** (`miri-ffi` job). Counting `unsafe`
   in first-party sources: `delulu` 37, `delulu-runtime` 13, `delulu-diag` 2 — and **zero** in
@@ -1767,7 +1753,7 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   reach — Miri cannot execute `dlopen` or Windows API calls — and that is recorded as an explicit
   assumption, not a to-do.
 
-#### Editor — FIXED: a workspace could choose which binary the extension launched
+### Editor — FIXED: a workspace could choose which binary the extension launched
 
 - **`delulu.serverPath` is now `machine-overridable`.** At VS Code's default scope a repository's own
   `.vscode/settings.json` could set it, and the extension launches that path as a process the moment
@@ -1794,13 +1780,13 @@ do to your system, so no major bump is implied (Constitution invariant 10).
   unresolvable dependency; the `node:` scheme is reserved for builtins, so the prefix is now what is
   checked. Test files no longer ship in the `.vsix` either.
 
-### P17 proof campaign, 2026-08-03 (findings IF-1, F1–F5)
+## Unreleased — P17 proof campaign, 2026-08-03 (findings IF-1, F1–F5)
 
 Findings live in `docs/design/PROOF_CAMPAIGN.md`. This campaign attacks the project's **claims**
 rather than its implementation, so most entries below are *open findings*, not fixes. Nothing here
 changes released behaviour **except P17-F5**, which narrows the accepted language — see below.
 
-#### Authority — FIXED, and format-affecting (F1, F2, F3)
+### Authority — FIXED, and format-affecting (F1, F2, F3)
 
 - **Path scopes are now stored in canonical form.** `⊑` is defined through `path::resolve`, which is
   not injective — `./data`, `data`, `./data/` and `.\data` are one path under four names. A relation
@@ -1831,7 +1817,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
   relative component that looks like a drive letter (`./C:`) must keep its `./` prefix, or it would
   re-resolve as the whole of drive `C:`, which is a widening.
 
-#### Verification — evidence that did not exist before
+### Verification — evidence that did not exist before
 
 - **Miri completes for the first time: 192 tests, three crates, zero undefined behaviour.** It had
   been started twice previously and finished neither time. `delulu-diag` 45 passed, **`delulu-broker`
@@ -1850,7 +1836,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
 - **CI gained Miri, ARM64 Linux, clippy/rustfmt gates, and an extension build+verify job.** It has
   still **never executed**, because the repository is not pushed.
 
-#### Documentation — a false claim corrected
+### Documentation — a false claim corrected
 
 - **`README.md` said "no proof assistant is installed".** It has been false since the P17 campaign
   installed Lean and machine-checked the higher-order fragment. Re-verified rather than assumed:
@@ -1858,7 +1844,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
   *"does not depend on any axioms"*. The genuine limit — the **full** type system is not mechanized —
   is stated instead of the wrong one.
 
-#### Editor — FIXED (VS Code extension, first test that read server and client together)
+### Editor — FIXED (VS Code extension, first test that read server and client together)
 
 - **Command injection through the open file's path.** The run and test code lenses built a shell
   command *string* — `` `${serverPath} run ${fsPath}` `` — and sent it to the user's shell. A file
@@ -1881,7 +1867,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
   interpolated into a shell string again, or if the manifest drifts from the workspace. Each of its
   gates was checked by reintroducing the exact defect and watching it fail.
 
-#### Language — CHANGED (narrows what compiles)
+### Language — CHANGED (narrows what compiles)
 
 - **`DL0210`: expression nesting is now capped at 128 levels.** Previously the parser recursed
   without bound and a *valid* module nested 100,000 deep did not produce an error — it overflowed
@@ -1902,7 +1888,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
   should emit a `let` per level. `DL0210` was the code Stage 1 held reserved for the next parse
   diagnostic, so nothing was renumbered.
 
-#### Security — FIXED
+### Security — FIXED
 
 - **CRITICAL (IF-1): a secret was fully recoverable while the toolchain said it could not be.**
   `delulu why Declassify` reported "program cannot perform `Declassify`" for a program that printed
@@ -1933,7 +1919,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
   in-repo programs were updated; the core-invariance snapshot moved in 7 cases, each inspected
   before re-recording. Witness: `crates/delulu-check/tests/secret_oracle.rs`.
 
-#### Known — found, named, and NOT fixed
+### Known — found, named, and NOT fixed
 
 - **`⊑` is a preorder, not a partial order (F1).** `./data` and `data` resolve to the same path but
   `Authority` derives `PartialEq` structurally, so they attenuate each other while comparing
@@ -1956,7 +1942,7 @@ changes released behaviour **except P17-F5**, which narrows the accepted languag
 verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
 reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
 
-#### Security — FIXED (P17, 2026-08-04)
+### Security — FIXED (P17, 2026-08-04)
 
 - **wasmtime 27 → 47 — nineteen advisories to none.** `cargo deny` now reports
   `advisories ok, bans ok, licenses ok, sources ok`. The one that mattered was **RUSTSEC-2026-0096**,
@@ -1979,7 +1965,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
   Routine backwards steps on the target platforms (GNSS acquisition, NTP correction, RTC at
   power-on) no longer resurrect expired grants.
 
-#### Known — capability-algebra and theorem-sketch findings (P17-7), OBSERVED and NOT fixed
+### Known — capability-algebra and theorem-sketch findings (P17-7), OBSERVED and NOT fixed
 
 - 🔴 **The core calculus does not model the construct that broke.** `DELULU_CORE.md` §9 names a
   Lean/Coq formalization of §1–§7 as the mechanization target; **mechanizing it as written would not
@@ -2008,7 +1994,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
   came through `attenuate_core` and its `⊑` check. Consequence worth knowing: a daemon restart drops
   every grant (fail-closed; authority is re-established by adopting a signed certificate).
 
-#### Known — cryptography audit findings (P17-7), OBSERVED and NOT fixed
+### Known — cryptography audit findings (P17-7), OBSERVED and NOT fixed
 
 - **The audit chain does not detect truncation.** `verify` checks each record's `prev_hash` and
   recomputes its hash, but every check is *local to a link* — so deleting the last *k* records
@@ -2033,7 +2019,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
   that a receipt signature cannot be replayed as a grant); canonical JSON sorts keys recursively; and
   omit-when-empty is injective, so it introduces no signature collision.
 
-#### Security — supply chain and engine hardening (P17-F)
+### Security — supply chain and engine hardening (P17-F)
 
 - **There was no supply-chain gate at all.** `cargo deny` had never been run; there was no
   `deny.toml`, and nothing in CI, the suite, or any script checked the tree against RustSec. The
@@ -2059,7 +2045,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
   using `std` alone. Limit stated: it zeroes the current allocation only — not an earlier buffer
   left by a `String` realloc, nor a copy made by `reveal`.
 
-#### Added
+### Added
 
 - **`scripts/cli-sweep.sh`** — the CLI + compiler sweep as a reproducible script (22 cases, exact
   exit codes). It had been performed by hand every pass, which is exactly the drift design rule 1
@@ -2103,7 +2089,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
   cargo-fuzz, cargo-deny, Miri. **No Lean/Coq/Alloy** — so *machine-checked* remains unreachable and
   `DELULU_CORE.md` §9's promised mechanization is still open.
 
-#### Fixed — P16 adversarial pass, 2026-08-03 (rulings D78–D88)
+### Fixed — P16 adversarial pass, 2026-08-03 (rulings D78–D88)
 
 - **The effect row could be escaped entirely (C88/D78).** A callback reaching a higher-order builtin
   through a bare type parameter had its effect row **silently dropped**, and a dropped row is an
@@ -2152,7 +2138,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
 - **The normative exit-code table omitted a code the CLI uses (C91/D86).** `--assert-trace`
   violations exit `3`; `STABILITY.md` §1 listed only `0/1/2`.
 
-#### Added
+### Added
 
 - **`docs/QUESTIONS.md`** — hard questions answered with evidence: whether authority can be bypassed
   (leading with the C88 failure rather than burying it), how Authority and Guard compare with a
@@ -2164,7 +2150,7 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
 - **`prim::contains_on_disk`** — one fail-closed containment check shared by the interpreter and the
   WASM host, replacing two lexical prefix tests.
 
-#### Known — found, named, and NOT fixed (D87, D88)
+### Known — found, named, and NOT fixed (D87, D88)
 
 - **Multi-tenancy is not provided (C92).** Several agents holding different authority on one machine
   require **separate OS accounts or containers**. Embedded mode isolates correctly and does so with
@@ -2188,13 +2174,13 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
 
 ---
 
-### production-hardening campaign
+## [Unreleased] — production-hardening campaign
 
 The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to failure and fixes what
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
-#### Added
+### Added
 
 - **`docs/release/CHECKPOINT-1.0.md`** (D71) — the state of the project beside the gate that shipped
   it: architecture and why two odd-looking dependencies are deliberate, the Survey, the compiler, the
@@ -2203,7 +2189,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   would most change the language's usefulness. Every figure is either recounted from the tree by a
   gated Survey fact or taken from a named suite run.
 
-#### Added
+### Added
 
 - **The toolchain can now be distributed.** `scripts/package-toolchain.sh` produces a self-contained
   per-platform archive — binary, `LICENSE`, `NOTICE`, `TRADEMARK.md`, examples (files *and* package
@@ -2244,7 +2230,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   omitted, because a missing field cannot be told apart from "this tool did not answer". The JSON
   walk is **uncapped**; only the human render truncates.
 
-#### Fixed
+### Fixed
 
 - **`delulu doctor --json` emitted TWO objects on any run that reported a problem.** It printed its
   envelope without recording the emission, so the nonzero exit made the CLI add its documented
@@ -2264,7 +2250,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   2 and named. A tool whose audience is machines is the worst place to silently drop a flag: a human
   notices prose where JSON should be, a pipeline does not.
 
-#### Changed
+### Changed
 
 - **Lint findings reduced — and the way they were counted corrected.** The number published for
   months was produced by a `grep` that also matched cargo's **per-crate summary lines**
@@ -2288,7 +2274,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   load-bearing. And the baseline is **per-platform**: macOS would be a third number, and no one has
   ever seen it.
 
-#### Fixed
+### Fixed
 
 - **No command silently ignores an option any more** (C76, D73). Twelve of twenty-two subcommands
   accepted a flag that cannot exist and exited **0** — `check`, `authority`, `why`, `atlas`,
@@ -2347,7 +2333,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   stated blocker has existed since D61; and `ci.yml` promised to flip the coverage gate "at the 1.0
   cut", which happened in the test suite instead, where it is stronger.
 
-#### Changed
+### Changed
 
 - **Only the CLI is publishable to crates.io** (D69). `STABILITY.md` §2 has always said the Rust
   crates are an implementation detail and not a stable interface; twelve of thirteen nonetheless
@@ -2373,7 +2359,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   given a false owner. `cli.rs` is now 7,740 lines. The core-invariance snapshot passed
   byte-identical and was not re-blessed, which is the whole proof that nothing moved but bytes.
 
-#### Added
+### Added
 
 - **The Survey answers "may I change this?"** (D68). A handful of paths are entrenched by
   Constitution §10 — the constitution itself, `STABILITY.md`, `/rfcs/`, the soundness audit, the
@@ -2395,7 +2381,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   ruling index in each build order names every existing entry as `S6-D1`…, `S7-D1`…, `S8-D1`… .
   Nothing was renamed and no text moved.
 
-#### Fixed
+### Fixed
 
 - **A Unix socket path the kernel cannot hold is refused by name** (D68). `sun_path` is **104 bytes
   on macOS against 108 on Linux**, and macOS temp directories are long enough that a state directory
@@ -2433,7 +2419,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   own thread. The reservation is now derived from the published budget. It is virtual memory; a
   program that never recurses pays nothing for the difference.
 
-#### Security
+### Security
 
 - **The decision that started a machine is now recorded, not only printed.** A run that spawned a
   hardware driver announced its provenance verdict on stderr and nowhere else, so afterwards nothing
@@ -2588,7 +2574,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   previously checked clean and now errors. Nothing in-tree was affected; downstream trees will see new
   errors, which is the point of the rule.
 
-#### Added
+### Added
 
 - **The Survey answers the transitive questions — `impact`, `affected-by`, `path` — and refuses to
   compose relations that do not compose.** `rdeps` is one hop. That is the right answer to "what
@@ -3012,7 +2998,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   named function used as a value (`apply(double, 21)`) type-checked and then faulted at run time.
   (C13, ruling D25)
 
-#### Changed
+### Changed
 
 - **The language server accepts incremental edits** (`textDocumentSync: 2`): a keystroke sends the
   range it touched instead of the whole file. A change carrying no range still replaces the
@@ -3118,7 +3104,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   waiting to happen. The message now names the target and offers the exact edit; an alias expanding to
   a function type is reclassified to **DL1302** (rule R-6a). (C24, ruling D31)
 
-#### Fixed
+### Fixed
 
 - **"Go to definition" could land in a different file after a server restart.** The search for a
   name across open documents iterated a `HashMap` and took the first match. `HashMap` ordering
@@ -3337,7 +3323,7 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 - **The front door was false.** A v1.0.0-tagged tree said "Stage 1 — under construction" and told
   readers to `rustup default stable` against a toolchain pinned to 1.96.1. (C4/P1, ruling D25)
 
-#### Known limitations (unchanged by this campaign — see `HARDENING_CAMPAIGN.md` §5)
+### Known limitations (unchanged by this campaign — see `HARDENING_CAMPAIGN.md` §5)
 
 - **macOS has never been executed.** Windows and Linux are verified green on every commit; there is no
   macOS hardware, so no claim is made. `docs/design/CROSS_PLATFORM_VERIFICATION.md` has the detail.

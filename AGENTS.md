@@ -10,12 +10,12 @@ you remember from elsewhere.
 **In force since 2026-10-17:** the owner's commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md` —
 take DeluluLang to a public release; every outstanding decision is the head chef's (below, *The owner's delegation*).
 
-0. **Sync with GitHub first** (owner, 2026-10-17): `git fetch origin`, then `git log --oneline HEAD..origin/main` and
+0. **Sync with GitHub first** (owner, 2026-10-17): `git fetch origin`, then `git log --oneline HEAD..origin/master` and
    the `origin/claude/*` branches — the on-demand cloud routine (below) may have pushed while the laptop was away; pull
    (fast-forward) before any edit, and read the CI runs of what came in. **Then run the Survey and `doctor`**
    (`cargo run -p delulu-survey -- check`, `cargo run -p delulu -- doctor --check`) — the section below says when and why.
    **`origin/autosave/laptop`** holds what a laptop session had not yet committed when it stopped (`scripts/autosave.ps1`,
-   a Task Scheduler job — owner, 2026-10-17): if its newest snapshot is newer than `main`'s last laptop commit, compare
+   a Task Scheduler job — owner, 2026-10-17): if its newest snapshot is newer than `master`'s last laptop commit, compare
    it with its base and recover what it needs. Never merge it — a snapshot is not a verified commit.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
@@ -32,11 +32,14 @@ authority; the host performs every effect under grants, a lease and the Guard.
 
 ## Hard rules — never break these
 
-- **Push only to `origin` = `github.com/jessesuniljs1-collab/DeluluLang`, branch `main`** (since the 2.0.0 launch,
-  D-V2-153). Never force-push, never rewrite pushed history (documents cite commit hashes). `main` is protected against
-  force-push and deletion. The development history before 2.0.0 is the private archive
-  `jessesuniljs1-collab/delululang-test`: never push there again, and never push its history here — hashes and run ids in
-  records dated before 2.0.0 refer to it.
+- **Push only to `origin`** (`github.com/jessesuniljs1-collab/delululang-test`, a public TESTING
+  repository). Never force-push, never rewrite pushed history (documents cite commit hashes). **The
+  project's final public repository** is created and pushed only under the owner's commission of 2026-10-17, once
+  `HANDOFF.md` §1.1's four items are resolved by recorded `D-V2-nn` decisions — and never by pushing this development
+  history there. **The owner, 2026-10-17 (night): *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*** — so push to and use `delululang-test` only; never push to
+  `DeluluLang` or any other repository, push a tag, switch `origin`, move the routine or change any repository's
+  visibility until he says so in words. This outranks the commission's launch steps: `launch/2.0.0` stays prepared, not
+  launched.
 - **Never put CI's skip token in a commit message** — it silently skips the push run.
 - **A word the owner banned** (named in `HANDOFF.md` §1's rule table) appears nowhere — no file, commit
   or product surface (*graph* and *ify* as one word). Check a diff with `grep -ci 'graph''ify'` before committing.

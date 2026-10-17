@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "delulu"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "ciborium",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-atlas"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "delulu-check",
  "delulu-diag",
@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-broker"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "delulu-check",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-check"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "ciborium",
@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-conform"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "delulu-check",
  "delulu-diag",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-diag"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-fuzz"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "delulu-check",
  "delulu-diag",
@@ -670,14 +670,14 @@ dependencies = [
 
 [[package]]
 name = "delulu-measure"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "delulu-registry"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "delulu-runtime",
  "getrandom 0.3.4",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-runtime"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "ciborium",
  "delulu-broker",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-survey"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-syntax"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "delulu-diag",
  "serde",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "delulu-wasm"
-version = "2.0.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "blake3",

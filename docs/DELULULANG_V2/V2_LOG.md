@@ -6171,3 +6171,17 @@ spends the same usage and stops with it; a job outside Claude does not.
 **Evidence.** By hand: snapshot `5fb039a` pushed (base `9829662`, one path), working tree unchanged; the second run
 `unchanged since snapshot 5fb039a`; the scheduled task's first run: result 0, the same log line. The banned-word guard
 falsified: with a probe token in place of the word and a probe file in the tree it refused (exit 1) and pushed nothing.
+
+## 2026-10-17 — the autosave refuses to carry history `origin` does not have
+
+After the launch `origin` is the public repository with a fresh history (D-V2-153); a snapshot's parents are HEAD and
+the previous snapshot, so a laptop still on the development history would have pushed all of it there. `scripts/
+autosave.ps1` now fetches with `--prune` and snapshots only when HEAD is on some branch of `origin`. **Falsified** on
+throwaway repositories: HEAD on an unrelated history — the guarded script refused (exit 1, no remote branch), the previous
+script pushed; control, HEAD on a branch origin has — a snapshot pushed.
+
+## 2026-10-17 (night) — the owner: only the test repository until he says otherwise
+
+*"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my
+repo."* Recorded in `AGENTS.md`'s push rule, `HANDOFF.md` §11.1 and the decision log (it outranks D-V2-153 §3 and the
+release procedure's steps 4–10). Nothing had been pushed to `DeluluLang`; the prepared release stays on `launch/2.0.0`.

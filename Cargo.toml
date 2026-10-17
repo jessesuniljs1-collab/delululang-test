@@ -25,7 +25,7 @@ members = [
 # both blockers were closed by work (D22: coverage 287/287, hard-gated; the D9 first-run drill,
 # timed and recorded in `measurements/first-run/RECORD.md`) and the gate re-ran before this line
 # changed. A gate that cannot say no is not a gate; this one did, once, and that is on record.
-version = "2.0.0"
+version = "1.0.0"
 edition = "2021"
 repository = "https://github.com/delulu-lang/delulu"
 # The code is Apache-2.0 (see LICENSE, NOTICE). The DeluluLang NAME is a trademark of Jesse Sunil

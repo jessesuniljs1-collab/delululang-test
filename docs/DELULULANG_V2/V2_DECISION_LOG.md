@@ -3768,6 +3768,14 @@ floor claimed. (6) **CODEOWNERS:** `@jessesuniljs1-collab` replaces the placehol
 `security_controls_are_decided_and_no_claim_runs_ahead_of_its_proof` replaces `pending_public_controls_are_still_marked_as_pending`
 and holds the new line; watched red on the old text. Entrenched record: this date. RW 7.8 closed.
 
+## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
+
+**The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
+launch, the snapshot push, the tag `v2.0.0`, the switch of `origin`, the routine's repository and the archive's
+visibility all wait for his word. D-V2-153's controls on `DeluluLang` (switched on and read back) stand; nothing has been
+pushed there. `launch/2.0.0` on `delululang-test` holds the prepared release and its gate (`CHECKLIST-2.0.md`); a
+session keeps it current by merging `master` into it, never the reverse.
+
 ## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
 
 Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.

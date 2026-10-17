@@ -14,7 +14,7 @@
           {
             "type": "command",
             "timeout": 60,
-            "command": "git fetch -q origin; git log --oneline -n 20 HEAD..origin/main; git branch -r --list origin/claude/* origin/autosave/*"
+            "command": "git fetch -q origin; git log --oneline -n 20 HEAD..origin/master; git branch -r --list origin/claude/* origin/autosave/*"
           }
         ]
       }
