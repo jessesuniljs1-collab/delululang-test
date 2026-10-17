@@ -255,7 +255,10 @@ fn a_refused_header_connects_nowhere_and_says_why_to_the_operator() {
 }
 
 /// The bytes the secret witnesses grant — a marker no report, trace or message may ever hold.
-const SECRET_BYTES: &str = "s3cr3t-8f2c-never-printed";
+const SECRET_BYTES: &str = "s3cr3t-wq7z-never-printed";
+/// The part of [`SECRET_BYTES`] searched for. Not hex: a sandboxed run's report carries 64-hex-digit digests, and a
+/// hex canary can be spelled by one by chance (2026-10-17: `8f2c` was, in an audit chain — broker_cli.rs).
+const SECRET_CANARY: &str = "wq7z";
 
 /// A program that sends the secret `API_TOKEN` as the `Authorization` header to `url` (P9-04 (b)/(c), D-V2-131),
 /// through `Secret.map` — `"Bearer " + s` — so the derived secret's audience is the one under test.
@@ -298,7 +301,7 @@ fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
         for f in ["rep.json", "trace.txt"] {
             all.push_str(&std::fs::read_to_string(dir.join(f)).unwrap_or_default());
         }
-        all.contains("8f2c")
+        all.contains(SECRET_CANARY)
     };
     // Inside the audience: sent.
     let dir = tmp("secret-in");
@@ -342,7 +345,7 @@ fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
     let o = run(&dir, &format!("@127.0.0.1:{port}"), true);
     assert_ne!(o.status.code(), Some(0), "{}", out(&o));
     assert!(out(&o).contains("DL1401") && out(&o).contains("secret"), "{}", out(&o));
-    assert!(!out(&o).contains("8f2c"), "{}", out(&o));
+    assert!(!out(&o).contains(SECRET_CANARY), "{}", out(&o));
     assert!(seen.join().unwrap().is_none(), "a guest sent nothing");
 }
 

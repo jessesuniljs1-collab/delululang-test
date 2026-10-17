@@ -2473,7 +2473,7 @@ mod tests {
     #[test]
     fn a_send_whose_record_was_lost_hands_over_no_bytes() {
         let state = temp_state("lostsend");
-        SecretStore::load(state.join("secrets.json")).set("K", "hunter2-8f2c").unwrap();
+        SecretStore::load(state.join("secrets.json")).set("K", "hunter2-wq7z").unwrap();
         let handle = start_daemon(&state);
         let spec = AuthoritySpec {
             effects: vec!["Net".to_string()],
@@ -2492,11 +2492,11 @@ mod tests {
         let lost = request(&state, send());
         drop(held);
         stop_daemon(&state, handle);
-        assert!(matches!(&free, Ok(Response::SecretBytes { bytes }) if bytes == "hunter2-8f2c"), "with the chain free: {free:?}");
+        assert!(matches!(&free, Ok(Response::SecretBytes { bytes }) if bytes == "hunter2-wq7z"), "with the chain free: {free:?}");
         match lost {
             Ok(Response::Error { code, message, .. }) => {
                 assert_eq!(code, "DL1401", "{message}");
-                assert!(message.contains("could not append") && !message.contains("8f2c"), "{message}");
+                assert!(message.contains("could not append") && !message.contains("wq7z"), "{message}");
             }
             other => panic!("a send whose record was lost must hand over nothing: {other:?}"),
         }

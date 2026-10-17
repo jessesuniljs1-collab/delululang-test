@@ -5909,3 +5909,41 @@ passes on Windows (29 checks) and in WSL (26 checks, KVM available). `master` is
 by hash (`7d6a22b`, `d3f0d52`) were kept. The routine is disabled; the owner had edited its prompt (quoted in
 `docs/CLOUD_SYNC_LOG.md`, whose 2026-10-17 entry has the details and the branch list). Not redone on the laptop, for the
 owner's word: the full suite on Windows and in WSL, the WSL microVM guest images, the editor's end-to-end test.
+
+## 2026-10-17 — `e1bc4df`'s push run red on macOS: a hex canary spelled by an audit hash; the canary made unspellable
+
+**What.** `e1bc4df` — a records-only commit, the disk-cleanup record — went red on one job: macOS's `broker_cli`
+`a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach_its_parents_other_origin`, *"the chain holds
+the bytes"* (CI `39025580650`, job `117375792215`; every other job green). The commit changes no code, so the test was read.
+P9-04 (d)'s two secret tests store the secret `hunter2-8f2c` and search every audit file for `8f2c` — four hex digits, in a
+chain whose every record carries a 64-hex-digit `hash` and `prev_hash` and a hex `actor_node`. A record's hash spells
+`8f2c` by chance — a chain holds some 800 (the first test) to 1,500 (the leased one) distinct four-digit hex strings,
+counted on chains left on disk, of 65,536 possible.
+
+**Witnessed** on the laptop (Windows), on the old code: 1 failure in 3 runs, then **8 in 100** (6 of the leased-send test,
+2 of `a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recorded`). A failed run leaves its state
+directory, so each chain was read: in all 9, `8f2c` stood only in one record's `hash` and the next one's `prev_hash`, and
+`hunter2` appeared 0 times. Nothing leaked; the test raised a false alarm.
+
+**Fix.** The secret is `hunter2-wq7z` and the canary `wq7z` (`broker_cli.rs`'s `SECRET`/`CANARY`): `w`, `q` and `z` are not
+hex digits, and the chain's other fields are decimal (`seq`, `ts`, ports) or words, so no field can spell it. The same change
+in `egress_cli.rs` (`SECRET_BYTES`/`SECRET_CANARY` — a sandboxed run's report carries two 64-hex-digit digests, so the same
+false alarm, rarer) and in `brokerd`'s `a_send_whose_record_was_lost_hands_over_no_bytes` (its message is a fixed string
+today; the daemon's other refusals embed the hex node id). Left as they are, each read: `delulu-runtime`'s egress unit tests
+search for the whole `tok_8f2c-never-in-a-record`, or a reason built from fixed inputs; `delulu-broker`'s secrets tests
+compare for equality only.
+
+**Evidence.** After: **0 failures in 100 runs**. Falsified with two mutants (applied by a script, restored, rebuilt): an
+extra chain record holding the bytes' masked tail `****wq7z` after every allowed send turned both broker tests red at the
+canary check (`broker_cli.rs:310`, `:404`); printing the secret header's value to stderr where the client holds it turned
+`egress_cli`'s red at `:318` (`Bearer s3cr3t-wq7z-never-printed` in its message). `cargo clippy --workspace --all-targets -- -D warnings`: exit 0. The suite (`cargo test --workspace --no-fail-fast -j 4`,
+Windows, 163 binaries): 2,225 passed, 4 failed, 15 ignored — the 4 are the map's freshness (`doctor_cli`'s three and
+`delulu-survey`'s `freshness`; `doctor`: "survey freshness: 2 behind the tree"), the map being rebuilt after the last
+edit; those targets after it: in the commit message.
+
+**Observed, not chased (RW 7.19).** On Windows most runs of these two tests — passing or failing — leave their temp
+directory behind (the programs and `state/`, a few KB): the final `let _ = std::fs::remove_dir_all(&base)` fails without a
+word. The daemon runs with its working directory in the state directory (`brokerd.rs:1920`) and may still be exiting when
+the test removes it — not confirmed. CI's runners are discarded.
+
+**Also read:** `b4fb0a9`'s push run `39026595221` — success on every job (`miri-slow` and `heavy-gates` skipped on a push).

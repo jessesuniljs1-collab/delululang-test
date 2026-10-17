@@ -3235,3 +3235,29 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4.65–4.67; proposing a secret's audience in `--grants`' lines; (3) RW 4.63, RW 4.53's rest, RW 4.57, RW 4.58's O2/O4, RW
   4.49's first two items; (4) a boundary over a `.dwx`. **For the owner:** D-V2-49 and D-V2-59, D-V2-110 to D-V2-137, P8-04's
   option (c); whether the routine (now a scheduled task) runs again, and with which dates.
+
+### 2026-10-17 — `e1bc4df`'s push run red on macOS: a hex canary spelled by an audit hash; fixed (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `b4fb0a9`
+- Commits: (1) this entry's commit
+- Files and folders: M `crates/delulu/src/brokerd.rs` (one unit test's secret), `crates/delulu/tests/broker_cli.rs`,
+  `crates/delulu/tests/egress_cli.rs`, `HANDOFF.md` (§11.5, two traps), `docs/CLOUD_SYNC_LOG.md` (this entry),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.18 closed, 7.19 observed), `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- **What** (`V2_LOG.md`, this date): `e1bc4df`'s push run `39025580650` was red on `test (macos-latest)` only — `broker_cli`'s
+  leased-send test, *"the chain holds the bytes"*. The commit changes no code. P9-04 (d)'s two secret tests searched the
+  audit chain for `8f2c`, four hex digits of the secret `hunter2-8f2c`, and a record's 64-hex-digit `hash` spelled it by
+  chance. Witnessed on Windows, old code: 8 runs in 100 red; all 9 failed chains held `8f2c` only in a `hash`/`prev_hash`
+  pair and `hunter2` nowhere. Now the secret is `hunter2-wq7z` and the canary `wq7z`, which is not hex; the same in
+  `egress_cli` and in `brokerd`'s lost-send unit test.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: on the laptop (Windows) — after the fix 0 runs in 100 red; two leak mutants red at the canary checks
+  (`broker_cli.rs:310`, `:404`; `egress_cli.rs:318`), restored and rebuilt; clippy exit 0; the suite 2,225 passed, 4 failed (the map's freshness, before its rebuild), 15 ignored. CI, read: `b4fb0a9`'s push run
+  `39026595221` — success on every job (`miri-slow` and `heavy-gates` skipped on a push); `e1bc4df`'s `39025580650` as above.
+  This entry's own push run: in the commit that follows it, or read in the next session.
+- Redo on the laptop: nothing new.
+- For the laptop's memory: `HANDOFF.md` §11.5 — a leak canary must be bytes no legitimate field can spell; a mutant script
+  restores the source and rebuilds.
+- Open / next: RW 7.19 — on Windows these two tests leave their temp directory behind (cause not confirmed). Otherwise the
+  2026-10-17 entry's list stands.

@@ -221,6 +221,12 @@ fn daemon_lifecycle_run_expose_stop_fail_closed() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// The bytes of the broker-held secret below, and the part of them no audit record, stdout or stderr may hold. The
+/// canary is NOT hex: every record carries 64-hex-digit `hash`/`prev_hash` and a hex `actor_node`, and the hex canary
+/// `8f2c` was spelled by a hash by chance (2026-10-17: macOS CI, then a local loop — no byte of the secret anywhere).
+const SECRET: &str = "hunter2-wq7z";
+const CANARY: &str = "wq7z";
+
 /// P9-04 (d), D-V2-134: under the daemon a run's secret is a broker HANDLE — its bytes are the broker's — and
 /// `get_with_secret` of one now asks the broker for them for the ONE origin the request names: the node's `secret_to`
 /// (D-V2-133) must hold `NAME@origin`, and the chain records a `send` naming the pair and the span, never a byte. The
@@ -250,7 +256,7 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     send("elsewhere.delulu", port.wrapping_add(1).max(1), "Authorization");
     // A header name no request may carry (a space is not an HTTP token): judged before the bytes exist.
     send("badheader.delulu", port, "Bad Header");
-    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", "hunter2-8f2c"]);
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
     assert!(o.status.success(), "secrets set: {}", stderr(&o));
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
@@ -301,9 +307,9 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     // No byte of the secret in the chain, in what the program printed, or in what the run said.
     for entry in std::fs::read_dir(state.join("audit")).unwrap() {
         let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
-        assert!(!text.contains("8f2c"), "the chain holds the bytes");
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
     }
-    assert!(!stdout(&o).contains("8f2c") && !stderr(&o).contains("8f2c"), "{}{}", stdout(&o), stderr(&o));
+    assert!(!stdout(&o).contains(CANARY) && !stderr(&o).contains(CANARY), "{}{}", stdout(&o), stderr(&o));
     // D-V2-133: the run's node keeps the audience its grant line named.
     let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list json");
@@ -349,7 +355,7 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
         let tail = &text[i..];
         tail[..tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len())].to_string()
     };
-    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", "hunter2-8f2c"]);
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
     assert!(o.status.success(), "secrets set: {}", stderr(&o));
     let delegate = |extra: &[&str]| -> (String, String) {
         let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--net", "127.0.0.1", "--secret", "API_TOKEN", "--multi", "--json"];
@@ -395,7 +401,7 @@ fn a_leased_send_is_guarded_on_its_destination_and_a_narrower_child_cannot_reach
     assert_eq!(v["records"].as_array().unwrap().len(), before, "the broker was asked nothing: {v:#}");
     for entry in std::fs::read_dir(state.join("audit")).unwrap() {
         let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
-        assert!(!text.contains("8f2c"), "the chain holds the bytes");
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
     }
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);

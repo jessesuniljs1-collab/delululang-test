@@ -1421,6 +1421,15 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A slice can be written in a git worktree while the suite runs** (routine run 25): the suite's tree stays frozen, and the
   next slice's code — written but not compiled there — is `git diff`-applied once the suite reports. Step (d)'s second half was
   written so, during the first half's suite, and compiled clean on its first build.
+- **A leak canary must be bytes no legitimate field can spell** (2026-10-17, the laptop): `broker_cli` searched the audit
+  chain for `8f2c` — four hex digits of the secret `hunter2-8f2c` — and a chain is mostly 64-hex-digit hashes, so a hash
+  spelled it: 8 runs in 100 red, and macOS CI red on a records-only commit, with no byte of the secret anywhere. A canary is
+  a part of the secret drawn from outside every alphabet the searched text uses (hex digests and ids, decimal times): now
+  `wq7z`. Before trusting a "the bytes are nowhere" check, name the alphabets of what it searches.
+- **A mutant script restores the source AND rebuilds** (2026-10-17): after `git checkout` of the mutated files,
+  `target/debug/delulu` was still the mutant build, and the next run of the fixed test went red on the mutant's own leak —
+  a regression, it seemed, until `grep -c mutant_note target/debug/delulu.exe` found the stale binary. Rebuild after
+  restoring, and check the binary before any run that follows.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
