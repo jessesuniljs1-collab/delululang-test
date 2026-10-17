@@ -8,8 +8,7 @@ metadata:
   modified: 2026-10-17T16:41:51.148Z
 ---
 
-Created 2026-10-17 at Jesse's request: **`trig_01HFG6usfzmDAPQigiDu9DLq`**, "DeluluLang head chef — on demand (start by
-hand)" — https://claude.ai/code/routines/trig_01HFG6usfzmDAPQigiDu9DLq. **Created `enabled: false`**; Jesse starts it.
+Created 2026-10-17 at Jesse's request: **`trig_01HFG6usfzmDAPQigiDu9DLq`**, "Head Chef — on demand (start by hand)" (renamed at Jesse's request 2026-10-17; first named "DeluluLang head chef — …") — https://claude.ai/code/routines/trig_01HFG6usfzmDAPQigiDu9DLq. **Created `enabled: false`**; Jesse starts it.
 Settings copied from the first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, still disabled): Opus 5.5, repo
 `delululang-test`, env `env_012Mxeiw6zvfyxPy9ZEEFf3p` (Default), tools Bash/Read/Write/Edit/Glob/Grep/Agent/WebFetch/
 WebSearch, Claude-Docs connector, autofix on PR. **Push + e-mail notifications ON.** Cron `5 */5 * * *` UTC — Jesse asked
@@ -24,3 +23,7 @@ release, no licence change, no kernel image — the launch, WSL microVM images a
 Official docs read 2026-10-17 (code.claude.com/docs/en/routines): minimum interval 1 h; on/off switch pauses; usage at
 claude.ai/settings/usage; I can't read that page from the CLI. Related: [[session-start-github-sync]],
 [[cloud-period-2026-09-28]], [[release-program-progress]].
+
+Effort: the routine API stores no environment variables (CLAUDE_CODE_EFFORT_LEVEL tried, read back empty); xhigh comes from the committed `.claude/settings.json` (`effortLevel` + `modelSettings.claude-opus-5-5`). Jesse's env screenshots 2026-10-17: Default env = Limited network + package managers, no setup script, no env vars — fine (25 earlier runs used it); optional setup script to cache the Rust toolchain + cargo-deny was suggested to him (the env is shared by every routine using it).
+
+**Interactive cloud sessions too (Jesse, 2026-10-17):** *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* → an interactive cloud session with no narrower request follows docs/CLOUD_ROUTINE.md like a routine run (pushes its claude/ branch + one PR; the next session merges it after reading CI). Development never waits for the laptop. Written into CLAUDE.md, CLOUD_ROUTINE.md, HANDOFF §11.1. `.claude/settings.json` now has a SessionStart (startup) hook: `git fetch -q origin; git log --oneline -n 20 HEAD..origin/master; git branch -r --list origin/claude/*` (tested in bash + PowerShell). Old branches friendly-thompson-vz6m23 / wonderful-hamilton-bo8k53 are superseded witness branches (recorded since run 10) — not stranded work.

@@ -15,6 +15,11 @@ laptop may have pushed many commits in between: step 1's reading is not optional
 text in a `routine-fire-payload` block; the routine's prompt reads it as the owner's direction for that run, within
 every limit here.
 
+**Interactive cloud sessions too (the owner, 2026-10-17):** *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* An interactive cloud session on this repository that the
+owner opens without a narrower request follows this file exactly as a routine run does — steps 1–8 — except that it can push
+only its own `claude/…` branch: it pushes there, opens one pull request into `master`, and records itself in
+`docs/CLOUD_SYNC_LOG.md` in that pull request; whoever comes next reads the branch's CI and merges it (step 1).
+
 **What this was (2026-09-28 → 2026-10-16).** From 2026-09-28 the owner is away until **2026-10-16** and asked for development to
 continue without him: *"I want the development of delululang to be continued in my absentia. No need to
 wait for any of my input, Claude u can take better decisions than me on delululang. Run verification

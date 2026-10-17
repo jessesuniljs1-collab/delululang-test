@@ -585,6 +585,8 @@ wins, and you should update the memory to match.
   (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`; its terms and limits are at the top of this file).
   Where a bullet below reserves something to the owner, read it through that commission. The owner's pronouns are
   he/his (stated 2026-10-17).
+- **Development never waits for the laptop** (owner, 2026-10-17): *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* Routine runs and interactive cloud
+  sessions continue the work by `docs/CLOUD_ROUTINE.md`; a cloud session's pull request is merged by whoever comes next.
 - **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
   repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
   fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the

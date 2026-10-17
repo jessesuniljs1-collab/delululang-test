@@ -2,6 +2,22 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "effortLevel": "xhigh",
   "modelSettings": {
-    "claude-opus-5-5": { "effortLevel": "xhigh" }
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
+    }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 60,
+            "command": "git fetch -q origin; git log --oneline -n 20 HEAD..origin/master; git branch -r --list origin/claude/*"
+          }
+        ]
+      }
+    ]
   }
 }

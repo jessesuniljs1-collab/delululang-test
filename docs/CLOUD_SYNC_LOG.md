@@ -3491,3 +3491,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `editor_contract.rs` ties the extension's version to it) and the CHANGELOG's `## [2.0.0]`; (e) the fresh-history
   snapshot (no-reply author), tag `v2.0.0`, `RELEASES=on`, verify the archives and attestations, publish; (f) this
   repository private as the archive, after verifying; (g) the final report (the prompt's §7).
+
+### 2026-10-17 — interactive cloud sessions continue the work too; a start-up hook fetches GitHub (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `5d4f6a4`
+- Commits: (1) this entry's commit
+- Files and folders: M `CLAUDE.md`, `docs/CLOUD_ROUTINE.md`, `HANDOFF.md` (§11.1), `.claude/settings.json` (a `SessionStart`
+  hook: `git fetch -q origin`, the commits `origin/master` has that the session lacks, the `origin/claude/*` branches — so
+  every session, laptop or cloud, sees what came in before it does anything), `docs/assistant-memory/*`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **What: *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."*** An interactive cloud session without a narrower request follows `docs/CLOUD_ROUTINE.md` like
+  a routine run; it pushes its own branch and opens a pull request, which the next session merges after reading its CI.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as two entries above — the launch (laptop), first deciding where development continues after it.

@@ -41,11 +41,15 @@ everything using survey and doctor"*).
   routine run found none — check with `command -v gh`, and read CI with the GitHub MCP tools either way
   (`docs/CLOUD_ROUTINE.md` step 3). The VM can fetch GitHub release assets only from this repository.
   Run `cargo fetch --locked` once before the suite: `egress_features` needs every platform's crates.
+- **The owner, 2026-10-17:** *"Not just routine or scheduled task runs, I will be using claude code cloud sessions also occasionally using test GitHub repo … I don't want delululang development and testing and addition of new features to be stopped just because of my lap not available and I am busy with other projects."* So an **interactive cloud session** with no narrower request from him continues
+  DeluluLang exactly as a routine run does: `docs/CLOUD_ROUTINE.md` from step 1, its work order step 4 (the release
+  program, then features, tests and fixes), every verified slice pushed and recorded. Development never waits for the laptop.
 - **A routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master` — since 2026-10-17 the on-demand routine
   `trig_01HFG6usfzmDAPQigiDu9DLq` (created paused; the owner switches it on when he cannot use the laptop; Opus 5.5 at
   xhigh through `.claude/settings.json`; it does not launch — D-V2-146). **An interactive
   cloud session** can push only its own branch → push, open a pull request into `master`, and record the
-  change in `docs/CLOUD_SYNC_LOG.md` in the same pull request.
+  change in `docs/CLOUD_SYNC_LOG.md` in the same pull request. The next session — laptop, routine or cloud — reads that
+  branch's CI and merges it (`docs/CLOUD_ROUTINE.md` step 1, every branch), so no session's work is stranded.
 - CI, where `gh` exists (the laptop): `gh run list -R jessesuniljs1-collab/delululang-test`, `gh run view <id> --log`, a job's log via
   `gh api repos/jessesuniljs1-collab/delululang-test/actions/jobs/<job-id>/logs`. Manual runs:
   `gh workflow run ci.yml --ref <branch> -f jobs=everything|heavy|heavy-gates|miri-slow`; also
