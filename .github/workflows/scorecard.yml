@@ -1,0 +1,48 @@
+# OpenSSF Scorecard (D-V2-144): how the public repository measures against the supply-chain checks — pinned
+# dependencies, branch protection, token permissions, dangerous workflows, signed releases and the rest — published
+# to the OpenSSF API and to this repository's code-scanning alerts. A measurement, not a claim: SECURITY.md §6 states
+# no floor until the scores are read.
+#
+# It runs only in the public repository (jessesuniljs1-collab/DeluluLang): in the development repository it would
+# publish a score for a repository that is not the project's home. Scorecard's publishing rules shape the file — one
+# job, read-only permissions at the top, only the steps its validator accepts, the action pinned by commit.
+name: scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "17 3 * * 2"
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    if: github.repository == 'jessesuniljs1-collab/DeluluLang'
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run the analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - name: Keep the results
+        uses: actions/upload-artifact@v6
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 30
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif

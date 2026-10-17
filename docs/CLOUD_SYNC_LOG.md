@@ -3331,3 +3331,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing.
 - For the laptop's memory: nothing new beyond step (a)'s.
 - Open / next: P9-05 (c)'s static half; the path in the chain's record (its own slice); (d) with a non-GET primitive.
+
+### 2026-10-17 — the archive's notices and SBOM; the GPL image never distributed; the release's build reusable (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `bfb5a84`
+- Commits: (1) this entry's commit
+- Files and folders: A `scripts/third-party-notices.py`, `.github/workflows/release-build.yml`,
+  `.github/workflows/scorecard.yml`; M `scripts/package-toolchain.sh`, `.github/workflows/release.yml`,
+  `crates/delulu/tests/distribution.rs`, `CHANGELOG.md`, `HANDOFF.md` (§1.1, the destination),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-143, D-V2-144), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **What** (`V2_LOG.md`; D-V2-143, D-V2-144): notices and an SBOM in every archive, legal files required, the image never
+  distributed, the release's build in a reusable workflow, Scorecard on the public repository.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: on the laptop — the generator for four targets, the packaging end to end on Windows, `distribution.rs`.
+  CI: this commit's push run and a release dry run (`workflow_dispatch`), read in the next commit.
+- Redo on the laptop: nothing.
+- For the laptop's memory: the empty `DeluluLang` repository is the destination (`HANDOFF.md` §1.1).
+- Open / next: the remaining decisions (SECURITY.md and the repository's controls at its creation, rustfmt, a code of
+  conduct, the root-issuance default, RW 4.19, P8-04 (c)); the WSL and editor checks; the scheduled task; the release.

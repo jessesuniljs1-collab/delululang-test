@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the archive's notices and bill of materials, 2026-10-17
+
+- **Added (D-V2-143): every toolchain archive carries `THIRD-PARTY-NOTICES.txt` and `SBOM.cdx.json`** — the licence and
+  notice texts of every crate the binary links, the C code they bundle and the Rust standard library, and the same crates
+  as a CycloneDX bill of materials, generated for the archive's target from the build's own graph. Packaging now refuses
+  to build an archive without `LICENSE`, `NOTICE`, `TRADEMARK.md`, `README.md`, `CHANGELOG.md` or `SECURITY.md`, or with
+  a linked crate whose licence it cannot show.
+- **Changed (D-V2-144):** the release's build and attestation run in a reusable workflow (`release-build.yml`), so an
+  archive's provenance names it as the signer.
+
 ## Unreleased — network grants scoped to paths, 2026-10-17
 
 - **Added (P9-05 (b), D-V2-139): a path can be narrowed, never widened.** A delegation can narrow a host to its paths —

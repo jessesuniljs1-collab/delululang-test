@@ -17,6 +17,13 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").canonicalize().expect("repo root")
 }
 
+/// The release, as its two files say it: `release.yml` (the triggers, the draft release) and the reusable
+/// `release-build.yml` it calls (the build, the attestation, the install gate — SLSA Build L3, D-V2-144).
+fn release_workflows() -> String {
+    read(".github/workflows/release.yml") + "
+" + &read(".github/workflows/release-build.yml")
+}
+
 fn read(rel: &str) -> String {
     let p = root().join(rel);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} must be readable: {e}", p.display()))
@@ -40,6 +47,19 @@ fn the_packaging_script_ships_the_portable_build() {
     );
     for owed in ["LICENSE", "NOTICE", "TRADEMARK.md"] {
         assert!(s.contains(owed), "the archive must carry {owed} — a binary alone is not a distribution");
+    }
+    // D-V2-143: required, not copied "if present" — `test -f "$f" && cp` skipped a missing LICENSE without a word —
+    // and beside them the notices of everything the binary links, generated from the build's own graph.
+    assert!(!s.contains(r#"test -f "$f" && cp"#), "a missing legal file must stop the packaging, not be skipped");
+    assert!(s.contains(r#"refusing to package a distribution without it"#), "a missing legal file stops the packaging");
+    assert!(
+        s.contains("scripts/third-party-notices.py") && s.contains("THIRD-PARTY-NOTICES.txt"),
+        "the archive must carry the third-party notices of what the binary links"
+    );
+    assert!(s.contains("--sbom \"$STAGE/SBOM.cdx.json\""), "the archive must carry its SBOM (SECURITY.md §6)");
+    let gen = read("scripts/third-party-notices.py");
+    for rule in ["--no-default-features", "\"net\"", "\"-e\", \"normal\"", "return 1"] {
+        assert!(gen.contains(rule), "the generator counts the portable build's linked graph and refuses a gap: `{rule}`");
     }
 }
 
@@ -204,7 +224,7 @@ fn the_install_page_carries_the_gate_the_release_workflow_runs() {
     let gate = read("scripts/check-install.sh");
     assert!(gate.contains("install-gate") && gate.contains("eval \"$BLOCK\""), "the gate runs the page's block");
     assert!(gate.contains("set -euo pipefail"), "a step that fails must fail the gate");
-    let wf = read(".github/workflows/release.yml");
+    let wf = release_workflows();
     assert!(wf.contains("bash scripts/check-install.sh"), "the release workflow runs the gate");
     assert!(wf.contains("bash scripts/package-toolchain.sh"), "the release workflow builds with the same script");
 }
@@ -214,7 +234,7 @@ fn the_install_page_carries_the_gate_the_release_workflow_runs() {
 /// even then only a draft, which a person publishes.
 #[test]
 fn the_release_workflow_publishes_only_a_draft_and_only_when_the_owner_says() {
-    let wf = read(".github/workflows/release.yml");
+    let wf = release_workflows();
     assert!(
         wf.contains("if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASES == 'on'"),
         "the release job must be gated on a tag AND the owner's switch"
@@ -279,6 +299,6 @@ fn the_version_has_its_changelog_section_and_a_tag_without_one_is_refused() {
         changelog.lines().any(|l| l.starts_with(&format!("## [{version}]"))),
         "CHANGELOG.md has no `## [{version}]` section for the version this tree builds"
     );
-    let wf = read(".github/workflows/release.yml");
+    let wf = release_workflows();
     assert!(wf.contains("The tag has its CHANGELOG section"), "the release workflow checks the tag's section");
 }

@@ -342,6 +342,11 @@ The CI runs that followed the first push — the first six, each read and record
 `docs/archive/v1/HANDOFF_HISTORY.md` (§1.1's run rows) and, run by run, in
 `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9; every V2 run is in `docs/DELULULANG_V2/V2_LOG.md`.
 
+**The destination exists (found 2026-10-17):** `github.com/jessesuniljs1-collab/DeluluLang`, created by the owner on
+2026-07-03, public, **empty** (no commit; default branch `main`). Under the owner's commission of 2026-10-17 it is the
+project's public home: the four items below are decided by the head chef (D-V2-144 and the release record), and it
+receives a fresh history — never this one.
+
 **Before the final public repository — a gate, not a to-do list.** This testing repository has been
 public since 2026-09-17, so everything below is already visible here. **Before the final public
 repository is created, added as a remote, or pushed to, put this list and the suggestions after it in

@@ -3528,6 +3528,70 @@ through `8cae6a1`), and does it still serve a public release.
 
 None is revised. One follow-up is carried into the release checks: D-V2-59's documentation note.
 
+## D-V2-143 — The licence stays Apache-2.0 (D27); every archive carries the notices and the bill of materials of everything its binary links, generated from the build's own graph, and refuses to package without them; the GPL microVM guest image is never distributed — the user builds it from pinned sources — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** The commission asks to resolve "the undecided licence". It is not undecided: the owner chose Apache-2.0 on
+2026-07-24 (D27 — `LICENSE`, `NOTICE`, `TRADEMARK.md`, `GOVERNANCE.md`); the head chef misreported it that morning
+(V2_LOG, 2026-10-17). The commission also asks for MIT, Apache-2.0 and both to be weighed, third-party obligations met,
+and the GPL kernel in the microVM image (D-NE-27, PS-C-05) decided.
+
+**Decision.**
+1. **Apache-2.0 stays**, weighed against the owner's own intent of 2026-07-24 (HANDOFF §11.1: free to use and sell by
+   anyone; the creator's attribution riding with every version and build; the name protected; a patent grant for a
+   language aimed at robots). Apache-2.0's §4(d) makes a NOTICE travel with every redistribution — the legal form of that
+   attribution — and its §3 grants patents. **MIT alone** has no patent grant and no NOTICE to carry. **MIT OR
+   Apache-2.0** (the Rust convention) would let a redistributor take the MIT branch and drop the NOTICE — against the
+   owner's stated intent. Every linked crate's licence is compatible (`deny.toml`'s allow-list, checked on every push).
+2. **Third-party notices in every archive** (`scripts/third-party-notices.py` → `THIRD-PARTY-NOTICES.txt`): exactly the
+   portable build's linked graph for the archive's target (`cargo tree -p delulu --no-default-features --features net -e
+   normal --target T` — no build-time tool, no Python-capable build's crates); each crate's own licence and NOTICE files,
+   a REUSE `LICENSES/` directory's (the chosen licence's only), the licences of the C code `libffi-sys` and `ittapi-sys`
+   bundle, and the Rust standard library's copyright notice; where a crate ships no licence file, the canonical text of
+   its declared licence from the Rust toolchain's own copy, with its copyright holders as its `Cargo.toml` declares them;
+   `ittapi` from its upstream project's text. **A crate whose licence cannot be shown stops the packaging (exit 1)** —
+   witnessed: the first run refused `ittapi` and `ittapi-sys` until their REUSE texts were read. Two crates are
+   `GPL-2.0-only OR BSD-3-Clause` (Intel's profiling API, through wasmtime's default `profiling` feature) and are used under
+   BSD-3-Clause; no GPL text is shipped. Measured: Windows 257 linked packages and 150 distinct texts; Linux glibc and musl 257 and
+   156; macOS arm64 253 and 150.
+3. **A bill of materials per archive** (`SBOM.cdx.json`, CycloneDX 1.5, the same graph): 248 components on Windows, each
+   with its package URL, declared licence and `Cargo.lock`'s sha256. `docs/release/SBOM-1.0.json` was 1.0's, direct
+   dependencies only; SECURITY.md §6's "SBOM per release" is true per archive from this release on.
+4. **The legal files are required.** `package-toolchain.sh` copied `LICENSE`, `NOTICE`, `TRADEMARK.md`, `README.md`,
+   `CHANGELOG.md` and `SECURITY.md` with `test -f && cp` — a missing `LICENSE` was skipped without a word; now it stops the
+   packaging. `distribution.rs` pins both (witnessed red against the old script).
+5. **The microVM guest image is never distributed by this project.** It holds a GPL-2.0 Linux kernel (`vmlinux`).
+   Distributing it obliges the complete corresponding source for every copy (GPL-2.0 §3) — shipped beside it, or offered
+   in writing for three years — and the kernel's notices with it: an obligation the project has no infrastructure to honour
+   reliably, for an artifact anyone with KVM can build. So the user builds it: `scripts/microvm/build-image.sh` fetches the
+   pinned, sha256-checked kernel source (D-V2-39) and builds it reproducibly (CI's `microvm-reproducible` job). No
+   workflow uploads it (only `release-build.yml` uploads, and only the toolchain archives). D-NE-27 is resolved as *never
+   distributed by DeluluLang*; PS-C-05 is closed as *won't ship, by decision*. This is the conservative path that needs no
+   legal judgement.
+6. **One legal uncertainty, named rather than resolved.** DeluluLang has been written largely by an AI under the owner's
+   direction; the copyright status of AI-assisted work differs between jurisdictions and is unsettled. `NOTICE` names Jesse
+   Sunil as the original creator and copyright holder, by his instruction; the licence's grant to users does not depend on
+   the question. Qualified legal advice is the owner's to seek if he wants certainty; nothing here waits for it.
+
+## D-V2-144 — SECURITY.md's pending controls, decided (first part): the release's build and attestation move into a reusable workflow, for SLSA Build Level 3, claimed only once verified; OpenSSF Scorecard measures the public repository — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** SECURITY.md §6 marks five controls `PENDING-PUBLIC`. GitHub's documentation (read 2026-10-17, *Using
+artifact attestations and reusable workflows to achieve SLSA v1 Build Level 3*): artifact attestations from hosted
+runners give Build Level 2; Level 3 needs the build and its attestation in a reusable workflow, verified with
+`gh attestation verify --signer-workflow`.
+
+**Decision (this part).**
+1. **`release-build.yml`**, a reusable workflow (`workflow_call`), holds the release's matrix build, the archive checks,
+   the attestation (a `v*` tag's run only, as before) and the install gate; `release.yml` keeps its triggers, its dry
+   run and its draft release, calls it, and grants it `id-token: write` and `attestations: write`. **Level 3 is claimed
+   only after the first release's archives verify with `--signer-workflow
+   jessesuniljs1-collab/DeluluLang/.github/workflows/release-build.yml`**; until then SECURITY.md says Level 2.
+2. **`scorecard.yml`** runs OpenSSF Scorecard on the public repository only (`if: github.repository ==
+   'jessesuniljs1-collab/DeluluLang'`), publishing the results and uploading them to code scanning;
+   `ossf/scorecard-action` pinned by commit (`2d1146689b8c…`, v2.4.4 — v2.5.0 was five days old). No floor is claimed
+   until scores are read.
+3. **The rest** — the disclosure channel, review, signed commits, branch protection, the CODEOWNERS handle — is decided
+   with the public repository's creation (the second part of this decision).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

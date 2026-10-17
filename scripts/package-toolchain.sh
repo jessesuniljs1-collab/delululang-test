@@ -70,10 +70,20 @@ mkdir -p "$STAGE/bin" "$STAGE/examples"
 cp "$BIN" "$STAGE/bin/"
 
 # Everything a recipient is legally and practically owed. A binary with no LICENSE beside it is not
-# a distribution anyone should accept.
+# a distribution anyone should accept — so each is REQUIRED: a tree missing one stops here, never ships
+# without it (D-V2-143; `test -f && cp` skipped a missing file without a word).
 for f in LICENSE NOTICE TRADEMARK.md README.md CHANGELOG.md SECURITY.md; do
-  test -f "$f" && cp "$f" "$STAGE/"
+  test -f "$f" || { echo "no $f in the tree — refusing to package a distribution without it"; exit 1; }
+  cp "$f" "$STAGE/"
 done
+# D-V2-143: and the notices of everything the binary links — each crate's licence and NOTICE texts, the
+# C code a crate bundles, Rust's standard library — from THIS build's own graph (`cargo tree` for the
+# portable features and this target). The generator refuses (exit 1) if any linked crate's licence
+# cannot be shown, and `set -e` stops the packaging with it.
+PY=python3
+"$PY" -c "" 2>/dev/null || PY=python
+# The same graph as a CycloneDX bill of materials (SECURITY.md §6: an SBOM per release, of what the binary links).
+"$PY" scripts/third-party-notices.py "$STAGE/THIRD-PARTY-NOTICES.txt" --target "$HOST" --sbom "$STAGE/SBOM.cdx.json"
 cp examples/*.delulu "$STAGE/examples/" 2>/dev/null || true
 # The package examples too, so `delulu run <dir>` — how real programs are shipped — can be tried
 # from the archive rather than only read about.
@@ -134,6 +144,11 @@ holds no authority of its own, and the host performs each thing it asks for
 under the same grants. 'delulu sandbox probe' says what this machine can
 confine. The morphs in morphs/ are found without installing anything:
 'delulu morph list', then 'delulu morph render <file> --to compact-ai'.
+
+Licences: LICENSE and NOTICE are DeluluLang's (Apache-2.0; TRADEMARK.md for the
+name). THIRD-PARTY-NOTICES.txt carries the licence and notice texts of every
+crate the binary links, the C code they bundle, and the Rust standard library;
+SBOM.cdx.json lists the same crates as a CycloneDX bill of materials.
 
 Verify what you downloaded before trusting it:
   sha256sum -c SHA256SUMS      (Linux/macOS)

@@ -1,0 +1,85 @@
+# The release's build, as a REUSABLE workflow (D-V2-144): SLSA v1.0 Build Level 3 asks that the build and its
+# provenance come from a workflow the calling repository's other jobs cannot alter, which GitHub's artifact
+# attestations give when the attesting job runs in a reusable workflow — verified per archive with
+# `gh attestation verify FILE -R jessesuniljs1-collab/DeluluLang --signer-workflow
+# jessesuniljs1-collab/DeluluLang/.github/workflows/release-build.yml`. Called by `release.yml` (its triggers, its
+# dry run, its draft release); nothing here runs on its own. `github.ref` is the caller's, so a dry run attests nothing
+# and uploads nothing, exactly as before (D-NE-7).
+name: release-build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+      # P5-04: a tag is a release, and a release says what changed — `## [X.Y.Z]` in CHANGELOG.md for
+      # the tag `vX.Y.Z`, checked before anything is built for it.
+      - name: The tag has its CHANGELOG section
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: grep -q "^## \[${GITHUB_REF_NAME#v}\]" CHANGELOG.md || { echo "CHANGELOG.md has no '## [${GITHUB_REF_NAME#v}]' section for ${GITHUB_REF_NAME}"; exit 1; }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `dist/` inside the checkout (the script's default, and gitignored): a relative path is the
+      # one spelling every step below agrees on, the Windows runner's bash included.
+      - name: Package the portable toolchain
+        shell: bash
+        env:
+          DELULU_BUILD_COMMIT: ${{ github.sha }}
+        run: bash scripts/package-toolchain.sh
+      - name: The archive is for the target this job claims
+        shell: bash
+        run: ls -l dist && test -f dist/delulu-*-${{ matrix.target }}.tar.gz
+      # The binary names the build it came from, and the commit is the one this run checked out.
+      - name: The binary names its target and commit
+        shell: bash
+        run: |
+          bin=$(ls -d dist/delulu-*-${{ matrix.target }}/bin)
+          v=$("$bin/delulu" --version --json)
+          echo "$v"
+          echo "$v" | grep -q '"target": "${{ matrix.target }}"'
+          echo "$v" | grep -q '"commit": "${{ github.sha }}"'
+      # The provenance of each archive: which repository, commit and workflow built it. Verify a
+      # download with `gh attestation verify <file> -R <this repository>`. A tag's run only: the
+      # attestation log is public and permanent (D-NE-7).
+      - name: Attest the archive's provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/delulu-*.tar.gz
+      # P5-05's gate: verify → unpack → PATH → new → test → authority → run → run --sandbox, exactly as
+      # INSTALL.md writes it — the script runs the commands out of INSTALL.md itself, so the page
+      # cannot drift from what was tested.
+      - name: Install it the way INSTALL.md says
+        shell: bash
+        run: bash scripts/check-install.sh dist/delulu-*-${{ matrix.target }}.tar.gz
+      # Kept for the release job — a tag's run only; a dry run distributes nothing (D-NE-7).
+      - name: Keep the archive for the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v6
+        with:
+          name: delulu-${{ matrix.target }}
+          path: |
+            dist/delulu-*.tar.gz
+            dist/delulu-*.tar.gz.sha256
+          if-no-files-found: error
+
