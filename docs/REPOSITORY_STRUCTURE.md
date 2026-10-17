@@ -660,7 +660,9 @@ through a morph at all.
     second UID: holds on POSIX, absent on 9p.
 
 The two dated disk-cleanup records that used to be listed here are now in
-`docs/archive/v1/maintenance/`.
+`docs/archive/v1/maintenance/`. Newer ones are in `docs/maintenance/`:
+`docs/maintenance/DISK-CLEANUP-2026-10-17.md` — the laptop's 178 GB Rust build cache after the cloud
+period and two spent build clones: what was deleted, how each was checked first, and what was kept.
 
 ### 5.9 `measurements/` and `rfcs/`
 

@@ -3200,7 +3200,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `doctor --check` 26 checks passed, KVM available. After this entry's last edit: in the commit message.
 - Verified (CI, read): `b82a145`'s push run `38739567829` — success on every job (`miri-slow` and `heavy-gates` skipped on a
   push); the nightly `38869800819` on `b82a145` (2026-10-16) — success on every job, `miri-slow` on all three crates and
-  `heavy-gates` included; the nightly `39013724751` (2026-10-17) was still running when this entry was written.
+  `heavy-gates` included; the nightly `39013724751` (2026-10-17) was still running when this entry was written — read
+  later the same day: success on every job, `miri-slow` and `heavy-gates` included. This entry's own commit, `ed120f1`:
+  push run `39021046478` — success on every job.
+- **Afterwards the same day — a disk cleanup** (the owner: *"Delete unwanted things. Log things deleted in .md file"*):
+  `D:\nelan` 180 GB → 5.07 GB, almost all of it the Rust build cache `target` (178.4 GB, `cargo clean`), plus two spent
+  build clones and their cache. Recorded in `docs/maintenance/DISK-CLEANUP-2026-10-17.md`.
 - **Branches** — the owner, 2026-10-17: *"claude routines made lot of branches. If not needed, should we remove them"*; asked
   to choose, the owner chose to delete the 23 merged branches and keep two. Deleted from GitHub, each checked with `git merge-base
   --is-ancestor <branch> origin/master` immediately before (nothing lost: every tip is in `master`'s history). To recreate
