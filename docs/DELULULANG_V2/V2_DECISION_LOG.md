@@ -3733,6 +3733,29 @@ public repository. The public history starts fresh (§1.1), so only the tree mat
 the word itself; `AGENTS.md` gives the check (`grep -ci 'graph''ify'`). `git grep -i` over the tracked tree finds nothing
 (2026-10-17). The old commits that spell it stay in this development history, which is never rewritten (`HANDOFF.md` §1).
 
+## D-V2-153 — The public repository: its controls now, and development moves there at the launch — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** `HANDOFF.md` §1.1 names `jessesuniljs1-collab/DeluluLang` (public, empty, default branch `main`, created
+2026-07-03) as the final repository; the commission delegates its setup, and the launch cannot start before it is decided
+where development continues afterwards — the push rule, the routine, cloud sessions and the start-up hook all name a
+repository.
+
+**Decision.**
+1. **Controls, set and read back on 2026-10-17** (the owner's `gh` login, scopes `repo`/`workflow`): private vulnerability
+   reporting **on** (it was off — the code of conduct's channel, D-V2-151, needs it); secret scanning and push protection
+   **on** (already); Dependabot alerts **on**. Branch protection of `main` — no force-push, no deletion — is set as soon as
+   `main` exists, at the snapshot push.
+2. **After the launch, development lives in the public repository**, on `main`, from the 2.0.0 fresh-history snapshot:
+   issues and pull requests from users arrive there, CI runs there on public runners, and the routine and cloud sessions
+   work where users can see it. A two-repository model (develop here, export snapshots there) would strand every outside
+   contribution. **`delululang-test` becomes the private development archive** once the release is verified: its history
+   is kept whole and never rewritten (the commission's limit), and every commit hash or run id cited in a record dated
+   before 2.0.0 refers to it — the snapshot's commit message and `HANDOFF.md` say so.
+3. **The cutover happens in the launch commit itself**, so the public tree states its own rules: `AGENTS.md`'s push rule
+   (origin = `DeluluLang`, branch `main`), `CLAUDE.md`, `docs/CLOUD_ROUTINE.md` (`master` → `main`), the `SessionStart`
+   hook (`origin/master` → `origin/main`); then, outside the tree, the laptop's `origin` and the routine's repository (by
+   the API, read back). Until that commit, nothing changes: this repository stays `origin`.
+
 ## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
 
 Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.

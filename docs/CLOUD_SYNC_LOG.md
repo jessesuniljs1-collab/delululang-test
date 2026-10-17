@@ -3505,3 +3505,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   a routine run; it pushes its own branch and opens a pull request, which the next session merges after reading its CI.
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next: as two entries above — the launch (laptop), first deciding where development continues after it.
+
+### 2026-10-17 — the public repository's controls; where development lives after the launch (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `218f471`
+- Commits: (1) this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-153), `HANDOFF.md` (§1.1 item 4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Outside the tree:** on `jessesuniljs1-collab/DeluluLang` (still empty) private vulnerability reporting switched ON and
+  Dependabot alerts ON; secret scanning and push protection were already ON — all four read back.
+- Open / next — the launch, in order: (1) `SECURITY.md` §1/§6 and CODEOWNERS (+ `governance.rs`), entrenched record;
+  (2) the cutover edits of D-V2-153 §3; (3) the 2.0.0 bump and CHANGELOG; (4) the snapshot push to `DeluluLang` `main`,
+  then branch protection; (5) tag `v2.0.0`, `RELEASES=on`, verify archives and attestations, publish; (6) the laptop's
+  `origin` and the routine switched to `DeluluLang`; `delululang-test` private; (7) the final report.
