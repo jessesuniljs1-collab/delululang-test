@@ -75,8 +75,10 @@ pub enum Denial {
     /// [`Denial::CertUnsupported`] because both mean "this build will not act on these bytes".
     CertMalformed { detail: String },
     /// DL1410 — the Guard: a delegated node used guarded authority with no permit. Carries the
-    /// matched rule and (in the message) the exact `delulu guard request …` escalation command.
-    GuardBlocked { node: GrantId, rule: String },
+    /// matched rule and (in the message) the exact `delulu guard request …` escalation command, which
+    /// asks for `wants` — the narrowest permit that covers the use (RW 4.65, `guard::narrowest_permit`)
+    /// — and for the rule only when the use's own item cannot be put in a command.
+    GuardBlocked { node: GrantId, rule: String, wants: Option<String> },
     /// DL1410 — the Guard at MINT time: a `Delegate`/`Attenuate` would hand guarded authority to a
     /// child with neither the owner code nor a covering permit. The message names BOTH ways forward
     /// (owner code for the principal; `delulu guard request` for an agent) — addendum §2.4.3.
@@ -296,14 +298,23 @@ impl Denial {
             ),
             // The Guard (addendum §3.3). DL1410's message MUST contain the exact request command
             // (dcg-style remediation); DL1412's MUST carry the principal's comment verbatim.
-            Denial::GuardBlocked { node, rule } => Diagnostic::error(
+            Denial::GuardBlocked { node, rule, wants } => Diagnostic::error(
                 "DL1410",
-                format!(
-                    "guard: delegated node `{}` needs approval to use `{rule}` (guarded, no permit) — \
-                     request access: delulu guard request {} --use {rule} --why \"<why>\"",
-                    node.as_str(),
-                    node.as_str()
-                ),
+                match wants.as_deref().filter(|w| *w != rule) {
+                    Some(wants) => format!(
+                        "guard: delegated node `{}` needs approval to use `{wants}` (rule `{rule}`: guarded, no \
+                         permit) — request access: delulu guard request {} --use {} --why \"<why>\"",
+                        node.as_str(),
+                        node.as_str(),
+                        crate::guard::hint_word(wants)
+                    ),
+                    None => format!(
+                        "guard: delegated node `{}` needs approval to use `{rule}` (guarded, no permit) — \
+                         request access: delulu guard request {} --use {rule} --why \"<why>\"",
+                        node.as_str(),
+                        node.as_str()
+                    ),
+                },
             ),
             Denial::GuardMintBlocked { parent, rule } => Diagnostic::error(
                 "DL1410",

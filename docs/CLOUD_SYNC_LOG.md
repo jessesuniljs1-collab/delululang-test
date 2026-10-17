@@ -3645,3 +3645,24 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   everything run and the release dry run on it are read and recorded as they finish.
 - Open / next: ordinary work on `master` (`docs/CLOUD_ROUTINE.md` step 4); keep `launch/2.0.0` current by merging
   `master` into it; the launch only when the owner says.
+
+### 2026-10-17 (night) — RW 4.65: a Guard refusal asks for the narrowest permit; the launch CI read (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `9ad8e9c`
+- Commits: (1) this entry's commit
+- Files and folders: M `crates/delulu-broker/src/guard.rs`, `crates/delulu-broker/src/diag.rs`,
+  `crates/delulu/src/brokerd.rs` (a test), `crates/delulu/tests/guard_e2e.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`
+  (4.65 closed), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **RW 4.65 closed:** DL1410's command asks for the narrowest permit that covers the use (`declassify:NAME@host:port`,
+  the file, `effect:<E>`), the rule beside it. An item a shell would split, expand or run never enters the command — the
+  item is the program's and the hint is pasted into shells. Witness red on the old code; two mutants red; `guard_e2e`
+  runs the printed command. clippy 0; Windows suite 2,244 passed (the 4 map-freshness tests green once the Survey was
+  regenerated).
+- **CI read (`delululang-test`):** the launch branch's `jobs=everything` runs — `39055892355` on `f34fea4` and
+  `39058514393` on `130193a` — **success on all 18 jobs each**, `miri-slow (delulu-broker)` included (2 h 54 min and
+  2 h 13 min); the release dry run `39058516429` on `130193a` **success** (four targets packaged and installed at 2.0.0,
+  the release job skipped — no tag). Master push runs `39057886362` (`424c391`), `39058210143` (`4681008`),
+  `39058694156` (`52071e5`), `39059809187` (`9ad8e9c`): success. CI does not run on pushes to `launch/2.0.0` or
+  `autosave/*` (it triggers on `master`/`main`); the launch branch is run by hand.
+- Open / next: RW 6.1 (CLI strings in the catalog); the launch waits for the owner's word.

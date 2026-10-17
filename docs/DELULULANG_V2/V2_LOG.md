@@ -6216,3 +6216,23 @@ extension; `evidence_claims`, `editor_contract`, `repository_structure`, `distri
 *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my
 repo."* Recorded in `AGENTS.md`'s push rule, `HANDOFF.md` §11.1 and the decision log (it outranks D-V2-153 §3 and the
 release procedure's steps 4–10). Nothing had been pushed to `DeluluLang`; the prepared release stays on `launch/2.0.0`.
+
+## 2026-10-17 (night) — RW 4.65: a Guard refusal asks for the narrowest permit
+
+**What.** `Denial::GuardBlocked` carries `wants`, the narrowest permit that covers the refused use
+(`guard::narrowest_permit`): the use's own item on its axis — `declassify:NAME@host:port` for a send, the file for a
+write — or `effect:<E>` for an op with no axis. DL1410's command asks for it and names the matched rule beside it; it
+asked for the rule, so one send's refusal told the agent to request `declassify:*`.
+
+**Found while making it.** The item is the program's — a file name, a destination — and the hint is a command agents
+paste into a shell: a file named `x$(…)` would have put a command substitution into it, run with the agent's authority,
+not the program's. So an item holding a character a shell splits, expands or runs is never put in the command (the rule
+is named instead, as before); one with a space is double-quoted; a path is written with `/`, the same path to the
+Guard's `path_norm` and one word in every shell.
+
+**Evidence.** `a_dl1410_hint_names_the_narrowest_permit_for_the_use` red on the old code (the hint read
+`--use declassify:*`), green after; the exact item, requested and approved, honors that send and refuses
+`foo@evil.example:443` (DL1410). `a_dl1410_hint_never_carries_an_item_a_shell_would_run`: nine hostile names fall back to
+the rule; falsified by two mutants (every character admitted → red; never quoted → red). `guard_e2e` now runs the
+command exactly as DL1410 prints it, and the approved one-file permit lets the write happen (Windows). clippy 0; the
+suite on Windows 2,244 passed, the 4 map-freshness tests red until the Survey was regenerated, then green.
