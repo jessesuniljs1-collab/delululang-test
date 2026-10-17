@@ -3285,3 +3285,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `final-public-repo-gate.md` (superseded), `delulu-licensing-intent.md`, `mutant-run-per-target.md` and the index
   updated; the same here, sanitized as this folder's README asks.
 - Open / next: the prompt's order — the audit, P9-05 step (a), then the decisions (each a `D-V2-nn`).
+
+### 2026-10-17 — P9-05 step (a): network grants scoped to paths (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `f2d9407`
+- Commits: (1) this entry's commit
+- Files and folders: A `crates/delulu-broker/src/netscope.rs`; M `crates/delulu-broker/src/lib.rs`,
+  `crates/delulu-broker/src/validate.rs`, `crates/delulu-runtime/src/broker.rs`, `crates/delulu-runtime/src/prim.rs`,
+  `crates/delulu-runtime/src/interp.rs`, `crates/delulu-runtime/src/egress.rs`, `crates/delulu-runtime/src/egress/tests.rs`,
+  `crates/delulu/src/openshell.rs`, `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/egress_cli.rs`,
+  `crates/delulu/tests/sandbox_openshell_cli.rs`, `CHANGELOG.md`, `skills/delulu/SKILL.md`, `docs/for-agents.md`,
+  `HANDOFF.md` (§11.5), `docs/REMAINING_WORK.md` (2.12), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-138),
+  `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **What** (`V2_LOG.md`, this date; D-V2-138): `net=HOST/PATTERN`, one reading at every check under every custody; an
+  ambiguous request path refused where a pattern decides; the special-use rule on the host part; the OpenShell export
+  refuses a path scope.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: on the laptop (Windows) — the new tests witnessed red first; seven mutants red; the gates in the commit message.
+  CI: this entry's push run, read in the commit that follows it.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (two traps); the laptop's `mutant-run-per-target.md` gains the
+  package-set lesson.
+- Open / next: P9-05 step (b), then (c); (d) with the first non-GET primitive.

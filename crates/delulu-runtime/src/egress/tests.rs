@@ -354,6 +354,39 @@ fn every_redirect_hop_is_checked_like_a_first_request() {
     }
 }
 
+/// P9-05 (a), D-V2-138: a path-scoped entry is judged on every hop — a redirect out of the granted path is refused as a
+/// redirect to an ungranted host is, and a path a server could read two ways is refused before anything is resolved. The
+/// query is not the path; a host granted whole reaches every path.
+#[test]
+fn a_path_scope_is_judged_on_every_hop() {
+    let r = FakeResolver::with(&[("a.example.com", &[PUBLIC]), ("b.example.com", &[PUBLIC])]);
+    let allow = ["a.example.com/v1/**", "b.example.com"];
+    let t = FakeTransport::answering(vec![redirect(302, "next"), redirect(301, "https://b.example.com/anything/../else"), ok("done")]);
+    let (rec, body) = get_with(&policy(&allow, &[]), "https://a.example.com/v1/start?q=/v2", &r, &t);
+    assert_eq!(body.as_deref(), Some("done"), "{:?}", rec.outcome);
+    let urls: Vec<String> = t.sent.borrow().iter().map(|s| s.url.clone()).collect();
+    assert_eq!(urls, ["https://a.example.com/v1/start?q=/v2", "https://a.example.com/v1/next", "https://b.example.com/anything/../else"]);
+    for (first, to, why) in [
+        ("https://a.example.com/v2/x", None, Reason::NotAllowlisted),
+        ("https://a.example.com/", None, Reason::NotAllowlisted),
+        ("https://a.example.com/v1/x", Some("/v2/x"), Reason::NotAllowlisted),
+        ("https://a.example.com/v1/x", Some("../v2"), Reason::Malformed("")),
+        ("https://a.example.com/v1/..%2Fv2", None, Reason::Malformed("")),
+        ("https://a.example.com/v1/..;/v2", None, Reason::Malformed("")),
+        ("https://a.example.com/v1//x", None, Reason::Malformed("")),
+    ] {
+        let script = match to {
+            Some(to) => vec![redirect(307, to), ok("never")],
+            None => vec![ok("never")],
+        };
+        let t = FakeTransport::answering(script);
+        let (rec, body) = get_with(&policy(&allow, &[]), first, &r, &t);
+        assert_eq!(body, None, "{first} -> {to:?}");
+        assert_eq!(rec.outcome.as_ref().unwrap_err().code(), why.code(), "{first} -> {to:?}: {:?}", rec.outcome);
+        assert_eq!(t.sent.borrow().len(), usize::from(to.is_some()), "{first} -> {to:?}: the refused hop is never sent");
+    }
+}
+
 /// A request's headers, as a program's map hands them over.
 type Headers = Vec<(String, String)>;
 

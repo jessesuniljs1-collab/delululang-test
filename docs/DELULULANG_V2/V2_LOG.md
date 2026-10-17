@@ -5980,3 +5980,35 @@ requires of the development repository.
 and `heavy-gates` skipped on a push).
 
 **Next:** the prompt's §1 — the audit of the repository's state — then P9-05 step (a).
+
+## 2026-10-17 — P9-05 step (a): network grants scoped to paths (D-V2-138)
+
+**What.** The first engineering of the owner's commission: `net=HOST/PATTERN` (`*` one segment, `**` the rest, last
+only), read by one module, `delulu_broker::netscope`, at every place a `net` entry is read — the grant parser, the
+runtime's first check (DL0904 naming the host or the path), the broker-secret pre-check, the egress client's every hop
+(redirects included) and the broker's `Net` use check (by its host part, so `--broker daemon` and embedded custody agree —
+NET-WILDCARD-1's question asked of a path). Where a pattern decides, a path a server could read two ways is refused, never
+matched. The special-use rule reads the host part (`net=127.0.0.1/x/**` refused, with the `net.special=` repair). The
+OpenShell export refuses a path scope rather than widen it to the host. User docs: `CHANGELOG.md`, the Agent Skill's grant
+block, `docs/for-agents.md`; `delulu toolchain`'s grant forms (`GRANT_FORMS`) name `net=HOST[/PATH]`.
+
+**Every reader found first** (`grep` over `scopes.net`, `grants.net`, `root.net`, `host_matches`): the runtime's mint
+(exact string — unchanged, so the program names the scope it gets), `host_allowed` (now `url_verdict`/`url_allowed`), the
+egress hop, `interp::send_broker_secret`'s pre-check (found by the grep, not by the design — without it a path outside the
+scope would have had the broker release the bytes and record a `send` before the client refused the request), the broker's
+use check, `accept_manifest` (copies a manifest's entries unparsed, so the matcher fails closed: an entry whose pattern
+does not parse matches nothing), the dependency pins (exact sets — sound with paths), `within.rs` (string sets — step (c)),
+the OpenShell export.
+
+**Evidence.** Tests written first and witnessed red: the egress hop test (`a_path_scope_is_judged_on_every_hop` — the
+in-scope request was refused by the old matcher), the broker's host-part test (red against the exact comparison). New
+tests: `netscope` (4 — the grammar, matching, ambiguity, the verdicts), the grant parser
+(`a_net_grant_may_name_a_path_pattern`), the hop test, `broker_cli`'s daemon parity
+(`a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded`) and its broker-secret case (no `send` for a path
+outside the scope), `egress_cli`'s loopback end to end at L0 and from a guest
+(`a_path_scoped_grant_reaches_its_paths_and_no_other` — TLS for the path, nothing connects for another), the export's
+refusal row. **Falsified:** M1–M5, M7 and M8 red, M6 witnessed red (D-V2-138); the stale-binary scan then found the M2 build
+of the broker's unit-test binary still on disk (another package set names it differently) — rebuilt, scanned clean
+(`HANDOFF.md` §11.5). Gates: in the commit message.
+
+**Next:** P9-05 step (b) — the broker's op and record carry the path; `⊑` by containment, in the Z3 model with mutants.

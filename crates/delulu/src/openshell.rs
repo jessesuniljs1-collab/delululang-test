@@ -288,6 +288,13 @@ pub(crate) fn export(
                     omitted.push(json!({ "grant": spec, "why": "the program's authority names no Http capability" }));
                     continue;
                 }
+                // P9-05 (a), D-V2-138: a path-scoped grant is not mapped yet — its host alone would widen it to every path.
+                if delulu_broker::netscope::split(value).1.is_some() {
+                    return Err(Refused::Unrepresentable(format!(
+                        "`--grant {spec}` names a path; this export does not map a path scope yet, and the host alone would \
+                         grant every path on it"
+                    )));
+                }
                 let Some(h) = endpoint_host(spec, value)? else {
                     omitted.push(json!({
                         "grant": spec,

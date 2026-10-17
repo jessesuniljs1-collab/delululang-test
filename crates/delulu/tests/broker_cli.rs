@@ -283,6 +283,22 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let o = daemon("badheader.delulu");
     assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
     assert!(sends(&records()).is_empty(), "nor for a header no request may carry: {:#?}", records());
+    // P9-05 (a), D-V2-138: a path outside the capability's path scope is refused at the call (DL0904) before the broker is
+    // asked — the bytes never leave it, and no `send` is recorded for a request that was never made.
+    let offpath = format!(
+        "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1/probe/**\"])\n    \
+         let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+         match h.get_with_secret(\"https://127.0.0.1:{port}/elsewhere\", hs, \"Authorization\", tok) {{\n        \
+         Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+    );
+    std::fs::write(cwd.join("offpath.delulu"), offpath).unwrap();
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["run", "offpath.delulu", "--grant", "console", "--grant", "net.special=127.0.0.1/probe/**", "--grant", &grant, "--no-prompt", "--broker", "daemon"],
+    );
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside every path"), "{}{}", stdout(&o), stderr(&o));
+    assert!(sends(&records()).is_empty(), "the broker was asked nothing for a path outside the scope: {:#?}", records());
     assert!(l.accept().is_err(), "nothing connected");
     // The audience: the broker hands the bytes to the egress client, the request goes out, the chain says so.
     let accepter = std::thread::spawn(move || {
@@ -445,6 +461,58 @@ fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
         .map(|r| (r["decision"].as_str().unwrap_or("").to_string(), r["target"].as_str().unwrap_or("").to_string()))
         .collect();
     assert!(uses.first().is_some_and(|(d, _)| d == "allow"), "the host's use is allowed and recorded: {v:#}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// P9-05 (a), D-V2-138: a path-scoped `net` grant means the same under the daemon as embedded — NET-WILDCARD-1's question
+/// asked of a path. Granted `net.special=*.example.invalid/v1/**` (`.invalid` never resolves, so nothing leaves the
+/// machine), a request under `/v1` reaches the egress client under both custodies, and the daemon's chain holds the host's
+/// `use allow`; a request for another path, or for a path spelled two ways, is refused DL0904 at the call under both.
+#[test]
+fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
+    let base = std::env::temp_dir().join(format!("delulu_bpath_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let scope = "*.example.invalid/v1/**";
+    for (file, path) in [("in.delulu", "/v1/items?page=/v2"), ("out.delulu", "/v2/items"), ("twisted.delulu", "/v1/../v2/items")] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"{scope}\"])\n    \
+             match h.get(\"https://api.example.invalid{path}\") {{\n        Ok(b) => out.println(\"fetched\")\n        \
+             Err(e) => out.println(\"not fetched\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let grant = format!("net.special={scope}");
+    let run = |file: &str, daemon: bool| {
+        let mut args = vec!["run", file, "--grant", "console", "--grant", grant.as_str(), "--no-prompt"];
+        if daemon {
+            args.extend(["--broker", "daemon"]);
+        }
+        delulu_in(&cwd, &state, &args)
+    };
+    let check = |daemon: bool| {
+        let o = run("in.delulu", daemon);
+        assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "daemon={daemon}: {}", stderr(&o));
+        assert!(!stderr(&o).contains("DL0904"), "daemon={daemon}: {}", stderr(&o));
+        for (file, words) in [("out.delulu", "outside every path the grant names"), ("twisted.delulu", "refused under a path scope")] {
+            let o = run(file, daemon);
+            assert!(stderr(&o).contains("DL0904") && stderr(&o).contains(words), "daemon={daemon}, {file}: {}", stderr(&o));
+            assert!(!stdout(&o).contains("fetched"), "daemon={daemon}, {file}: the program never got an answer: {}", stdout(&o));
+        }
+    };
+    check(false);
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    check(true);
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+    let allowed = v["records"].as_array().unwrap().iter().any(|r| r["target"] == "api.example.invalid" && r["decision"] == "allow");
+    assert!(allowed, "the host's use is allowed and recorded under the daemon: {v:#}");
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

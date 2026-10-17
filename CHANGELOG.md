@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — network grants scoped to paths, 2026-10-17
+
+- **Added (P9-05 (a), D-V2-138): a `net` grant may name the paths it reaches.** `--grant net=api.example.com/v1/**` (and
+  `net.special=HOST/PATTERN`) lets a program fetch from that host only under `/v1`: a pattern's segments are literals, `*`
+  (exactly one segment) or `**` (the rest, only last). The program asks for the same scope —
+  `root.http(["api.example.com/v1/**"])` — and a request outside it is refused at the call (DL0904, saying whether the host
+  or the path is outside), as is a redirect out of it (the run report's `not-allowlisted`). Where a path scope decides, a
+  path a server could read another way — a `.` or `..` segment, `//`, a `;`, an escaped `/`, `\`, `.`, `%` or `;` — is
+  refused, never matched; a pattern spelled so is refused at the grant. A plain `net=HOST` still reaches every path. The
+  special-use rule reads the host part, so `net=127.0.0.1/x/**` is refused like `net=127.0.0.1`, with the `net.special=`
+  repair. Under `--broker daemon` the grant means the same, and a secret is never fetched from the broker for a path outside
+  the scope; `delulu sandbox policy --format openshell` refuses a path-scoped grant rather than export its host alone.
+
 ## Unreleased — a secret's audience in the grant tree, 2026-10-15
 
 - **Fixed (NET-WILDCARD-1, D-V2-136): a pattern `net` grant now means the same under `--broker daemon` as embedded.**

@@ -2196,7 +2196,7 @@ impl Interp {
             return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
         };
         let url = prim::str_arg(argvals, 0, span)?;
-        if !url.starts_with("https://") || !prim::host_allowed(&url, allow) {
+        if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
             return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
         }
         let headers = prim::headers_arg(argvals, "get_with_secret", span)?;

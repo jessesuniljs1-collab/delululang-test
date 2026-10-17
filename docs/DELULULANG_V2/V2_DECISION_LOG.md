@@ -3398,6 +3398,43 @@ its sends. A pair names one destination exactly. `dead_pattern_reason` refuses a
 match: a glob other than `*`, or a pair without a name, a host and an exact port. This corrects D-V2-134 item 2's "a permit to
 expose the secret is not one to send it". **Falsified:** M453 (no name match) and M454 (dead patterns accepted) red.
 
+## D-V2-138 — P9-05 step (a): a `net` grant may name a path pattern, `HOST/PATTERN`, read one way at the grant, the first check, every egress hop and — by its host — the broker's use check; where a pattern decides, a path a server could read two ways is refused — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** RW 2.12: a `net` grant reached every path of its host. Run 25 read P9-05 against the code (`V2_P9_DESIGN.md`):
+the egress client already parses each hop, the broker sees only the host, the grammar had no room for a path; the build
+order put (a) first — the grammar and the runtime. The owner's commission of 2026-10-17 names P9-05 as the next work.
+
+**Decision.**
+1. **Grammar.** `net=HOST/PATTERN` and `net.special=HOST/PATTERN`. A pattern's segments are literals (letters, digits,
+   `-._~!$&'()+,=:@`), `*` (exactly one non-empty segment) or `**` (the rest, none included — only last). Refused at the
+   grant: an empty, `.` or `..` segment, a trailing `/`, `%`, `;`, `?`, `#`, a `*` inside a literal, more than 64 segments
+   or 1,024 bytes. `net=HOST` is unchanged: every path.
+2. **The special-use rule reads the HOST part.** `net=127.0.0.1/x/**` is refused as `net=127.0.0.1` is, with the
+   `net.special=` repair — a check on the whole value would be walked past by any path appended to it (HANDOFF §11.4: what
+   else spells this?).
+3. **One reading**, `delulu_broker::netscope` (split, pattern, ambiguity, match, `judge_all`), beside `host_matches`
+   (NET-WILDCARD-1's lesson). Its callers: the grant parser; the runtime's first check (`prim::url_verdict` — DL0904
+   saying whether the host or the path is outside); the broker-secret pre-check (`interp::send_broker_secret`, so the broker
+   is asked for no bytes, and records no `send`, for a path outside the scope); the egress client on every hop (a redirect
+   out of the path is `not-allowlisted`, an ambiguous spelling `malformed`); and the broker's `Net` use check, which compares
+   the HOST part — the op carries the host — so `--broker daemon` and embedded custody read the grant alike.
+4. **Where a pattern decides, the request path must be plain**: a `.`/`..` segment, an empty segment before the last, a
+   `;`, or an escape of `/`, `\`, `.`, `%`, `;` or a control character is refused, never matched — each is a second spelling
+   a URL parser or a server reads as another path (`..;/`, `%2F`, `%252F`). A host-only grant reaches every path, so its
+   requests are not judged so. The query is not the path.
+5. **Minting is exact, as for hosts.** `root.http(["api.example.com/v1/**"])` needs that grant exactly, so what a program
+   may reach stays readable from its source and `authority`. Narrowing by containment is step (b)'s order (`⊑`, the Z3
+   model, mutants).
+6. **The OpenShell export refuses a path-scoped grant in words** — its host alone would widen it to every path. A mapping
+   waits until OpenShell's prover can check it in CI.
+7. **Not yet:** the broker's op and record carry no path (step (b)); `grants diff` and `authority` compare path entries
+   as strings (step (c)); methods wait for the first non-GET primitive (step (d)); a secret's audience still refuses a path.
+
+**Falsified** (each restored from a copy and every binary rebuilt and scanned for the mutant's marker): M1 the hop lets a
+path outside pass, M2 no ambiguity check, M3 the special-use rule reads the whole entry, M4 a pattern unvalidated, M5 the
+first check reads hosts only, M7 the broker-secret pre-check reads hosts only, M8 the export maps the host — all red; the
+broker's host-part comparison (M6) witnessed red against the exact one before it was written.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

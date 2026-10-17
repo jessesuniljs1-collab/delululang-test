@@ -191,7 +191,9 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
             Op::FsWrite => authority.scopes.fs_write.iter().any(|root| crate::path_is_within(arg, root)),
             // NET-WILDCARD-1 (routine run 25): by the runtime's own matcher, `*.example.com` included — the exact-string
             // `contains` refused every use of a pattern grant under the daemon that embedded custody allowed.
-            Op::Net => authority.scopes.net.iter().any(|pat| host_matches(arg, pat)),
+            // P9-05 (a), D-V2-138: an entry may name a path pattern; the op carries the host, so the host part is compared
+            // here and the path is the egress client's to judge on every hop (`netscope::judge`) — under every custody.
+            Op::Net => authority.scopes.net.iter().any(|pat| host_matches(arg, crate::netscope::host_of(pat))),
             Op::Declassify => authority.scopes.declassify.contains(arg),
             Op::ForeignBind => authority.scopes.foreign_c.contains(arg),
             // RFC 0001 F1 (D12e). Until this arm existed, `Op::Actuate` fell through to `_ => true`
@@ -547,6 +549,22 @@ mod tests {
             ("api.plain.org", false),
             ("other.net", false),
         ] {
+            assert_eq!(b.check(&node, Op::Net, Some(host)).is_allow(), allowed, "{host}");
+        }
+    }
+
+    /// P9-05 (a), D-V2-138: a node granted a host with a path pattern may use that host — the op carries the host, and the
+    /// path is the egress client's to judge — exactly as embedded custody reads the same grant. Comparing the whole entry
+    /// (`api.example.com/v1/**`) with the host would refuse every use of it under the daemon: NET-WILDCARD-1's shape again.
+    #[test]
+    fn a_path_scoped_net_grant_is_compared_by_its_host_part() {
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000)));
+        let node = b.issue(
+            holder(),
+            Authority::new(eff(&["Net"]), Scopes { net: names(&["api.example.com/v1/**", "*.cdn.org/assets/*"]), ..Default::default() }),
+            None,
+        );
+        for (host, allowed) in [("api.example.com", true), ("x.cdn.org", true), ("example.com", false), ("cdn.org", false), ("evil.com", false)] {
             assert_eq!(b.check(&node, Op::Net, Some(host)).is_allow(), allowed, "{host}");
         }
     }

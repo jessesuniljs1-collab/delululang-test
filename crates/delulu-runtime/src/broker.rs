@@ -206,8 +206,13 @@ pub const GRANT_FORMS: &[GrantForm] = &[
     GrantForm { key: "exec.native", form: "exec.native", example: "exec.native", grants: "emitting and running native code (no native tier ships yet)" },
     GrantForm { key: "fs.read", form: "fs.read=PATH", example: "fs.read=./data", grants: "reading files under PATH" },
     GrantForm { key: "fs.write", form: "fs.write=PATH", example: "fs.write=./out", grants: "writing files under PATH" },
-    GrantForm { key: "net", form: "net=HOST", example: "net=example.com", grants: "HTTPS to HOST; never a special-use address" },
-    GrantForm { key: "net.special", form: "net.special=HOST", example: "net.special=127.0.0.1", grants: "HTTPS to a special-use address, named explicitly" },
+    GrantForm {
+        key: "net",
+        form: "net=HOST[/PATH]",
+        example: "net=api.example.com/v1/**",
+        grants: "HTTPS to HOST — only under PATH when one is named (`*` one segment, `**` the rest); never a special-use address",
+    },
+    GrantForm { key: "net.special", form: "net.special=HOST[/PATH]", example: "net.special=127.0.0.1", grants: "HTTPS to a special-use address, named explicitly" },
     GrantForm { key: "foreign.c", form: "foreign.c=LOGICAL:PATH", example: "foreign.c=mathlib:libm.so.6", grants: "binding the C library LOGICAL to PATH" },
     GrantForm { key: "foreign.python", form: "foreign.python=PATTERN", example: "foreign.python=numpy", grants: "importing Python modules matching PATTERN" },
     GrantForm {
@@ -317,8 +322,24 @@ impl Grants {
                     }
                     // NE-18 / D-NE-28 (owner, 2026-09-18): a special-use address or name is refused under
                     // plain `net=` and granted only by the explicit spelling `net.special=`.
+                    // P9-05 (a), D-V2-138: `net=HOST/PATTERN` — the host as before, then a path pattern, refused here when
+                    // a spelling in it could be read two ways (`delulu_broker::netscope`, the one reading every custody
+                    // shares). The special-use rule reads the HOST: `net=127.0.0.1/x/**` is no way round `net.special=`.
+                    let host = if k.trim().starts_with("net") {
+                        let (host, path) = delulu_broker::netscope::split(val);
+                        if host.is_empty() {
+                            return Err(format!("bad grant `{spec}` — it names no host (use {}=HOST or HOST/PATH/**)", k.trim()));
+                        }
+                        if let Some(path) = path {
+                            delulu_broker::netscope::parse_pattern(path)
+                                .map_err(|why| format!("bad grant `{spec}` — its path is refused: {why}"))?;
+                        }
+                        host
+                    } else {
+                        val
+                    };
                     if k.trim() == "net" {
-                        if let Some(class) = crate::netclass::special_use_class(val) {
+                        if let Some(class) = crate::netclass::special_use_class(host) {
                             return Err(format!(
                                 "bad grant `{spec}` — `{val}` is a special-use address: {class}. A plain `net=` grant never reaches one; if this program is meant to, grant it explicitly: `--grant net.special={val}`"
                             ));
@@ -523,11 +544,33 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
 mod tests {
     use super::*;
 
+    /// P9-05 (a), D-V2-138: `net=HOST/PATTERN` grants HOST under PATTERN; a pattern a URL parser or a server could read two
+    /// ways is refused at the grant; and the special-use rule reads the HOST — `net=127.0.0.1/x/**` is no way round
+    /// `net.special=`, whose own spelling takes a path as well.
+    #[test]
+    fn a_net_grant_may_name_a_path_pattern() {
+        let mut g = Grants::default();
+        for ok in ["net=api.example.com/v1/**", "net=api.example.com/repos/*/issues", "net=*.example.com/assets/**", "net.special=127.0.0.1/health"] {
+            assert!(g.add(ok).is_ok(), "`{ok}`: {:?}", Grants::default().add(ok));
+        }
+        assert!(g.net.iter().any(|n| n == "api.example.com/v1/**") && g.net_special == ["127.0.0.1/health"], "{:?}", g.net);
+        for bad in ["net=api.example.com/", "net=api.example.com//x", "net=api.example.com/v1*/x", "net=api.example.com/**/x",
+                    "net=api.example.com/a/../b", "net=api.example.com/a%2Fb", "net=api.example.com/a;b", "net=/v1/**"] {
+            let e = Grants::default().add(bad).unwrap_err();
+            assert!(e.contains("path is refused") || e.contains("names no host"), "`{bad}`: {e}");
+        }
+        for special in ["net=127.0.0.1/x/**", "net=169.254.169.254/latest/**", "net=localhost/a"] {
+            let e = Grants::default().add(special).unwrap_err();
+            let repair = format!("--grant net.special={}", special.trim_start_matches("net="));
+            assert!(e.contains("special-use") && e.contains(&repair), "`{special}`: {e}");
+        }
+    }
+
     /// RW 5.4: the grant-parser property over every documented form and mutations of them.
     #[test]
     fn the_grant_property_holds_over_a_seeded_corpus() {
         let seeds: Vec<Vec<u8>> = [
-            "console", "clock", "rand", "declassify", "fs.read=./data", "fs.write=C:/out", "net=example.com",
+            "console", "clock", "rand", "declassify", "fs.read=./data", "fs.write=C:/out", "net=example.com", "net=a.example.com/v1/*/x/**",
             "net.special=localhost", "secret:TOKEN=abc", "plugin=./plugins", "foreign.c=m:/usr/lib/libm.so",
             "sensor=temp:lo=0,hi=5", "fs.read=", "=", "",
         ]

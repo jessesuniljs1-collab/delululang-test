@@ -176,6 +176,40 @@ fn a_refused_request_says_why_to_the_operator_and_nothing_to_the_program() {
     }
 }
 
+/// P9-05 (a), D-V2-138: end to end on loopback, at L0 and from a guest — under `net.special=127.0.0.1/allowed/**` a request
+/// under `/allowed` leaves as TLS (its query is not its path); one for another path, or for a path spelled two ways, is
+/// refused DL0904 at the call and nothing connects.
+#[test]
+fn a_path_scoped_grant_reaches_its_paths_and_no_other() {
+    let scope = "127.0.0.1/allowed/**";
+    let grant = format!("net.special={scope}");
+    for sandbox in [false, true] {
+        let run = |dir: &Path| {
+            let mut args = vec!["run", "fetch.delulu", "--grant", "console", "--grant", grant.as_str()];
+            if sandbox {
+                args.push("--sandbox");
+            }
+            delulu(dir, &args)
+        };
+        let dir = tmp(if sandbox { "path-in-guest" } else { "path-in-l0" });
+        let (port, seen) = listen(Duration::from_secs(20));
+        fetcher(&dir, scope, &format!("https://127.0.0.1:{port}/allowed/x?then=/other"));
+        let o = run(&dir);
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("sandbox={sandbox}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "sandbox={sandbox}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "sandbox={sandbox}:\n{}", out(&o));
+        for (label, path) in [("another path", "/other/x"), ("a `..` segment", "/allowed/../other"), ("an escaped `/`", "/allowed/..%2Fother")] {
+            let dir = tmp(if sandbox { "path-out-guest" } else { "path-out-l0" });
+            let (port, seen) = listen(Duration::from_secs(3));
+            fetcher(&dir, scope, &format!("https://127.0.0.1:{port}{path}"));
+            let o = run(&dir);
+            assert!(out(&o).contains("DL0904"), "sandbox={sandbox}, {label}: refused at the call:\n{}", out(&o));
+            assert!(!String::from_utf8_lossy(&o.stdout).lines().any(|l| l.ends_with("delivered")), "sandbox={sandbox}, {label}:\n{}", out(&o));
+            assert!(seen.join().unwrap().is_none(), "sandbox={sandbox}, {label}: nothing connected");
+        }
+    }
+}
+
 /// A program that fetches `url` with `headers` through `get_with` (P9-04 (a), D-V2-128).
 fn fetcher_with(dir: &Path, hosts: &str, url: &str, headers: &[(&str, &str)]) {
     let inserts: String = headers.iter().map(|(n, v)| format!("    hs.insert(\"{n}\", \"{v}\")\n")).collect();

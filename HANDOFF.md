@@ -1469,7 +1469,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A mutant script restores the source AND rebuilds** (2026-10-17): after `git checkout` of the mutated files,
   `target/debug/delulu` was still the mutant build, and the next run of the fixed test went red on the mutant's own leak —
   a regression, it seemed, until `grep -c mutant_note target/debug/delulu.exe` found the stale binary. Rebuild after
-  restoring, and check the binary before any run that follows.
+  restoring, and check the binary before any run that follows. **Rebuild exactly as the mutant built** (2026-10-17,
+  P9-05 (a)): `cargo test -p A -p B --lib --no-run` names a crate's test binary differently from `cargo test -p A --lib`,
+  so a rebuild with another package set left the mutant's binary on disk — a marker string in every mutant
+  (`std::hint::black_box("MUTANT_…")`) and a scan of `target/debug/deps/*.exe` for it found that.
+- **A check made on a whole grant value is walked past by anything appended to it** (2026-10-17, P9-05 (a)): once a `net`
+  grant could carry a path, the special-use rule — `special_use_class(value)` — would have read `127.0.0.1/x/**` as no
+  address at all, and `net=` would have reached loopback. Every rule that reads a grant reads the part it is about (the
+  host), after the split, by the one parser every custody shares (`delulu_broker::netscope`). The same shape: a pre-check
+  that releases a secret's bytes must judge the whole URL the request will be judged by, or the broker hands them over
+  (and records a `send`) for a request the client then refuses.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

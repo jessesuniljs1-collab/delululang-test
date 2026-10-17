@@ -73,6 +73,7 @@ A `val` closure can still be `!{Write}` — the two axes are independent and bot
 --grant console                      --grant clock          --grant rand
 --grant fs.read=PATH                 --grant fs.write=PATH
 --grant net=HOST                     --grant net.special=169.254.169.254   # metadata/loopback: explicit only
+--grant net=HOST/v1/*/items/**       # that host under those paths only: `*` one segment, `**` the rest (last)
 --grant "secret:NAME=env:VAR"        --grant declassify
 --grant foreign.c=LOGICAL:PATH       --grant foreign.python=numpy
 --grant plugin=PATH                  # where a program may LOAD a plugin artifact from

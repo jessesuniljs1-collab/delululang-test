@@ -169,6 +169,8 @@ fn a_grant_openshell_cannot_state_refuses_the_export_by_name() {
         ("plugin=./plugins", "loads code"),
         ("fs.write=/", "whole filesystem"),
         ("net=*.org", "top-level domain"),
+        // P9-05 (a), D-V2-138: a path scope is not mapped yet, and the host alone would widen it.
+        ("net=api.example.com/v1/**", "names a path"),
     ] {
         let o = export(&dir, "p.delulu", &with_grants(&["fs.read=./data", grant], &["--workdir", "/sandbox"]));
         assert_eq!(o.status.code(), Some(1), "{grant}: {}", text(&o.stderr));

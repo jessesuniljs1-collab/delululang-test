@@ -143,7 +143,7 @@ pub enum Reason {
     Userinfo,
     /// A spelling some URL parser would rewrite; the payload names the rule.
     Malformed(&'static str),
-    /// The host is not in the capability's allowlist (a redirect's target, typically — the program's
+    /// The host, or under a path scope the path, is not in the capability's allowlist (a redirect's target, typically — the program's
     /// own first request is refused earlier, as a `DL0904` fault).
     NotAllowlisted,
     /// The host is, or resolved to, a special-use address, and was not granted with `net.special=`.
@@ -222,7 +222,7 @@ impl Reason {
             Reason::Scheme => "only `https://` is fetched; there is no plain-HTTP path".into(),
             Reason::Userinfo => "the URL carries userinfo (`user@host`), which is refused rather than parsed".into(),
             Reason::Malformed(why) => format!("the URL is refused rather than normalized: {why}"),
-            Reason::NotAllowlisted => "the host is not in the capability's allowlist".into(),
+            Reason::NotAllowlisted => "the host — or, under a path scope, the path — is not in the capability's allowlist".into(),
             Reason::SpecialUse(class) => format!(
                 "the host is, or resolved to, a special-use address ({class}); a host reaches one only when it is granted with `--grant net.special=HOST`"
             ),
@@ -285,6 +285,17 @@ pub struct Target {
     pub ip: Option<IpAddr>,
     /// Byte offset in `url` where the authority ends (the path, query or fragment begins).
     authority_end: usize,
+}
+
+impl Target {
+    /// The path as sent — the text after the authority up to a `?` or `#`; empty when the URL names none.
+    pub fn path(&self) -> &str {
+        let rest = &self.url[self.authority_end..];
+        if !rest.starts_with('/') {
+            return "";
+        }
+        &rest[..rest.find(['?', '#']).unwrap_or(rest.len())]
+    }
 }
 
 /// Parse `url` into a [`Target`], refusing every spelling a URL parser would rewrite.
@@ -1017,14 +1028,20 @@ fn hop(
     rec: &mut EgressRecord,
 ) -> Result<HopEnd, Reason> {
     let t = parse_target(url)?;
-    if !policy.allow.iter().any(|p| crate::prim::host_matches(&t.host, p)) {
-        return Err(Reason::NotAllowlisted);
+    // P9-05 (a), D-V2-138: the host, and where an entry names a path pattern, this hop's path — a redirect out of the
+    // granted path is refused here as one to an ungranted host is; a path a server could read two ways, before DNS.
+    match delulu_broker::netscope::judge_all(&policy.allow, &t.host, t.path()) {
+        delulu_broker::netscope::Verdict::Allow => {}
+        delulu_broker::netscope::Verdict::Ambiguous(why) => return Err(Reason::Malformed(why)),
+        delulu_broker::netscope::Verdict::OtherHost | delulu_broker::netscope::Verdict::OutsidePath => {
+            return Err(Reason::NotAllowlisted);
+        }
     }
     // Asked before anything touches the network, DNS included.
     if !transport.available() {
         return Err(Reason::NoClient);
     }
-    let special_ok = policy.allow_special.iter().any(|p| crate::prim::host_matches(&t.host, p));
+    let special_ok = policy.allow_special.iter().any(|p| crate::prim::host_matches(&t.host, delulu_broker::netscope::host_of(p)));
     // The NAME first: `localhost` and the metadata names are special whatever they resolve to.
     if let Some(class) = crate::netclass::special_use_class(&t.host) {
         if !special_ok {

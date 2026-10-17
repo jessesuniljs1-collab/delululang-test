@@ -338,9 +338,27 @@ pub fn host_of(url: &str) -> &str {
     hostport.split(':').next().unwrap_or(hostport)
 }
 
-pub(crate) fn host_allowed(url: &str, allow: &[String]) -> bool {
-    let host = host_of(url);
-    allow.iter().any(|pat| host_matches(host, pat))
+/// The path of `url` as the first check reads it — the text after the authority, up to a `?` or `#` (none: empty). The
+/// egress client re-reads every hop on its own strict parse; this is only the early check, as [`host_of`] is.
+pub fn path_of(url: &str) -> &str {
+    let after = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let Some(start) = after.find(['/', '?', '#']) else { return "" };
+    let rest = &after[start..];
+    if !rest.starts_with('/') {
+        return "";
+    }
+    &rest[..rest.find(['?', '#']).unwrap_or(rest.len())]
+}
+
+/// P9-05 (a), D-V2-138: the capability's verdict on `url` — its host against each entry's host pattern, and where an entry
+/// names a path pattern, the path against it (`delulu_broker::netscope`, the reading the egress client and the broker
+/// share).
+pub(crate) fn url_verdict(url: &str, allow: &[String]) -> delulu_broker::netscope::Verdict {
+    delulu_broker::netscope::judge_all(allow, host_of(url), path_of(url))
+}
+
+pub(crate) fn url_allowed(url: &str, allow: &[String]) -> bool {
+    url_verdict(url, allow) == delulu_broker::netscope::Verdict::Allow
 }
 
 /// Does `host` fall under the allowlist pattern `pat` — exact, or `*.suffix` on a dot boundary?
@@ -653,8 +671,21 @@ pub fn call_cap_method_pinned(
                 crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
             }
-            if !host_allowed(&url, allow) {
-                return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
+            match url_verdict(&url, allow) {
+                delulu_broker::netscope::Verdict::Allow => {}
+                delulu_broker::netscope::Verdict::OtherHost => {
+                    return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
+                }
+                delulu_broker::netscope::Verdict::OutsidePath => {
+                    return Err(Fault::at(
+                        "DL0904",
+                        format!("the path of `{url}` is outside every path the grant names for its host"),
+                        span,
+                    ));
+                }
+                delulu_broker::netscope::Verdict::Ambiguous(why) => {
+                    return Err(Fault::at("DL0904", format!("`{url}` is refused under a path scope: {why}"), span));
+                }
             }
             // P9-04 (d), D-V2-134: a broker-held secret (a daemon or leased run's handle) carries no bytes here — the
             // interpreter asks the broker for them for one origin and hands this table a secret that holds them

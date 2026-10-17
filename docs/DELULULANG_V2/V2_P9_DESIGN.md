@@ -278,3 +278,7 @@ skip branch, §11.2).
   path, `Scopes.net` entries with a path, `⊑` as prefix containment — a new exact-set-plus-prefix order that joins the Z3 model
   with mutants; (c) `grants diff`/`authority`: path reach (`scope_expansion` on a wider prefix) and the static walk; (d)
   methods, with the first non-GET primitive. Each a slice, each witnessed red first.
+  **Step (a) built 2026-10-17 (D-V2-138), on the laptop under the owner's commission of that day:** `net=HOST/PATTERN`,
+  one reading (`delulu_broker::netscope`) at the grant, the first check, the broker-secret pre-check, every egress hop
+  and the broker's use check (by host); an ambiguous request path refused where a pattern decides; the OpenShell export
+  refuses a path scope. Next: step (b).

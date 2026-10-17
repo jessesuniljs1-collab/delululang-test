@@ -20,6 +20,7 @@
 //! - [`secrets`] — phase 5g: the broker-resident secret store + `expose`/`secret_map`.
 //! - [`diag`] — broker denials and their mapping to `delulu_diag::Diagnostic`.
 //! - [`ids`] / [`time`] — the injectable GrantId source and TTL clock (ruling 3).
+//! - [`netscope`] — P9-05: a `net` entry's host and path pattern, the one reading every custody shares.
 
 mod path;
 
@@ -33,6 +34,7 @@ pub mod diag;
 pub mod guard;
 pub mod ids;
 pub mod lease;
+pub mod netscope;
 pub mod ocsf;
 pub mod proposal;
 pub mod secrets;

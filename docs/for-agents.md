@@ -679,6 +679,10 @@ overstate it downstream:
   performed by the runtime (for a `--sandbox` guest, by the HOST — the guest has no socket and no
   resolver): allowlisted host, name resolved once and pinned, special-use addresses refused unless the
   host was granted with `--grant net.special=HOST` (never plain `net=`), every redirect re-checked,
+  a grant's path pattern held on every hop (`--grant net=api.example.com/v1/**`, P9-05 (a): `*` one
+  segment, `**` the rest; the program asks for the same scope, `root.http(["api.example.com/v1/**"])`;
+  a path outside it, or one a server could read another way — `..`, `//`, `;`, an escaped `/` — is
+  refused at the call, DL0904, under every custody),
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
