@@ -72,9 +72,11 @@ ignores one in *user* settings, and `modelSettings` is how a level is saved per 
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
-`sonnet` alias — launched 2026-09-28). **Haiku 5.5 is announced, not released** (checked against the
-official models page, 2026-09-28): once that page lists it, Haiku 5.5 (the `haiku` alias, if it then
-resolves to 5.5 — say which model ran) may be used as an agent; until then no Haiku agent. **Classifier fallback:** Opus 5.5 re-runs a request its
+`sonnet` alias — launched 2026-09-28). **Since 2026-10-17 Haiku 5.5 is released** (`claude-haiku-5-5`), and the owner
+said: *"Claude code cloud routine can run sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u
+claude code local sessions, But it consumes more usage when running parallely"* — so a run may use a Sonnet 5.5 or
+Haiku 5.5 sous-chef where one adds independent value, one at a time unless parallel work clearly pays for itself, and
+names the model that ran. *(Before: Haiku 5.5 was announced, not released, checked 2026-09-28 — no Haiku agent then.)* **Classifier fallback:** Opus 5.5 re-runs a request its
 safety classifier flags as cybersecurity on Opus 4.8, **and the session stays on Opus 4.8 from then
 on** (Sonnet 5.5 falls back to Sonnet 5). Sandbox red-team work — PS-E-03's escaped guest above all —
 is defensive, but a flag can happen: if Claude Code shows a fallback notice, every later commit's

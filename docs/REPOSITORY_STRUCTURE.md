@@ -321,6 +321,7 @@ DeluluLang/
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
 ├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
+├── CODE_OF_CONDUCT.md              # the Contributor Covenant 2.1 (D-V2-151)
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
 ├── .github/workflows/              # the three-OS CI matrix (live since 2026-09-14; runs recorded in CROSS_PLATFORM_VERIFICATION §9)
 │                                   #   `witness.yml`: one test on one runner at any ref, by hand — a
@@ -522,6 +523,7 @@ account for everything and check nothing.
 | `INSTALL.md` | Building from source and the portable archive; why the shipped binary embeds no Python, and why `cargo install delulu` from crates.io is deliberately not offered. |
 | `CHANGELOG.md` | Keep-a-Changelog, every entry naming the ruling that authorized it. Versions follow the **semver-authority law**: any widening of what a package may do is a major bump, even with an unchanged API. |
 | `GOVERNANCE.md` | Who decides what, and how a decision is recorded. |
+| `CODE_OF_CONDUCT.md` | The Contributor Covenant 2.1, verbatim, with its contact filled by the repository's private reporting form (D-V2-151). |
 | `CONTRIBUTING.md` | How to propose a change, and the rules a change must satisfy. It binds this project too, which `governance.rs` tests. |
 | `SECURITY.md` | The disclosure policy and the threat model's edges. |
 | `TRADEMARK.md` | Name and mark usage. Owner-reserved territory. |

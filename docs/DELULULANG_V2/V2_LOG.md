@@ -6126,3 +6126,12 @@ alone, built, run and restored from a copy: M1 any first line accepted — kille
 driver does not reach that branch; recorded so nobody reads the CLI test as covering it); M1b the wait skipped, M2 the
 flag ignored (the refusal said 10000 ms), M3 the flag dropped from the hardware-only list — killed by the CLI test; M4
 the sim device silent — killed by `sim_device_cli` (both runs refused "did not say READY"). Suite: 2,242 passed and 4 failed before the Survey was regenerated — all four the stale-map gates (doctor_cli 3, the Survey's freshness 1), which pass after it (rerun after the last edit).
+
+## 2026-10-17 — the code of conduct; four decisions recorded (D-V2-148 to D-V2-151)
+
+**What.** `CODE_OF_CONDUCT.md`: the Contributor Covenant 2.1 verbatim from its official source, its contact placeholder
+filled by the repository's private reporting form (no e-mail invented), linked from `CONTRIBUTING.md` (D-V2-151).
+Recorded: RW 4.5 strict anchored roots stay opt-in in 2.0, the flip planned for a later major with
+`ROOT_ISSUANCE_TRUST_BOUNDARY.md` §10's migration (D-V2-148); the release is 2.0.0, the bump made in the commit the tag
+names (D-V2-149); P8-04 option (c) goes to an RFC after the release (D-V2-150). `V2_DECISION_LOG.md`'s list of decisions
+carried from V1 now says where each stands.

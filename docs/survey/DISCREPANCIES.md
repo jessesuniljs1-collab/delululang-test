@@ -59,7 +59,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:33` — prose names `docs/design/PRODUCTION_READINESS_2026-08-10.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:34` — prose names `docs/design/P19_ECOSYSTEM_REVIEW.md`, which moved to `docs/archive/v1/design/P19_ECOSYSTEM_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md:35` — prose names `docs/design/STAGE10_AUTONOMY_HONESTY_REVIEW.md`, which moved to `docs/archive/v1/design/STAGE10_AUTONOMY_HONESTY_REVIEW.md` in V2-0; the citation is historical and left as written
-- `docs/REPOSITORY_STRUCTURE.md:474` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
+- `docs/REPOSITORY_STRUCTURE.md:475` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:160` — prose names `docs/design/LANGUAGE_SPECIFICATION.md`, which moved to `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:161` — prose names `docs/design/PRODUCTION_READINESS_REVIEW.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` in V2-0; the citation is historical and left as written
 - `docs/archive/v1/NEXT_EVOLUTION_2026/DOCUMENTATION_AUDIT.md:162` — prose names `docs/design/PRODUCTION_READINESS_2026-08-09.md`, which moved to `docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md` in V2-0; the citation is historical and left as written
@@ -102,7 +102,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** write the stage when you mean an earlier one — `S9-D21` — as the Stage-10 ledger already does
 
-- `docs/design` — 362 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
+- `docs/design` — 363 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
 
 ## note — `test-count-quoted-but-unverifiable` (1)
 

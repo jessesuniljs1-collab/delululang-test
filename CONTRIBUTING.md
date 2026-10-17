@@ -2,6 +2,8 @@
 
 **Governs:** Constitution §9. **Companion:** `SECURITY.md`, `docs/design/STABILITY.md`, `rfcs/`.
 
+Everyone who takes part follows the [code of conduct](CODE_OF_CONDUCT.md) (the Contributor Covenant 2.1).
+
 ---
 
 ## 1. The bar

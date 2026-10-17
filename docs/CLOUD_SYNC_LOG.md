@@ -3421,3 +3421,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing (made there).
 - For the laptop's memory: a test driver must print `READY` first.
 - Open / next: item 1 of the previous entry is DONE; items 2–6 stand (the code of conduct and the decisions are next).
+
+### 2026-10-17 — the code of conduct; RW 4.5, the version and P8-04 (c) recorded (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `f2a19db`
+- Commits: (1) this entry's commit
+- Files and folders: A `CODE_OF_CONDUCT.md`; M `CONTRIBUTING.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md`
+  (4.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-148 to D-V2-151), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; and `AGENTS.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/assistant-memory/agent-usage-rule-2026-09-17.md` — the owner's word that routine runs, like laptop sessions, may use
+  Sonnet 5.5 and Haiku 5.5 sous-chefs when needed (Haiku 5.5 is released), mindful that parallel agents cost more usage.
+  Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- Open / next, in order: (4) the README — stale status rows, the D-V2-59 note that `contained` is best-effort, the code
+  of conduct linked; (5) *[laptop]* the WSL microVM images, the WSL suite, the VS Code test on Windows; (6) *[laptop]*
+  the launch (as listed two entries above). Items 1–3 of that list are done.

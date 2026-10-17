@@ -3670,7 +3670,69 @@ It reached CI twice through the test drivers themselves (PowerShell's start-up; 
 silent driver refused with exit 1 naming the 300 ms it waited; four bad values refused with exit 2; the flag refused under
 `sim`); `sim.rs`'s two serve tests now expect `READY` first. Mutants: in the commit message.
 
-## Owner decisions carried from V1, still open
+## D-V2-148 — RW 4.5: strict anchored-root mode stays opt-in in 2.0; the flip waits for a later major with its migration — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** RW 4.5: legacy root issuance is the default, so a same-user process can mint root authority unless the
+operator starts the broker with `--require-anchored-roots` (DISC-1's mitigation). The commission delegates the default.
+`ROOT_ISSUANCE_TRUST_BOUNDARY.md` §10 analysed the flip: it breaks `grants delegate` without `--parent` and `run
+--grant` against a broker — every first run and quick-start — and its own recommendation is *"keep strict mode opt-in
+now; gather evidence; plan a default flip for a major version with the migration above … Do not sell it as airtight
+without the deployment-side key custody, which is the real boundary."*
+
+**Decision.** **Opt-in in 2.0.** 2.0 is a major version, but none of §10's migration exists yet (the
+`--allow-unsigned-roots` escape, the auto-root re-pointed at adopting a pre-issued root, the quick-starts rewritten), no
+user evidence has been gathered, and on the default deployment — one OS account — the anchor key sits where the same
+agent can read it, so a default flip would break every first run while protecting little. The flip is planned for a
+later major, with §10's migration, once deployments report how they hold the anchor key. `DEPLOYMENT.md` and `SECURITY.md`
+keep telling a production deployment to turn it on. RW 4.5 stays open with this as its plan.
+
+## D-V2-149 — The release is 2.0.0 — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** The workspace says 1.0.0 (tagged 2026-07-20). Since then, changes a 1.x user meets as breaks: a hardware
+driver must say `READY` first (D-V2-147); a secret's name can no longer hold `@`; a compiled program or a Contained plugin
+may no longer use the WebAssembly 3.0 features the engine turned on by default; on Windows a foreign library no longer
+falls back to the application's or the system's directories; an ordinary `run` is held to 1 GiB of memory and five
+minutes of processor time unless `--limits` sets others (PS-B-01, D-NE-31); and the broker daemon's wire refuses bytes
+after a frame's value (CHANGELOG, the *Unreleased* sections).
+
+**Decision.** **2.0.0**, by Semantic Versioning: each item above can stop a 1.x program, driver or deployment that worked.
+The bump and the CHANGELOG's `## [2.0.0]` heading (the *Unreleased* sections consolidated under it) are made at the
+launch, in the commit the tag names, so the version never claims a release that did not happen.
+
+## D-V2-150 — P8-04 option (c), a revoke-only principal in the grant tree, goes to an RFC after the release — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** P8-04's monitor is a node minted between the operator and the run (D-V2-101 onward); option (c) — a
+principal that can revoke and do nothing else, placed in the tree — was reserved to the owner because it changes who may
+hold authority. The commission delegates it.
+
+**Decision.** **Deferred to a public RFC after the release**, not built for 2.0. It changes the holder model —
+what a node in the grant tree is — which is Authority's meaning, and `AGENTS.md` lets the head chef harden Authority but
+not redefine it without the process; the RFC process's own debt (D21, a core authority change shipped without its comment
+period) is the reason not to repeat that shortcut on the first public release. What 2.0 ships is unchanged and complete
+as far as software reaches (D-V2-116): the monitor revokes its own subtree and nothing else.
+
+## D-V2-151 — The code of conduct: the Contributor Covenant 2.1, reports through the private reporting form — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** A public project needs a code of conduct; `HANDOFF.md` carried it as an owner decision. The commission's
+limit applies: never invent a contact.
+
+**Decision.** `CODE_OF_CONDUCT.md` is the **Contributor Covenant 2.1, verbatim** (taken on 2026-10-17 from its official
+source, `EthicalSource/contributor_covenant`, `content/version/2/1/code_of_conduct.md`, its front matter removed), with
+its one placeholder, the contact method, filled by a channel that exists: the repository's private reporting form (the
+**Security** tab, **Report a vulnerability**, a title beginning "Conduct:"), which reaches the maintainer alone, and
+GitHub's own **Report content**. No e-mail address is invented. The public repository's private reporting must be on
+for the channel to work — a launch item.
+
+## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
+
+Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.
+D-NE-3 (snapshot regeneration is a reviewed act) stands as a process rule. D-NE-6: D-V2-38. D-NE-7, publication: the
+launch, from the laptop (D-V2-146). D-NE-8's installer posture: its workflow half D-V2-42; the rest at the launch.
+D-NE-25 (`Secret.map` under strong profiles): its proposal stands until built. D-NE-27, the GPL microVM image: D-V2-144,
+never distributed. The Constitution §5.15 wording: D-V2-141. rustfmt: D-V2-145. The code of conduct: D-V2-151. RW 4.19:
+D-V2-147. RW 4.5: D-V2-148. P8-04 (c): D-V2-150. The version: D-V2-149. The four pre-public-repository items: at the launch.
+
+*(The list as it stood before 2026-10-17:)*
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
 code of conduct; the four pre-public-repository items. Each is asked at the start of the phase that

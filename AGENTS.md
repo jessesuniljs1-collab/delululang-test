@@ -124,6 +124,10 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
   Sonnet 5.5** (the `sonnet` alias), **and Haiku 5.5 once it is released** — not Haiku 4.5 meanwhile
   (owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*). Check the official models page before the first Haiku agent of a
   run. The head chef is Opus 5.5 at xhigh. Name the model an agent ACTUALLY ran in every record of it.
+  **Since 2026-10-17 Haiku 5.5 is released** (`claude-haiku-5-5`), and the owner: *"Claude code cloud routine can run
+  sonnet 5.5 and haiku 5.5 as sub agents if and whenever needed just like for u claude code local sessions, But it
+  consumes more usage when running parallely"* — so a routine run and a laptop session alike may use Sonnet 5.5 or
+  Haiku 5.5 sous-chefs where one adds value; run them one at a time unless parallel work clearly pays for itself.
 - **Judge an agent by its logs, never its summary.** Haiku overclaimed; one "microVM TTL defect" was
   the agent's own test mistake; one "dead delegate" was really a stale secret store. Re-run every claim
   against the CURRENT binary before it is used or recorded.
