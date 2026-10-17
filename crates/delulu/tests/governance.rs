@@ -191,21 +191,28 @@ fn the_rfc_template_keeps_its_hard_sections() {
     assert!(t.contains("14 days"), "the comment period must be stated");
 }
 
-/// PENDING-PUBLIC items must still be MARKED. This is the test most likely to fail usefully: the
-/// natural drift is for a placeholder to quietly become a claim as launch approaches, and a
-/// security control that is documented as live but is not is worse than one that is absent.
+/// Until the launch decisions this test required every control that needed public hosting to stay MARKED
+/// `PENDING-PUBLIC` — the natural drift is for a placeholder to quietly become a claim as launch approaches. Since
+/// D-V2-154 each control is decided: LIVE, or not adopted with its reason, and CODEOWNERS names the maintainer's real
+/// account. What must still never happen is a claim running ahead of its proof: no placeholder owner may remain, no row
+/// may stay "pending a publication" that has happened, and SLSA L3 is a condition until it is verified.
 #[test]
-fn pending_public_controls_are_still_marked_as_pending() {
+fn security_controls_are_decided_and_no_claim_runs_ahead_of_its_proof() {
     let s = read("SECURITY.md");
     assert!(
-        s.contains("PENDING-PUBLIC"),
-        "controls that need public hosting must still be marked PENDING-PUBLIC, not silently \
-         upgraded to claims — build-order D2"
+        !s.contains("PENDING-PUBLIC"),
+        "a control may no longer wait for a publication that has been decided (D-V2-154): it is LIVE, or not adopted \
+         with its reason — build-order D2"
+    );
+    assert!(
+        s.contains("L3 is claimed only after"),
+        "SLSA Build Level 3 stays a condition until `gh attestation verify --signer-workflow` has passed on a release"
     );
     let owners = read(".github/CODEOWNERS");
-    assert!(owners.contains("PENDING-PUBLIC"), "CODEOWNERS must not name a plausible-looking account that does not exist");
-    // And the reverse: anything claimed LIVE must be something that actually runs here.
-    for live in ["Release artifact signatures", "Reproducible builds", "SBOM"] {
+    assert!(!owners.contains("PENDING-PUBLIC"), "CODEOWNERS must name a real account, not a placeholder");
+    let default_owner = owners.lines().find(|l| l.trim_start().starts_with("* ")).unwrap_or("");
+    assert!(default_owner.contains("@jessesuniljs1-collab"), "the default owner is the maintainer's account: {default_owner}");
+    for live in ["Release artifact signatures", "Reproducible builds", "SBOM", "Private vulnerability reporting"] {
         assert!(s.contains(live), "the controls table must list `{live}`");
     }
 }

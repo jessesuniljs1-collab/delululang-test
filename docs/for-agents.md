@@ -135,8 +135,8 @@ and invariant 44 requires an entrenchment analysis before any of them moves. `qu
 first, with the `.github/CODEOWNERS` line it was read from:
 
 ```
-ENTRENCHED — changing this needs @PENDING-PUBLIC-project-lead specifically, not any maintainer
-        matched by `/docs/design/CONSTITUTION.md` at .github/CODEOWNERS:16
+ENTRENCHED — changing this needs @jessesuniljs1-collab specifically, not any maintainer
+        matched by `/docs/design/CONSTITUTION.md` at .github/CODEOWNERS:12
 ```
 
 If you see it, stop and propose the change rather than making it. Nineteen nodes carry it: the

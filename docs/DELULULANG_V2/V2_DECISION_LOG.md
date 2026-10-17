@@ -3756,6 +3756,18 @@ repository.
    hook (`origin/master` → `origin/main`); then, outside the tree, the laptop's `origin` and the routine's repository (by
    the API, read back). Until that commit, nothing changes: this repository stays `origin`.
 
+## D-V2-154 — `SECURITY.md`'s controls decided and CODEOWNERS named — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Decision.** (1) **Reporting:** GitHub's private reporting form on the public repository is the only channel; no `security@`
+address and no PGP key, because none would be monitored — the commission forbids inventing either. (2) **Two-person review:
+not adopted** — one maintainer; `main` refuses force-push and deletion, CI gates every change, CODEOWNERS names the
+maintainer. (3) **Signed commits and tags: not adopted** — the release's build attestations vouch for what users install.
+(4) **SLSA:** Build Level 2 per release (GitHub artifact attestations from `release-build.yml`); **L3 claimed only after**
+`gh attestation verify --signer-workflow …/release-build.yml` passes on a published release. (5) **Scorecard:** runs, no
+floor claimed. (6) **CODEOWNERS:** `@jessesuniljs1-collab` replaces the placeholder. `governance.rs`'s
+`security_controls_are_decided_and_no_claim_runs_ahead_of_its_proof` replaces `pending_public_controls_are_still_marked_as_pending`
+and holds the new line; watched red on the old text. Entrenched record: this date. RW 7.8 closed.
+
 ## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
 
 Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.

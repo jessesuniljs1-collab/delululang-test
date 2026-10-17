@@ -88,6 +88,32 @@ cargo run -p delulu-survey -- build
 
 ---
 
+## 2026-10-17 — `SECURITY.md` §1 and §6, and `.github/CODEOWNERS`: every control decided, the owner named
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `SECURITY.md` §1 (the reporting channel: the public repository's private reporting form, the only channel; no `security@` address or PGP key) and §6 (each `PENDING-PUBLIC` row decided: two-person review and signed commits **not adopted**, with reasons; SLSA **L2** live per release and **L3 only after** `gh attestation verify --signer-workflow` passes; Scorecard runs with no floor claimed; private reporting, secret scanning, push protection and dependency alerts live); `.github/CODEOWNERS` — the placeholder replaced by `@jessesuniljs1-collab` on its eleven lines |
+| Entrenched by | `.github/CODEOWNERS` (`/SECURITY.md`); build-order D2 (nothing claimed live that is not) |
+| Campaign | the owner's commission of 2026-10-17 (*"SECURITY.md"*, *"CODEOWNERS"* among the decisions it delegates); `HANDOFF.md` §1.1 items 3 and 4; RW 7.8 |
+| Approved by | **the head chef, 2026-10-17, under the owner's delegation of that day** (D-V2-154) — the owner: *"You do not need to wait for my review or approval for any outstanding project decisions"*; its limit honoured: *"Never invent security contact details, cryptographic keys, verification results or compliance claims"* |
+
+**Why**
+
+The public repository exists and its controls are switched on (D-V2-153, read back), so "pending a publication" was no
+longer true of any row: each became live, or not adopted with its reason. No address or key is listed because none would be
+monitored; L3 is written as a condition because it has not been verified; two-person review is not claimed by a project
+with one maintainer. `governance.rs`'s test was rewritten to hold the new line — no placeholder, no pending row, L3 a
+condition — and was watched failing on the old text before the edit.
+
+**Why this is not an RFC**
+
+`SECURITY.md` is policy, not language: no rule, diagnostic or guarantee of the language moves. Every change narrows a
+claim to what runs or names a real owner where a placeholder stood — build-order D2 strengthened, not relaxed.
+
+---
+
 ## 2026-10-17 — `docs/design/CONSTITUTION.md` §5.14 item 3 and §5.15 guarantee 5: a layer counts only where it runs
 
 **Changed**

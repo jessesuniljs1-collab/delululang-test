@@ -3519,3 +3519,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (2) the cutover edits of D-V2-153 §3; (3) the 2.0.0 bump and CHANGELOG; (4) the snapshot push to `DeluluLang` `main`,
   then branch protection; (5) tag `v2.0.0`, `RELEASES=on`, verify archives and attestations, publish; (6) the laptop's
   `origin` and the routine switched to `DeluluLang`; `delululang-test` private; (7) the final report.
+
+### 2026-10-17 — `SECURITY.md`'s controls decided; CODEOWNERS names the maintainer (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `30a340a`
+- Commits: (1) this entry's commit
+- Files and folders: M `SECURITY.md` (entrenched), `.github/CODEOWNERS`, `crates/delulu/tests/governance.rs` (the test
+  rewritten, watched red first), `crates/delulu-survey/src/codeowners.rs` (a comment), `docs/for-agents.md`,
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-154), `docs/REMAINING_WORK.md`
+  (7.8), `HANDOFF.md` (§1.1 item 3), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next — the launch: (2) the cutover edits of D-V2-153 §3; (3) the 2.0.0 bump and CHANGELOG; (4) the snapshot push
+  and branch protection; (5) the tag, `RELEASES=on`, verification, publishing; (6) `origin`, the routine, the archive;
+  (7) the final report.

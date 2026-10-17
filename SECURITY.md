@@ -11,13 +11,14 @@ in `docs/security/DRILL-001.md`. **Updated 2026-09-17**, when the testing reposi
 ## 1. Reporting a vulnerability
 
 **Report privately through GitHub.** On this repository, open the **Security** tab and choose
-**Report a vulnerability** — GitHub's private vulnerability reporting, enabled on 2026-09-17, when the
-testing repository became public. A report is visible only to you and to the repository's
+**Report a vulnerability** — GitHub's private vulnerability reporting: on the public repository,
+[`jessesuniljs1-collab/DeluluLang`](https://github.com/jessesuniljs1-collab/DeluluLang/security/advisories/new), since
+2026-10-17, and on the development repository since 2026-09-17. A report is visible only to you and to the repository's
 administrators, and nothing about it is public unless and until an advisory is published.
 
-**Still `PENDING-PUBLIC`:** a dedicated `security@` address and the PGP key that signs advisories,
-assigned when the project's final public repository launches. Until then the private report above is
-the only channel, and no e-mail address is listed, because none is monitored yet.
+**It is the only channel** (D-V2-154). No `security@` address and no PGP key are offered, because none would be
+monitored: the project has one maintainer, and GitHub's form already reaches him privately and carries the report
+through to a published advisory and, where one is warranted, a CVE.
 
 That is stated rather than papered over. A security policy that lists a channel which does not answer
 is worse than one that admits it is not open yet: it costs a reporter the window in which the bug
@@ -25,7 +26,8 @@ could have been fixed. The channel above answers, on these terms:
 
 - it is private — **not** a public issue tracker;
 - an acknowledgement within **3 working days**, and a substantive response within **10**;
-- when the `security@` address opens, its PGP key is published in this file and on the release page.
+- a fix is announced as a GitHub Security Advisory on the public repository, crediting the reporter unless they ask
+  otherwise.
 
 **Please do not** open a public issue for a suspected vulnerability, and please do not test against
 infrastructure you do not own.
@@ -157,25 +159,24 @@ branch. Timeline, target times, and what the drill exposed: **`docs/security/DRI
 
 ## 6. Supporting controls
 
-Several controls below require the project's final public repository and its CI identity
-infrastructure. Each ships as written policy plus committed configuration that activates on that
-publication, marked `PENDING-PUBLIC`. The testing repository has been public since 2026-09-17, but it is
-not that publication, so those rows stay pending; the GitHub protections switched on for it are listed
-as live. Nothing here is claimed to be live that is not — see `STAGE9_BUILD_ORDER.md` D2.
+Until 2026-10-17 several rows here waited for the project's public repository, marked as pending. That repository
+exists now, and each row is decided (D-V2-154): **live**, or **not adopted**, with the reason. Nothing here is claimed to
+be live that is not — see `STAGE9_BUILD_ORDER.md` D2.
 
 | Control | Status |
 |---|---|
-| Two-person review on every change | `PENDING-PUBLIC` (branch protection). Enforced procedurally today: the agent that writes a phase never commits it. |
-| Signed commits and tags | `PENDING-PUBLIC` (Sigstore gitsign needs OIDC identity) |
+| Two-person review on every change | **Not adopted** — the project has one maintainer, and a rule nobody can satisfy would be a claim, not a control. `main` refuses force-pushes and deletion, every change passes CI, and CODEOWNERS names the maintainer. |
+| Signed commits and tags | **Not adopted** — what a user installs is vouched for by the release's build attestations (next rows), not by commit signatures. |
 | Release artifact signatures | **LIVE** — the project's own ed25519 machinery, verified by `delulu verify-sig` |
-| SLSA provenance | Local in-toto statement generated; **L3 attestation is `PENDING-PUBLIC`** and the builder identity is stated honestly as a local runner |
+| SLSA provenance | **Build Level 2, live per release**: every archive carries a GitHub artifact attestation from the reusable workflow `.github/workflows/release-build.yml`. **L3 is claimed only after** `gh attestation verify <archive> --signer-workflow jessesuniljs1-collab/DeluluLang/.github/workflows/release-build.yml` has passed on a published release, and the release notes say which. |
 | Reproducible builds | **LIVE** — see `STAGE9_BUILD_ORDER.md` D6 |
 | SBOM (CycloneDX) per release | **LIVE** |
-| OpenSSF Scorecard floor | `PENDING-PUBLIC` — set for the final public repository; the testing repository is public and could be scored, but no floor is claimed for it |
+| OpenSSF Scorecard | **Runs** on the public repository (`.github/workflows/scorecard.yml`); **no floor is claimed** — a score is published, not promised. |
 | AI-contribution policy | **LIVE** — `CONTRIBUTING.md` §AI |
 | AI-overseer monitoring | Advisory only, never merge authority — Constitution §9: the guarantees hold even if every overseer colludes |
-| Private vulnerability reporting | **LIVE** on the testing repository since 2026-09-17 (GitHub) — the channel in §1 |
-| Secret scanning and push protection | **LIVE** on the testing repository since 2026-09-17 (GitHub): a push carrying a credential GitHub recognizes is refused |
+| Private vulnerability reporting | **LIVE** on the public repository since 2026-10-17 and the development repository since 2026-09-17 (GitHub) — the channel in §1 |
+| Secret scanning and push protection | **LIVE** on both repositories (GitHub): a push carrying a credential GitHub recognizes is refused |
+| Dependency alerts | **LIVE** on the public repository (Dependabot alerts), beside `cargo deny` in CI |
 
 ## 7. Our own limits
 

@@ -388,7 +388,7 @@ change to these yet, only for this reminder:
 |---|---|---|
 | 1. The banned word | **Done 2026-10-17 (D-V2-152):** the two rule lines reworded so they do not spell it; the old commits stay in this history | Start from a fresh history |
 | 2. The author e-mail | New commits use GitHub's private no-reply address. Change git's `user.email` **before** switching on GitHub's *Block command line pushes that expose my email*, or pushes are refused | A fresh history, authored with the no-reply address |
-| 3. The CODEOWNERS placeholder | Leave it as it is | Replace it with the owner's real handle, and update `governance.rs::pending_public_controls_are_still_marked_as_pending`, which requires the placeholder today |
+| 3. The CODEOWNERS placeholder | **Done 2026-10-17 (D-V2-154):** `@jessesuniljs1-collab` | Replace it with the owner's real handle, and update `governance.rs::pending_public_controls_are_still_marked_as_pending`, which requires the placeholder today |
 | 4. The `PENDING-PUBLIC` controls | They stay pending; the testing repository has the interim reporting channel above. **2026-10-17 (D-V2-153):** on the public repository private vulnerability reporting, secret scanning, push protection and Dependabot alerts are ON (read back); development moves there at the launch | Decide which to switch on at launch: the `security@` address and its PGP key, branch protection, signed commits, SLSA L3, the Scorecard floor |
 
 Rewriting *this* repository's history would remove items 1 and 2 from it, and is not recommended: it

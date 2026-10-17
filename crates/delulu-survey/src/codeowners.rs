@@ -17,7 +17,7 @@
 //!
 //! Provenance is unchanged by any of this: a marking names the CODEOWNERS line it was read from, and
 //! the owner string is carried **verbatim, never interpreted**. The Survey has no opinion about who
-//! `@PENDING-PUBLIC-project-lead` is.
+//! the owner it names is (until 2026-10-17 a placeholder, `@PENDING-PUBLIC-project-lead`).
 
 use crate::scan::ScannedFile;
 use crate::{Builder, Severity};
