@@ -124,6 +124,11 @@ shallow, so first `git fetch --unshallow origin master` (else every branch looks
 `origin/claude/*`, `git rev-list --count origin/master..BRANCH`. A commit `master` lacks is step 4's first item: read its
 runs (`…/actions/runs?head_sha=HASH`), verify it, and MERGE it (the hash its runs name stays in `master`'s history) — or
 record why it is superseded (a witness branch whose work landed in revised form).
+**And `origin/autosave/laptop`** (since 2026-10-17): the laptop's Task Scheduler job (`scripts/autosave.ps1`) pushes there
+every ten minutes whatever a laptop session had not committed — the owner asked for it so that work survives a session
+stopping at its usage limit. Each snapshot's message names its base. If the newest one is newer than the laptop's last
+commit on `master`, `git diff BASE origin/autosave/laptop` is unfinished work: finish it, verify it like any change, and
+commit it to `master` in your own commits. Never merge the branch itself.
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile

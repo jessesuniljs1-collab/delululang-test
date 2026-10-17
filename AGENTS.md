@@ -14,6 +14,9 @@ take DeluluLang to a public release; every outstanding decision is the head chef
    the `origin/claude/*` branches — the on-demand cloud routine (below) may have pushed while the laptop was away; pull
    (fast-forward) before any edit, and read the CI runs of what came in. **Then run the Survey and `doctor`**
    (`cargo run -p delulu-survey -- check`, `cargo run -p delulu -- doctor --check`) — the section below says when and why.
+   **`origin/autosave/laptop`** holds what a laptop session had not yet committed when it stopped (`scripts/autosave.ps1`,
+   a Task Scheduler job — owner, 2026-10-17): if its newest snapshot is newer than `master`'s last laptop commit, compare
+   it with its base and recover what it needs. Never merge it — a snapshot is not a verified commit.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).

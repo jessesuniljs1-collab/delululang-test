@@ -3549,3 +3549,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   and only then moves `origin`, the routine and the archive.
 - Open / next: the launch, as above. Meanwhile a routine run or cloud session takes ordinary work (`docs/CLOUD_ROUTINE.md`
   step 4, items 5–7: `REMAINING_WORK.md` rows, sweeps, features), never the launch.
+
+### 2026-10-17 — the autosave: the laptop's work reaches GitHub even when a session stops (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `9829662`
+- Commits: (1) this entry's commit
+- Files and folders: A `scripts/autosave.ps1`; M `AGENTS.md` (*Read first* 0), `HANDOFF.md` (§11.1),
+  `docs/CLOUD_ROUTINE.md` (step 1), `.claude/settings.json` (the start-up hook also lists `origin/autosave/*`),
+  `docs/REPOSITORY_STRUCTURE.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Why:** the owner, 2026-10-17 — *"Head Chef continue cooking till usage limit hits. Can u run something parellely so
+  that everything will get pushed to github repo even if usage limit hits"*. A sous-chef or a routine draws on the same
+  usage and stops with the session, so the safety net runs outside Claude: Windows Task Scheduler, task
+  `DeluluLang-autosave`, every 10 minutes for 7 days (installed 2026-10-17 18:21 UTC).
+- **What it does:** pushes every local branch ahead of its upstream (plain push; a diverged branch is only logged), and
+  snapshots uncommitted work to **`autosave/laptop`** through a private index — HEAD, the index and the working tree are
+  untouched; parents are the previous snapshot and HEAD, so the branch only fast-forwards; CI does not run on it.
+- **Verified:** a run by hand pushed snapshot `5fb039a` (base `9829662`, 1 path, `git status` unchanged after); a second
+  run read `unchanged since snapshot 5fb039a`; the scheduled task's first run returned 0 with the same line in its log;
+  the banned-word guard, run with a probe token and a probe file, refused and pushed nothing (`ls-remote` showed no
+  probe branch).
+- Open / next: unchanged — the launch (the entry before this one).
