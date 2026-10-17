@@ -3723,6 +3723,16 @@ its one placeholder, the contact method, filled by a channel that exists: the re
 GitHub's own **Report content**. No e-mail address is invented. The public repository's private reporting must be on
 for the channel to work — a launch item.
 
+## D-V2-152 — The two rule lines that spelled the banned word are reworded; the tree no longer contains it — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** The owner's ruling: a third-party tool's name appears nowhere in the repository. Two lines of `HANDOFF.md` (the §1
+rule table and §11.1) stated the rule by spelling the name, and §1.1's pre-public item 1 said to reword them before the
+public repository. The public history starts fresh (§1.1), so only the tree matters there.
+
+**Decision.** Both lines now name it as *graph* and *ify* written as one word — enough for an agent to obey the rule, without
+the word itself; `AGENTS.md` gives the check (`grep -ci 'graph''ify'`). `git grep -i` over the tracked tree finds nothing
+(2026-10-17). The old commits that spell it stay in this development history, which is never rewritten (`HANDOFF.md` §1).
+
 ## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
 
 Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.

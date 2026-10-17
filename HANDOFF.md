@@ -332,7 +332,7 @@ none of its crates a dependency — bind every run.
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
 | **Never claim execution that did not happen.** | "Prepared" and "green" are different words and this project keeps them different. See §8. |
 | **Do not fabricate evidence, and never delete a failed experiment.** | Failed runs are recorded, not tidied away. |
-| **The word "graphify" appears nowhere in the repository or product surfaces.** | Owner ruling. (The `dcg` credit in the Guard docs stands and is unrelated.) |
+| **A third-party tool's name — *graph* and *ify* written as one word — appears nowhere in the repository or product surfaces, this line included (reworded 2026-10-17, D-V2-152).** | Owner ruling. (The `dcg` credit in the Guard docs stands and is unrelated.) |
 | **Regenerate the Survey after any change, before running the suite.** | `cargo run -p delulu-survey -- build`. A test enforces freshness; see §4. |
 | **Run `delulu doctor` — it is the one command that answers "is this healthy?"** | Three sections: **environment** (install, state directory, audit chain), **security posture** (root-issuance mode, anchor-key custody, whether the filesystem can enforce owner-only permissions, and whether the RUNNING broker agrees with the policy on disk), and **repository** (the map's freshness and integrity). Exit 0 healthy, **1 when a problem remains**, 2 on a bad invocation. `--check` never writes; `--json` emits one envelope. Run it **on the deployment host, as the account your agents use** — see §11.4 and `docs/DEPLOYMENT.md`. |
 
@@ -386,7 +386,7 @@ change to these yet, only for this reminder:
 
 | Item | This testing repository | The final public repository |
 |---|---|---|
-| 1. The banned word | Reword the two rule lines in §1 and §11.1 so they do not spell it; the old commit stays in history | Start from a fresh history |
+| 1. The banned word | **Done 2026-10-17 (D-V2-152):** the two rule lines reworded so they do not spell it; the old commits stay in this history | Start from a fresh history |
 | 2. The author e-mail | New commits use GitHub's private no-reply address. Change git's `user.email` **before** switching on GitHub's *Block command line pushes that expose my email*, or pushes are refused | A fresh history, authored with the no-reply address |
 | 3. The CODEOWNERS placeholder | Leave it as it is | Replace it with the owner's real handle, and update `governance.rs::pending_public_controls_are_still_marked_as_pending`, which requires the placeholder today |
 | 4. The `PENDING-PUBLIC` controls | They stay pending; the testing repository has the interim reporting channel above | Decide which to switch on at launch: the `security@` address and its PGP key, branch protection, signed commits, SLSA L3, the Scorecard floor |
@@ -609,7 +609,8 @@ wins, and you should update the memory to match.
   wait — but the decision itself is not outstanding.
 - **Harden, never redefine, Authority and Guard.** Closing a hole is welcome. Changing what they mean
   is not, without the owner. The owner has stated this as a guardrail more than once.
-- **The word "graphify" appears nowhere** in the repository or any product surface. Documents were
+- **A third-party tool's name — *graph* and *ify* as one word — appears nowhere** in the repository or any product surface
+  (this line reworded 2026-10-17 so that it no longer spells it; D-V2-152). Documents were
   anonymised at commit `f4ffd01`. The `dcg` credit in the Guard documentation is unrelated and stands.
 - **The scheduled-continuation feature must not be removed.** If autonomous wake-ups are used they
   must be a **one-shot chain carrying a nonce**, never a recurring cron: a recurring job outlived the

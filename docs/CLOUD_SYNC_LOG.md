@@ -3453,3 +3453,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing.
 - Open / next, in order: (5) *[laptop]* the WSL microVM images, the WSL suite, the VS Code test on Windows (a routine run
   may run `editors/vscode/e2e.js` on Linux under `xvfb-run`); (6) *[laptop]* the launch, as listed three entries above.
+
+### 2026-10-17 — the banned word gone from the tree; the VS Code test on Windows (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `f731e5b`
+- Commits: (1) this entry's commit
+- Files and folders: M `HANDOFF.md` (the two rule lines and §1.1 item 1), `AGENTS.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-152), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Validated on the laptop:** `node editors/vscode/e2e.js target/debug/delulu.exe` on Windows 11 with a freshly packaged
+  `delulu-lang.vsix` (binary built from `f731e5b`'s code): **passed** — "extension activated and the language server started
+  with no errors reported", exit 0. The WSL validation (a fresh ext4 clone, the microVM image rebuilt from source, the
+  KVM-gated tests, the whole suite) was running when this entry was written; its result goes in the next entry.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: (5) the WSL result; (6) *[laptop]* the launch — pre-public item 1 (the banned word) is now done.

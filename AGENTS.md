@@ -36,7 +36,7 @@ authority; the host performs every effect under grants, a lease and the Guard.
   history there.
 - **Never put CI's skip token in a commit message** — it silently skips the push run.
 - **A word the owner banned** (named in `HANDOFF.md` §1's rule table) appears nowhere — no file, commit
-  or product surface. Do not copy or restate the two existing rule lines that spell it.
+  or product surface (*graph* and *ify* as one word). Check a diff with `grep -ci 'graph''ify'` before committing.
 - **Owner-reserved — change only with the owner's word:** `docs/design/CONSTITUTION.md`,
   `DELULU_CORE.md`, `STABILITY.md`, `SOUNDNESS_AUDIT.md`, `SECURITY.md`, `rfcs/`, `docs/security/`,
   `crates/delulu-check/tests/laundering.rs`, `crates/delulu-conform/`, `tests/conformance/witnesses.toml`
