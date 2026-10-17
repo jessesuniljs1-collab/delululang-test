@@ -6210,3 +6210,9 @@ item 13, the Book's maintainer list, `REMAINING_WORK.md` 7.5 (closed at 2.0.0), 
 describes the 2.0.0 archives on the Releases page, their checksums and attestations, and the absence of a package-manager
 entry. Records of the past (`CHECKPOINT-1.0.md`, the stage build orders) are left as written. `node --check` on the
 extension; `evidence_claims`, `editor_contract`, `repository_structure`, `distribution`, `release` passed.
+
+## 2026-10-17 (night) — the owner: only the test repository until he says otherwise
+
+*"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my
+repo."* Recorded in `AGENTS.md`'s push rule, `HANDOFF.md` §11.1 and the decision log (it outranks D-V2-153 §3 and the
+release procedure's steps 4–10). Nothing had been pushed to `DeluluLang`; the prepared release stays on `launch/2.0.0`.

@@ -3629,3 +3629,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (7.5), `docs/release/CHECKLIST-2.0.md` (criterion 13), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Deleted, renamed: nothing.
 - Open / next: the release procedure in `docs/release/CHECKLIST-2.0.md`, from step 2.
+
+### 2026-10-17 (night) — the owner: only the test repository until he says otherwise (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `52071e5`
+- Commits: (1) this entry's commit
+- Files and folders: M `AGENTS.md` (the push rule), `HANDOFF.md` (§11.1), `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always
+  push only to my repo"*. Every push goes to `delululang-test`. Nothing was ever pushed to `DeluluLang` (its `ls-remote`
+  is empty); no tag was pushed; `origin`, the routine and both repositories' visibility are unchanged.
+- **The launch waits for his word:** `launch/2.0.0` (on `delululang-test`) holds the prepared release — the 2.0.0 version,
+  the CHANGELOG section, the release gate (the 2.0 checklist under `docs/release/` on that branch) with steps 1–3 doable and 4–10 held. The CI
+  everything run and the release dry run on it are read and recorded as they finish.
+- Open / next: ordinary work on `master` (`docs/CLOUD_ROUTINE.md` step 4); keep `launch/2.0.0` current by merging
+  `master` into it; the launch only when the owner says.

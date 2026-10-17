@@ -20,8 +20,8 @@ the repositories are synced.
 
 ## GitHub first, then the Survey and doctor
 
-**Since the 2.0.0 launch (D-V2-153) the repository is `github.com/jessesuniljs1-collab/DeluluLang` and its branch is
-`main`:** read every `delululang-test` below as `DeluluLang`, and every `master` as `main`. `delululang-test` is the private
+**Once the owner says to move the repository (D-V2-153; not before — his word of 2026-10-17, night, keeps every session on
+`delululang-test`), it is `github.com/jessesuniljs1-collab/DeluluLang` and its branch is `main`:** read every `delululang-test` below as `DeluluLang`, and every `master` as `main`. `delululang-test` is the private
 archive of the development history before 2.0.0 — never pushed to again; a commit hash or run id in a record dated
 before 2.0.0 refers to it.
 

@@ -39,6 +39,10 @@ after step 8, before the draft is published.
 
 ## Release procedure
 
+**Steps 4–10 wait for the owner's word** (2026-10-17, night: *"Only push to and use test repo until I tell u to change.
+Do not change repo, unless told by me"*). Until he says so, only steps 1–3 run, on `delululang-test`.
+
+
 1. `master` merged INTO `launch/2.0.0` (never the other way); the gates re-run there (`survey build`, `check`,
    `findings` 0 errors; `doctor --check`).
 2. CI `jobs=everything` on the launch branch's final commit — every job read, success (criteria 1, 3, 4).
