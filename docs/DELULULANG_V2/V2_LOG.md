@@ -6158,7 +6158,7 @@ records only):
 ## 2026-10-17 — the autosave: a session's unpushed work survives its usage limit
 
 **What.** `scripts/autosave.ps1`, registered as the Windows Task Scheduler job `DeluluLang-autosave` (every 10 minutes,
-7 days, as the owner's user, no console window): it pushes every local branch that is ahead of its upstream — a plain
+7 hours — the owner: *"Maybe next 7 hrs is enough"*; `-Hours N` sets another span — as the owner's user, no console window): it pushes every local branch that is ahead of its upstream — a plain
 push, never a force — and snapshots uncommitted work (tracked edits and new unignored files) onto `autosave/laptop`
 through a private index, so HEAD, the index and the working tree are never touched. A snapshot's parents are the
 previous snapshot and HEAD, so the branch only fast-forwards; it is never merged — the next session recovers from it

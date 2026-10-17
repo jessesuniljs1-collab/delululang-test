@@ -3562,7 +3562,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - **Why:** the owner, 2026-10-17 — *"Head Chef continue cooking till usage limit hits. Can u run something parellely so
   that everything will get pushed to github repo even if usage limit hits"*. A sous-chef or a routine draws on the same
   usage and stops with the session, so the safety net runs outside Claude: Windows Task Scheduler, task
-  `DeluluLang-autosave`, every 10 minutes for 7 days (installed 2026-10-17 18:21 UTC).
+  `DeluluLang-autosave`, every 10 minutes (installed 2026-10-17 18:21 UTC for 7 days; re-installed 18:28 UTC for **7 hours** at the owner's word, *"Maybe next 7 hrs is enough … We can start task scheduler later"* — `-Install` starts it again, `-Hours N` sets the span).
 - **What it does:** pushes every local branch ahead of its upstream (plain push; a diverged branch is only logged), and
   snapshots uncommitted work to **`autosave/laptop`** through a private index — HEAD, the index and the working tree are
   untouched; parents are the previous snapshot and HEAD, so the branch only fast-forwards; CI does not run on it.
