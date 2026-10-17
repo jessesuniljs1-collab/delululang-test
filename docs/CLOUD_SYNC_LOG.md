@@ -3533,3 +3533,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next — the launch: (2) the cutover edits of D-V2-153 §3; (3) the 2.0.0 bump and CHANGELOG; (4) the snapshot push
   and branch protection; (5) the tag, `RELEASES=on`, verification, publishing; (6) `origin`, the routine, the archive;
   (7) the final report.
+
+### 2026-10-17 — `launch/2.0.0` exists: do not merge it into `master` (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `23ca64c`
+- Commits: (1) this entry's commit
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **The prepared launch commit is `f34fea4` on `launch/2.0.0`** (the 2.0.0 version, the CHANGELOG's `## [2.0.0]`, the
+  cutover of D-V2-153 §3; its own sync-log entry is on that branch). Full CI dispatched on it: run `39055892355`.
+- **For every session until the launch:** keep working on `master` as before; **never merge `launch/2.0.0` into
+  `master`** (it would make `master` claim an unreleased 2.0.0 and point the rules at a repository that is still empty).
+  The launch session first merges `master` INTO `launch/2.0.0` (so nothing done meanwhile is lost), re-runs the gates and
+  CI there, then dates the CHANGELOG, snapshots that tree into `DeluluLang` `main`, tags `v2.0.0`, verifies, publishes,
+  and only then moves `origin`, the routine and the archive.
+- Open / next: the launch, as above. Meanwhile a routine run or cloud session takes ordinary work (`docs/CLOUD_ROUTINE.md`
+  step 4, items 5–7: `REMAINING_WORK.md` rows, sweeps, features), never the launch.
