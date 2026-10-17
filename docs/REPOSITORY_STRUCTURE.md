@@ -287,6 +287,9 @@ DeluluLang/
 │   │                               #   C compiler; compiled, never run) — routine run 3's loop engineering
 │   ├── ci-log-summary.py           # a CI job's saved log in a few lines: totals, failures, compiler
 │   │                               #   warnings, named lines — routine run 12's loop engineering
+│   ├── autosave.ps1                # the laptop's safety net (owner, 2026-10-17): a Task Scheduler job every
+│   │                               #   10 minutes pushes branches ahead of GitHub (never a force) and snapshots
+│   │                               #   uncommitted work to `autosave/laptop` — never merged; recovered from
 │   ├── suite.sh                    # the whole suite the routine's way (alone, -j 4), and TREE-MOVED
 │   │                               #   when the tree changed under it — routine run 13's loop engineering
 │   ├── authority-corpus.py         # what every corpus program asks for (pure, literal, grant data, computed),

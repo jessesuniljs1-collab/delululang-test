@@ -10,10 +10,13 @@ you remember from elsewhere.
 **In force since 2026-10-17:** the owner's commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md` —
 take DeluluLang to a public release; every outstanding decision is the head chef's (below, *The owner's delegation*).
 
-0. **Sync with GitHub first** (owner, 2026-10-17): `git fetch origin`, then `git log --oneline HEAD..origin/master` and
+0. **Sync with GitHub first** (owner, 2026-10-17): `git fetch origin`, then `git log --oneline HEAD..origin/main` and
    the `origin/claude/*` branches — the on-demand cloud routine (below) may have pushed while the laptop was away; pull
    (fast-forward) before any edit, and read the CI runs of what came in. **Then run the Survey and `doctor`**
    (`cargo run -p delulu-survey -- check`, `cargo run -p delulu -- doctor --check`) — the section below says when and why.
+   **`origin/autosave/laptop`** holds what a laptop session had not yet committed when it stopped (`scripts/autosave.ps1`,
+   a Task Scheduler job — owner, 2026-10-17): if its newest snapshot is newer than `main`'s last laptop commit, compare
+   it with its base and recover what it needs. Never merge it — a snapshot is not a verified commit.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
