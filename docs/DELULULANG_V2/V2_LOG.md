@@ -6179,3 +6179,9 @@ the previous snapshot, so a laptop still on the development history would have p
 autosave.ps1` now fetches with `--prune` and snapshots only when HEAD is on some branch of `origin`. **Falsified** on
 throwaway repositories: HEAD on an unrelated history — the guarded script refused (exit 1, no remote branch), the previous
 script pushed; control, HEAD on a branch origin has — a snapshot pushed.
+
+## 2026-10-17 (night) — the owner: only the test repository until he says otherwise
+
+*"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my
+repo."* Recorded in `AGENTS.md`'s push rule, `HANDOFF.md` §11.1 and the decision log (it outranks D-V2-153 §3 and the
+release procedure's steps 4–10). Nothing had been pushed to `DeluluLang`; the prepared release stays on `launch/2.0.0`.

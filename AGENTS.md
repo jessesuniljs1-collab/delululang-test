@@ -36,7 +36,10 @@ authority; the host performs every effect under grants, a lease and the Guard.
   repository). Never force-push, never rewrite pushed history (documents cite commit hashes). **The
   project's final public repository** is created and pushed only under the owner's commission of 2026-10-17, once
   `HANDOFF.md` §1.1's four items are resolved by recorded `D-V2-nn` decisions — and never by pushing this development
-  history there.
+  history there. **The owner, 2026-10-17 (night): *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*** — so push to and use `delululang-test` only; never push to
+  `DeluluLang` or any other repository, push a tag, switch `origin`, move the routine or change any repository's
+  visibility until he says so in words. This outranks the commission's launch steps: `launch/2.0.0` stays prepared, not
+  launched.
 - **Never put CI's skip token in a commit message** — it silently skips the push run.
 - **A word the owner banned** (named in `HANDOFF.md` §1's rule table) appears nowhere — no file, commit
   or product surface (*graph* and *ify* as one word). Check a diff with `grep -ci 'graph''ify'` before committing.
