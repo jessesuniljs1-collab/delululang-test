@@ -20,7 +20,12 @@ the repositories are synced.
 
 ## GitHub first, then the Survey and doctor
 
-Every session — laptop or cloud — starts with `git fetch origin` and reads what came in (`HEAD..origin/master`, the
+**Since the 2.0.0 launch (D-V2-153) the repository is `github.com/jessesuniljs1-collab/DeluluLang` and its branch is
+`main`:** read every `delululang-test` below as `DeluluLang`, and every `master` as `main`. `delululang-test` is the private
+archive of the development history before 2.0.0 — never pushed to again; a commit hash or run id in a record dated
+before 2.0.0 refers to it.
+
+Every session — laptop or cloud — starts with `git fetch origin` and reads what came in (`HEAD..origin/main`, the
 `origin/claude/*` branches, their CI) before any edit: the on-demand routine pushes while the laptop is away (owner,
 2026-10-17; `AGENTS.md` *Read first* 0).
 

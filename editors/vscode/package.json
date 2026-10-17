@@ -2,7 +2,7 @@
   "name": "delulu-lang",
   "displayName": "DeluluLang",
   "description": "DeluluLang language support — one LSP server for every editor (`delulu lsp`).",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "publisher": "delulu-lang",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "https://github.com/delulu-lang/delulu" },

@@ -1,5 +1,10 @@
 # The cloud routine — how DeluluLang develops itself when the laptop is away
 
+**Since the 2.0.0 launch (D-V2-153) the repository is `github.com/jessesuniljs1-collab/DeluluLang` and its branch is
+`main`:** read every `delululang-test` below as `DeluluLang`, and every `master` as `main`. `delululang-test` is the private
+archive of the development history before 2.0.0 — never pushed to again; a commit hash or run id in a record dated
+before 2.0.0 refers to it.
+
 **Since 2026-10-17: on demand (D-V2-146).** The owner, 2026-10-17: *"Create a new claude code cloud routine like last
 time, I will be running it occasionally whenever I can't use my laptop. Let it be paused at start, I will start it
 whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The

@@ -3533,3 +3533,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next — the launch: (2) the cutover edits of D-V2-153 §3; (3) the 2.0.0 bump and CHANGELOG; (4) the snapshot push
   and branch protection; (5) the tag, `RELEASES=on`, verification, publishing; (6) `origin`, the routine, the archive;
   (7) the final report.
+
+### 2026-10-17 — the launch commit, prepared on `launch/2.0.0` (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `launch/2.0.0` (NOT `master`: D-V2-149 puts the version in the commit the tag names, so `master` never claims an
+  unreleased 2.0.0)   Pull request: none   Merged: no — the launch session uses this commit as the public snapshot
+- Base: `23ca64c`
+- Files and folders: M `Cargo.toml`, `Cargo.lock`, `editors/vscode/package.json`, `editors/vscode/package-lock.json`
+  (1.0.0 → 2.0.0); `CHANGELOG.md` (`## [2.0.0]`, its breaking changes and the history note; the 76 *Unreleased* sections
+  under it as `###`, their own subsections demoted a level, no text changed); the D-V2-153 §3 cutover — `AGENTS.md` (the
+  push rule: `DeluluLang`, `main`), `CLAUDE.md`, `docs/CLOUD_ROUTINE.md`, `HANDOFF.md` (§1, §11.1), `.claude/settings.json`
+  (the hook reads `origin/main`); `docs/CLOUD_SYNC_LOG.md`; `docs/survey/*`. Deleted, renamed: nothing.
+- Checked on the branch: distribution 10/10 (the `## [2.0.0]` section for the version this tree builds), editor_contract 7/7
+  (the extension's version = the workspace's), evidence_claims, governance, release, repository_structure; survey and
+  doctor in the commit message. The full CI: dispatched on the branch (`ci.yml`, `jobs=everything`).
+- Open / next — the launch session: (a) read the branch's CI; (b) set the CHANGELOG date (`## [2.0.0] — YYYY-MM-DD`);
+  (c) a fresh-history snapshot of this tree (no-reply author; the message names the archive) pushed to
+  `DeluluLang` `main`; branch protection; (d) tag `v2.0.0` there, `RELEASES=on`, verify archives and
+  `gh attestation verify --signer-workflow`, publish; (e) the laptop's `origin`, the routine's repository and prompt;
+  `delululang-test` private; (f) the final report.

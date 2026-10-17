@@ -29,11 +29,11 @@ authority; the host performs every effect under grants, a lease and the Guard.
 
 ## Hard rules — never break these
 
-- **Push only to `origin`** (`github.com/jessesuniljs1-collab/delululang-test`, a public TESTING
-  repository). Never force-push, never rewrite pushed history (documents cite commit hashes). **The
-  project's final public repository** is created and pushed only under the owner's commission of 2026-10-17, once
-  `HANDOFF.md` §1.1's four items are resolved by recorded `D-V2-nn` decisions — and never by pushing this development
-  history there.
+- **Push only to `origin` = `github.com/jessesuniljs1-collab/DeluluLang`, branch `main`** (since the 2.0.0 launch,
+  D-V2-153). Never force-push, never rewrite pushed history (documents cite commit hashes). `main` is protected against
+  force-push and deletion. The development history before 2.0.0 is the private archive
+  `jessesuniljs1-collab/delululang-test`: never push there again, and never push its history here — hashes and run ids in
+  records dated before 2.0.0 refer to it.
 - **Never put CI's skip token in a commit message** — it silently skips the push run.
 - **A word the owner banned** (named in `HANDOFF.md` §1's rule table) appears nowhere — no file, commit
   or product surface (*graph* and *ify* as one word). Check a diff with `grep -ci 'graph''ify'` before committing.
