@@ -154,6 +154,29 @@ fn locale_priority_flag_beats_env_beats_config() {
 /// Criterion 7 at the CLI level, strengthened per build-order deviation 8: the FULL
 /// `--json` output is byte-identical across locales — message text included — while the
 /// human stderr differs. The machine interface cannot be localized.
+/// RW 6.1: a named CLI string speaks the locale — the `authority` report's header in the slang voice — while en-US
+/// stays the in-code text byte for byte, every other line of the report is the same, and the JSON report never moves.
+#[test]
+fn a_named_cli_string_speaks_the_locale_and_the_json_does_not_move() {
+    let ctx = Ctx::fresh("clistr");
+    let file = ctx.dir.join("ok.delulu");
+    std::fs::write(&file, "module m\nfn main() {}\n").unwrap();
+    let file = file.to_str().unwrap().to_string();
+    std::fs::write(&ctx.config, "welcomed = true\n").unwrap();
+
+    let en = ctx.run(&["authority", &file], false, &[("DELULU_LOCALE", "en-US")], None);
+    let slang = ctx.run(&["authority", &file], false, &[("DELULU_LOCALE", "delulu-slang")], None);
+    assert!(en.status.success() && slang.status.success(), "{}{}", text(&en), text(&slang));
+    let (en, slang) = (String::from_utf8_lossy(&en.stdout).to_string(), String::from_utf8_lossy(&slang.stdout).to_string());
+    assert!(en.starts_with("Authority of `m` — what this program can do to your system:\n"), "en-US, in-code: {en}");
+    assert!(slang.starts_with("what `m` can actually do to your system:\n"), "the slang header: {slang}");
+    assert_eq!(en.lines().skip(1).collect::<Vec<_>>(), slang.lines().skip(1).collect::<Vec<_>>(), "only the header moved");
+
+    let en_j = ctx.run(&["authority", &file, "--json"], false, &[("DELULU_LOCALE", "en-US")], None);
+    let slang_j = ctx.run(&["authority", &file, "--json"], false, &[("DELULU_LOCALE", "delulu-slang")], None);
+    assert_eq!(en_j.stdout, slang_j.stdout, "the machine envelope is locale-invariant, byte for byte");
+}
+
 #[test]
 fn criterion7_json_bytes_identical_across_locales_human_differs() {
     // Tag must be unique across ALL tests in this binary — Ctx dirs are keyed (tag, pid)

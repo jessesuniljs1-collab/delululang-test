@@ -3625,3 +3625,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `39058694156` (`52071e5`), `39059809187` (`9ad8e9c`): success. CI does not run on pushes to `launch/2.0.0` or
   `autosave/*` (it triggers on `master`/`main`); the launch branch is run by hand.
 - Open / next: RW 6.1 (CLI strings in the catalog); the launch waits for the owner's word.
+
+### 2026-10-17 (night) — RW 6.1: the CLI's own lines can be translated (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `640a7d5`
+- Commits: (1) this entry's commit
+- Files and folders: M `crates/delulu-diag/src/catalog.rs`, `crates/delulu-diag/src/lib.rs`,
+  `crates/delulu-diag/catalogs/delulu-slang.toml`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/locale_cli.rs`,
+  `crates/delulu/tests/locale_plugin_cli.rs`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/README.md`,
+  `docs/lang/en-US.md`, `docs/lang/delulu-slang.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (6.1 partial, 6.2),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **RW 6.1 unblocked:** three named CLI strings (`cli.authority.header`, `cli.authority.foreign-separator`,
+  `cli.locale.add.confirm`), rendered through the active catalog or en-US whole, terminal-safe; slang speaks all three;
+  a third catalog's key installs and renders. Two end-to-end witnesses red on the old code; a mutant red.
+- Open / next: more CLI strings as surfaces earn them; the launch waits for the owner's word.

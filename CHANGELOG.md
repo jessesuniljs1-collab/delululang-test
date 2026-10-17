@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the CLI's own lines can be translated, 2026-10-17
+
+- **Added (RW 6.1): named CLI strings in the catalogs.** A catalog can now translate the `authority` report's header
+  (`[cli.authority.header]`, `{program}`), its separator above foreign code (`[cli.authority.foreign-separator]`) and
+  `locale add`'s question (`[cli.locale.add.confirm]`, `{locale}`; the answer is still `y`). Before, every `cli.*` key
+  was refused with DL1704. `delulu-slang` speaks all three. en-US output and every JSON envelope are unchanged; a
+  catalog's text is made safe for a terminal.
+
 ## Unreleased — a Guard refusal asks for the narrowest permit, 2026-10-17
 
 - **Changed (RW 4.65): DL1410's request command asks for the narrowest permit that covers the refused use**, with the

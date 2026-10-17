@@ -110,27 +110,21 @@ message = "secret contents cannot enter the WASM guest ({detail})"
 
 ### 3.2 CLI strings (dotted keys)
 
+The CLI key space is exactly `delulu_diag::catalog::CLI_STRINGS` — since 2026-10-17 (RW 6.1)
+`cli.authority.header` (`{program}`), `cli.authority.foreign-separator` and `cli.locale.add.confirm`
+(`{locale}`). A `cli.*` key outside it names no surface and gets DL1704; `cli.grant-prompt.*` and `cli.run.ok`
+name lines the CLI does not print, and the first-run picker is shown before any locale exists, so it is en-US by
+design. The en-US text of each is the code's own (`catalog.rs`), reproduced here:
+
 ```toml
-[cli.grant-prompt.title]
-message = "this program requests: {summary} — allow?"
-
-[cli.grant-prompt.effects]
-message = "effects: {effects}"
-
 [cli.authority.header]
 message = "Authority of `{program}` — what this program can do to your system:"
 
 [cli.authority.foreign-separator]
 message = "-- outside the proof (contained at process level) --"
 
-[cli.run.ok]
-message = "ok"
-
-[cli.locale-picker.prompt]
-message = "pick your compiler's vibe (changes human text only — codes & JSON never change):"
-
 [cli.locale.add.confirm]
-message = "catalogs change human text only; codes, repairs, and JSON never change; this catalog holds no authority. add `{locale}`?"
+message = "install locale `{locale}`? [y/N]: "
 ```
 
 ### 3.3 The welcome note — NOT a catalog key (documented here for completeness only)

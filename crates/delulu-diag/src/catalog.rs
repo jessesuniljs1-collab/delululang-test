@@ -25,11 +25,51 @@ use std::sync::OnceLock;
 use crate::codes::is_registered;
 use crate::diagnostic::Diagnostic;
 
-/// Named CLI strings: `(key, en-US text, allowed placeholders)`. The declaration HERE is
-/// the key's existence — call sites reference the key, so a missing en-US text is a
-/// compile error (the literal "refuses to build" of spec §6.1). Grows with the surfaces:
-/// the first-run picker (8c) lands the first entries.
-pub const CLI_STRINGS: &[(&str, &str, &[&str])] = &[];
+/// A named CLI string: `(key, en-US text, allowed placeholders)`.
+pub type CliString = (&'static str, &'static str, &'static [&'static str]);
+
+/// `authority`'s first line (RW 6.1).
+pub const CLI_AUTHORITY_HEADER: CliString =
+    ("cli.authority.header", "Authority of `{program}` — what this program can do to your system:", &["program"]);
+/// `authority`'s separator above the foreign libraries — code outside the proof (RW 6.1).
+pub const CLI_AUTHORITY_FOREIGN_SEPARATOR: CliString =
+    ("cli.authority.foreign-separator", "-- outside the proof (contained at process level) --", &[]);
+/// `locale add`'s question before it installs a catalog; the answer is still `y` (RW 6.1).
+pub const CLI_LOCALE_ADD_CONFIRM: CliString = ("cli.locale.add.confirm", "install locale `{locale}`? [y/N]: ", &["locale"]);
+
+/// Named CLI strings. The declaration HERE is the key's existence — a call site names the
+/// constant ([`render_cli`]), so a missing en-US text is a compile error (the literal
+/// "refuses to build" of spec §6.1). Grows with the surfaces (RW 6.1: the first three,
+/// 2026-10-17; the first-run picker stays en-US — it is shown before any locale exists).
+pub const CLI_STRINGS: &[CliString] = &[CLI_AUTHORITY_HEADER, CLI_AUTHORITY_FOREIGN_SEPARATOR, CLI_LOCALE_ADD_CONFIRM];
+
+/// A named CLI string in `catalog`'s voice, with `args` — or its en-US text when there is
+/// no catalog, the catalog has no entry for it, or the entry cannot render (never half a
+/// message). Either way it is made safe for a terminal: a catalog is text anyone may
+/// write, and an argument may be a name a program chose.
+pub fn render_cli(s: CliString, catalog: Option<&Catalog>, args: &[(&str, &str)]) -> String {
+    let args: Vec<(String, String)> = args.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    let text = catalog.and_then(|c| c.render(s.0, &args)).or_else(|| fill(s.1, &args)).unwrap_or_else(|| s.1.to_string());
+    crate::render::terminal_safe(&text).into_owned()
+}
+
+/// A template with its `{name}` placeholders filled from `args`; `None` when a value it
+/// needs is missing.
+fn fill(template: &str, args: &[(String, String)]) -> Option<String> {
+    let mut out = String::with_capacity(template.len() + 16);
+    let mut rest = template;
+    while let Some(i) = rest.find('{') {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 1..];
+        let j = after.find('}')?;
+        let name = &after[..j];
+        let val = args.iter().find(|(k, _)| k == name)?;
+        out.push_str(&val.1);
+        rest = &after[j + 1..];
+    }
+    out.push_str(rest);
+    Some(out)
+}
 
 /// Look up a named CLI string's en-US text.
 pub fn cli_string(key: &str) -> Option<&'static str> {
@@ -162,20 +202,7 @@ impl Catalog {
     /// the template needs is missing — means THE WHOLE entry falls back to en-US: a
     /// half-rendered message with a literal `{fn}` in it would be worse than no catalog.
     pub fn render(&self, key: &str, args: &[(String, String)]) -> Option<String> {
-        let template = self.entries.get(key)?;
-        let mut out = String::with_capacity(template.len() + 16);
-        let mut rest = template.as_str();
-        while let Some(i) = rest.find('{') {
-            out.push_str(&rest[..i]);
-            let after = &rest[i + 1..];
-            let j = after.find('}')?;
-            let name = &after[..j];
-            let val = args.iter().find(|(k, _)| k == name)?;
-            out.push_str(&val.1);
-            rest = &after[j + 1..];
-        }
-        out.push_str(rest);
-        Some(out)
+        fill(self.entries.get(key)?, args)
     }
 
     /// Number of renderable entries (for the picker's coverage line).
@@ -266,6 +293,62 @@ mod tests {
 
     fn args(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    /// RW 6.1: every named CLI string is one key, `cli.`-spelled, never the welcome, and its en-US text uses exactly
+    /// the placeholders it declares — a catalog may use no others, and en-US must fill every one.
+    #[test]
+    fn every_named_cli_string_declares_exactly_the_placeholders_its_text_uses() {
+        let mut keys: Vec<&str> = CLI_STRINGS.iter().map(|(k, _, _)| *k).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), CLI_STRINGS.len(), "a key declared twice");
+        for (key, en_us, allowed) in CLI_STRINGS {
+            assert!(key.starts_with("cli.") && !key.starts_with("cli.first-run.welcome"), "{key}");
+            let used: Vec<&str> = en_us.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(n, _)| n)).collect();
+            let mut want: Vec<&str> = allowed.to_vec();
+            let mut got = used.clone();
+            want.sort_unstable();
+            got.sort_unstable();
+            assert_eq!(got, want, "{key}: the en-US text uses {used:?}");
+            assert_eq!(placeholders_for(key), Some(*allowed), "{key} is in the key space");
+        }
+    }
+
+    /// RW 6.1: the shipped slang voice covers every named CLI string, each rendering whole with its arguments.
+    #[test]
+    fn the_shipped_slang_catalog_speaks_every_named_cli_string() {
+        let cat = Catalog::delulu_slang();
+        for s @ (key, en_us, allowed) in CLI_STRINGS.iter().copied() {
+            let a: Vec<(&str, &str)> = allowed.iter().map(|p| (*p, "X")).collect();
+            let slang = render_cli(s, Some(cat), &a);
+            assert!(cat.render(key, &args(&a)).is_some(), "{key} has a slang entry");
+            assert_ne!(slang, render_cli(s, None, &a), "{key} speaks slang, not {en_us:?}");
+            assert!(!slang.contains('{'), "{key} renders whole: {slang}");
+        }
+    }
+
+    /// RW 6.1: `render_cli` falls back to en-US whole — no catalog, no entry, or an entry missing its argument — and
+    /// what it prints is safe for a terminal, whoever wrote the catalog or chose the argument.
+    #[test]
+    fn render_cli_falls_back_whole_and_is_terminal_safe() {
+        let h = CLI_AUTHORITY_HEADER;
+        let en = "Authority of `m` — what this program can do to your system:";
+        assert_eq!(render_cli(h, None, &[("program", "m")]), en);
+        let (empty, _) = Catalog::parse("[meta]\nlocale = \"x\"\n");
+        assert_eq!(render_cli(h, Some(&empty), &[("program", "m")]), en, "no entry → en-US");
+        let (hostile, w) = Catalog::parse("[meta]\nlocale = \"x\"\n[cli.authority.header]\nmessage = \"\\u001b[8m{program}\"\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(
+            render_cli(h, Some(&hostile), &[]),
+            "Authority of `{program}` — what this program can do to your system:",
+            "an argument missing → the template, never half a message"
+        );
+        assert!(
+            !render_cli(h, Some(&hostile), &[("program", "m")]).contains('\u{1b}'),
+            "a catalog's escape is shown, not obeyed"
+        );
+        assert!(!render_cli(h, None, &[("program", "m\u{1b}[2J")]).contains('\u{1b}'), "so is an argument's");
     }
 
     /// The validity gate for the SHIPPED catalog: it must load with zero DL1704 warnings —

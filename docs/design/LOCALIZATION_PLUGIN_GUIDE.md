@@ -37,16 +37,17 @@ richly localizable precisely *because* the machine side is frozen. (See `AI_NATI
   to build with a missing `en-US` key. Every other locale falls back to it.
 - **`delulu-slang`** — Gen-Z spoken English, the project's default voice option. **It is a starter
   catalog, and this line overstated it until 2026-08-23.** What actually ships is version `0.8.0`
-  with **8 of 154 diagnostic codes** and **zero CLI strings**; long-form `explain` is en-US
+  with **8 of 154 diagnostic codes** and **the 3 named CLI strings**; long-form `explain` is en-US
   throughout. The catalog `[meta].coverage` string is the honest one and the picker shows it.
 
-  **The CLI half cannot be authored yet, and that is a gap in the loader rather than in the
-  catalog.** `delulu_diag::catalog::CLI_STRINGS` — the table whose entries *are* the key space, so
-  that a missing en-US text is a compile error — is currently **empty**. Every `[cli.*]` key this
-  guide documents below is therefore unknown to the validator: a catalog using one gets DL1704 and
-  falls back. Registering those strings at their call sites is tracked in
-  [`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.1, and it is a prerequisite for any locale's
-  CLI coverage, not just this one's.
+  **The CLI half could not be authored until 2026-10-17**: `delulu_diag::catalog::CLI_STRINGS` — the
+  table whose entries *are* the key space, so that a missing en-US text is a compile error — was
+  **empty**, and every `[cli.*]` key got DL1704. The CLI key space is exactly
+  `delulu_diag::catalog::CLI_STRINGS` — since 2026-10-17 (RW 6.1) `cli.authority.header` (`{program}`),
+  `cli.authority.foreign-separator` and `cli.locale.add.confirm` (`{locale}`). A `cli.*` key outside it names no
+  surface and gets DL1704; `cli.grant-prompt.*` and `cli.run.ok` name lines the CLI does not print, and the
+  first-run picker is shown before any locale exists, so it is en-US by design. Each further string is
+  registered at its call site ([`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.1).
 
 Both are embedded in the binary. **Every other language ships as a catalog plugin** — authored by
 anyone (human or AI), added/removed/edited freely. AI-generated community translations are the
@@ -77,18 +78,15 @@ label   = "cet appel effectue « {effect} »"
 help    = "ajoute « {effect} » à la ligne d'effets (élargit l'autorité) ou supprime l'appel"
 
 # --- CLI strings: keyed by dotted stable id ---
-[cli.grant-prompt.title]
-message = "ce programme demande : {summary} — d'accord ?"
-
 [cli.authority.header]
 message = "Autorité de « {program} » — ce que ce programme peut faire à votre système :"
 ```
 
 **Rules:**
-- **Keys are stable ids** — diagnostic codes (`DL0501`) and dotted CLI names (`cli.grant-prompt.title`).
+- **Keys are stable ids** — diagnostic codes (`DL0501`) and dotted CLI names (`cli.authority.header`).
   The full key list is enumerated in `docs/for-agents.md` / the Stage-9 reference; a catalog need not
   define all of them (missing keys fall back), but `[meta]` must be honest about coverage.
-- **Placeholders are typed and fixed per key** — `{fn}`, `{effect}`, `{program}`, `{summary}`, etc.
+- **Placeholders are typed and fixed per key** — `{fn}`, `{effect}`, `{program}`, `{locale}`, etc.
   You may reorder them and surround them with any prose, but you may not invent new ones: an unknown
   placeholder → **DL1704** at catalog load, and that entry falls back to en-US (the rest of the
   catalog still loads). The canonical placeholder set per key is listed in the reference.

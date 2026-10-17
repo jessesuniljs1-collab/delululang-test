@@ -14,7 +14,10 @@ mod render;
 mod source;
 mod span;
 
-pub use catalog::{cli_string, placeholders_for, Catalog, CLI_STRINGS};
+pub use catalog::{
+    cli_string, placeholders_for, render_cli, Catalog, CliString, CLI_AUTHORITY_FOREIGN_SEPARATOR, CLI_AUTHORITY_HEADER,
+    CLI_LOCALE_ADD_CONFIRM, CLI_STRINGS,
+};
 pub use codes::{
     code_explain, code_title, is_registered, static_code, topic_explain, unallocated, CodeInfo, Disposition, UnallocatedCode,
     GUARD_BYPASS_BANNER, GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY, REGISTRY, REVOCATION_BOUND, TOPICS, UNALLOCATED,

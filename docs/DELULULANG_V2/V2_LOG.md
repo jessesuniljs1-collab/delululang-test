@@ -6205,3 +6205,21 @@ Guard's `path_norm` and one word in every shell.
 the rule; falsified by two mutants (every character admitted → red; never quoted → red). `guard_e2e` now runs the
 command exactly as DL1410 prints it, and the approved one-file permit lets the write happen (Windows). clippy 0; the
 suite on Windows 2,244 passed, the 4 map-freshness tests red until the Survey was regenerated, then green.
+
+## 2026-10-17 (night) — RW 6.1: the CLI's own lines can be translated
+
+**What.** `CLI_STRINGS` was empty, so no CLI prose was localizable and every `cli.*` key a guide documented got DL1704.
+Three strings are registered as constants their call sites name (`CliString`, so a missing en-US text is a compile
+error): `cli.authority.header` (`{program}`), `cli.authority.foreign-separator`, `cli.locale.add.confirm` (`{locale}`).
+`render_cli` gives the active catalog's text, or en-US whole — never half a message — and passes either through
+`terminal_safe`, since a catalog is text anyone may write and an argument may be a name a program chose. The slang
+catalog speaks all three. Not registered, on purpose: `cli.grant-prompt.*` and `cli.run.ok` (the CLI prints no such
+line) and the picker (shown before any locale exists). The guide, `docs/lang/README.md`, `en-US.md` and
+`delulu-slang.md` say so; the nine starter packs' `cli.*` blocks predate the key space.
+
+**Evidence.** `a_named_cli_string_speaks_the_locale_and_the_json_does_not_move` (`locale_cli`) red on the old code — the
+slang header was en-US — green after: only the header line moves, `authority --json` is byte-identical across locales.
+`a_third_catalog_speaks_the_cli_strings_and_locale_add_asks_in_the_active_voice` (`locale_plugin_cli`) red on the old
+code — the pirate catalog's `[cli.authority.header]` was DL1704 — green after; `locale add`'s question asked in en-US and
+in slang, `n` installing nothing. Three `catalog.rs` unit tests (placeholders declared = used; the slang catalog covers
+every string; fallback whole and terminal-safe — falsified: `render_cli` without `terminal_safe` → red).
