@@ -3438,3 +3438,18 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (4) the README — stale status rows, the D-V2-59 note that `contained` is best-effort, the code
   of conduct linked; (5) *[laptop]* the WSL microVM images, the WSL suite, the VS Code test on Windows; (6) *[laptop]*
   the launch (as listed two entries above). Items 1–3 of that list are done.
+
+### 2026-10-17 — the README, CLAUDE.md and the status rows brought current (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `0fc64e1`
+- Commits: (1) this entry's commit
+- Files and folders: M `README.md` (the status table: 2.0.0 being prepared, the latest CI run, the public repository
+  named, V2's done list through P9, the next step, the on-demand routine, a new row — the sandbox's default `contained`
+  does not require filesystem confinement and reports an unmeasured wall, D-V2-59/D-V2-92 — and the code of conduct
+  linked), `CLAUDE.md` (GitHub first; the on-demand routine), `HANDOFF.md` (the 2026-09-28 snapshot marked as one),
+  `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- Open / next, in order: (5) *[laptop]* the WSL microVM images, the WSL suite, the VS Code test on Windows (a routine run
+  may run `editors/vscode/e2e.js` on Linux under `xvfb-run`); (6) *[laptop]* the launch, as listed three entries above.

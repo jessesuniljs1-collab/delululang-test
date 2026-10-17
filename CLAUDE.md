@@ -18,6 +18,12 @@ learn something durable (an owner instruction, a trap, a finding that must never
 it into `HANDOFF.md` §11 and note it in `docs/CLOUD_SYNC_LOG.md`, so it reaches the laptop's memory when
 the repositories are synced.
 
+## GitHub first, then the Survey and doctor
+
+Every session — laptop or cloud — starts with `git fetch origin` and reads what came in (`HEAD..origin/master`, the
+`origin/claude/*` branches, their CI) before any edit: the on-demand routine pushes while the laptop is away (owner,
+2026-10-17; `AGENTS.md` *Read first* 0).
+
 ## Survey and doctor, always
 
 Start every session with `cargo run -p delulu-survey -- check` and `cargo run -p delulu -- doctor --check`;
@@ -35,7 +41,9 @@ everything using survey and doctor"*).
   routine run found none — check with `command -v gh`, and read CI with the GitHub MCP tools either way
   (`docs/CLOUD_ROUTINE.md` step 3). The VM can fetch GitHub release assets only from this repository.
   Run `cargo fetch --locked` once before the suite: `egress_features` needs every platform's crates.
-- **A scheduled routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master`. **An interactive
+- **A routine run** follows `docs/CLOUD_ROUTINE.md` and pushes to `master` — since 2026-10-17 the on-demand routine
+  `trig_01HFG6usfzmDAPQigiDu9DLq` (created paused; the owner switches it on when he cannot use the laptop; Opus 5.5 at
+  xhigh through `.claude/settings.json`; it does not launch — D-V2-146). **An interactive
   cloud session** can push only its own branch → push, open a pull request into `master`, and record the
   change in `docs/CLOUD_SYNC_LOG.md` in the same pull request.
 - CI, where `gh` exists (the laptop): `gh run list -R jessesuniljs1-collab/delululang-test`, `gh run view <id> --log`, a job's log via

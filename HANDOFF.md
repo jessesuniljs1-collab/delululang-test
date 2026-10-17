@@ -57,6 +57,9 @@ every session — laptop or cloud — starts by fetching `origin`** and reading 
 
 ## Where things stand (2026-09-28)
 
+*(A dated snapshot. For anything after 2026-10-17 read the commission section above, `V2_PHASE_STATUS.md` row 17 and the newest
+`docs/CLOUD_SYNC_LOG.md` entry.)*
+
 - **DeluluLang V2 is executing** — the active source of truth is `docs/DELULULANG_V2/` (start at
   `V2_README.md`).
 - **Done**, each phase's CI run read green: V2-0 (workspace and documents), P1 (machine-contract truth),
