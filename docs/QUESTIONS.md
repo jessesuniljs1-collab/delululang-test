@@ -689,10 +689,10 @@ Repeated here so no reader has to assemble it from the rest:
 10. **Foreign calls are outside the proof.** Enumerated, not eliminated.
 11. **Side channels are out of scope.**
 12. **Post-quantum options are unvalidated** and gated behind `--unstable`.
-13. **Nothing is released.** No registry, no download page, no release binary — you build from source
-    or produce your own archive. (The source is on GitHub, in a repository that has been *public*
-    since 2026-09-17 — for cross-OS CI and editing from the cloud. It is a testing repository, not
-    distribution; the project's final public repository will be a different one.)
+13. **Released as archives only.** 2.0.0 is on the Releases page of `jessesuniljs1-collab/DeluluLang`
+    for four targets, with checksums and build attestations; there is no registry or package-manager
+    entry (`INSTALL.md` §3 says why `cargo install delulu` is not offered). 1.0.0 was tagged and never
+    distributed (D-V2-155).
 14. **Open robustness defects**: exponential type inference on a small class of programs, and
     quadratic checking in nesting depth. Both are unbounded — no fuel, no `--max-type-size`, no
     timeout. (The third defect this item used to name — an unbounded parser recursion that crashed

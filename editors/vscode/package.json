@@ -5,7 +5,7 @@
   "version": "2.0.0",
   "publisher": "delulu-lang",
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "https://github.com/delulu-lang/delulu" },
+  "repository": { "type": "git", "url": "https://github.com/jessesuniljs1-collab/DeluluLang" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages", "Formatters", "Linters", "Snippets"],
   "icon": "media/icon.png",

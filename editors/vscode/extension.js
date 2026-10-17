@@ -28,16 +28,17 @@ async function reportUnavailable(why, missingFromPath) {
   if (choice === "Open Setting") {
     await vscode.commands.executeCommand("workbench.action.openSettings", "delulu.serverPath");
   } else if (choice === "How do I install it?") {
-    // Deliberately NOT a link to a hosting page. DeluluLang publishes to no registry and no
-    // download page — the README says so in its own first table — so a button opening
-    // `github.com/delulu-lang/delulu#installation` would send a stuck user to a 404 at the exact
-    // moment they needed an answer. The instructions are short enough to simply give them.
+    // The instructions themselves, not only a link: a stuck user gets the answer in the editor,
+    // offline too. (Before 2.0.0 there was no download page at all, and an earlier draft linked a
+    // repository address that did not exist — a 404 at the exact moment an answer was needed.)
     const doc = await vscode.workspace.openTextDocument({
       language: "markdown",
       content: [
         "# Installing the DeluluLang toolchain",
         "",
-        "There is no release binary and no package-manager entry yet: you build from source.",
+        "Release archives for Linux (x86-64, arm64), macOS (Apple Silicon) and Windows (x86-64) are on",
+        "https://github.com/jessesuniljs1-collab/DeluluLang/releases — `INSTALL.md` says how to verify one",
+        "(`SHA256SUMS`, `gh attestation verify`). There is no package-manager entry. Or build from source:",
         "",
         "```",
         "git clone <the DeluluLang repository>",

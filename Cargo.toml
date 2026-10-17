@@ -27,7 +27,7 @@ members = [
 # changed. A gate that cannot say no is not a gate; this one did, once, and that is on record.
 version = "2.0.0"
 edition = "2021"
-repository = "https://github.com/delulu-lang/delulu"
+repository = "https://github.com/jessesuniljs1-collab/DeluluLang"
 # The code is Apache-2.0 (see LICENSE, NOTICE). The DeluluLang NAME is a trademark of Jesse Sunil
 # and is governed separately by TRADEMARK.md — the license covers the code, not the name.
 license = "Apache-2.0"

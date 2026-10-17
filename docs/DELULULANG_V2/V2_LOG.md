@@ -6199,3 +6199,14 @@ the previous snapshot, so a laptop still on the development history would have p
 autosave.ps1` now fetches with `--prune` and snapshots only when HEAD is on some branch of `origin`. **Falsified** on
 throwaway repositories: HEAD on an unrelated history — the guarded script refused (exit 1, no remote branch), the previous
 script pushed; control, HEAD on a branch origin has — a snapshot pushed.
+
+## 2026-10-17 — the release's metadata and "nothing is released" statements made true for 2.0 — on `launch/2.0.0`
+
+Checking the metadata (the commission: *"Confirm that the actual release artefacts, metadata … are correct"*) found the
+workspace `Cargo.toml` and the VS Code extension's `package.json` naming `github.com/delulu-lang/delulu` as their
+repository — an address that is not this project's. Both now name `https://github.com/jessesuniljs1-collab/DeluluLang`.
+Every statement that nothing is released — `README.md` (status table, *Installing*, the V2 row), `docs/QUESTIONS.md`
+item 13, the Book's maintainer list, `REMAINING_WORK.md` 7.5 (closed at 2.0.0), the extension's install text — now
+describes the 2.0.0 archives on the Releases page, their checksums and attestations, and the absence of a package-manager
+entry. Records of the past (`CHECKPOINT-1.0.md`, the stage build orders) are left as written. `node --check` on the
+extension; `evidence_claims`, `editor_contract`, `repository_structure`, `distribution`, `release` passed.

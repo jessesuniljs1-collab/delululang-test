@@ -3618,3 +3618,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   guarded script refused, exit 1, no remote branch; the previous script, same state, pushed (the witness); control —
   HEAD on `master`, which origin has — a snapshot pushed. The task was re-installed with the guarded copy.
 - Open / next: unchanged — the release procedure in the 2.0 checklist on `launch/2.0.0`.
+
+### 2026-10-17 — the release's metadata made true for 2.0 — on `launch/2.0.0` (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `launch/2.0.0`   Pull request: none   Merged: no (the launch snapshots this branch)
+- Base: `81d5656`
+- Commits: (1) this entry's commit
+- Files and folders: M `Cargo.toml`, `editors/vscode/package.json` (the `repository` URL), `editors/vscode/extension.js`
+  (the install text), `README.md`, `docs/QUESTIONS.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`
+  (7.5), `docs/release/CHECKLIST-2.0.md` (criterion 13), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- Open / next: the release procedure in `docs/release/CHECKLIST-2.0.md`, from step 2.
