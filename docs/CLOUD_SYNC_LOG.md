@@ -3467,3 +3467,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   KVM-gated tests, the whole suite) was running when this entry was written; its result goes in the next entry.
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next: (5) the WSL result; (6) *[laptop]* the launch — pre-public item 1 (the banned word) is now done.
+
+### 2026-10-17 — the machine-level validation recorded (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `ca7a238`
+- Commits: (1) this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Validated** (`V2_LOG.md`, this date): VS Code e2e on Windows passed; the microVM image rebuilt from source in WSL
+  (exit 0); `microvm_cli` 10/10 + its root test 1/1 as root, `microvm_criterion8` 1/1; the WSL suite 2,311 passed, 0
+  failed; CI for `f2a19db`, `d68ff67`, `0fc64e1` read green. The commission's step 4 is DONE.
+- Routine: renamed by the owner's request to *Head Chef — on demand (start by hand)*; still paused.
+- Open / next — **the launch** (*[laptop]*, a fresh session with a full budget; the order in `HANDOFF.md` §1.1 and the
+  laptop memory `release-program-progress`): (a) decide where development continues after the launch — the public
+  repository with a fresh history, or this one — and rewrite `AGENTS.md`'s push rule and the routine's repository to
+  match, BEFORE the public push; (b) configure the empty `jessesuniljs1-collab/DeluluLang` (private vulnerability
+  reporting, secret scanning, push protection; protect `main` once it exists); (c) `SECURITY.md` §1/§6 (the private
+  reporting form as the channel — no invented address or key; SLSA L2 until `gh attestation verify --signer-workflow
+  …/release-build.yml` passes; the SBOM per archive), CODEOWNERS `@jessesuniljs1-collab` and
+  `governance.rs::pending_public_controls_are_still_marked_as_pending`, each entrenched edit in
+  `ENTRENCHED_CHANGE_RECORD.md`; (d) the 2.0.0 bump (the workspace `Cargo.toml` and `Cargo.lock`; check whether
+  `editor_contract.rs` ties the extension's version to it) and the CHANGELOG's `## [2.0.0]`; (e) the fresh-history
+  snapshot (no-reply author), tag `v2.0.0`, `RELEASES=on`, verify the archives and attestations, publish; (f) this
+  repository private as the archive, after verifying; (g) the final report (the prompt's §7).

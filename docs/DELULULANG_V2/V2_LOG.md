@@ -6135,3 +6135,22 @@ Recorded: RW 4.5 strict anchored roots stay opt-in in 2.0, the flip planned for 
 `ROOT_ISSUANCE_TRUST_BOUNDARY.md` §10's migration (D-V2-148); the release is 2.0.0, the bump made in the commit the tag
 names (D-V2-149); P8-04 option (c) goes to an RFC after the release (D-V2-150). `V2_DECISION_LOG.md`'s list of decisions
 carried from V1 now says where each stands.
+
+## 2026-10-17 — the machine-level validation: WSL microVM images, the WSL suite, VS Code on Windows
+
+**What ran** (the commission's step 4), on the owner's laptop against `f731e5b` (the code of `f2a19db`; later commits are
+records only):
+- **VS Code end-to-end on Windows 11**: `node editors/vscode/e2e.js target/debug/delulu.exe`, a freshly packaged
+  `delulu-lang.vsix` — passed: the extension activated and the language server started with no errors reported (exit 0).
+- **The microVM image rebuilt from source in WSL2** (Ubuntu 20.04, kernel 6.6.87.2, KVM): a fresh ext4 clone of
+  `delululang-test` at `f731e5b`, `scripts/microvm/build-image.sh` with the pinned kernel tarball and Firecracker v1.17.0
+  from the cache (D-V2-39) — exit 0: `vmlinux` sha256 `f19758e4…6fad`, `initramfs.cpio` `3272f0c6…3121`, `manifest.json`
+  `5d40ebd2…a335`. The image stays on the laptop: never committed, never distributed (D-NE-27, D-V2-144).
+- **The KVM-gated tests** against that image (`RUSTFLAGS="--cfg delulu_kvm"`): `microvm_cli` 10/10 as the user, and its
+  root-only test `as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host` 1/1 run as root from the same binary
+  (as the user it fails only at `sudo -n` — WSL's sudo asks for a password; recorded so nobody reads that as a defect);
+  `microvm_criterion8` 1/1.
+- **The whole suite on Linux (ext4, WSL)**: `cargo test --workspace --no-fail-fast -j 4` — **2,311 passed, 0 failed**,
+  16 ignored.
+- **CI**: `f2a19db` (RW 4.19) run `39051817373` — success on every job (Linux, Windows, macOS, arm64, the microVM jobs,
+  Miri, fuzz, lints, formal, supply chain, editor); `d68ff67` `39050623478` and `0fc64e1` `39052018825` — success.
