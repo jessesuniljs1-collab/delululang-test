@@ -3534,6 +3534,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   and branch protection; (5) the tag, `RELEASES=on`, verification, publishing; (6) `origin`, the routine, the archive;
   (7) the final report.
 
+### 2026-10-17 — the launch commit, prepared on `launch/2.0.0` (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `launch/2.0.0` (NOT `master`: D-V2-149 puts the version in the commit the tag names, so `master` never claims an
+  unreleased 2.0.0)   Pull request: none   Merged: no — the launch session uses this commit as the public snapshot
+- Base: `23ca64c`
+- Files and folders: M `Cargo.toml`, `Cargo.lock`, `editors/vscode/package.json`, `editors/vscode/package-lock.json`
+  (1.0.0 → 2.0.0); `CHANGELOG.md` (`## [2.0.0]`, its breaking changes and the history note; the 76 *Unreleased* sections
+  under it as `###`, their own subsections demoted a level, no text changed); the D-V2-153 §3 cutover — `AGENTS.md` (the
+  push rule: `DeluluLang`, `main`), `CLAUDE.md`, `docs/CLOUD_ROUTINE.md`, `HANDOFF.md` (§1, §11.1), `.claude/settings.json`
+  (the hook reads `origin/main`); `docs/CLOUD_SYNC_LOG.md`; `docs/survey/*`. Deleted, renamed: nothing.
+- Checked on the branch: distribution 10/10 (the `## [2.0.0]` section for the version this tree builds), editor_contract 7/7
+  (the extension's version = the workspace's), evidence_claims, governance, release, repository_structure; survey and
+  doctor in the commit message. The full CI: dispatched on the branch (`ci.yml`, `jobs=everything`).
+- Open / next — the launch session: (a) read the branch's CI; (b) set the CHANGELOG date (`## [2.0.0] — YYYY-MM-DD`);
+  (c) a fresh-history snapshot of this tree (no-reply author; the message names the archive) pushed to
+  `DeluluLang` `main`; branch protection; (d) tag `v2.0.0` there, `RELEASES=on`, verify archives and
+  `gh attestation verify --signer-workflow`, publish; (e) the laptop's `origin`, the routine's repository and prompt;
+  `delululang-test` private; (f) the final report.
+
 ### 2026-10-17 — `launch/2.0.0` exists: do not merge it into `master` (made on the laptop)
 - Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
 - Branch: `master`   Pull request: none   Merged: n/a
@@ -3549,3 +3568,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   and only then moves `origin`, the routine and the archive.
 - Open / next: the launch, as above. Meanwhile a routine run or cloud session takes ordinary work (`docs/CLOUD_ROUTINE.md`
   step 4, items 5–7: `REMAINING_WORK.md` rows, sweeps, features), never the launch.
+
+### 2026-10-17 — the autosave: the laptop's work reaches GitHub even when a session stops (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `9829662`
+- Commits: (1) this entry's commit
+- Files and folders: A `scripts/autosave.ps1`; M `AGENTS.md` (*Read first* 0), `HANDOFF.md` (§11.1),
+  `docs/CLOUD_ROUTINE.md` (step 1), `.claude/settings.json` (the start-up hook also lists `origin/autosave/*`),
+  `docs/REPOSITORY_STRUCTURE.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Why:** the owner, 2026-10-17 — *"Head Chef continue cooking till usage limit hits. Can u run something parellely so
+  that everything will get pushed to github repo even if usage limit hits"*. A sous-chef or a routine draws on the same
+  usage and stops with the session, so the safety net runs outside Claude: Windows Task Scheduler, task
+  `DeluluLang-autosave`, every 10 minutes (installed 2026-10-17 18:21 UTC for 7 days; re-installed 18:28 UTC for **7 hours** at the owner's word, *"Maybe next 7 hrs is enough … We can start task scheduler later"* — `-Install` starts it again, `-Hours N` sets the span).
+- **What it does:** pushes every local branch ahead of its upstream (plain push; a diverged branch is only logged), and
+  snapshots uncommitted work to **`autosave/laptop`** through a private index — HEAD, the index and the working tree are
+  untouched; parents are the previous snapshot and HEAD, so the branch only fast-forwards; CI does not run on it.
+- **Verified:** a run by hand pushed snapshot `5fb039a` (base `9829662`, 1 path, `git status` unchanged after); a second
+  run read `unchanged since snapshot 5fb039a`; the scheduled task's first run returned 0 with the same line in its log;
+  the banned-word guard, run with a probe token and a probe file, refused and pushed nothing (`ls-remote` showed no
+  probe branch).
+- Open / next: unchanged — the launch (the entry before this one).

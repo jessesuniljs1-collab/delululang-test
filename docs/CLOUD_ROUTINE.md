@@ -1,5 +1,10 @@
 # The cloud routine — how DeluluLang develops itself when the laptop is away
 
+**Since the 2.0.0 launch (D-V2-153) the repository is `github.com/jessesuniljs1-collab/DeluluLang` and its branch is
+`main`:** read every `delululang-test` below as `DeluluLang`, and every `master` as `main`. `delululang-test` is the private
+archive of the development history before 2.0.0 — never pushed to again; a commit hash or run id in a record dated
+before 2.0.0 refers to it.
+
 **Since 2026-10-17: on demand (D-V2-146).** The owner, 2026-10-17: *"Create a new claude code cloud routine like last
 time, I will be running it occasionally whenever I can't use my laptop. Let it be paused at start, I will start it
 whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The
@@ -124,6 +129,11 @@ shallow, so first `git fetch --unshallow origin master` (else every branch looks
 `origin/claude/*`, `git rev-list --count origin/master..BRANCH`. A commit `master` lacks is step 4's first item: read its
 runs (`…/actions/runs?head_sha=HASH`), verify it, and MERGE it (the hash its runs name stays in `master`'s history) — or
 record why it is superseded (a witness branch whose work landed in revised form).
+**And `origin/autosave/laptop`** (since 2026-10-17): the laptop's Task Scheduler job (`scripts/autosave.ps1`) pushes there
+every ten minutes whatever a laptop session had not committed — the owner asked for it so that work survives a session
+stopping at its usage limit. Each snapshot's message names its base. If the newest one is newer than the laptop's last
+commit on `master`, `git diff BASE origin/autosave/laptop` is unfinished work: finish it, verify it like any change, and
+commit it to `master` in your own commits. Never merge the branch itself.
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile

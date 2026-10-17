@@ -6154,3 +6154,20 @@ records only):
   16 ignored.
 - **CI**: `f2a19db` (RW 4.19) run `39051817373` — success on every job (Linux, Windows, macOS, arm64, the microVM jobs,
   Miri, fuzz, lints, formal, supply chain, editor); `d68ff67` `39050623478` and `0fc64e1` `39052018825` — success.
+
+## 2026-10-17 — the autosave: a session's unpushed work survives its usage limit
+
+**What.** `scripts/autosave.ps1`, registered as the Windows Task Scheduler job `DeluluLang-autosave` (every 10 minutes,
+7 hours — the owner: *"Maybe next 7 hrs is enough"*; `-Hours N` sets another span — as the owner's user, no console window): it pushes every local branch that is ahead of its upstream — a plain
+push, never a force — and snapshots uncommitted work (tracked edits and new unignored files) onto `autosave/laptop`
+through a private index, so HEAD, the index and the working tree are never touched. A snapshot's parents are the
+previous snapshot and HEAD, so the branch only fast-forwards; it is never merged — the next session recovers from it
+(`AGENTS.md` *Read first* 0, `docs/CLOUD_ROUTINE.md` step 1, `HANDOFF.md` §11.1).
+
+**Why.** The owner, 2026-10-17: *"continue cooking till usage limit hits. Can u run something parellely so that
+everything will get pushed to github repo even if usage limit hits"*. Anything inside Claude — a sous-chef, the routine —
+spends the same usage and stops with it; a job outside Claude does not.
+
+**Evidence.** By hand: snapshot `5fb039a` pushed (base `9829662`, one path), working tree unchanged; the second run
+`unchanged since snapshot 5fb039a`; the scheduled task's first run: result 0, the same log line. The banned-word guard
+falsified: with a probe token in place of the word and a probe file in the tree it refused (exit 1) and pushed nothing.
