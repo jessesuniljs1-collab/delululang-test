@@ -3405,3 +3405,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
      test; reword the two `HANDOFF.md` rule lines that spell the banned word; the 2.0.0 bump and CHANGELOG; the
      fresh-history snapshot; tag `v2.0.0`; `RELEASES=on`; verify archives and attestations; publish; then
      `delululang-test` private as the archive; the final report.
+
+### 2026-10-17 — RW 4.19 closed: the driver READY handshake (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `d68ff67`
+- Commits: (1) this entry's commit
+- Files and folders: M `crates/delulu-runtime/src/adapter.rs`, `crates/delulu-runtime/src/sim.rs`,
+  `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/hw_adapter_cli.rs`,
+  `crates/delulu/tests/hw_dpx_cli.rs`, `crates/delulu/tests/sandbox_devices_cli.rs`, `CHANGELOG.md`, `docs/DEPLOYMENT.md`,
+  `docs/REMAINING_WORK.md` (4.19), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-147), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/delulu-hw-adapter.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **What** (D-V2-147): a driver says `READY` before `main`; `--adapter-startup-ms`.
+- Survey and doctor (after the last edit): in the commit message. Suite: 2,242 passed and 4 failed before the Survey was regenerated — all four the stale-map gates (doctor_cli 3, the Survey's freshness 1), which pass after it (rerun after the last edit).
+- Redo on the laptop: nothing (made there).
+- For the laptop's memory: a test driver must print `READY` first.
+- Open / next: item 1 of the previous entry is DONE; items 2–6 stand (the code of conduct and the decisions are next).

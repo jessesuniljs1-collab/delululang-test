@@ -136,6 +136,7 @@ fn logging_driver(cwd: &Path) -> String {
     {
         let script = "import sys\n\
              log = open('adapter-saw.txt', 'a')\n\
+             print('READY', flush=True)\n\
              while True:\n\
              \x20   line = sys.stdin.readline()\n\
              \x20   if not line:\n\
@@ -153,6 +154,7 @@ fn logging_driver(cwd: &Path) -> String {
     #[cfg(not(windows))]
     {
         let script = "#!/bin/sh\n\
+             echo READY\n\
              while IFS= read -r l; do\n\
              \x20 echo \"$l\" >> adapter-saw.txt\n\
              \x20 case \"$l\" in\n\

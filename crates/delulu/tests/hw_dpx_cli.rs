@@ -164,6 +164,7 @@ fn device(dir: &Path) -> String {
         let script = "import re, sys\n\
              open('device-started.txt', 'w').close()\n\
              log = open('device-saw.txt', 'a')\n\
+             print('READY', flush=True)\n\
              while True:\n\
              \x20   line = sys.stdin.readline()\n\
              \x20   if not line:\n\
@@ -190,6 +191,7 @@ fn device(dir: &Path) -> String {
     {
         let script = "#!/bin/sh\n\
              : > device-started.txt\n\
+             echo READY\n\
              while IFS= read -r l; do\n\
              \x20 echo \"$l\" >> device-saw.txt\n\
              \x20 case \"$l\" in\n\

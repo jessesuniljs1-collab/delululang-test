@@ -1643,6 +1643,21 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
 
 // ----- a run's devices, shared by the ordinary run and the sandboxed one (P8-01) ----------------
 
+/// How long this run's driver may take to say `READY` (RW 4.19, D-V2-147): `--adapter-startup-ms`, whole milliseconds
+/// from 1 to `STARTUP_MAX`, else `STARTUP_DEFAULT`. `device_terms` refuses a bad value before anything runs, so the
+/// spawn sites read it with the default only as a formality.
+pub(crate) fn adapter_startup(opts: &Opts) -> Result<std::time::Duration, String> {
+    use delulu_runtime::adapter::{STARTUP_DEFAULT, STARTUP_MAX};
+    let Some(raw) = opts.adapter_startup_ms.as_deref() else {
+        return Ok(STARTUP_DEFAULT);
+    };
+    let max = STARTUP_MAX.as_millis() as u64;
+    match raw.parse::<u64>() {
+        Ok(ms) if (1..=max).contains(&ms) => Ok(std::time::Duration::from_millis(ms)),
+        _ => Err(format!("`--adapter-startup-ms {raw}` must be a whole number of milliseconds from 1 to {max}")),
+    }
+}
+
 /// The device profile and clock this command line asks for (Stage 10 phase 10f, spec §5.4),
 /// decided BEFORE anything runs, for the same reason the isolation profile is: a hardware grant for
 /// an artifact nobody approved must never reach the point of moving something — `resolve_device_profile`
@@ -1663,6 +1678,7 @@ pub(crate) fn device_terms(file: &str, opts: &Opts) -> Result<(delulu_runtime::P
             ("--require-signed-adapter", opts.require_signed_adapter),
             ("--adapter-dpx", opts.adapter_dpx.is_some()),
             ("--adapter-transport", opts.adapter_transport.is_some()),
+            ("--adapter-startup-ms", opts.adapter_startup_ms.is_some()),
         ];
         let given: Vec<String> = hw_only.iter().filter(|(_, on)| *on).map(|(f, _)| format!("`{f}`")).collect();
         if !given.is_empty() {
@@ -1675,6 +1691,9 @@ pub(crate) fn device_terms(file: &str, opts: &Opts) -> Result<(delulu_runtime::P
             return Err(2);
         }
     } else if let Some(problem) = verified_driver_flags(opts) {
+        eprintln!("error: {problem}. Nothing ran.");
+        return Err(2);
+    } else if let Err(problem) = adapter_startup(opts) {
         eprintln!("error: {problem}. Nothing ran.");
         return Err(2);
     }
@@ -1858,7 +1877,12 @@ pub(crate) fn plan_devices(
             if let Some(code) = gate {
                 return Err(code);
             }
-            match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
+            match delulu_runtime::adapter::ProcessAdapter::spawn(
+                adapter,
+                prog,
+                &args,
+                adapter_startup(opts).unwrap_or(delulu_runtime::adapter::STARTUP_DEFAULT),
+            ) {
                 Ok(a) => Some(Box::new(a) as Box<dyn delulu_runtime::adapter::Adapter>),
                 Err(e) => {
                     // Fail closed and BEFORE `main`: a run that could not start its driver must
@@ -1915,7 +1939,11 @@ fn verified_driver(adapter: &str, dpx: &str, opts: &Opts) -> Result<Box<dyn delu
         );
         return Err(1);
     };
-    let line = match delulu_runtime::adapter::LineTransport::spawn(&resolved.display().to_string(), &args) {
+    let line = match delulu_runtime::adapter::LineTransport::spawn(
+        &resolved.display().to_string(),
+        &args,
+        adapter_startup(opts).unwrap_or(delulu_runtime::adapter::STARTUP_DEFAULT),
+    ) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: {e}");

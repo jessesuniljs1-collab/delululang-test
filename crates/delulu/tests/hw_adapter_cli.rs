@@ -80,6 +80,7 @@ fn rig(tag: &str, program: &str) -> Rig {
     {
         let script = "import re, sys\n\
              log = open('adapter-saw.txt', 'a')\n\
+             print('READY', flush=True)\n\
              while True:\n\
              \x20   line = sys.stdin.readline()\n\
              \x20   if not line:\n\
@@ -118,6 +119,7 @@ fn rig(tag: &str, program: &str) -> Rig {
     #[cfg(not(windows))]
     {
         let script = "#!/bin/sh\n\
+             echo READY\n\
              while IFS= read -r l; do\n\
              \x20 echo \"$l\" >> adapter-saw.txt\n\
              \x20 case \"$l\" in\n\
@@ -638,4 +640,57 @@ fn a_bare_driver_name_is_verified_and_started_as_one_file() {
     assert!(o.status.success(), "{} {}", stdout(&o), stderr(&o));
     assert!(!r.dir.join("IMPOSTOR-RAN").exists(), "{}", stderr(&o));
     assert!(r.saw().contains("CMD"), "the verified driver received the command: {}", r.saw());
+}
+
+/// RW 4.19 (D-V2-147): a driver says `READY` before the program's `main` runs, within `--adapter-startup-ms`. One
+/// that stays silent — as every driver written before the handshake does — refuses the run before anything is
+/// commanded, and says what it waited for and how long; the flag is bounded, and refused where no driver starts.
+#[test]
+fn a_driver_that_never_says_ready_refuses_the_run_before_main_and_the_wait_is_the_operators() {
+    let r = rig("ready", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+    #[cfg(windows)]
+    let silent = {
+        std::fs::write(r.dir.join("silent.py"), "import sys\nfor _ in sys.stdin:\n    pass\n").unwrap();
+        "python -I -S silent.py".to_string()
+    };
+    #[cfg(not(windows))]
+    let silent = {
+        std::fs::write(r.dir.join("silent.sh"), "#!/bin/sh\ncat > /dev/null\n").unwrap();
+        "sh silent.sh".to_string()
+    };
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &silent, "--adapter-startup-ms", "300"]);
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(1), "a driver that never said READY must not run the program: {err}");
+    assert!(err.contains("did not say READY") && err.contains("300 ms"), "the refusal says what it awaited, and how long: {err}");
+    assert!(!stdout(&o).contains("COMMANDED"), "nothing was commanded:\n{}", stdout(&o));
+
+    // The rig's own driver says READY: the same run goes through with the flag given.
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd, "--adapter-startup-ms", "60000"]);
+    assert!(o.status.success() && stdout(&o).contains("COMMANDED"), "a driver that says READY runs: {}", stderr(&o));
+
+    for bad in ["0", "120001", "ten", "-5"] {
+        let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd, "--adapter-startup-ms", bad]);
+        assert_eq!(o.status.code(), Some(2), "`{bad}` is refused before anything runs: {}", stderr(&o));
+        assert!(stderr(&o).contains("--adapter-startup-ms"), "the refusal names the flag: {}", stderr(&o));
+    }
+    // Not a hardware run: nothing would read the flag, so it is refused rather than ignored.
+    let o = delulu(
+        &r.dir,
+        &[
+            "run",
+            "arm.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            GRANT,
+            "--broker-profile",
+            "sim",
+            "--adapter-startup-ms",
+            "500",
+            "--no-prompt",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("--adapter-startup-ms"), "{}", stderr(&o));
 }

@@ -3643,6 +3643,33 @@ modified them.
    the laptop's in *Open / next* (`docs/CLOUD_ROUTINE.md` step 4, item 3).
 4. **Every session starts by syncing with GitHub** (the owner's words, `AGENTS.md` *Read first* 0, `HANDOFF.md` §11.1).
 
+## D-V2-147 — RW 4.19: a driver says `READY` before the program runs; the wait is the operator's flag — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** RW 4.19 (D23's protocol, reserved to the owner until the commission of 2026-10-17): the adapter's 2000 ms
+`EXCHANGE_TIMEOUT` began when the first command was written, while the driver had been starting only since just before
+`main`. A driver that takes longer to open its port or home an axis failed its first command and poisoned the adapter.
+It reached CI twice through the test drivers themselves (PowerShell's start-up; a cold Python's, 4251 ms).
+
+**Decision.**
+1. **A driver prints `READY` on its own line before anything else**, once it can accept commands. The host waits for that
+   line before `main` runs (`adapter.rs` `await_ready`, for `ProcessAdapter` and `LineTransport` alike); silence, an early
+   exit, or any other first line is `AdapterError::NotReady`, the child is stopped, and the run is refused before one
+   command is sent. `EXCHANGE_TIMEOUT` is untouched: start-up simply no longer counts against an exchange.
+2. **The wait is `--adapter-startup-ms N`**: default 10000 (`STARTUP_DEFAULT`), 1 to 120000 (`STARTUP_MAX`); a value
+   outside that, or not a number, is refused before anything runs, and the flag is refused on a run with no driver
+   (beside `--adapter-cmd` in the hardware-only list). The RW row proposed declaring it at grant time like
+   `heartbeat_ms`; it is a flag instead, because how long a driver takes to start is a fact about the machine the
+   operator runs it on, not about what the program may do — and the flag sits next to `--adapter-cmd`, where that
+   machine's driver is named.
+3. **`delulu device sim` says `READY` too** (`sim::serve`), so the reference device is a correct transport.
+4. **Breaking for driver authors**, hence 2.0: a 1.x driver adds one line. CHANGELOG and `DEPLOYMENT.md` say so.
+
+**Evidence.** Unit tests `a_slow_starting_driver_is_waited_for_and_its_first_command_answered` and
+`a_driver_that_does_not_say_ready_is_refused_before_any_command` (`adapter.rs`); the CLI test
+`a_driver_that_never_says_ready_refuses_the_run_before_main_and_the_wait_is_the_operators` (`hw_adapter_cli.rs`: a
+silent driver refused with exit 1 naming the 300 ms it waited; four bad values refused with exit 2; the flag refused under
+`sim`); `sim.rs`'s two serve tests now expect `READY` first. Mutants: in the commit message.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

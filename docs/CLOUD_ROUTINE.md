@@ -65,7 +65,10 @@ or record it refuted.
 
 **Effort.** The owner asked for Opus 5.5 at **xhigh** effort: the routine is set to Opus 5.5, and the
 repository's `.claude/settings.json` sets `effortLevel` to `xhigh` for every session that opens it —
-without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, read 2026-09-28).
+without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, read 2026-09-28). **Since 2026-10-17** the file also names the model (`modelSettings` → `claude-opus-5-5` → `effortLevel: xhigh`):
+the settings reference (read 2026-10-17) says a top-level `effortLevel` in a project file applies to every model, but Opus 5.5
+ignores one in *user* settings, and `modelSettings` is how a level is saved per model. The routine's own `environment_variables`
+(`CLAUDE_CODE_EFFORT_LEVEL`) was tried and the API stored nothing, so the repository file is the one control (D-V2-146).
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the

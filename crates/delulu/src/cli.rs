@@ -348,6 +348,10 @@ pub(crate) struct Opts {
     /// `--adapter-transport <command>` (P8-02): the process that carries a Verified driver's frames to the
     /// device and its replies back — the only part of such a driver that touches the machine.
     pub(crate) adapter_transport: Option<String>,
+    /// `--adapter-startup-ms <ms>` (RW 4.19, D-V2-147): how long a hardware driver, or a Verified driver's transport, may
+    /// take to print `READY` before the run is refused. Kept as typed so a value that is not a number is refused, not
+    /// dropped; [`adapter_startup`] reads it. Absent = `STARTUP_DEFAULT` (10 s); at most `STARTUP_MAX` (120 s).
+    pub(crate) adapter_startup_ms: Option<String>,
     pub(crate) sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -419,6 +423,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         adapter_record: None,
         adapter_dpx: None,
         adapter_transport: None,
+        adapter_startup_ms: None,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -623,6 +628,14 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     i += 1;
                 } else {
                     opts.missing_values.push("--adapter-transport".to_string());
+                }
+            }
+            "--adapter-startup-ms" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_startup_ms = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-startup-ms".to_string());
                 }
             }
             "--sim-step" => {
@@ -1421,7 +1434,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX: the driver's LOGIC as a signed\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Verified plugin, read once, pinned, re-proved and interpreted by the host; CMD only carries its\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 frames to the device and the replies back — P8-02)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 frames to the device and the replies back — P8-02;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a driver (or transport) prints READY before its first command, within --adapter-startup-ms MS\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (default 10000, at most 120000); silence or any other first line refuses the run — RW 4.19)\n\
      \x20 delulu device    sim [--seed N] [--actuator DEVICE:dim=lo..hi,heartbeat_ms=N,ttl_ms=N,fail=F]... [--sensor NAME]... [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (P8-03: the reference SIMULATOR as a device on standard input/output, speaking the CMD/READ line\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 protocol a driver's transport writes — `--adapter-transport \'delulu device sim …\'`. The bounds given\n\

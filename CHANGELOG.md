@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a driver says READY before the program runs, 2026-10-17
+
+- **Breaking for driver authors (RW 4.19, D-V2-147): a hardware driver prints `READY` on its own line before anything
+  else**, once it can accept commands. The host waits for it before the program's `main` runs, for
+  `--adapter-startup-ms N` (new; default 10000, at most 120000; refused on a run with no driver), and refuses the run if
+  the driver stays silent or says anything else first. A driver's slow start no longer fails its first command. The
+  same holds for a Verified driver's `--adapter-transport`; `delulu device sim` says `READY` itself. **To upgrade a
+  1.x driver: print `READY` (and flush) when it is ready.**
+
 ## Unreleased — the archive's notices and bill of materials, 2026-10-17
 
 - **Changed (D-V2-145): the Rust source is formatted by rustfmt** (`rustfmt.toml`, checked in CI). Contributors run

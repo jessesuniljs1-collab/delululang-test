@@ -25,7 +25,13 @@
 //!
 //! # The protocol
 //!
-//! Line-oriented, UTF-8, one exchange per command. Requests from DeluluLang:
+//! Line-oriented, UTF-8, one exchange per command. **First, the driver's readiness** (RW 4.19, D-V2-147): its first
+//! line must be `READY`, written once it can accept commands — after opening its port, homing an axis, whatever its
+//! start-up takes. The host waits for it under a START-UP deadline (`--adapter-startup-ms`, default
+//! [`STARTUP_DEFAULT`], at most [`STARTUP_MAX`]) before the program's `main` runs; silence past it, any other first
+//! line, or an exit first is a failure, and the run does not begin. Only then does the per-exchange deadline apply.
+//!
+//! Requests from DeluluLang:
 //!
 //! ```text
 //! CMD <device> <dim>=<value>[,<dim>=<value>...]
@@ -78,6 +84,14 @@ use std::time::Duration;
 /// is the tunable that governs real-time behaviour, and it is set at grant time by a human.
 pub const EXCHANGE_TIMEOUT: Duration = Duration::from_millis(2000);
 
+/// How long a driver may take to say `READY` when no `--adapter-startup-ms` names another (RW 4.19, D-V2-147). Its own
+/// deadline, separate from [`EXCHANGE_TIMEOUT`]: start-up is the driver's (an interpreter's first start, a port to
+/// open, an axis to home), an exchange is the device's — and before this a slow start was spent out of the first
+/// command's 2000 ms and poisoned the adapter.
+pub const STARTUP_DEFAULT: Duration = Duration::from_millis(10_000);
+/// The longest start-up an operator may declare: a bound, so the run's own start cannot be made to wait unboundedly.
+pub const STARTUP_MAX: Duration = Duration::from_millis(120_000);
+
 /// Hard ceiling on a single reply line the reader thread will buffer (64 KiB). Every legitimate reply
 /// in this protocol is a handful of bytes ("OK", "VAL 21.5", "ERR <short reason>") — this is orders of
 /// magnitude more headroom than any of them needs. It exists for the MEMORY dimension of rule 2: the
@@ -105,6 +119,9 @@ pub enum AdapterError {
     /// The adapter refused the command. This is the hardware's own "no" — the only variant that
     /// reflects a working adapter, and the reason it is separated from the failures above.
     Refused(String),
+    /// The driver did not say `READY` as its first line within its start-up deadline — silent, another first line,
+    /// or an exit first (RW 4.19, D-V2-147). It was stopped, and the run does not begin.
+    NotReady(String),
 }
 
 impl std::fmt::Display for AdapterError {
@@ -120,6 +137,7 @@ impl std::fmt::Display for AdapterError {
                 write!(f, "adapter is poisoned by an earlier failure and will not be reused")
             }
             AdapterError::Refused(r) => write!(f, "the hardware refused the command: {r}"),
+            AdapterError::NotReady(why) => write!(f, "the adapter did not say READY: {why}"),
         }
     }
 }
@@ -170,7 +188,8 @@ pub struct ProcessAdapter {
 impl ProcessAdapter {
     /// Spawn `program` (with `args`) as a device adapter. `name` is the identity the DL1905
     /// approval record binds, so it is carried for diagnostics rather than derived from the path.
-    pub fn spawn(name: &str, program: &str, args: &[String]) -> Result<ProcessAdapter, AdapterError> {
+    /// The driver must say `READY` within `startup` (RW 4.19) — this returns only once it has, before `main` runs.
+    pub fn spawn(name: &str, program: &str, args: &[String], startup: Duration) -> Result<ProcessAdapter, AdapterError> {
         let mut child = Command::new(program)
             .args(args)
             .stdin(Stdio::piped())
@@ -183,6 +202,7 @@ impl ProcessAdapter {
         let stdin = child.stdin.take().ok_or_else(|| AdapterError::Spawn("no stdin pipe".into()))?;
         let stdout = child.stdout.take().ok_or_else(|| AdapterError::Spawn("no stdout pipe".into()))?;
         let rx = line_reader(stdout);
+        await_ready(&rx, &mut child, startup)?;
         Ok(ProcessAdapter { name: name.to_string(), child, stdin, rx, poisoned: false })
     }
 
@@ -282,6 +302,25 @@ impl Drop for ProcessAdapter {
     }
 }
 
+/// Wait for a just-started driver's first line, which must be `READY`, within `within` (RW 4.19, D-V2-147). On any
+/// failure the child is stopped before the error is returned, so a driver that never became ready is not left running.
+fn await_ready(rx: &Receiver<String>, child: &mut Child, within: Duration) -> Result<(), AdapterError> {
+    let why = match rx.recv_timeout(within) {
+        Ok(line) if line.trim() == "READY" => return Ok(()),
+        Ok(line) => {
+            let shown: String = line.trim().chars().take(80).collect();
+            format!("its first line was `{shown}` — a driver says READY first, once it can accept commands")
+        }
+        Err(RecvTimeoutError::Timeout) => {
+            format!("not within {} ms of starting (raise `--adapter-startup-ms` if it needs longer)", within.as_millis())
+        }
+        Err(RecvTimeoutError::Disconnected) => "it closed its output, or exited, before saying READY".to_string(),
+    };
+    let _ = child.kill();
+    let _ = child.wait();
+    Err(AdapterError::NotReady(why))
+}
+
 /// The reader thread for a peer that answers in lines: it exists solely so an exchange can have a
 /// deadline, because blocking stdio has no portable timeout. It ends when the pipe closes — the peer
 /// died, or its owner dropped the handle.
@@ -344,7 +383,8 @@ pub struct LineTransport {
 impl LineTransport {
     /// Start `program` (already resolved to the file to run) with `args`; its standard error is the
     /// operator's, as a driver's is.
-    pub fn spawn(program: &str, args: &[String]) -> Result<LineTransport, AdapterError> {
+    /// The transport says `READY` within `startup` first, as a driver does (RW 4.19).
+    pub fn spawn(program: &str, args: &[String], startup: Duration) -> Result<LineTransport, AdapterError> {
         let mut child = Command::new(program)
             .args(args)
             .stdin(Stdio::piped())
@@ -354,7 +394,9 @@ impl LineTransport {
             .map_err(|e| AdapterError::Spawn(format!("{program}: {e}")))?;
         let stdin = child.stdin.take().ok_or_else(|| AdapterError::Spawn("no stdin pipe".into()))?;
         let stdout = child.stdout.take().ok_or_else(|| AdapterError::Spawn("no stdout pipe".into()))?;
-        Ok(LineTransport { child, stdin, rx: line_reader(stdout) })
+        let rx = line_reader(stdout);
+        await_ready(&rx, &mut child, startup)?;
+        Ok(LineTransport { child, stdin, rx })
     }
 }
 
@@ -396,11 +438,82 @@ mod tests {
     /// starts. Python starts in a fraction of it, and the default build already needs a CPython on
     /// Windows.
     fn echo_adapter(script: &str) -> ProcessAdapter {
+        let (prog, args) = ready_then(script);
+        ProcessAdapter::spawn("test-adapter", prog, &args, STARTUP_DEFAULT).expect("spawn")
+    }
+
+    /// `script` as a driver that says `READY` first, as every driver must (RW 4.19).
+    fn ready_then(script: &str) -> (&'static str, Vec<String>) {
+        as_driver(&format!("{}{script}", ready_line()))
+    }
+
+    fn as_driver(script: &str) -> (&'static str, Vec<String>) {
         #[cfg(windows)]
         let (prog, args) = ("python", vec!["-c".to_string(), script.to_string()]);
         #[cfg(not(windows))]
         let (prog, args) = ("sh", vec!["-c".to_string(), script.to_string()]);
-        ProcessAdapter::spawn("test-adapter", prog, &args).expect("spawn")
+        (prog, args)
+    }
+
+    fn ready_line() -> &'static str {
+        #[cfg(windows)]
+        {
+            "print('READY', flush=True)\n"
+        }
+        #[cfg(not(windows))]
+        {
+            "echo READY; "
+        }
+    }
+
+    /// A pause in the driver's language, in seconds.
+    fn pause(seconds: f32) -> String {
+        #[cfg(windows)]
+        {
+            format!("import time; time.sleep({seconds})\n")
+        }
+        #[cfg(not(windows))]
+        {
+            format!("sleep {seconds}; ")
+        }
+    }
+
+    /// RW 4.19, D-V2-147: a driver whose start-up outlasts the per-exchange deadline is no longer spent out of its first
+    /// command — the host waits for its READY under the start-up deadline, and then the first exchange has its whole
+    /// 2000 ms. Before the handshake this driver's first command timed out and poisoned the adapter.
+    #[test]
+    fn a_slow_starting_driver_is_waited_for_and_its_first_command_answered() {
+        let slow = format!("{}{}{}", pause(2.5), ready_line(), responder("OK"));
+        let (prog, args) = as_driver(&slow);
+        let started = std::time::Instant::now();
+        let mut a = ProcessAdapter::spawn("slow", prog, &args, STARTUP_DEFAULT).expect("a driver that says READY in time starts");
+        assert!(started.elapsed() >= Duration::from_millis(2400), "spawn returned before READY: {:?}", started.elapsed());
+        assert!(a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]).is_ok(), "the first command has its whole exchange");
+    }
+
+    /// RW 4.19: no READY — silence past the start-up deadline, another first line, or an exit first — is a failure
+    /// before anything is commanded, and says which.
+    #[test]
+    fn a_driver_that_does_not_say_ready_is_refused_before_any_command() {
+        #[cfg(windows)]
+        let says_ok_first = "print('OK', flush=True)\nimport time; time.sleep(30)\n".to_string();
+        #[cfg(not(windows))]
+        let says_ok_first = "echo OK; sleep 30".to_string();
+        let cases = [
+            ("silent", format!("{}{}", pause(30.0), silent()), "not within 300 ms"),
+            ("another first line", says_ok_first, "first line was `OK`"),
+            ("exits", String::new(), "before saying READY"),
+        ];
+        for (label, script, words) in cases {
+            let (prog, args) = as_driver(&script);
+            let started = std::time::Instant::now();
+            match ProcessAdapter::spawn("unready", prog, &args, Duration::from_millis(300)) {
+                Err(AdapterError::NotReady(why)) => assert!(why.contains(words), "{label}: {why}"),
+                Err(e) => panic!("{label}: expected NotReady, got {e}"),
+                Ok(_) => panic!("{label}: a driver that never said READY was accepted"),
+            }
+            assert!(started.elapsed() < Duration::from_secs(20), "{label}: the wait is bounded: {:?}", started.elapsed());
+        }
     }
 
     /// A Windows driver loop: `body` runs once per request line, with the line (newline stripped) in
@@ -525,7 +638,7 @@ mod tests {
 
     #[test]
     fn spawning_a_program_that_does_not_exist_is_a_refusal_not_a_panic() {
-        let got = ProcessAdapter::spawn("nope", "definitely-not-a-real-program-xyzzy", &[]);
+        let got = ProcessAdapter::spawn("nope", "definitely-not-a-real-program-xyzzy", &[], STARTUP_DEFAULT);
         assert!(matches!(got, Err(AdapterError::Spawn(_))), "a missing program must refuse, not panic");
     }
 
@@ -614,11 +727,8 @@ mod tests {
     // ----- P8-02/P8-03: the line transport a Verified driver's frames travel over --------------------
 
     fn line(script: &str) -> LineTransport {
-        #[cfg(windows)]
-        let (prog, args) = ("python", vec!["-c".to_string(), script.to_string()]);
-        #[cfg(not(windows))]
-        let (prog, args) = ("sh", vec!["-c".to_string(), script.to_string()]);
-        LineTransport::spawn(prog, &args).expect("spawn")
+        let (prog, args) = ready_then(script);
+        LineTransport::spawn(prog, &args, STARTUP_DEFAULT).expect("spawn")
     }
 
     #[test]

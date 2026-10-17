@@ -14,6 +14,9 @@ real to gate"; it now dispatches to a real driver.
 
 **What it is:** an operator-supplied **subprocess** speaking a line protocol over stdio —
 `CMD <device> <dim>=<v>,...` → `OK` | `ERR <reason>`, `READ <device>` → `VAL <f>` | `NODEV`.
+**Since 2026-10-17 (RW 4.19, D-V2-147) the driver's first line is `READY`**, awaited before `main` for
+`--adapter-startup-ms` (default 10 s, max 120 s); silence or another first line refuses the run. Every test driver
+and `delulu device sim` print it.
 Attached with `--adapter-cmd "<command>"` under `--broker-profile hw:<name>`.
 Code: `crates/delulu-runtime/src/adapter.rs`; wiring in `device.rs`; tests in
 `crates/delulu/tests/hw_adapter_cli.rs`.

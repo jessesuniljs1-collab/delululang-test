@@ -507,6 +507,11 @@ These are known, documented, and not fixable by configuration:
   before dispatch, and the driver's provenance is checked before it is started (a detached signature, refusable,
   pinnable with `--adapter-signer`, recorded with `--adapter-record`) — but the driver itself is not sandboxed, and
   between the check and the start its file could be replaced by anyone who can write its directory.
+  **Since 2.0 (RW 4.19, D-V2-147) a driver prints `READY` on its own line before anything else**, once it can accept
+  commands (its port open, its axis homed); the host waits for it before the program's `main` runs, for
+  `--adapter-startup-ms` (default 10000, at most 120000), and a driver that stays silent, or whose first line is anything
+  else, refuses the run before one command is sent. A Verified driver's `--adapter-transport` says `READY` the same way,
+  and so does `delulu device sim`. **A driver written for 1.x must add that one line.**
   **`--adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX` (V2 P8-02) has neither residual for the driver's
   LOGIC**: the `.dpx` is read once, its embedded signature must verify under the key you pinned, its code is re-proved
   by the checker, and the code interpreted is the code those checks were made on — nothing is started by name. The

@@ -6109,3 +6109,20 @@ now's `routine-fire-payload`, usage).
 
 **Checked.** The routine read back from the API: `enabled: false`, `notifications.channel` push and e-mail `true`, model
 `claude-opus-5-5`, the cron above. CI of `43d8a7c` (rustfmt) read: CI `39039217277`, ocsf and openshell — success.
+
+## 2026-10-17 — RW 4.19: a driver says READY before the program runs (D-V2-147)
+
+**What.** `adapter.rs`: a driver's (and a transport's) first line must be `READY`, awaited before `main` for
+`--adapter-startup-ms` (default 10 s, 1..=120 s; refused on a run without a driver, and on a value outside that or not a
+number); silence, an early exit or another first line is `AdapterError::NotReady` and the run is refused before one
+command is sent. `delulu device sim` says `READY` (`sim::serve`). Every test driver prints it (`hw_adapter_cli.rs`,
+`hw_dpx_cli.rs`, `sandbox_devices_cli.rs`). `EXCHANGE_TIMEOUT` is unchanged. DEPLOYMENT.md, CHANGELOG (breaking for driver
+authors), RW 4.19 closed. While there: `line_reader`'s doc comment had drifted onto `await_ready`; moved back.
+
+**Witnessed and falsified.** The unit tests `a_slow_starting_driver_is_waited_for_and_its_first_command_answered` and
+`a_driver_that_does_not_say_ready_is_refused_before_any_command`; the CLI test
+`a_driver_that_never_says_ready_refuses_the_run_before_main_and_the_wait_is_the_operators`. Five mutants, each applied
+alone, built, run and restored from a copy: M1 any first line accepted — killed by the unit test (the CLI test's silent
+driver does not reach that branch; recorded so nobody reads the CLI test as covering it); M1b the wait skipped, M2 the
+flag ignored (the refusal said 10000 ms), M3 the flag dropped from the hardware-only list — killed by the CLI test; M4
+the sim device silent — killed by `sim_device_cli` (both runs refused "did not say READY"). Suite: 2,242 passed and 4 failed before the Survey was regenerated — all four the stale-map gates (doctor_cli 3, the Survey's freshness 1), which pass after it (rerun after the last edit).

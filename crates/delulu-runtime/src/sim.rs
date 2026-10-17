@@ -189,13 +189,17 @@ fn read_bounded_line(input: &mut dyn BufRead, buf: &mut Vec<u8>) -> std::io::Res
     Ok(read)
 }
 
-/// Run the simulator as a device on a line: read `CMD`/`READ` requests, answer `OK`/`ERR`/`VAL`/
-/// `NODEV`, one line per request, until the input ends.
+/// Run the simulator as a device on a line: say `READY` (RW 4.19 — the first line every driver and transport
+/// writes), then read `CMD`/`READ` requests and answer `OK`/`ERR`/`VAL`/`NODEV`, one line per request, until the
+/// input ends.
 ///
 /// Every refusal is the DEVICE's: a request it cannot parse, a device it does not have, or a
 /// setpoint outside the bounds this process was given (its own hard stop). It never answers `OK` for
 /// something it did not do — the law of `adapter.rs` rule 4, on this side of the pipe.
 pub fn serve(input: &mut dyn BufRead, output: &mut dyn Write, sim: &mut Sim, bounds: &[ActuatorEnvelope]) {
+    if writeln!(output, "READY").is_err() || output.flush().is_err() {
+        return;
+    }
     loop {
         let mut buf: Vec<u8> = Vec::new();
         // Bounded, like every read of an untrusted peer: a host that streams without a newline gets
@@ -356,11 +360,12 @@ mod tests {
         let mut out: Vec<u8> = Vec::new();
         serve(&mut std::io::BufReader::new(input.as_bytes()), &mut out, &mut sim, &bounds);
         let said: Vec<&str> = std::str::from_utf8(&out).unwrap().lines().collect();
-        assert_eq!(said.len(), 4, "one line per request: {said:?}");
-        assert_eq!(said[0], "OK");
-        assert_eq!(said[1], "VAL 4");
-        assert!(said[2].starts_with("ERR the bench refuses it:"), "{said:?}");
-        assert_eq!(said[3], "NODEV");
+        assert_eq!(said.len(), 5, "READY, then one line per request: {said:?}");
+        assert_eq!(said[0], "READY", "the device says READY before anything else (RW 4.19)");
+        assert_eq!(said[1], "OK");
+        assert_eq!(said[2], "VAL 4");
+        assert!(said[3].starts_with("ERR the bench refuses it:"), "{said:?}");
+        assert_eq!(said[4], "NODEV");
     }
 
     #[test]
@@ -371,7 +376,13 @@ mod tests {
         let flood = format!("CMD arm0/elbow angle_deg={}", "1".repeat(70 * 1024));
         let mut out: Vec<u8> = Vec::new();
         serve(&mut std::io::BufReader::new(flood.as_bytes()), &mut out, &mut sim, &bounds);
-        assert!(out.is_empty(), "it answered an unbounded line: {:?}", String::from_utf8_lossy(&out));
+        assert_eq!(
+            out,
+            b"READY
+",
+            "it answered an unbounded line: {:?}",
+            String::from_utf8_lossy(&out)
+        );
     }
 
     #[test]
