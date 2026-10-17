@@ -6191,3 +6191,11 @@ found the matrix promising 1.0.x security backports to 2028-07 — for a version
 chapters); `delulu fmt --check examples docs/book/samples` 0 would change; a bundle of every ref,
 `D:\nelan\DeluluLang-history-2026-10-17.bundle` (14,095,723 bytes, sha256 `a62498fc…f353e7`, `git bundle verify` okay);
 `repository_structure`, `evidence_claims`, `release`, `distribution`, `governance` passed.
+
+## 2026-10-17 — the autosave refuses to carry history `origin` does not have
+
+After the launch `origin` is the public repository with a fresh history (D-V2-153); a snapshot's parents are HEAD and
+the previous snapshot, so a laptop still on the development history would have pushed all of it there. `scripts/
+autosave.ps1` now fetches with `--prune` and snapshots only when HEAD is on some branch of `origin`. **Falsified** on
+throwaway repositories: HEAD on an unrelated history — the guarded script refused (exit 1, no remote branch), the previous
+script pushed; control, HEAD on a branch origin has — a snapshot pushed.

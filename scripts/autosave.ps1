@@ -15,7 +15,9 @@
      fast-forwards. A snapshot is NOT a verified commit: never merge it; the next session reads it and recovers
      what it needs. CI does not run on it (ci.yml runs on pushes to master and main only).
 
-  It refuses a snapshot that carries the word the owner banned, or a file over 50 MB, and logs why.
+  It refuses a snapshot that carries the word the owner banned, a file over 50 MB, or a HEAD that is on no branch of
+  origin (the snapshot would carry history origin does not have - after the 2.0.0 launch, the whole development
+  history into the public repository), and logs why.
 
   Install (a task for the current user, every 10 minutes for 7 hours): powershell -File scripts\autosave.ps1 -Install
   Remove:                                                               powershell -File scripts\autosave.ps1 -Uninstall
@@ -28,11 +30,11 @@ param(
     [switch]$Uninstall,
     [int]$Hours = 7,
     [int]$Minutes = 10,
-    [string]$Branch = 'autosave/laptop'
+    [string]$Branch = 'autosave/laptop',
+    [string]$State = (Join-Path $env:LOCALAPPDATA 'DeluluLang')
 )
 $ErrorActionPreference = 'Continue'
 $TaskName = 'DeluluLang-autosave'
-$State = Join-Path $env:LOCALAPPDATA 'DeluluLang'
 $Log = Join-Path $State 'autosave.log'
 New-Item -ItemType Directory -Force $State | Out-Null
 
@@ -82,7 +84,7 @@ function Git-Logged([string]$line) {
     $global:LASTEXITCODE = $c
 }
 
-Git-Logged 'fetch -q origin'
+Git-Logged 'fetch -q --prune origin'
 if ($LASTEXITCODE -ne 0) { Say 'fetch failed; nothing pushed'; exit 1 }
 
 # 1. Committed work: every branch ahead of its upstream, fast-forward only.
@@ -115,6 +117,14 @@ $on = Git-Quiet rev-parse --abbrev-ref HEAD
 if ($tree -eq (Git-Quiet rev-parse 'HEAD^{tree}')) { Say "clean: $on $($head.Substring(0, 7))"; exit 0 }
 $prev = Git-Quiet rev-parse -q --verify "refs/remotes/origin/$Branch"
 if ($prev -and ((Git-Quiet rev-parse "$prev^{tree}") -eq $tree)) { Say "unchanged since snapshot $($prev.Substring(0, 7))"; exit 0 }
+
+# A snapshot carries HEAD's history, so it may go only where that history already is. Since the 2.0.0 launch `origin`
+# is the public repository with a fresh history (D-V2-153): a snapshot of a checkout still on the development history
+# would publish all of it there. (`--prune` above drops the old repository's refs once `origin` points elsewhere.)
+if (-not (Git-Quiet for-each-ref --contains $head '--format=%(refname)' refs/remotes/origin)) {
+    Say "REFUSED: HEAD $($head.Substring(0, 7)) is on no branch of origin - a snapshot would carry history origin does not have; nothing pushed"
+    exit 1
+}
 
 $banned = 'graph' + 'ify'
 if ((Git-Quiet diff $head $tree) -match $banned) { Say 'REFUSED: the snapshot carries the banned word; nothing pushed'; exit 1 }
