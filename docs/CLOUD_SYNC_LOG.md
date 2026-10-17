@@ -3369,3 +3369,39 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing.
 - For the laptop's memory: `cargo fmt --all` before every commit now — CI's `lints` job fails an unformatted tree.
 - Open / next: as the previous entry.
+
+### 2026-10-17 — the on-demand cloud routine (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `43d8a7c`
+- Commits: (1) this entry's commit
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `AGENTS.md`, `HANDOFF.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-146), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/assistant-memory/*`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **What** (D-V2-146): the routine `trig_01HFG6usfzmDAPQigiDu9DLq`, created paused; every session starts with `git fetch`.
+- CI read: `43d8a7c` — CI `39039217277`, ocsf `39039217297`, openshell `39039217270`: success.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: the routine's ID and that it is paused; fetch `origin` first in every session.
+- **Open / next, in order** (the release program; *[laptop]* = needs the owner's laptop, a routine run leaves it):
+  1. **RW 4.19, the driver READY handshake — half built, NOT in `master`.** The laptop holds it uncommitted (a `git stash`
+     on the laptop, "RW 4.19 READY handshake (in progress)"). Its design, for whoever finishes it: a driver prints `READY`
+     before its first command; `STARTUP_DEFAULT` 10 s, `STARTUP_MAX` 120 s; `AdapterError::NotReady`; `ProcessAdapter::spawn`
+     and `LineTransport::spawn` take a startup `Duration`; a `--adapter-startup-ms N` flag (1..=120000; refused where no
+     driver starts); every CLI test driver (`hw_adapter_cli.rs`, `hw_dpx_cli.rs`, `sandbox_devices_cli.rs`,
+     `dead_man_cli.rs`, `sandbox_modes_cli.rs`) prints `READY` first; CHANGELOG (breaking for driver authors);
+     DEPLOYMENT.md; RW 4.19 closed; its decision D-V2-147. A routine run that starts before the laptop pushes it should
+     take the next item instead, so the two never collide.
+  2. A code of conduct: the Contributor Covenant 2.1, verbatim from its official source; reports through GitHub's private
+     reporting.
+  3. Record the decisions taken but not yet written: RW 4.5 (root issuance stays opt-in — ROOT_ISSUANCE_TRUST_BOUNDARY
+     §10's own recommendation); version **2.0.0**; P8-04 option (c) to a post-release RFC; and update *Owner decisions
+     carried from V1, still open* in `V2_DECISION_LOG.md`.
+  4. The README: stale status rows; the D-V2-59 note that `contained` is best-effort.
+  5. *[laptop]* Rebuild the microVM images under WSL from a fresh ext4 clone (`scripts/microvm/build-image.sh`); the WSL
+     suite; `node editors/vscode/e2e.js` on Windows (a routine run may run it on Linux under `xvfb-run`).
+  6. *[laptop]* The launch: configure the empty public `jessesuniljs1-collab/DeluluLang` (private vulnerability
+     reporting, secret scanning, push protection, `main` protected); `SECURITY.md` §1/§6, CODEOWNERS, the governance
+     test; reword the two `HANDOFF.md` rule lines that spell the banned word; the 2.0.0 bump and CHANGELOG; the
+     fresh-history snapshot; tag `v2.0.0`; `RELEASES=on`; verify archives and attestations; publish; then
+     `delululang-test` private as the archive; the final report.

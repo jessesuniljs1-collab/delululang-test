@@ -45,6 +45,12 @@ and the VS Code end-to-end test → the scheduled task → the release → an ev
 `docs/DELULULANG_V2/V2_LOG.md` (entries from 2026-10-17), `V2_PHASE_STATUS.md` (row 17, the release program) and
 `docs/CLOUD_SYNC_LOG.md`.
 
+**The on-demand routine (D-V2-146).** On 2026-10-17 the owner asked for a new cloud routine he runs *"occasionally
+whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */5 * * *` UTC, push
+and e-mail notifications, created disabled). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
+does what a Linux VM can verify; the launch, the WSL microVM images and the Windows VS Code test stay the laptop's. **So
+every session — laptop or cloud — starts by fetching `origin`** and reading what came in (`AGENTS.md`, *Read first* 0).
+
 **Commit identity.** From 2026-10-17 this repository commits as
 `227307678+jessesuniljs1-collab@users.noreply.github.com` (a repository-local `git config user.email`; account id
 227307678, read with `gh api user`), so no new commit carries the owner's personal address.
@@ -576,6 +582,10 @@ wins, and you should update the memory to match.
   (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`; its terms and limits are at the top of this file).
   Where a bullet below reserves something to the owner, read it through that commission. The owner's pronouns are
   he/his (stated 2026-10-17).
+- **Start every session by syncing with GitHub** (owner, 2026-10-17: *"save this to memory, So that u will check GitHub
+  repo whenever u start session"*): `git fetch origin`, read `HEAD..origin/master` and the `origin/claude/*` branches,
+  fast-forward before any edit, and read the CI runs of what came in — the on-demand routine (D-V2-146) pushes while the
+  laptop is away.
 - **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
   which held from the first commit and is why CI never ran before that date. The remote is for

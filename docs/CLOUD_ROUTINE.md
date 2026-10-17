@@ -1,6 +1,21 @@
-# The cloud routine — how DeluluLang develops itself until 2026-10-16
+# The cloud routine — how DeluluLang develops itself when the laptop is away
 
-**What this is.** From 2026-09-28 the owner is away until **2026-10-16** and asked for development to
+**Since 2026-10-17: on demand (D-V2-146).** The owner, 2026-10-17: *"Create a new claude code cloud routine like last
+time, I will be running it occasionally whenever I can't use my laptop. Let it be paused at start, I will start it
+whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The
+routine is **`trig_01HFG6usfzmDAPQigiDu9DLq`**, *DeluluLang head chef — on demand (start by hand)*: Opus 5.5, the
+`delululang-test` repository, the Default environment, the Claude-Docs connector, push and e-mail notifications,
+schedule `5 */5 * * *` (UTC: 00:05, 05:05, 10:05, 15:05, 20:05 — cron has no 5 h 5 min interval, so it is every five
+hours at five past, and the 20:05 → 00:05 gap is four hours). **Created paused**; the owner switches it on at
+[claude.ai/code/routines](https://claude.ai/code/routines) and off when he is back. Its mandate is his commission of
+2026-10-17 (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`), and step 4 below gives its work order. The
+first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, the cloud period of 2026-09-28 → 2026-10-16) stays disabled. Everything
+below still holds except where a paragraph says *since 2026-10-17*. A run may start long after the last one, and the
+laptop may have pushed many commits in between: step 1's reading is not optional. A **Run now** with text puts that
+text in a `routine-fire-payload` block; the routine's prompt reads it as the owner's direction for that run, within
+every limit here.
+
+**What this was (2026-09-28 → 2026-10-16).** From 2026-09-28 the owner is away until **2026-10-16** and asked for development to
 continue without him: *"I want the development of delululang to be continued in my absentia. No need to
 wait for any of my input, Claude u can take better decisions than me on delululang. Run verification
 loops and loop engineering."* A Claude Code **routine** — a saved prompt that runs as a full cloud
@@ -30,6 +45,10 @@ his standing rulings reserve them by name: **the final public repository** (neve
 any repository but `origin` — `HANDOFF.md` §1.1); **the licence** (never change `LICENSE`, `NOTICE` or the
 licence terms); **D-NE-7, publication** (never push a tag, never create a release — the release workflow's
 dry run is fine); **D-NE-27** (never commit or ship a built GPL kernel image).
+**Since 2026-10-17** the owner's commission delegates all four to the head chef, but **a routine run still does none
+of them** (D-V2-146): the commission's order puts the WSL and VS Code validation before the release, and both need the
+laptop (KVM under WSL, VS Code on Windows); the launch also needs the owner's `gh` login, and the cloud's git proxy
+reaches only `origin`. So the four lines above bind every routine run. The launch is done from the laptop.
 
 **PS-D-02 is no longer stopped** — the owner's words above; routine run 1 built it (D-V2-48).
 
@@ -73,7 +92,10 @@ force-push. If a push to `master` is rejected:
 
 ## One run, step by step
 
-**0. Date and budget.** `date -u`. If it is **2026-10-16 or later**: do no new work — if the closing
+**0. Date and budget.** `date -u`. **Since 2026-10-17 there is no end date**: the routine runs only while the owner
+has it switched on, so the date rule below is history — skip it, and keep the rest of this step (the budget). The closing
+entry it describes stays where it is, a record of the cloud period; a run now writes an ordinary sync-log entry.
+*(History:)* If it is **2026-10-16 or later**: do no new work — if the closing
 entry is not yet in `docs/CLOUD_SYNC_LOG.md`, write it (what the period built, what is open, how to sync)
 and push it; then stop at once, spending nothing more (the routine keeps firing until the owner pauses
 it). **The closing entry exists since run 19 (2026-10-12)**: the section *The closing entry* near the top of
@@ -152,7 +174,16 @@ another OS, and then takes about seven minutes itself (run 5).
 **4. Choose one piece of work** — the first of these that is not done:
 1. Anything steps 2–3 found.
 2. `Open / next` items from the newest sync-log entries.
-3. **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
+3. **Since 2026-10-17: the release program** — the owner's commission (`HANDOFF.md`, *The owner's commission of
+   2026-10-17*). Its order: audit → P9-05 (done) → the decisions → WSL and VS Code validation → the scheduled task (this
+   routine, D-V2-146) → the release → the final report. The current list, in order, is the newest sync-log entry's
+   *Open / next*. **A routine run takes the items a Linux VM can build and verify** — finishing a half-built slice, a
+   decision and its records, the code of conduct, the README, `editors/vscode/e2e.js` under `xvfb-run` (Linux only; the
+   Windows run stays the laptop's), fixes that CI or a sweep finds. **It leaves for the laptop**: rebuilding the microVM
+   images (no KVM in the VM), the VS Code test on Windows, and every launch step (configuring the public repository, the
+   fresh-history push, the tag, `RELEASES=on`, publishing) — each named in *Open / next* as the laptop's. When nothing a
+   VM can do is left, go on to items 4–7 below.
+4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
    step, `contained`'s set, D-V2-92), with three residuals kept open where they are recorded: E-03's H6 (RW 4.27 — twice
@@ -178,16 +209,16 @@ another OS, and then takes about seven minutes itself (run 5).
    two grant files, D-V2-119, and two lease nodes, D-V2-120), P9-03 proposals (next — read against the code by run 20, `V2_P9_DESIGN.md`; step 1 built, D-V2-121, and step 1b, D-V2-122 — a sandboxed run's report, run 21; step 2, D-V2-123 — `grants propose REPORT`, run 21, and both for a package, D-V2-124; step 3, D-V2-125 — the store, approval under the approver's node, rejection, run 22; step 4, D-V2-126 — `grants auto-approve`, the same run: **P9-03 complete**), **P9-04** endpoint-bound secrets (read against the code by run 22, `V2_P9_DESIGN.md`; step (a), a request with headers — `http.get_with`, D-V2-128 — built by run 23; steps (b) and (c) — `http.get_with_secret`, a secret only to its grant's audience, D-V2-131 — built by run 24; step (d) — the broker's `secret_to`, D-V2-133, and its `send`, D-V2-134 — by run 25; step (e) — `authority --json`'s `secret_destinations`, D-V2-135 — the same run: **P9-04 complete**), **P9-05** method-and-path scopes (read against the code by run 25 — `V2_P9_DESIGN.md`, NET-WILDCARD-1 closed on the way, D-V2-136; **step (a) next**: path scopes in the grammar and the egress client).
    A phase is done when its CI run is read green and `V2_PHASE_STATUS.md` says so with the commit and
    the run.
-4. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
+5. `docs/REMAINING_WORK.md` rows the head chef can close and a Linux VM can verify — for example **7.3**
    (build the Dockerfile and devcontainer: the VM has Docker), **7.4** (`editors/vscode/e2e.js` on Linux
    under `xvfb-run`, installed by `apt`), **2.2**, **2.4**, **2.10**, **4.17**, **7.16** — each as a small,
    witnessed change.
-5. **A verification sweep** at least once a week (Sundays, UTC) and whenever nothing above is ready:
+6. **A verification sweep** at least once a week (Sundays, UTC) and whenever nothing above is ready:
    dispatch CI by hand (`mcp__github__actions_run_trigger` `run_workflow`, `workflow_id` `ci.yml`, `ref`
    `master`, `inputs` `{"jobs": "everything"}`), read every job, run an adversarial testing pass
    on the newest feature (a sous-chef agent may do it — `AGENTS.md`), and scan the live documents for
    claims the code has overtaken (`HANDOFF.md` §11.8's last lesson).
-6. **When every phase is built: keep improving and verifying DeluluLang, the language of the future** —
+7. **When every phase is built: keep improving and verifying DeluluLang, the language of the future** —
    the owner's words. Pick from `REMAINING_WORK.md` (the language: 2.x, the backends: 3.x, containment:
    4.x, proof: 5.x, tooling: 6.x), from what the sweeps find, and from what would make the language
    better for its users — developers, AI agents, robots — each change small, witnessed and recorded.
@@ -407,3 +438,10 @@ fool. Keep this file short enough to read at the start of every run.
 
 Every run left an entry in `docs/CLOUD_SYNC_LOG.md`; the laptop sync is written there. The routine can be
 paused or deleted at [claude.ai/code/routines](https://claude.ai/code/routines).
+
+**Since 2026-10-17 (the on-demand routine):** switch `trig_01HFG6usfzmDAPQigiDu9DLq` on at
+[claude.ai/code/routines](https://claude.ai/code/routines) when you leave the laptop, and off when you are back.
+**Run now** starts a run at once and can carry a direction for that run. Each run's session is listed under the
+routine, and a push and an e-mail say when it ends. Every run draws on the same subscription as the laptop
+([claude.ai/settings/usage](https://claude.ai/settings/usage)). Back on the laptop, every session starts by
+fetching `origin` and pulling what the routine pushed (`AGENTS.md`, *Read first*, step 0).

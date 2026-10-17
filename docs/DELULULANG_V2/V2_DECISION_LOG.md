@@ -3616,6 +3616,33 @@ people who run `cargo fmt` without thinking; an unformatted tree makes every fir
    next line too it found a second: **three user-facing error lines without `error:`** (`unknown command …` twice,
    `refused — the source produced no errors …`), prefixed now. Witnessed: the strengthened gate red on the unfixed source.
 
+## D-V2-146 — The on-demand cloud routine: created paused, the owner starts it; a routine run never launches — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** The commission's order has *the scheduled task* as a step. The head chef had meant to leave the first
+routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`) disabled. On 2026-10-17 the owner asked instead for *"a new claude code cloud
+routine like last time, I will be running it occasionally whenever I can't use my laptop. Let it be paused at start …
+Enable Push and Email notifications … run every 5hr and 5 mins"*, modeled on the first routine's settings as he had
+modified them.
+
+**Decision.**
+1. **Created**: `trig_01HFG6usfzmDAPQigiDu9DLq`, *DeluluLang head chef — on demand (start by hand)* — the first routine's
+   settings (Opus 5.5; `delululang-test`; the Default environment `env_012Mxeiw6zvfyxPy9ZEEFf3p`; tools Bash, Read, Write,
+   Edit, Glob, Grep, Agent, WebFetch, WebSearch; the Claude-Docs connector; autofix on pull requests) with **push and
+   e-mail notifications on** and **`enabled: false`** (read back from the API at creation). Schedule `5 */5 * * *` UTC:
+   cron cannot express a 5 h 5 min interval (the routines' minimum is one hour, the expression is cron), so it fires every
+   five hours at five past — and the 20:05 → 00:05 gap is four hours. The first routine stays disabled.
+2. **Its prompt** keeps the owner's own lines from the first routine verbatim (CI first, finish what a limit cut off, read
+   the last commits, record everything, the Survey and doctor, commit as `jessesuniljs1-collab`) and the hard limits
+   (only `origin`; no tag or release; no licence change; no kernel image), adds the commission's (never invent a contact,
+   key, result or compliance claim), the no-reply commit e-mail and `cargo fmt`, and reads a **Run now** text as the
+   owner's direction for that run (the docs, read 2026-10-17: such text arrives in a `routine-fire-payload` block and is
+   inert unless the prompt opts in; this routine has no API trigger, so only the owner can send it).
+3. **A routine run does not launch.** The commission delegates the release, but its order puts the WSL and VS Code
+   validation before it, and both need the laptop (KVM under WSL; VS Code on Windows); the launch needs the owner's `gh`
+   login, and the cloud's git proxy reaches only `origin`. So a run does what a Linux VM can verify and names the rest as
+   the laptop's in *Open / next* (`docs/CLOUD_ROUTINE.md` step 4, item 3).
+4. **Every session starts by syncing with GitHub** (the owner's words, `AGENTS.md` *Read first* 0, `HANDOFF.md` §11.1).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

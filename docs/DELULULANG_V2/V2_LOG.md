@@ -6097,3 +6097,15 @@ run on `6e0637e` (`39037514962`, by hand) — success on all four targets throug
 each runner generated the notices and the SBOM (Windows 257 linked packages / 248 components, Linux x86-64 257 / 248,
 macOS arm64 253 / 244, Linux arm64 245 components) and passed the install gate. D-V2-143's machinery works on every
 release target.
+
+## 2026-10-17 — the on-demand cloud routine (D-V2-146)
+
+**What.** At the owner's request a new routine, `trig_01HFG6usfzmDAPQigiDu9DLq`, created **paused** for him to switch on
+when he cannot use the laptop: the first routine's settings, push and e-mail notifications, `5 */5 * * *` UTC (cron has no
+5 h 5 min interval). `docs/CLOUD_ROUTINE.md` gained its *Since 2026-10-17* paragraphs (no end date; the release program as
+the work order; what a VM run leaves for the laptop); `AGENTS.md` *Read first* step 0 and `HANDOFF.md` §11.1 now start
+every session by fetching `origin`. The official routines documentation was read the same day (scheduling, pausing, Run
+now's `routine-fire-payload`, usage).
+
+**Checked.** The routine read back from the API: `enabled: false`, `notifications.channel` push and e-mail `true`, model
+`claude-opus-5-5`, the cron above. CI of `43d8a7c` (rustfmt) read: CI `39039217277`, ocsf and openshell — success.

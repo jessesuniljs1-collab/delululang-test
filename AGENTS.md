@@ -10,13 +10,16 @@ you remember from elsewhere.
 **In force since 2026-10-17:** the owner's commission `docs/design/DeluluLang_Autonomous_Development_Prompt.md` —
 take DeluluLang to a public release; every outstanding decision is the head chef's (below, *The owner's delegation*).
 
-0. **Run the Survey and `doctor`** (`cargo run -p delulu-survey -- check`,
-   `cargo run -p delulu -- doctor --check`) — the section below says when and why.
+0. **Sync with GitHub first** (owner, 2026-10-17): `git fetch origin`, then `git log --oneline HEAD..origin/master` and
+   the `origin/claude/*` branches — the on-demand cloud routine (below) may have pushed while the laptop was away; pull
+   (fast-forward) before any edit, and read the CI runs of what came in. **Then run the Survey and `doctor`**
+   (`cargo run -p delulu-survey -- check`, `cargo run -p delulu -- doctor --check`) — the section below says when and why.
 1. `HANDOFF.md` — §0, §1, then §11.
 2. `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the NEWEST entry of `docs/DELULULANG_V2/V2_LOG.md`.
    Decisions taken under the owner's delegation are `V2_DECISION_LOG.md` (`D-V2-nn`).
 3. `docs/CLOUD_SYNC_LOG.md` — what earlier cloud sessions changed; and **`docs/CLOUD_ROUTINE.md`** —
-   the loop every scheduled cloud run follows until 2026-10-16.
+   the loop every routine run follows (the cloud period 2026-09-28 → 2026-10-16; since 2026-10-17 the on-demand
+   routine `trig_01HFG6usfzmDAPQigiDu9DLq`, which the owner switches on when he cannot use the laptop — D-V2-146).
 4. `docs/REMAINING_WORK.md` — everything open, each row checked against the binary.
 
 DeluluLang is a statically typed, authority-and-effect-typed language (a Rust workspace of 13 crates):
