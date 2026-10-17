@@ -359,7 +359,10 @@ never semantics.
 2. **WASM/WASI runtime (containment):** deny-by-default host (Wasmtime-class); even a compiler or
    type-system bug is contained at module granularity.
 3. **MicroVM (isolation):** Firecracker-class VM for genuinely untrusted execution — default-deny
-   egress, read-only mounts, scoped short-lived credentials, explicit lifetimes.
+   egress, read-only mounts, scoped short-lived credentials, explicit lifetimes. *Built on Linux x86-64
+   with KVM only* (`--isolation microvm`, V2 PS-C); on every other host a microVM run is refused
+   (DL1408) rather than launched weaker, and the process sandbox (`--sandbox`, L1) is the isolation
+   layer there. A layer counts only where it runs.
 4. **The capability broker (policy):** root capabilities are issued by a broker outside any
    agent's reach, controlled by the human — or, where a human delegates, by a supervising system
    the human controls. Agents receive narrow, revocable, audited grants and cannot even *see*
@@ -380,7 +383,11 @@ Relative to the stated threat model, the runtime guarantees:
 2. No actor accesses another actor's mutable state (from Stage 7).
 3. A plugin cannot exceed the authority granted at load time (§6).
 4. The union of program authority is bounded by the human's root grant.
-5. Violations are contained at the WASM/microVM layer even if the type system is bypassed.
+5. Where the type system is bypassed, a violation is contained by the layer the program runs under:
+   the WASM/WASI floor for a program run on the WebAssembly engine (`--engine wasm`); the process
+   sandbox for a guest (`--sandbox`, L1 — Linux, macOS, Windows); the microVM (`--isolation microvm`,
+   L2) on Linux x86-64 with KVM only. An ordinary in-process run (L0) has no operating-system boundary:
+   there the runtime's own re-checks (guarantee 6) are the layer beneath the type system.
 6. Scope constraints inside capability values (paths, hosts, envelopes) are re-checked at runtime
    on every use — enforcement is doubled, not delegated to the type system alone.
 

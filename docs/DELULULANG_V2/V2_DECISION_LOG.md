@@ -3475,6 +3475,59 @@ carrying the path in the broker's `Net` op and record.
 no canonical form, N6 `grants diff`'s special-use line exact, N7 `grants delegate --net` unvalidated — all red; every
 binary rebuilt and scanned clean.
 
+## D-V2-140 — P9 closes with P9-05's path dimension: enforced, ordered and proved; `authority`'s static path report and the method dimension are recorded open, each with its reason — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** P9-05 was designed as four slices (`V2_P9_DESIGN.md`): (a) path scopes in the grammar and the runtime, (b) the
+order with the Z3 model, (c) `grants diff`/`authority` path reach and the static walk, (d) methods with the first non-GET
+primitive. (a) and (b) are built (D-V2-138, D-V2-139); `grants diff`'s path reach came with (b), since it decides by the
+runtime's mint.
+
+**Decision.**
+1. **P9 is complete as far as the request primitives that exist reach** — every request is a `GET`, and the path
+   dimension of a `net` grant is enforced at every check under every custody, ordered by containment everywhere a grant is
+   compared, and proved. The phase row says so, as P8's says "as far as software reaches".
+2. **(c)'s static half stays open (RW 2.12)**: `authority --json` naming the path each request's URL literal shows. The
+   AST walk `secret_destinations` uses cannot tell an `Http` capability's `get` from a `Map`'s without type information
+   it does not carry; a report that guesses which call is a request is the kind of claim this project does not make. It
+   needs the checker's types at each call, which is its own slice.
+3. **(d), methods, waits for the first non-GET primitive (RW 2.11)**, as run 25's reading said: a method scope for a
+   method no program can call is a gate that cannot fail. A request with a body and a method is a language addition —
+   the checker's table, both engines, the guest channel, the egress client, the trace, the report and its schema, the
+   OCSF mapping, conformance anchors — and is ranked as the first engineering priority after the public release.
+4. **The path in the chain's record** stays open (RW 2.12; D-V2-139 item 6).
+
+## D-V2-141 — Constitution §5.15 guarantee 5 and §5.14's third layer are narrowed to what is built: a violation is contained by the layer a program runs under, and the microVM is that layer only on Linux x86-64 with KVM — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** RW 7.10a; the owner's commission asks for exactly this review. The entrenched file's change is recorded in
+`ENTRENCHED_CHANGE_RECORD.md` (2026-10-17), with why it is not an RFC (it strengthens §5.14's honesty limits; the
+2026-08-08 precedent).
+
+**Decision.** Guarantee 5 now names the layer for each way a program runs — the WASM/WASI floor on the WebAssembly engine,
+the process sandbox for a guest (L1, three operating systems), the microVM on Linux x86-64 with KVM (L2) — and says that
+an ordinary in-process run (L0) has no operating-system boundary, its runtime re-checks (guarantee 6) being the layer
+beneath the type system. §5.14's third layer adds that it is built on Linux x86-64 with KVM only, refused (DL1408)
+elsewhere, and that a layer counts only where it runs. Nothing else in the Constitution changes.
+
+## D-V2-142 — The review the owner's commission asks for: D-V2-49, D-V2-59 and D-V2-110 to D-V2-137 are kept — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** The commission: *"Review delegated decisions D-V2-49, D-V2-59 and D-V2-110 through D-V2-137. Preserve sound
+decisions; revise any that no longer serve the project's goals."* Each entry was read again — the two flagged when taken in
+full, the rest from their decision items — against two questions: does it still hold in the code (CI on `master` green
+through `8cae6a1`), and does it still serve a public release.
+
+| Decision | Kept, because |
+|---|---|
+| D-V2-49 (`DELULU_CORE.md` v0.3) | It moves the formal model toward the implementation (progress-or-fault, the attempted label, the higher-order primitive) and changes no language rule; RW 5.1 (mechanization) stays open, aimed at the right calculus. |
+| D-V2-59 (`hostile-agent` requires all five properties; `contained`, `dev` none for now) | Still the honest split: macOS's reads remain a PS-E residual, so requiring all five of `contained` (the default) would refuse every macOS run. The documentation must say `contained` is best-effort and `hostile-agent` is the profile for untrusted code — checked in the README refresh before the release. |
+| D-V2-110, 117 (devices start at the first request; never-started devices journaled) | Parity between a guest and an ordinary run, and a report that says what did not happen. |
+| D-V2-111, 114, 115 (a lost record is never answered as success; a loosening is undone) | The fail-closed rule (invariants 26/27) applied to every handler the writer reaches. |
+| D-V2-112, 113, 116 (egress refusals in the chain; the monitor's `special-use` and `break-glass` rules) | The out-of-band monitor judges what the chain holds; P8 complete as far as software reaches. |
+| D-V2-118 to 126 (P9-01 to P9-03: `--within`, `grants diff`, proposals, auto-approval) | Each decides through the runtime's mint or the tree's own `⊑` — now with paths (D-V2-139) — and auto-approval never approves guarded authority and is revoked with its node. |
+| D-V2-127, 130 (DEADMAN-BUSY-1; a speed claim against a same-machine control) | Measured fixes for the runner-starvation trap; the control keeps the test able to fail. |
+| D-V2-128, 129, 131 to 137 (P9-04, the trace's refusals, MAP-HANDLE-1, NET-WILDCARD-1, the red team's F1) | A secret goes only where its audience names, by the broker's recorded and guarded `send`; one matcher per question; `secret_destinations`' static walk matches only the four-argument `get_with_secret`, so it guesses nothing (D-V2-140's concern does not reach it). |
+
+None is revised. One follow-up is carried into the release checks: D-V2-59's documentation note.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

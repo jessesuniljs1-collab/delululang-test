@@ -6038,3 +6038,16 @@ the record's `reason` field. The real consumer is the OCSF export (`dst_endpoint
 **Also read:** step (a)'s `94b6c36` push run `39034873839` — success on every job.
 
 **Next:** P9-05 (c)'s static half, then the commission's decisions.
+
+## 2026-10-17 — P9 closes as far as GET reaches (D-V2-140); the Constitution's containment claim narrowed to what is built (D-V2-141)
+
+**P9.** With P9-05's path dimension enforced, ordered and proved, P9 is complete as far as the request primitives that
+exist reach. Recorded open, each with its reason: `authority`'s static path report (an AST walk cannot tell an `Http`
+`get` from a `Map`'s without the checker's types — no guessed claim), the method dimension (waits for the first non-GET
+primitive, now ranked first after the public release), the path in the chain's record (OCSF's hostname, D-V2-139).
+
+**The Constitution (entrenched).** §5.15 guarantee 5 promised containment "at the WASM/microVM layer" for every program;
+the microVM is built on Linux x86-64 with KVM only, and an ordinary run has no OS boundary. Now it names the layer per
+way of running, and §5.14's third layer says where it is built. Recorded in `ENTRENCHED_CHANGE_RECORD.md` with why it is
+not an RFC (it strengthens §5.14's honesty limits; the 2026-08-08 precedent). RW 7.10a closed. Gates: in the commit
+message.

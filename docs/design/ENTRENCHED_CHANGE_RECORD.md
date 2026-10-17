@@ -88,6 +88,49 @@ cargo run -p delulu-survey -- build
 
 ---
 
+## 2026-10-17 — `docs/design/CONSTITUTION.md` §5.14 item 3 and §5.15 guarantee 5: a layer counts only where it runs
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/CONSTITUTION.md` — §5.14's third layer (a sentence added) and §5.15's fifth guarantee (reworded) |
+| Entrenched by | `.github/CODEOWNERS` (`/docs/design/CONSTITUTION.md`); §10 — §5.14's honesty limits |
+| Campaign | the owner's commission of 2026-10-17 (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`: *"Review `CONSTITUTION.md` §5.15 and correct any inaccurate claims about microVM containment or platform availability"*); REMAINING_WORK 7.10a |
+| Approved by | **the head chef, 2026-10-17, under the owner's delegation of that day** (D-V2-141) — the owner: *"You do not need to wait for my review or approval for any outstanding project decisions"* |
+
+**Why**
+
+§5.15 guaranteed: *"Violations are contained at the WASM/microVM layer even if the type system is bypassed."* The
+microVM layer exists only on Linux x86-64 with KVM (V2 PS-C, 2026-09-27); an ordinary `run` executes the interpreter
+in-process with no operating-system boundary, and a WebAssembly floor holds only for a program run on that engine. So
+the clause promised containment on hosts and paths where none is built. §5.14's third layer read as present on every
+host in the same way. RW 7.10a recorded both and left them for the owner, because the file is entrenched; the owner's
+commission delegated exactly this correction.
+
+**Why this is not an RFC**
+
+§10: the Constitution changes by RFC, and §5.14's honesty limits only by a replacement that *preserves or strengthens*
+the whole-program authority guarantee. This change adds no capability, removes no guarantee that holds, and narrows two
+claims to what is built — it strengthens the honesty limits, and the guarantee is unchanged where it held. The precedent
+is this record's first entry (2026-08-08): a binding honesty clause found factually false was corrected under the
+project lead's approval with the deviation recorded, not left false through a comment period. The same three sites in
+non-entrenched documents (README's Honesty section, QUESTIONS §1.3/§2.1, the Book Ch. 14/15/20) were corrected on
+2026-08-23 and already say what this now says.
+
+**Verified before the change**
+
+The layers as the binary states them: `delulu run --help` names `--engine wasm` (the WebAssembly backend), `--sandbox`
+(the jailed guest), `--isolation none|process|microvm` (`process` isolates foreign code only) and `--sandbox-backend
+external:CMD` (L3); `doctor --check` on this Windows host reports `L1 — L2 is absent` and KVM absent; REMAINING_WORK
+4.1 and README's Honesty section record the microVM as built on Linux x86-64 with KVM only. The conformance rules for
+§5.15 (`delulu-conform/src/rules.rs`) cite guarantees 1–6 by statement, not this sentence; `governance.rs` reads the
+file's structure, not this clause.
+
+**What makes this hard to undo**
+
+Nothing: a two-sentence documentation revert.
+
 ## 2026-09-17 — `SECURITY.md` §1 and §6, after the testing repository became public
 
 **Changed**
