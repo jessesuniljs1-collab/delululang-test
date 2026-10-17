@@ -281,4 +281,7 @@ skip branch, §11.2).
   **Step (a) built 2026-10-17 (D-V2-138), on the laptop under the owner's commission of that day:** `net=HOST/PATTERN`,
   one reading (`delulu_broker::netscope`) at the grant, the first check, the broker-secret pre-check, every egress hop
   and the broker's use check (by host); an ambiguous request path refused where a pattern decides; the OpenShell export
-  refuses a path scope. Next: step (b).
+  refuses a path scope. **Step (b) built the same day (D-V2-139):** `net` ordered by containment (host string, then
+  pattern) in the broker's `⊑`, the runtime's mint and `grants diff`; the meet every entry's meet; the canonical form an
+  antichain; Z3 §2d (41 obligations, three more CI mutants) and an exhaustive Rust check. Not taken: the path in the
+  broker's op and record (OCSF reads `target` as the hostname) — its own slice. Next: (c)'s static half.

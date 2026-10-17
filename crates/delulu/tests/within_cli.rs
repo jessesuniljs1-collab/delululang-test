@@ -427,6 +427,27 @@ fn grants_diff_names_what_a_change_adds_and_nothing_it_does_not() {
     assert_eq!(diff(&s_a, &s_a).0, 0, "the same audience adds nothing");
     let (code, v) = diff(&s_none, &write("s-other.grants", &["secret:J@a.example.com=v"]));
     assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("scope_expansion")), "another secret is scope, as before: {v:#}");
+    // P9-05 (b), D-V2-139: a path is scope. A path under a granted host, or under a granted path, adds nothing; the whole
+    // host where OLD granted a path, or a sibling path, is `scope_expansion` naming the entry.
+    let p_v1 = write("p-v1.grants", &["net=api.example.com/v1/**"]);
+    let p_host = write("p-host.grants", &["net=api.example.com"]);
+    assert_eq!(diff(&p_host, &p_v1).0, 0, "a path under a granted host adds nothing");
+    assert_eq!(diff(&p_v1, &write("p-items.grants", &["net=api.example.com/v1/items/*"])).0, 0, "a narrower path adds nothing");
+    for (why, wider, entry) in [
+        ("the whole host", p_host.clone(), "net=api.example.com"),
+        ("a sibling path", write("p-v2.grants", &["net=api.example.com/v2/**"]), "net=api.example.com/v2/**"),
+    ] {
+        let (code, v) = diff(&p_v1, &wider);
+        let f = &v["findings"][0];
+        assert_eq!((code, f["category"].as_str(), f["grant"].as_str()), (1, Some("scope_expansion"), Some(entry)), "{why}: {v:#}");
+    }
+    // The same order for special-use reach: a path of a special-use host is within it; the host itself is not within one
+    // of its paths.
+    let sp_host = write("sp-host.grants", &["net.special=127.0.0.1"]);
+    let sp_path = write("sp-path.grants", &["net.special=127.0.0.1/health"]);
+    assert_eq!(diff(&sp_host, &sp_path).0, 0, "a path of a special-use host adds nothing");
+    let (code, v) = diff(&sp_path, &sp_host);
+    assert_eq!((code, v["findings"][0]["category"].as_str()), (1, Some("special_use_reach")), "the whole host is more: {v:#}");
     // The human answer names the same, and a lease node is refused by name until it is diffed (exit 2).
     let o = delulu(&["grants", "diff", &old, &new]);
     assert_eq!(o.status.code(), Some(1), "{}", out(&o));

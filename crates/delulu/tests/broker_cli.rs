@@ -517,6 +517,60 @@ fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// P9-05 (b), D-V2-139: a delegation may narrow a host to its paths and never widens one. Under a node granted
+/// `api.example.invalid`, a child may hold `api.example.invalid/v1/**`; under that child, the whole host is refused
+/// DL0802 with the narrower entry as the repair. A `--net` the grammar refuses is refused in words before the broker is
+/// asked. A leased run holds the narrow scope: its request for another path is refused at the call (DL0904), one under it
+/// reaches the egress client (`.invalid` resolves to nothing — nothing leaves the machine).
+#[test]
+fn a_delegation_narrows_a_host_to_its_paths_and_never_widens_one() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    // Short: a broker's socket lives in the state directory (macOS allows 103 bytes).
+    let base = std::env::temp_dir().join(format!("dlp-{}-{}", std::process::id(), t % 1_000_000_000));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    for (file, path) in [("in.delulu", "/v1/items"), ("out.delulu", "/v2/items")] {
+        let program = format!(
+            "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    \
+             let h = root.http([\"api.example.invalid/v1/**\"])\n    \
+             match h.get(\"https://api.example.invalid{path}\") {{\n        Ok(b) => out.println(\"fetched\")\n        \
+             Err(e) => out.println(\"not fetched\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join(file), program).unwrap();
+    }
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let delegate = |extra: &[&str]| {
+        let mut args = vec!["grants", "delegate", "--effects", "Write,Net", "--multi", "--json"];
+        args.extend_from_slice(extra);
+        delulu_in(&cwd, &state, &args)
+    };
+    let node_token = |o: &Output| -> (String, String) {
+        assert!(o.status.success(), "delegate: {}{}", stdout(o), stderr(o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(o)).expect("delegate --json");
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+    let (parent, _) = node_token(&delegate(&["--net", "api.example.invalid"]));
+    let (child, token) = node_token(&delegate(&["--parent", &parent, "--net", "api.example.invalid/v1/**"]));
+    let o = delegate(&["--parent", &child, "--net", "api.example.invalid"]);
+    assert!(!o.status.success(), "the whole host is wider than the child's path: {}", stdout(&o));
+    let said = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(said.contains("DL0802") && said.contains("api.example.invalid/v1/**"), "the repair is the narrower entry: {said}");
+    let o = delegate(&["--net", "api.example.invalid/v1/../x"]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("is refused") && stderr(&o).contains(".."), "{}", stderr(&o));
+    let run = |file: &str| delulu_in(&cwd, &state, &["run", file, "--lease", &token, "--no-prompt"]);
+    let o = run("in.delulu");
+    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not fetched\n"), "{}", stderr(&o));
+    let o = run("out.delulu");
+    assert!(stderr(&o).contains("DL0904") && stderr(&o).contains("outside every path"), "{}{}", stdout(&o), stderr(&o));
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// MAP-HANDLE-1 (routine run 24): under the daemon a run's secret is a broker HANDLE, with no bytes in the program's process —
 /// and `Secret.map`'s function runs in that process. It was handed the empty string, and `s.map(f).expose(d)` printed `f("")`
 /// (here `!`) where embedded custody prints `f(bytes)` (`hunter2!`): a fabricated value, then exposed with no broker gate and no

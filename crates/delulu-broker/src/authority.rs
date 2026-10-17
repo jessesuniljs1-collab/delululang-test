@@ -76,7 +76,8 @@ impl Scopes {
         Scopes {
             fs_read: canon(&self.fs_read),
             fs_write: canon(&self.fs_write),
-            net: self.net.clone(),
+            // P9-05 (b), D-V2-139: a `net` set is a preorder too — no entry within another, as for paths.
+            net: crate::netscope::canonicalize_set(&self.net),
             secrets: self.secrets.clone(),
             declassify: self.declassify.clone(),
             foreign_c: self.foreign_c.clone(),
@@ -129,6 +130,7 @@ impl Authority {
         let s = &self.scopes;
         path::canonicalize_set(&s.fs_read) == s.fs_read
             && path::canonicalize_set(&s.fs_write) == s.fs_write
+            && crate::netscope::canonicalize_set(&s.net) == s.net
             && s.well_formed_secret_to() == s.secret_to
     }
 
@@ -215,7 +217,8 @@ impl Authority {
             scopes: Scopes {
                 fs_read: path::intersect_path_sets(&self.scopes.fs_read, &other.scopes.fs_read),
                 fs_write: path::intersect_path_sets(&self.scopes.fs_write, &other.scopes.fs_write),
-                net: name_intersect(&self.scopes.net, &other.scopes.net),
+                // P9-05 (b), D-V2-139: an entry may name a path pattern — the meet of two sets is every entry's meet.
+                net: crate::netscope::set_meet(&self.scopes.net, &other.scopes.net),
                 secrets: name_intersect(&self.scopes.secrets, &other.scopes.secrets),
                 declassify: name_intersect(&self.scopes.declassify, &other.scopes.declassify),
                 foreign_c: name_intersect(&self.scopes.foreign_c, &other.scopes.foreign_c),
@@ -253,7 +256,7 @@ pub fn attenuation_check(child: &Authority, parent: &Authority) -> Result<(), Au
     let ok = child.effects.is_subset(&parent.effects)
         && path::all_within(&child.scopes.fs_read, &parent.scopes.fs_read)
         && path::all_within(&child.scopes.fs_write, &parent.scopes.fs_write)
-        && child.scopes.net.is_subset(&parent.scopes.net)
+        && crate::netscope::set_within(&child.scopes.net, &parent.scopes.net)
         && child.scopes.secrets.is_subset(&parent.scopes.secrets)
         && child.scopes.secret_to.is_subset(&parent.scopes.secret_to)
         && child.scopes.declassify.is_subset(&parent.scopes.declassify)
@@ -342,6 +345,25 @@ mod tests {
                 child: auth(&["Read"], Scopes { fs_read: names(&["./data"]), ..Default::default() }),
                 parent: auth(&["Read"], Scopes { fs_read: names(&["./data/sub"]), ..Default::default() }),
                 expected: Some(auth(&["Read"], Scopes { fs_read: names(&["./data/sub"]), ..Default::default() })),
+            },
+            // P9-05 (b), D-V2-139: a `net` entry's path pattern is ordered by containment, its host by exact string.
+            Row {
+                name: "net path narrowing ok (h.com/v1/** ⊑ h.com)",
+                child: auth(&["Net"], Scopes { net: names(&["h.com/v1/**", "h.com/v2/x"]), ..Default::default() }),
+                parent: auth(&["Net"], Scopes { net: names(&["h.com"]), ..Default::default() }),
+                expected: None,
+            },
+            Row {
+                name: "net path widening rejected (h.com ⋢ h.com/v1/**) -> the narrower survives",
+                child: auth(&["Net"], Scopes { net: names(&["h.com"]), ..Default::default() }),
+                parent: auth(&["Net"], Scopes { net: names(&["h.com/v1/**"]), ..Default::default() }),
+                expected: Some(auth(&["Net"], Scopes { net: names(&["h.com/v1/**"]), ..Default::default() })),
+            },
+            Row {
+                name: "net sibling paths rejected -> they meet in nothing",
+                child: auth(&["Net"], Scopes { net: names(&["h.com/v2/**"]), ..Default::default() }),
+                parent: auth(&["Net"], Scopes { net: names(&["h.com/v1/**"]), ..Default::default() }),
+                expected: Some(auth(&["Net"], Scopes::default())),
             },
             Row {
                 name: "fs sibling-prefix rejected (./database ⋢ ./data) -> empty fs meet",
@@ -518,6 +540,19 @@ mod tests {
         let a = auth(&["Read", "Net"], Scopes { fs_read: names(&["./data"]), ..Default::default() });
         let b = auth(&["Read"], Scopes { fs_read: names(&["./data/sub"]), ..Default::default() });
         assert_eq!(a.intersect(&b), b.intersect(&a));
+    }
+
+    /// P9-05 (b), D-V2-139: an authority's `net` set is canonical as its path sets are — an entry within another is
+    /// dropped — so two authorities each within the other are one value, hash alike, and `is_canonical` sees one kept.
+    #[test]
+    fn a_net_set_is_canonical_like_a_path_set() {
+        let a = Authority::new(eff(&["Net"]), Scopes { net: names(&["h.com", "h.com/v1/**"]), ..Default::default() });
+        let b = Authority::new(eff(&["Net"]), Scopes { net: names(&["h.com"]), ..Default::default() });
+        assert_eq!(a, b);
+        assert!(a.is_canonical());
+        let raw = auth(&["Net"], Scopes { net: names(&["h.com", "h.com/v1/**"]), ..Default::default() });
+        assert!(!raw.is_canonical(), "a kept entry within another is not canonical");
+        assert_eq!(raw.canonicalized(), a);
     }
 
     #[test]

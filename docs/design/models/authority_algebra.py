@@ -9,7 +9,8 @@ the result to the whole conjunction `attenuation_check` actually computes:
 
     child ⊑ parent  ==  effects ⊆
                      ∧ fs_read, fs_write   path-descendant cover
-                     ∧ net, secrets, secret_to, declassify, foreign_c, foreign_python   exact-set ⊆
+                     ∧ net                entries ⊆ by host string, then path-pattern containment (§2d)
+                     ∧ secrets, secret_to, declassify, foreign_c, foreign_python   exact-set ⊆
                      ∧ device             per-device interval containment
                      ∧ budget             componentwise ≤ on (memory, processor time); absent = TOP
 
@@ -21,6 +22,9 @@ Each dimension is modelled from the code, not from the prose:
   * budget          — `budget_scope.rs::within` / `::meet` (PS-B-05, D-V2-08's condition for a
                       budget joining the order): an ABSENT budget is the top, so an absent child
                       under a present parent is a WIDENING — the same asymmetry as the rate.
+  * net paths       — `netscope.rs` (P9-05 (b), D-V2-139): an entry `HOST/PATTERN`, its pattern's segments a literal,
+                      `*` or a final `**`; `pattern_within` and `pattern_meet` modelled from the code and proved
+                      SOUND against what the patterns match, the meet exact (§2d)
   * secret_to       — `authority.rs` (P9-04 (d), D-V2-133): each secret's audience, a set of
                       `NAME@host:port` pairs, ordered by inclusion like every exact-set dimension —
                       plus the one rule the others lack, a pair lives only beside its NAME in
@@ -67,6 +71,9 @@ MUTANTS = {
     "secret-to-dropped": "the secret audience is left out of the full conjunction",
     "secret-to-meet-union": "the secret audience's meet is the UNION (a widening meet)",
     "secret-to-keeps-orphans": "canonicalization keeps a pair whose secret the authority does not hold",
+    "net-star-under-literal": "a `*` segment is called within a literal one (it matches other segments)",
+    "net-rest-under-fixed": "a pattern ending `**` is called within one of the same fixed segments and no `**`",
+    "net-meet-star-wins": "the meet of `*` and a literal is `*` (a widening meet)",
 }
 MUTANT = os.environ.get("DELULU_Z3_MUTANT", "")
 if MUTANT and MUTANT not in MUTANTS:
@@ -321,6 +328,95 @@ prove("meet ⊑ both                     x⊓y ⊑ x ∧ x⊓y ⊑ y",
 
 print()
 print("=" * 78)
+print("(2d) NET PATHS — netscope.rs `pattern_within` / `pattern_meet` (P9-05 (b), D-V2-139)")
+print("     a pattern: n fixed segments (a, b or *) and an optional final **; L = 3")
+print("     a path: m segments (a, b, c, or an empty LAST one — a trailing /); M = 5")
+print("=" * 78)
+
+from z3 import Int  # noqa: E402 — the section's own sort, beside the bit-vectors above
+
+L, M = 3, 5
+LIT_A, LIT_B, STAR, EMPTY = 0, 1, 2, 3
+
+def pat(n):
+    return {"n": Int(f"{n}_n"), "s": [Int(f"{n}_s{i}") for i in range(L)], "r": Bool(f"{n}_r")}
+
+def pvars(x):
+    return [x["n"], x["r"]] + x["s"]
+
+def pwf(x):
+    """A pattern the grammar accepts: at most L fixed segments, each a literal or `*`, and never empty."""
+    return And(x["n"] >= 0, x["n"] <= L, Or(x["n"] >= 1, x["r"]), *[And(v >= LIT_A, v <= STAR) for v in x["s"]])
+
+def path(n):
+    return {"m": Int(f"{n}_m"), "p": [Int(f"{n}_p{j}") for j in range(M)]}
+
+def pathvars(y):
+    return [y["m"]] + y["p"]
+
+def pathwf(y):
+    """A plain path: segments a, b or c (a literal no pattern names), an empty one only last (a trailing `/`)."""
+    return And(y["m"] >= 0, y["m"] <= M, *[And(v >= LIT_A, v <= EMPTY) for v in y["p"]],
+               *[Implies(j < y["m"] - 1, y["p"][j] != EMPTY) for j in range(M)])
+
+def segmatch(sv, xv):
+    """A literal its own segment; `*` any segment but the empty one (`path_matches`)."""
+    return Or(And(sv == LIT_A, xv == LIT_A), And(sv == LIT_B, xv == LIT_B), And(sv == STAR, xv != EMPTY))
+
+def pmatch(x, y):
+    """`path_matches`: the fixed segments in order, then exactly nothing more — or anything more under `**`."""
+    return And(If(x["r"], y["m"] >= x["n"], y["m"] == x["n"]), *[Implies(i < x["n"], segmatch(x["s"][i], y["p"][i])) for i in range(L)])
+
+def pwithin(c, p):
+    """`pattern_within`: at each of the parent's fixed segments the child has a fixed one, equal to a literal or under
+    `*`; past them, a parent `**` takes everything, and without one the child ends there too, with no `**`."""
+    def seg_ok(i):
+        if MUTANT == "net-star-under-literal":
+            return If(p["s"][i] == STAR, True, Or(c["s"][i] == p["s"][i], c["s"][i] == STAR))
+        return If(p["s"][i] == STAR, True, c["s"][i] == p["s"][i])
+    fixed = And(*[Implies(i < p["n"], And(i < c["n"], seg_ok(i))) for i in range(L)])
+    tail = If(p["r"], True, c["n"] == p["n"] if MUTANT == "net-rest-under-fixed" else And(c["n"] == p["n"], Not(c["r"])))
+    return And(fixed, tail)
+
+def pmeet(a, b):
+    """`pattern_meet`: segment by segment up to the shorter fixed part (two different literals meet in nothing; `*`
+    takes the other side's segment); then the longer side's segments, if the shorter ends in `**`; `**` if both do."""
+    k = If(a["n"] < b["n"], a["n"], b["n"])
+    def seg(i):
+        if MUTANT == "net-meet-star-wins":
+            common = If(a["s"][i] == STAR, STAR, If(b["s"][i] == STAR, STAR, a["s"][i]))
+        else:
+            common = If(a["s"][i] == STAR, b["s"][i], a["s"][i])
+        return If(i < k, common, If(a["n"] < b["n"], b["s"][i], a["s"][i]))
+    segs_ok = And(*[Implies(i < k, Not(And(a["s"][i] != STAR, b["s"][i] != STAR, a["s"][i] != b["s"][i]))) for i in range(L)])
+    ok = And(segs_ok, If(a["n"] == b["n"], True, If(a["n"] < b["n"], a["r"], b["r"])))
+    m = {"n": If(a["n"] < b["n"], b["n"], a["n"]), "s": [seg(i) for i in range(L)],
+         "r": If(a["n"] == b["n"], And(a["r"], b["r"]), If(a["n"] < b["n"], b["r"], a["r"]))}
+    return ok, m
+
+PA, PB, PC, PY = pat("PA"), pat("PB"), pat("PC"), path("PY")
+POK, PM = pmeet(PA, PB)
+prove("within reflexive                wf x → x within x", Implies(pwf(PA), pwithin(PA, PA)), pvars(PA))
+prove("within transitive               a within b ∧ b within c → a within c",
+      Implies(And(pwf(PA), pwf(PB), pwf(PC), pwithin(PA, PB), pwithin(PB, PC)), pwithin(PA, PC)),
+      pvars(PA) + pvars(PB) + pvars(PC))
+prove("within SOUND                    c within p ∧ c matches a path → p matches it",
+      Implies(And(pwf(PA), pwf(PB), pathwf(PY), pwithin(PA, PB), pmatch(PA, PY)), pmatch(PB, PY)),
+      pvars(PA) + pvars(PB) + pathvars(PY))
+prove("meet exact (no wider)           a⊓b matches a path → a and b both match it",
+      Implies(And(pwf(PA), pwf(PB), pathwf(PY), POK, pmatch(PM, PY)), And(pmatch(PA, PY), pmatch(PB, PY))),
+      pvars(PA) + pvars(PB) + pathvars(PY))
+prove("meet exact (no narrower)        a and b both match a path → a⊓b exists and matches it",
+      Implies(And(pwf(PA), pwf(PB), pathwf(PY), pmatch(PA, PY), pmatch(PB, PY)), And(POK, pmatch(PM, PY))),
+      pvars(PA) + pvars(PB) + pathvars(PY))
+prove("meet within both                a⊓b within a ∧ a⊓b within b",
+      Implies(And(pwf(PA), pwf(PB), POK), And(pwf(PM), pwithin(PM, PA), pwithin(PM, PB))), pvars(PA) + pvars(PB))
+prove("meet is GLB                     c within a ∧ c within b → a⊓b exists ∧ c within a⊓b",
+      Implies(And(pwf(PA), pwf(PB), pwf(PC), pwithin(PC, PA), pwithin(PC, PB)), And(POK, pwithin(PC, PM))),
+      pvars(PA) + pvars(PB) + pvars(PC))
+
+print()
+print("=" * 78)
 print("(3) THE FULL CONJUNCTION — attenuation_check, authority.rs")
 print("=" * 78)
 
@@ -411,6 +507,11 @@ print("    in the number, but that uniformity is an argument, not something Z3 c
 print("  * The budget dimension is modelled over UNBOUNDED integers: its laws hold for every")
 print("    positive (memory, cpu) pair and for absence, not only the grid the Rust tests enumerate")
 print("    (budget_scope.rs). The Rust fields are u64; the laws use only ≤ and min, which u64 keeps.")
+print("  * The NET dimension's entries carry path patterns (§2d): their order is proved SOUND and its meet")
+print("    exact for patterns of up to %d fixed segments against paths of up to %d; that it calls nothing" % (L, M))
+print("    within too little (completeness) is checked exhaustively in netscope.rs's tests. A SET of entries")
+print("    (every child entry within a parent entry) is a preorder; the product below models net, like the")
+print("    path dimensions, by the set laws.")
 print("  * The PATH dimensions are represented here by the set laws only. Their real order is")
 print("    path-descendant COVER, whose laws are checked exhaustively over real path strings in")
 print("    crates/delulu-broker/tests/order_laws.rs — including the antisymmetry FAILURE (F1).")

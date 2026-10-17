@@ -366,7 +366,12 @@ pub(crate) fn diff(old: &Grants, new_lines: &[String]) -> Result<Vec<DiffFinding
             // `net.special=` puts its host in `net` too: decided once, as special-use reach.
             "net" => one.net.iter().try_for_each(|h| mint("http", Some(h))),
             "net.special" => one.net_special.iter().try_for_each(|h| {
-                if old.net_special.contains(h) { Ok(()) } else { Err(format!("OLD does not grant `{h}` as special-use reach")) }
+                // P9-05 (b): within a special-use grant of OLD, by the broker's order (a narrower path is no new reach).
+                if old.net_special.iter().any(|g| delulu_broker::netscope::entry_within(h, g)) {
+                    Ok(())
+                } else {
+                    Err(format!("OLD does not grant `{h}` as special-use reach"))
+                }
             }),
             // P9-04 (c), D-V2-131: a secret's REACH is its audience — every origin NEW lets it be sent to must be one OLD
             // names for it too. No audience is the bottom (sent nowhere), so one is reach a secret without one never had.
@@ -814,7 +819,9 @@ mod tests {
         }
         let paths: Vec<String> =
             ["a", "a/b", "a/b/c", "a/x", "d", "d/e"].iter().map(|p| base.join(p).to_string_lossy().to_string()).collect();
-        let hosts = ["example.com", "api.example.com", "cdn.example.org"];
+        // P9-05 (b), D-V2-139: path-scoped entries too — the runtime's mint and the lattice must order them alike.
+        let hosts = ["example.com", "api.example.com", "cdn.example.org", "api.example.com/v1/**", "api.example.com/v1/*/x",
+                     "api.example.com/v1/items/x", "api.example.com/v2/**", "api.example.com/**"];
         let names = ["API_KEY", "DB_PASS"];
         // A small deterministic generator (xorshift) — inputs generated, not written (§11.2).
         let mut state: u64 = 0x9E37_79B9_7F4A_7C15;

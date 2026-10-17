@@ -6012,3 +6012,29 @@ of the broker's unit-test binary still on disk (another package set names it dif
 (`HANDOFF.md` §11.5). Gates: in the commit message.
 
 **Next:** P9-05 step (b) — the broker's op and record carry the path; `⊑` by containment, in the Z3 model with mutants.
+
+## 2026-10-17 — P9-05 step (b): the path order, by containment, proved (D-V2-139)
+
+**What.** `net` entries ordered by containment — the same host string, then the path pattern — in the broker's `⊑` and
+meet, the runtime's mint (a program may ask for less than it was granted) and `grants diff` (a narrower path is no
+addition); the meet every entry's meet; the canonical form an antichain (P17-F3 for this dimension); every `net` parser
+calling `netscope::check_entry` (the two `--net` flags stored anything before). The Z3 model gains §2d. User docs:
+`CHANGELOG.md`.
+
+**Evidence.** The agreement test (`within.rs`, the `--within` verdict against the lattice) extended with path-scoped
+entries went red with only the broker switched ("verdict false, lattice true" for `api.example.com/v1/*/x` within
+`api.example.com/v1/**`), green with the mint switched too. New: the exhaustive exactness test (every pattern of up to three
+segments against every path of up to five: syntactic order = semantic inclusion, the meet = the intersection), the
+canonical-form test over every subset of seven entries, three attenuation-table rows, `a_net_set_is_canonical_like_a_path_set`,
+`grants diff`'s path and special-use cases, `broker_cli`'s delegation test (narrow allowed, wide refused DL0802 with the
+narrower repair, a malformed `--net` refused, a leased run held to the narrow path). Z3: 41 obligations discharged; the
+three new mutants each leave 2–3 undischarged. Rust mutants N1–N7 (eight) all red, no stale binary. Gates: in the commit
+message.
+
+**A wrong reason, caught before it was written.** Drafting the decision, the head chef first gave the monitor's
+`special-use` rule as the reason the chain cannot carry a path in `target`; reading `monitor_cmd.rs` showed the rule reads
+the record's `reason` field. The real consumer is the OCSF export (`dst_endpoint.hostname`). Recorded so: D-V2-139 item 6.
+
+**Also read:** step (a)'s `94b6c36` push run `39034873839` — success on every job.
+
+**Next:** P9-05 (c)'s static half, then the commission's decisions.

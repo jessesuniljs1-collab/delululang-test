@@ -3309,3 +3309,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.5 (two traps); the laptop's `mutant-run-per-target.md` gains the
   package-set lesson.
 - Open / next: P9-05 step (b), then (c); (d) with the first non-GET primitive.
+
+### 2026-10-17 — P9-05 step (b): the path order, by containment, proved (made on the laptop)
+- Session: `https://claude.ai/code/session_01XxNxT5sWUFtXDgDUuHCC6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `94b6c36`
+- Commits: (1) this entry's commit
+- Files and folders: M `crates/delulu-broker/src/netscope.rs`, `crates/delulu-broker/src/authority.rs`,
+  `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/within.rs`, `crates/delulu/src/cli.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/within_cli.rs`, `docs/design/models/authority_algebra.py`,
+  `docs/design/models/README.md`, `docs/MATHEMATICS.md`, `.github/workflows/ci.yml` (the Z3 steps: 41 obligations, nine
+  mutants), `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-139),
+  `docs/DELULULANG_V2/V2_P9_DESIGN.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- **What** (`V2_LOG.md`; D-V2-139): the `net` order by containment everywhere a set is compared, its meet, its canonical
+  form; Z3 §2d.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the laptop (Windows) — the agreement test red then green; eight Rust mutants and three Z3 mutants caught; Z3
+  41 obligations; the gates in the commit message. CI: `94b6c36`'s (step (a)) push run `39034873839` — success on every job,
+  the three operating systems' test jobs among them (`miri-slow` and `heavy-gates` skipped on a push).
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new beyond step (a)'s.
+- Open / next: P9-05 (c)'s static half; the path in the chain's record (its own slice); (d) with a non-GET primitive.

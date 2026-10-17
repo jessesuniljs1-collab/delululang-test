@@ -7652,6 +7652,11 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
         } else if let Some(v) = flag_value(args, &mut i, "--fs-write") {
             fs_write.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--net") {
+            // P9-05 (b), D-V2-139: one grammar for every `net` entry — none stored that no check can read.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net {v}` is refused: {why}");
+                return 2;
+            }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--subject") {
             subject = Some(v);
@@ -8155,6 +8160,11 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         } else if let Some(v) = flag_value(args, &mut i, "--fs-write") {
             fs_write.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--net") {
+            // P9-05 (b), D-V2-139: one grammar for every `net` entry — none stored that no check can read.
+            if let Err(why) = delulu_broker::netscope::check_entry(&v) {
+                eprintln!("error: `--net {v}` is refused: {why}");
+                return 2;
+            }
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
             // A delegation NAMES a secret the broker holds; it never carries the value. `NAME=VALUE`

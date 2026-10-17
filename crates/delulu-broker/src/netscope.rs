@@ -190,6 +190,156 @@ pub fn host_of(entry: &str) -> &str {
     split(entry).0
 }
 
+/// Refuse an entry the grammar does not accept: an empty host, or a path pattern that does not parse. Every parser of a
+/// `net` entry calls it — `--grant net=`, `grants delegate --net`, a lease's `--net` — so none stores what none can read.
+pub fn check_entry(entry: &str) -> Result<(), String> {
+    let (host, path) = split(entry);
+    if host.is_empty() {
+        return Err("it names no host (write HOST, or HOST/PREFIX/** for the paths under PREFIX)".to_string());
+    }
+    match path {
+        Some(p) => parse_pattern(p).map(|_| ()).map_err(|why| format!("its path is refused: {why}")),
+        None => Ok(()),
+    }
+}
+
+// ----- the order (P9-05 (b), D-V2-139) -------------------------------------------------------------
+
+/// Is every path `child` matches one `parent` matches? Decided by the syntax, segment by segment: a literal under an
+/// equal literal or `*`, `*` under `*`, and everything that remains — none included — under a final `**`. Exact for these
+/// patterns (an exhaustive test compares it with the paths each matches): a `*` is never under a literal (it matches
+/// other segments), and a `**` is under nothing but a `**` (it matches the empty rest, and any length).
+pub fn pattern_within(child: &[Segment], parent: &[Segment]) -> bool {
+    for (i, p) in parent.iter().enumerate() {
+        if *p == Segment::Rest {
+            return true;
+        }
+        let Some(c) = child.get(i) else { return false };
+        let ok = match (c, p) {
+            (Segment::Literal(a), Segment::Literal(b)) => a == b,
+            (Segment::Literal(_) | Segment::One, Segment::One) => true,
+            _ => false,
+        };
+        if !ok {
+            return false;
+        }
+    }
+    child.len() == parent.len()
+}
+
+/// The pattern matching exactly the paths both match, or `None` when no path does: segment by segment the narrower of
+/// the two (two different literals meet in nothing), and where one side's `**` begins, the other side's rest.
+pub fn pattern_meet(a: &[Segment], b: &[Segment]) -> Option<Vec<Segment>> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    loop {
+        match (a.get(i), b.get(i)) {
+            (Some(Segment::Rest), _) => {
+                out.extend(b[i..].iter().cloned());
+                return Some(out);
+            }
+            (_, Some(Segment::Rest)) => {
+                out.extend(a[i..].iter().cloned());
+                return Some(out);
+            }
+            (None, None) => return Some(out),
+            (None, Some(_)) | (Some(_), None) => return None,
+            (Some(x), Some(y)) => out.push(match (x, y) {
+                (Segment::One, Segment::One) => Segment::One,
+                (Segment::One, Segment::Literal(l)) | (Segment::Literal(l), Segment::One) => Segment::Literal(l.clone()),
+                (Segment::Literal(p), Segment::Literal(q)) if p == q => Segment::Literal(p.clone()),
+                _ => return None,
+            }),
+        }
+        i += 1;
+    }
+}
+
+/// A pattern as it is written after its host.
+pub fn render(pattern: &[Segment]) -> String {
+    let mut s = String::new();
+    for seg in pattern {
+        s.push('/');
+        s.push_str(match seg {
+            Segment::Literal(l) => l,
+            Segment::One => "*",
+            Segment::Rest => "**",
+        });
+    }
+    s
+}
+
+/// Is the entry `child` within `parent`? The hosts must be the same string — a `*.SUFFIX` pattern does not contain a host
+/// under it here, as before (conservative: the order never calls more within than the matcher allows) — and then: a
+/// parent with no path reaches every path; a child with none is within only such a parent; two patterns by
+/// [`pattern_within`]. An entry whose pattern does not parse is within only an identical entry.
+pub fn entry_within(child: &str, parent: &str) -> bool {
+    if child == parent {
+        return true;
+    }
+    let ((ch, cp), (ph, pp)) = (split(child), split(parent));
+    if ch != ph {
+        return false;
+    }
+    match (cp, pp) {
+        (_, None) => true,
+        (None, Some(_)) => false,
+        (Some(c), Some(p)) => match (parse_pattern(c), parse_pattern(p)) {
+            (Ok(c), Ok(p)) => pattern_within(&c, &p),
+            _ => false,
+        },
+    }
+}
+
+/// The entry reaching exactly what both reach, or `None` when they share no path (or no host).
+pub fn entry_meet(a: &str, b: &str) -> Option<String> {
+    if a == b {
+        return Some(a.to_string());
+    }
+    let ((ah, ap), (bh, bp)) = (split(a), split(b));
+    if ah != bh {
+        return None;
+    }
+    match (ap, bp) {
+        (None, _) => Some(b.to_string()),
+        (_, None) => Some(a.to_string()),
+        (Some(x), Some(y)) => {
+            let (Ok(px), Ok(py)) = (parse_pattern(x), parse_pattern(y)) else { return None };
+            pattern_meet(&px, &py).map(|m| format!("{ah}{}", render(&m)))
+        }
+    }
+}
+
+/// `child ⊑ parent` for a `net` set: every child entry within some parent entry. A preorder, not an order — `{h/a/**}`
+/// and `{h/a/**, h/a/b}` are each within the other (as P18 found of path sets; the canonical form is an antichain).
+pub fn set_within<'a>(child: impl IntoIterator<Item = &'a String>, parent: &std::collections::BTreeSet<String>) -> bool {
+    child.into_iter().all(|c| parent.iter().any(|p| entry_within(c, p)))
+}
+
+/// A `net` set's canonical representative (P17-F3's rule, kept for this dimension): no entry within another, and of two
+/// entries each within the other the smaller spelling — so two sets each within the other canonicalize to one value and
+/// hash alike, as path sets do (`path::canonicalize_set`).
+pub fn canonicalize_set(net: &std::collections::BTreeSet<String>) -> std::collections::BTreeSet<String> {
+    net.iter()
+        .filter(|x| !net.iter().any(|y| y != *x && entry_within(x, y) && (!entry_within(y, x) || y < *x)))
+        .cloned()
+        .collect()
+}
+
+/// The meet of two `net` sets: every non-empty meet of an entry of each — never wider than either side, and the
+/// greatest set that is not (each entry of a common lower bound is within one entry of each side, so within their meet).
+pub fn set_meet(a: &std::collections::BTreeSet<String>, b: &std::collections::BTreeSet<String>) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    for x in a {
+        for y in b {
+            if let Some(m) = entry_meet(x, y) {
+                out.insert(m);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,5 +409,97 @@ mod tests {
         let both = ["a.com/x/**".to_string(), "a.com".to_string()];
         assert_eq!(judge_all(&both, "a.com", "/y/../z"), Verdict::Allow, "an unrestricted entry for the host allows any path");
         assert_eq!(host_of("api.example.com/v1/**"), "api.example.com");
+    }
+
+    /// P9-05 (b), D-V2-139: the order and the meet decided by the syntax are EXACT on a bounded domain — every pattern of up
+    /// to three segments over two literals and `*`, with or without a final `**`, against every path of up to five
+    /// segments over those literals, a third one and a trailing `/`: `pattern_within(c, p)` holds exactly when every path
+    /// `c` matches `p` matches, and the meet matches exactly the paths both match (`None` exactly when none does).
+    #[test]
+    fn the_order_and_the_meet_are_exact_over_a_bounded_domain() {
+        let (max_pat, max_path) = if cfg!(miri) { (2, 3) } else { (3, 5) };
+        let syms = [Segment::Literal("a".into()), Segment::Literal("b".into()), Segment::One];
+        let mut pats: Vec<Vec<Segment>> = vec![vec![Segment::Rest]];
+        let mut layer: Vec<Vec<Segment>> = vec![Vec::new()];
+        for _ in 0..max_pat {
+            layer = layer.iter().flat_map(|p| syms.iter().map(move |s| [p.clone(), vec![s.clone()]].concat())).collect();
+            for p in &layer {
+                pats.push(p.clone());
+                pats.push([p.clone(), vec![Segment::Rest]].concat());
+            }
+        }
+        let mut paths: Vec<String> = vec![String::new(), "/".into()];
+        let mut prefixes: Vec<String> = vec![String::new()];
+        for _ in 0..max_path {
+            prefixes = prefixes.iter().flat_map(|p| ["a", "b", "c"].map(|s| format!("{p}/{s}"))).collect();
+            for p in &prefixes {
+                paths.push(p.clone());
+                paths.push(format!("{p}/"));
+            }
+        }
+        let lang = |p: &[Segment]| -> Vec<bool> { paths.iter().map(|x| path_matches(p, x)).collect() };
+        let langs: Vec<Vec<bool>> = pats.iter().map(|p| lang(p)).collect();
+        let mut within_pairs = 0;
+        for (i, c) in pats.iter().enumerate() {
+            for (j, p) in pats.iter().enumerate() {
+                let semantic = langs[i].iter().zip(&langs[j]).all(|(x, y)| !x || *y);
+                assert_eq!(pattern_within(c, p), semantic, "{} within {}", render(c), render(p));
+                within_pairs += usize::from(semantic);
+                let both: Vec<bool> = langs[i].iter().zip(&langs[j]).map(|(x, y)| *x && *y).collect();
+                match pattern_meet(c, p) {
+                    Some(m) => {
+                        assert!(parse_pattern(&render(&m)).is_ok(), "the meet is a pattern: {}", render(&m));
+                        assert_eq!(lang(&m), both, "{} ⊓ {} = {}", render(c), render(p), render(&m));
+                    }
+                    None => assert!(both.iter().all(|x| !x), "{} ⊓ {} is empty, yet a path matches both", render(c), render(p)),
+                }
+            }
+        }
+        // The control: a domain where nothing (or everything) was within proved nothing.
+        assert!(within_pairs > pats.len() && within_pairs < pats.len() * pats.len() / 2, "{within_pairs} of {}", pats.len().pow(2));
+    }
+
+    /// P17-F3 for `net` (D-V2-139): over every subset of a small universe of entries, the canonical form is ⊑-equivalent
+    /// to the set, canonicalizing twice changes nothing, and two sets each within the other canonicalize identically.
+    #[test]
+    fn equivalent_net_sets_canonicalize_identically() {
+        let universe = ["h.com", "h.com/a/**", "h.com/a/b", "h.com/*/b", "h.com/b/**", "g.com", "g.com/a/*"];
+        let subsets: Vec<std::collections::BTreeSet<String>> = (0..1u32 << universe.len())
+            .map(|m| universe.iter().enumerate().filter(|(i, _)| m & (1 << i) != 0).map(|(_, e)| e.to_string()).collect())
+            .collect();
+        let step = if cfg!(miri) { 7 } else { 1 };
+        let mut equivalent_pairs = 0;
+        for a in subsets.iter().step_by(step) {
+            let ca = canonicalize_set(a);
+            assert!(set_within(&ca, a) && set_within(a, &ca), "{a:?} -> {ca:?}");
+            assert_eq!(canonicalize_set(&ca), ca, "idempotent: {a:?}");
+            for b in subsets.iter().step_by(step) {
+                if set_within(a, b) && set_within(b, a) {
+                    equivalent_pairs += usize::from(a != b);
+                    assert_eq!(ca, canonicalize_set(b), "{a:?} and {b:?} are equivalent");
+                }
+            }
+        }
+        assert!(cfg!(miri) || equivalent_pairs > 100, "{equivalent_pairs} unequal equivalent pairs — the control");
+    }
+
+    #[test]
+    fn entries_and_sets_are_ordered_by_host_then_path() {
+        assert!(entry_within("h.com/v1/x", "h.com/v1/**") && entry_within("h.com/v1/**", "h.com") && entry_within("h.com", "h.com"));
+        assert!(!entry_within("h.com", "h.com/v1/**"), "every path is not within some paths");
+        assert!(!entry_within("h.com/v2/x", "h.com/v1/**") && !entry_within("g.com/v1/x", "h.com/v1/**"));
+        assert!(!entry_within("api.h.com/v1/x", "*.h.com/v1/**"), "a host under a pattern is not contained, as before");
+        assert!(entry_within("h.com/v1*", "h.com/v1*") && !entry_within("h.com/v1*", "h.com/**"), "an unparsed entry: itself only");
+        assert_eq!(entry_meet("h.com", "h.com/v1/**").as_deref(), Some("h.com/v1/**"));
+        assert_eq!(entry_meet("h.com/*/x/**", "h.com/v1/**").as_deref(), Some("h.com/v1/x/**"));
+        assert_eq!(entry_meet("h.com/v1/**", "h.com/v2/**"), None);
+        assert_eq!(entry_meet("h.com/v1/**", "g.com/v1/**"), None);
+        let set = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<std::collections::BTreeSet<String>>();
+        assert!(set_within(&set(&["h.com/v1/a", "g.com"]), &set(&["h.com/v1/**", "g.com"])));
+        assert!(!set_within(&set(&["h.com/v1/a", "f.com"]), &set(&["h.com/v1/**", "g.com"])));
+        assert_eq!(set_meet(&set(&["h.com", "g.com/x/**"]), &set(&["h.com/v1/**", "g.com/x/y", "f.com"])), set(&["h.com/v1/**", "g.com/x/y"]));
+        assert_eq!(canonicalize_set(&set(&["h.com", "h.com/v1/**", "g.com/x/*", "g.com/x/y"])), set(&["h.com", "g.com/x/*"]));
+        assert_eq!(check_entry("h.com/v1/**"), Ok(()));
+        assert!(check_entry("/v1/**").is_err() && check_entry("h.com/v1/").is_err() && check_entry("h.com/a/../b").is_err());
     }
 }

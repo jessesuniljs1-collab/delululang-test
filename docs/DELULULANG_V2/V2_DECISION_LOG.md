@@ -3435,6 +3435,46 @@ path outside pass, M2 no ambiguity check, M3 the special-use rule reads the whol
 first check reads hosts only, M7 the broker-secret pre-check reads hosts only, M8 the export maps the host — all red; the
 broker's host-part comparison (M6) witnessed red against the exact one before it was written.
 
+## D-V2-139 — P9-05 step (b): a `net` set is ordered by containment — an entry within another of the same host string whose path pattern contains it — with every entry's meet as the meet and an antichain as the canonical form, in the broker's `⊑`, the runtime's mint and `grants diff` alike; proved sound in Z3 and exact by enumeration; the chain keeps naming the host — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** D-V2-138 left the `net` order exact-string — the broker's `⊑`, the runtime's mint — so a delegation could not
+narrow a host to its paths, a program could not ask for less than it was granted, and `grants diff` reported a narrower
+path as an addition. Run 25's build order put the order, with the Z3 model and mutants, in step (b); it also proposed
+carrying the path in the broker's `Net` op and record.
+
+**Decision.**
+1. **The order** (`netscope::entry_within`): the same host string (a `*.SUFFIX` entry still contains no host under it here —
+   conservative, as before); a parent with no path reaches every path; a child with none is within only such a parent; two
+   patterns by `pattern_within` — a literal under an equal literal or `*`, `*` under `*`, everything remaining under a
+   final `**`. A set is within another when every entry is within one of its entries: a preorder.
+2. **The meet** (`pattern_meet`): segment by segment the narrower side, two different literals meeting in nothing, and
+   where one side's `**` begins, the other side's rest. A set's meet is every non-empty entry meet.
+3. **The canonical form** is an antichain — no entry within another, and of two mutually within the smaller spelling —
+   P17-F3's rule for this dimension (`Scopes::canonicalized`, `is_canonical`), so ⊑-equivalent authorities are one value
+   and hash alike. Host-only sets are unchanged by it.
+4. **One order everywhere**: `attenuation_check` and `intersect` (DL0802's repair is the meet); the runtime's mint (a
+   program may ask for a narrower path than granted, never a wider one; its special-use subset by the same order);
+   `grants diff` (by the mint, and its `net.special` line by the same order); and every parser of a `net` entry calls
+   `netscope::check_entry` — `--grant`, `grants delegate --net`, `grants certify --net` (refused in words, exit 2).
+5. **Proved.** The Z3 model's §2d: the order reflexive, transitive and SOUND against what the patterns match, the meet
+   exact both ways, within both sides and the greatest such — 7 obligations, 41 in all, and three mutants CI requires to
+   fail (`net-star-under-literal`, `net-rest-under-fixed`, `net-meet-star-wins`). In Rust, exhaustively: the order and the
+   meet EXACT (complete as well as sound) for every pattern of up to three segments against every path of up to five;
+   the canonical form over every subset of a seven-entry universe. The agreement test (`within.rs`: the `--within`
+   verdict and the lattice give one answer) now generates path-scoped entries — and went red when only the broker's
+   side had the new order.
+6. **Not taken: the path in the broker's `Net` op and record.** Every consumer reads a `use` record's `target` as the
+   host — the OCSF export maps it to `dst_endpoint.hostname` (`ocsf.rs`, "never a path"), the egress refusal's `deny`
+   record and `audit query` likewise — so a path there would make an exported event's hostname carry a path; a separate
+   field changes the record's canonical shape and is its own slice (RW 2.12 keeps it open). The path is judged by the
+   egress client on every hop under every custody (D-V2-138) and named in the run report (each hop's URL).
+7. **Next:** step (c)'s static half — `authority` naming each request's path as the source shows it; (d) methods, with the
+   first non-GET primitive.
+
+**Falsified:** N1 `*` within a literal, N2 `*` wins the meet, N3 the broker's exact subset, N4 the exact mint, N5 and N5b
+no canonical form, N6 `grants diff`'s special-use line exact, N7 `grants delegate --net` unvalidated — all red; every
+binary rebuilt and scanned clean.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

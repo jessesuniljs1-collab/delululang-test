@@ -13,6 +13,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — network grants scoped to paths, 2026-10-17
 
+- **Added (P9-05 (b), D-V2-139): a path can be narrowed, never widened.** A delegation can narrow a host to its paths —
+  `grants delegate --parent g_X --net api.example.com/v1/**` under a node granted `api.example.com` — and the reverse is
+  refused (DL0802, its repair the narrower entry). A program may ask for less than it was granted:
+  `root.http(["api.example.com/v1/**"])` runs under `--grant net=api.example.com`. `grants diff` reports a path only when it
+  reaches more (`scope_expansion` for the whole host or a sibling path, `special_use_reach` likewise), never a narrower
+  one. `grants delegate --net` and `grants certify --net` refuse an entry the grant grammar refuses, in words.
 - **Added (P9-05 (a), D-V2-138): a `net` grant may name the paths it reaches.** `--grant net=api.example.com/v1/**` (and
   `net.special=HOST/PATTERN`) lets a program fetch from that host only under `/v1`: a pattern's segments are literals, `*`
   (exactly one segment) or `**` (the rest, only last). The program asks for the same scope —

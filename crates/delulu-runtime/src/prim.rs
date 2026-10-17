@@ -428,11 +428,18 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         }
         "http" => {
             let hosts = list_str_arg(args, 0, span)?;
-            if hosts.iter().all(|h| root.net.iter().any(|g| g == h)) {
-                // PS-B-02: the capability carries which of its hosts the operator granted with
-                // `net.special=` — the same exact-string match the minting check above makes, so a
-                // program cannot name its way into special-use authority it was not given.
-                let special = hosts.iter().filter(|h| root.net_special.iter().any(|g| g == *h)).cloned().collect();
+            // P9-05 (b), D-V2-139: each requested entry within a granted one — the broker's own order
+            // (`netscope::entry_within`: the same host string, a path pattern within the grant's), so a program may ask
+            // for less than it was granted (`api.example.com/v1/**` under `api.example.com`) and never for more.
+            if hosts.iter().all(|h| root.net.iter().any(|g| delulu_broker::netscope::entry_within(h, g))) {
+                // PS-B-02: the capability carries which of its entries lie within a `net.special=` grant — by the
+                // same order as the minting check above, so a program cannot name its way into special-use authority
+                // it was not given.
+                let special = hosts
+                    .iter()
+                    .filter(|h| root.net_special.iter().any(|g| delulu_broker::netscope::entry_within(h, g)))
+                    .cloned()
+                    .collect();
                 Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts, special }))
             } else {
                 Err(refused("network host", "net=HOST"))

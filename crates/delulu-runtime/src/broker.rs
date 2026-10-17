@@ -326,15 +326,8 @@ impl Grants {
                     // a spelling in it could be read two ways (`delulu_broker::netscope`, the one reading every custody
                     // shares). The special-use rule reads the HOST: `net=127.0.0.1/x/**` is no way round `net.special=`.
                     let host = if k.trim().starts_with("net") {
-                        let (host, path) = delulu_broker::netscope::split(val);
-                        if host.is_empty() {
-                            return Err(format!("bad grant `{spec}` — it names no host (use {}=HOST or HOST/PATH/**)", k.trim()));
-                        }
-                        if let Some(path) = path {
-                            delulu_broker::netscope::parse_pattern(path)
-                                .map_err(|why| format!("bad grant `{spec}` — its path is refused: {why}"))?;
-                        }
-                        host
+                        delulu_broker::netscope::check_entry(val).map_err(|why| format!("bad grant `{spec}` — {why}"))?;
+                        delulu_broker::netscope::host_of(val)
                     } else {
                         val
                     };
