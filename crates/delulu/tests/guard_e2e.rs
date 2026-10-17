@@ -18,7 +18,8 @@
 //! delulu guard policy set fs_write:* guarded --owner <code>
 //! delulu grants delegate --effects Read,Write --fs-read ./data --fs-write ./out --multi --owner <code>
 //! delulu run agent.delulu --lease <token>      (DL1410 naming `delulu guard request …`; no write)
-//! delulu guard request <node> --use fs_write:* --why "write the result file"
+//! delulu guard request <node> --use fs_write:<work>/out/result.txt --why "write the result file"
+//!                                              (the item DL1410 names: the narrowest permit, RW 4.65)
 //! delulu run agent.delulu --lease <token>      (DL1411 carrying the request id)
 //! delulu guard approve <req> --owner <code> --comment "ok"
 //! delulu run agent.delulu --lease <token>      (succeeds via the permit; out\result.txt written)
@@ -130,13 +131,19 @@ fn guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end() {
     assert_eq!(o.status.code(), Some(1), "guarded write must be refused");
     let err = stderr(&o);
     assert!(err.contains("DL1410"), "criterion 1: {err}");
-    assert!(err.contains(&format!("delulu guard request {node} --use fs_write:*")), "the exact request command: {err}");
+    // RW 4.65: the command asks for the narrowest permit that covers the use — this one file — with the rule beside
+    // it, never the rule `fs_write:*` itself; the agent runs it exactly as printed (below).
+    let cmd = format!("delulu guard request {node} --use ");
+    let at = err.find(&cmd).unwrap_or_else(|| panic!("the exact request command: {err}"));
+    let item = err[at + cmd.len()..].split(" --why").next().unwrap().trim_matches('"').to_string();
+    assert!(item.starts_with("fs_write:") && item.ends_with("out/result.txt"), "the narrowest permit: {err}");
+    assert!(err.contains("(rule `fs_write:*`: guarded"), "the matched rule named beside it: {err}");
     // Criterion 8: the awareness line printed before user output, `on` state.
     assert!(err.contains("guard: on — guarded:") && err.contains("fs_write:*"), "awareness line: {err}");
     assert!(!cwd.join("out/result.txt").exists(), "nothing executes under a guard block");
 
     // ----- REQUEST (mandatory --why) → retried run is DL1411 carrying the request id ---------------
-    let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", "fs_write:*", "--why", "write the result file"]);
+    let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &item, "--why", "write the result file"]);
     assert!(o.status.success(), "request: {}", stderr(&o));
     let req = stdout(&o).trim().to_string();
     let o = delulu_in(&cwd, &state, &["run", "agent.delulu", "--lease", &token, "--no-prompt"]);

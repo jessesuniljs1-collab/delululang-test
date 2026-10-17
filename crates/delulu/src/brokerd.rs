@@ -3427,7 +3427,9 @@ mod tests {
             Response::Decision { allow: false, code, message, .. } => {
                 assert_eq!(code.as_deref(), Some("DL1410"));
                 let m = message.unwrap();
-                assert!(m.contains("delulu guard request") && m.contains(&child) && m.contains("declassify:*"), "{m}");
+                // RW 4.65: the narrowest permit for this use is asked for; the rule is named beside it.
+                assert!(m.contains(&format!("delulu guard request {child} --use declassify:S --why")), "{m}");
+                assert!(m.contains("(rule `declassify:*`: guarded"), "{m}");
             }
             other => panic!("criterion 1: delegated guarded use must be DL1410, got {other:?}"),
         }

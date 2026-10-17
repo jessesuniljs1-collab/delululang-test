@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a Guard refusal asks for the narrowest permit, 2026-10-17
+
+- **Changed (RW 4.65): DL1410's request command asks for the narrowest permit that covers the refused use**, with the
+  matched rule named beside it — `delulu guard request <node> --use declassify:API_KEY@api.example.com:443 …` for one
+  send, `--use fs_write:/srv/out/report.txt` for one write — where it asked for the rule itself (`declassify:*`: every
+  secret, to every destination). An item the program chose that a shell would split, expand or run (`$`, a backtick,
+  `;`, `|`, `"`, `%`, `!`, `<`, `>`, a newline) never enters the command; the rule is named instead, as before. A path
+  is written with `/` and quoted when it holds a space.
+
 ## Unreleased — a driver says READY before the program runs, 2026-10-17
 
 - **Breaking for driver authors (RW 4.19, D-V2-147): a hardware driver prints `READY` on its own line before anything

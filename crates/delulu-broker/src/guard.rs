@@ -347,6 +347,44 @@ fn rule_label(class: GuardClass, pattern: &str) -> String {
     format!("{}:{}", class.wire_name(), pattern)
 }
 
+/// The narrowest permit that covers one use, as the `--use` item DL1410's hint asks for (RW 4.65, routine run 25's
+/// red team, F2): the use's own item on its axis — `declassify:NAME@host:port` for a send, the file for a write — or
+/// the op's effect where the op has no axis. Naming only the matched rule asked for `declassify:*`, every secret to
+/// every destination, for one send.
+///
+/// `None` when the item cannot be asked for — a pattern the Guard would refuse as dead — **or cannot be put in a
+/// command safely**: the item comes from the program (a file name, a destination), and the hint is a command an agent
+/// pastes into a shell, so a file named `x$(…)` must never reach it. The hint then names the rule, as before.
+pub(crate) fn narrowest_permit(op: Op, arg: Option<&str>) -> Option<String> {
+    let Some(class) = use_axis_class(op) else {
+        return op.required_effect().map(|e| rule_label(GuardClass::Effect, e.name()));
+    };
+    // A path arrives in the host's spelling; with `/` it is the same path to the Guard (`path_norm`) and one word in
+    // every shell, where `\` is an escape in some.
+    let item = if class_is_path_valued(class) { arg?.replace('\\', "/") } else { arg?.to_string() };
+    let quotable = |c: char| plain_shell_char(c) || " ()'&#".contains(c);
+    if item.is_empty() || item == "*" || !item.chars().all(quotable) || dead_pattern_reason(class, &item).is_some() {
+        return None;
+    }
+    Some(rule_label(class, &item))
+}
+
+/// A character every shell an agent uses (sh, PowerShell, cmd) takes literally outside quotes.
+fn plain_shell_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || "_-./:@+=,~*".contains(c)
+}
+
+/// One shell word for a [`narrowest_permit`] item: as it is when plain, else in double quotes — whose content the
+/// item's characters (`narrowest_permit` admits a space and `()'&#` beyond the plain ones) keep literal in sh,
+/// PowerShell and cmd alike.
+pub(crate) fn hint_word(item: &str) -> String {
+    if item.chars().all(plain_shell_char) {
+        item.to_string()
+    } else {
+        format!("\"{item}\"")
+    }
+}
+
 // ================================================================================================
 // Policy
 // ================================================================================================
@@ -857,8 +895,9 @@ impl Broker {
                 }
                 // Fail closed (criterion 10): a poisoned store extends no trust — guarded refuses and
                 // neither permits nor pending/denied requests are consulted.
+                let wants = narrowest_permit(op, arg);
                 if self.guard.poisoned {
-                    return GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule });
+                    return GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule, wants });
                 }
                 self.guard_gc();
                 // A matching permit honors the use (and decrements a bounded use count).
@@ -889,10 +928,10 @@ impl Broker {
                             GuardVerdict::Block(Denial::GuardDenied { node: node.clone(), comment: comment.clone() })
                         }
                         // An approved-but-consumed request falls through to a fresh DL1410.
-                        ReqStatus::Approved => GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule }),
+                        ReqStatus::Approved => GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule, wants }),
                     };
                 }
-                GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule })
+                GuardVerdict::Block(Denial::GuardBlocked { node: node.clone(), rule, wants })
             }
         }
     }
@@ -1292,7 +1331,8 @@ mod tests {
                 assert_eq!(d.code(), "DL1410");
                 let msg = d.to_diagnostic().message;
                 assert!(msg.contains("delulu guard request"), "names the request command: {msg}");
-                assert!(msg.contains(child.as_str()) && msg.contains("declassify:*"), "{msg}");
+                assert!(msg.contains(child.as_str()) && msg.contains("--use declassify:API_KEY --why"), "{msg}");
+                assert!(msg.contains("(rule `declassify:*`"), "the matched rule is named beside it: {msg}");
             }
             _ => panic!("a delegated guarded use must be blocked"),
         }
@@ -1868,5 +1908,66 @@ mod tests {
         assert!(pattern_matches(GuardClass::FsRead, "C:/Users/J/Data/Secret", Some("c:\\users\\j\\data\\secret\\k.txt")));
         assert!(pattern_matches(GuardClass::FsRead, "c:/users/j/data/secret", Some("C:\\Users\\J\\Data\\Secret\\k.txt")));
         assert!(!pattern_matches(GuardClass::FsRead, "C:/Users/J/Data/Secret", Some("C:\\Users\\J\\Data\\Secrets\\k.txt")));
+    }
+
+    /// RW 4.65: the hint's item comes from the PROGRAM, and the hint is a command an agent runs. An item a shell would
+    /// split, expand or run never reaches it — the rule is named instead — and a path with a space is quoted.
+    #[test]
+    fn a_dl1410_hint_never_carries_an_item_a_shell_would_run() {
+        for hostile in [
+            "/srv/out/x$(touch pwned)",
+            "/srv/out/x`id`",
+            "/srv/out/x\";id;\"",
+            "/srv/out/a;id",
+            "/srv/out/a|id",
+            "/srv/out/a\nid",
+            "/srv/out/%PATH%",
+            "/srv/out/a!b",
+            "/srv/out/a<b",
+        ] {
+            assert_eq!(narrowest_permit(Op::FsWrite, Some(hostile)), None, "{hostile:?}");
+            let d = Denial::GuardBlocked {
+                node: GrantId::from_trusted("g_1"),
+                rule: "fs_write:*".into(),
+                wants: narrowest_permit(Op::FsWrite, Some(hostile)),
+            };
+            assert!(d.to_diagnostic().message.contains("--use fs_write:* --why"), "{hostile:?}");
+        }
+        // A Windows path in `/` spelling — one word in every shell, the same path to the Guard.
+        let win = narrowest_permit(Op::FsWrite, Some("C:\\Users\\a\\out\\r.txt")).unwrap();
+        assert_eq!(win, "fs_write:C:/Users/a/out/r.txt");
+        assert!(GuardSubset::parse(&[win]).unwrap().covers_use(Op::FsWrite, Some("C:\\Users\\a\\out\\r.txt")));
+        // A space is quoted; a relative path or a portless pair is no request at all; an op with no axis asks for its effect.
+        let spaced = narrowest_permit(Op::FsWrite, Some("/home/J Doe/out/r.txt")).unwrap();
+        assert_eq!(hint_word(&spaced), "\"fs_write:/home/J Doe/out/r.txt\"");
+        assert_eq!(hint_word("declassify:foo@api.example.com:443"), "declassify:foo@api.example.com:443");
+        assert_eq!(narrowest_permit(Op::FsWrite, Some("out/r.txt")), None);
+        assert_eq!(narrowest_permit(Op::Declassify, Some("foo@host")), None, "a pair without its port matches nothing");
+        assert_eq!(narrowest_permit(Op::Clock, None).as_deref(), Some("effect:Clock"));
+        assert_eq!(narrowest_permit(Op::FsRead, None), None);
+    }
+
+    /// RW 4.65 (routine run 25's red team, F2): a send's DL1410 named only the rule, so its hint asked for
+    /// `declassify:*` — every secret, every destination. It names the narrowest permit that covers the use, the
+    /// rule beside it; that exact item, requested and approved, honors this send and no other destination.
+    #[test]
+    fn a_dl1410_hint_names_the_narrowest_permit_for_the_use() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let send = "foo@api.example.com:443";
+        let msg = match b.guard_verdict_use(&child, Op::Declassify, Some(send)) {
+            GuardVerdict::Block(d) if d.code() == "DL1410" => d.to_diagnostic().message,
+            _ => panic!("a delegated guarded send must be blocked"),
+        };
+        let item = format!("declassify:{send}");
+        assert!(msg.contains(&format!("delulu guard request {} --use {item} --why", child.as_str())), "{msg}");
+        assert!(msg.contains("`declassify:*`") && !msg.contains("--use declassify:*"), "the rule named, not asked for: {msg}");
+        let (id, _) = b.guard_request(&child, GuardSubset::parse(&[item]).unwrap(), "one call".into()).unwrap();
+        b.guard_approve(Some("gow1_testowner"), &id, None, None, Some("ok".into())).unwrap();
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some(send)), GuardVerdict::PermitUse));
+        assert!(matches!(
+            b.guard_verdict_use(&child, Op::Declassify, Some("foo@evil.example:443")),
+            GuardVerdict::Block(d) if d.code() == "DL1410"
+        ));
     }
 }
