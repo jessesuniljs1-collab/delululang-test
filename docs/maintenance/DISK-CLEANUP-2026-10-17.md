@@ -1,6 +1,6 @@
 # Disk cleanup — 2026-10-17
 
-A record of what was deleted from `D:\nelan`, what was kept, and **how each deletion was checked before it
+A record of what was deleted from `D:\nelan` and, the same day, from WSL's disk, what was kept, and **how each deletion was checked before it
 happened**. Same discipline as the two earlier passes, now in the archive:
 [`DISK-CLEANUP-2026-08-04.md`](../archive/v1/maintenance/DISK-CLEANUP-2026-08-04.md) and
 [`DISK-CLEANUP-2026-08-09.md`](../archive/v1/maintenance/DISK-CLEANUP-2026-08-09.md).
@@ -75,9 +75,8 @@ Each path was confirmed gone with `Test-Path`.
 - **`DeluluLang\.claude\worktrees\`** — never deleted without asking (`HANDOFF.md` §11.3), and 0.02 GB.
 - **`DeluluLang\dist`**, **`fuzz`**, **`editors\vscode\node_modules`** — small, and the last is the extension's
   working dependency.
-- **The cargo registry and toolchains** (`C:\Users\jesse\.cargo`, `.rustup`), and **WSL**: its `ext4.vhdx` is on
-  `C:` (57.9 GB on 2026-10-17, against 21.6 GB after the 2026-08-09 compaction) — outside `D:\nelan`, and a
-  WSL cleanup needs the verification the 2026-08-09 record describes; not touched.
+- **The cargo registry and toolchains** (`C:\Users\jesse\.cargo`, `.rustup`). WSL was cleaned afterwards, at
+  the owner's word — the next section.
 
 ## Result
 
@@ -92,3 +91,61 @@ delulu-survey` (86 s) and `cargo test -p delulu --test repository_structure` (4 
 **About 179.6 GB reclaimed.** The cache will grow again with use, and fastest when the whole suite is built:
 `cargo clean` is always safe in this repository (CI keeps no state on the laptop), at the price of one
 full rebuild.
+
+## WSL — the same day, at the owner's word
+
+The owner, told that WSL's disk image on `C:` had grown to 57.9 GB (21.6 GB after the 2026-08-09 compaction):
+*"clean it"*. The 2026-08-09 method, unchanged: measure read-only (as root, `du -x`), classify each directory
+(`CACHEDIR.TAG` ⇒ a pure cargo cache; `Cargo.toml`/`crates/`/`.git` ⇒ source-bearing), verify every
+source-bearing directory against `D:`, delete with a self-guarding script, keep one warm target, then
+`fstrim` → `wsl --shutdown` → compact. The owner's choices for `D:` an hour earlier (every build cache, a warm
+rebuild of `delulu`, the spent clones) were applied to the same categories here; everything else was kept.
+
+**Measured:** `df /` 55 GB used. `/home/user` 52.8 GB, of which cargo caches 46.1 GB (counting the `target` inside one clone); `/tmp` 0.8 GB (5,098
+`delulu-*` test scratch directories); `/usr` and `/var` 2.1 GB (the system — kept).
+
+**How the clones were checked** (run as the owning user; the first attempt ran as root, where git declines a
+repository another user owns — the script's guard REFUSED all three and deleted nothing, as it should):
+each clean (`git status --porcelain` empty), no stash, HEAD an ancestor of `D:`'s `master`, every branch and
+tag tip an object in `D:`. Every file outside `.git` and `target` was hashed against `D:`'s object store:
+`delulu-src-img` 951 files, all present; `delulu-src-5065be1` and `delulu-src-p5b` 983 and 981 files, all
+present but five each — the packaged release under the ignored `dist/` (`bin/delulu`, the `.tar.gz`, its
+`.sha256`, `SHA256SUMS`, a generated `INSTALL.txt`), build output the release workflow regenerates; no `.md`.
+
+**Deleted:**
+
+| Path in WSL | Size | Basis |
+|---|---:|---|
+| `/home/user/delulu-target` | 23,598 MB | pure cache (`CACHEDIR.TAG`), 2026-09-26 |
+| `/home/user/delulu-gnu-target` | 11,528 MB | pure cache — rebuilt afterwards, below |
+| `/home/user/delulu-kvm-target` | 4,268 MB | pure cache (the `--cfg delulu_kvm` build) |
+| `/home/user/delulu-img-target` | 3,455 MB | pure cache (the guest image's build) |
+| `/home/user/dl-ps0-target` | 1,019 MB | pure cache, 2026-09-18 |
+| `/home/user/delulu-miri`, `/home/user/delulu-miri-target` | 913 MB | pure Miri caches (`miri/CACHEDIR.TAG`) |
+| `/home/user/delulu-linux2/fuzz/target` | 376 MB | pure cache inside a preserved snapshot — **its source kept** |
+| `/home/user/.cache/delulu-microvm/work` | 1,784 MB | the unpacked `linux-6.18.54` build tree `build-image.sh` makes; the pinned tarballs beside it kept |
+| `/home/user/delulu-src-img` | 1,120 MB | clone at `262d5c4` (977 MB of it its `target`) — verified above |
+| `/home/user/delulu-src-5065be1`, `/home/user/delulu-src-p5b` | 383 MB | clones at `5065be1`, `5e2c8fd` — verified above |
+| `/tmp/delulu-*` (5,098 entries), `/tmp/dl-dist` | 732 MB | spent test scratch and an old packaged build |
+
+**Kept:** `delulu-f1` and `delulu-linux2`'s source (each holds superseded files `D:` lacks — the 2026-08-09
+finding), `microvm-image-a`/`-b` (34 MB each — but stale: the host refuses them since the channel became `/3`,
+and the clone and build tree they were made from are gone now; rebuild from a fresh clone on the Linux
+filesystem, `HANDOFF.md` §11.3), `bin` (Firecracker), `psc`, `agent-lab*`, `dl-*` labs, `delulu-dist`, the
+kernel and Firecracker tarballs in `.cache/delulu-microvm`, `.cache/miri`, `~/.cargo`, `~/.rustup`, the owner's
+own coursework files, and `.aws`, `.azure`, `.docker`.
+
+**Then:** `delulu` and `delulu-survey` rebuilt into `/home/user/delulu-gnu-target` (111 s, with `survey check`
+ok, `survey findings` 0 errors, `doctor --check` 26 checks passed); `fstrim -v /` (991.6 GiB trimmed);
+`wsl --shutdown`; and the compaction — `diskpart /s` with `select vdisk file="…\ext4.vhdx"`, `attach vdisk
+readonly`, `compact vdisk`, `detach vdisk`, started elevated (`Start-Process -Verb RunAs`, Windows' UAC prompt): *"DiskPart
+successfully compacted the virtual disk file."* WSL started again afterwards with its files in place,
+`/dev/kvm` present and `delulu --version` answering.
+
+| | Before | After |
+|---|---:|---:|
+| WSL used (`df /`) | 55 GB | 6.5 GB; 9.7 GB after the rebuild |
+| `ext4.vhdx` | 57.97 GB | **12.84 GB** |
+| `C:` free | 100.7 GB | **147.5 GB** |
+
+**About 45 GB returned to `C:`.**

@@ -3205,7 +3205,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   push run `39021046478` — success on every job.
 - **Afterwards the same day — a disk cleanup** (the owner: *"Delete unwanted things. Log things deleted in .md file"*):
   `D:\nelan` 180 GB → 5.07 GB, almost all of it the Rust build cache `target` (178.4 GB, `cargo clean`), plus two spent
-  build clones and their cache. Recorded in `docs/maintenance/DISK-CLEANUP-2026-10-17.md`.
+  build clones and their cache; then WSL's disk (*"clean it"*): its cargo caches, three verified clones and spent
+  test scratch, `fstrim` and a compaction — `ext4.vhdx` 57.97 GB → 12.84 GB. **The WSL microVM guest images are
+  still stale, and the Linux-filesystem clone they were built from is gone:** rebuild them from a fresh clone
+  (`HANDOFF.md` §11.3). Recorded in `docs/maintenance/DISK-CLEANUP-2026-10-17.md`.
 - **Branches** — the owner, 2026-10-17: *"claude routines made lot of branches. If not needed, should we remove them"*; asked
   to choose, the owner chose to delete the 23 merged branches and keep two. Deleted from GitHub, each checked with `git merge-base
   --is-ancestor <branch> origin/master` immediately before (nothing lost: every tip is in `master`'s history). To recreate
