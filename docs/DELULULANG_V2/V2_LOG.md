@@ -6171,3 +6171,23 @@ spends the same usage and stops with it; a job outside Claude does not.
 **Evidence.** By hand: snapshot `5fb039a` pushed (base `9829662`, one path), working tree unchanged; the second run
 `unchanged since snapshot 5fb039a`; the scheduled task's first run: result 0, the same log line. The banned-word guard
 falsified: with a probe token in place of the word and a probe file in the tree it refused (exit 1) and pushed nothing.
+
+## 2026-10-17 — the 2.0 release gate written; the support matrix made true for 2.0 (D-V2-155) — on `launch/2.0.0`
+
+**What.** `docs/release/CHECKLIST-2.0.md`: thirteen criteria for the first published release — suites on every OS,
+conformance, the hardening gates, the supply chain, one version, licence obligations in the tree and in every archive,
+security claims no further than their proof, the artefacts themselves, the editor, the microVM layer, a fresh and clean
+public history, the development history preserved, documents true at 2.0 — each MET or PENDING with its evidence, the
+ten-step release procedure, and a verdict to be written before the draft is published. `SUPPORT_MATRIX.md` rewritten for
+2.0 (D-V2-155): 2.0.x is the first published release and an LTS; 1.0.x was tagged and never distributed, so it is
+unsupported; no wire or DIR major changed (`WIRE_VERSION` `"broker/1"`, `DIR_VERSION` 1, as at `v1.0.0`). The README's
+status line says the same.
+
+**Why.** The commission: *"Do not claim release readiness merely because CI is green. Confirm that the actual release
+artefacts, metadata, licence obligations and security claims are correct."* Reading the release documents for that
+found the matrix promising 1.0.x security backports to 2028-07 — for a version no one could have.
+
+**Evidence, 2026-10-17 on the launch tree:** `delulu-conform --coverage` 355/355; `--check-reference` in sync (24
+chapters); `delulu fmt --check examples docs/book/samples` 0 would change; a bundle of every ref,
+`D:\nelan\DeluluLang-history-2026-10-17.bundle` (14,095,723 bytes, sha256 `a62498fc…f353e7`, `git bundle verify` okay);
+`repository_structure`, `evidence_claims`, `release`, `distribution`, `governance` passed.

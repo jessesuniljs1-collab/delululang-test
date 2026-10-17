@@ -3590,3 +3590,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   the banned-word guard, run with a probe token and a probe file, refused and pushed nothing (`ls-remote` showed no
   probe branch).
 - Open / next: unchanged — the launch (the entry before this one).
+
+### 2026-10-17 — the 2.0 release gate; the support matrix for 2.0 (D-V2-155) — on `launch/2.0.0` (made on the laptop)
+- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `launch/2.0.0`   Pull request: none   Merged: no (the launch snapshots this branch)
+- Base: `3f652cf`
+- Commits: (1) this entry's commit
+- Files and folders: A `docs/release/CHECKLIST-2.0.md`; M `docs/release/SUPPORT_MATRIX.md`, `README.md` (status line),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-155), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REPOSITORY_STRUCTURE.md` (§5.7),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Backup made: `D:\nelan\DeluluLang-history-2026-10-17.bundle` (every ref; verified) — the commission's recoverable backup.
+- Open / next: `CHECKLIST-2.0.md`'s procedure from step 2 (CI on this commit), then the launch.

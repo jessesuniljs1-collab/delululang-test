@@ -3768,6 +3768,23 @@ floor claimed. (6) **CODEOWNERS:** `@jessesuniljs1-collab` replaces the placehol
 `security_controls_are_decided_and_no_claim_runs_ahead_of_its_proof` replaces `pending_public_controls_are_still_marked_as_pending`
 and holds the new line; watched red on the old text. Entrenched record: this date. RW 7.8 closed.
 
+## D-V2-155 — The support matrix at 2.0: 2.0.x is the first published release and the first LTS; 1.0.x is unsupported — TAKEN (head chef, 2026-10-17, under the owner's delegation)
+
+**Context.** `docs/release/SUPPORT_MATRIX.md` (written 2026-07-20) called 1.0.x "Current + LTS", security-supported to
+2028-07, and planned 1.1 to 1.8. But 1.0.0 was tagged in the development history and never distributed — no archive, no
+release, no registry entry: D-NE-7 kept everything unpublished, and `ANNOUNCEMENT-1.0.md` says so. Published as it stood,
+the page would promise backports to a version nobody can have, and plan minors of a major that 2.0 replaces. The other
+promise a major can trigger, `VERSION_COEVOLUTION.md`'s n−1 support of a wire or DIR major, does not apply: 2.0 changes
+none — `WIRE_VERSION` is `"broker/1"` and `DIR_VERSION` is 1, as at `v1.0.0`; only the additive `PRIM_TABLE_VERSION` moved
+(1 → 7), which that page calls routine (checked 2026-10-17 with `git diff v1.0.0`).
+
+**Decision.** (1) **2.0.x is the first published release and an LTS** — minor 0, by the matrix's own every-4th-minor
+rule — with 24 months of security backports from its release date. (2) **1.0.x is recorded as tagged and never
+distributed, and is unsupported**: no backport window is promised, because no one received it; its tag stays in the
+archive's history. (3) The 2.x schedule keeps the policy's shape (~12-week minors, every 4th an LTS, 24-month windows),
+in relative dates only. (4) No wire or DIR major changed, so the n−1 obligation is not triggered by 2.0. The matrix is
+rewritten on `launch/2.0.0`, in the tree the tag names.
+
 ## Owner decisions carried from V1 — where each stands (rewritten 2026-10-17)
 
 Since the commission of 2026-10-17 none of these waits for the owner; each is the head chef's, with its record.

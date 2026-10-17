@@ -634,12 +634,13 @@ localizations: `ar-SA.md`, `de-DE.md`, `es-ES.md`, `fr-FR.md`, `hi-IN.md`, `ja-J
 **Diagnostic codes and JSON never localize** — only prose does, and the machine envelope never passes
 through a morph at all.
 
-### 5.7 `docs/release/` — the 1.0 artifacts
+### 5.7 `docs/release/` — the 1.0 artifacts, and the 2.0 gate
 
 | File | Purpose |
 | --- | --- |
 | `CHECKPOINT-1.0.md` | **The best single status page**: architecture, testing, and twenty known limitations named without softening. |
 | `CHECKLIST-1.0.md` | The release checklist and its dispositions. |
+| `CHECKLIST-2.0.md` | The 2.0 release gate (the commission of 2026-10-17): thirteen criteria, each MET or PENDING with its evidence, the release procedure, and the verdict written before the draft is published. |
 | `ANNOUNCEMENT-1.0.md` | The announcement text. Unpublished, because nothing is distributed. |
 | `SUPPORT_MATRIX.md` | Platforms, release trains, and what support means. |
 | `SBOM-1.0.json` | The software bill of materials. |

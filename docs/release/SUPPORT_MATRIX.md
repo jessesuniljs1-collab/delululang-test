@@ -5,26 +5,29 @@ designation, and the security-backport window. **Related:** `docs/design/STABILI
 stable), `docs/design/VERSION_COEVOLUTION.md` (broker/protocol/DIR majors across LTS windows),
 `docs/design/REGISTRY_POLICY.md` (advisories and the feed).
 
-This page is a **policy plus a schedule**. The policy binds from 1.0. The schedule below 1.0 is a
-plan, and is labelled as such: at the time of writing only **1.0.0** has shipped, so every row after
-it is a commitment about cadence, not a record of a release that happened. Dates are approximate
-(trains are cut on readiness, not on a clock), and the table is updated as real minors ship.
+This page is a **policy plus a schedule**. The policy binds from 1.0. The schedule below is a plan,
+and is labelled as such: **2.0.0 is the first published release** — 1.0.0 was tagged on 2026-07-20 in
+the development history and never distributed (D-V2-155) — so every row after it is a commitment
+about cadence, not a record of a release that happened. Dates are approximate (trains are cut on
+readiness, not on a clock), and the table is updated as real minors ship.
 
 ## 1. Release trains
 
-- **Minors ship on a ~12-week train.** `1.x` minor releases (`1.1`, `1.2`, …) target roughly every
+- **Minors ship on a ~12-week train.** `2.x` minor releases (`2.1`, `2.2`, …) target roughly every
   twelve weeks. A train carries additive change only within the major — new syntax, new primitives,
   new diagnostics (add-only), new stdlib — never a break to anything `STABILITY.md` §1 marks stable.
-- **Patch releases ship as needed** (`1.x.y`), for security and correctness fixes, off any train
+- **Patch releases ship as needed** (`2.x.y`), for security and correctness fixes, off any train
   that is still in a supported window (see §3). A patch never adds authority-observable surface.
-- **A major (`2.0`) is reserved for a stable-surface break**, and does not ride the minor train. The
-  co-evolution policy for a major transition — how long `1.x` and `2.x` are supported side by side —
-  is `docs/design/VERSION_COEVOLUTION.md`.
+- **A major (`3.0`) is reserved for a stable-surface break**, and does not ride the minor train — as
+  2.0 was (D-V2-149: the breaks its CHANGELOG section lists). The co-evolution policy for a major
+  transition — how long `2.x` and `3.x` are supported side by side — is
+  `docs/design/VERSION_COEVOLUTION.md`.
 
 ## 2. LTS designation
 
-- **Every 4th minor is an LTS** — `1.0`, `1.4`, `1.8`, `1.12`, … (minor ≡ 0 mod 4). `1.0` is the
-  first LTS: it is the 1.0 stability baseline, and it anchors the whole contract in `STABILITY.md`.
+- **Every 4th minor is an LTS** — `2.0`, `2.4`, `2.8`, `2.12`, … (minor ≡ 0 mod 4). `2.0` is the
+  first published LTS. `STABILITY.md`'s contract was set at 1.0; 2.0 carries it, with the breaks its
+  CHANGELOG section names.
 - **An LTS gets 24 months of security backports** from its release date. A security fix that lands
   on the current train is **backported to every LTS still inside its 24-month window**, released as
   a patch on that LTS line, and — this is the part 10k builds — **published as an advisory with a
@@ -39,23 +42,23 @@ Status values: **Current** (the newest release, gets every fix) · **LTS** (in i
 security-backport window) · **Maintenance** (a superseded non-LTS minor, security-only, until the
 next minor) · **EOL** (no further releases; a build against it still works, but no fixes come).
 
-**Planned schedule** — 1.0.0 is real (released 2026-07-20); the rest is the committed cadence, not
-history. "Security-supported until" is the date through which security patches (and advisories) are
-promised.
+**Planned schedule** — 2.0.0 is real (released with the `v2.0.0` tag, dated by the launch commit);
+the rest is the committed cadence, not history. "Security-supported until" is the date through which
+security patches (and advisories) are promised.
 
-| Version | Kind | Released (planned) | Status today (2026-07-20) | Security-supported until |
+| Version | Kind | Released (planned) | Status today (at 2.0.0) | Security-supported until |
 |---|---|---|---|---|
-| **1.0.x** | **LTS** | 2026-07-20 | **Current + LTS** | **2028-07 (24-month LTS window)** |
-| 1.1.x | minor | ~2026-10 | not yet released | until 1.2 ships (+ overlap) |
-| 1.2.x | minor | ~2027-01 | not yet released | until 1.3 ships (+ overlap) |
-| 1.3.x | minor | ~2027-03 | not yet released | until 1.4 ships (+ overlap) |
-| **1.4.x** | **LTS** | ~2027-06 | not yet released | ~2029-06 (24-month LTS window) |
-| 1.5.x … 1.7.x | minor | ~2027-09 … 2028-03 | not yet released | each until its successor ships |
-| **1.8.x** | **LTS** | ~2028-06 | not yet released | ~2030-06 (24-month LTS window) |
+| 1.0.x | — | tagged 2026-07-20, **never distributed** | **Unsupported** (no user received it; D-V2-155) | — |
+| **2.0.x** | **LTS** | the `v2.0.0` tag | **Current + LTS** | **24 months from its release (LTS window)** |
+| 2.1.x | minor | ~12 weeks after 2.0 | not yet released | until 2.2 ships (+ overlap) |
+| 2.2.x, 2.3.x | minor | ~every 12 weeks | not yet released | each until its successor ships |
+| **2.4.x** | **LTS** | ~a year after 2.0 | not yet released | 24 months from its release |
+| 2.5.x … 2.7.x | minor | ~every 12 weeks | not yet released | each until its successor ships |
+| **2.8.x** | **LTS** | ~two years after 2.0 | not yet released | 24 months from its release |
 
-Two LTS lines are supported concurrently whenever their 24-month windows overlap (they do: 1.0's
-window runs to 2028-07 and 1.4's opens ~2027-06). During that overlap a security fix is backported
-to **both** live LTS lines, each with its own advisory feed entry.
+Two LTS lines are supported concurrently whenever their 24-month windows overlap (they do: 2.0's
+window runs 24 months and 2.4's opens about a year after it). During that overlap a security fix is
+backported to **both** live LTS lines, each with its own advisory feed entry.
 
 ## 4. How a support promise becomes a mechanism
 

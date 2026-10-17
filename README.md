@@ -33,7 +33,8 @@ cannot exceed what you hold, and what you granted cannot break you.
 
 ## Status
 
-**v1.0.0 is the last release; 2.0.0 is being prepared** (V2, below — its version decided in D-V2-149, not yet tagged).
+**2.0.0 is the first published release** (V2, below; D-V2-149). 1.0.0 was tagged on 2026-07-20 in the development
+history and never distributed, so it carries no support promise (`docs/release/SUPPORT_MATRIX.md`, D-V2-155).
 Stages 1–10 are built and closed, from the skeleton through the "Industrial" stage.
 The language core has been change-frozen since Stage 9; `docs/design/STABILITY.md` is the contract.
 
