@@ -329,10 +329,26 @@ fn pattern_matches(class: GuardClass, pattern: &str, token: Option<&str>) -> boo
 fn path_within(token: &str, pattern: &str) -> bool {
     let fold = cfg!(windows) || cfg!(target_os = "macos") || is_windows_absolute(&path_norm(pattern));
     if fold {
-        crate::path::is_descendant_or_equal(&token.to_lowercase(), &pattern.to_lowercase())
+        let (token, pattern) = (one_normalization(token.to_lowercase()), one_normalization(pattern.to_lowercase()));
+        crate::path::is_descendant_or_equal(&token, &pattern)
     } else {
         crate::path::is_descendant_or_equal(token, pattern)
     }
+}
+
+/// RW 4.17 (D-V2-156): macOS's filesystem ignores Unicode normalization as it ignores case — `café` written
+/// precomposed (NFC) and decomposed (NFD) is one name, before the file exists as after — so there both sides of a path
+/// rule are compared in NFC. `realpath` already gives an existing file one spelling (measured on a runner); a name that
+/// does not exist yet keeps the spelling it was written in, and a seal written in one was walked past in the other.
+/// Elsewhere the two spellings are two files, and a permit on one must not reach the other: nothing is folded.
+#[cfg(target_os = "macos")]
+fn one_normalization(s: String) -> String {
+    icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(&s).into_owned()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn one_normalization(s: String) -> String {
+    s
 }
 
 /// Do two path patterns share any path — does one contain the other? For trees that is exactly

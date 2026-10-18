@@ -39,3 +39,8 @@ blake3 = "1"
 # one cannot hang the chain's readers. libc is already in the tree (getrandom's), not a new crate.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# RW 4.17 (D-V2-156): macOS's filesystem ignores Unicode normalization, so the Guard compares paths there in NFC.
+# icu_normalizer is already in the tree (url → idna → idna_adapter, 2.3.0, Unicode-3.0) — not a new crate.
+[target.'cfg(target_os = "macos")'.dependencies]
+icu_normalizer = { version = "2.3", default-features = false, features = ["compiled_data"] }

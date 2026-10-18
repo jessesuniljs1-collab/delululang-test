@@ -1491,6 +1491,13 @@ mod containment_tests {
             assert_eq!(rc, rd, "one file, two spellings for the Guard to compare");
             assert_eq!(pc, pd, "one file, two pins");
         }
+        // A name that does not exist yet keeps the spelling it was written in — the Guard's comparison folds it (D-V2-156).
+        let absent = |n: &str| resolve_spelling(&grant.join(n)).map(|p| p.ends_with(n));
+        eprintln!(
+            "RW 4.17: an absent name keeps its spelling: NFC {:?}, NFD {:?}",
+            absent("n\u{e9}.txt"),
+            absent("ne\u{301}.txt")
+        );
         let _ = fs::remove_dir_all(&base);
     }
 
