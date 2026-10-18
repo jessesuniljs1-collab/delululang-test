@@ -6335,3 +6335,28 @@ moved.
 
 **CI read:** `c4be914`'s push run `39165158474` — success. This commit's push run: read by this run if its budget allows
 (the next entry), else first by the next run.
+
+## 2026-10-18 — the e-stop witness observes its baseline; `launch/2.0.0` kept current, its CI read (on-demand routine run 1)
+
+**What.** `launch/2.0.0`'s `jobs=everything` run `39165405002` (on `9763787`, the first merge) went red in one job:
+`test (windows-latest)` — `sandbox_devices_cli` `an_operator_revoke_stops_a_guests_arm_mid_motion`, "the arm was driving
+before the e-stop": the output was `SUPERVISOR UP`, then `REVOKED: … (operator-revoke); the safe-park fail-state is
+engaged` at every command. The product was right — revoked, parked, nothing commanded after; the witness's baseline
+("mid-motion") was a 300 ms sleep after the node appeared, and on that runner the revoke landed before the guest's first
+command. Its first recorded failure. Six CPU hogs did not reproduce it in the VM (0 of 5); growing the window did — a
+warm-up before the first command (`fib(27)`) made the old test red 3 of 3 with the runner's own message (routine run
+18's lesson: grow what the window holds). The test now streams the guest's lines and revokes once a `COMMANDED` line has
+come; the warm-up stays, so a sleep could never pass again.
+
+**Evidence.** Old test with the warm-up: red 3 of 3. New: green 3 of 3; the whole `sandbox_devices_cli` target (14
+tests) green 4 of 4 with six CPU hogs. Read on runners at `65a4ec7` (`witness.yml`, the whole target): `windows-latest`
+`39168481629` — 14 passed, 0 failed (the runner terminated only `vctip`, no `delulu`); `macos-latest` `39168483913` —
+success.
+
+**The launch branch.** Release procedure step 1 twice: `9763787` (RW 6.1 and the Survey's worktree fix) and `b8f9f16`
+(GUARD-NORM-1's fix, D-V2-156 after D-V2-155 in the decision log), each with its CHANGELOG lines in the 2.0.0 section
+and the gates green on the launch tree. `39165405002` (`jobs=everything` on `9763787`): 15 jobs success, `test
+(windows-latest)` red in this witness alone (2,253 passed, 1 failed), `miri-slow (delulu-check)` and `(delulu-broker)`
+still running when this was written; the release dry run `39165442908` on `9763787` — success. `39167478125`
+(`jobs=everything` on `b8f9f16`) running, unread; its release dry run `39167480432` — success. This test's fix reaches
+the launch branch with the next merge of `master`.

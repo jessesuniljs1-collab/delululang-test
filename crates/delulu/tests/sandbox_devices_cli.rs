@@ -545,6 +545,7 @@ fn main(root: Root) ! {Write, Actuate} {
   let c = root.console()
   let a = root.actuator(\"arm0/elbow\")
   c.println(\"SUPERVISOR UP\")
+  c.println(\"warm \" + str(fib(27)))
   let done = drive(c, a, 30)
   c.println(\"SUPERVISOR DOWN\")
 }
@@ -573,7 +574,7 @@ fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let _guard = DaemonGuard { state: state.clone() };
-    let child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .current_dir(&cwd)
         .env("DELULU_STATE_DIR", &state)
         .env("DELULU_NO_FIRST_RUN", "1")
@@ -595,6 +596,29 @@ fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn the sandboxed supervisor");
+    // The guest's lines as they come, so the revoke waits for its first command rather than for a time: a 300 ms sleep
+    // was the baseline once, and a busy Windows runner revoked before any command (launch run 39165405002); the warm-up
+    // before the first command makes that window wide on every machine.
+    let (commanded, first_command) = std::sync::mpsc::channel();
+    let out = child.stdout.take().expect("the supervisor's stdout");
+    let reader = std::thread::spawn(move || {
+        use std::io::BufRead as _;
+        let mut all = String::new();
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            if line == "COMMANDED" {
+                let _ = commanded.send(());
+            }
+            all.push_str(&line);
+            all.push('\n');
+        }
+        all
+    });
+    let mut err = child.stderr.take().expect("the supervisor's stderr");
+    let err_reader = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(&mut err, &mut s);
+        s
+    });
     let deadline = Instant::now() + Duration::from_secs(30);
     let node = loop {
         if let Some(n) = device_node(&cwd, &state, "arm0/elbow") {
@@ -603,12 +627,12 @@ fn an_operator_revoke_stops_a_guests_arm_mid_motion() {
         assert!(Instant::now() < deadline, "the sandboxed run never published a node for arm0/elbow");
         std::thread::sleep(Duration::from_millis(20));
     };
-    // Mid-motion: once the guest has commanded at least once.
-    std::thread::sleep(Duration::from_millis(300));
+    // Mid-motion: once the guest HAS commanded — observed, never assumed.
+    first_command.recv_timeout(Duration::from_secs(60)).expect("the guest never commanded the arm");
     let o = delulu_in(&cwd, &state, &["grants", "revoke", &node]);
     assert!(o.status.success(), "grants revoke {node}: {}", stderr(&o));
-    let out = child.wait_with_output().expect("the supervisor exits");
-    let (so, se) = (String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string());
+    child.wait().expect("the supervisor exits");
+    let (so, se) = (reader.join().expect("the stdout reader"), err_reader.join().expect("the stderr reader"));
     let lines: Vec<&str> = so.lines().collect();
     let first = lines.iter().position(|l| l.starts_with("REVOKED:")).unwrap_or_else(|| panic!("a REVOKED line:\n{so}\n{se}"));
     assert!(lines[..first].contains(&"COMMANDED"), "the arm was driving before the e-stop:\n{so}");

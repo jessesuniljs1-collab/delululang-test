@@ -205,6 +205,12 @@ another OS, and then takes about seven minutes itself (run 5).
    images (no KVM in the VM), the VS Code test on Windows, and every launch step (configuring the public repository, the
    fresh-history push, the tag, `RELEASES=on`, publishing) — each named in *Open / next* as the laptop's. When nothing a
    VM can do is left, go on to items 4–7 below.
+   **Keeping `launch/2.0.0` current is a VM's work too** (on-demand run 1, release procedure step 1): `git worktree add
+   ../launch-wt launch/2.0.0` with its own `CARGO_TARGET_DIR` (the build is 2.0.0's); `git merge --no-ff origin/master`; move
+   `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
+   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
+   rebuild; run `doctor --check` and the document gates there; commit, push the branch, and dispatch `ci.yml`
+   (`jobs=everything`) and `release.yml` at it. Never the reverse merge.
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
