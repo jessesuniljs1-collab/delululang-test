@@ -3770,7 +3770,7 @@ and holds the new line; watched red on the old text. Entrenched record: this dat
 
 ## D-V2-156 — A Guard path rule compares in NFC on macOS, whose filesystem ignores Unicode normalization (RW 4.17) — TAKEN (head chef, 2026-10-18, under the owner's delegation)
 
-*(Numbered 156: D-V2-155, the 2.0 release gate, lives on `launch/2.0.0` until the launch.)*
+*(Numbered 156: D-V2-155, the support matrix at 2.0, lives on `launch/2.0.0` until the launch.)*
 
 **Measured first** (on-demand routine run 1, `witness.yml` on `macos-latest`): APFS opens `café` written precomposed
 (NFC) and decomposed (NFD) as one file, and `realpath` already resolves an EXISTING file's two spellings to one — so the

@@ -3707,3 +3707,25 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: this commit's push run; `launch/2.0.0`'s `jobs=everything` run `39165405002` on `9763787` (dispatched by
   this run; read it — `miri-slow` takes hours) and its release dry run `39165442908` (success); merge `master` into
   `launch/2.0.0` again for RW 4.17 (its CHANGELOG lines go into the 2.0.0 section); RW 4.17's UNC half.
+
+### 2026-10-18 — on-demand routine run 1 (last): the e-stop witness observes its baseline; the launch branch's CI read
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/estop-observed-baseline` (its runner reads), fast-forwarded into `master`   Pull request: none
+- Base: `c7d3187`
+- Commits: `65a4ec7` The e-stop witness waits for the guest's first command, not 300 ms; and this entry's commit
+- Files and folders: M `crates/delulu/tests/sandbox_devices_cli.rs`, `docs/CLOUD_ROUTINE.md` (step 4: how a VM keeps
+  `launch/2.0.0` current), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-156's
+  note: D-V2-155 is the support matrix, not "the release gate"), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **On `launch/2.0.0` this run:** `9763787` and `b8f9f16`, two merges of `master` (release procedure step 1), each with
+  the gates green on the launch tree; CI `jobs=everything` and the release dry run dispatched on each (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the e-stop witness red 3 of 3 with its window grown, green 3 of 3 after; its target 4 of 4 under load; the
+  runner reads in `V2_LOG.md`. `c7d3187`'s push runs — CI `39167159924` and `ocsf` `39167159926` — success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new (routine runs 17–19's baseline lessons, applied).
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39167478125` (`jobs=everything` on
+  `b8f9f16`) and `39167480432` (its release dry run) — `39165405002` on `9763787` is red only in this witness, its Miri
+  jobs as read in `V2_LOG.md`; then merge `master` into it again (this fix, these records) and dispatch `everything`
+  on the result — criterion 1 of `CHECKLIST-2.0.md` needs a green run on the final launch commit; (3) RW 4.17's UNC
+  half; RW 6.1's further strings; (4) *[laptop]* the launch, only on the owner's word.
