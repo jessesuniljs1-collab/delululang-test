@@ -3666,3 +3666,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: this commit's push run (read by this run if its budget allows, else first by the next); keep `launch/2.0.0`
   current by merging `master` into it (a laptop or cloud session that can run its gates); more CLI strings as surfaces earn
   them (RW 6.1); the launch only when the owner says.
+
+### 2026-10-18 — on-demand routine run 1 (continued): the Survey mapped a worktree's `.git` file; `launch/2.0.0` kept current
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (and `launch/2.0.0`, release procedure step 1)   Pull request: none   Merged: n/a
+- Base: `a3d7678`
+- Commits: (1) this entry's commit on `master`; then on `launch/2.0.0` a merge of it (its hash in the next entry)
+- Files and folders: M `crates/delulu-survey/src/scan.rs`, `crates/delulu-survey/tests/clean_checkout.rs`, `HANDOFF.md`
+  (§11.5), `docs/CLOUD_ROUTINE.md` (step 5), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- **Found:** the first commit made from a `git worktree` (the launch merge) was refused by the pre-commit hook — its map
+  held `file:.git`, a worktree's `.git` being a file the walk did not skip. Witnessed red, fixed, green (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite 2,319 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+- CI read: `a3d7678`'s push runs — CI `39163449226` success (14 jobs, `miri-slow` and `heavy-gates` skipped as on every push; `actors_pingpong`: arm64 MEASURED 2.88x where the machine gave 4.10x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `openshell` `39163449144` success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a worktree's `.git` is a file).
+- Open / next: the launch merge's CI (`jobs=everything`, dispatched by this run — read it); RW 6.1 grows as surfaces
+  earn strings; the launch only when the owner says.

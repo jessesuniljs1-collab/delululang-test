@@ -342,7 +342,9 @@ workflow cannot be dispatched until it is on `master`** (the API answers 404 for
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
-— the suite's tree never moves, and a slice's code is ready when its predecessor lands. **A variable set in a backgrounded
+— the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
+commit (on-demand run 1 merged `master` into `launch/2.0.0` in one, with its own `CARGO_TARGET_DIR`): its `.git` is a
+file, which the Survey did not skip until that run. **A variable set in a backgrounded
 `A && (B) &` list does not reach the next line** (run 25: `S=… && (…) &` then `cat $S/x` read `/x`) — set it on a line of its own.
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a

@@ -1528,6 +1528,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the laptop's session and "this entry's commit"; the recovering run rewrites them as its own, names the snapshot, and
   checks each OLDER snapshot against the commits that followed it (`git diff SNAPSHOT NEXT -- PATHS` empty = landed).
 
+- **A worktree's `.git` is a FILE** (2026-10-18): `git worktree add` (and a submodule) writes `.git` as one line,
+  `gitdir: …`, and the Survey's walk excluded `.git` only as a directory — a map built in a worktree carried
+  `file:.git` and could never match a clone. The pre-commit hook caught it on the first commit made from one; the
+  walk skips `.git` in either shape now. An exclusion by name asks: what other SHAPE can this name take?
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

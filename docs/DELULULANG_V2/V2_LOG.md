@@ -6260,3 +6260,23 @@ a wildcard wider than the use — but `dead_pattern_reason` refuses a glob in a 
 one, so such an item gets no hint item and the rule is named. The quoted alphabet (space and `()'&#`) reads literally
 in bash, dash and pwsh 7.6.7. Unread here: `cmd.exe` and Windows PowerShell 5.1 (the laptop's). The live-document scan
 found RW 7.10 still saying `CODE_OF_CONDUCT.md` is absent (closed in the record — D-V2-151 added it 2026-10-17).
+
+## 2026-10-18 — the Survey mapped a worktree's `.git` file (on-demand routine run 1, continued)
+
+**What.** Release procedure step 1 — `master` merged into `launch/2.0.0` — was done in a `git worktree` (its own
+target directory, so the main checkout stayed on `master`). Its map, rebuilt there, had one node more than the same
+files exported from the index: `file:.git`. A worktree's (or a submodule's) `.git` is a FILE, one line `gitdir: …`,
+and `scan::walk` excluded `.git` only as a directory, so the map of a worktree could never match a clone — the
+pre-commit hook (run 15) refused the merge commit, exactly as CI's freshness gate would have refused it on every
+runner. `clean_checkout`'s gate asks `git check-ignore`, which never names `.git` itself, so nothing could see it.
+`CLOUD_ROUTINE.md` has recommended a worktree for writing a slice since run 25; none had BUILT the map in one.
+Fixed: the walk skips `.git` whatever its shape.
+
+**Evidence.** `clean_checkout.rs` `a_worktrees_git_file_is_not_mapped` (a temporary tree with a `.git` file) red on the
+old walk — it listed `.git` beside the tree's one document — green after; it also asserts the walk read the tree at all.
+Every other tree walk in the Survey goes through `scan::walk` (`grep read_dir`). clippy 0; the full suite 2,319 passed,
+0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read:** `a3d7678`'s push runs — CI `39163449226` success (14 jobs, `miri-slow` and `heavy-gates` skipped as on
+every push; `actors_pingpong`: arm64 MEASURED 2.88x where the machine gave 4.10x, passed; Ubuntu and Windows NOT
+MEASURED, busy; macOS NOT MEASURED, 3 threads) and `openshell` `39163449144` success.

@@ -80,3 +80,21 @@ fn the_survey_reads_no_file_that_git_ignores() {
         ignored.join("\n  ")
     );
 }
+
+/// A checkout made with `git worktree add` (or a submodule) holds `.git` as a FILE — one line,
+/// `gitdir: …` — not a directory, and `git check-ignore` never names it, so the test above cannot see
+/// it. Mapped, it is a node no ordinary clone has: a map built in a worktree (the routine writes
+/// slices in one since run 25) disagrees with every runner, and the pre-commit hook refused the first
+/// commit made from one (2026-10-18). Version-control internals are excluded in either shape.
+#[test]
+fn a_worktrees_git_file_is_not_mapped() {
+    let dir = std::env::temp_dir().join(format!("survey-worktree-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("docs")).unwrap();
+    std::fs::write(dir.join(".git"), "gitdir: /elsewhere/.git/worktrees/x\n").unwrap();
+    std::fs::write(dir.join("docs/README.md"), "# a document\n").unwrap();
+    let files: Vec<String> = delulu_survey::scan::walk(&dir).into_iter().map(|f| f.rel).collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(files.contains(&"docs/README.md".to_string()), "the walk read the tree at all: {files:?}");
+    assert!(!files.iter().any(|f| f == ".git"), "a worktree's `.git` file was mapped: {files:?}");
+}
