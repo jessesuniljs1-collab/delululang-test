@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a Guard path rule on macOS covers both Unicode normalizations, 2026-10-18
+
+- **Fixed (RW 4.17, D-V2-156): on macOS a Guard path rule now covers a name in either Unicode normalization.** macOS's
+  filesystem treats `café` written precomposed and decomposed as one name; a seal on a file that did not exist yet,
+  written in one spelling, did not stop a program creating it in the other. Rules are compared in NFC there, after the
+  case fold they already had. Linux and Windows, where the two spellings are two files, are unchanged.
+
 ## Unreleased — the CLI's own lines can be translated, 2026-10-18
 
 - **Added (RW 6.1): named CLI strings in the catalogs.** A catalog can now translate the `authority` report's header
