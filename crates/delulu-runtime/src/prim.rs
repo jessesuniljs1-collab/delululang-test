@@ -1468,6 +1468,32 @@ mod containment_tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    /// RW 4.17 (a hypothesis, measured): a filesystem that ignores Unicode normalization (macOS's APFS)
+    /// opens `café` written precomposed (NFC) and decomposed (NFD) as ONE file. The Guard and the broker
+    /// decide on the resolved spelling (GUARD-ALIAS-1), so wherever both spellings reach one file they
+    /// must resolve to one spelling, or a seal written in one is walked past in the other. Where the
+    /// filesystem keeps them apart (ext4, NTFS) the second spelling names no file, and nothing is
+    /// claimed. Prints what each resolves to, so the first runner read is also the measurement.
+    #[test]
+    fn two_normalizations_of_one_file_resolve_to_one_spelling() {
+        use super::{pin_fs, resolve_spelling};
+        let base = unique_dir("nfc");
+        let grant = base.join("grant");
+        fs::create_dir_all(grant.join("caf\u{e9}")).unwrap();
+        fs::write(grant.join("caf\u{e9}").join("key.txt"), b"k").unwrap();
+        let (nfc, nfd) = ("caf\u{e9}/key.txt", "cafe\u{301}/key.txt");
+        let same_file = fs::read(grant.join(nfd)).is_ok();
+        let (rc, rd) = (resolve_spelling(&grant.join(nfc)), resolve_spelling(&grant.join(nfd)));
+        let (pc, pd) = (pin_fs(&grant, nfc), pin_fs(&grant, nfd));
+        eprintln!("RW 4.17: one file under both spellings: {same_file}; resolved {rc:?} / {rd:?}; pinned {pc:?} / {pd:?}");
+        assert!(rc.is_some() && pc.is_some(), "the precomposed spelling resolves at all");
+        if same_file {
+            assert_eq!(rc, rd, "one file, two spellings for the Guard to compare");
+            assert_eq!(pc, pd, "one file, two pins");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
     /// GUARD-ALIAS-1: the pin is the path a use RESOLVES to — a link inside the grant is followed to
     /// where it lands, so the Guard is asked about that, and a path that resolves outside is not pinned
     /// at all (the effect then refuses it with DL0904).
