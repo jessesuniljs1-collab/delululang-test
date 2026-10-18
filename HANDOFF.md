@@ -1035,6 +1035,14 @@ spells the same thing?**
   permit on the name covers them now; a pattern no use can match is refused. Search key: every time a Guard token gains a new
   shape, does every rule written for the old shape still reach it?
 
+- **GUARD-NORM-1 — a seal walked past by the other Unicode normalization on macOS** (on-demand routine run 1,
+  2026-10-18, D-V2-156): APFS treats `café` precomposed and decomposed as one name. `realpath` gives an EXISTING file one
+  spelling (measured), so GUARD-ALIAS-1's resolution held for files that exist — but a name not yet created keeps the
+  spelling it was written in, and a seal set before the file existed was walked past by a write in the other spelling
+  (witnessed red on a runner). The Guard compares in NFC on macOS now, nowhere else. Search key: a resolution step that
+  fixes a spelling only for what EXISTS leaves every not-yet-created name in the caller's spelling — ask what the
+  filesystem will treat as the same name, and compare in that form.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background

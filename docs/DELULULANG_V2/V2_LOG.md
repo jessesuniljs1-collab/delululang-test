@@ -6311,3 +6311,27 @@ Every other tree walk in the Survey goes through `scan::walk` (`grep read_dir`).
 **CI read:** `a3d7678`'s push runs — CI `39163449226` success (14 jobs, `miri-slow` and `heavy-gates` skipped as on
 every push; `actors_pingpong`: arm64 MEASURED 2.88x where the machine gave 4.10x, passed; Ubuntu and Windows NOT
 MEASURED, busy; macOS NOT MEASURED, 3 threads) and `openshell` `39163449144` success.
+
+## 2026-10-18 — RW 4.17: a Guard seal and the other Unicode normalization on macOS (D-V2-156; on-demand routine run 1)
+
+**What.** RW 4.17 named POSIX names that change under Unicode normalization as an open question. Asked as "what else
+spells this?" of the Guard — a deny-list — on the one filesystem that treats two spellings as one name (APFS). Two
+witnesses on a branch, read on `macos-latest` before any fix: `prim.rs`
+`two_normalizations_of_one_file_resolve_to_one_spelling` printed `one file under both spellings: true` and both
+spellings resolved and pinned to one (green: `realpath` gives an existing file one spelling — that half of the
+hypothesis refuted); `guard.rs` `a_path_rule_covers_the_other_unicode_normalization_where_the_filesystem_ignores_it`
+was RED — `"/srv/café" over "/srv/cafe\u{301}/new.txt"`: a rule on a name not yet created does not cover the other
+spelling, which the filesystem creates as the same name. Linux and Windows read both green as two files (nothing
+claimed, nothing folded). Fixed (D-V2-156): on macOS `path_within` compares in NFC after its case fold.
+
+**Evidence.** Read on `macos-latest` (`witness.yml`): the measurement `39165640550` (`ccb97f5`) green — one file under
+both spellings, one resolved spelling; the Guard witness `39165785709` (`80a6243`) RED as quoted; at the fix (`7d04370`)
+the broker's whole unit suite `39166154433` 204 passed, 0 failed, the measurement `39166156467` green and printing `an
+absent name keeps its spelling: NFC Some(true), NFD Some(true)`, and `guard_e2e`, `sandbox_guard_e2e`, `broker_cli`
+`39166158256` green. Windows: the measurement `39165642238` green. In the VM: `delulu-broker` 204/204;
+`check-other-os.sh aarch64-apple-darwin` clean; clippy 0; the full suite 2,321 passed, 0 failed, 16 ignored (cargo's
+exit 0, the tree unmoved). `Cargo.lock` gains one dependency line (`icu_normalizer` under `delulu-broker`), no version
+moved.
+
+**CI read:** `c4be914`'s push run `39165158474` — success. This commit's push run: read by this run if its budget allows
+(the next entry), else first by the next run.

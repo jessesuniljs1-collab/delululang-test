@@ -3725,3 +3725,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: `HANDOFF.md` §11.5 (a worktree's `.git` is a file).
 - Open / next: the launch merge's CI (`jobs=everything`, dispatched by this run — read it); RW 6.1 grows as surfaces
   earn strings; the launch only when the owner says.
+
+### 2026-10-18 — on-demand routine run 1 (continued): RW 4.17 — a Guard seal and the other Unicode normalization on macOS (D-V2-156)
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/rw-4-17-normalization` (the runner witnesses), fast-forwarded into `master`   Pull request: none
+- Base: `c4be914`
+- Commits: `ccb97f5` Witness (RW 4.17): two Unicode normalizations of one file, one spelling?; `80a6243` Witness (RW
+  4.17): a Guard path rule and the other Unicode normalization (RED on macOS); `7d04370` A Guard path rule covers the
+  other Unicode normalization on macOS (RW 4.17); and this entry's commit
+- Files and folders: M `crates/delulu-broker/Cargo.toml` (`icu_normalizer` on macOS only), `Cargo.lock` (one line),
+  `crates/delulu-broker/src/guard.rs`, `crates/delulu-runtime/src/prim.rs` (a test), `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4, GUARD-NORM-1), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-156), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (4.17 partial), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Found and fixed (GUARD-NORM-1):** on macOS a Guard seal on a name not yet created, written in one Unicode
+  normalization, was walked past by a write in the other — APFS treats them as one name, and only an EXISTING file's
+  spelling is unified by `realpath` (measured). The Guard compares path rules in NFC on macOS now, nowhere else.
+- Verified: the macOS reads in `V2_LOG.md` (red first, then green on four targets); the full suite 2,321 passed, 0 failed;
+  `delulu-broker` 204/204; clippy 0; `check-other-os.sh aarch64-apple-darwin` clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (macOS read on runners; Windows and Linux unchanged).
+- For the laptop's memory: `HANDOFF.md` §11.4 GUARD-NORM-1 (a resolution that fixes the spelling only of what EXISTS).
+- Open / next: this commit's push run; `launch/2.0.0`'s `jobs=everything` run `39165405002` on `9763787` (dispatched by
+  this run; read it — `miri-slow` takes hours) and its release dry run `39165442908` (success); merge `master` into
+  `launch/2.0.0` again for RW 4.17 (its CHANGELOG lines go into the 2.0.0 section); RW 4.17's UNC half.

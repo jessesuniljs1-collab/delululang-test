@@ -3785,6 +3785,27 @@ archive's history. (3) The 2.x schedule keeps the policy's shape (~12-week minor
 in relative dates only. (4) No wire or DIR major changed, so the n−1 obligation is not triggered by 2.0. The matrix is
 rewritten on `launch/2.0.0`, in the tree the tag names.
 
+## D-V2-156 — A Guard path rule compares in NFC on macOS, whose filesystem ignores Unicode normalization (RW 4.17) — TAKEN (head chef, 2026-10-18, under the owner's delegation)
+
+*(Numbered 156: D-V2-155, the 2.0 release gate, lives on `launch/2.0.0` until the launch.)*
+
+**Measured first** (on-demand routine run 1, `witness.yml` on `macos-latest`): APFS opens `café` written precomposed
+(NFC) and decomposed (NFD) as one file, and `realpath` already resolves an EXISTING file's two spellings to one — so the
+Guard, deciding on the resolved spelling since GUARD-ALIAS-1, was right for every file that exists. A name that does not
+exist yet keeps the spelling it was written in (`canonical_existing` re-appends it), and the Guard compared it as
+written: a seal on `/srv/out/café.txt` (NFC) set before the file exists did not cover a write to
+`/srv/out/cafe\u{301}.txt` (NFD) — the same name to the filesystem. Witnessed red on the runner (`80a6243`).
+
+**Decision.** (1) **Normalize, not refuse**, and only in the Guard's comparison: on macOS both sides of a path rule are
+compared in NFC after the case fold the same function already does there (`guard::path_within`). Refusing every
+non-NFC path would refuse a decomposed name a macOS tool wrote legitimately; normalizing at the comparison also covers
+rules stored before this change, in either spelling. (2) **Nowhere else:** on ext4 and NTFS the two spellings are two
+files, so a permit on one must not reach the other — folding there would widen a permit; and the grant lattice keeps
+comparing as written, where a mismatch can only refuse. (3) **The normalizer:** `icu_normalizer` 2.3, already in the
+tree (`url` → `idna` → `idna_adapter`; Unicode-3.0, allowed by `deny.toml`), taken by `delulu-broker` on macOS only —
+not a new crate, and the broker stays transport-free (its Ruling 1). RW 4.17's other half — a UNC path in an operator's
+grant on Windows — stays open.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
