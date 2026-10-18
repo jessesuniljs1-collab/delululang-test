@@ -84,8 +84,10 @@ message = "Autorité de « {program} » — ce que ce programme peut faire à vo
 
 **Rules:**
 - **Keys are stable ids** — diagnostic codes (`DL0501`) and dotted CLI names (`cli.authority.header`).
-  The full key list is enumerated in `docs/for-agents.md` / the Stage-9 reference; a catalog need not
-  define all of them (missing keys fall back), but `[meta]` must be honest about coverage.
+  The key space is exactly the registered diagnostic codes (`delulu_diag::REGISTRY`; `delulu explain E-DLnnnn`
+  describes each) and the named CLI strings (`delulu_diag::catalog::CLI_STRINGS`); `docs/lang/en-US.md` §3 gives the
+  en-US text of every CLI string and of a starter set of codes. A catalog need not define all of them (missing keys
+  fall back), but `[meta]` must be honest about coverage.
 - **Placeholders are typed and fixed per key** — `{fn}`, `{effect}`, `{program}`, `{locale}`, etc.
   You may reorder them and surround them with any prose, but you may not invent new ones: an unknown
   placeholder → **DL1704** at catalog load, and that entry falls back to en-US (the rest of the

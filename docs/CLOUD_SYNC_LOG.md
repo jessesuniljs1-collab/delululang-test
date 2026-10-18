@@ -3743,3 +3743,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `39167478125` — each superseded by it, kept as evidence; (3) RW 4.17's UNC half; RW 6.1's further strings; RW 6.2;
   (4) *[laptop]* the launch, only on the owner's word — the launch session merges `master` into `launch/2.0.0` first,
   then needs a green `everything` run on its final commit (`CHECKLIST-2.0.md` criterion 1).
+
+### 2026-10-18 — on-demand routine run 1 (postscript 2): the localization guide's key-list claim corrected
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `3f2ac0d`   Commits: this entry's commit
+- Files and folders: M `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (§2's rules: the key space named — `delulu_diag::REGISTRY`
+  and `CLI_STRINGS` — where it said `docs/for-agents.md` and a "Stage-9 reference" listed it; neither does),
+  `docs/REMAINING_WORK.md` (correction row 1.14), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: `grep` finds no catalog key in `docs/for-agents.md` and no Stage-9 reference; `docs/lang/en-US.md` §3.1 holds
+  7 of 154 codes (so the guide says "a starter set"); `delulu explain E-DL0501` answers. Document gates green.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before — this commit's push run first.
