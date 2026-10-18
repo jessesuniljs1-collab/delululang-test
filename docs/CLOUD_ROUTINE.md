@@ -133,7 +133,9 @@ record why it is superseded (a witness branch whose work landed in revised form)
 every ten minutes whatever a laptop session had not committed — the owner asked for it so that work survives a session
 stopping at its usage limit. Each snapshot's message names its base. If the newest one is newer than the laptop's last
 commit on `master`, `git diff BASE origin/autosave/laptop` is unfinished work: finish it, verify it like any change, and
-commit it to `master` in your own commits. Never merge the branch itself.
+commit it to `master` in your own commits. Never merge the branch itself. **A snapshot is a draft** (on-demand run 1):
+re-run every witness its records claim, read its diff adversarially as a stranger's, rewrite its records as this run's
+(naming the snapshot), and check each older snapshot landed — `git diff SNAPSHOT NEXT_COMMIT -- PATHS` empty.
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile
@@ -345,7 +347,9 @@ workflow cannot be dispatched until it is on `master`** (the API answers 404 for
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
-— the suite's tree never moves, and a slice's code is ready when its predecessor lands. **A variable set in a backgrounded
+— the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
+commit (on-demand run 1 merged `master` into `launch/2.0.0` in one, with its own `CARGO_TARGET_DIR`): its `.git` is a
+file, which the Survey did not skip until that run. **A variable set in a backgrounded
 `A && (B) &` list does not reach the next line** (run 25: `S=… && (…) &` then `cat $S/x` read `/x`) — set it on a line of its own.
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a

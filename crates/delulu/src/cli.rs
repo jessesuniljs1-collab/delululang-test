@@ -2587,7 +2587,8 @@ fn cmd_locale(rest: &[String]) -> i32 {
             );
             if crate::locale::interactive_tty() && !yes {
                 use std::io::Write as _;
-                eprint!("install locale `{}`? [y/N]: ", cat.locale);
+                let ask = delulu_diag::CLI_LOCALE_ADD_CONFIRM;
+                eprint!("{}", delulu_diag::render_cli(ask, crate::locale::active_catalog(), &[("locale", &cat.locale)]));
                 let _ = std::io::stderr().flush();
                 let mut line = String::new();
                 let _ = std::io::stdin().read_line(&mut line);
@@ -4429,7 +4430,8 @@ fn render_authority(report: &Json) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
     let name = report["program"].as_str().unwrap_or("?");
-    let _ = writeln!(out, "Authority of `{name}` — what this program can do to your system:");
+    let catalog = crate::locale::active_catalog();
+    let _ = writeln!(out, "{}", delulu_diag::render_cli(delulu_diag::CLI_AUTHORITY_HEADER, catalog, &[("program", name)]));
     let modules = strs(&report["modules"]);
     if !modules.is_empty() {
         let _ = writeln!(out, "  modules:      {}", modules.join(", "));
@@ -4552,7 +4554,7 @@ fn render_authority(report: &Json) -> String {
         let _ = writeln!(out, "  foreign:      (none — no code outside the guarantee)");
     } else {
         let _ = writeln!(out, "  foreign:");
-        let _ = writeln!(out, "    -- outside the proof (contained at process level) --");
+        let _ = writeln!(out, "    {}", delulu_diag::render_cli(delulu_diag::CLI_AUTHORITY_FOREIGN_SEPARATOR, catalog, &[]));
         // Stage 5 phase 5h: which isolation profile bounds these foreign libraries' blast radius when
         // the program runs (spec §5). `process` = each library in an isolated worker subprocess (a
         // crash is DL1409, the host survives); `inproc` = Stage-4 in-process (a crash takes the host).

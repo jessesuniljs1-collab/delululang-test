@@ -95,6 +95,11 @@ fn descend(root: &Path, dir: &Path, out: &mut Vec<ScannedFile>) {
 
     for path in entries {
         let name = path.file_name().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+        // A checkout made by `git worktree add`, or a submodule, holds `.git` as a FILE (`gitdir: …`):
+        // version-control internals in either shape, and a node no ordinary clone has.
+        if name == ".git" {
+            continue;
+        }
         if path.is_dir() {
             if EXCLUDED_DIRS.iter().any(|(d, _)| *d == name) {
                 continue;
