@@ -3729,3 +3729,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   jobs as read in `V2_LOG.md`; then merge `master` into it again (this fix, these records) and dispatch `everything`
   on the result — criterion 1 of `CHECKLIST-2.0.md` needs a green run on the final launch commit; (3) RW 4.17's UNC
   half; RW 6.1's further strings; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-18 — on-demand routine run 1 (postscript): the last push run read; `launch/2.0.0` at `e098438`
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `9ba06d2`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- CI read: `9ba06d2`'s push run `39169109890` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push).
+- `launch/2.0.0`: the third merge, `e098438` (this fix and the records), gates green on the launch tree; CI `39169269103` (`jobs=everything`) dispatched — at 22:01 UTC 14 jobs success, the Windows tests and three `miri-slow` running. `39165405002` (`9763787`): 16 success, Windows red in the fixed witness, `miri-slow (delulu-broker)` running. `39167478125` (`b8f9f16`): 16 success, Windows green this time, two `miri-slow` running. All unread past this line.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) on `launch/2.0.0` read `39169269103`
+  (`jobs=everything` on `e098438`, the branch's newest commit), and the Miri jobs still running in `39165405002` and
+  `39167478125` — each superseded by it, kept as evidence; (3) RW 4.17's UNC half; RW 6.1's further strings; RW 6.2;
+  (4) *[laptop]* the launch, only on the owner's word — the launch session merges `master` into `launch/2.0.0` first,
+  then needs a green `everything` run on its final commit (`CHECKLIST-2.0.md` criterion 1).
