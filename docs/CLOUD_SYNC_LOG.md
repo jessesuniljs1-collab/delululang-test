@@ -3625,3 +3625,44 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `39058694156` (`52071e5`), `39059809187` (`9ad8e9c`): success. CI does not run on pushes to `launch/2.0.0` or
   `autosave/*` (it triggers on `master`/`main`); the launch branch is run by hand.
 - Open / next: RW 6.1 (CLI strings in the catalog); the launch waits for the owner's word.
+
+### 2026-10-18 — on-demand routine run 1: RW 6.1 recovered from the laptop's autosave, finished and verified; RW 7.10's stale row
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its first run (started 2026-10-18 20:06 UTC, no `routine-fire-payload`)
+- Branch: `master`   Pull request: none   Merged: n/a
+- Base: `640a7d5`
+- Commits: (1) this entry's commit
+- Files and folders: A `docs/assistant-memory/autosave-snapshot-is-a-draft.md`; M `CHANGELOG.md`, `HANDOFF.md`,
+  `crates/delulu-diag/catalogs/delulu-slang.toml`, `crates/delulu-diag/src/catalog.rs`, `crates/delulu-diag/src/lib.rs`,
+  `crates/delulu/src/cli.rs`, `crates/delulu/tests/locale_cli.rs`, `crates/delulu/tests/locale_plugin_cli.rs`,
+  `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/assistant-memory/MEMORY.md`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/README.md`,
+  `docs/lang/delulu-slang.md`, `docs/lang/en-US.md`, `docs/survey/*` (3). Deleted, renamed: nothing.
+- **Recovered:** `origin/autosave/laptop`'s newest snapshot `b4a9e18` (2026-10-17 21:15 UTC, base `640a7d5`, 14 paths) — the
+  laptop's RW 6.1, begun in `session_01TeFcPssxRcTvPXJpY7qdyn`, which stopped before committing; its draft entry here is
+  replaced by this one, and its `V2_LOG.md` entry rewritten as this run's. The four older snapshots are byte-identical to
+  commits that followed them (`5fb039a` → `424c391`; `6bf8f8e` → `3f652cf` on `launch/2.0.0`; `36ff555` and `4d407f5` →
+  `640a7d5`). The autosave branch is not merged (never).
+- **RW 6.1:** three named CLI strings (`cli.authority.header`, `cli.authority.foreign-separator`, `cli.locale.add.confirm`),
+  rendered through the active catalog or en-US whole; slang speaks all three; a third catalog's key installs and renders.
+  Re-witnessed here: both end-to-end witnesses red on the old product code, the mutant red. **Fixed in the draft:** a
+  catalog's line break started a forged line of the `authority` report (`terminal_safe` → `terminal_line`, witnessed red
+  first); a doc comment carried onto the wrong test.
+- **The Sunday sweep:** CI = the nightly (every job, green); an adversarial pass by hand on RW 4.65's DL1410 hint — `,`
+  under PowerShell (pwsh 7.6.7 installed in the VM) and `*` widening the permit, both refuted (`V2_LOG.md`); `cmd.exe` and
+  Windows PowerShell 5.1 unread. **RW 7.10 closed in the record:** `CODE_OF_CONDUCT.md` has existed since 2026-10-17
+  (D-V2-151); the row still said absent.
+- Survey and doctor: at the start `survey check` ok (1519 nodes, 14775 edges), `doctor --check` ok (all checks pass); after
+  the last edit: in the commit message. `gh` is installed with an invalid `GH_TOKEN` (as run 10 found); CI read with `curl`.
+- Verified: the full suite 2,318 passed, 0 failed, 16 ignored (exit 0); `delulu-diag` 50/50, `locale_cli` 7/7,
+  `locale_plugin_cli` 3/3, clippy 0, `cargo deny … advisories` ok. CI read before the push: `39069505317` (CI) and
+  `39069505339` (`ocsf`) on `640a7d5` — success; the nightly `39108708245` (all 18 jobs) — success; `actors_pingpong` and
+  the sandbox properties per OS in `V2_LOG.md`.
+- Redo on the laptop: optional — paste a DL1410 hint holding `,` and a quoted path into `cmd.exe` and Windows
+  PowerShell 5.1 (unread in the VM). The RW 6.1 change is OS-neutral; CI runs it on every OS.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a slot's line count is part of its escape; an autosave snapshot is a draft),
+  `docs/assistant-memory/autosave-snapshot-is-a-draft.md`; `docs/CLOUD_ROUTINE.md` step 1 says how to recover one.
+- Open / next: this commit's push run (read by this run if its budget allows, else first by the next); keep `launch/2.0.0`
+  current by merging `master` into it (a laptop or cloud session that can run its gates); more CLI strings as surfaces earn
+  them (RW 6.1); the launch only when the owner says.

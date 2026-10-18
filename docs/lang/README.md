@@ -25,9 +25,14 @@ reasoning while locking every *decision* that does.
 
 ## The invariants every pack obeys (repeat of the guide's law)
 
-1. **Keys are stable ids** (diagnostic codes like `DL0501`; dotted CLI names like
-   `cli.grant-prompt.title`). Translate the *values*, never the keys.
-2. **Placeholders are typed and fixed** (`{fn}`, `{effect}`, `{program}`, `{summary}`, …). Reorder
+1. **Keys are stable ids** (diagnostic codes like `DL0501`; dotted CLI names like `cli.authority.header`).
+   Translate the *values*, never the keys. The CLI key space is exactly `delulu_diag::catalog::CLI_STRINGS` —
+   since 2026-10-17 (RW 6.1) `cli.authority.header` (`{program}`), `cli.authority.foreign-separator` and
+   `cli.locale.add.confirm` (`{locale}`). A `cli.*` key outside it names no surface and gets DL1704;
+   `cli.grant-prompt.*` and `cli.run.ok` name lines the CLI does not print, and the first-run picker is shown
+   before any locale exists, so it is en-US by design. The packs below were drafted before the key space
+   existed, and their `cli.*` blocks name keys beyond it.
+2. **Placeholders are typed and fixed** (`{fn}`, `{effect}`, `{program}`, `{locale}`, …). Reorder
    and surround freely; never invent new ones (→ DL1704).
 3. **The welcome note is never translated** (Stage-8 §6.3) — no key for it; it renders byte-identically
    in every locale.

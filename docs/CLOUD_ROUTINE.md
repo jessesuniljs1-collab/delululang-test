@@ -128,7 +128,9 @@ record why it is superseded (a witness branch whose work landed in revised form)
 every ten minutes whatever a laptop session had not committed — the owner asked for it so that work survives a session
 stopping at its usage limit. Each snapshot's message names its base. If the newest one is newer than the laptop's last
 commit on `master`, `git diff BASE origin/autosave/laptop` is unfinished work: finish it, verify it like any change, and
-commit it to `master` in your own commits. Never merge the branch itself.
+commit it to `master` in your own commits. Never merge the branch itself. **A snapshot is a draft** (on-demand run 1):
+re-run every witness its records claim, read its diff adversarially as a stranger's, rewrite its records as this run's
+(naming the snapshot), and check each older snapshot landed — `git diff SNAPSHOT NEXT_COMMIT -- PATHS` empty.
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile

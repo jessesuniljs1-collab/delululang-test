@@ -1517,6 +1517,17 @@ Added in V2 (2026-09-17 → 2026-09-28):
   that releases a secret's bytes must judge the whole URL the request will be judged by, or the broker hands them over
   (and records a `send`) for a request the client then refuses.
 
+- **A slot's line count is part of its escape** (2026-10-18, RW 6.1): `terminal_safe` keeps a line break, because a
+  diagnostic lays itself out on several lines (indented after the first, RW 4.34); a string that fills ONE line of a
+  report — `authority`'s header, translated by anyone — must go through `terminal_line`, or its `\n` starts a forged
+  line of the report (`effects: (none)` under the header, witnessed red). For every text a third party writes into a
+  human report, ask how many lines its slot is, and escape for that.
+- **An autosave snapshot is a draft — verify it as a stranger's work** (2026-10-18, the on-demand routine's first run):
+  `b4a9e18` held a finished-looking slice whose records claimed two red witnesses and a mutant. They re-ran as claimed,
+  and an adversarial read still found a forged-line hole and a doc comment carried onto the wrong test. Its records name
+  the laptop's session and "this entry's commit"; the recovering run rewrites them as its own, names the snapshot, and
+  checks each OLDER snapshot against the commits that followed it (`git diff SNAPSHOT NEXT -- PATHS` empty = landed).
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

@@ -7,13 +7,13 @@ voice, and the machine envelope is (as always) byte-identical to every other loc
 > **This pack is the authoring target, not the shipped state.** The block below is what a *complete*
 > delulu-slang catalog declares. What is actually built into the binary today
 > (`crates/delulu-diag/catalogs/delulu-slang.toml`) is **version `0.8.0`, 8 of 154 diagnostic codes,
-> and zero CLI strings** — its own `[meta].coverage` says so. The gap is tracked in
-> [`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.2.
+> and the 3 named CLI strings there are** — its own `[meta].coverage` says so. The diagnostics gap is
+> tracked in [`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.2.
 >
-> The **CLI half is blocked** rather than merely unwritten: `delulu_diag::catalog::CLI_STRINGS` is
-> empty, so no `cli.*` key exists to translate and any catalog using one gets DL1704 and falls back
-> (§6.1). Until those strings are registered at their call sites, `cli = 100` is not authorable by
-> anyone, in any locale.
+> The **CLI half was blocked until 2026-10-17**, when `delulu_diag::catalog::CLI_STRINGS` was empty and
+> every `cli.*` key got DL1704. It now holds three strings (§6.1), and this catalog speaks all three; the
+> rest of the CLI's prose is en-US until it is registered at its call site, so `cli = 100` measures the
+> registered strings, not every line the CLI prints.
 
 ```toml
 # The target for a complete pack — NOT what ships today (see the note above).
@@ -76,24 +76,21 @@ message = "secrets stay host-side, they don't go into the wasm guest ({detail}).
 
 ### 2.2 CLI strings
 
-```toml
-[cli.grant-prompt.title]
-message = "this program wants: {summary} — you good with that?"
+The CLI key space is exactly `delulu_diag::catalog::CLI_STRINGS` — since 2026-10-17 (RW 6.1)
+`cli.authority.header` (`{program}`), `cli.authority.foreign-separator` and `cli.locale.add.confirm`
+(`{locale}`). A `cli.*` key outside it names no surface and gets DL1704; `cli.grant-prompt.*` and `cli.run.ok`
+name lines the CLI does not print, and the first-run picker is shown before any locale exists, so it is en-US by
+design. What ships:
 
+```toml
 [cli.authority.header]
 message = "what `{program}` can actually do to your system:"
 
 [cli.authority.foreign-separator]
 message = "-- outside the proof (contained at the process level, stay woke) --"
 
-[cli.run.ok]
-message = "ok bet 🔥"
-
-[cli.locale-picker.prompt]
-message = "pick your compiler's vibe (this changes human text ONLY — codes & JSON never move):"
-
 [cli.locale.add.confirm]
-message = "catalogs = human text only. codes/repairs/JSON don't change, and this thing holds zero authority. add `{locale}`?"
+message = "catalogs = human text only, and this one holds zero authority. install `{locale}`? [y/N]: "
 ```
 
 ### 2.3 The welcome note
@@ -112,8 +109,8 @@ Two different things get called "coverage" on this page and they must not be blu
 
 - **By design** — `explain` long-form docs are en-US outside the top codes. A delulu reads the vibe
   on the common path and the precise en-US doc when they go deep.
-- **Not by design** — the shipped catalog covers 8 of 154 diagnostics and 0 CLI strings against the
-  `cli = 100, diagnostics = 90` this page targets. Until 2026-08-23 this section read *"CLI + top
-  diagnostics are 100%"*, which described the target as though it were the state. The diagnostics
-  half is unwritten work; the CLI half is **blocked** on `CLI_STRINGS` being empty
+- **Not by design** — the shipped catalog covers 8 of 154 diagnostics against the `diagnostics = 90` this
+  page targets. Until 2026-08-23 this section read *"CLI + top diagnostics are 100%"*, which described the
+  target as though it were the state. The diagnostics half is unwritten work; the CLI half, blocked until
+  2026-10-17 on `CLI_STRINGS` being empty, covers all 3 registered strings
   ([`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.1). 🐦‍🔥

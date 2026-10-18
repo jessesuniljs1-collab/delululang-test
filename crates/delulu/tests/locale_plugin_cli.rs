@@ -135,3 +135,50 @@ fn a_catalog_plugin_with_authority_is_refused() {
     assert!(err.contains("ZERO authority"), "{err}");
     assert!(!locales.join("pirate.toml").exists(), "nothing installed");
 }
+
+/// RW 6.1: a third catalog speaks the CLI's named strings — `[cli.authority.header]` was no key at all before (DL1704 at
+/// add time, and en-US after) — and `locale add`'s own question is asked in the ACTIVE locale, while `y` stays the answer.
+#[test]
+fn a_third_catalog_speaks_the_cli_strings_and_locale_add_asks_in_the_active_voice() {
+    let work = tmp("clistr");
+    let locales = work.join("locales");
+    let toml = "[meta]\nlocale = \"pirate\"\nversion = \"0.1.0\"\nfallback = \"en-US\"\ncoverage = \"the authority header\"\n\n\
+                [cli.authority.header]\nmessage = \"what `{program}` may plunder from yer system:\"\n";
+    let dpx = build_catalog_plugin(&work, toml, "");
+    let o = delulu(&work, &locales, &["locale", "add", dpx.to_str().unwrap()], None);
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert!(o.status.success(), "add: {err}");
+    assert!(!err.contains("DL1704"), "the key exists: {err}");
+    std::fs::write(work.join("ok.delulu"), "module m\nfn main() {}\n").unwrap();
+    let o = delulu(&work, &locales, &["authority", "ok.delulu"], Some("pirate"));
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(out.starts_with("what `m` may plunder from yer system:\n"), "the pirate header: {out}");
+
+    // The question before an install, in the active voice; `n` installs nothing.
+    let ask = |locale: &str| {
+        use std::io::Write as _;
+        let fresh = work.join(format!("locales_{locale}"));
+        let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&work)
+            .args(["locale", "add", dpx.to_str().unwrap()])
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_ASSUME_TTY", "1")
+            .env("DELULU_LOCALES_DIR", &fresh)
+            .env("DELULU_LOCALE", locale)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(b"n\n").unwrap();
+        let o = child.wait_with_output().unwrap();
+        assert_eq!(o.status.code(), Some(1), "{locale}: `n` refuses");
+        assert!(!fresh.join("pirate.toml").exists(), "{locale}: nothing installed");
+        String::from_utf8_lossy(&o.stderr).to_string()
+    };
+    let en = ask("en-US");
+    assert!(en.contains("install locale `pirate`? [y/N]: "), "en-US, in-code: {en}");
+    let slang = ask("delulu-slang");
+    assert!(slang.contains("this one holds zero authority. install `pirate`? [y/N]: "), "the slang question: {slang}");
+    assert!(!slang.contains("install locale `pirate`?"), "{slang}");
+}

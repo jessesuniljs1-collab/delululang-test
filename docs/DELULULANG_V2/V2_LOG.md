@@ -6205,3 +6205,58 @@ Guard's `path_norm` and one word in every shell.
 the rule; falsified by two mutants (every character admitted → red; never quoted → red). `guard_e2e` now runs the
 command exactly as DL1410 prints it, and the approved one-file permit lets the write happen (Windows). clippy 0; the
 suite on Windows 2,244 passed, the 4 map-freshness tests red until the Survey was regenerated, then green.
+
+## 2026-10-18 — RW 6.1: the CLI's own lines can be translated (begun on the laptop 2026-10-17; recovered from its autosave and finished by the on-demand routine's first run)
+
+**What.** `CLI_STRINGS` was empty, so no CLI prose was localizable and every `cli.*` key a guide documented got DL1704.
+Three strings are registered as constants their call sites name (`CliString`, so a missing en-US text is a compile
+error): `cli.authority.header` (`{program}`), `cli.authority.foreign-separator`, `cli.locale.add.confirm` (`{locale}`).
+`render_cli` gives the active catalog's text, or en-US whole — never half a message — and passes either through
+`terminal_line` (one line, every control character shown escaped), since a catalog is text anyone may write and an
+argument may be a name a program chose — the laptop's draft used `terminal_safe`, see below. The slang
+catalog speaks all three. Not registered, on purpose: `cli.grant-prompt.*` and `cli.run.ok` (the CLI prints no such
+line) and the picker (shown before any locale exists). The guide, `docs/lang/README.md`, `en-US.md` and
+`delulu-slang.md` say so; the nine starter packs' `cli.*` blocks predate the key space.
+
+**Evidence.** `a_named_cli_string_speaks_the_locale_and_the_json_does_not_move` (`locale_cli`) red on the old code — the
+slang header was en-US — green after: only the header line moves, `authority --json` is byte-identical across locales.
+`a_third_catalog_speaks_the_cli_strings_and_locale_add_asks_in_the_active_voice` (`locale_plugin_cli`) red on the old
+code — the pirate catalog's `[cli.authority.header]` was DL1704 — green after; `locale add`'s question asked in en-US and
+in slang, `n` installing nothing. Three `catalog.rs` unit tests (placeholders declared = used; the slang catalog covers
+every string; fallback whole and terminal-safe — falsified: `render_cli` without `terminal_safe` → red).
+
+**Recovered and finished (2026-10-18, the on-demand routine's first run, `trig_01HFG6usfzmDAPQigiDu9DLq`).** The laptop
+session stopped before it committed. The autosave's newest snapshot, `b4a9e18` (2026-10-17 21:15 UTC; base `640a7d5`,
+`master`'s last commit; 14 paths), held the slice with its records written; the four older snapshots are byte-identical
+to commits that followed them (`424c391`, `3f652cf`) or to `master`. Applied to `master` and verified as a stranger's
+work: both end-to-end witnesses re-run red on the old product code (`cli.rs`, `catalog.rs`, `lib.rs` and the slang
+catalog put back to `640a7d5`, the new tests kept) — the slang header was en-US; the pirate catalog's key was DL1704 at
+`locale add` — and the mutant re-run red (`render_cli` with no escape at all). **Two defects in the draft, found by
+reading it adversarially:** (1) `terminal_safe` keeps a line break — right for a diagnostic, which lays itself out on
+several lines and is indented after its first (RW 4.34), wrong for a string that fills ONE line of a report: a catalog
+whose `[cli.authority.header]` held `{program}:\n  effects:      (none)` started a forged `effects:` line under
+`authority`'s header (witnessed red: `"m:\n  effects:      (none)"`). `render_cli` uses `terminal_line` now; the unit
+tests assert that every en-US text is one line and that a catalog's or an argument's line break is shown escaped.
+(2) The new `locale_cli` test had been inserted between `criterion7_json_bytes_identical_across_locales_human_differs`'s
+doc comment and its `#[test]`, so that comment described the wrong test — moved back (routine run 20's lesson: an
+insertion before an anchor must not carry the anchor). In the VM: `delulu-diag` 50/50; `locale_cli` 7/7,
+`locale_plugin_cli` 3/3; clippy 0; `cargo deny --all-features check advisories` ok; the full suite 2,318 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read by this run, before its push:** `master`'s push runs on `640a7d5` — CI `39069505317` and `ocsf`
+`39069505339` — success; the nightly `39108708245` (2026-10-18 07:43 UTC, on `640a7d5`, all 18 jobs, `heavy-gates`,
+the three `miri-slow` and `microvm` included) — success. `actors_pingpong`: arm64 MEASURED 2.93x where the machine
+gave 4.11x, passed; Ubuntu and Windows NOT MEASURED (busy runners — speedups 2.00–2.05x and 1.41–1.73x against
+controls of 2.17–2.24x and 2.42–2.45x); macOS NOT MEASURED (3 hardware threads; 2.26x observed). Sandbox properties
+unchanged: Linux x64 every property established, the guest a subordinate uid; arm64 the same as the same OS user;
+Windows a per-run AppContainer, privilege escalation not confined; macOS filesystem reads not confined.
+
+**The Sunday sweep (step 4 item 6), 2026-10-18.** CI: the nightly above ran every job on `master`'s code (a by-hand
+`everything` dispatch would have repeated it). An adversarial pass, by hand, on the newest security-relevant feature —
+RW 4.65's DL1410 hint, a command agents paste into a shell, built from an item the program chose. Two hypotheses, both
+**refuted**: (a) `,` is in `plain_shell_char` and left unquoted, and PowerShell's argument mode reads `a,b` as an array —
+but PowerShell 7.6.7 (installed in the VM from Microsoft's apt repository) passes `fs_write:/srv/out/report,final.txt`
+to a native command as one argument, and `=+~@:` literally; (b) a `*` in a file name would make the "narrowest" permit
+a wildcard wider than the use — but `dead_pattern_reason` refuses a glob in a path pattern and any `*` in a `declassify`
+one, so such an item gets no hint item and the rule is named. The quoted alphabet (space and `()'&#`) reads literally
+in bash, dash and pwsh 7.6.7. Unread here: `cmd.exe` and Windows PowerShell 5.1 (the laptop's). The live-document scan
+found RW 7.10 still saying `CODE_OF_CONDUCT.md` is absent (closed in the record — D-V2-151 added it 2026-10-17).

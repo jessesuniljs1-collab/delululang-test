@@ -12,7 +12,7 @@ locale    = "delulu-slang"
 name      = "Delulu Slang"
 fallback  = "en-US"
 version   = "0.8.0"
-coverage  = "diagnostics: starter set (grows to all DL01-08xx short messages by v1.0); cli: lands with the first-run picker; explain: en-US"
+coverage  = "diagnostics: starter set (grows to all DL01-08xx short messages); cli: every named string (3); explain: en-US"
 direction = "ltr"
 
 [DL0501]
@@ -44,3 +44,13 @@ message = "the wasm backend can't do this one yet — running it on the interpre
 
 [DL1205]
 message = "secrets stay host-side, they don't go into the wasm guest ({detail}). that's the whole point fr"
+
+# Named CLI strings (RW 6.1) — `delulu_diag::catalog::CLI_STRINGS` declares each key and its placeholders.
+[cli.authority.header]
+message = "what `{program}` can actually do to your system:"
+
+[cli.authority.foreign-separator]
+message = "-- outside the proof (contained at the process level, stay woke) --"
+
+[cli.locale.add.confirm]
+message = "catalogs = human text only, and this one holds zero authority. install `{locale}`? [y/N]: "
