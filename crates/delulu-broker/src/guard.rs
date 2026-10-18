@@ -1910,6 +1910,20 @@ mod tests {
         assert!(!pattern_matches(GuardClass::FsRead, "C:/Users/J/Data/Secret", Some("C:\\Users\\J\\Data\\Secrets\\k.txt")));
     }
 
+    /// RW 4.17: macOS's filesystem ignores Unicode normalization — `café` written precomposed (NFC) and decomposed (NFD)
+    /// is one name, before the file exists as after — so there a path rule on one spelling covers the other, as it covers
+    /// the other case. Where the filesystem keeps them apart (ext4, NTFS) they are two files, and a permit on one must not
+    /// reach the other.
+    #[test]
+    fn a_path_rule_covers_the_other_unicode_normalization_where_the_filesystem_ignores_it() {
+        let (nfc, nfd) = ("/srv/caf\u{e9}", "/srv/cafe\u{301}");
+        let one_name = cfg!(target_os = "macos");
+        for (rule, use_) in [(nfc, format!("{nfd}/new.txt")), (nfd, format!("{nfc}/key.txt")), (nfc, nfd.to_string())] {
+            assert_eq!(pattern_matches(GuardClass::FsWrite, rule, Some(&use_)), one_name, "{rule:?} over {use_:?}");
+        }
+        assert!(pattern_matches(GuardClass::FsRead, nfc, Some(&format!("{nfc}/key.txt"))), "the same spelling, always");
+    }
+
     /// RW 4.65: the hint's item comes from the PROGRAM, and the hint is a command an agent runs. An item a shell would
     /// split, expand or run never reaches it — the rule is named instead — and a path with a space is quoted.
     #[test]
