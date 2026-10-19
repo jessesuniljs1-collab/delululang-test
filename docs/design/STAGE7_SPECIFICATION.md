@@ -209,7 +209,9 @@ turn tree quiesces — `main` returns *and* all mailboxes are empty *and* no tur
 Per-actor `Rc` heaps (Stage-1 model, now one per actor). `val` values are promoted at
 creation/`recover`-to-val into the **shared immutable heap** (`Arc`, deep-frozen). `iso` sends
 **move** the object graph between actor heaps (static uniqueness makes this a pointer handoff;
-debug builds verify refcount==1 across the moved graph — §7.4). `tag` sends copy the actor
+the graph crosses whole — a cell it holds twice, or a cycle `recover` built, arrives as the same shape — and debug
+builds verify that no reference to a moved node comes from outside the moved graph — §7.4; amended by D-V2-165, which
+replaced *"refcount==1 across the moved graph"*: that proxy reported legal `recover` results as compiler bugs). `tag` sends copy the actor
 handle. Rc cycles leak (Stage-1 note carried; per-actor cycle collection is Stage 10 work).
 
 ### 6.3 Effects, broker, trace

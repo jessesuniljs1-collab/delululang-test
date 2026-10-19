@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — moving a value that holds itself to an actor, 2026-10-20
+
+- **Fixed: sending an actor a value that holds itself crashed the process with a stack overflow.** For example, a
+  record built in `recover` whose field holds the record. The value now arrives whole. A list held twice inside a moved
+  value also arrives as one list held twice, where it used to arrive as two copies.
+- **Fixed: `--debug-rcaps` reported those legal values as a compiler bug (DL1610).** It now reports only a reference
+  from outside the moved value, and looks inside `Option`s, results and maps too.
+- **Changed: a sandboxed program that passes a value that holds itself to a host operation is refused (DL1401)**
+  instead of crashing.
+
 ## Unreleased — `==` on records and maps; values that hold themselves, 2026-10-20
 
 - **Fixed: `==` on two records or two maps was always `false`**, even for a record compared with itself, and `!=`
@@ -20,8 +30,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed: `str` (and `println`) of a value that holds itself crashed the process with a stack overflow** — a record
   whose field holds the record (`n.next = Some(n)`), or a list holding a record that holds the list. Such a value now
   prints `...` where it meets itself (`Node { v: 1, next: Some(Node { ... }) }`), and `==` on two such values ends.
-- **Known: sending such a value to an actor still crashes** (RW 2.16), and **`==` on two functions is always `false`**
-  (RW 2.15). Both are recorded and are next.
+- **Known: `==` on two functions is always `false`** (RW 2.15). It is recorded and is next. (Sending such a value
+  to an actor crashed too; the next entry fixes it.)
 
 ## Unreleased — an empty list typed by the checker on the WASM engine, 2026-10-20
 

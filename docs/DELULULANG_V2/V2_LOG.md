@@ -7278,3 +7278,45 @@ Mutants, all red, control green:
 automatic github push"*. The `DeluluLang-autosave` task's 7-hour window of 2026-10-19 had run out. It was re-installed
 for 7 days (`-Hours 168`, from 2026-10-19 22:42 UTC), and a run by hand pushed snapshot `c94cbba` to `autosave/laptop`.
 Recorded in HANDOFF §11.1 and the laptop's memory. Every verified commit is pushed at once, as before.
+
+## 2026-10-20 — the laptop: an `iso` move carries its graph whole; the debug race checker asks for the guarantee (RW 2.16, D-V2-165)
+
+**MSG-CYCLE-1, fixed.** `recover { var k = Node { v: 7, next: None }; k.next = Some(k); k }` is a legal `iso Node`.
+Moving it to an actor overflowed the stack in `value_to_msg` and killed the process. The move now numbers each `List`,
+`Map` and `Record` cell where it is first met, before what it holds, and carries a cell met again as
+`MsgValue::Back(n)`. `msg_to_value` makes each cell empty and records it before rebuilding what it holds, so a back
+reference finds it. The graph arrives whole: a cycle as a cycle, and a cell held twice as one cell held twice, where it
+used to arrive as two copies.
+
+**Two more, found on the way:**
+- **The debug race checker.** It reported the cyclic graph, and the legal `recover { let a = [1]; [a, a] }`, as a
+  compiler bug (DL1610). It wanted every node below the top held exactly once, after spec §6.2's *"refcount==1 across
+  the moved graph"*, a proxy for the guarantee. It also never looked inside a variant or a map, so an outside alias
+  reached through `Some(xs)` passed. It now counts the references the moved graph holds to each node (the top node
+  gets two more) and reports only one from outside, walking through variants (each payload once) and maps. The old
+  test `an_aliased_nested_node_is_a_dl1610_class_violation` built exactly the legal `[a, a]` shape and called it a
+  violation; it now holds the list outside the graph, and two new tests pin both directions.
+- **The sandbox channel.** `WireValue::from_value` recursed the same way. Its wire is a tree and it refuses what
+  cannot cross honestly, so a value that holds itself is now `Untransferable` (DL1401).
+
+D-V2-165 records the decision and amends spec §6.2. Refusing the cyclic move, or narrowing `recover`, was rejected: the
+program is legal and the move is sound.
+
+**Observed once, not reproduced (RW 7.20).** Two `channel.rs` confinement tests failed in one `--lib channel` run, both
+at `host.denied().1 == 1`. The panic text was not kept, and the next 25 runs were green. Recorded rather than dropped.
+
+**Evidence.**
+- `actors_cli.rs` `a_graph_that_holds_itself_moves_to_an_actor_whole` (plain and `--debug-rcaps`).
+- `actors.rs` `move_graph_tests::a_moved_graph_keeps_its_shape` (pointer identity after the move).
+- `actors_trace.rs` 8 (three uniqueness tests, one rewritten).
+- `channel.rs` `a_value_that_holds_itself_is_refused_and_one_held_twice_crosses`.
+- Mutants M583–M590, all red, control green:
+  - M583, M590 — no back-references (the unit test and the CLI test, each dying of the overflow);
+  - M584 — a cell recorded after its contents;
+  - M585 — no allowance for the top node;
+  - M586 — the graph's own references uncounted;
+  - M587 — variants not walked;
+  - M588 — maps not walked;
+  - M589 — the channel walking into a cycle.
+- The whole `delulu-runtime` suite (282 unit tests and every test file) and `actors_cli`, `actors_bounded_cli`,
+  `actors_cycles_cli` green.

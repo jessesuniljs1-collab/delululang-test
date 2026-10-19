@@ -1146,7 +1146,8 @@ spells the same thing?**
   above `eq` promised structural equality for whatever `==` accepts — the checker's rule and the runtime's had
   drifted). Fixing it meant asking what a structural walk meets: `n.next = Some(n)` is a legal program, and `str` of it
   already overflowed the stack and killed the process. So did sending a `recover`ed self-referencing graph to an
-  actor (MSG-CYCLE-1, open). Search keys: when the checker admits an operation, does the runtime answer it for every
+  actor (MSG-CYCLE-1, closed by D-V2-165 — and `--debug-rcaps`, built on spec §6.2's *refcount==1*, called that legal
+  graph a compiler bug: a proxy criterion had drifted from the guarantee it stood for). Search keys: when the checker admits an operation, does the runtime answer it for every
   type it admits? And every recursive walk over runtime values (display, equality, a boundary's conversion, a
   uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
   where a cycle closes.

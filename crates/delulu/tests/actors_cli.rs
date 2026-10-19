@@ -95,6 +95,42 @@ fn criterion6_native_actor_run_is_clean_under_assert_trace_and_debug_rcaps() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// MSG-CYCLE-1 (RW 2.16, D-V2-165): a graph that holds itself, built in `recover` and moved to an actor, arrives holding
+/// itself — and under `--debug-rcaps` is not reported as a compiler bug. Before, the move walked the graph as a tree until
+/// the stack overflowed and the process died; the debug walk counted the graph's own back-reference as an alias (DL1610).
+#[test]
+fn a_graph_that_holds_itself_moves_to_an_actor_whole() {
+    let dir = scratch("cycle");
+    let file = dir.join("app.delulu");
+    let src = "module app\n\
+        type Node {\n  v: Int,\n  next: Option[Node],\n}\n\
+        actor Sink {\n\
+        var out: Cap[Console]\n\
+        new(out: Cap[Console]) { self.out = out }\n\
+        be take(n: iso Node) ! {Write} { self.out.println(str(n)) }\n\
+        }\n\
+        fn main(root: Root) ! {Async, Write} {\n\
+        let s = spawn Sink(root.console())\n\
+        let n: iso Node = recover {\n\
+        var k = Node { v: 7, next: None }\n\
+        k.next = Some(k)\n\
+        k\n\
+        }\n\
+        s.take(consume n)\n\
+        }\n";
+    std::fs::write(&file, src).unwrap();
+    for flags in [&[][..], &["--debug-rcaps"][..]] {
+        let mut args = vec!["run", file.to_str().unwrap(), "--grant", "console", "--no-prompt"];
+        args.extend_from_slice(flags);
+        let o = delulu_in(&dir, &args);
+        let out = combined(&o);
+        assert!(o.status.success(), "{flags:?}: must exit 0: {out}");
+        assert!(!out.contains("DL1610"), "{flags:?}: a legal graph is not a compiler bug: {out}");
+        assert!(out.contains("Node { v: 7, next: Some(Node { ... }) }"), "{flags:?}: it arrives holding itself: {out}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_non_actor_program_run_is_untouched_by_stage7_flags_absence() {
     // House rule: a module with no actors takes the identical v0.6 path — smoke it.
