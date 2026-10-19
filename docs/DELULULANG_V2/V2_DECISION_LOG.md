@@ -3935,6 +3935,48 @@ a generic function's body none of its caller's, a lambda's the frames visible at
 `Cx::hidden` hides the rest from every lookup). (7) The interpreter stays the reference engine and `--engine wasm` stays
 opt-in. The Study-C table is not re-measured by this decision (`HOT_PATH_TABLE.md` says so).
 
+## D-V2-164 — The WASM fragment takes `List`: shared headers, a snapshot `for`, `split` and the index fault in the interpreter's own words (RW 3.4) — TAKEN (head chef, 2026-10-20, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-20): the last two Study-C kernels, `wordcount_macro` (`Str.split`, `len`) and
+`list_map_macro` (a list literal, `map`, `len`), were DL1201 on `List` alone. D-V2-163 (3) had left `for` and every `List`
+outside. Two defects were found and witnessed red while building this:
+- **WASM-IFTY-1.** `if`'s block type was guessed from the then-branch's syntax, and a variable was guessed `Int`. An `if`
+  choosing between two `Str` variables compiled to a module wasmtime refused at run time ("invalid WASM module", DL0904),
+  and a `match` arm binding a `Str` was refused.
+- **WASM-INTERN-1.** String literals inside a lambda were never interned. `apply(fn(s: Str) -> Str { s + "!" }, "a")`
+  panicked `compile_module` at `expect("interned")`.
+
+**Decision.**
+1. **The representation.** A `List[T]` of a scalar (`Int`, `Bool`, `Float`, `Str`, a sum type) is an i32 pointer to a
+   header `[len][cap][data]`, with `cap` 8-byte slots at `data`. `let ys = xs` names the same header, so a `push` through
+   either is seen by both, as on the interpreter (`Rc<RefCell<Vec>>`). A list of lists stays DL1201.
+2. **Growth.** `__list_slot` doubles a full list's slots into a fresh allocation and leaves the old ones untouched; the
+   bump heap never frees.
+3. **`for`.** It reads the length and the slots pointer once, so it walks the list as it was when the loop began. That
+   is the interpreter's snapshot, made exact by (2) and by `pop` staying outside: `pop` would let a later `push` reuse a
+   slot inside a running `for`'s snapshot. `pop`, `filter`, `find`, `fold`, `sort`, `reverse` and `concat` stay DL1201
+   until each is built.
+4. **`push`.** It computes its value before the list grows, as the interpreter does: `xs.push(xs.len())` pushes the old
+   length.
+5. **`get` and indexing.** `get` answers `None` outside the list, a negative index included. An index outside it faults
+   DL0903 in the interpreter's own words, through `delulu:list.index_fault`, whose record `trap_or_refusal` reports.
+6. **`Str.split`.** It runs host-side by the interpreter's rule (`delulu:list.str_split`): the same Rust `split`, and
+   `chars` for an empty separator. A pure helper needs no grant and records no effect.
+7. **Imports and helpers.** The two `delulu:list` imports and the two helpers are emitted only in a module that uses a
+   list, after the actors' imports and after the user functions, so every other module's bytes are unchanged.
+8. **Reference capabilities.** A reference-capability prefix (`ref List[Int]`) is looked through: it is the checker's
+   discipline, and the value is represented the same either way.
+9. **`run_int_fn`.** It runs under the full host with nothing granted, so a pure function that uses a list can run.
+10. **Block types (WASM-IFTY-1).** An `if`'s and a `match`'s block type is set from what the first branch compiled to, and
+    the context-free guess is deleted.
+11. **Interning (WASM-INTERN-1).** String collection descends into lambdas, lists, records, fields and indexes, and so
+    does the import scan.
+
+**Evidence.** `list_parity.rs` (9 tests); `loop_parity.rs`'s random programs now build, push, index, `get`, walk and map
+lists (176 of 400, asserted over 120); mutants M533–M540 red, control green; the release differential in `V2_LOG.md`.
+**Not re-measured:** Study C's table keeps its 2026-10-19 rows; all six kernels compile and print the interpreter's
+answers, and a run over all six on one machine is next.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

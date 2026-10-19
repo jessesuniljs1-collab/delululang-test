@@ -4333,3 +4333,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - For the laptop's memory: nothing beyond `HANDOFF.md` §11.3.
 - Open / next: as the entry before. Then the WASM `List` (literal, `len`, `get`, `push`, indexing, `for`, `map`) and
   `Str.split`, for the last two Study-C kernels.
+
+### 2026-10-20 — RW 3.4 widened: `List` on the WASM engine, all six Study-C kernels compile; WASM-IFTY-1, WASM-INTERN-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-list` (on `laptop/vm-posture`)   Pull request: #5   Merged: not yet (after #4, on green CI)
+- Base: `a53f90a`. Pull request #3 landed on `master` by fast-forward (`9367b13`) after its CI `39299693759` read
+  success on every job.
+- What: D-V2-164 (`V2_DECISION_LOG.md`), REMAINING_WORK 3.4 (widened), 3.15 and 3.16 (closed), `V2_LOG.md`.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::List`, the list operations and helpers, `for`, the
+  `delulu:list` imports, block types from what compiled, string collection), `crates/delulu-wasm/src/host.rs`
+  (`str_split`, `index_fault`, `write_str_list`, `MEMORY_EXHAUSTED`, `run_int_fn` under a host),
+  `crates/delulu-wasm/src/gen.rs` (lists in the loop generator), `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `README.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `measurements/study-c/HOT_PATH_TABLE.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/list_parity.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M533–M540; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (a type known before compiling is a guess; a walk over an enum names every variant).
+- Open / next, in order: (1) the CI of #4 and #5, landing each on green; the launch `everything` run `39296491537`; then merge
+  `master` into `launch/2.0.0` again; (2) Study C over all six kernels on one machine (release, all lanes); (3) `Str == Str`,
+  `pop` and the other list methods on WASM; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the
+  owner's word.

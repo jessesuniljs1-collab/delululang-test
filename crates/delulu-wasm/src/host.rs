@@ -163,9 +163,7 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
             Trap::StackOverflow => "DL0905: recursion depth exceeded (guest stack exhausted)".to_string(),
             // `__alloc` traps this way when the memory cannot give an allocation (past WebAssembly's 4 GiB, or a growth the
             // engine refuses) — the backend emits no other out-of-bounds access — so the text names both.
-            Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => {
-                "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)".to_string()
-            }
+            Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => MEMORY_EXHAUSTED.to_string(),
             // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
             // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;
             // the two are indistinguishable from the trap alone, so the common case (overflow)
@@ -177,16 +175,23 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
     }
 }
 
-/// Run an exported PURE function with i64 arguments (no imports, no ambient authority).
+/// Run an exported PURE function with i64 arguments, under a host that grants nothing (no ambient authority). The host
+/// is there for what a pure function may still import: the `delulu:list` interface (RW 3.4), whose `split` and index
+/// fault need no grant; a capability import it reached would be refused, as an ungranted `main`'s is.
 pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmError> {
     let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
-    let mut store = Store::new(&engine, ());
-    let instance = Instance::new(&mut store, &module, &[]).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let state = main_host_state(&HostConfig::default(), ActorRuntime::new(empty_actor_table()));
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
     let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let params: Vec<Val> = args.iter().map(|&a| Val::I64(a)).collect();
     let mut results = vec![Val::I64(0)];
-    func.call(&mut store, &params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    func.call(&mut store, &params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
+    if let Some(reason) = store.data().refused.clone() {
+        return Err(WasmError::Trap(reason));
+    }
     match results.first() {
         Some(Val::I64(n)) => Ok(*n),
         Some(Val::I32(n)) => Ok(*n as i64),
@@ -450,6 +455,27 @@ fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
     }
     g.set(&mut *caller, Val::I32(end as u32 as i32)).map_err(|_| ())?;
     Ok(base)
+}
+
+/// What an access outside the guest's memory, or a memory that could not grow, is reported as (WASM-OOM-1).
+const MEMORY_EXHAUSTED: &str =
+    "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)";
+
+/// Write a `List[Str]` of `parts` (RW 3.4): each part a string cell, their pointers in 8-byte slots, and the header
+/// `codegen.rs` reads, `[len][cap][data]`, with exactly as many slots as parts. Returns the header's pointer.
+fn write_str_list(caller: &mut Caller<'_, HostState>, parts: &[String]) -> Result<i32, ()> {
+    let n = i32::try_from(parts.len()).map_err(|_| ())?;
+    let mut slots = Vec::with_capacity(parts.len() * 8);
+    for p in parts {
+        let cell = write_str_cell(caller, p)?;
+        slots.extend_from_slice(&u64::from(cell as u32).to_le_bytes());
+    }
+    let data = guest_alloc(caller, n.checked_mul(8).ok_or(())?)?;
+    guest_write(caller, data, &slots)?;
+    let header = guest_alloc(caller, 12)?;
+    let fields: Vec<u8> = [n as u32, n as u32, data as u32].iter().flat_map(|f| f.to_le_bytes()).collect();
+    guest_write(caller, header, &fields)?;
+    Ok(header)
 }
 
 fn guest_write(caller: &mut Caller<'_, HostState>, ptr: i32, bytes: &[u8]) -> Result<(), ()> {
@@ -1031,6 +1057,40 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     0
                 }
             }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:list` host interface (pure: neither traced nor gated) ---------------------------------
+    // `Str.split` by the interpreter's own rule (`prim.rs`): the parts between occurrences of the separator, and one part
+    // per character for an empty one — written into the guest's memory as a `List[Str]`.
+    linker
+        .func_wrap("delulu:list", "str_split", |mut caller: Caller<'_, HostState>, s: i32, sep: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let (Some(s), Some(sep)) = (read_guest_str(&mut caller, s), read_guest_str(&mut caller, sep)) else {
+                caller.data_mut().refused = Some("DL0903: a string given to `split` lies outside the guest's memory".into());
+                return 0;
+            };
+            let parts: Vec<String> = if sep.is_empty() {
+                s.chars().map(|c| c.to_string()).collect()
+            } else {
+                s.split(sep.as_str()).map(str::to_string).collect()
+            };
+            match write_str_list(&mut caller, &parts) {
+                Ok(list) => list,
+                Err(()) => {
+                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // An index outside a list: the guest calls this and then traps, and the run reports what is recorded here — the
+    // interpreter's own fault (`interp.rs`'s `index`), word for word.
+    linker
+        .func_wrap("delulu:list", "index_fault", |mut caller: Caller<'_, HostState>, index: i64, len: i32| {
+            caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 

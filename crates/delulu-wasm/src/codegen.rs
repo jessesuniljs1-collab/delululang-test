@@ -117,7 +117,17 @@ enum Ty {
     // Stage 7 phase 7h: an actor reference (`tag A`) is an i64 host-side slot id; `u32` is the
     // actor's index into the module's `ActorTable` (so a send resolves the behaviour index).
     ActorRef(u32),
+    // RW 3.4: a `List[T]` of scalars, an i32 pointer to its header `[len:i32][cap:i32][data:i32]`; `data` holds `cap`
+    // 8-byte slots. Lists are shared, as the interpreter's are: `let ys = xs` names the same header, so a `push`
+    // through either is seen by both. A list of lists is outside the fragment (a `Scalar` holds no list).
+    List(Scalar),
 }
+
+/// The list header's fields (`Ty::List`): its length, its capacity in slots, and a pointer to its slots.
+const LIST_LEN: u64 = 0;
+const LIST_CAP: u64 = 4;
+const LIST_DATA: u64 = 8;
+const LIST_HEADER_BYTES: i32 = 12;
 
 /// The payload types a variant field may hold (a `Copy` subset of `Ty`, so `Ty` stays `Copy`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -404,6 +414,13 @@ struct Imports {
     foreign_bind: u32,
     foreign_call: u32,
     float_to_str: u32,
+    // RW 3.4, the WASM `List`: the `delulu:list` imports — `Str.split`, computed by the interpreter's own rule host-side,
+    // and the out-of-range index's fault, in the interpreter's words — and the two list helpers, which follow the user
+    // functions and the actor members. `u32::MAX` when the module uses no list.
+    str_split: u32,
+    index_fault: u32,
+    list_new: u32,
+    list_slot: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -451,12 +468,34 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::ForeignPtr
         | Ty::Result(..)
         | Ty::Option(..)
-        | Ty::Enum(_) => Some(ValType::I32),
+        | Ty::Enum(_)
+        | Ty::List(_) => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
 
+/// The block type of an `if` or `block` whose value has type `t` (none for `Unit`).
+fn block_type(t: Ty) -> BlockType {
+    match wasm_valtype(t) {
+        Some(v) => BlockType::Result(v),
+        None => BlockType::Empty,
+    }
+}
+
+/// The element types a `List` may hold on the WASM engine: the scalars a slot can carry and a `match` can bind.
+fn list_element(t: Ty) -> Option<Scalar> {
+    match ty_to_scalar(t)? {
+        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_)) => Some(s),
+        _ => None,
+    }
+}
+
 fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
+    // A reference capability (`ref`, `val`, `iso`, …) is the checker's aliasing discipline; the value it qualifies is
+    // represented the same either way — on the interpreter as here (RW 3.4: `let xs: ref List[Int] = []`).
+    if let TypeExpr::Rcap { inner, .. } = t {
+        return wasm_ty(env, inner);
+    }
     if let TypeExpr::Named { path, args, .. } = t {
         if path.segs.len() == 1 {
             let name = path.segs[0].name.as_str();
@@ -487,6 +526,12 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
             if name == "Option" {
                 if let [t] = &args[..] {
                     return Some(Ty::Option(ty_to_scalar(wasm_ty(env, t)?)?));
+                }
+                return None;
+            }
+            if name == "List" {
+                if let [t] = &args[..] {
+                    return Some(Ty::List(list_element(wasm_ty(env, t)?)?));
                 }
                 return None;
             }
@@ -554,10 +599,48 @@ fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
             Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names)),
             Expr::Try { inner, .. } => in_expr(inner, names),
             Expr::Block(b) => in_block(b, names),
+            // A lambda's body, a list's items and an index run where they are inlined or evaluated, so the imports they
+            // call are the module's (WASM-INTERN-1's sibling: a `println` inside a lambda had no console import).
+            Expr::Lambda { body, .. } => in_block(body, names),
+            Expr::List { items, .. } => items.iter().any(|i| in_expr(i, names)),
+            Expr::Index { recv, index, .. } => in_expr(recv, names) || in_expr(index, names),
             _ => false,
         }
     }
     module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body, names)))
+}
+
+/// Does any compilable function make or index a `List`, or call `split`, `push` or `map`? Then the module carries the
+/// list helpers (`__list_new`, `__list_slot`, after the user functions) and the `delulu:list` imports, and every other
+/// module is byte-identical to before (the WASM `List`, RW 3.4).
+fn module_uses_lists(env: &EnumEnv, module: &Module) -> bool {
+    fn in_block(b: &Block) -> bool {
+        b.stmts.iter().any(|s| match s {
+            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value),
+            Stmt::While { cond, body, .. } => in_expr(cond) || in_block(body),
+            Stmt::For { .. } => true,
+            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Return { value: None, .. } => false,
+            Stmt::Return { value: Some(e), .. } => in_expr(e),
+            Stmt::Expr(e) => in_expr(e),
+        })
+    }
+    fn in_expr(e: &Expr) -> bool {
+        match e {
+            Expr::List { .. } | Expr::Index { .. } => true,
+            Expr::Method { name, recv, args, .. } => {
+                matches!(name.name.as_str(), "split" | "push" | "map") || in_expr(recv) || args.iter().any(in_expr)
+            }
+            Expr::Call { callee, args, .. } => in_expr(callee) || args.iter().any(in_expr),
+            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            Expr::Unary { operand, .. } => in_expr(operand),
+            Expr::If { cond, then_, else_, .. } => in_expr(cond) || in_block(then_) || else_.as_ref().is_some_and(|e| in_expr(e)),
+            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee) || arms.iter().any(|a| in_expr(&a.body)),
+            Expr::Try { inner, .. } => in_expr(inner),
+            Expr::Block(b) | Expr::Lambda { body: b, .. } => in_block(b),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body)))
 }
 
 /// Does the module perform console output (so it needs the console host imports)? Public helper;
@@ -636,6 +719,10 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
         float_to_str: u32::MAX,
+        str_split: u32::MAX,
+        index_fault: u32::MAX,
+        list_new: u32::MAX,
+        list_slot: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -673,6 +760,13 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         actor_imp.field_get = n_imports + 2;
         actor_imp.field_set = n_imports + 3;
         n_imports += 4;
+    }
+    // RW 3.4: the `delulu:list` imports follow the actors' (so a program without a list is unchanged).
+    let needs_lists = module_uses_lists(&env, module);
+    if needs_lists {
+        imp.str_split = n_imports;
+        imp.index_fault = n_imports + 1;
+        n_imports += 2;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
                                 // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
@@ -789,6 +883,15 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         types.ty().function([ValType::I64, ValType::I32, ValType::I64], []); // actor_field_set(slot, field_idx, value)
         next_type += 4;
     }
+    let mut str_split_ty = 0;
+    let mut index_fault_ty = 0;
+    if needs_lists {
+        str_split_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // str_split(s, sep) -> List[Str]
+        index_fault_ty = next_type + 1;
+        types.ty().function([ValType::I64, ValType::I32], []); // index_fault(index, len): records DL0903, then the guest traps
+        next_type += 2;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -872,6 +975,10 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         imports.import("delulu:actors", "actor_field_get", EntityType::Function(actor_field_get_ty));
         imports.import("delulu:actors", "actor_field_set", EntityType::Function(actor_field_set_ty));
     }
+    if needs_lists {
+        imports.import("delulu:list", "str_split", EntityType::Function(str_split_ty));
+        imports.import("delulu:list", "index_fault", EntityType::Function(index_fault_ty));
+    }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
     // then the actor members (Stage 7 phase 7h).
@@ -888,6 +995,10 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     }
     for t in &actor_member_types {
         funcsec.function(*t);
+    }
+    if needs_lists {
+        funcsec.function(alloc_type); // __list_new(len) -> list
+        funcsec.function(alloc_type); // __list_slot(list) -> the address of a new last slot
     }
 
     let mut mems = MemorySection::new();
@@ -915,6 +1026,10 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let actor_base = user_base + fns.len() as u32;
     for (j, (_, _, _, _, export)) in member_plans.iter().enumerate() {
         exports.export(export, ExportKind::Func, actor_base + j as u32);
+    }
+    if needs_lists {
+        imp.list_new = actor_base + member_plans.len() as u32;
+        imp.list_slot = imp.list_new + 1;
     }
 
     let mut code = CodeSection::new();
@@ -947,6 +1062,10 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
             foreign_binds,
         )?);
     }
+    if needs_lists {
+        code.function(&list_new_fn(alloc));
+        code.function(&list_slot_fn(alloc));
+    }
 
     let mut datas = DataSection::new();
     if !data.is_empty() {
@@ -957,7 +1076,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors {
+    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors || needs_lists {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -1038,7 +1157,25 @@ fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec
             }
         }
         Expr::Recover { body, .. } => collect_strings_block(body, off, data),
-        _ => {}
+        // WASM-INTERN-1: a literal inside a lambda, a list, a record or an index was never interned, and compiling it
+        // panicked at `expect("interned")` — `apply(fn(s: Str) -> Str { s + "!" }, "a")` crashed `--engine wasm`.
+        Expr::Lambda { body, .. } => collect_strings_block(body, off, data),
+        Expr::List { items, .. } => {
+            for i in items {
+                collect_strings_expr(i, off, data);
+            }
+        }
+        Expr::Record { fields, .. } => {
+            for (_, e) in fields {
+                collect_strings_expr(e, off, data);
+            }
+        }
+        Expr::Field { recv, .. } => collect_strings_expr(recv, off, data),
+        Expr::Index { recv, index, .. } => {
+            collect_strings_expr(recv, off, data);
+            collect_strings_expr(index, off, data);
+        }
+        Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
     }
 }
 
@@ -1377,14 +1514,18 @@ fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<T
 
 fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
     match stmt {
-        Stmt::Let { name, value, .. } => {
+        Stmt::Let { name, ty, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
             if let Expr::Lambda { params, body, .. } = value {
                 let c = cx.callable(params, body);
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
-            let ty = compile_expr(value, cx)?;
+            // An empty list says its element type only on its `let` (`let xs: List[Int] = []`).
+            let ty = match (value, ty.as_ref().and_then(|t| wasm_ty(cx.env, t))) {
+                (Expr::List { items, .. }, Some(Ty::List(s))) if items.is_empty() => compile_list_literal(items, cx, Some(s))?,
+                _ => compile_expr(value, cx)?,
+            };
             let idx = cx.alloc_local(ty)?;
             cx.emit(Instruction::LocalSet(idx));
             cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
@@ -1456,7 +1597,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
             cx.emit(Instruction::End);
             Ok(Ty::Unit)
         }
-        Stmt::For { .. } => Err(CompileError::Unsupported("`for` (a `List` is outside the WASM fragment)".into())),
+        Stmt::For { var, iter, body, .. } => compile_for(var, iter, body, cx),
         Stmt::Break { .. } | Stmt::Continue { .. } => {
             let Some(&(brk, cont)) = cx.loops.last() else {
                 return Err(CompileError::Unsupported("`break` or `continue` outside a compiled `while`".into()));
@@ -1803,6 +1944,10 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
         }
         Expr::Block(b) => compile_block_as(b, cx, expected),
         Expr::Match { scrutinee, arms, .. } => compile_match(scrutinee, arms, cx, Some(expected)).map(|_| ()),
+        Expr::List { items, .. } => match expected {
+            Ty::List(s) => compile_list_literal(items, cx, Some(s)).map(|_| ()),
+            _ => Err(CompileError::Unsupported(format!("a list where {expected:?} was expected"))),
+        },
         _ => {
             let got = compile_expr(e, cx)?;
             if got != expected {
@@ -1892,14 +2037,11 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
     let arm_idx =
         |t: usize| arm_for_tag[t].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()));
 
-    let result_ty = match expected {
-        Some(t) => t,
-        None => expr_result_ty(&arms[arm_idx(0)?].body)?,
-    };
-    let bt = match wasm_valtype(result_ty) {
-        Some(v) => BlockType::Result(v),
-        None => BlockType::Empty,
-    };
+    // The result type is the expected one, or the type the first arm compiles to: each `if` of the chain is given it once
+    // it is known (WASM-IFTY-1: it was guessed from the first arm's syntax, a variable guessed `Int`, and an arm binding a
+    // `Str` was refused).
+    let mut result_ty = expected;
+    let mut ifs: Vec<usize> = Vec::new();
 
     // Load the tag once, then a nested `if tag==t { arm } else { … }` chain (final tag = last else).
     let tv = cx.alloc_local(Ty::I32)?;
@@ -1910,11 +2052,17 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::LocalGet(tv));
         cx.emit(Instruction::I32Const(t as i32));
         cx.emit(Instruction::I32Eq);
-        cx.emit(Instruction::If(bt));
-        compile_arm(&arms[arm_idx(t)?], &ctors[t].1, sp, sty, cx, result_ty, expected.is_some())?;
+        ifs.push(cx.instrs.len());
+        cx.emit(Instruction::If(BlockType::Empty));
+        let got = compile_arm(&arms[arm_idx(t)?], &ctors[t].1, sp, sty, cx, result_ty)?;
+        result_ty.get_or_insert(got);
         cx.emit(Instruction::Else);
     }
-    compile_arm(&arms[arm_idx(ntags - 1)?], &ctors[ntags - 1].1, sp, sty, cx, result_ty, expected.is_some())?;
+    let got = compile_arm(&arms[arm_idx(ntags - 1)?], &ctors[ntags - 1].1, sp, sty, cx, result_ty)?;
+    let result_ty = result_ty.unwrap_or(got);
+    for at in ifs {
+        cx.instrs[at] = Instruction::If(block_type(result_ty));
+    }
     for _ in 0..ntags - 1 {
         cx.emit(Instruction::End);
     }
@@ -1927,9 +2075,8 @@ fn compile_arm(
     sp: u32,
     scrut_ty: Ty,
     cx: &mut Cx,
-    result_ty: Ty,
-    expected_mode: bool,
-) -> Result<(), CompileError> {
+    result_ty: Option<Ty>,
+) -> Result<Ty, CompileError> {
     cx.scopes.push(HashMap::new());
     match &arm.pattern {
         // `Ctor(f0, f1, …)` — bind each field named by a `Bind` pattern at its slot.
@@ -1953,14 +2100,10 @@ fn compile_arm(
         }
         _ => {}
     }
-    let r = if expected_mode {
-        compile_expr_as(&arm.body, cx, result_ty)
-    } else {
-        match compile_expr(&arm.body, cx) {
-            Ok(t) if t == result_ty => Ok(()),
-            Ok(t) => Err(CompileError::Unsupported(format!("a match arm of type {t:?} where {result_ty:?} was expected"))),
-            Err(e) => Err(e),
-        }
+    // Held to the match's type once it is known; the first arm of a match with none expected says what it is.
+    let r = match result_ty {
+        Some(t) => compile_expr_as(&arm.body, cx, t).map(|()| t),
+        None => compile_expr(&arm.body, cx),
     };
     cx.scopes.pop();
     r
@@ -2006,6 +2149,32 @@ fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx, lexic
             local_binds.push((p.name.name.clone(), l, ty));
         }
     }
+    inline_body(body, local_binds, fn_binds, cx, lexical)
+}
+
+/// Apply a one-parameter function value to the value held in `local` (`List.map`'s per-element call): the same inlining
+/// as a call, with the argument already evaluated.
+fn inline_apply(c: &Callable, local: u32, ty: Ty, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.inline_depth >= 64 {
+        return Err(CompileError::Unsupported("inlining too deep (recursive generic or lambda?)".into()));
+    }
+    let [p] = c.params.as_slice() else {
+        return Err(CompileError::Unsupported("a function value of other than one parameter where one is applied".into()));
+    };
+    if is_fn_type(&p.ty) {
+        return Err(CompileError::Unsupported("a function value applied to a function".into()));
+    }
+    inline_body(&c.body, vec![(p.name.name.clone(), local, ty)], Vec::new(), cx, Lexical::Value(c))
+}
+
+/// Compile an inlined body with its parameters bound (`inline_call`, `inline_apply`).
+fn inline_body(
+    body: &Block,
+    local_binds: Vec<(String, u32, Ty)>,
+    fn_binds: Vec<(String, Callable)>,
+    cx: &mut Cx,
+    lexical: Lexical,
+) -> Result<Ty, CompileError> {
     // Enter the inlined body with the parameters bound. It sees the names of where it was written and no others
     // (WASM-HYGIENE-1); its `break`/`continue` reach no loop of the caller's, and its assignments no variable of the
     // caller's (RW 3.4).
@@ -2046,7 +2215,12 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Ok(Ty::I32)
             }
             LitKind::Str(s) => {
-                let ptr = *cx.str_off.get(s).expect("interned") as i32;
+                // A literal the collector did not reach is refused (DL1201), never a panic (WASM-INTERN-1).
+                let ptr = *cx
+                    .str_off
+                    .get(s)
+                    .ok_or_else(|| CompileError::Unsupported("a string literal where the backend collected none".into()))?
+                    as i32;
                 cx.emit(Instruction::I32Const(ptr));
                 Ok(Ty::Str)
             }
@@ -2110,6 +2284,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
         }
         Expr::Binary { op, lhs, rhs, .. } => compile_binary(*op, lhs, rhs, cx),
+        Expr::List { items, .. } => compile_list_literal(items, cx, None),
+        Expr::Index { recv, index, .. } => compile_index(recv, index, cx),
         Expr::If { cond, then_, else_, .. } => {
             let ct = compile_expr(cond, cx)?;
             if ct != Ty::I32 {
@@ -2117,19 +2293,19 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             let else_ =
                 else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
-            let then_ty = block_result_ty(then_)?;
-            let bt = match wasm_valtype(then_ty) {
-                Some(v) => BlockType::Result(v),
-                None => BlockType::Empty,
-            };
-            cx.emit(Instruction::If(bt));
+            // The `if`'s block type is the type the then-branch compiles to, set once it has compiled (WASM-IFTY-1: it was
+            // guessed from the branch's syntax, a variable guessed `Int`, so `if c { a } else { b }` of two `Str`
+            // variables built an `if` typed i64 holding an i32 — a module wasmtime refused, at run time, as invalid).
+            let at = cx.instrs.len();
+            cx.emit(Instruction::If(BlockType::Empty));
             let tt = compile_block(then_, cx)?;
+            cx.instrs[at] = Instruction::If(block_type(tt));
             cx.emit(Instruction::Else);
-            let et = compile_expr(else_, cx)?;
+            compile_expr_as(else_, cx, tt).map_err(|e| match e {
+                CompileError::Unsupported(m) => CompileError::Unsupported(format!("`if` branches of differing types: {m}")),
+                other => other,
+            })?;
             cx.emit(Instruction::End);
-            if tt != et {
-                return Err(CompileError::Unsupported("`if` branches of differing types".into()));
-            }
             Ok(tt)
         }
         Expr::Method { recv, name, args, span, id } => {
@@ -2297,6 +2473,21 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.str_len_fn));
                 return Ok(Ty::I64);
             }
+            // RW 3.4: `Str.split(sep)`, split host-side by the interpreter's own rule (an empty separator splits into
+            // characters) into a `List[Str]` in the guest's memory.
+            if recv_ty == Ty::Str && name.name == "split" && args.len() == 1 {
+                if cx.imp.str_split == u32::MAX {
+                    return Err(CompileError::Unsupported("`split` without the list interface".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("`split` by a separator that is not a Str".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.str_split));
+                return Ok(Ty::List(Scalar::Str));
+            }
+            if let Ty::List(s) = recv_ty {
+                return compile_list_method(s, &name.name, args, cx);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -2413,51 +2604,305 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     }
 }
 
-/// Statically determine a block's result type (to type an `if` before its then-branch is emitted).
-fn block_result_ty(b: &Block) -> Result<Ty, CompileError> {
-    match b.stmts.last() {
-        Some(Stmt::Expr(e)) => expr_result_ty(e),
-        Some(Stmt::Return { value: Some(e), .. }) => expr_result_ty(e),
-        Some(Stmt::Let { .. }) | Some(Stmt::Return { value: None, .. }) | None => Ok(Ty::Unit),
-        Some(Stmt::While { .. }) | Some(Stmt::Assign { .. }) => Ok(Ty::Unit),
-        Some(Stmt::For { .. }) | Some(Stmt::Break { .. }) | Some(Stmt::Continue { .. }) => Ok(Ty::Unit),
+// ----- RW 3.4: the WASM `List` -------------------------------------------------------------------------------------
+//
+// A list is a pointer to its header `[len][cap][data]` (`Ty::List`); its elements sit in 8-byte slots at `data`, written
+// and read with `store_scalar`/`load_scalar` as a variant's fields are. `__list_new(len)` makes one with `len` slots in
+// use; `__list_slot(list)` makes room for one more (doubling the slots into a fresh allocation when full — the bump heap
+// never frees, so the old slots stay as they were) and returns the new slot's address. Every operation is held to the
+// interpreter's: `get` answers `None` outside the list, an index outside it faults DL0903 in the interpreter's words, and
+// `for` walks the list as it was when the loop began.
+
+fn list_mem(offset: u64) -> MemArg {
+    MemArg { offset, align: 2, memory_index: 0 }
+}
+
+/// Push the address of slot `index` (an i32 local) of the slots at `data` (an i32 local).
+fn emit_slot_addr(cx: &mut Cx, data: u32, index: u32) {
+    cx.emit(Instruction::LocalGet(data));
+    cx.emit(Instruction::LocalGet(index));
+    cx.emit(Instruction::I32Const(8));
+    cx.emit(Instruction::I32Mul);
+    cx.emit(Instruction::I32Add);
+}
+
+fn list_helpers(cx: &Cx) -> Result<(), CompileError> {
+    if cx.imp.list_new == u32::MAX || cx.imp.list_slot == u32::MAX {
+        return Err(CompileError::Unsupported("a list in a module compiled without the list helpers".into()));
+    }
+    Ok(())
+}
+
+/// `[a, b, …]`: a list of the items, each at the element type (the first item's, or `want`, the annotation's).
+fn compile_list_literal(items: &[Expr], cx: &mut Cx, want: Option<Scalar>) -> Result<Ty, CompileError> {
+    list_helpers(cx)?;
+    let list = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(items.len() as i32));
+    cx.emit(Instruction::Call(cx.imp.list_new));
+    cx.emit(Instruction::LocalSet(list));
+    let mut elem = want;
+    for (k, item) in items.iter().enumerate() {
+        cx.emit(Instruction::LocalGet(list));
+        cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+        cx.emit(Instruction::I32Const(k as i32 * 8));
+        cx.emit(Instruction::I32Add);
+        let s = match elem {
+            Some(s) => {
+                compile_expr_as(item, cx, s.to_ty())?;
+                s
+            }
+            None => {
+                let t = compile_expr(item, cx)?;
+                list_element(t).ok_or_else(|| CompileError::Unsupported(format!("a list of {t:?}")))?
+            }
+        };
+        store_scalar(cx, s);
+        elem = Some(s);
+    }
+    let s =
+        elem.ok_or_else(|| CompileError::Unsupported("an empty list whose element type is not written on its `let`".into()))?;
+    cx.emit(Instruction::LocalGet(list));
+    Ok(Ty::List(s))
+}
+
+/// `xs[i]`: the element, or DL0903 in the interpreter's words when `i` is outside the list.
+fn compile_index(recv: &Expr, index: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let Ty::List(s) = compile_expr(recv, cx)? else {
+        return Err(CompileError::Unsupported("indexing a value that is not a List".into()));
+    };
+    if cx.imp.index_fault == u32::MAX {
+        return Err(CompileError::Unsupported("an index without the list interface".into()));
+    }
+    let list = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalSet(list));
+    if compile_expr(index, cx)? != Ty::I64 {
+        return Err(CompileError::Unsupported("an index that is not an Int".into()));
+    }
+    let ix = cx.alloc_local(Ty::I64)?;
+    cx.emit(Instruction::LocalSet(ix));
+    // Outside the list: `i < 0 || i >= len`.
+    cx.emit(Instruction::LocalGet(ix));
+    cx.emit(Instruction::I64Const(0));
+    cx.emit(Instruction::I64LtS);
+    cx.emit(Instruction::LocalGet(ix));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+    cx.emit(Instruction::I64ExtendI32U);
+    cx.emit(Instruction::I64GeS);
+    cx.emit(Instruction::I32Or);
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(ix));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+    cx.emit(Instruction::Call(cx.imp.index_fault));
+    cx.emit(Instruction::Unreachable);
+    cx.emit(Instruction::End);
+    let data = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalSet(data));
+    let i32ix = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalGet(ix));
+    cx.emit(Instruction::I32WrapI64);
+    cx.emit(Instruction::LocalSet(i32ix));
+    emit_slot_addr(cx, data, i32ix);
+    load_scalar(cx, s);
+    Ok(s.to_ty())
+}
+
+/// A method of a `List[s]` whose header pointer is on the stack.
+fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    match (method, args) {
+        ("len", []) => {
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::I64ExtendI32U);
+            Ok(Ty::I64)
+        }
+        ("is_empty", []) => {
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::I32Eqz);
+            Ok(Ty::I32)
+        }
+        // `Some(xs[i])`, or `None` for an index outside the list — a negative one included, as the interpreter's
+        // `usize` conversion makes it.
+        ("get", [index]) => {
+            let list = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(list));
+            if compile_expr(index, cx)? != Ty::I64 {
+                return Err(CompileError::Unsupported("`get` with an index that is not an Int".into()));
+            }
+            let ix = cx.alloc_local(Ty::I64)?;
+            cx.emit(Instruction::LocalSet(ix));
+            let opt = Ty::Option(s);
+            let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+            let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+            let (some, none) = (tag("Some"), tag("None"));
+            let cell = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+            cx.emit(Instruction::Call(cx.alloc_fn));
+            cx.emit(Instruction::LocalSet(cell));
+            // Inside: `0 <= i && i < len`.
+            cx.emit(Instruction::LocalGet(ix));
+            cx.emit(Instruction::I64Const(0));
+            cx.emit(Instruction::I64GeS);
+            cx.emit(Instruction::LocalGet(ix));
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::I64ExtendI32U);
+            cx.emit(Instruction::I64LtS);
+            cx.emit(Instruction::I32And);
+            cx.emit(Instruction::If(BlockType::Empty));
+            cx.emit(Instruction::LocalGet(cell));
+            cx.emit(Instruction::I32Const(some));
+            cx.emit(Instruction::I32Store(u32_at()));
+            cx.emit(Instruction::LocalGet(cell));
+            cx.emit(Instruction::I32Const(field_offset(0)));
+            cx.emit(Instruction::I32Add);
+            let data = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+            cx.emit(Instruction::LocalSet(data));
+            let i32ix = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalGet(ix));
+            cx.emit(Instruction::I32WrapI64);
+            cx.emit(Instruction::LocalSet(i32ix));
+            emit_slot_addr(cx, data, i32ix);
+            load_scalar(cx, s);
+            store_scalar(cx, s);
+            cx.emit(Instruction::Else);
+            cx.emit(Instruction::LocalGet(cell));
+            cx.emit(Instruction::I32Const(none));
+            cx.emit(Instruction::I32Store(u32_at()));
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::LocalGet(cell));
+            Ok(opt)
+        }
+        // The value is computed before the list grows, as the interpreter computes it before pushing: `xs.push(xs.len())`
+        // pushes the old length.
+        ("push", [value]) => {
+            list_helpers(cx)?;
+            let list = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(list));
+            compile_expr_as(value, cx, s.to_ty())?;
+            let v = cx.alloc_local(s.to_ty())?;
+            cx.emit(Instruction::LocalSet(v));
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::Call(cx.imp.list_slot));
+            cx.emit(Instruction::LocalGet(v));
+            store_scalar(cx, s);
+            Ok(Ty::Unit)
+        }
+        // A new list of `f(x)` for each element, the function value inlined per element.
+        ("map", [f]) => {
+            list_helpers(cx)?;
+            let c = resolve_callable(f, cx)?;
+            let list = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(list));
+            let (n, data, out, out_data, i) = (
+                cx.alloc_local(Ty::I32)?,
+                cx.alloc_local(Ty::I32)?,
+                cx.alloc_local(Ty::I32)?,
+                cx.alloc_local(Ty::I32)?,
+                cx.alloc_local(Ty::I32)?,
+            );
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::LocalSet(n));
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+            cx.emit(Instruction::LocalSet(data));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::Call(cx.imp.list_new));
+            cx.emit(Instruction::LocalTee(out));
+            cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+            cx.emit(Instruction::LocalSet(out_data));
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::LocalSet(i));
+            let x = cx.alloc_local(s.to_ty())?;
+            cx.emit(Instruction::Block(BlockType::Empty));
+            let brk = cx.depth;
+            cx.emit(Instruction::Loop(BlockType::Empty));
+            let top = cx.depth;
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I32GeU);
+            cx.emit(Instruction::BrIf(cx.depth - brk));
+            emit_slot_addr(cx, data, i);
+            load_scalar(cx, s);
+            cx.emit(Instruction::LocalSet(x));
+            let t = inline_apply(&c, x, s.to_ty(), cx)?;
+            let es = list_element(t).ok_or_else(|| CompileError::Unsupported(format!("`map` to a list of {t:?}")))?;
+            let y = cx.alloc_local(t)?;
+            cx.emit(Instruction::LocalSet(y));
+            emit_slot_addr(cx, out_data, i);
+            cx.emit(Instruction::LocalGet(y));
+            store_scalar(cx, es);
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::I32Const(1));
+            cx.emit(Instruction::I32Add);
+            cx.emit(Instruction::LocalSet(i));
+            cx.emit(Instruction::Br(cx.depth - top));
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(es))
+        }
+        _ => Err(CompileError::Unsupported(format!("the List method `.{method}`"))),
     }
 }
 
-fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
-    match e {
-        Expr::Lit { kind, .. } => match kind {
-            LitKind::Int(_) => Ok(Ty::I64),
-            LitKind::Bool(_) => Ok(Ty::I32),
-            LitKind::Str(_) => Ok(Ty::Str),
-            LitKind::Float(_) => Ok(Ty::F64),
-        },
-        Expr::Unary { op, operand, .. } => match op {
-            UnOp::Neg => expr_result_ty(operand),
-            UnOp::Not => Ok(Ty::I32),
-        },
-        Expr::Binary { op, lhs, .. } => match op {
-            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne | BinOp::And | BinOp::Or => Ok(Ty::I32),
-            _ => expr_result_ty(lhs),
-        },
-        Expr::If { then_, .. } => block_result_ty(then_),
-        Expr::Match { arms, .. } => arms.first().map(|a| expr_result_ty(&a.body)).unwrap_or(Ok(Ty::Unit)),
-        Expr::Block(b) => block_result_ty(b),
-        Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
-        Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
-        Expr::Method { name, .. } if name.name == "clock" => Ok(Ty::Clock),
-        Expr::Method { name, .. } if name.name == "now_ms" => Ok(Ty::I64),
-        Expr::Method { name, .. } if name.name == "rand" => Ok(Ty::Rand),
-        Expr::Method { name, args, .. } if name.name == "int" && args.len() == 2 => Ok(Ty::I64),
-        // `str(...)` always yields a Str — type it precisely so it can tail an `if` branch.
-        Expr::Call { callee, .. } if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") => {
-            Ok(Ty::Str)
-        }
-        // Var/Call are context-dependent; default I64 for typing. A mismatch is caught by the
-        // branch-equality check in `compile_expr`.
-        Expr::Var { .. } | Expr::Call { .. } => Ok(Ty::I64),
-        _ => Err(CompileError::Unsupported("this expression form".into())),
+/// `for x in xs { body }` over the list as it is when the loop begins — its length and its slots are read once, so a
+/// `push` in the body neither extends the walk nor moves it (the interpreter iterates a snapshot). `break` leaves the
+/// walk; `continue` goes on to the next element.
+fn compile_for(var: &Ident, iter: &Expr, body: &Block, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let Ty::List(s) = compile_expr(iter, cx)? else {
+        return Err(CompileError::Unsupported("`for` over a value that is not a List".into()));
+    };
+    let (list, n, data, i) =
+        (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+    cx.emit(Instruction::LocalSet(list));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+    cx.emit(Instruction::LocalSet(n));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalSet(data));
+    cx.emit(Instruction::I32Const(0));
+    cx.emit(Instruction::LocalSet(i));
+    let x = cx.alloc_local(s.to_ty())?;
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let brk = cx.depth;
+    cx.emit(Instruction::Loop(BlockType::Empty));
+    let top = cx.depth;
+    cx.emit(Instruction::LocalGet(i));
+    cx.emit(Instruction::LocalGet(n));
+    cx.emit(Instruction::I32GeU);
+    cx.emit(Instruction::BrIf(cx.depth - brk));
+    emit_slot_addr(cx, data, i);
+    load_scalar(cx, s);
+    cx.emit(Instruction::LocalSet(x));
+    // `continue` leaves this block, to the step to the next element.
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let cont = cx.depth;
+    cx.loops.push((brk, cont));
+    cx.scopes.push(HashMap::from([(var.name.clone(), (x, s.to_ty()))]));
+    cx.callables.push(HashMap::new());
+    let body_ty = compile_block(body, cx);
+    cx.callables.pop();
+    cx.scopes.pop();
+    cx.loops.pop();
+    if body_ty? != Ty::Unit {
+        cx.emit(Instruction::Drop);
     }
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(i));
+    cx.emit(Instruction::I32Const(1));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalSet(i));
+    cx.emit(Instruction::Br(cx.depth - top));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::End);
+    Ok(Ty::Unit)
 }
 
 fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
@@ -2865,6 +3310,126 @@ fn int_to_str_fn(alloc: u32) -> Function {
 /// that do not continue a character (`0b10xx_xxxx`). RW 3.4.
 ///
 /// locals: 0 = s (param); 1 = at, 2 = end (i32); 3 = n (i64).
+/// `__list_new(len) -> list` (RW 3.4): a header and `max(len, 4)` slots, `len` of them in use (the caller fills them).
+fn list_new_fn(alloc: u32) -> Function {
+    use Instruction::*;
+    build(
+        &[(2, ValType::I32)], // 1 = the header, 2 = the capacity
+        &[
+            LocalGet(0),
+            I32Const(4),
+            LocalGet(0),
+            I32Const(4),
+            I32GtS,
+            Select,
+            LocalSet(2), // cap = len > 4 ? len : 4
+            I32Const(LIST_HEADER_BYTES),
+            Call(alloc),
+            LocalSet(1),
+            LocalGet(1),
+            LocalGet(0),
+            I32Store(list_mem(LIST_LEN)),
+            LocalGet(1),
+            LocalGet(2),
+            I32Store(list_mem(LIST_CAP)),
+            LocalGet(1),
+            LocalGet(2),
+            I32Const(8),
+            I32Mul,
+            Call(alloc),
+            I32Store(list_mem(LIST_DATA)),
+            LocalGet(1),
+        ],
+    )
+}
+
+/// `__list_slot(list) -> address` (RW 3.4): one more slot in use, its address returned. A full list's slots are copied
+/// to twice as many in a fresh allocation; the old ones are left exactly as they were, which is what lets a `for` that
+/// began before the growth go on reading them.
+fn list_slot_fn(alloc: u32) -> Function {
+    use Instruction::*;
+    build(
+        &[(5, ValType::I32)], // 1 = len, 2 = cap, 3 = the new slots, 4 = i, 5 = the old slots
+        &[
+            LocalGet(0),
+            I32Load(list_mem(LIST_LEN)),
+            LocalSet(1),
+            LocalGet(0),
+            I32Load(list_mem(LIST_CAP)),
+            LocalSet(2),
+            LocalGet(1),
+            LocalGet(2),
+            I32GeU,
+            If(BlockType::Empty),
+            // cap = cap * 2 > 4 ? cap * 2 : 4
+            LocalGet(2),
+            I32Const(2),
+            I32Mul,
+            I32Const(4),
+            LocalGet(2),
+            I32Const(2),
+            I32Mul,
+            I32Const(4),
+            I32GtU,
+            Select,
+            LocalSet(2),
+            LocalGet(2),
+            I32Const(8),
+            I32Mul,
+            Call(alloc),
+            LocalSet(3),
+            LocalGet(0),
+            I32Load(list_mem(LIST_DATA)),
+            LocalSet(5),
+            I32Const(0),
+            LocalSet(4),
+            Block(BlockType::Empty),
+            Loop(BlockType::Empty),
+            LocalGet(4),
+            LocalGet(1),
+            I32GeU,
+            BrIf(1),
+            LocalGet(3),
+            LocalGet(4),
+            I32Const(8),
+            I32Mul,
+            I32Add,
+            LocalGet(5),
+            LocalGet(4),
+            I32Const(8),
+            I32Mul,
+            I32Add,
+            I64Load(i64_at()),
+            I64Store(i64_at()),
+            LocalGet(4),
+            I32Const(1),
+            I32Add,
+            LocalSet(4),
+            Br(0),
+            End,
+            End,
+            LocalGet(0),
+            LocalGet(3),
+            I32Store(list_mem(LIST_DATA)),
+            LocalGet(0),
+            LocalGet(2),
+            I32Store(list_mem(LIST_CAP)),
+            End,
+            LocalGet(0),
+            LocalGet(1),
+            I32Const(1),
+            I32Add,
+            I32Store(list_mem(LIST_LEN)),
+            LocalGet(0),
+            I32Load(list_mem(LIST_DATA)),
+            LocalGet(1),
+            I32Const(8),
+            I32Mul,
+            I32Add,
+        ],
+    )
+}
+
 fn str_len_fn() -> Function {
     use Instruction::*;
     build(

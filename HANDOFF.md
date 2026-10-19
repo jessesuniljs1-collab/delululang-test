@@ -1097,6 +1097,15 @@ spells the same thing?**
   asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
   a generator cannot write a shape, teach it the shape in the same change.
 
+- **WASM-IFTY-1 and WASM-INTERN-1 — a guess and a walk that missed a form** (the laptop, 2026-10-20, while building the WASM
+  `List`, D-V2-164, RW 3.15, 3.16). The backend typed an `if` before compiling it, from a context-free guess in which every
+  variable was `Int`. Two `Str` variables built a module wasmtime refused as invalid at run time, after the backend had
+  claimed to compile it. Its string collector walked every expression form but lambdas, lists, records, fields and
+  indexes, and codegen `expect`s a collected literal, so a literal in a lambda was a Rust panic. Neither showed in the
+  50,000-program differential: its programs bind no `Str` to a variable an `if` returns, and write no literal inside a
+  lambda. Search keys: a type known before compiling is a guess, so set it from what compiled. A walk over an enum must
+  name every variant or say why not, and its consumer should refuse rather than `expect`.
+
 - **WASM-SHORT-1, WASM-NEG-1, WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1 — the WASM engine's faults, refusals and output,
   held to the interpreter's** (found by on-demand routine run 4's verification and red-team pass, 2026-10-19; its fixes
   were lost with the VM when the usage limit hit, and the laptop redid them from its run log, RW 3.10–3.14). The engine

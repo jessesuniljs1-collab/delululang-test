@@ -533,6 +533,10 @@ was first measured, and **none of this book's own guide chapters do**. Since 202
 may grow past the first megabyte; measured that day with `delulu build FILE --target wasm`, 3 of the
 17 entry points now in `tests/corpus` and `examples` compile on their own, and each of the others
 stops at something else — a `List`, a string method, Python, a plugin, or a package's other modules.
+Since 2026-10-20 a `List` of `Int`, `Bool`, `Float`, `Str` or a sum type compiles as well: a literal, `len`,
+`is_empty`, `get`, `push`, indexing, `for` over it, `map`, and `Str.split`. Each behaves as on the interpreter: a
+list is shared, a `for` walks the list as it was when the loop began, and an index outside it faults `DL0903`. A list
+of lists, `pop`, `filter`, `fold`, `sort` and `Str == Str` are among what stays `DL1201`.
 
 So: if you are writing ordinary DeluluLang — anything with a loop, a float, a record, or a list —
 **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code

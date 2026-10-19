@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `List` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a `List`** of `Int`, `Bool`, `Float`, `Str` or a sum type: a literal, `len`,
+  `is_empty`, `get`, `push`, indexing, `for` over it and `map`. It also compiles `Str.split`. Each behaves as on the
+  interpreter: two names for a list share it, a `for` walks the list as it was when the loop began, `get` answers `None`
+  outside the list, and an index outside it stops the program with `DL0903` in the same words. All six Study-C benchmark
+  programs now run on the WASM engine; the published figures are not yet re-measured for the two that newly do. A list of
+  lists, `pop`, `filter`, `fold`, `sort` and `Str == Str` still run on the interpreter only (`DL1201` on
+  `--engine wasm`).
+- **Fixed (WASM-IFTY-1): on the WASM engine, an `if` or `match` whose value was a `Str` variable failed.** An `if` choosing
+  between two string variables stopped with "invalid WASM module" (`DL0904`), and a `match` arm binding a string was
+  refused, where the interpreter ran both.
+- **Fixed (WASM-INTERN-1): a string literal inside a lambda crashed `delulu run --engine wasm`** with an internal panic.
+
 ## Unreleased — the microVM's host: `doctor` reports KVM's posture, and the guest's absences are pinned, 2026-10-19
 
 - **Added: `delulu doctor` reports `KVM host posture`** on a Linux host with KVM: each vendor module's `nested`

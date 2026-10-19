@@ -119,6 +119,12 @@ and why:
   0 from every ratio without a word; and it timed any lane that exited 0, whatever it printed — a lane is now timed only
   when it printed the interpreter's answer.
 
+  **Since 2026-10-20 (the WASM `List`) the last two compile too.** `wordcount_macro` (`Str.split`, then `len`) and
+  `list_map_macro` (a list literal, `map`, `len`) run on the WASM engine and print the interpreter's answers, 18000 and
+  16000, so **6 of the 6 kernels** compile. **The table above is NOT re-measured for them**: their rows are those of the
+  2026-10-19 run, and a criterion-1 ratio over all six needs Study C run again on one machine, all lanes. Until it is,
+  the geo-mean above is of four kernels and says so.
+
 ## What is NOT deferred, and did ship
 
 - The Cranelift-optimized Wasmtime tier itself (`--engine wasm`), now with its optimization level

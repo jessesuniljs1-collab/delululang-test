@@ -197,11 +197,40 @@ pub fn random_loop_program(seed: u64) -> (String, Vec<i64>) {
     } else {
         (String::new(), "acc")
     };
+    // A list, from a stream of its own as the function value's is (the WASM `List`): built before the loop, pushed to,
+    // indexed (perhaps outside it — DL0903 on both engines), read with `get`, walked with `for` and mapped after it.
+    let mut l = Rng::new(seed ^ 0xE703_7ED1_A0B4_28DB);
+    let mut list_decl = String::new();
+    let mut after = String::new();
+    if l.chance(1, 2) {
+        let items: Vec<String> = (0..1 + l.below(3)).map(|_| gen_leaf(&mut l, &["a", "b", "c"])).collect();
+        list_decl = format!("  let xs = [{}]\n", items.join(", "));
+        if l.chance(1, 2) {
+            body.push_str(&format!("    xs.push({})\n", gen_expr(&mut l, 1, &outer, false)));
+        }
+        if l.chance(1, 2) {
+            body.push_str(&format!("    acc = acc + xs[{}]\n", l.below(5)));
+        }
+        if l.chance(1, 2) {
+            body.push_str(&format!(
+                "    acc = match xs.get({}) {{\n      Some(v) => v,\n      None => acc,\n    }}\n",
+                l.below(5)
+            ));
+        }
+        after = if l.chance(1, 2) {
+            "  for x in xs {\n    acc = acc + x\n  }\n".to_string()
+        } else {
+            format!(
+                "  for y in xs.map(fn(x: Int) -> Int {{ {} }}) {{\n    acc = acc - y\n  }}\n",
+                gen_expr(&mut l, 2, &["x", "a"], false)
+            )
+        };
+    }
     body.push_str(&format!("    acc = {}\n", gen_expr(&mut r, 2, &outer, false)));
     let init = gen_leaf(&mut r, &["a", "b", "c"]);
     let limit = r.below(13);
     let src = format!(
-        "module gl\nfn f(a: Int, b: Int, c: Int) -> Int {{\n{bind}  var acc = {init}\n  var i = 0\n  while i < {limit} {{\n{body}  }}\n  {tail}\n}}\n"
+        "module gl\nfn f(a: Int, b: Int, c: Int) -> Int {{\n{bind}{list_decl}  var acc = {init}\n  var i = 0\n  while i < {limit} {{\n{body}  }}\n{after}  {tail}\n}}\n"
     );
     let small = r.chance(1, 2);
     let arg = |r: &mut Rng| if small { r.below(100) as i64 - 50 } else { gen_arg(r) };

@@ -6947,3 +6947,52 @@ mode never noted) red, control green; `microvm_guest_kernel` green, red with `# 
 laptop's WSL, `~/delulu-gnu-target`): `microvm::tests` and `kvm_posture_tests` 11 passed; `cargo clippy -p delulu
 --all-targets -- -D warnings` clean; M532 (a `/network-interfaces/eth0` call added to `vm_api_calls`, on a copy of the
 tree) red on `the_vm_is_given_one_vsock_and_nothing_else`. `scripts/clippy.sh -j 4` clean and stamped on Windows.
+
+## 2026-10-20 — the laptop: `List` on the WASM engine; WASM-IFTY-1, WASM-INTERN-1 (RW 3.4, 3.15, 3.16, D-V2-164)
+
+**Why.** The last two Study-C kernels, `wordcount_macro` (`Str.split`, `len`) and `list_map_macro` (a literal, `map`,
+`len`), were DL1201 on `List` alone.
+
+**What.** D-V2-164 records the design:
+- the header `[len][cap][data]`, so lists are shared as on the interpreter;
+- `__list_new` and `__list_slot`;
+- a `for` over a snapshot;
+- `push` computing its value first;
+- `get`'s `None` outside the list;
+- `delulu:list.str_split` (the interpreter's own `split`);
+- `delulu:list.index_fault` (the interpreter's DL0903 words);
+- the imports and helpers only in a module that uses a list;
+- reference capabilities looked through;
+- `run_int_fn` under a host with nothing granted.
+
+Both kernels now print the interpreter's answers on WASM (18000, 16000); **6 of 6 compile**. The two that newly do are
+not re-measured.
+
+**Found on the way, each witnessed red first.**
+- **WASM-IFTY-1.** `pick(a, b, c) = if c { a } else { b }` over `Str`s: the interpreter printed `a left`, while
+  `--engine wasm` printed `DL0904: invalid WASM module: failed to compile`. The `if`'s block type had been guessed `Int`
+  for a variable. A `match` arm binding a `Str` was refused for the same reason.
+- **WASM-INTERN-1.** `apply(fn(s: Str) -> Str { s + " and a literal" }, "a value")` panicked the compiler at
+  `codegen.rs` `expect("interned")`.
+
+Block types are now patched from what the first branch compiled to, and the guess functions (`block_result_ty`,
+`expr_result_ty`) are deleted. The collector descends into lambdas, lists, records, fields and indexes, and a missing
+literal is refused rather than panicked over.
+
+**Evidence.**
+- `crates/delulu-wasm/tests/list_parity.rs` (new, 9 tests): literals of `Int`, `Str` and `Bool`; `get` inside and
+  outside the list; sharing through `let ys = xs` and a `ref` parameter; `push` of the list's own length; a `for` that
+  pushes during its walk; break and continue in nested `for`s; `map` with captured names and a bound function value;
+  `split` (empty parts, multi-byte characters, empty separator); the index fault at 3, -1 and `Int::MAX`; and what stays
+  refused.
+- `loop_parity.rs`'s and `wasm_cli.rs`'s refused examples became a list of lists, since a `for` over a list now
+  compiles.
+- `random_loop_program` builds, pushes, indexes, `get`s, walks and maps a list, from a stream of its own. 176 of 400
+  sampled programs do, asserted over 120: 298 agreed and 102 faulted on both engines.
+- Mutants M533–M540 each red, control green.
+- After the last edit:
+  - the 50,000-program release differential: 45,007 agreed, 4,993 faulted on both, 0 mismatches;
+  - `scripts/clippy.sh -j 4` clean and stamped;
+  - `delulu-wasm` whole (lib 87, `list_parity` 9, `loop_parity` 7, `fault_parity` 6 and the rest) green;
+  - the CLI targets that run the WASM engine green (artifact_review, budget_cli, cli, guard_e2e, json_contract,
+    plugin_cli, release, sandbox_modes_cli, wasm_cli, message_spacing, book).
