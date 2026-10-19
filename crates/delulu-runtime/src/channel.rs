@@ -137,7 +137,30 @@ pub struct Untransferable(pub &'static str);
 
 impl WireValue {
     /// Encode a runtime value for the wire. `cap` maps a capability to the handle the host minted.
+    ///
+    /// The wire carries a tree, so a value that holds itself (`n.next = Some(n)`) is refused rather than approximated —
+    /// the walk keeps the cells it is inside and refuses one met again inside itself (MSG-CYCLE-1: it recursed until the
+    /// stack overflowed). A cell held twice without a cycle crosses as two copies of plain data.
     pub fn from_value(v: &Value, cap: &mut impl FnMut(&std::rc::Rc<CapVal>) -> Handle) -> Result<WireValue, Untransferable> {
+        Self::from_value_in(v, cap, &mut std::collections::BTreeSet::new())
+    }
+
+    fn from_value_in(
+        v: &Value,
+        cap: &mut impl FnMut(&std::rc::Rc<CapVal>) -> Handle,
+        inside: &mut std::collections::BTreeSet<usize>,
+    ) -> Result<WireValue, Untransferable> {
+        // Enter the cell at `addr` (a `List`, `Map` or `Record`), or refuse it if the walk is already inside it.
+        fn enter(inside: &mut std::collections::BTreeSet<usize>, addr: usize) -> Result<(), Untransferable> {
+            if inside.insert(addr) {
+                Ok(())
+            } else {
+                Err(Untransferable("a value that holds itself"))
+            }
+        }
+        fn addr<T>(cell: &std::rc::Rc<std::cell::RefCell<T>>) -> usize {
+            std::rc::Rc::as_ptr(cell) as *const () as usize
+        }
         Ok(match v {
             Value::Unit => WireValue::Unit,
             Value::Bool(b) => WireValue::Bool(*b),
@@ -145,26 +168,35 @@ impl WireValue {
             Value::Float(f) => WireValue::Float(*f),
             Value::Str(s) => WireValue::Str(s.to_string()),
             Value::List(items) => {
-                WireValue::List(items.borrow().iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?)
+                enter(inside, addr(items))?;
+                let w = items.borrow().iter().map(|x| Self::from_value_in(x, cap, inside)).collect::<Result<_, _>>()?;
+                inside.remove(&addr(items));
+                WireValue::List(w)
             }
-            Value::Record { name, fields } => WireValue::Record {
-                name: name.to_string(),
-                fields: fields.borrow().iter().map(|(k, x)| Ok((k.clone(), WireValue::from_value(x, cap)?))).collect::<Result<
-                    Vec<_>,
-                    Untransferable,
-                >>(
-                )?,
-            },
+            Value::Record { name, fields } => {
+                enter(inside, addr(fields))?;
+                let w = fields
+                    .borrow()
+                    .iter()
+                    .map(|(k, x)| Ok((k.clone(), Self::from_value_in(x, cap, inside)?)))
+                    .collect::<Result<Vec<_>, Untransferable>>()?;
+                inside.remove(&addr(fields));
+                WireValue::Record { name: name.to_string(), fields: w }
+            }
             Value::Variant { name, fields } => WireValue::Variant {
                 name: name.to_string(),
-                fields: fields.iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?,
+                fields: fields.iter().map(|x| Self::from_value_in(x, cap, inside)).collect::<Result<_, _>>()?,
             },
-            Value::Map(m) => WireValue::Map(
-                m.borrow()
+            Value::Map(m) => {
+                enter(inside, addr(m))?;
+                let w = m
+                    .borrow()
                     .iter()
-                    .map(|(k, x)| Ok((WireValue::from_value(&k.to_value(), cap)?, WireValue::from_value(x, cap)?)))
-                    .collect::<Result<Vec<_>, Untransferable>>()?,
-            ),
+                    .map(|(k, x)| Ok((Self::from_value_in(&k.to_value(), cap, inside)?, Self::from_value_in(x, cap, inside)?)))
+                    .collect::<Result<Vec<_>, Untransferable>>()?;
+                inside.remove(&addr(m));
+                WireValue::Map(w)
+            }
             Value::Cap(c) => WireValue::Cap { handle: cap(c), kind: c.kind.name().to_string() },
             Value::Closure(_) => return Err(Untransferable("a closure")),
             Value::Root(_) => return Err(Untransferable("the root")),
@@ -1384,6 +1416,23 @@ mod tests {
     fn a_value_that_cannot_cross_honestly_is_refused() {
         let root = Value::Root(std::rc::Rc::new(crate::value::RootVal::default()));
         assert_eq!(WireValue::from_value(&root, &mut no_caps()), Err(Untransferable("the root")));
+    }
+
+    /// MSG-CYCLE-1: the wire carries a tree, so a value that holds itself is refused — not walked until the stack
+    /// overflows — while a list held twice, with no cycle, crosses as plain data.
+    #[test]
+    fn a_value_that_holds_itself_is_refused_and_one_held_twice_crosses() {
+        let fields = std::rc::Rc::new(std::cell::RefCell::new(vec![("v".to_string(), Value::Int(7))]));
+        let k = Value::Record { name: std::rc::Rc::from("Node"), fields: fields.clone() };
+        fields.borrow_mut().push(("next".to_string(), Value::variant("Some", vec![k.clone()])));
+        assert_eq!(WireValue::from_value(&k, &mut no_caps()), Err(Untransferable("a value that holds itself")));
+        fields.borrow_mut().clear(); // break the cycle, so the test does not leak it
+
+        let a = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![Value::Int(1)])));
+        let twice = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![a.clone(), a])));
+        let wire = WireValue::from_value(&twice, &mut no_caps()).expect("a list held twice is plain data");
+        let back = wire.into_value(&mut |_| None).expect("no handles");
+        assert_eq!(back.display(), "[[1], [1]]");
     }
 
     fn a_map(entries: Vec<(crate::value::MapKey, Value)>) -> Value {

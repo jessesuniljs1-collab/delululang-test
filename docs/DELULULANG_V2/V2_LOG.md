@@ -7232,3 +7232,49 @@ Mutants, all red, control green:
 - M574 — no inferred type;
 - M575 — an `Int` list typed `Str`;
 - M576 — `run --engine wasm` back on `compile_module_with` (red in the CLI test).
+
+## 2026-10-20 — the laptop: `==` on records and maps; values that hold themselves (RW 2.13, 2.14; 2.15 and 2.16 found)
+
+**EQ-RECORD-1.** While reading `Value::eq` for the WASM `Float` work: its doc says it is the structural equality for
+the value types `==` accepts. The checker accepts `==` on a record or a map whose contents are not opaque; it even refuses
+a map with an opaque side by name. Yet `eq` had no arm for either and fell to `_ => false`. A probe on the binary at
+`4d200b6` printed `false false true` for `p == p`, `p == q` (equal fields) and `p != p`; `m == m` was `false`;
+`[p].contains(p)` was `false`; `assert_eq(p, p)` would fail naming two identical records. Fixed: a record equals one
+of the same type whose fields are equal, a map one with the same keys holding equal values.
+
+**DISPLAY-CYCLE-1.** Before adding those arms: what does a structural walk meet? `n.next = Some(n)` is a legal program,
+and `str(n)` already overflowed the stack and killed the process. So would the new `==`. Fixed in both:
+- `display` keeps the cells it is inside. A `List`, `Map` or `Record` cell met again renders as its shape around `...`
+  (`Node { v: 1, next: Some(Node { ... }) }`, `[...]`, `{...}`), as Python renders a list that holds itself.
+- `eq` keeps the pairs of cells it is comparing. A pair met again is taken as equal, so two values that hold themselves
+  compare in finite time and differ only if something else they hold does.
+- No identity shortcut: `[nan] == [nan]` stays `false`, as `nan == nan` is.
+- The sets are `BTreeSet`s, so a scalar `==` allocates nothing.
+
+**Found, open:**
+- EQ-FN-1 (RW 2.15) — `f == f` on a function value checks clean and answers `false`.
+- MSG-CYCLE-1 (RW 2.16) — `recover`ing a self-referencing `iso Node` and sending it to an actor overflows the stack in
+  `value_to_msg`; the channel's `WireValue::from_value` and `assert_unique_graph` walk the same way.
+
+Tests:
+- `crates/delulu-runtime/tests/value_semantics.rs` `records_and_maps_compare_as_their_contents` (records, `contains`, list
+  equality in and out of order, maps, a NaN in a list) — red on the old `eq`;
+- `a_value_that_holds_itself_renders_and_compares_in_finite_time` (a record through an `Option` field, a record through
+  a list it holds) — on the old code the test binary died, `STATUS_STACK_OVERFLOW`;
+- `value.rs` `cycle_tests::a_map_that_holds_itself_renders_and_compares_in_finite_time`.
+
+Mutants, all red, control green:
+- M577 — `display` not marking a cell (the binary dies);
+- M578 — a record pair met again taken as unequal;
+- M579 — the record arm answering `false`;
+- M580 — map keys ignored;
+- M581 — an identity shortcut on lists (red on `[nan] == [nan]`);
+- M582 — a map pair met again taken as unequal.
+
+**Evidence.** `value_semantics` 2; the whole `delulu-runtime` suite (280 unit tests and every test file) and
+`delulu-conform` green; `conformance`, `core_invariance`, `corpus_cli`, `examples_run` green.
+
+**The owner, 2026-10-20:** *"push everything to test github repo frequently. enable that windows task scheduler for
+automatic github push"*. The `DeluluLang-autosave` task's 7-hour window of 2026-10-19 had run out. It was re-installed
+for 7 days (`-Hours 168`, from 2026-10-19 22:42 UTC), and a run by hand pushed snapshot `c94cbba` to `autosave/laptop`.
+Recorded in HANDOFF §11.1 and the laptop's memory. Every verified commit is pushed at once, as before.

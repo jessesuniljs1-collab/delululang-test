@@ -27,7 +27,7 @@
 //! dropped and counted, reported at exit; `--on-actor-death abort` opts into whole-program
 //! abort. Supervision is post-1.0.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering};
@@ -99,6 +99,10 @@ pub enum MsgValue {
         id: ActorId,
         actor: String,
     },
+    /// A `List`, `Map` or `Record` cell this message already carries: the `n`th met, counting each cell where it is first
+    /// met, before what it holds (MSG-CYCLE-1). A moved graph that holds itself, or holds one cell twice, arrives as the
+    /// same graph — not as a walk that never ends, and not as copies.
+    Back(u32),
 }
 
 /// A root slice crossing an actor boundary (value-level authority passing, spec §7).
@@ -788,6 +792,31 @@ impl Drop for MailboxSlot<'_> {
 /// CHECKED program (the rcap pass fails closed on everything unconvertible), so the code is
 /// the checker-bug class.
 pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> Result<MsgValue, Fault> {
+    value_to_msg_in(v, self_state, &mut HashMap::new())
+}
+
+/// The address of a mutable cell (`List`, `Map`, `Record`) — what tells one cell from another in a moved graph.
+fn cell_addr<T>(cell: &Rc<std::cell::RefCell<T>>) -> usize {
+    Rc::as_ptr(cell) as *const () as usize
+}
+
+/// `value_to_msg`, with the cells already carried numbered in `cells` (MSG-CYCLE-1: the walk was a tree's, so a moved
+/// graph that held itself recursed until the stack overflowed and the process died).
+fn value_to_msg_in(
+    v: &Value,
+    self_state: Option<(&Value, ActorId, &str)>,
+    cells: &mut HashMap<usize, u32>,
+) -> Result<MsgValue, Fault> {
+    // A cell met again is a reference back to where it was first carried; a cell met first is numbered before what it holds,
+    // as `msg_to_value` rebuilds it before what it holds.
+    let first = |addr: usize, cells: &mut HashMap<usize, u32>| -> Option<MsgValue> {
+        if let Some(n) = cells.get(&addr) {
+            return Some(MsgValue::Back(*n));
+        }
+        let n = u32::try_from(cells.len()).unwrap_or(u32::MAX);
+        cells.insert(addr, n);
+        None
+    };
     // `self` crossing a boundary is the actor handing out its own ADDRESS (ref <: tag) —
     // the classic reply-to pattern. Detected by heap identity with the current turn's state.
     if let (Value::Record { fields, .. }, Some((Value::Record { fields: sf, .. }, id, name))) = (v, self_state) {
@@ -802,6 +831,9 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
         Value::Str(s) => MsgValue::Str(s.to_string()),
         Value::Unit => MsgValue::Unit,
         Value::List(items) => {
+            if let Some(back) = first(cell_addr(items), cells) {
+                return Ok(back);
+            }
             // Debug lane (§7.4 / deviation 7): an iso move's graph must be unaliased. At
             // this layer we can only see the spine; `--debug-rcaps` (7i) deepens this.
             debug_assert!(
@@ -809,35 +841,46 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
                 "actor-boundary list with {} strong refs — the static uniqueness proof failed",
                 Rc::strong_count(items)
             );
-            MsgValue::List(items.borrow().iter().map(|x| value_to_msg(x, self_state)).collect::<Result<_, _>>()?)
+            MsgValue::List(items.borrow().iter().map(|x| value_to_msg_in(x, self_state, cells)).collect::<Result<_, _>>()?)
         }
         // A `Map` is sendable exactly when its values are, which is the `List` rule; the keys are
         // `Str`/`Int`/`Bool` by construction, so they always are. The same debug-lane aliasing check
         // applies for the same reason.
         Value::Map(m) => {
+            if let Some(back) = first(cell_addr(m), cells) {
+                return Ok(back);
+            }
             debug_assert!(
                 Rc::strong_count(m) <= 2,
                 "actor-boundary map with {} strong refs — the static uniqueness proof failed",
                 Rc::strong_count(m)
             );
             MsgValue::Map(
-                m.borrow().iter().map(|(k, v)| Ok((k.clone(), value_to_msg(v, self_state)?))).collect::<Result<_, Fault>>()?,
+                m.borrow()
+                    .iter()
+                    .map(|(k, v)| Ok((k.clone(), value_to_msg_in(v, self_state, cells)?)))
+                    .collect::<Result<_, Fault>>()?,
             )
         }
-        Value::Record { name, fields } => MsgValue::Record {
-            name: name.to_string(),
-            fields: fields
-                .borrow()
-                .iter()
-                .map(|(n, x)| Ok((n.clone(), value_to_msg(x, self_state)?)))
-                .collect::<Result<_, Fault>>()?,
-        },
+        Value::Record { name, fields } => {
+            if let Some(back) = first(cell_addr(fields), cells) {
+                return Ok(back);
+            }
+            MsgValue::Record {
+                name: name.to_string(),
+                fields: fields
+                    .borrow()
+                    .iter()
+                    .map(|(n, x)| Ok((n.clone(), value_to_msg_in(x, self_state, cells)?)))
+                    .collect::<Result<_, Fault>>()?,
+            }
+        }
         Value::Variant { name, fields } => MsgValue::Variant {
             name: name.to_string(),
-            fields: fields.iter().map(|x| value_to_msg(x, self_state)).collect::<Result<_, _>>()?,
+            fields: fields.iter().map(|x| value_to_msg_in(x, self_state, cells)).collect::<Result<_, _>>()?,
         },
         Value::Closure(c) => {
-            let scopes = flatten_env(&c.env, self_state)?;
+            let scopes = flatten_env(&c.env, self_state, cells)?;
             MsgValue::Closure { params: c.params.clone(), body: c.body.clone(), scopes }
         }
         Value::Cap(c) => MsgValue::Cap { kind: c.kind, scope: c.scope.clone() },
@@ -897,7 +940,11 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
 
 /// Flatten a closure's capture environment into per-scope name/value lists, outermost
 /// first, EXCLUDING the root (module globals — the receiver reattaches its own).
-fn flatten_env(env: &Env, self_state: Option<(&Value, ActorId, &str)>) -> Result<Vec<Vec<(String, MsgValue)>>, Fault> {
+fn flatten_env(
+    env: &Env,
+    self_state: Option<(&Value, ActorId, &str)>,
+    cells: &mut HashMap<usize, u32>,
+) -> Result<Vec<Vec<(String, MsgValue)>>, Fault> {
     let mut chain = Vec::new();
     let mut cur = Some(env.clone());
     while let Some(s) = cur {
@@ -910,7 +957,7 @@ fn flatten_env(env: &Env, self_state: Option<(&Value, ActorId, &str)>) -> Result
     for scope in chain {
         let mut vars = Vec::new();
         for (n, v) in scope.vars_snapshot() {
-            vars.push((n, value_to_msg(&v, self_state)?));
+            vars.push((n, value_to_msg_in(&v, self_state, cells)?));
         }
         out.push(vars);
     }
@@ -920,6 +967,12 @@ fn flatten_env(env: &Env, self_state: Option<(&Value, ActorId, &str)>) -> Result
 /// Rebuild a message value into the RECEIVING actor's heap. `globals` is the receiving
 /// interpreter's module-global scope (closures reattach to it).
 pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
+    msg_to_value_in(m, globals, &mut Vec::new())
+}
+
+/// `msg_to_value`, with each `List`, `Map` and `Record` cell rebuilt so far in `cells`, in the order `value_to_msg`
+/// numbered them: a cell is made empty and recorded before what it holds is rebuilt into it, so a `Back` inside it finds it.
+fn msg_to_value_in(m: MsgValue, globals: &Env, cells: &mut Vec<Value>) -> Value {
     match m {
         MsgValue::Int(i) => Value::Int(i),
         MsgValue::Float(f) => Value::Float(f),
@@ -927,25 +980,40 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         MsgValue::Str(s) => Value::str(s),
         MsgValue::Unit => Value::Unit,
         MsgValue::Map(pairs) => {
-            Value::Map(Rc::new(std::cell::RefCell::new(pairs.into_iter().map(|(k, v)| (k, msg_to_value(v, globals))).collect())))
+            let cell = Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()));
+            cells.push(Value::Map(cell.clone()));
+            let held = pairs.into_iter().map(|(k, v)| (k, msg_to_value_in(v, globals, cells))).collect();
+            *cell.borrow_mut() = held;
+            Value::Map(cell)
         }
         MsgValue::List(items) => {
-            Value::List(Rc::new(std::cell::RefCell::new(items.into_iter().map(|x| msg_to_value(x, globals)).collect())))
+            let cell = Rc::new(std::cell::RefCell::new(Vec::new()));
+            cells.push(Value::List(cell.clone()));
+            let held = items.into_iter().map(|x| msg_to_value_in(x, globals, cells)).collect();
+            *cell.borrow_mut() = held;
+            Value::List(cell)
         }
-        MsgValue::Record { name, fields } => Value::Record {
-            name: Rc::from(name.as_str()),
-            fields: Rc::new(std::cell::RefCell::new(fields.into_iter().map(|(n, x)| (n, msg_to_value(x, globals))).collect())),
-        },
+        MsgValue::Record { name, fields } => {
+            let cell = Rc::new(std::cell::RefCell::new(Vec::new()));
+            let name: Rc<str> = Rc::from(name.as_str());
+            cells.push(Value::Record { name: name.clone(), fields: cell.clone() });
+            let held = fields.into_iter().map(|(n, x)| (n, msg_to_value_in(x, globals, cells))).collect();
+            *cell.borrow_mut() = held;
+            Value::Record { name, fields: cell }
+        }
+        MsgValue::Back(n) => cells.get(n as usize).cloned().expect(
+            "a back-reference names a cell rebuilt before it (`value_to_msg` numbers cells in the order they are rebuilt)",
+        ),
         MsgValue::Variant { name, fields } => Value::Variant {
             name: Rc::from(name.as_str()),
-            fields: crate::value::VariantFields::new(fields.into_iter().map(|x| msg_to_value(x, globals)).collect()),
+            fields: crate::value::VariantFields::new(fields.into_iter().map(|x| msg_to_value_in(x, globals, cells)).collect()),
         },
         MsgValue::Closure { params, body, scopes } => {
             let mut env = globals.clone();
             for scope in scopes {
                 let child = Scope::child(&env);
                 for (n, v) in scope {
-                    child.define(&n, msg_to_value(v, globals));
+                    child.define(&n, msg_to_value_in(v, globals, cells));
                 }
                 env = child;
             }
@@ -988,41 +1056,74 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
     }
 }
 
-/// The `--debug-rcaps` uniqueness walk (spec §7.4, phase 7i): an iso MOVE's graph must be
-/// unaliased. The value in hand is the environment's plus the evaluator's clone, so the top
-/// spine allows 2 strong refs; every NESTED mutable node (List/Record) must be exactly 1.
-/// Immutable values (Str, scalars, variants, caps) share freely and are exempt. A violation
-/// is compiler-bug class: the STATIC uniqueness proof failed — never a runtime safety net
-/// (the rebuild boundary is race-free by construction either way).
+/// The `--debug-rcaps` uniqueness walk (spec §6.2/§6.4, phase 7i): an iso MOVE's graph must have no alias OUTSIDE it.
+/// Every strong reference to a mutable node (`List`, `Map`, `Record`) must come from inside the graph being moved — the
+/// nodes and variant payloads it holds — except the top node's two (the binding and the evaluator's clone). One more is a
+/// reference from outside: the static uniqueness proof failed, a compiler-bug class report (DL1610). Immutable values
+/// (`Str`, scalars, caps) share freely; a variant is walked through, each payload once.
+///
+/// D-V2-165: this counted every node below the top as needing exactly one reference, so a graph that `recover` lifts
+/// legally — one that holds itself (`k.next = Some(k)`) or holds one list twice (`[a, a]`) — was reported as a compiler
+/// bug, while an alias reached through a variant or a map was never looked at. It now counts the graph's own references.
 pub fn assert_unique_graph(v: &Value) -> Result<(), String> {
-    fn walk(v: &Value, top: bool, path: &str) -> Result<(), String> {
+    /// Each mutable node met, in the order first met: its kind and path, its strong count, and how many references to it
+    /// the graph holds.
+    struct Node {
+        what: String,
+        strong: usize,
+        inside: usize,
+    }
+    fn walk(v: &Value, path: &str, nodes: &mut Vec<Node>, index: &mut HashMap<usize, usize>, payloads: &mut HashSet<usize>) {
+        let (addr, kind, strong) = match v {
+            Value::List(rc) => (cell_addr(rc), "list", Rc::strong_count(rc)),
+            Value::Map(rc) => (cell_addr(rc), "map", Rc::strong_count(rc)),
+            Value::Record { fields, .. } => (cell_addr(fields), "record", Rc::strong_count(fields)),
+            Value::Variant { fields, .. } => {
+                if payloads.insert(fields.ptr_id()) {
+                    for (i, x) in fields.iter().enumerate() {
+                        walk(x, &format!("{path}.{i}"), nodes, index, payloads);
+                    }
+                }
+                return;
+            }
+            _ => return,
+        };
+        if let Some(&i) = index.get(&addr) {
+            nodes[i].inside += 1;
+            return;
+        }
+        index.insert(addr, nodes.len());
+        nodes.push(Node { what: format!("{kind} at {path}"), strong, inside: 1 });
         match v {
             Value::List(rc) => {
-                let max = if top { 2 } else { 1 };
-                let n = Rc::strong_count(rc);
-                if n > max {
-                    return Err(format!("list at {path} has {n} strong refs (max {max})"));
-                }
                 for (i, x) in rc.borrow().iter().enumerate() {
-                    walk(x, false, &format!("{path}[{i}]"))?;
+                    walk(x, &format!("{path}[{i}]"), nodes, index, payloads);
                 }
-                Ok(())
+            }
+            Value::Map(rc) => {
+                for (k, x) in rc.borrow().iter() {
+                    walk(x, &format!("{path}[{}]", k.to_value().display()), nodes, index, payloads);
+                }
             }
             Value::Record { fields, .. } => {
-                let max = if top { 2 } else { 1 };
-                let n = Rc::strong_count(fields);
-                if n > max {
-                    return Err(format!("record at {path} has {n} strong refs (max {max})"));
-                }
                 for (fname, x) in fields.borrow().iter() {
-                    walk(x, false, &format!("{path}.{fname}"))?;
+                    walk(x, &format!("{path}.{fname}"), nodes, index, payloads);
                 }
-                Ok(())
             }
-            _ => Ok(()),
+            _ => {}
         }
     }
-    walk(v, true, "arg")
+    let (mut nodes, mut index, mut payloads) = (Vec::new(), HashMap::new(), HashSet::new());
+    walk(v, "arg", &mut nodes, &mut index, &mut payloads);
+    for (i, n) in nodes.iter().enumerate() {
+        // The walk's first step into the top node is the one reference from outside it may have, held twice (the binding
+        // and the evaluator's clone); every other node's references must all be the graph's own.
+        let max = if i == 0 { n.inside + 1 } else { n.inside };
+        if n.strong > max {
+            return Err(format!("{} has {} strong refs (max {max})", n.what, n.strong));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1303,5 +1404,38 @@ mod boundary_authority_tests {
         let Value::Secret(s) = back else { panic!() };
         assert_eq!(s.handle_name(), Some("K"));
         assert_eq!(s.audience().map(|a| a.to.clone()), Some(to), "a handle's audience crosses");
+    }
+}
+
+#[cfg(test)]
+mod move_graph_tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// MSG-CYCLE-1 (D-V2-165): a moved graph arrives as the same graph. A list held twice arrives as one list held twice,
+    /// not two copies (a push through one would otherwise not be seen through the other, as it is on the sending side), and
+    /// a record holding itself arrives holding itself, where the walk used to overflow the stack.
+    #[test]
+    fn a_moved_graph_keeps_its_shape() {
+        let a = Value::List(Rc::new(RefCell::new(vec![Value::Int(1)])));
+        let twice = Value::List(Rc::new(RefCell::new(vec![a.clone(), a])));
+        let back = msg_to_value(value_to_msg(&twice, None).expect("sendable"), &Scope::root());
+        let Value::List(outer) = back else { panic!("a list arrives") };
+        let outer = outer.borrow();
+        let (Value::List(x), Value::List(y)) = (&outer[0], &outer[1]) else { panic!("two lists") };
+        assert!(Rc::ptr_eq(x, y), "one list, held twice");
+
+        let fields = Rc::new(RefCell::new(vec![("v".to_string(), Value::Int(7))]));
+        let k = Value::Record { name: Rc::from("Node"), fields: fields.clone() };
+        fields.borrow_mut().push(("next".to_string(), Value::variant("Some", vec![k.clone()])));
+        let back = msg_to_value(value_to_msg(&k, None).expect("sendable"), &Scope::root());
+        assert_eq!(back.display(), "Node { v: 7, next: Some(Node { ... }) }");
+        let Value::Record { fields: got, .. } = &back else { panic!("a record arrives") };
+        let next = got.borrow()[1].1.clone();
+        let Value::Variant { fields: some, .. } = next else { panic!("Some") };
+        let Value::Record { fields: inner, .. } = &some[0] else { panic!("a record inside") };
+        assert!(Rc::ptr_eq(got, inner), "it holds itself");
+        fields.borrow_mut().clear(); // break the sender's cycle, so the test does not leak it
+        got.borrow_mut().clear();
     }
 }

@@ -116,14 +116,48 @@ fn an_unaliased_iso_graph_passes_the_uniqueness_walk() {
     assert!(assert_unique_graph(&outer).is_ok());
 }
 
+fn list(items: Vec<Value>) -> Value {
+    Value::List(std::rc::Rc::new(std::cell::RefCell::new(items)))
+}
+
 #[test]
 fn an_aliased_nested_node_is_a_dl1610_class_violation() {
-    // Two paths to the same mutable list inside a "unique" graph — exactly what the static
-    // proof forbids; the detector must see it.
-    let shared = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![Value::Int(1)])));
-    let outer = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![shared.clone(), shared])));
+    // A mutable list inside a "unique" graph that is also held OUTSIDE it — exactly what the static proof forbids; the
+    // detector must see it. (Before D-V2-165 this test held the list twice INSIDE the graph, which `recover` admits.)
+    let shared = list(vec![Value::Int(1)]);
+    let outside = shared.clone();
+    let outer = list(vec![shared]);
     let err = assert_unique_graph(&outer).expect_err("aliasing must be detected");
-    assert!(err.contains("strong refs"), "{err}");
+    assert!(err.contains("list at arg[0]") && err.contains("strong refs"), "{err}");
+    drop(outside);
+}
+
+/// D-V2-165: a graph `recover` lifts legally passes — one holding a list twice (`[a, a]`), and one holding itself
+/// (`k.next = Some(k)`). Both were reported as a compiler bug (DL1610) by a walk that wanted every nested node held once.
+#[test]
+fn a_graph_holding_a_node_twice_or_holding_itself_passes_the_uniqueness_walk() {
+    let a = list(vec![Value::Int(1)]);
+    let twice = list(vec![a.clone(), a]);
+    assert!(assert_unique_graph(&twice).is_ok(), "{:?}", assert_unique_graph(&twice));
+    let fields = std::rc::Rc::new(std::cell::RefCell::new(vec![("v".to_string(), Value::Int(7))]));
+    let k = Value::Record { name: std::rc::Rc::from("Node"), fields: fields.clone() };
+    fields.borrow_mut().push(("next".to_string(), Value::variant("Some", vec![k.clone()])));
+    assert!(assert_unique_graph(&k).is_ok(), "{:?}", assert_unique_graph(&k));
+}
+
+/// D-V2-165: an alias from outside reached through a variant or a map is seen. The old walk stopped at both.
+#[test]
+fn an_alias_reached_through_a_variant_or_a_map_is_a_dl1610_class_violation() {
+    let held = list(vec![Value::Int(1)]);
+    let outside = held.clone();
+    let through_variant = list(vec![Value::variant("Some", vec![held])]);
+    let err = assert_unique_graph(&through_variant).expect_err("an alias through `Some` must be detected");
+    assert!(err.contains("list at arg[0].0"), "{err}");
+    let m = std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()));
+    m.borrow_mut().insert(delulu_runtime::value::MapKey::Str("k".into()), outside.clone());
+    let err = assert_unique_graph(&list(vec![Value::Map(m)])).expect_err("an alias through a map must be detected");
+    assert!(err.contains("list at arg[0][k]"), "{err}");
+    drop(outside);
 }
 
 #[test]

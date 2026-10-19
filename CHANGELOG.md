@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `==` on records and maps; values that hold themselves, 2026-10-20
+
+- **Fixed: `==` on two records or two maps was always `false`**, even for a record compared with itself, and `!=`
+  always `true`. So `List.contains` could not find a record and `assert_eq` failed on equal records. They now compare
+  by their contents: a record equals one of the same type whose fields are equal, and a map equals one with the same
+  keys holding equal values.
+- **Fixed: `str` (and `println`) of a value that holds itself crashed the process with a stack overflow** — a record
+  whose field holds the record (`n.next = Some(n)`), or a list holding a record that holds the list. Such a value now
+  prints `...` where it meets itself (`Node { v: 1, next: Some(Node { ... }) }`), and `==` on two such values ends.
+- **Known: sending such a value to an actor still crashes** (RW 2.16), and **`==` on two functions is always `false`**
+  (RW 2.15). Both are recorded and are next.
+
 ## Unreleased — an empty list typed by the checker on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` and `delulu build --target wasm` compile an empty list whose element type is not written**

@@ -1141,6 +1141,16 @@ spells the same thing?**
   witness generated from the grammar the binary publishes (`delulu toolchain --json`). Search key: a list that names
   what to refuse needs a generated witness over everything it could name.
 
+- **EQ-RECORD-1, DISPLAY-CYCLE-1, MSG-CYCLE-1 — a value can hold itself** (the laptop, 2026-10-20, RW 2.13–2.16):
+  `Value::eq` had no arm for a record or a map, so `p == p` was `false` although the checker admits it (the doc
+  above `eq` promised structural equality for whatever `==` accepts — the checker's rule and the runtime's had
+  drifted). Fixing it meant asking what a structural walk meets: `n.next = Some(n)` is a legal program, and `str` of it
+  already overflowed the stack and killed the process. So did sending a `recover`ed self-referencing graph to an
+  actor (MSG-CYCLE-1, open). Search keys: when the checker admits an operation, does the runtime answer it for every
+  type it admits? And every recursive walk over runtime values (display, equality, a boundary's conversion, a
+  uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
+  where a cycle closes.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
