@@ -516,15 +516,20 @@ fn deny_response(d: &delulu_broker::Denial) -> Response {
     Response::Error { code: diag.code.to_string(), message: diag.message, requires_human: d.requires_human() }
 }
 
+/// An effective state's wire name, and the seq that revoked it.
+fn state_name(eff: &delulu_broker::EffState) -> (&'static str, Option<u64>) {
+    match eff {
+        delulu_broker::EffState::Live => ("live", None),
+        delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(*by_seq)),
+        delulu_broker::EffState::Expired { .. } => ("expired", None),
+    }
+}
+
 /// One grant-tree node → its wire form (phase 5j `grants list|inspect`). `eff` is the node's
 /// effective state (revocation + TTL folded against the broker clock). Holder fields are copied as
 /// DATA — displayed by the CLI, never switched on (criterion 9).
 fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo {
-    let (state, by_seq) = match eff {
-        delulu_broker::EffState::Live => ("live", None),
-        delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(by_seq)),
-        delulu_broker::EffState::Expired { .. } => ("expired", None),
-    };
+    let (state, by_seq) = state_name(&eff);
     let names = |s: &std::collections::BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>();
     NodeInfo {
         id: n.id.as_str().to_string(),
@@ -1056,6 +1061,30 @@ fn handle(
                 .collect();
             (Response::Listed { nodes }, false)
         }
+        ReqBody::RunsUnder { root, nodes } if nodes.len() > crate::broker_ipc::MAX_RUNS_ASKED => (
+            Response::Error {
+                code: "DL1401".to_string(),
+                message: format!(
+                    "a question about the runs under `{root}` names {} nodes, and one asks after at most {} — ask in parts",
+                    nodes.len(),
+                    crate::broker_ipc::MAX_RUNS_ASKED
+                ),
+                requires_human: false,
+            },
+            false,
+        ),
+        ReqBody::RunsUnder { root, nodes } => {
+            // RW 4.69: a monitor's per-poll question, answered from the nodes it names — never from a walk of the tree.
+            let root = GrantId::from_trusted(root);
+            let state = broker.effective_state(&root).map(|e| state_name(&e).0.to_string());
+            let runs = nodes
+                .into_iter()
+                .filter_map(|n| {
+                    broker.run_under(&root, &GrantId::from_trusted(n.clone())).map(|run| (n, run.as_str().to_string()))
+                })
+                .collect();
+            (Response::Runs { state, runs }, false)
+        }
         ReqBody::Inspect { node } => {
             let node = GrantId::from_trusted(node);
             match (broker.inspect(&node), broker.effective_state(&node)) {
@@ -1550,7 +1579,27 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
         if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
-            eprintln!("delulu broker: response write failed (dropping connection): {e}");
+            match e.get_ref().and_then(|i| i.downcast_ref::<crate::broker_ipc::FrameTooLarge>()) {
+                // RW 4.69: nothing of the answer was written. Say so — a dropped connection reads as a broker that is not
+                // there, and a monitor that hears that stops watching and lets its dead-man revoke everything it watched.
+                Some(big) => {
+                    let refusal = Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "the broker's answer to this request is {} bytes, larger than one protocol frame ({} bytes), and                              was not sent",
+                            big.len,
+                            crate::broker_ipc::MAX_FRAME
+                        ),
+                        requires_human: false,
+                    };
+                    if let Err(e) =
+                        write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &refusal)
+                    {
+                        eprintln!("delulu broker: response write failed (dropping connection): {e}");
+                    }
+                }
+                None => eprintln!("delulu broker: response write failed (dropping connection): {e}"),
+            }
         }
         drop(conn);
         if stop {
@@ -2894,6 +2943,66 @@ mod tests {
              jitter tolerance = 150 ms); took {elapsed:?}"
         );
 
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.69: a monitor's question over the wire — its node's state, and the run of each asked node under it, with nothing
+    /// about any other node; a revoked node still names its run; more than `MAX_RUNS_ASKED` names are refused in words. And an
+    /// answer too large for one frame — a listing whose two descriptions together pass 16 MiB — is refused in words, never a
+    /// dropped connection, and the daemon serves on.
+    #[test]
+    fn a_monitors_question_is_answered_from_the_nodes_it_names() {
+        let state = temp_state("runsunder");
+        let handle = start_daemon(&state);
+        let child = |parent: &str, desc: String| -> String {
+            let authority = AuthoritySpec { effects: vec!["Write".to_string()], holder_desc: desc, ..Default::default() };
+            match request(&state, ReqBody::Attenuate { parent: parent.to_string(), authority, owner: None }).unwrap() {
+                Response::Issued { node } => node,
+                other => panic!("attenuate: {other:?}"),
+            }
+        };
+        let Response::Issued { node: top } = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap() else { panic!("issue") };
+        let m = child(&top, "monitor".into());
+        let run = child(&m, "a run".into());
+        let dev = child(&run, "its device".into());
+        let other = child(&top, "someone else".into());
+        let ask = |root: &str, nodes: &[&str]| {
+            let nodes = nodes.iter().map(|n| n.to_string()).collect();
+            match request(&state, ReqBody::RunsUnder { root: root.to_string(), nodes }).unwrap() {
+                Response::Runs { state, runs } => {
+                    (state, runs.into_iter().collect::<std::collections::HashMap<String, String>>())
+                }
+                other => panic!("runs under: {other:?}"),
+            }
+        };
+        let (s, runs) = ask(&m, &[&dev, &run, &other, &m, &top, "g_0000000000000000000000000000dead"]);
+        assert_eq!(s.as_deref(), Some("live"));
+        let want: std::collections::HashMap<String, String> =
+            [(dev.clone(), run.clone()), (run.clone(), run.clone()), (m.clone(), m.clone())].into_iter().collect();
+        assert_eq!(runs, want, "only the asked nodes under the root, each with its run");
+        assert_eq!(ask("g_0000000000000000000000000000dead", &[&run]), (None, std::collections::HashMap::new()), "no such root");
+        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: m.clone(), target: run.clone() }).unwrap()
+        else {
+            panic!("revoke")
+        };
+        assert_eq!(ask(&run, &[&dev]), (Some("revoked".to_string()), [(dev.clone(), dev.clone())].into_iter().collect()));
+        let many = (0..=crate::broker_ipc::MAX_RUNS_ASKED).map(|i| format!("g_{i}")).collect();
+        let resp = request(&state, ReqBody::RunsUnder { root: m.clone(), nodes: many }).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("ask in parts")),
+            "{resp:?}"
+        );
+
+        let _ = child(&top, "x".repeat(9 << 20));
+        let _ = child(&top, "y".repeat(9 << 20));
+        let resp = request(&state, ReqBody::List).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("larger than one protocol frame")),
+            "an answer past one frame is refused in words: {}",
+            format!("{resp:?}").chars().take(300).collect::<String>()
+        );
+        assert!(matches!(request(&state, ReqBody::Status).unwrap(), Response::Status { .. }), "and the daemon serves on");
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }

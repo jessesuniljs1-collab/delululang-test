@@ -1066,6 +1066,14 @@ spells the same thing?**
   beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); and every opening read every day file twice (0.2–0.3 s
   there; D-V2-160: the anchor notes where the chain stood, and an opening whose files still measure so reads one line).
 
+- **MONITOR-FRAME-1 — a tree too large for one answer killed a healthy monitor's fleet** (the laptop, 2026-10-19,
+  D-V2-161, RW 4.69): the monitor asked for the whole grant tree each poll; every wire frame is capped at 16 MiB
+  (`broker_ipc::MAX_FRAME`), and past it the daemon dropped the connection. The monitor took that for an absent broker,
+  stopped, and its dead-man revoked everything under it — 550 nodes of another holder's long descriptions did it. Routine
+  run 3 had measured the same listing and filed it as a latency (371 ms); the cliff was a constant in the wire code. Search
+  key: for every answer that grows with history, find the size limit it will meet and what its client does when it cannot be
+  sent — a dropped connection reads as "unreachable", and a monitor that hears "unreachable" stops.
+
 - **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
   and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the
   operator had passed, and a comment claimed compute was refused by name. The refusal list's own comment named the class

@@ -6576,3 +6576,37 @@ the CLI's `grants list --json` 2.7 s) the median stayed 13 ms but the **max went
 each whole-tree listing holds the serial daemon, and an e-stop's revoke waits behind it. Not a deadline for the monitor (its
 beater beats while it waits on the daemon, D-V2-127). Recorded as RW 4.69 (open, measured): ask only for the live subtree
 under the monitor's node.
+
+## 2026-10-19 — RW 4.69: a tree too large for one listing killed a healthy monitor's fleet (MONITOR-FRAME-1, D-V2-161)
+
+**What.** The on-demand routine's third run measured the monitor's per-poll `List` as a latency (371 ms at 30,003 nodes) and
+recorded RW 4.69. Putting its own question further — what does the listing's growth meet? — the laptop found a constant:
+`broker_ipc::MAX_FRAME`, 16 MiB a frame. The tree keeps every node for the daemon's life, each with its holder's description
+(no bound), and past the cap the daemon's `write_frame` refused, the serve loop dropped the connection, and the client read
+`broker unreachable`. By hand on Windows (debug build, a scratch daemon): a monitor on `g_M` with one run under it, then
+nodes of another holder with 30,000-byte descriptions — at 500 the listing answered (15.6 MB of JSON), at 550 `grants list`
+failed, the monitor ended `broker unreachable: PeekNamedPipe: win32 error 233`, and four seconds later `g_M` and its run were
+revoked by the monitor's own dead-man (`by_seq 1106` both).
+
+**Why this way (D-V2-161).** The monitor needs two things of the tree each poll: its node's state, and the run each newly read
+record's actor belongs to. `RunsUnder { root, nodes }` answers exactly those, from parent pointers (`Broker::run_under`), so
+its cost is what is asked — never the tree. Asking AFTER the read also closes what the old order left open: a node minted
+between the listing and the read had its records skipped for good (by construction; not witnessed). An oversize answer is
+now `DL1401` in words, so no client reads "unreachable" from a broker that is there. The human surfaces that read the whole
+tree (`grants list`, `grants tree`, the atlas overlay) still cannot read one past a frame: RW 4.70, open.
+
+**Evidence.** `monitor_cli.rs` `a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor` — the state measured by
+`grants list` itself failing past one frame (562 nodes of 30,000 bytes on Windows, 142 of 120,000 elsewhere, four writers at
+once), then three dead-man periods, then the run under the monitor quarantined at its first envelope refusal: **red on the old
+product code** (`("revoked", "revoked")` for the monitor's node and its run), green after (14 s locally).
+`brokerd.rs` `a_monitors_question_is_answered_from_the_nodes_it_names` (only asked nodes under the root, with their runs; a
+revoked node still names its run; an unknown root `None`; 4,097 names refused; two 9 MiB descriptions make `List` a DL1401 in
+words and the daemon serves on); `tree.rs` `a_node_maps_to_its_run_under_a_root_and_nothing_outside_is_under_it` (the old
+`monitor_cmd.rs` unit test's tree, moved to where the walk lives). Mutants, each on its own target: M494 — the oversize
+answer dropped as before: the daemon test red, the e2e red at its last assertion (the monitor itself survived: the two halves
+are separate); M495 — `run_under` answering any node as its own run: the tree test and `a_monitor_sees_nothing_outside_its_own_subtree`
+red; M496 — the asked node instead of its run: the tree test red; M497 — the cap removed: the daemon test red. Locally green:
+`monitor_cli` 22, `audit_cli`, `broker_cli`, `budget_cli`, `estop_cli`, `grants_cli`, `json_contract`, `plugin_load_cli`,
+`sandbox_devices_cli`, `within_cli`, the `delulu` binary's 183 unit tests and `delulu-broker`'s; clippy 0; fmt clean. **The
+full suite did not run on the laptop** (the owner's rule of 2026-10-19: it runs on GitHub — the run is named in
+`CLOUD_SYNC_LOG.md`).

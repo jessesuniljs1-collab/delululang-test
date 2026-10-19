@@ -1447,3 +1447,83 @@ fn a_long_chain_does_not_kill_a_healthy_monitor() {
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
 }
+
+/// A node's state by `grants inspect` — one node's answer, which fits a frame however large the tree is.
+fn inspect_state(f: &Fixture, id: &str) -> String {
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "inspect", id, "--json"]);
+    assert!(o.status.success(), "grants inspect {id}: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants inspect --json");
+    v["node"]["state"].as_str().unwrap_or("").to_string()
+}
+
+/// **RW 4.69: a tree too large for one listing is not a dead monitor.** The monitor asked the daemon for the WHOLE grant tree
+/// every poll, and the tree keeps every node it ever held — another holder's included, each with its holder's description,
+/// unbounded words. Past one protocol frame (16 MiB) the daemon could not send the listing and dropped the connection; the
+/// monitor read that as a broker that was not there, stopped watching, and its dead-man revoked its node and every run under
+/// it — nothing under it having misbehaved (by hand on Windows, 2026-10-19: 550 nodes of 30,000-byte descriptions, outside
+/// the monitor's subtree). The state this needs is a tree whose whole listing does not fit a frame, measured here by
+/// `grants list` itself. The monitor must stay live across three periods past it, and then still quarantine the run under
+/// it at its first envelope refusal — so "not revoked" is not a monitor that judges nothing.
+#[test]
+fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
+    const PERIOD_MS: u64 = 1000;
+    let f = setup("mtree");
+    std::fs::write(f.cwd.join("persist.delulu"), persistent_prober(60)).unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "the run"]);
+    let mon = start_monitor_args(&f, &m, &["--for", "600000", "--death-after", &PERIOD_MS.to_string()]);
+
+    // Another holder's nodes, outside the monitor's subtree, each described at length — under each OS's limit on one
+    // argument (Windows: 32,767 characters a command line) — until together their descriptions are more than one frame.
+    let desc_len: usize = if cfg!(windows) { 30_000 } else { 120_000 };
+    let count = (16 * 1024 * 1024) / desc_len + 2;
+    let desc = "x".repeat(desc_len);
+    std::thread::scope(|s| {
+        for w in 0..4 {
+            let (f, desc) = (&f, &desc);
+            s.spawn(move || {
+                for _ in (w..count).step_by(4) {
+                    let o = delulu_in(&f.cwd, &f.state, &["grants", "delegate", "--effects", "Write", "--holder-desc", desc]);
+                    assert!(o.status.success(), "grants delegate: {}", stderr(&o));
+                }
+            });
+        }
+    });
+    // The state, measured: a whole-tree listing no longer fits one frame.
+    let listed = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    assert!(
+        !listed.status.success(),
+        "{count} nodes of {desc_len}-byte descriptions are more than one frame, and the whole listing answered — the state \
+         this witness needs was not reached"
+    );
+
+    // Three periods of the monitor's dead-man past that size: the monitor polled throughout.
+    std::thread::sleep(std::time::Duration::from_millis(3 * PERIOD_MS));
+    assert_eq!(
+        (inspect_state(&f, &m), inspect_state(&f, &run)),
+        ("live".to_string(), "live".to_string()),
+        "a healthy monitor stopped watching once the tree's whole listing outgrew a frame, and its own {PERIOD_MS} ms \
+         dead-man revoked it and the run under it"
+    );
+    // And it still judges: the run under it is quarantined at its first envelope refusal.
+    let o = delulu_in(&f.cwd, &f.state, &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let (so, se) = (stdout(&o), stderr(&o));
+    let (report, seen) = stop_monitor(&f, &m, mon);
+    let all = format!("stdout:\n{so}\nstderr:\n{se}\nmonitor: {report}\n{seen:?}");
+    assert!(so.contains("REFUSED:"), "the baseline — the run was refused by its envelope: {all}");
+    let q = report["quarantines"].as_array().expect("quarantines");
+    assert_eq!(q.len(), 1, "one run, one quarantine: {all}");
+    assert_eq!((q[0]["target"].as_str(), q[0]["rule"].as_str()), (Some(run.as_str()), Some("envelope")), "{all}");
+    assert!(report["ended"].as_str().is_some_and(|e| e.contains("nothing left to watch")), "{all}");
+
+    // An answer too large for a frame is refused in words — never a dropped connection, which reads as a broker that is not
+    // there.
+    let said = format!("{}{}", stdout(&listed), stderr(&listed));
+    assert!(said.contains("DL1401") && said.contains("larger than one protocol frame"), "{said}");
+
+    drop(guard);
+    let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
+}

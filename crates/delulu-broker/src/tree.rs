@@ -860,6 +860,25 @@ impl Broker {
         Some(EffState::Expired { ttl_millis: 0, now_millis: now })
     }
 
+    /// RW 4.69: the run `node` belongs to under `root` — the child of `root` on `node`'s path to the top of the tree, or
+    /// `root` itself when `node` is `root`; `None` when `node` is neither `root` nor below it, or is not in the tree. A
+    /// monitor's question about the actors its newest records name, answered by walking parent pointers as
+    /// [`Self::effective_state_inherited`] does: its cost grows with the node's depth, never with the size of the tree.
+    pub fn run_under(&self, root: &GrantId, node: &GrantId) -> Option<GrantId> {
+        let mut cur = self.nodes.get(node)?;
+        let mut below: Option<&GrantId> = None;
+        // Parents always point at an already-existing node and ids are never reused, so a cycle is unreachable; the
+        // bound answers "not under it" rather than spinning.
+        for _ in 0..1024 {
+            if &cur.id == root {
+                return Some(below.unwrap_or(&cur.id).clone());
+            }
+            below = Some(&cur.id);
+            cur = self.nodes.get(cur.parent.as_ref()?)?;
+        }
+        None
+    }
+
     /// Number of nodes in the tree (for tests).
     pub fn len(&self) -> usize {
         self.nodes.len()
@@ -1022,6 +1041,35 @@ mod tests {
         assert!(s.starts_with("g_"), "id should start with g_: {s}");
         assert_eq!(s.len(), 34, "g_ + 32 hex");
         assert!(s[2..].chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    /// RW 4.69 (moved from `monitor_cmd.rs`, where the monitor once computed it from a whole-tree listing): every node
+    /// under `g_M` maps to its run — the child of `g_M` on its path — and nothing outside the subtree (a sibling, a
+    /// cousin, the parent, an id the tree never held) is under it. A revoked run still maps: its records were written
+    /// while it lived, and the monitor judges them after.
+    #[test]
+    fn a_node_maps_to_its_run_under_a_root_and_nothing_outside_is_under_it() {
+        let mut b = det_broker();
+        let rw = || Authority::new(eff(&["Read"]), Scopes::default());
+        let top = b.issue(holder(), rw(), None);
+        let m = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let run1 = b.attenuate(&m, rw(), holder(), None).unwrap();
+        let dev1 = b.attenuate(&run1, rw(), holder(), None).unwrap();
+        let deep = b.attenuate(&dev1, rw(), holder(), None).unwrap();
+        let run2 = b.attenuate(&m, rw(), holder(), None).unwrap();
+        let sibling = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let cousin = b.attenuate(&sibling, rw(), holder(), None).unwrap();
+        b.revoke(&m, &run2).unwrap();
+        assert_eq!(b.run_under(&m, &m), Some(m.clone()), "the root is its own run");
+        assert_eq!(b.run_under(&m, &run1), Some(run1.clone()));
+        assert_eq!(b.run_under(&m, &dev1), Some(run1.clone()), "a device's node belongs to its run");
+        assert_eq!(b.run_under(&m, &deep), Some(run1.clone()), "however deep");
+        assert_eq!(b.run_under(&m, &run2), Some(run2.clone()), "a revoked run is still the run its records name");
+        for outside in [&top, &sibling, &cousin] {
+            assert_eq!(b.run_under(&m, outside), None, "`{outside}` is not under the monitor");
+        }
+        assert_eq!(b.run_under(&m, &GrantId::from_trusted("g_never")), None, "an id the tree never held");
+        assert_eq!(b.run_under(&GrantId::from_trusted("g_never"), &run1), None, "a root the tree never held");
     }
 
     #[test]
