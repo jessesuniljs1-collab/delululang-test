@@ -4513,3 +4513,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) the CI of #10–#12 and this branch, landing each on green in order; then `launch/2.0.0`; (2) EQ-FN-1
   (RW 2.15); RW 7.20 under load; records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's
   word.
+
+### 2026-10-20 — no `==` on functions; an opaque type inside a record field is seen (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/eq-fn` (on `laptop/msg-cycles`, #13)   Pull request: #14   Merged: not yet (after #11–#13, on green CI)
+- Base: `d63d13d`. Also: #10's CI `39335074061` read success on every job; `master` fast-forwarded to `11a50bd`; master's
+  push run `39335645443` (`d51d8d3`) read success.
+- What: `V2_LOG.md` (this date, the tenth entry); D-V2-166; RW 2.15 closed, 2.17 added closed.
+- Files and folders: M `crates/delulu-check/src/check.rs` (`opaque_for`, `lacks_equality`, `no_equality`,
+  `type_expr_opaque`), `crates/delulu-check/src/lib.rs` (two tests), `crates/delulu-diag/src/codes.rs` (DL0605's explain),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M591–M598; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #11–#13 and this branch, landing each on green in order; then merge `master` into
+  `launch/2.0.0` and dispatch its `everything` and release dry runs; (2) records on WASM; RW 7.20 under load; RW 4.66,
+  4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

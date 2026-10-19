@@ -4019,6 +4019,34 @@ removes. Narrowing `recover` to tree-shaped results was rejected for the same re
 - `channel.rs` `a_value_that_holds_itself_is_refused_and_one_held_twice_crosses`.
 - Mutants M583–M590 red, control green.
 
+## D-V2-166 — A function has no structural equality; an opaque type inside a record field is seen (RW 2.15, 2.17) — TAKEN (head chef, 2026-10-20, under the owner's delegation)
+
+**Found** (the laptop, 2026-10-20, asking after EQ-RECORD-1 whether the runtime answers `==` for every type the checker
+admits):
+- **EQ-FN-1.** `let g = fn(x: Int) -> Int { x }; g == g` checked clean and answered `false`. The checker treated a
+  function type as comparable, and `Value::eq` has no answer for two closures.
+- **OPAQUE-FIELD-1.** The walk over a record's (or sum's) written field types, `type_expr_opaque`, named no `Map`, no
+  `Plugin` and no actor. So a record holding `Map[Str, Secret[Str]]`, a `Plugin[Verified]` or an actor reference was
+  admitted to `==` (and to `str`), though the same type outside a record is refused (DL0605, DL0604). No secret byte
+  was exposed: `Value::eq` answers `false` for two secrets and `display` prints «secret». But the rule R-5 states, that
+  an opaque value has no equality wherever it sits, did not hold.
+
+**Decision.**
+1. **A function has no structural equality.** `==`, `!=`, `assert_eq` and `List.contains` refuse a type that holds a
+   function — bare, in a list, an option, a map or a record field — with DL0605, in its own words ("a function has no
+   structural equality"; label: compare what the functions compute). Identity comparison of closures is not a promise
+   the language makes; `str` of a function stays `<fn>`. No new code: DL0605 is "opaque type has no structural
+   equality", and a function is opaque to equality. Its `explain` text says so.
+2. **One walk, two questions.** `opaque_for(t, fns)` is the walk; `is_opaque` (str, DL0604) asks without functions and
+   `lacks_equality` (the three equality sites) asks with them. The field walk names what the type walk names: `Map`
+   (both sides), `Plugin`, and an actor's name.
+
+**Evidence.**
+- `delulu-check` `equality_on_a_function_is_dl0605_in_its_own_words` (five shapes, and `str(g)` still checks) and
+  `an_opaque_type_inside_a_record_field_is_seen` (a secret map, an actor, a plugin, `str` of the secret map, and a plain
+  record that still compares and prints). Both were red on the old `check.rs`.
+- Mutants M591–M598, red, control green.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
