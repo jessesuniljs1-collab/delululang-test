@@ -1061,6 +1061,21 @@ fn handle(
                 .collect();
             (Response::Listed { nodes }, false)
         }
+        ReqBody::ListPage { after } => {
+            let mut nodes: Vec<NodeInfo> = Vec::new();
+            let (mut bytes, mut next) = (0usize, None);
+            for n in broker.nodes().into_iter().filter(|n| after.as_deref().is_none_or(|a| n.id.as_str() > a)) {
+                let info = node_info(n, broker.effective_state(&n.id).unwrap_or(delulu_broker::EffState::Live));
+                let size = crate::broker_ipc::encoded_len(&info);
+                if !nodes.is_empty() && bytes.saturating_add(size) > crate::broker_ipc::LIST_PAGE_BYTES {
+                    next = nodes.last().map(|l| l.id.clone());
+                    break;
+                }
+                bytes = bytes.saturating_add(size);
+                nodes.push(info);
+            }
+            (Response::ListedPage { nodes, next }, false)
+        }
         ReqBody::RunsUnder { root, nodes } if nodes.len() > crate::broker_ipc::MAX_RUNS_ASKED => (
             Response::Error {
                 code: "DL1401".to_string(),
@@ -1655,6 +1670,34 @@ pub const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs
 /// [`REQUEST_DEADLINE`]: a daemon that does not answer is an error in words, never a hang.
 pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
     request_timed(state_dir, body, REQUEST_DEADLINE)
+}
+
+/// RW 4.70: the whole tree, read page by page (`ListPage`) and answered as one `Listed` — or the first answer that is not a
+/// page (a refusal), or the transport's error. Each page is its own request, so a tree past one frame is listed whole and the
+/// daemon serves other requests between pages; a paged listing is not a snapshot (the tree may change between pages).
+pub fn list_all(state_dir: &Path) -> io::Result<Response> {
+    let mut all: Vec<NodeInfo> = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        match request(state_dir, ReqBody::ListPage { after: after.clone() })? {
+            Response::ListedPage { nodes, next } => {
+                all.extend(nodes);
+                match next {
+                    // A page's `next` is past the `after` it answered, or the daemon is not paging.
+                    Some(n) if after.as_deref().is_none_or(|a| n.as_str() > a) => after = Some(n),
+                    Some(n) => {
+                        return Ok(Response::Error {
+                            code: "DL1401".to_string(),
+                            message: format!("the broker's listing did not advance past `{n}`"),
+                            requires_human: false,
+                        })
+                    }
+                    None => return Ok(Response::Listed { nodes: all }),
+                }
+            }
+            other => return Ok(other),
+        }
+    }
 }
 
 /// [`request`] with the caller's own bound on the whole answer, so a hung or slow broker cannot block the
