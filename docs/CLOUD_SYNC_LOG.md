@@ -3967,3 +3967,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   remainder (the serial daemon behind other writers' appends on a short chain — routine run 16's measurement, not re-run);
   RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67; (5) *[laptop]* the launch, only on the owner's
   word.
+
+### 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; and `launch/2.0.0`   Base: `4c8e44a`   Commits: this entry's commit; on `launch/2.0.0` `6c01264`, the merge
+  of `4c8e44a`.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `4c8e44a`'s push runs — CI `39210944095` and `ocsf` `39210944303` — **success**; `master` is green on every slice
+  of this run. `launch/2.0.0` at `6c01264`: the release dry run `39212180218` — success; `jobs=everything` `39212177717` —
+  running at this entry (its `miri-slow` jobs take hours).
+- Measured: the monitor's per-poll `List` at 3,002 nodes — no material cost to other daemon requests (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39212177717` (`jobs=everything`
+  on `6c01264`, the branch's newest commit); `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the final launch
+  commit, so a launch session merges `master` once more and reads it again; (3) the monitor's `List` at tens of thousands of
+  nodes; RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
+  RW 6.2, RW 4.63, 4.66, 4.67; (4) *[laptop]* the launch, only on the owner's word.

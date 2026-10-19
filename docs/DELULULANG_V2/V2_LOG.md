@@ -6553,3 +6553,23 @@ Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners befor
 routine run 16's original measurement — the serial daemon's queue behind other writers' appends on a SHORT chain — not re-run.
 
 **CI read:** `7f1a4a1`'s push runs — CI `39208000005` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.98x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39207999996` — success. `launch/2.0.0` at `d2814e8` (this run's merge of `7f1a4a1`): the release dry run `39208470155` — success; `jobs=everything` `39208467616` — at 06:33 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` running (they take hours): the next run reads them.
+
+## 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`; the monitor's listing measured
+
+**CI read:** `4c8e44a`'s push runs — CI `39210944095` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every
+push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.12x, passed; Ubuntu and Windows NOT MEASURED, busy;
+macOS NOT MEASURED, 3 threads) and `ocsf` `39210944303` — success. `master` is green on every slice of this run.
+
+**`launch/2.0.0` at `6c01264`**, the merge of `4c8e44a` (release procedure step 1): the CHANGELOG change and the decision log
+merged by themselves (D-V2-155, D-V2-158 to D-V2-160); the map rebuilt there (1524 nodes, 14955 edges, 0 errors); `doctor
+--check` ok; book, core_invariance, distribution, doctor_cli, evidence_claims, governance, repository_structure, release and
+`monitor_cli` (23) green, `audit::tests` 30 and `audit_truncation` 4 green on the launch tree. Dispatched: the release dry
+run `39212180218` — success; `jobs=everything` `39212177717` — running at this entry. `39208467616` (`d2814e8`): 17 of 18
+success, `miri-slow (delulu-broker)` still running — superseded by `39212177717`, kept as evidence.
+
+**Measured, not a defect at this size: the monitor's listing.** MONITOR-CHAIN-1's question put to the monitor's other per-poll
+work — it asks the daemon for the whole grant tree (`List`) every poll, and the tree keeps every revoked node. A scratch
+daemon (debug build) with 3,002 nodes: the CLI's `grants list --json` 238–304 ms for 1.7 MB (most of it the CLI's own
+rendering); a recorded daemon request (`grants delegate`) took median 12 ms (max 16) alone and 13 ms (max 23) with a monitor
+polling that tree every 25 ms — the daemon's own listing costs it little at this size. Not graded further: the next run, or
+a sweep, measures it at tens of thousands of nodes before calling it a latency or a deadline.
