@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 316 |
-| Rust lines | 177897 |
-| Rust files outside `src/` (test/bench targets) | 147 |
+| Rust files | 317 |
+| Rust lines | 178232 |
+| Rust files outside `src/` (test/bench targets) | 148 |
 | Markdown documents | 268 |
-| Markdown lines | 81715 |
+| Markdown lines | 81778 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1539 / 15362 |
+| Nodes / edges in this map | 1540 / 15380 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -383,13 +383,13 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 9061 lines
+- **Modules:** 8 files, 9251 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 169 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 311 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 4119 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 4309 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 343 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 1805 | The embedded Wasmtime host (Phase 3a/3b). |
@@ -420,7 +420,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL13xx` | 8 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm` |
 | `DL14xx` | 21 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-wasm` |
 | `DL15xx` | 11 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm` |
-| `DL16xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax` |
+| `DL16xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm` |
 | `DL17xx` | 20 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-registry`, `delulu-runtime`, `delulu-syntax` |
 | `DL18xx` | 2 | `delulu`, `delulu-check`, `delulu-diag` |
 | `DL19xx` | 13 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-registry`, `delulu-runtime`, `delulu-syntax` |

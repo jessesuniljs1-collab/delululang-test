@@ -4531,3 +4531,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) the CI of #11–#13 and this branch, landing each on green in order; then merge `master` into
   `launch/2.0.0` and dispatch its `everything` and release dry runs; (2) records on WASM; RW 7.20 under load; RW 4.66,
   4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — records on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-records` (on `laptop/eq-fn`, #14)   Pull request: #15   Merged: not yet (after #13 and #14, on green CI)
+- Base: `d18d86f`. Also: #11's CI `39336126623` and #12's `39337254137` read success on every job; `master`
+  fast-forwarded to `825657a` (both) and pushed.
+- What: `V2_LOG.md` (this date, the eleventh entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::Record`, `Scalar::Record`, `RecordDesc`, the record
+  registry in `build_enum_env`, `compile_record_literal`, `compile_field`, `compile_field_assign`, `lvalue_ty`,
+  `lvalue_expr`), `crates/delulu/tests/wasm_cli.rs` (chapter `01`), `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/record_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M599–M603; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #13, #14 and this branch, landing each on green in order; then merge `master` into
+  `launch/2.0.0`; (2) on WASM: `Option`/`List` fields, `str` of a record, `fs_write` (`05`); RW 7.20; RW 4.66, 4.67, 6.1,
+  6.2; (3) *[laptop]* the launch, only on the owner's word.

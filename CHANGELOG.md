@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — records on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles records**: a literal, a field read, and a field write (`p.x = v`, `l.a.x = v`),
+  with records passed to and returned from functions, held in lists and options, and fields of any scalar type,
+  `Float` included. A record is shared as on the interpreter (`var q = p; q.n = 1` is seen through `p`), and a literal's
+  fields are computed in the order written. `examples/guide/01_types.delulu` now runs on the WASM engine with the
+  interpreter's output. `str` and `==` of a whole record, and a record with an `Option` or list field, still run only
+  on the interpreter.
+
 ## Unreleased — no `==` on functions; an opaque value inside a record is seen, 2026-10-20
 
 - **Changed: `==`, `!=`, `assert_eq` and `List.contains` refuse a function** (DL0605, "a function has no structural
