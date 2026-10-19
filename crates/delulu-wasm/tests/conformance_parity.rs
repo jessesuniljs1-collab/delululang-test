@@ -108,6 +108,9 @@ fn random_console_programs_match_across_engines() {
     let mut calls = [0u32; STR_METHODS.len()];
     // Programs that called `parse_int`, and how many of those printed its `None`.
     let (mut parsed, mut unparsed) = (0u32, 0u32);
+    // Programs with a `Float` line (every leaf the generator writes holds a `.`, or is `float(…)`), and how many printed a
+    // NaN and an infinity.
+    let (mut floats, mut nans, mut infs) = (0u32, 0u32, 0u32);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -136,6 +139,11 @@ fn random_console_programs_match_across_engines() {
                     parsed += 1;
                     unparsed += u32::from(wo.lines().any(|l| l == "none"));
                 }
+                if ["float(", ".0", "0.", "2.5", "3.75"].iter().any(|m| src.contains(m)) {
+                    floats += 1;
+                    nans += u32::from(wo.contains("NaN"));
+                    infs += u32::from(wo.contains("inf"));
+                }
                 if src.contains(" == ") {
                     compares += 1;
                     equal += u32::from(wo.lines().last().is_some_and(|l| l.starts_with("true")));
@@ -162,6 +170,7 @@ fn random_console_programs_match_across_engines() {
     );
     assert!(calls.iter().all(|n| *n > 100), "Str methods: {STR_METHODS:?} called in {calls:?} programs");
     assert!(parsed > 300 && unparsed > 100, "parse_int: {parsed} programs, {unparsed} of them printing `none`");
+    assert!(floats > 300 && nans > 20 && infs > 10, "Float: {floats} programs, {nans} printing a NaN, {infs} an infinity");
 }
 
 #[test]

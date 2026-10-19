@@ -7151,3 +7151,56 @@ Mutants, all red, control green:
 
 **Evidence.** `str_parity` 5; `conformance_parity` 6; the whole `delulu-wasm` suite green; the release differential with
 the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: `Float` on the WASM engine (RW 3.4)
+
+**`Float` compiles**: `+ - * /`, the six comparisons, negation, `%`, `float(…)`, `int(…)`, `str(…)` and `parse_float`.
+Both engines use IEEE 754, so the guest uses WebAssembly's own `f64` instructions and the answers agree to the bit:
+- a NaN compares false, and `!=` true, on both;
+- `float(i)` is `f64.convert_i64_s` (round to nearest, as Rust's `as f64`);
+- `int(x)` is `i64.trunc_sat_f64_s`: toward zero, saturating at the `Int` range, a NaN to 0, exactly Rust's `as i64`;
+- negation is `f64.neg`.
+
+What WebAssembly lacks, the host computes with the interpreter's own code:
+- `%` is `delulu:float.rem`, Rust's `%`;
+- `str` of a `Float` is `delulu:float.to_str`, the interpreter's `Value::display` itself;
+- `parse_float` is `delulu:str.parse_float`, through `call_builtin` as `parse_int` is.
+
+The foreign interface's `float_to_str` now also calls `Value::display`. The copy of that rule, `format_float`, is
+removed, so there is one implementation, not two. `parse_int` and `parse_float` share `parse_by_builtin`.
+
+A module carries `delulu:float` only if a compiled body makes or takes a `Float`: a literal, `float(…)`,
+`parse_float(…)`, or `Float` written in a signature (`module_uses_floats`). Every other module is byte-identical.
+
+`tests/corpus/tier3-application/telemetry_report.delulu` now compiles. Given a telemetry file with good, bad, exponent,
+`inf` and padded readings, it prints the interpreter's answer on both engines. The corpus's entry points: 8 of 17.
+`01_types` now stops at a record literal.
+
+`float_parity.rs`:
+- `float_arithmetic_matches_the_interpreter` — `0.1 + 0.2`, a third, negative zero, an overflow to infinity, a NaN and
+  its comparisons, `%` with signs and by zero, and the casts at both ends of their ranges;
+- `parse_float_matches_the_interpreter` — padded, signed and exponent text, and `inf`, `nan`, `1e999`, a word, `1.2.3`;
+- `floats_are_held_as_the_interpreter_holds_them` — function signatures, a `var` in a loop, a list pushed, indexed,
+  walked and mapped, an `Option[Float]`;
+- `only_a_module_with_a_float_imports_the_float_interface`.
+
+The console generator writes a `Float` line in a third of its programs, from a stream of its own (`gen_float`). Its leaves
+are exact and inexact, overflow-prone and signed-zero; it uses every operator and an `if` on a comparison; the line is
+printed through `str`, or cast back with `int`. `conformance_parity`: 678 of 2,000 programs, 49 printing a NaN and 15 an
+infinity, asserted over 300, 20 and 10. (A first run printed 10 infinities; a leaf `0.3` became `1.0e200`.)
+
+Mutants, all red, control green:
+- M563 — `+` as `-`;
+- M564 — `<` as `<=` (red in the random programs only, which compare equal operands);
+- M565 — `%` as `rem_euclid`;
+- M566 — the trapping `i64.trunc_f64_s`;
+- M567 — an unsigned conversion;
+- M568 — negation dropped;
+- M569 — the interface never declared;
+- M570 — the interface always declared;
+- M571 — `parse_float` off by an epsilon;
+- M572 — `str` as Rust's `to_string`;
+- M573 — the generator writing no `Float`.
+
+**Evidence.** `float_parity` 4; `conformance_parity` 6; `foreign_parity` 8; the whole `delulu-wasm` suite green; the
+release differential with the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.

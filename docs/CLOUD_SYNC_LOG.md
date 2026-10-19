@@ -4440,3 +4440,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `Float` arithmetic (IEEE as the interpreter's; `%` by the host's `fmod`), `str(Float)` without the foreign interface,
   `parse_float` (`01_types`, `telemetry_report`); an empty list typed from the checker (`02`); `pop` and the other list
   methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — `Float` on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-float` (on `laptop/wasm-parse`, #9)   Pull request: #10   Merged: not yet (after #8 and #9, on green CI)
+- Base: `d51d8d3`. Also: #7's CI `39328647809` read success on every job; `master` fast-forwarded to `650387a` and pushed.
+- What: `V2_LOG.md` (this date, the sixth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`module_uses_floats`, `mentions_float`, the `delulu:float`
+  imports, `Float` operators, negation, `float`/`int`, `compile_parse`), `crates/delulu-wasm/src/host.rs`
+  (`delulu:float.to_str`, `delulu:float.rem`, `delulu:str.parse_float`, `parse_by_builtin`, `float_to_guest_str`;
+  `format_float` removed — `str` of a `Float` is now `Value::display` itself), `crates/delulu-wasm/src/gen.rs`
+  (`gen_float`), `crates/delulu-wasm/tests/conformance_parity.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/float_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M563–M573; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #8, #9 and this branch, landing each on green in order; then `launch/2.0.0`; (2) on WASM:
+  records (`01_types`), an empty list typed from the checker (`02`), `pop` and the other list methods; RW 4.66, 4.67, 6.1,
+  6.2; (3) *[laptop]* the launch, only on the owner's word.

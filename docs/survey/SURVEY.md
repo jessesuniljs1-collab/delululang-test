@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 314 |
-| Rust lines | 176898 |
-| Rust files outside `src/` (test/bench targets) | 145 |
+| Rust files | 315 |
+| Rust lines | 177266 |
+| Rust files outside `src/` (test/bench targets) | 146 |
 | Markdown documents | 268 |
-| Markdown lines | 81286 |
+| Markdown lines | 81368 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1537 / 15268 |
+| Nodes / edges in this map | 1538 / 15283 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -383,16 +383,16 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 8804 lines
+- **Modules:** 8 files, 9018 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 169 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 311 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 3935 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 4076 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
-| `src/gen.rs` | 306 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 1769 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/gen.rs` | 343 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
+| `src/host.rs` | 1805 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 830 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 

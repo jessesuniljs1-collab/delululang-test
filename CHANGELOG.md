@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `Float` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `Float` arithmetic** — `+ - * / %`, comparisons, negation, `float(…)`, `int(…)`,
+  `str(…)` and `parse_float` — in variables, lists, options and function signatures. The answers are the interpreter's
+  to the bit: both engines use IEEE 754, and `%`, `str` and `parse_float` are computed by the interpreter's own code.
+  `tests/corpus/tier3-application/telemetry_report.delulu` now runs on the WASM engine with the interpreter's output.
+  A module with no `Float` in it compiles to the same module as before.
+
 ## Unreleased — `parse_int` on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `parse_int`.** The WASM engine hands the text to the interpreter's own

@@ -427,6 +427,11 @@ struct Imports {
     str_method: u32,
     /// `delulu:str.parse_int` — the builtin `parse_int`, run host-side by the interpreter's own `call_builtin`.
     parse_int: u32,
+    /// `delulu:str.parse_float` — the builtin `parse_float`, the same way.
+    parse_float: u32,
+    /// `delulu:float.rem` — `Float % Float`, which WebAssembly has no instruction for, computed by the host as the
+    /// interpreter computes it.
+    float_rem: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -647,6 +652,32 @@ fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
     module_any(env, module, &hit, false)
 }
 
+/// Does any function whose body is compiled make or take a `Float` — a literal, `float(…)`, `parse_float(…)`, or a
+/// `Float` written in its signature? Only these bring a `Float` into a compiled body, so only such a module carries the
+/// `delulu:float` interface, and every other module is unchanged.
+fn module_uses_floats(env: &EnumEnv, module: &Module) -> bool {
+    let hit = |e: &Expr| match e {
+        Expr::Lit { kind: LitKind::Float(_), .. } => true,
+        Expr::Call { callee, .. } => matches!(&**callee, Expr::Var { path, .. }
+            if path.segs.len() == 1 && matches!(path.segs[0].name.as_str(), "float" | "parse_float")),
+        _ => false,
+    };
+    let signed = |f: &FnDecl| f.params.iter().any(|p| mentions_float(&p.ty)) || f.ret.as_ref().is_some_and(mentions_float);
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && signed(f)))
+        || module_any(env, module, &hit, false)
+}
+
+/// Does a written type name `Float` anywhere in it — `Float`, `Option[Float]`, `List[Float]`, a function type over one?
+fn mentions_float(t: &TypeExpr) -> bool {
+    match t {
+        TypeExpr::Named { path, args, .. } => {
+            path.segs.last().is_some_and(|s| s.name == "Float") || args.iter().any(mentions_float)
+        }
+        TypeExpr::Fn { params, ret, .. } => params.iter().any(mentions_float) || ret.as_deref().is_some_and(mentions_float),
+        TypeExpr::Rcap { inner, .. } => mentions_float(inner),
+    }
+}
+
 /// The `Str` methods the WASM engine runs host-side, through the interpreter's own `call_str_method` — so each answers
 /// exactly what the interpreter answers, Unicode and all (RW 3.4). A method's id is its index here; `host.rs` reads it
 /// back. `len` and `split` have their own paths (`__str_len`, `delulu:list.str_split`).
@@ -806,6 +837,8 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         str_eq: u32::MAX,
         str_method: u32::MAX,
         parse_int: u32::MAX,
+        parse_float: u32::MAX,
+        float_rem: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -860,6 +893,23 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let needs_parse_int = module_calls_builtin(&env, module, "parse_int");
     if needs_parse_int {
         imp.parse_int = n_imports;
+        n_imports += 1;
+    }
+    let needs_parse_float = module_calls_builtin(&env, module, "parse_float");
+    if needs_parse_float {
+        imp.parse_float = n_imports;
+        n_imports += 1;
+    }
+    // A module that makes or takes a `Float` carries `delulu:float`: `str` of one (unless the foreign interface already
+    // brought `float_to_str`), and `%`.
+    let needs_floats = module_uses_floats(&env, module);
+    let needs_float_str = needs_floats && !needs_foreign;
+    if needs_float_str {
+        imp.float_to_str = n_imports;
+        n_imports += 1;
+    }
+    if needs_floats {
+        imp.float_rem = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -1008,6 +1058,25 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         types.ty().function([ValType::I32], [ValType::I32, ValType::I64]);
         next_type += 1;
     }
+    let mut parse_float_ty = 0;
+    if needs_parse_float {
+        parse_float_ty = next_type;
+        // parse_float(s) -> (parsed, value)
+        types.ty().function([ValType::I32], [ValType::I32, ValType::F64]);
+        next_type += 1;
+    }
+    let mut float_str_ty = 0;
+    if needs_float_str {
+        float_str_ty = next_type;
+        types.ty().function([ValType::F64], [ValType::I32]); // to_str(x) -> str ptr (`Value::Float`'s display)
+        next_type += 1;
+    }
+    let mut float_rem_ty = 0;
+    if needs_floats {
+        float_rem_ty = next_type;
+        types.ty().function([ValType::F64, ValType::F64], [ValType::F64]); // rem(a, b) -> a % b
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1100,6 +1169,15 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     }
     if needs_parse_int {
         imports.import("delulu:str", "parse_int", EntityType::Function(parse_int_ty));
+    }
+    if needs_parse_float {
+        imports.import("delulu:str", "parse_float", EntityType::Function(parse_float_ty));
+    }
+    if needs_float_str {
+        imports.import("delulu:float", "to_str", EntityType::Function(float_str_ty));
+    }
+    if needs_floats {
+        imports.import("delulu:float", "rem", EntityType::Function(float_rem_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -1232,6 +1310,8 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         || needs_lists
         || needs_str_methods
         || needs_parse_int
+        || needs_parse_float
+        || needs_floats
     {
         m.section(&imports);
     }
@@ -2467,6 +2547,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     cx.emit(Instruction::Call(cx.arith_base + 2));
                     Ok(Ty::I64)
                 }
+                // A `Float`'s sign flipped, as the interpreter's `-f`.
+                UnOp::Neg if ty == Ty::F64 => {
+                    cx.emit(Instruction::F64Neg);
+                    Ok(Ty::F64)
+                }
                 UnOp::Not if ty == Ty::I32 => {
                     cx.emit(Instruction::I32Eqz);
                     Ok(Ty::I32)
@@ -2696,6 +2781,28 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if name == "parse_int" && args.len() == 1 {
                 return compile_parse_int(&args[0], cx);
             }
+            if name == "parse_float" && args.len() == 1 {
+                return compile_parse_float(&args[0], cx);
+            }
+            // `float(x)` and `int(x)` as the interpreter's `as` casts: an `Int` rounded to the nearest `Float`
+            // (`f64.convert_i64_s`), and a `Float` truncated toward zero and saturated at the `Int` range, a NaN to 0
+            // (`i64.trunc_sat_f64_s` — exactly Rust's `as i64`).
+            if (name == "float" || name == "int") && args.len() == 1 {
+                let at = compile_expr(&args[0], cx)?;
+                return match (name.as_str(), at) {
+                    ("float", Ty::I64) => {
+                        cx.emit(Instruction::F64ConvertI64S);
+                        Ok(Ty::F64)
+                    }
+                    ("int", Ty::F64) => {
+                        cx.emit(Instruction::I64TruncSatF64S);
+                        Ok(Ty::I64)
+                    }
+                    ("float", Ty::F64) => Ok(Ty::F64),
+                    ("int", Ty::I64) => Ok(Ty::I64),
+                    _ => Err(CompileError::Unsupported(format!("`{name}` of {at:?}"))),
+                };
+            }
             if name == "str" && args.len() == 1 {
                 let at = compile_expr(&args[0], cx)?;
                 return match at {
@@ -2807,15 +2914,27 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
 /// `parse_int(s)` (RW 3.4): the host parses by the interpreter's own rule (`call_builtin`) and answers whether it parsed
 /// and the number; the guest builds the `Option[Int]` from the two, as `List.get` builds its own.
 fn compile_parse_int(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
-    if cx.imp.parse_int == u32::MAX {
-        return Err(CompileError::Unsupported("`parse_int` in a module compiled without the string interface".into()));
+    compile_parse(arg, cx, cx.imp.parse_int, Scalar::I64, "parse_int")
+}
+
+/// `parse_float(s)`, as `parse_int` — the interpreter's rule refuses the text a `Float` literal may not be (`inf`, a
+/// magnitude past the range), so neither engine reads a non-finite number from text.
+fn compile_parse_float(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    compile_parse(arg, cx, cx.imp.parse_float, Scalar::F64, "parse_float")
+}
+
+/// Call the host's `import` on the `Str` `arg` — answering whether it parsed and the number, a `Scalar` `s` — and build
+/// the `Option` from the two.
+fn compile_parse(arg: &Expr, cx: &mut Cx, import: u32, s: Scalar, name: &str) -> Result<Ty, CompileError> {
+    if import == u32::MAX {
+        return Err(CompileError::Unsupported(format!("`{name}` in a module compiled without the string interface")));
     }
     compile_expr_as(arg, cx, Ty::Str)?;
-    cx.emit(Instruction::Call(cx.imp.parse_int));
-    let (parsed, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::Call(import));
+    let (parsed, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(s.to_ty())?);
     cx.emit(Instruction::LocalSet(value));
     cx.emit(Instruction::LocalSet(parsed));
-    let opt = Ty::Option(Scalar::I64);
+    let opt = Ty::Option(s);
     let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
     let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
     let (some, none) = (tag("Some"), tag("None"));
@@ -2832,7 +2951,7 @@ fn compile_parse_int(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     cx.emit(Instruction::I32Const(field_offset(0)));
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::LocalGet(value));
-    store_scalar(cx, Scalar::I64);
+    store_scalar(cx, s);
     cx.emit(Instruction::Else);
     cx.emit(Instruction::LocalGet(cell));
     cx.emit(Instruction::I32Const(none));
@@ -3226,6 +3345,28 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ge => (Instruction::I64GeS, Ty::I32),
             Eq => (Instruction::I64Eq, Ty::I32),
             Ne => (Instruction::I64Ne, Ty::I32),
+            And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
+        };
+        cx.emit(ins);
+        return Ok(ty);
+    }
+    // `Float` arithmetic is IEEE 754 on both engines — the interpreter's `f64` and WebAssembly's `f64` are the same
+    // arithmetic, so the results agree to the bit, and a comparison with a NaN is false (`!=`, true) on both. `%` has no
+    // WebAssembly instruction; the host computes it as the interpreter does (Rust's `%`, a truncated remainder).
+    if lt == Ty::F64 && rt == Ty::F64 {
+        let (ins, ty): (Instruction<'static>, Ty) = match op {
+            Add => (Instruction::F64Add, Ty::F64),
+            Sub => (Instruction::F64Sub, Ty::F64),
+            Mul => (Instruction::F64Mul, Ty::F64),
+            Div => (Instruction::F64Div, Ty::F64),
+            Rem if cx.imp.float_rem != u32::MAX => (Instruction::Call(cx.imp.float_rem), Ty::F64),
+            Rem => return Err(CompileError::Unsupported("`Float % Float` in a module compiled without `delulu:float`".into())),
+            Lt => (Instruction::F64Lt, Ty::I32),
+            Le => (Instruction::F64Le, Ty::I32),
+            Gt => (Instruction::F64Gt, Ty::I32),
+            Ge => (Instruction::F64Ge, Ty::I32),
+            Eq => (Instruction::F64Eq, Ty::I32),
+            Ne => (Instruction::F64Ne, Ty::I32),
             And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
         };
         cx.emit(ins);

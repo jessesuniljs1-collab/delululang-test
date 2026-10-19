@@ -129,6 +129,17 @@ pub fn random_console_program(seed: u64) -> String {
             "  out.println(match parse_int({text}) {{\n    Some(n) => str(n),\n    None => \"none\",\n  }})\n"
         ));
     }
+    // `Float` (on the WASM engine since 2026-10-20), from a stream of its own: arithmetic that overflows to infinity, makes
+    // a NaN or a negative zero, `%`, comparisons and the casts — printed through `str`, or cast back to an `Int`.
+    let mut f = Rng::new(seed ^ 0xBB67_AE85_84CA_A73B);
+    if f.chance(1, 3) {
+        let x = gen_float(&mut f, 3);
+        body.push_str(&if f.chance(1, 4) {
+            format!("  out.println(str(int({x})))\n")
+        } else {
+            format!("  out.println(str({x}))\n")
+        });
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);
@@ -171,6 +182,32 @@ fn gen_str_method(r: &mut Rng, depth: u32) -> String {
         5 => format!("str({recv}.starts_with({}))", pat(r)),
         6 => format!("{recv}.replace({}, {})", pat(r), pat(r)),
         _ => format!("{recv}.slice({}, {})", r.below(9) as i64 - 2, r.below(9) as i64 - 2),
+    }
+}
+
+/// A `Float` expression: leaves that are exact and inexact, huge enough to overflow when multiplied, zeros of both signs,
+/// and `float` of an `Int`; every operator, `%` included; an `if` on a comparison; a negation.
+fn gen_float(r: &mut Rng, depth: u32) -> String {
+    const LEAVES: [&str; 8] = ["0.1", "2.5", "-3.75", "1.0e300", "0.0", "-0.0", "7.0", "1.0e200"];
+    if depth == 0 || r.chance(1, 3) {
+        return match r.below(5) {
+            0 => format!("float({})", gen_safe_int(r, 1)),
+            _ => format!("({})", LEAVES[r.below(LEAVES.len() as u64) as usize]),
+        };
+    }
+    let sub = |r: &mut Rng| gen_float(r, depth - 1);
+    match r.below(8) {
+        0 => format!("({} + {})", sub(r), sub(r)),
+        1 => format!("({} - {})", sub(r), sub(r)),
+        2 => format!("({} * {})", sub(r), sub(r)),
+        3 => format!("({} / {})", sub(r), sub(r)),
+        4 => format!("({} % {})", sub(r), sub(r)),
+        5 => format!("(-{})", sub(r)),
+        _ => {
+            const OPS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
+            let op = OPS[r.below(OPS.len() as u64) as usize];
+            format!("(if {} {op} {} {{ {} }} else {{ {} }})", sub(r), sub(r), sub(r), sub(r))
+        }
     }
 }
 

@@ -540,10 +540,11 @@ of lists, `pop`, `filter`, `fold` and `sort` are among what stays `DL1201`; `Str
 day, comparing bytes as the interpreter does. So does every other `Str` method — `trim`, `to_upper`, `to_lower`,
 `chars`, `contains`, `starts_with`, `replace` and `slice` — each answered by the interpreter's own implementation, so
 the two engines cannot disagree about Unicode. A function's name passed as a value compiles as well
-(`apply(double, 21)`, `xs.map(double)`): calling the value calls the function. So does `parse_int`, answered by the
-interpreter's own implementation. Measured again that day, 7 of the 17 entry points compile.
+(`apply(double, 21)`, `xs.map(double)`): calling the value calls the function. So do `parse_int` and `Float` —
+arithmetic, comparison, `float`, `int`, `str` and `parse_float` — the same to the bit on both engines. Measured again
+that day, 8 of the 17 entry points compile.
 
-So: if you are writing ordinary DeluluLang — anything with a float, a record, a map, or a list of lists —
+So: if you are writing ordinary DeluluLang — anything with a record, a map, or a list of lists —
 **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
 cases described below, and it is grown deliberately, one construct at a time, with the boundary
 refusing rather than guessing.

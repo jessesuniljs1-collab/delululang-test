@@ -358,13 +358,52 @@ impl HostState {
     }
 }
 
-/// Format an `f64` EXACTLY as `Value::display` does (`{:.1}` for a finite integral value, else
-/// `to_string`) — the guest's `str(Float)` calls this host-side, so both engines print identically.
-fn format_float(x: f64) -> String {
-    if x.fract() == 0.0 && x.is_finite() {
-        format!("{x:.1}")
-    } else {
-        x.to_string()
+/// Run the interpreter's builtin `name` (`parse_int`, `parse_float`) on the guest string at `s`: `Some(Some(payload))` for
+/// its `Some`, `Some(None)` for its `None`, and `None` once a refusal is recorded — a string outside the guest's memory, a
+/// fault, or an answer of another shape.
+fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> Option<Option<Value>> {
+    if caller.data().refused.is_some() {
+        return None;
+    }
+    let Some(text) = read_guest_str(caller, s) else {
+        caller.data_mut().refused = Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+        return None;
+    };
+    let answer = delulu_runtime::prim::call_builtin(name, &[Value::str(text)], delulu_diag::Span::new(0, 0, 0));
+    match answer {
+        Some(Ok(Value::Variant { name: ctor, fields })) => match (&*ctor, fields.as_slice()) {
+            ("Some", [v]) => return Some(Some(v.clone())),
+            ("None", []) => return Some(None),
+            _ => {}
+        },
+        Some(Err(fault)) => {
+            caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+            return None;
+        }
+        _ => {}
+    }
+    caller.data_mut().refused = Some(format!("`{name}` answered a value the WASM engine does not hold"));
+    None
+}
+
+/// Record that the interpreter's `name` answered `got`, which the guest cannot hold, and return `none`.
+fn unheld<T>(caller: &mut Caller<'_, HostState>, name: &str, got: &Value, none: T) -> T {
+    caller.data_mut().refused = Some(format!("`{name}` answered {got:?}, which the WASM engine does not hold"));
+    none
+}
+
+/// `str` of a `Float` in the guest's memory, by the interpreter's own `Value::display` — one rule for both engines, not a
+/// copy of it.
+fn float_to_guest_str(caller: &mut Caller<'_, HostState>, x: f64) -> i32 {
+    if caller.data().refused.is_some() {
+        return 0;
+    }
+    match write_str_cell(caller, &Value::Float(x).display()) {
+        Ok(ptr) => ptr,
+        Err(()) => {
+            caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
+            0
+        }
     }
 }
 
@@ -1056,17 +1095,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     // print a foreign Float identically. Pure (not traced).
     linker
         .func_wrap("delulu:foreign", "float_to_str", |mut caller: Caller<'_, HostState>, x: f64| -> i32 {
-            if caller.data().refused.is_some() {
-                return 0;
-            }
-            let s = format_float(x);
-            match write_str_cell(&mut caller, &s) {
-                Ok(ptr) => ptr,
-                Err(()) => {
-                    caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
-                    0
-                }
-            }
+            float_to_guest_str(&mut caller, x)
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
@@ -1169,29 +1198,36 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     // the `Option[Int]` from the two.
     linker
         .func_wrap("delulu:str", "parse_int", |mut caller: Caller<'_, HostState>, s: i32| -> (i32, i64) {
-            if caller.data().refused.is_some() {
-                return (0, 0);
+            match parse_by_builtin(&mut caller, "parse_int", s) {
+                Some(Some(Value::Int(n))) => (1, n),
+                Some(None) => (0, 0),
+                Some(Some(other)) => unheld(&mut caller, "parse_int", &other, (0, 0)),
+                None => (0, 0),
             }
-            let Some(s) = read_guest_str(&mut caller, s) else {
-                caller.data_mut().refused = Some("DL0903: a string given to `parse_int` lies outside the guest's memory".into());
-                return (0, 0);
-            };
-            let answer = delulu_runtime::prim::call_builtin("parse_int", &[Value::str(s)], delulu_diag::Span::new(0, 0, 0));
-            match &answer {
-                Some(Ok(Value::Variant { name, fields })) => match (&**name, fields.as_slice()) {
-                    ("Some", [Value::Int(n)]) => return (1, *n),
-                    ("None", []) => return (0, 0),
-                    _ => {}
-                },
-                Some(Err(fault)) => {
-                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
-                    return (0, 0);
-                }
-                _ => {}
-            }
-            caller.data_mut().refused = Some(format!("`parse_int` answered {answer:?}, which the WASM engine does not hold"));
-            (0, 0)
         })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `parse_float(s)` the same way; the interpreter's rule answers `None` for text a `Float` literal may not be.
+    linker
+        .func_wrap("delulu:str", "parse_float", |mut caller: Caller<'_, HostState>, s: i32| -> (i32, f64) {
+            match parse_by_builtin(&mut caller, "parse_float", s) {
+                Some(Some(Value::Float(x))) => (1, x),
+                Some(None) => (0, 0.0),
+                Some(Some(other)) => unheld(&mut caller, "parse_float", &other, (0, 0.0)),
+                None => (0, 0.0),
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:float` host interface (pure: neither traced nor gated) --------------------------------
+    // `str` of a `Float`, by the interpreter's own display, for a module without the foreign interface (which brings its
+    // own `float_to_str`); and `Float % Float`, which WebAssembly has no instruction for — Rust's `%`, as the interpreter's.
+    linker
+        .func_wrap("delulu:float", "to_str", |mut caller: Caller<'_, HostState>, x: f64| -> i32 {
+            float_to_guest_str(&mut caller, x)
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:float", "rem", |_caller: Caller<'_, HostState>, a: f64, b: f64| -> f64 { a % b })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
