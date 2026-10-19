@@ -363,7 +363,9 @@ file, which the Survey did not skip until that run. **A variable set in a backgr
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a
 full disk after a lockfile change, and four tests of another to a script edited between the map's build and the suite's
-start, which `TREE-MOVED` cannot see). Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
+start, which `TREE-MOVED` cannot see). **A container restart kills a background suite without a word** (on-demand run 2: its output stopped growing at
+`egress_cli` and never wrote `EXIT=`; every process's start time — `ps aux`'s START — was the restart's minute, 01:20): when a
+suite's file stops growing, read the start times before waiting longer, then run it again. Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
 stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported — and the NEXT slice's witness too (run 16 appended one to a
 test file and compiled it mid-suite; restored in time, but `TREE-MOVED` cannot see an edit that is undone). While the suite runs, a fix may be COMMITTED (a commit

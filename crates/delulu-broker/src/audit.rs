@@ -427,15 +427,20 @@ impl AuditLog {
     /// Catch up with any other writer (AUDIT-WRITERS-1). Called under the append lock. The fast
     /// path is two small reads — the anchor, and the tail file's length — both of which every
     /// writer moves on every append; only when either disagrees with what this handle last wrote is
-    /// the chain re-read. A chain that disagrees with its own anchor is refused here exactly as
-    /// `open` refuses it.
+    /// the chain read again: first only what was appended since ([`AuditLog::read_appended`]), and
+    /// the whole chain when that does not account for it. A chain that disagrees with its own anchor
+    /// is refused here exactly as `open` refuses it.
     fn catch_up(&mut self) -> Result<(), AuditError> {
-        let anchor_agrees = read_anchor(&self.dir).is_some_and(|(h, n)| h == self.head && n == self.records);
+        let anchor = read_anchor(&self.dir);
+        let anchor_agrees = anchor.as_ref().is_some_and(|(h, n)| *h == self.head && *n == self.records);
         let tail_agrees = match &self.current_day {
             Some(d) => file_len(&day_path(&self.dir, d)) == self.tail_len,
             None => list_day_files(&self.dir)?.is_empty(),
         };
         if anchor_agrees && tail_agrees {
+            return Ok(());
+        }
+        if self.read_appended(anchor.as_ref())? {
             return Ok(());
         }
         let (head, current_day, records, max_seq) = recover(&self.dir)?;
@@ -445,6 +450,54 @@ impl AuditLog {
         self.records = records;
         self.max_seq = max_seq;
         Ok(())
+    }
+
+    /// RW 4.53 (MONITOR-CHAIN-1's class, on the writing side): catch up by reading only what other
+    /// writers appended since this handle last wrote — the rest of the day file it wrote, from the byte
+    /// it stopped at, and every later day file — each record naming the one before it and its hash its
+    /// own, and then the anchor agreeing with the head and count that reading gives. A catch-up re-read
+    /// and re-counted the WHOLE chain under the append lock (twice: every head, then every count), so on
+    /// a long chain each daemon request after a sandboxed host's record — an operator's e-stop revoke
+    /// among them — paid for the chain's whole history. `false` when anything else is the case — no
+    /// file this handle wrote, a file cut short, a line that is not a record or does not verify, an
+    /// anchor that disagrees (a writer puts down its line, then its line break, then the anchor, all
+    /// under the lock) — and the whole recovery decides, refusing what it refused before. Nothing is
+    /// changed unless the reading accounts for what the anchor says.
+    fn read_appended(&mut self, anchor: Option<&(String, usize)>) -> Result<bool, AuditError> {
+        let (Some(day), Some(from)) = (self.current_day.clone(), self.tail_len) else { return Ok(false) };
+        let days = list_day_files(&self.dir)?;
+        if !days.contains(&day) || file_len(&day_path(&self.dir, &day)).is_none_or(|l| l < from) {
+            return Ok(false);
+        }
+        let (mut head, mut records, mut max_seq) = (self.head.clone(), self.records, self.max_seq);
+        let mut tail = (day.clone(), from);
+        let later = days.iter().filter(|d| d.as_str() > day.as_str()).map(|d| (d.clone(), 0));
+        for (d, start) in std::iter::once((day.clone(), from)).chain(later) {
+            let bytes = read_day_from(&day_path(&self.dir, &d), start).map_err(AuditError::io)?;
+            for line in bytes.split(|b| *b == b'\n') {
+                if line.iter().all(u8::is_ascii_whitespace) {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_slice::<Value>(line) else { return Ok(false) };
+                if v.get("seq").is_none() {
+                    continue; // a day file's header
+                }
+                let Some((hash, seq)) = verified_link(&v, &head) else { return Ok(false) };
+                head = hash;
+                records += 1;
+                max_seq = max_seq.max(seq);
+            }
+            tail = (d, start + bytes.len() as u64);
+        }
+        if anchor.is_none_or(|(h, n)| *h != head || *n != records) {
+            return Ok(false);
+        }
+        self.head = head;
+        self.records = records;
+        self.max_seq = max_seq;
+        self.current_day = Some(tail.0);
+        self.tail_len = Some(tail.1);
+        Ok(true)
     }
 
     fn ensure_day_file(&mut self, day: &str) -> Result<(), AuditError> {
@@ -709,6 +762,164 @@ pub fn tail(dir: impl AsRef<Path>, n: usize) -> Result<Vec<AuditRecord>, AuditEr
 pub fn query(dir: impl AsRef<Path>, filter: &QueryFilter) -> Result<Vec<AuditRecord>, AuditError> {
     let all = read_all_records(dir.as_ref())?;
     Ok(all.into_iter().filter(|r| filter.matches(r)).collect())
+}
+
+// ----- following the chain (MONITOR-CHAIN-1, RW 4.49) ------------------------------------------------
+
+/// A reader that follows the chain from a point and reads only what was appended after it, each record checked against the
+/// one before it (MONITOR-CHAIN-1, RW 4.49).
+///
+/// `delulu monitor watch` read the WHOLE chain on every poll — about 3 µs a record in a release build, 11 in a debug one —
+/// and it beats its dead-man between polls, so once one read outlasted the dead-man's period a healthy monitor was revoked
+/// by its own broker, and every run under it with it, for nothing but the chain's length (witnessed by hand at 250,000
+/// records and the default 2 s period). A follower costs what was appended since its last read: the rest of the day file it
+/// stopped in, from the byte it stopped at, and every later day file — a record is never filed behind the chain's newest
+/// file (AUDIT-DAY-1).
+///
+/// Only COMPLETE lines are read: a writer puts down a record and then its line break, so a line without its break may
+/// still be growing, and is read by the next call. Each record must name the previous record's hash as its `prev_hash`,
+/// and its own hash must recompute — the link check [`verify`] makes. A line that does not is returned as UNVERIFIED and
+/// never as a record: what a follower's reader acts on is what the chain vouches for. That catches a damaged line and one
+/// forged without the format; a writer of the operator's own user who computes the hash is category 7, as for every file
+/// in this directory, and [`verify`] with the anchor stays the whole chain's check.
+#[derive(Clone, Debug)]
+pub struct Follower {
+    dir: PathBuf,
+    /// The day file the follower stopped in (`None`: there was none), and how many of its bytes it has read.
+    day: Option<String>,
+    offset: u64,
+    /// The hash of the last record read — [`GENESIS_HASH`] before the first.
+    head: String,
+}
+
+/// What one [`Follower::read_new`] found.
+#[derive(Clone, Debug, Default)]
+pub struct Followed {
+    /// The records appended since the last read whose link and hash verify, in chain order.
+    pub records: Vec<AuditRecord>,
+    /// Each line that did not verify, by its seq (`None`: a line that is not a record at all) — never in `records`.
+    pub unverified: Vec<Option<u64>>,
+    /// The day file the follower stopped in is gone, or shorter than what it had read: the chain was rewritten under it.
+    /// The follower moved to the chain's end and read nothing in between.
+    pub rewritten: bool,
+}
+
+impl Follower {
+    /// A follower at the chain's end now: its first [`Follower::read_new`] returns what is appended after this call.
+    /// Reads the newest day file once (and older ones only back to the last record, when the newest holds none).
+    pub fn at_end(dir: impl Into<PathBuf>) -> Result<Follower, AuditError> {
+        let dir = dir.into();
+        let days = list_day_files(&dir)?;
+        let (mut at, mut head) = (None, None);
+        for day in days.iter().rev() {
+            let bytes = read_day_from(&day_path(&dir, day), 0).map_err(AuditError::io)?;
+            let complete = complete_lines(&bytes);
+            if at.is_none() {
+                at = Some((day.clone(), complete.len() as u64));
+            }
+            // The last record line, read from the end: only it is parsed on a long day.
+            head = complete
+                .rsplit(|b| *b == b'\n')
+                .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
+                .find_map(|v| v.get("seq").and(v.get("hash")).and_then(Value::as_str).map(str::to_string));
+            if head.is_some() {
+                break;
+            }
+        }
+        let (day, offset) = at.map_or((None, 0), |(d, o)| (Some(d), o));
+        Ok(Follower { dir, day, offset, head: head.unwrap_or_else(|| GENESIS_HASH.to_string()) })
+    }
+
+    /// The hash of the last record this follower read — [`GENESIS_HASH`] when it has read none on an empty chain.
+    pub fn head(&self) -> &str {
+        &self.head
+    }
+
+    /// Everything appended since the last call (or since [`Follower::at_end`]), each line verified against the one
+    /// before it. A line that does not verify is named in [`Followed::unverified`], and the follower goes on from its
+    /// stored hash, so one bad line does not blind it to the records written after.
+    pub fn read_new(&mut self) -> Result<Followed, AuditError> {
+        let days = list_day_files(&self.dir)?;
+        let mut out = Followed::default();
+        let mut todo: Vec<(String, u64)> = Vec::new();
+        match &self.day {
+            None => todo.extend(days.iter().map(|d| (d.clone(), 0))),
+            Some(cur) => {
+                let len = fs::metadata(day_path(&self.dir, cur)).map(|m| m.len()).ok();
+                if !days.contains(cur) || len.is_none_or(|l| l < self.offset) {
+                    *self = Follower::at_end(self.dir.clone())?;
+                    out.rewritten = true;
+                    return Ok(out);
+                }
+                todo.push((cur.clone(), self.offset));
+                todo.extend(days.iter().filter(|d| d.as_str() > cur.as_str()).map(|d| (d.clone(), 0)));
+            }
+        }
+        for (day, from) in todo {
+            let bytes = read_day_from(&day_path(&self.dir, &day), from).map_err(AuditError::io)?;
+            let complete = complete_lines(&bytes);
+            for line in complete.split(|b| *b == b'\n') {
+                if line.iter().all(u8::is_ascii_whitespace) {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_slice::<Value>(line) else {
+                    out.unverified.push(None);
+                    continue;
+                };
+                if v.get("seq").is_none() {
+                    continue; // a day file's header — not part of the chain
+                }
+                let (seq, stored) = (v.get("seq").and_then(Value::as_u64), v.get("hash").and_then(Value::as_str));
+                match AuditRecord::from_value(&v) {
+                    Some(rec) if verified_link(&v, &self.head).is_some() => {
+                        self.head = rec.hash.clone();
+                        out.records.push(rec);
+                    }
+                    _ => {
+                        out.unverified.push(seq);
+                        if let Some(h) = stored {
+                            self.head = h.to_string();
+                        }
+                    }
+                }
+            }
+            self.day = Some(day);
+            self.offset = from + complete.len() as u64;
+        }
+        Ok(out)
+    }
+}
+
+/// A stored record's two checks, as [`verify`] makes them: it names `head` as its `prev_hash`, and its hash recomputes
+/// from its own body. Its hash and seq when both hold.
+fn verified_link(v: &Value, head: &str) -> Option<(String, u64)> {
+    let (prev, stored, seq) = (v.get("prev_hash")?.as_str()?, v.get("hash")?.as_str()?, v.get("seq")?.as_u64()?);
+    let mut body = v.clone();
+    body.as_object_mut()?.remove("hash");
+    (prev == head && chain_hash(prev, &canonical_json(&body)) == stored).then(|| (stored.to_string(), seq))
+}
+
+/// The bytes of a day file from `from` on — [`read_regular`]'s rule (a FIFO or any other non-file is refused, never
+/// waited on), and a seek, so a follower reads what was appended and nothing before it.
+fn read_day_from(path: &Path, from: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read as _, Seek as _};
+    let mut open = fs::OpenOptions::new();
+    open.read(true);
+    #[cfg(all(unix, not(miri)))]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NONBLOCK);
+    let mut f = open.open(path)?;
+    if !f.metadata()?.is_file() {
+        return Err(std::io::Error::other(NotRegular(path.to_path_buf(), "an audit day log")));
+    }
+    f.seek(std::io::SeekFrom::Start(from))?;
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+/// `bytes` up to and including its last line break — the lines a writer has finished.
+fn complete_lines(bytes: &[u8]) -> &[u8] {
+    bytes.iter().rposition(|b| *b == b'\n').map_or(&[][..], |i| &bytes[..=i])
 }
 
 // ----- RFC 0001 phase F5: audit reconciliation ---------------------------------------------------
@@ -1343,10 +1554,11 @@ mod tests {
         let made = std::process::Command::new("mkfifo").arg(&day).status().expect("mkfifo runs");
         assert!(made.success());
         type Reader = fn(PathBuf) -> Result<(), AuditError>;
-        let readers: [(&str, Reader); 3] = [
+        let readers: [(&str, Reader); 4] = [
             ("verify", |d| verify(d).map(|_| ())),
             ("tail", |d| tail(d, 3).map(|_| ())),
             ("open", |d| AuditLog::open(d).map(|_| ())),
+            ("follow", |d| Follower::at_end(d).map(|_| ())),
         ];
         for (name, read) in readers {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -1529,6 +1741,151 @@ mod tests {
         child.kill().unwrap();
         child.wait().unwrap();
         AppendLock::take_within(&dir, std::time::Duration::from_secs(5)).expect("released with the process that held it");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// MONITOR-CHAIN-1 (RW 4.49): a follower reads what was appended after it — across a day's file into the next — and
+    /// nothing from before it: the record it had already passed is overwritten here, in place, with a line that would not
+    /// verify, and nothing the follower returns is about it.
+    #[test]
+    fn a_follower_reads_only_what_was_appended_after_it_across_days() {
+        let dir = tmp_dir("follow");
+        let (day1, day2) = (86_400_000 + 500, 2 * 86_400_000 + 500);
+        let mut log = AuditLog::open(&dir).unwrap();
+        log.append(entry(0, day1, "issue", "g_a", "allow")).unwrap();
+        let mut f = Follower::at_end(&dir).unwrap();
+        assert_eq!(f.head(), log.head(), "at the chain's end");
+        assert!(f.read_new().unwrap().records.is_empty(), "nothing appended yet");
+        log.append(entry(0, day1 + 1, "use", "g_a", "allow")).unwrap();
+        log.append(entry(0, day2, "use", "g_a", "deny")).unwrap();
+        assert_eq!(list_day_files(&dir).unwrap(), vec!["19700102", "19700103"], "the third went into the next day's file");
+        let path = day_path(&dir, "19700102");
+        let text = fs::read_to_string(&path).unwrap();
+        let passed = text.lines().nth(1).unwrap().to_string();
+        fs::write(&path, text.replacen(&passed, &passed.replace("\"issue\"", "\"ISSUE\""), 1)).unwrap();
+        let got = f.read_new().unwrap();
+        assert_eq!(got.records.iter().map(|r| r.seq).collect::<Vec<_>>(), vec![2, 3], "{got:?}");
+        assert!(got.unverified.is_empty() && !got.rewritten, "nothing from before it was read: {got:?}");
+        assert_eq!(f.head(), log.head());
+        assert!(f.read_new().unwrap().records.is_empty(), "each record is read once");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A writer puts down a record and then its line break: a line without its break may still be growing, so neither a
+    /// follower's read nor the end it starts from takes it — both read it once it is whole.
+    #[test]
+    fn a_follower_leaves_a_line_without_its_break_for_the_next_read() {
+        let dir = tmp_dir("follow-partial");
+        let mut log = AuditLog::open(&dir).unwrap();
+        log.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+        let mut f = Follower::at_end(&dir).unwrap();
+        let rec = entry(2, 1001, "use", "g_a", "allow").into_record(log.head());
+        let mut file = fs::OpenOptions::new().append(true).open(day_path(&dir, &day_string(1000))).unwrap();
+        file.write_all(rec.to_line().as_bytes()).unwrap();
+        let got = f.read_new().unwrap();
+        assert!(got.records.is_empty() && got.unverified.is_empty(), "a line still growing is not read: {got:?}");
+        let mut g = Follower::at_end(&dir).unwrap();
+        assert_eq!(g.head(), log.head(), "nor is it the end a follower starts from");
+        file.write_all(b"\n").unwrap();
+        for (name, follower) in [("f", &mut f), ("g", &mut g)] {
+            let got = follower.read_new().unwrap();
+            assert_eq!(got.records.iter().map(|r| r.seq).collect::<Vec<_>>(), vec![2], "{name}: {got:?}");
+            assert!(got.unverified.is_empty(), "{name}: {got:?}");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// What a follower returns as a record is what the chain vouches for. A deny whose hash does not recompute, a line that
+    /// is not a record, and a record that names another predecessor are each UNVERIFIED — and the follower reads on from
+    /// the last one's stored hash, so the record written after them is read.
+    #[test]
+    fn a_follower_returns_lines_that_do_not_verify_as_unverified_and_reads_on() {
+        let dir = tmp_dir("follow-forged");
+        let mut log = AuditLog::open(&dir).unwrap();
+        let first = log.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+        let mut f = Follower::at_end(&dir).unwrap();
+        let mut altered = entry(2, 1001, "use", "g_a", "allow").into_record(&first.hash);
+        altered.decision = "deny".into(); // changed after it was hashed
+        let elsewhere = entry(3, 1002, "use", "g_a", "deny").into_record(GENESIS_HASH);
+        let after = entry(4, 1003, "use", "g_a", "deny").into_record(&elsewhere.hash);
+        let lines = format!("{}\nnot a record\n{}\n{}\n", altered.to_line(), elsewhere.to_line(), after.to_line());
+        append_line(&day_path(&dir, &day_string(1000)), lines.trim_end()).unwrap();
+        let got = f.read_new().unwrap();
+        assert_eq!(got.unverified, vec![Some(2), None, Some(3)], "{got:?}");
+        assert_eq!(got.records.iter().map(|r| r.seq).collect::<Vec<_>>(), vec![4], "{got:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A day file cut short under a follower is a chain rewritten under it: it says so, reads nothing in between, and goes
+    /// on from the chain's end as it now is.
+    #[test]
+    fn a_follower_whose_file_was_cut_short_says_the_chain_was_rewritten() {
+        let dir = tmp_dir("follow-cut");
+        let mut log = AuditLog::open(&dir).unwrap();
+        let first = log.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+        log.append(entry(0, 1001, "use", "g_a", "allow")).unwrap();
+        let mut f = Follower::at_end(&dir).unwrap();
+        let path = day_path(&dir, &day_string(1000));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(&path, text.lines().take(2).map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+        let got = f.read_new().unwrap();
+        assert!(got.rewritten && got.records.is_empty() && got.unverified.is_empty(), "{got:?}");
+        assert_eq!(f.head(), first.hash, "from the chain's end as it now is");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// RW 4.53: a writer catching up after another reads what that writer appended — the rest of its day and the next
+    /// day's file — and not the chain behind it. A record behind both is made unreadable here, in place (so nothing after
+    /// it moves): the catching-up append still chains onto the other writer's last record, and `verify` still finds the
+    /// damage. Before, every catch-up re-read and re-counted the whole chain under the append lock, and refused it here.
+    #[test]
+    fn a_writer_catching_up_reads_only_what_another_writer_appended() {
+        let dir = tmp_dir("catchup");
+        let (day1, day2) = (86_400_000 + 500, 2 * 86_400_000 + 500);
+        let mut a = AuditLog::open(&dir).unwrap();
+        a.append(entry(0, day1, "issue", "g_a", "allow")).unwrap();
+        a.append(entry(0, day1 + 1, "use", "g_a", "allow")).unwrap();
+        let mut b = AuditLog::open(&dir).unwrap();
+        b.append(entry(0, day1 + 2, "use", "g_b", "allow")).unwrap();
+        let last = b.append(entry(0, day2, "use", "g_b", "allow")).unwrap();
+        assert_eq!(list_day_files(&dir).unwrap(), vec!["19700102", "19700103"], "b's second record began the next day");
+        let path = day_path(&dir, "19700102");
+        let text = fs::read_to_string(&path).unwrap();
+        let behind = text.lines().nth(1).unwrap().to_string();
+        fs::write(&path, text.replacen(&behind, &format!("X{}", &behind[1..]), 1)).unwrap();
+        let rec = a.append(entry(0, day2 + 1, "revoke", "g_a", "allow")).expect("a catches up past b's records alone");
+        assert_eq!((rec.prev_hash.as_str(), rec.seq), (last.hash.as_str(), last.seq + 1), "onto b's last record");
+        assert!(verify(&dir).is_err(), "the damage behind is still `verify`'s to find");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// What a catch-up reads only past its point must still account for everything the anchor says: a line appended by a
+    /// writer that did not anchor it — a forged record, well formed and linked — is refused as the whole recovery refused it.
+    #[test]
+    fn a_line_appended_without_its_anchor_is_refused_as_before() {
+        let dir = tmp_dir("catchup-unanchored");
+        let mut a = AuditLog::open(&dir).unwrap();
+        let first = a.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+        let forged = entry(2, 1001, "use", "g_x", "deny").into_record(&first.hash);
+        append_line(&day_path(&dir, &day_string(1000)), &forged.to_line()).unwrap();
+        let e = a.append(entry(0, 1002, "use", "g_a", "allow")).expect_err("the anchor does not hold the forged line");
+        assert!(format!("{e:?}").contains("anchor disagrees"), "{e:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A day file cut short under a writer is refused as the whole recovery refused it (P17-C1) — never read as "nothing was
+    /// appended", which would chain the next record onto a head the file no longer holds.
+    #[test]
+    fn a_file_cut_short_under_a_writer_is_refused_as_before() {
+        let dir = tmp_dir("catchup-cut");
+        let mut a = AuditLog::open(&dir).unwrap();
+        a.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+        a.append(entry(0, 1001, "use", "g_a", "allow")).unwrap();
+        let path = day_path(&dir, &day_string(1000));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(&path, text.lines().take(2).map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+        let e = a.append(entry(0, 1002, "use", "g_a", "allow")).expect_err("the anchor holds a record the file lost");
+        assert!(format!("{e:?}").contains("anchor disagrees"), "{e:?}");
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -470,7 +470,9 @@ polls), the broker revokes `g_M` — every run under it — and records that it 
 hanging the monitor therefore quarantines its runs, and so does Ctrl-C: end a watch with `--for MS` (it disarms, recorded) or by
 revoking `g_M`. `--on-monitor-death continue` lets the runs outlive their monitor. A beat carries a key only the monitor holds; on
 Linux the monitor's memory is closed to other processes of the same user, and on macOS and Windows that rests on the OS account,
-as above.
+as above. A poll reads only what was appended since the last, so a long chain costs a watch nothing (D-V2-158); and a record
+that does not verify against the one before it — damaged, or written by hand — is named on the monitor's standard error and
+never acted on.
 
 **A run's own node ends with the run** (D-V2-157). Under the daemon, `delulu run --grant …` issues a root node for that run
 alone. The run revokes it (recorded) as it ends, and the broker holds a dead-man on it meanwhile: a run that is killed, crashes

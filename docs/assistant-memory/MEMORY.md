@@ -43,4 +43,5 @@
 - [Laptop BSOD mitigation](laptop-bsod-mitigation.md) — RESOLVED (NVIDIA nvlddmkm, fixed 2026-07-12); build caps LIFTED; keep the commit-often habit.
 - [Mutant runs: one cargo target at a time](mutant-run-per-target.md) — a `--lib NAME --test T` filter hits every target; "all survived" = check the harness first
 - [A fix for one node asks every node](a-fix-for-one-node-asks-every-node.md) — RW 4.57: RW 4.51 ended a plugin's node with its run, and the run's own root outlived every run; ask every node a holder holds, the parent first
+- [A latency may be a deadline](a-latency-may-be-a-deadline.md) — MONITOR-CHAIN-1: the monitor's whole-chain read per poll was filed LOW; it beats a dead-man, so a long chain revoked its whole fleet; grow the input past the nearest deadline before grading a cost
 - [WSL KVM lab (2026-09-26)](wsl-kvm-lab.md) — WSL2 has /dev/kvm (nestedVirtualization + wsl.conf boot modprobe); the PS-C toolchain there (image at ~/microvm-image-a, ~/bin/firecracker) and how to run the gated microVM tests

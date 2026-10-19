@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 309 |
-| Rust lines | 172218 |
+| Rust lines | 172683 |
 | Rust files outside `src/` (test/bench targets) | 140 |
-| Markdown documents | 263 |
-| Markdown lines | 79175 |
+| Markdown documents | 264 |
+| Markdown lines | 79457 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1523 / 14919 |
+| Nodes / edges in this map | 1524 / 14946 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 45087 lines
+- **Modules:** 44 files, 45094 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -125,7 +125,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/main.rs` | 102 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 685 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1456 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
-| `src/monitor_cmd.rs` | 778 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
+| `src/monitor_cmd.rs` | 785 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
 | `src/morph_file.rs` | 244 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 304 | `delulu new` — start a package that already works. |
 | `src/openshell.rs` | 685 | PS-E-05 (a), D-V2-82: `delulu sandbox policy <file> --format openshell` — the wall an OpenShell |
@@ -162,11 +162,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 13252 lines
+- **Modules:** 19 files, 13609 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/audit.rs` | 1534 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
+| `src/audit.rs` | 1891 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 586 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/budget_scope.rs` | 187 | PS-B-05: the resource-budget dimension of authority. |
 | `src/cert.rs` | 1698 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |

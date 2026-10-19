@@ -3878,3 +3878,87 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39183559939` (`jobs=everything` on `b4748fa`;
   `miri-slow` takes hours), then merge `master` into it again for the lease half and RW 4.68 and dispatch `everything` on
   the result; (3) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 2 (postscript): `e200edb`'s push run read; `launch/2.0.0` at `3aafb77`
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `e200edb`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (step 5: a container restart
+  kills a background suite without a word), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `e200edb`'s push runs — CI `39189114719`, `ocsf` `39189114737` and `openshell` `39189114674` — **success** (CI's 14
+  jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.82x, passed; Ubuntu and
+  Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads). `master` is green on this run's last code.
+- `launch/2.0.0`: `3aafb77`, the merge of `e200edb` (release procedure step 1) — the CHANGELOG's changes merged into the
+  2.0.0 section's dated entry by themselves; the map rebuilt there (1523 nodes, 14919 edges, 0 errors); `doctor --check` ok;
+  `doctor_cli`, `repository_structure`, `evidence_claims`, `governance`, `distribution`, `book`, `core_invariance`,
+  `release`, `plugin_load_cli` (24), `satellite_demo` (5) and `monitor_cli` (22) green on the launch tree. Dispatched on it:
+  `jobs=everything` `39189498514` and the release dry run `39189501390` — unread at this entry. `39183559939` (`everything`
+  on `b4748fa`): 16 of 18 success at 02:05 UTC, its two `miri-slow` jobs running; superseded by `39189498514`, kept as evidence.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39189498514` and
+  `39189501390` on `3aafb77` — the branch's newest commit; `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the
+  final launch commit, so a launch session merges `master` once more and reads it again; (3) RW 4.17's UNC half, RW 6.1's
+  further strings, RW 6.2, the open containment rows (4.63, 4.66, 4.67); (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3: MONITOR-CHAIN-1 — a long chain killed a healthy monitor's fleet; the monitor reads only what was appended, verified (D-V2-158)
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its third run (started 2026-10-19 05:05 UTC, no `routine-fire-payload`)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `49f6c6f`
+- Commits: `90d6ddb` A monitor reads only what was appended, verified (MONITOR-CHAIN-1); and this entry's commit
+- Files and folders: A `docs/assistant-memory/a-latency-may-be-a-deadline.md`; M `crates/delulu-broker/src/audit.rs`
+  (`Follower`, `Followed`, `read_day_from`, `complete_lines`, five tests), `crates/delulu/src/monitor_cmd.rs` (the watch
+  reads through a follower), `crates/delulu/tests/monitor_cli.rs` (the witness and its chain grower), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 MONITOR-CHAIN-1, §11.5 a latency may be a deadline), `docs/DEPLOYMENT.md` (the monitor's poll),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-158), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.49 closed;
+  4.53's monitor half noted), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed:
+  nothing.
+- **Start of run:** `master` at `49f6c6f`, nothing newer; `origin/autosave/laptop`'s newest snapshot still `b4a9e18`
+  (recovered by run 1); every `claude/*` branch in `master` but the two kept as superseded on 2026-10-17. Survey `ok` (1522
+  nodes, 14894 edges), `doctor --check` all checks passed. `gh` is installed; CI read with `curl` and the GitHub MCP tools.
+  Run 2's claims re-run: `monitor_cli` 22/22, `plugin_load_cli` 24/24, `satellite_demo` 5/5, `compute_cli` 18/18 — all hold.
+- **CI read:** `49f6c6f` `39190850972` — success; `launch/2.0.0` at `3aafb77`: `jobs=everything` `39189498514` — success on
+  all 18 jobs — and the release dry run `39189501390` — success; `39183559939` (`b4748fa`) — success on all 18.
+- **Found and fixed (MONITOR-CHAIN-1, RW 4.49 closed):** `monitor watch` read the whole chain each poll and beats its
+  dead-man between polls; at 250,000 records and the default 2 s, a healthy monitor was revoked by its own broker with every
+  run under it (by hand, nothing misbehaving). `audit::Follower` reads only what was appended, whole lines only, each record
+  linked to the one before and its hash its own; an unverified line is named and never judged.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the witness red on the old code (a 101,251-record chain; the run's lease revoked by the dead-man), green after,
+  4 of 4 under four concurrent copies; mutants M473–M479 and M473b red, control green; clippy 0; `check-other-os.sh`
+  (Windows, macOS) clean; runner reads at `90d6ddb` — `monitor_cli` macOS `39205018972` (22 passed) and Windows
+  `39205021062` (21 passed), `audit::tests` macOS `39205023031` (23) and Windows `39205025243` (22); the full suite 2,335
+  passed, 0 failed, 16 ignored (exit 0, the tree unmoved).
+- Redo on the laptop: nothing (macOS and Windows read on runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1) and §11.5 (a cost recorded as a latency may be a deadline);
+  `docs/assistant-memory/a-latency-may-be-a-deadline.md`.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.53's writer half — `AuditLog::catch_up` re-reads and
+  re-counts the whole chain under the append lock whenever another writer moved it (the daemon's e-stop revoke behind it),
+  and `open` on every opening: this run's next slice; (3) merge `master` into `launch/2.0.0` (release procedure step 1) and
+  read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67;
+  (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3 (continued): RW 4.53's writer half — a writer catches up by reading only what was appended (D-V2-159)
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `200df1c`
+- Commits: `7ae1524` A writer catches up by reading only what was appended (RW 4.53); and this entry's commit
+- Files and folders: M `crates/delulu-broker/src/audit.rs` (`AuditLog::read_appended`, `verified_link` shared with the
+  follower, three tests), `CHANGELOG.md`, `HANDOFF.md` (§11.4 MONITOR-CHAIN-1: the writing side), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-159), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.53 partial), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Fixed (RW 4.53, partial):** every writer's catch-up re-read and re-counted the whole chain under the append lock once
+  another writer had written; a recorded daemon request beside another writer on 100,000 records took median 3,817 ms (max
+  4,479), now 14 ms (max 21). `AuditLog::open` still reads the whole chain on every opening.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: M480 (the old behaviour) red in the witness; M481–M484 red; M485 survived the first round and is red in a third
+  witness written for it; control green; clippy 0; `check-other-os.sh` (Windows, macOS) clean; runner reads at `7ae1524` —
+  `audit::tests` macOS `39206620758` (26 passed), Windows `39206622817` (25); the full suite 2,338 passed, 0 failed, 16
+  ignored (exit 0, the tree unmoved). CI read: `200df1c`'s push runs — CI `39206009719` and `ocsf` `39206009590` — success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1, the writing side).
+- Open / next, in order: (1) this commit's push run; (2) merge `master` into `launch/2.0.0` (release procedure step 1: its
+  CHANGELOG lines into the 2.0.0 section) and read `jobs=everything` on the result; (3) RW 4.53's last part — `AuditLog::open`
+  reads the whole chain on every opening (each sandboxed run's host, each CLI command that records); its fast path needs the
+  anchor to name the newest file and its length; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66,
+  4.67; (5) *[laptop]* the launch, only on the owner's word.

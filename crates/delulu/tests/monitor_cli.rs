@@ -1346,3 +1346,104 @@ fn the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other() {
     let gate = recs.iter().find(|x| x["action"] == "break-glass" && x["decision"] == "allow").expect("the gate's record");
     assert_eq!(r["target"], gate["target"], "both name the same ticket: {r}\n{gate}");
 }
+
+/// Grow `dir`'s chain with records written by the chain's own code until ONE whole read of it — `audit::query`, what the
+/// monitor read on every poll — takes at least `at_least`; return that read's time and the record count. The first record
+/// goes through `AuditLog`, so the day file and its header are the writer's own; the rest are the same writer's lines
+/// (`AuditEntry::into_record`, `to_line`) put down in bulk, and the anchor — a count the bulk lines contradict — is removed,
+/// so the next opening anchors the chain again, as a log's first opening does.
+fn grow_chain_until_a_read_takes(dir: &Path, at_least: std::time::Duration) -> (std::time::Duration, usize) {
+    use delulu_broker::audit::{AuditEntry, AuditSink};
+    use std::io::Write;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+    let entry = |seq: u64| AuditEntry {
+        seq,
+        ts: now,
+        actor_node: Some("g_00000000000000000000000000000000".into()),
+        action: "use".into(),
+        target: Some("arm0/elbow".into()),
+        authority: Some(serde_json::json!({ "effects": ["Actuate"] })),
+        span: None,
+        decision: "allow".into(),
+    };
+    let mut log = delulu_broker::AuditLog::open(dir).unwrap();
+    let first = log.append(entry(0)).unwrap();
+    let day = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .expect("the day file the first record went into");
+    drop(log);
+    let (mut head, mut seq, mut n) = (first.hash, first.seq, 1usize);
+    let mut batch = 30_000usize;
+    loop {
+        let mut text = String::new();
+        for _ in 0..batch {
+            seq += 1;
+            let rec = entry(seq).into_record(&head);
+            text.push_str(&rec.to_line());
+            text.push('\n');
+            head = rec.hash;
+        }
+        std::fs::OpenOptions::new().append(true).open(&day).unwrap().write_all(text.as_bytes()).unwrap();
+        n += batch;
+        let t = std::time::Instant::now();
+        let read = delulu_broker::audit::query(dir, &Default::default()).unwrap();
+        let took = t.elapsed();
+        assert_eq!(read.len(), n, "every line written is a record the chain's reader reads");
+        if took >= at_least {
+            std::fs::remove_file(dir.join("ANCHOR.json")).unwrap();
+            return (took, n);
+        }
+        assert!(n < 3_000_000, "{n} records still read in {took:?} — this machine reads too fast for the state this needs");
+        batch = n / 2;
+    }
+}
+
+/// **MONITOR-CHAIN-1 (RW 4.49): a long chain is not a dead monitor.** The monitor read the WHOLE chain on every poll and beats
+/// its dead-man between polls, so once one read outlasted the period a healthy monitor was revoked by its own broker — and
+/// every run under it with it — for nothing but the chain's length (by hand, 2026-10-19: 250,000 records and the default
+/// 2 s period). The state this needs is a chain whose one whole read, measured here, takes twice the period. The monitor must
+/// stay live across several periods and then read what was appended after it began — so "not revoked" is not a monitor
+/// that read nothing.
+#[test]
+fn a_long_chain_does_not_kill_a_healthy_monitor() {
+    const PERIOD_MS: u64 = 500;
+    let f = setup("mlong");
+    let audit = f.state.join("audit");
+    let (took, n) = grow_chain_until_a_read_takes(&audit, std::time::Duration::from_millis(2 * PERIOD_MS));
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let stats = delulu_broker::verify(&audit).expect("the grown chain verifies — every line is its writer's own");
+    assert!(stats.records >= n, "{stats:?}");
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
+    let live = |when: &str| {
+        let states = node_states(&f);
+        assert_eq!(
+            (states[&m].0.as_str(), states[&run].0.as_str()),
+            ("live", "live"),
+            "{when}: a healthy monitor over {n} records (one whole read: {took:?}) was revoked by its own {PERIOD_MS} ms \
+             dead-man: {states:?}"
+        );
+    };
+    std::thread::sleep(std::time::Duration::from_millis(4 * PERIOD_MS));
+    live("four periods into the watch");
+    // Appended after the watch began: what the monitor must read.
+    let _ = delegate(&f, &["--parent", &run, "--holder-desc", "minted after the watch began"]);
+    std::thread::sleep(std::time::Duration::from_millis(2 * PERIOD_MS));
+    live("six periods into the watch");
+    let (report, seen) = stop_monitor(&f, &m, mon);
+    eprintln!("measured: {n} records, one whole read {took:?}; the monitor read {} past its start", report["records_read"]);
+    assert!(report["ended"].as_str().is_some_and(|e| !e.contains("dead-man")), "{report:#}\n{seen:?}");
+    // Its own arming and the delegation made after it began, at least.
+    assert!(
+        report["records_read"].as_u64().unwrap_or(0) >= 2,
+        "the monitor must have read what was appended after it began: {report:#}\n{seen:?}"
+    );
+    // The daemon is found through the state directory: stop it first, then remove the long chain.
+    drop(guard);
+    let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
+}
