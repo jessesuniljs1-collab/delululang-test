@@ -6571,5 +6571,8 @@ success, `miri-slow (delulu-broker)` still running — superseded by `3921217771
 work — it asks the daemon for the whole grant tree (`List`) every poll, and the tree keeps every revoked node. A scratch
 daemon (debug build) with 3,002 nodes: the CLI's `grants list --json` 238–304 ms for 1.7 MB (most of it the CLI's own
 rendering); a recorded daemon request (`grants delegate`) took median 12 ms (max 16) alone and 13 ms (max 23) with a monitor
-polling that tree every 25 ms — the daemon's own listing costs it little at this size. Not graded further: the next run, or
-a sweep, measures it at tens of thousands of nodes before calling it a latency or a deadline.
+polling that tree every 25 ms — the daemon's own listing costs it little at this size. **At 30,003 nodes** (a 17 MB listing;
+the CLI's `grants list --json` 2.7 s) the median stayed 13 ms but the **max went from 17 ms to 371 ms** beside the monitor —
+each whole-tree listing holds the serial daemon, and an e-stop's revoke waits behind it. Not a deadline for the monitor (its
+beater beats while it waits on the daemon, D-V2-127). Recorded as RW 4.69 (open, measured): ask only for the live subtree
+under the monitor's node.

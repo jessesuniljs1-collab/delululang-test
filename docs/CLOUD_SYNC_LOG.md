@@ -3976,10 +3976,12 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - CI read: `4c8e44a`'s push runs — CI `39210944095` and `ocsf` `39210944303` — **success**; `master` is green on every slice
   of this run. `launch/2.0.0` at `6c01264`: the release dry run `39212180218` — success; `jobs=everything` `39212177717` —
   running at this entry (its `miri-slow` jobs take hours).
-- Measured: the monitor's per-poll `List` at 3,002 nodes — no material cost to other daemon requests (`V2_LOG.md`).
+- Measured: the monitor's per-poll `List` — at 3,002 nodes no material cost to other daemon requests; at 30,003 nodes a
+  recorded request's max went from 17 ms to 371 ms beside one monitor polling every 25 ms (`V2_LOG.md`) — **RW 4.69 added,
+  open**. (Added in a second commit: `docs/REMAINING_WORK.md` too.)
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39212177717` (`jobs=everything`
   on `6c01264`, the branch's newest commit); `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the final launch
-  commit, so a launch session merges `master` once more and reads it again; (3) the monitor's `List` at tens of thousands of
-  nodes; RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
+  commit, so a launch session merges `master` once more and reads it again; (3) RW 4.69 — the monitor asks only for the live
+  subtree under its node (measured first, red before); RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
   RW 6.2, RW 4.63, 4.66, 4.67; (4) *[laptop]* the launch, only on the owner's word.
