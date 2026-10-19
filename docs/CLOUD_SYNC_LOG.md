@@ -4155,3 +4155,30 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `9e2eed8`; (2) Study C's start-up control (an empty `main` per lane) so a ratio can be read as compute; (3) the WASM
   fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels); RW 4.66, 4.67, 6.1's further strings, 6.2;
   (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): `master` red on `lints` once, fixed (`45ca06d`); Study C measures start-up
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `81da0ae`   Commits: `45ca06d` Study C's time_it witness says its range with contains (clippy,
+  master red on lints); and this entry's commit.
+- **`master` was red:** `81da0ae`'s push run `39268713452` — `lints` failure (clippy `manual_range_contains` in a test written
+  after this run's last clippy; its message said "clippy 0"). Fixed in `45ca06d`, a one-line commit made in a worktree at
+  `81da0ae` and linted there; its push run `39269260235` is read in the next entry (or by the next run).
+- Files and folders (this entry's commit): M `crates/delulu-measure/src/study_c.rs` (the start-up control:
+  `startup_program`, `take_control`, the report's start-up table and the table above start-up, `startup` in the record; two
+  unit tests), `measurements/study-c/REPORT.md` and `results.json` (regenerated 14:26 UTC, with the control),
+  `measurements/study-c/HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`, `CHANGELOG.md`, `HANDOFF.md` (§11.5), `docs/assistant-memory/a-benchmark-checks-its-answer.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Measured (the published record, 14:26 UTC):** start-up C 0.92 ms, interpreter 4.70, WASM 7.01; C's work above its floor
+  0.05–0.58 ms (no compute ratio offered), WASM's 1.30–4.13 ms; `wasm ÷ C` 6.5×–11.5× (geo-mean 8.8×), `interp ÷ C`
+  8.9×–359.0×. The 14:14 run's ratios differ by up to a quarter; the table says so. Every quoting document updated to this run.
+- Verified: `study_c::tests` 7; M519–M521 red, control green; clippy (`delulu-measure`) 0 after the last edit.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (the slip: a commit's lint claim is about the commit).
+- Open / next, in order: (1) `45ca06d`'s and this commit's push runs; `launch/2.0.0`'s `everything` run `39266597313` on
+  `9e2eed8` (the release dry run `39266602442` there — success); then merge `master` into it again (this run's Study C and
+  `45ca06d`); (2) the WASM fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels), and kernels long
+  enough for C's work to be measured above its start-up; RW 4.66, 4.67, 6.1's further strings, 6.2; (3) *[laptop]* the
+  launch, only on the owner's word.

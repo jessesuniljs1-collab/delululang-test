@@ -4,66 +4,66 @@
     {
       "kind": "micro",
       "ms": {
-        "c": 1.141,
-        "interp": 82.878,
-        "python": 17.461,
-        "wasm": 7.644
+        "c": 1.498,
+        "interp": 96.186,
+        "python": 17.676,
+        "wasm": 9.74
       },
       "name": "fib_recursive_24",
       "spread_ms": {
-        "c": 0.689,
-        "interp": 17.441,
-        "python": 5.959,
-        "wasm": 3.04
+        "c": 0.255,
+        "interp": 32.919,
+        "python": 8.962,
+        "wasm": 3.302
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 1.258,
-        "interp": 365.356,
-        "python": 80.386,
-        "wasm": 11.946
+        "c": 0.973,
+        "interp": 349.299,
+        "python": 72.456,
+        "wasm": 11.145
       },
       "name": "loop_sum_1m",
       "spread_ms": {
-        "c": 0.265,
-        "interp": 151.022,
-        "python": 38.327,
-        "wasm": 3.26
+        "c": 0.118,
+        "interp": 172.104,
+        "python": 12.681,
+        "wasm": 2.345
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 0.987,
-        "interp": 16.7,
-        "python": 14.93,
-        "wasm": 9.755
+        "c": 1.031,
+        "interp": 14.773,
+        "python": 13.66,
+        "wasm": 8.313
       },
       "name": "string_build_20k",
       "spread_ms": {
-        "c": 0.965,
-        "interp": 7.557,
-        "python": 3.913,
-        "wasm": 18.571
+        "c": 0.739,
+        "interp": 4.83,
+        "python": 5.298,
+        "wasm": 2.797
       },
       "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 1.15,
-        "interp": 8.627,
-        "python": 13.739
+        "c": 0.992,
+        "interp": 11.335,
+        "python": 13.596
       },
       "name": "wordcount_macro",
       "spread_ms": {
-        "c": 0.962,
-        "interp": 3.284,
-        "python": 2.874
+        "c": 0.475,
+        "interp": 0.981,
+        "python": 3.367
       },
       "unrun": [
         {
@@ -75,15 +75,15 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 1.303,
-        "interp": 11.764,
-        "python": 14.624
+        "c": 1.266,
+        "interp": 11.242,
+        "python": 13.124
       },
       "name": "list_map_macro",
       "spread_ms": {
-        "c": 0.365,
-        "interp": 5.799,
-        "python": 3.839
+        "c": 0.266,
+        "interp": 1.671,
+        "python": 3.511
       },
       "unrun": [
         {
@@ -95,17 +95,17 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 1.021,
-        "interp": 317.955,
-        "python": 46.789,
-        "wasm": 11.971
+        "c": 1.105,
+        "interp": 267.976,
+        "python": 45.145,
+        "wasm": 11.113
       },
       "name": "nested_calls_macro",
       "spread_ms": {
-        "c": 0.413,
-        "interp": 163.337,
-        "python": 16.244,
-        "wasm": 3.91
+        "c": 0.421,
+        "interp": 163.697,
+        "python": 32.111,
+        "wasm": 3.694
       },
       "unrun": []
     }
@@ -132,11 +132,28 @@
     "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz",
     "python": "Python 3.11.17"
   },
-  "measured_at": "2026-10-19 14:14 UTC",
+  "measured_at": "2026-10-19 14:26 UTC",
   "profile": "release",
   "repeats": 5,
   "resolution": "timed in microseconds; published in milliseconds with three decimals (study-c/1 truncated to whole milliseconds)",
   "schema": "study-c/2",
+  "startup": {
+    "kind": "control",
+    "ms": {
+      "c": 0.921,
+      "interp": 4.698,
+      "python": 11.91,
+      "wasm": 7.013
+    },
+    "name": "startup_control",
+    "spread_ms": {
+      "c": 0.153,
+      "interp": 1.347,
+      "python": 8.003,
+      "wasm": 1.083
+    },
+    "unrun": []
+  },
   "statistic": "minimum of repeats (spread published alongside)",
   "study": "C",
   "title": "performance honesty baseline"

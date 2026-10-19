@@ -44,6 +44,8 @@ pub struct Bench {
 
 pub struct Results {
     pub benches: Vec<Bench>,
+    /// The start-up control on every lane (`startup_program`) — never one of `benches`, so never in a ratio.
+    pub startup: Option<Bench>,
     pub lanes_available: Vec<String>,
     pub lanes_unavailable: Vec<(String, String)>,
     /// When the study ran (UTC): a timing is a fact about a day and a machine, never about the language alone.
@@ -236,7 +238,7 @@ pub fn run_study(work: &Path) -> std::io::Result<Results> {
     lanes_unavailable.push(("go".into(), "no Go toolchain on the measurement machine".into()));
 
     let mut benches = Vec::new();
-    for (name, kind, dl_src, c_src, py_src) in programs() {
+    for (name, kind, dl_src, c_src, py_src) in programs().into_iter().chain([startup_program()]) {
         let mut timings = Vec::new();
         let mut spreads = Vec::new();
         let mut unrun = Vec::new();
@@ -303,9 +305,29 @@ pub fn run_study(work: &Path) -> std::io::Result<Results> {
 
         benches.push(Bench { name: name.to_string(), kind, timings, spreads, unrun });
     }
+    let startup = take_control(&mut benches);
 
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    Ok(Results { benches, lanes_available, lanes_unavailable, measured_at: utc_minute(secs), machine: machine(&dl_bin) })
+    Ok(Results { benches, startup, lanes_available, lanes_unavailable, measured_at: utc_minute(secs), machine: machine(&dl_bin) })
+}
+
+/// The control is measured by the same code as every benchmark, then taken out of them, so no ratio or count includes it.
+fn take_control(benches: &mut Vec<Bench>) -> Option<Bench> {
+    benches.iter().position(|b| b.kind == "control").map(|i| benches.remove(i))
+}
+
+/// The start-up control: a program that prints `0` and does nothing else, in every lane. Every benchmark figure is a
+/// whole process — a C process's start and exit, DeluluLang's reading and checking of the program and, on WASM, its
+/// compilation — and this measures that floor, so a reader can tell work from start-up (2026-10-19: C's whole figure was
+/// about 1 ms on Linux, the WASM engine's smallest 7.64 ms).
+fn startup_program() -> (&'static str, &'static str, String, String, String) {
+    (
+        "startup_control",
+        "control",
+        "module bench\n\nfn main(root: Root) ! {Write} {\n  let out = root.console()\n  out.println(\"0\")\n}\n".into(),
+        "#include <stdio.h>\nint main(){printf(\"0\\n\");return 0;}\n".into(),
+        "print(0)\n".into(),
+    )
 }
 
 fn get(b: &Bench, lane: &str) -> Option<u128> {
@@ -315,6 +337,21 @@ fn get(b: &Bench, lane: &str) -> Option<u128> {
 /// Microseconds as milliseconds, for the record and the tables.
 pub fn ms(us: u128) -> f64 {
     us as f64 / 1_000.0
+}
+
+/// One benchmark's record: its minimum and spread per lane, in milliseconds, and the lanes that did not run it.
+fn bench_json(b: &Bench) -> serde_json::Value {
+    serde_json::json!({
+        "name": b.name,
+        "kind": b.kind,
+        "ms": b.timings.iter()
+            .map(|(l, v)| (l.clone(), serde_json::Value::from(ms(*v))))
+            .collect::<serde_json::Map<String, serde_json::Value>>(),
+        "spread_ms": b.spreads.iter()
+            .map(|(l, v)| (l.clone(), serde_json::Value::from(ms(*v))))
+            .collect::<serde_json::Map<String, serde_json::Value>>(),
+        "unrun": b.unrun.iter().map(|(l, why)| serde_json::json!({"lane": l, "reason": why})).collect::<Vec<_>>(),
+    })
 }
 
 pub fn json(r: &Results) -> serde_json::Value {
@@ -339,17 +376,8 @@ pub fn json(r: &Results) -> serde_json::Value {
         "lanes_unavailable": r.lanes_unavailable.iter().map(|(l, why)| json!({
             "lane": l, "reason": why
         })).collect::<Vec<_>>(),
-        "benchmarks": r.benches.iter().map(|b| json!({
-            "name": b.name,
-            "kind": b.kind,
-            "ms": b.timings.iter()
-                .map(|(l, v)| (l.clone(), serde_json::Value::from(ms(*v))))
-                .collect::<serde_json::Map<String, serde_json::Value>>(),
-            "spread_ms": b.spreads.iter()
-                .map(|(l, v)| (l.clone(), serde_json::Value::from(ms(*v))))
-                .collect::<serde_json::Map<String, serde_json::Value>>(),
-            "unrun": b.unrun.iter().map(|(l, why)| json!({"lane": l, "reason": why})).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
+        "benchmarks": r.benches.iter().map(bench_json).collect::<Vec<_>>(),
+        "startup": r.startup.as_ref().map(bench_json),
     })
 }
 
@@ -429,6 +457,44 @@ pub fn report(r: &Results) -> String {
             }
         }
         s.push_str("|\n");
+    }
+
+    if let Some(floor) = &r.startup {
+        s.push_str(
+            "\n## Start-up, measured\n\n\
+             A program that prints `0` and does nothing else, on every lane — the floor under every figure above, \
+             each of which is a whole process (ms; spread in brackets):\n\n\
+             | | interp | wasm | C | CPython |\n|---|---|---|---|---|\n| start-up ",
+        );
+        for l in lanes {
+            match (get(floor, l), floor.spreads.iter().find(|(x, _)| x == l)) {
+                (Some(v), Some((_, sp))) => s.push_str(&format!("| {:.2} [{:.2}] ", ms(v), ms(*sp))),
+                (Some(v), None) => s.push_str(&format!("| {:.2} ", ms(v))),
+                _ => s.push_str("| — "),
+            }
+        }
+        s.push_str(
+            "|\n\n### Above start-up (each benchmark less its lane's floor, ms)\n\n\
+             A ratio of two whole processes is not a ratio of compute; this table is the figure above less the floor. \
+             A difference smaller than the floor's spread is noise, not work, and no ratio is computed from it.\n\n\
+             | Benchmark | interp | wasm | C | CPython |\n|---|---|---|---|---|\n",
+        );
+        for b in &r.benches {
+            s.push_str(&format!("| `{}` ", b.name));
+            for l in lanes {
+                match (get(b, l), get(floor, l)) {
+                    (Some(v), Some(f)) => s.push_str(&format!("| {:.2} ", (v as f64 - f as f64) / 1_000.0)),
+                    _ => s.push_str("| — "),
+                }
+            }
+            s.push_str("|\n");
+        }
+        if !floor.unrun.is_empty() {
+            s.push('\n');
+            for (l, why) in &floor.unrun {
+                s.push_str(&format!("- the start-up control on **{l}**: {why}\n"));
+            }
+        }
     }
 
     // The assessment, computed from the data rather than asserted.
@@ -564,6 +630,7 @@ mod tests {
         }
         let r = Results {
             benches: vec![Bench { name: "fib_recursive_24".into(), kind: "micro", timings, spreads, unrun }],
+            startup: None,
             lanes_available: vec!["interp".into(), "wasm".into(), "c".into()],
             lanes_unavailable: vec![],
             measured_at: utc_minute(1_792_416_058),
@@ -595,6 +662,7 @@ mod tests {
         };
         let r = Results {
             benches: vec![bench("loop_sum_1m", 640), bench("nested_calls_macro", 0)],
+            startup: None,
             lanes_available: vec!["interp".into(), "c".into()],
             lanes_unavailable: vec![],
             measured_at: utc_minute(0),
@@ -605,6 +673,53 @@ mod tests {
         assert!(text.contains("| `loop_sum_1m` | 545.3× |"), "{text}");
         assert!(text.contains("Left out of every ratio, because its C time read 0 µs: `nested_calls_macro`."), "{text}");
         assert_eq!(json(&r)["benchmarks"][0]["ms"]["c"], 0.64);
+    }
+
+    /// The start-up control is the floor under every figure: shown per lane, subtracted in its own table, and never a
+    /// benchmark — not in the timings table, not in a ratio, not in the WASM engine's count.
+    #[test]
+    fn the_start_up_floor_is_shown_and_never_a_benchmark() {
+        let lane = |pairs: &[(&str, u128)]| pairs.iter().map(|(l, v)| (l.to_string(), *v)).collect::<Vec<_>>();
+        let r = Results {
+            benches: vec![Bench {
+                name: "loop_sum_1m".into(),
+                kind: "micro",
+                timings: lane(&[("interp", 365_000), ("wasm", 11_950), ("c", 1_260)]),
+                spreads: vec![],
+                unrun: vec![],
+            }],
+            startup: Some(Bench {
+                name: "startup_control".into(),
+                kind: "control",
+                timings: lane(&[("interp", 5_000), ("wasm", 7_200), ("c", 990)]),
+                spreads: lane(&[("interp", 400), ("wasm", 600), ("c", 300)]),
+                unrun: vec![("python".into(), "the program failed to run".into())],
+            }),
+            lanes_available: vec!["interp".into(), "wasm".into(), "c".into()],
+            lanes_unavailable: vec![],
+            measured_at: utc_minute(0),
+            machine: vec![],
+        };
+        let text = report(&r);
+        assert!(text.contains("| start-up | 5.00 [0.40] | 7.20 [0.60] | 0.99 [0.30] | — |"), "{text}");
+        assert!(text.contains("| `loop_sum_1m` | 360.00 | 4.75 | 0.27 | — |"), "{text}");
+        assert!(text.contains("- the start-up control on **python**: the program failed to run"), "{text}");
+        assert!(!text.contains("| `startup_control` |"), "the control is no benchmark:\n{text}");
+        assert!(text.contains("ran **1 of 1** benchmarks"), "{text}");
+        let j = json(&r);
+        assert_eq!(j["startup"]["ms"]["wasm"], 7.2);
+        assert_eq!(j["benchmarks"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_control_is_taken_out_of_the_benchmarks() {
+        let b =
+            |name: &str, kind: &'static str| Bench { name: name.into(), kind, timings: vec![], spreads: vec![], unrun: vec![] };
+        let mut benches = vec![b("fib_recursive_24", "micro"), b("startup_control", "control"), b("wordcount_macro", "macro")];
+        let control = take_control(&mut benches).expect("the control is found");
+        assert_eq!(control.name, "startup_control");
+        assert_eq!(benches.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(), ["fib_recursive_24", "wordcount_macro"]);
+        assert_eq!(startup_program().1, "control", "the program run_study chains in is the one taken out");
     }
 
     /// `time_it` times a real process in microseconds — no process starts in under 100 µs, so a reading below that is a

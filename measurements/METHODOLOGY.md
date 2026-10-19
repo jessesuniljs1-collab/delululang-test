@@ -199,7 +199,9 @@ DeluluLang WASM backend, C at `gcc -O2`, and CPython. All lanes compute the same
 algorithm — and since 2026-10-19 the study checks it: a lane is timed only when it printed the
 interpreter's answer. Each runs 5 times; the **minimum** is reported with the spread beside it, timed in
 microseconds (until 2026-10-19 whole milliseconds, which read a C process on Linux as 0 or 1). Each run
-records its date and its machine; an earlier run is kept whole under `study-c/runs/`.
+records its date and its machine; an earlier run is kept whole under `study-c/runs/`. A start-up control — a
+program that prints `0` and nothing else — runs on every lane, and the report shows each benchmark less its
+lane's start-up; it is never a benchmark and never in a ratio.
 
 **Release only.** The study refuses to run against a debug build. The first run did measure debug,
 and the numbers were both wrong and dangerous — authoritative-looking figures describing a binary
@@ -207,8 +209,8 @@ nobody runs.
 
 ### 3.3 The result
 
-**2026-10-19, a 4-vCPU Linux cloud VM:** the interpreter **7.5× to 311.4× slower than C**, the WASM engine
-**6.7× to 11.7×** on the 4 of 6 benchmarks it runs — whole processes, a C process starting and exiting in
+**2026-10-19, a 4-vCPU Linux cloud VM:** the interpreter **8.9× to 359.0× slower than C**, the WASM engine
+**6.5× to 11.5×** on the 4 of 6 benchmarks it runs — whole processes, a C process starting and exiting in
 about 1 ms. The interpreter's own times are within a run's spread of the v1.0 figures; the C lane's
 start-up shrank, so the ratios grew (`study-c/HOT_PATH_TABLE.md`).
 

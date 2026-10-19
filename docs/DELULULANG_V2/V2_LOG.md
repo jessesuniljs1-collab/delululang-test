@@ -6774,3 +6774,30 @@ the 2026-07-20 table kept beneath it verbatim and that run whole in `measurement
 was updated where it is quoted (`README.md`, `docs/QUESTIONS.md` twice, `docs/for-agents.md`, `measurements/METHODOLOGY.md`
 §3.2–3.3); the dated phase records and the 1.0 announcement keep theirs. **Not measured:** a compute-only ratio — every
 figure is a whole process, and the study has no start-up control per lane (an empty `main`); RW 3.4 names it.
+
+## 2026-10-19 — on-demand routine run 4 (continued): Study C measures start-up; `master` red on `lints` once, fixed (`45ca06d`)
+
+**`master` red, and why.** `81da0ae`'s push run `39268713452` went red on `lints` alone — clippy's `manual_range_contains`
+on `time_it_reads_a_process_in_microseconds`, a test written after this run's last clippy, in a commit whose message said
+"clippy 0". Read from the job's log (one error, nothing else); fixed in `45ca06d` — made in a worktree at `81da0ae` so it held
+nothing else, `cargo clippy -p delulu-measure --all-targets -D warnings` exit 0 and the crate's tests green there — and pushed
+within minutes. The run's other jobs were not waited for before the fix went up; its push run is read below.
+
+**What (the start-up control).** The hot-path table said a compute-only ratio needs a start-up control per lane. Study C now
+runs one — a program that prints `0` and nothing else — through the same per-lane code as every benchmark, then takes it out
+of the benchmarks (`take_control`), so no table, count or ratio includes it. The report shows its figure per lane, with its
+spread, and each benchmark less its lane's floor; no ratio is computed from those differences, and the report says why.
+
+**The published record is now this run** (2026-10-19 14:26 UTC; the same build, machine and quiet as 14:14): start-up C
+0.92 ms, interpreter 4.70, WASM 7.01, CPython 11.91. WASM 8.31–11.14 ms on its four kernels, 1.30–4.13 ms above its floor;
+C 0.97–1.50 ms, **0.05–0.58 ms above its floor** — so the C lane's work is inside a millisecond's noise and no compute ratio
+is offered. `wasm ÷ C` **6.5×–11.5×** (geo-mean 8.8×), `interp ÷ C` **8.9×–359.0×**. Between the 14:14 run and this one,
+single ratios moved by up to a quarter (`loop_sum_1m`'s `interp ÷ C` 290.4× then 359.0×), mostly through C's ~1 ms
+denominator — the table now says so. Every document quoting the range was updated to this run (README, QUESTIONS twice,
+for-agents, METHODOLOGY, CHANGELOG, RW 3.4); this log's previous entry keeps the 14:14 figures as what that run read.
+
+**Evidence.** `study_c::tests` seven: two new — the floor shown per lane with its spread, each benchmark less it
+(360.00, 4.75, 0.27), a lane where the control failed named, and the control absent from the timings table and the WASM
+count; and `take_control` removes the control and only it (`startup_program`'s kind is the one taken). Mutants M519 (the
+control copied, not taken out), M520 (no subtraction), M521 (the control's failures unshown) red; control green. clippy
+(`delulu-measure`, all targets) 0 after the last edit.

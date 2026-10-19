@@ -6,7 +6,7 @@
 
 Measured facts, and nothing else. Constitution §5.11 explicitly rejects *"faster than C"* as false — C sits near the hardware floor. The committed claim is *competitive with C on hot paths, with safety C cannot offer*, and this study **assesses** that claim rather than asserting it. Stage 10 is where it gets worked.
 
-These numbers were measured **2026-10-19 14:14 UTC** on the machine below, and are published as they came out. The first run (2026-07-20) was the v1.0 baseline; each earlier run is kept whole under `runs/`.
+These numbers were measured **2026-10-19 14:26 UTC** on the machine below, and are published as they came out. The first run (2026-07-20) was the v1.0 baseline; each earlier run is kept whole under `runs/`.
 
 ## Method
 
@@ -34,23 +34,44 @@ All lanes compute the same result by the same algorithm, and the study checks it
 
 | Benchmark | Kind | interp | wasm | C (gcc -O2) | CPython |
 |---|---|---|---|---|---|
-| `fib_recursive_24` | micro | 82.88 | 7.64 | 1.14 | 17.46 |
-| `loop_sum_1m` | micro | 365.36 | 11.95 | 1.26 | 80.39 |
-| `string_build_20k` | micro | 16.70 | 9.76 | 0.99 | 14.93 |
-| `wordcount_macro` | macro | 8.63 | — | 1.15 | 13.74 |
-| `list_map_macro` | macro | 11.76 | — | 1.30 | 14.62 |
-| `nested_calls_macro` | macro | 317.95 | 11.97 | 1.02 | 46.79 |
+| `fib_recursive_24` | micro | 96.19 | 9.74 | 1.50 | 17.68 |
+| `loop_sum_1m` | micro | 349.30 | 11.14 | 0.97 | 72.46 |
+| `string_build_20k` | micro | 14.77 | 8.31 | 1.03 | 13.66 |
+| `wordcount_macro` | macro | 11.34 | — | 0.99 | 13.60 |
+| `list_map_macro` | macro | 11.24 | — | 1.27 | 13.12 |
+| `nested_calls_macro` | macro | 267.98 | 11.11 | 1.10 | 45.15 |
 
 ### Spread across repeats (max − min, ms)
 
 | Benchmark | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| `fib_recursive_24` | 17.44 | 3.04 | 0.69 | 5.96 |
-| `loop_sum_1m` | 151.02 | 3.26 | 0.27 | 38.33 |
-| `string_build_20k` | 7.56 | 18.57 | 0.96 | 3.91 |
-| `wordcount_macro` | 3.28 | — | 0.96 | 2.87 |
-| `list_map_macro` | 5.80 | — | 0.36 | 3.84 |
-| `nested_calls_macro` | 163.34 | 3.91 | 0.41 | 16.24 |
+| `fib_recursive_24` | 32.92 | 3.30 | 0.26 | 8.96 |
+| `loop_sum_1m` | 172.10 | 2.35 | 0.12 | 12.68 |
+| `string_build_20k` | 4.83 | 2.80 | 0.74 | 5.30 |
+| `wordcount_macro` | 0.98 | — | 0.47 | 3.37 |
+| `list_map_macro` | 1.67 | — | 0.27 | 3.51 |
+| `nested_calls_macro` | 163.70 | 3.69 | 0.42 | 32.11 |
+
+## Start-up, measured
+
+A program that prints `0` and does nothing else, on every lane — the floor under every figure above, each of which is a whole process (ms; spread in brackets):
+
+| | interp | wasm | C | CPython |
+|---|---|---|---|---|
+| start-up | 4.70 [1.35] | 7.01 [1.08] | 0.92 [0.15] | 11.91 [8.00] |
+
+### Above start-up (each benchmark less its lane's floor, ms)
+
+A ratio of two whole processes is not a ratio of compute; this table is the figure above less the floor. A difference smaller than the floor's spread is noise, not work, and no ratio is computed from it.
+
+| Benchmark | interp | wasm | C | CPython |
+|---|---|---|---|---|
+| `fib_recursive_24` | 91.49 | 2.73 | 0.58 | 5.77 |
+| `loop_sum_1m` | 344.60 | 4.13 | 0.05 | 60.55 |
+| `string_build_20k` | 10.07 | 1.30 | 0.11 | 1.75 |
+| `wordcount_macro` | 6.64 | — | 0.07 | 1.69 |
+| `list_map_macro` | 6.54 | — | 0.34 | 1.21 |
+| `nested_calls_macro` | 263.28 | 4.10 | 0.18 | 33.23 |
 
 ## The assessment
 
@@ -58,23 +79,23 @@ Interpreter time divided by C time, per benchmark:
 
 | Benchmark | interp ÷ C |
 |---|---|
-| `fib_recursive_24` | 72.6× |
-| `loop_sum_1m` | 290.4× |
-| `string_build_20k` | 16.9× |
-| `wordcount_macro` | 7.5× |
-| `list_map_macro` | 9.0× |
-| `nested_calls_macro` | 311.4× |
+| `fib_recursive_24` | 64.2× |
+| `loop_sum_1m` | 359.0× |
+| `string_build_20k` | 14.3× |
+| `wordcount_macro` | 11.4× |
+| `list_map_macro` | 8.9× |
+| `nested_calls_macro` | 242.5× |
 
-Range: **7.5× to 311.4× slower than C** on these benchmarks.
+Range: **8.9× to 359.0× slower than C** on these benchmarks.
 
 The WASM engine (`--engine wasm`) ran **4 of 6** benchmarks with the interpreter's answer. WASM time divided by C time where both ran:
 
 | Benchmark | wasm ÷ C |
 |---|---|
-| `fib_recursive_24` | 6.7× |
-| `loop_sum_1m` | 9.5× |
-| `string_build_20k` | 9.9× |
-| `nested_calls_macro` | 11.7× |
+| `fib_recursive_24` | 6.5× |
+| `loop_sum_1m` | 11.5× |
+| `string_build_20k` | 8.1× |
+| `nested_calls_macro` | 10.1× |
 
 **The honest reading: `delulu 1.0.0` is NOT competitive with C on these workloads.** The constitution's committed claim is about *hot paths under a tiered backend with a JIT*; DeluluLang ships a tree-walking interpreter and a WASM backend without the DIR-level optimizer, and neither is that. The gap above is the baseline Stage 10 works against, and stating it plainly is the only way later numbers will mean anything.
 

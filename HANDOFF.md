@@ -1631,6 +1631,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   benchmark silently gone from every ratio. Now each lane is held to the interpreter's answer and timed in microseconds,
   and the record names its date and machine. Before re-running a measurement on a new machine, ask what its unit reads at
   the fastest lane there, and what it times when a lane is wrong.
+  **The same run's slip:** clippy ran, a test was added, and the commit said "clippy 0" — `master` red on `lints` (`81da0ae`,
+  fixed in `45ca06d`). A commit message's evidence is about the commit: run the lint after the LAST edit of any `.rs` file,
+  tests included.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

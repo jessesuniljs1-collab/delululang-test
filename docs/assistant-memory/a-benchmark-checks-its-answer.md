@@ -15,7 +15,7 @@ lane on the machine it runs on.
 WASM lane from one benchmark to four. And it used `as_millis()`: the v1.0 run on the laptop read C at 5–6 ms, so nobody saw
 it; the first run on a Linux VM read every C process as 1 or 0 ms, and the benchmark at 0 vanished from both ratio tables
 without a word. Found by the on-demand routine's fourth run re-measuring for the hot-path table; fixed with mutants
-M513–M518 red. The re-measure moved the published range from 2.0×–60.5× to 7.5×–311.4× (interpreter) — not because the
+M513–M518 red. The re-measure moved the published range from 2.0×–60.5× to 8.9×–359.0× (interpreter) — not because the
 interpreter got slower (its own times matched) but because a Linux C process starts in ~1 ms.
 
 **How to apply:** before re-running any study on a new machine, read the harness for (a) what it does when a lane prints

@@ -266,7 +266,7 @@ without declaring the effect. Mechanism and witness:
 Three more things worth knowing before you evaluate it:
 
 - **Performance is measured, never promised.** DeluluLang is **not competitive with C** on the measured
-  workloads — whole processes, 7.5×–311.4× slower on the interpreter and 6.7×–11.7× on the WASM engine
+  workloads — whole processes, 8.9×–359.0× slower on the interpreter and 6.5×–11.5× on the WASM engine
   where it runs (4 of 6), on a Linux VM on 2026-10-19 — and
   [`measurements/study-c/REPORT.md`](measurements/study-c/REPORT.md) says so in those words.
 - **Foreign code is outside the proof.** A `ForeignCall` is a hole in the guarantee. It is
