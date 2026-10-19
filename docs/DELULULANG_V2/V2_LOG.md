@@ -6832,3 +6832,32 @@ for-agents, METHODOLOGY, CHANGELOG, RW 3.4); this log's previous entry keeps the
 count; and `take_control` removes the control and only it (`startup_program`'s kind is the one taken). Mutants M519 (the
 control copied, not taken out), M520 (no subtraction), M521 (the control's failures unshown) red; control green. clippy
 (`delulu-measure`, all targets) 0 after the last edit.
+
+## 2026-10-19 — on-demand routine run 4 (continued): `master` red on `formal` (Lean's host refused the runners), fixed (`205f0f4`); WASM-OOM-1 (RW 3.9)
+
+**`master` red, not this run's code.** `0e4e9a2`'s push run `39270059515` and `6c26aed`'s `39271301242` went red on `formal`
+alone, each at the same step and before any proof ran: elan downloads Lean 4.32.2 from `releases.lean-lang.org`, which
+refused the runners' TLS (`[35] SSL connect error`) eight minutes apart; `45ca06d`'s `formal`, about five minutes earlier,
+had passed. Neither commit touched the model. The VM got no answer from that host either, and a 200 from the same
+tarball as a release asset of `leanprover/lean4` on GitHub. **Fixed in `205f0f4`:** the job fetches that asset with curl's
+retries, checks a pinned SHA-256 (`5f2069e6…72aa`, taken from the asset on 2026-10-19 — Lean publishes no checksum file to
+check it against), and runs that `lean` on `DeluluCore.lean`, a single core-Lean file. Verified in the VM before the push:
+the step's script, taken from the workflow by a YAML parser and run with `RUNNER_TEMP` set to a scratch directory — hash
+OK, Lean 4.32.2, every theorem "does not depend on any axioms", exit 0. Its push run is read below or by the next run.
+
+**WASM-OOM-1 (found reading the trap mapper while verifying RW 3.4).** `__alloc` trapped with `unreachable` when the
+memory could not give an allocation, and the host reads every `unreachable` as the arithmetic helpers' overflow — so a
+program that doubles a string past WebAssembly's 4 GiB, under `--limits mem=12884901888`, printed `error[DL0901]: … integer
+overflow` with no arithmetic in it (by hand, on the old backend; under the default 1 GiB budget the budget stops a program
+first, on both engines). Now `__alloc` traps as an access out of bounds (a 4-byte load at 0xFFFF_FFFF, past any 32-bit
+memory) and the host's DL0903 text says "memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's
+4 GiB)"; the same program now prints that. DL0903 is the code the fixed heap's end reported before RW 3.4. Residual, in RW
+3.9: the exhaustion has no code of its own (DL0903's explanation is about indexing) — a code would be a decision.
+
+**Evidence.** `codegen.rs` `alloc_tests::an_allocation_the_memory_cannot_give_is_not_an_overflow`: a module holding
+`__alloc` alone and an exported caller, both failure branches — an end that wraps past 2^32 (`-8` bytes from a heap pointer
+of 16; the test's first form used `-64`, which does not wrap — the memory simply grew to ~4 GiB — corrected before any
+fix) and a growth the memory's maximum refuses — **red on the old `__alloc`** (`DL0901: integer overflow`), green after.
+Mutants M522 (the wrap branch back to `unreachable`), M523 (the growth branch), M524 (DL0903's old text) red; control green.
+`delulu-wasm` 129 passed; `wasm_cli` 10, `budget_cli` 10; the release differential 50,000 checked, 46,235 agreed, 3,765 both
+faulted, 0 mismatches; `scripts/clippy.sh` clean (stamped).

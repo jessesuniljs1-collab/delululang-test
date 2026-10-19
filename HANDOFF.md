@@ -1092,6 +1092,13 @@ spells the same thing?**
   asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
   a generator cannot write a shape, teach it the shape in the same change.
 
+- **WASM-OOM-1 — an exhausted WASM memory read as an overflow** (on-demand routine run 4, 2026-10-19, RW 3.9): RW 3.4's
+  `__alloc` trapped with `unreachable`, and the host had long read every `unreachable` as the arithmetic helpers' overflow
+  (`DL0901`) — so a string doubled past WebAssembly's 4 GiB (a budget above 4 GiB lets a program get there) was "integer
+  overflow" in a program with no arithmetic. Search key: a new user of a shared signal inherits that signal's existing
+  meaning at every reader — before emitting `unreachable`, an error sentinel or a status code, read what its readers say
+  it means.
+
 - **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
   each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
   as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the

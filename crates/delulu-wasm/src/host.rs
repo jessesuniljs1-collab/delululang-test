@@ -161,8 +161,10 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
             // DL0901 (checked_div returns None) — so it maps to overflow, not divide-by-zero.
             Trap::IntegerOverflow => "DL0901: integer overflow".to_string(),
             Trap::StackOverflow => "DL0905: recursion depth exceeded (guest stack exhausted)".to_string(),
+            // `__alloc` traps this way when the memory cannot give an allocation (past WebAssembly's 4 GiB, or a growth the
+            // engine refuses) — the backend emits no other out-of-bounds access — so the text names both.
             Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => {
-                "DL0903: memory access out of bounds".to_string()
+                "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)".to_string()
             }
             // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
             // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;

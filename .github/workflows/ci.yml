@@ -631,8 +631,16 @@ jobs:
 
       # P17-9: the higher-order fragment, machine checked. Silence means every declaration
       # type-checked; the file's own `#print axioms` block is what proves no `sorry` is hiding.
+      # The toolchain is Lean's own release tarball from GitHub, pinned by SHA-256 (taken 2026-10-19 from that asset; Lean
+      # publishes no checksum file to check it against) — not elan, whose downloads come from releases.lean-lang.org, which
+      # refused the runners' TLS on 2026-10-19 and turned `formal` red on two pushes (`0e4e9a2`, `6c26aed`) before any proof
+      # ran. The model is one core-Lean file (no Lake, no Mathlib), so the binary is all it needs.
       - name: Machine-check Delulu Core (Lean)
         run: |
-          curl -sSfL --retry 4 --retry-delay 5 https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.32.2
-          . "$HOME/.elan/env"
-          cd docs/design/models/lean && lean DeluluCore.lean
+          v=4.32.2
+          f="lean-$v-linux.tar.zst"
+          curl -sSfL --retry 4 --retry-delay 5 -o "$RUNNER_TEMP/$f" "https://github.com/leanprover/lean4/releases/download/v$v/$f"
+          echo "5f2069e6f5db73780f374ccb49ce8ea649aa20a0cebf0116816744c999ce72aa  $RUNNER_TEMP/$f" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/lean" && tar --zstd -xf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP/lean" --strip-components=1
+          "$RUNNER_TEMP/lean/bin/lean" --version
+          cd docs/design/models/lean && "$RUNNER_TEMP/lean/bin/lean" DeluluCore.lean
