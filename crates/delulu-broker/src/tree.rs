@@ -860,6 +860,25 @@ impl Broker {
         Some(EffState::Expired { ttl_millis: 0, now_millis: now })
     }
 
+    /// RW 4.69: the run `node` belongs to under `root` — the child of `root` on `node`'s path to the top of the tree, or
+    /// `root` itself when `node` is `root`; `None` when `node` is neither `root` nor below it, or is not in the tree. A
+    /// monitor's question about the actors its newest records name, answered by walking parent pointers as
+    /// [`Self::effective_state_inherited`] does: its cost grows with the node's depth, never with the size of the tree.
+    pub fn run_under(&self, root: &GrantId, node: &GrantId) -> Option<GrantId> {
+        let mut cur = self.nodes.get(node)?;
+        let mut below: Option<&GrantId> = None;
+        // Parents always point at an already-existing node and ids are never reused, so a cycle is unreachable; the
+        // bound answers "not under it" rather than spinning.
+        for _ in 0..1024 {
+            if &cur.id == root {
+                return Some(below.unwrap_or(&cur.id).clone());
+            }
+            below = Some(&cur.id);
+            cur = self.nodes.get(cur.parent.as_ref()?)?;
+        }
+        None
+    }
+
     /// Number of nodes in the tree (for tests).
     pub fn len(&self) -> usize {
         self.nodes.len()
@@ -931,19 +950,35 @@ impl Broker {
     /// A human-facing tree rendering (spec §3.2 `tree`). Includes the holder for display — this is
     /// the one place holder fields are read, and they are DATA, never a decision input.
     pub fn tree(&self) -> String {
-        let mut roots: Vec<&GrantId> = self.nodes.values().filter(|n| n.parent.is_none()).map(|n| &n.id).collect();
+        // RW 4.70: each node's children from one index — a scan of every node for each node's children held the serial
+        // daemon for 10.9 s at 16,000 nodes (debug build, 2026-10-19), an e-stop's revoke waiting behind it.
+        let mut roots: Vec<&GrantId> = Vec::new();
+        let mut children: HashMap<&GrantId, Vec<&GrantId>> = HashMap::new();
+        for n in self.nodes.values() {
+            match &n.parent {
+                Some(p) => children.entry(p).or_default().push(&n.id),
+                None => roots.push(&n.id),
+            }
+        }
         roots.sort();
+        children.values_mut().for_each(|c| c.sort());
+        let now = self.now();
         let mut out = String::new();
-        for root in roots {
-            self.render_node(root, 0, &mut out);
+        // Depth-first in id order, from a stack rather than a call per level: a node's depth has no bound at its creation.
+        let mut todo: Vec<(&GrantId, usize)> = roots.into_iter().rev().map(|r| (r, 0)).collect();
+        while let Some((id, depth)) = todo.pop() {
+            self.render_line(id, depth, now, &mut out);
+            todo.extend(children.get(id).into_iter().flatten().rev().map(|c| (*c, depth + 1)));
         }
         out
     }
 
-    fn render_node(&self, id: &GrantId, depth: usize, out: &mut String) {
+    fn render_line(&self, id: &GrantId, depth: usize, now: i64, out: &mut String) {
         let Some(n) = self.nodes.get(id) else { return };
         let indent = "  ".repeat(depth);
-        let state = match effective_state(n, self.now()) {
+        // TREE-STATE-1 (RW 4.70): the state the broker acts on — a child of an expired parent is expired — as `grants list`
+        // and `inspect` show it; the node's own state alone called such a child live.
+        let state = match self.effective_state_inherited(id, now).unwrap_or(EffState::Live) {
             EffState::Live => "live".to_string(),
             EffState::Revoked { by_seq } => format!("revoked@{by_seq}"),
             EffState::Expired { .. } => "expired".to_string(),
@@ -962,11 +997,6 @@ impl Broker {
             terminal_line(holder_kind),
             terminal_line(holder_desc),
         ));
-        let mut children: Vec<&GrantId> = self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();
-        children.sort();
-        for child in children {
-            self.render_node(child, depth + 1, out);
-        }
     }
 }
 
@@ -1022,6 +1052,60 @@ mod tests {
         assert!(s.starts_with("g_"), "id should start with g_: {s}");
         assert_eq!(s.len(), 34, "g_ + 32 hex");
         assert!(s[2..].chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    /// RW 4.69 (moved from `monitor_cmd.rs`, where the monitor once computed it from a whole-tree listing): every node
+    /// under `g_M` maps to its run — the child of `g_M` on its path — and nothing outside the subtree (a sibling, a
+    /// cousin, the parent, an id the tree never held) is under it. A revoked run still maps: its records were written
+    /// while it lived, and the monitor judges them after.
+    #[test]
+    fn a_node_maps_to_its_run_under_a_root_and_nothing_outside_is_under_it() {
+        let mut b = det_broker();
+        let rw = || Authority::new(eff(&["Read"]), Scopes::default());
+        let top = b.issue(holder(), rw(), None);
+        let m = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let run1 = b.attenuate(&m, rw(), holder(), None).unwrap();
+        let dev1 = b.attenuate(&run1, rw(), holder(), None).unwrap();
+        let deep = b.attenuate(&dev1, rw(), holder(), None).unwrap();
+        let run2 = b.attenuate(&m, rw(), holder(), None).unwrap();
+        let sibling = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let cousin = b.attenuate(&sibling, rw(), holder(), None).unwrap();
+        b.revoke(&m, &run2).unwrap();
+        assert_eq!(b.run_under(&m, &m), Some(m.clone()), "the root is its own run");
+        assert_eq!(b.run_under(&m, &run1), Some(run1.clone()));
+        assert_eq!(b.run_under(&m, &dev1), Some(run1.clone()), "a device's node belongs to its run");
+        assert_eq!(b.run_under(&m, &deep), Some(run1.clone()), "however deep");
+        assert_eq!(b.run_under(&m, &run2), Some(run2.clone()), "a revoked run is still the run its records name");
+        for outside in [&top, &sibling, &cousin] {
+            assert_eq!(b.run_under(&m, outside), None, "`{outside}` is not under the monitor");
+        }
+        assert_eq!(b.run_under(&m, &GrantId::from_trusted("g_never")), None, "an id the tree never held");
+        assert_eq!(b.run_under(&GrantId::from_trusted("g_never"), &run1), None, "a root the tree never held");
+    }
+
+    /// TREE-STATE-1 (RW 4.70): the tree shows each node in the state the broker acts on. A child of an expired parent is
+    /// expired — `effective_state`, `grants list` and `grants inspect` said so — and the tree, reading the child's own state
+    /// alone, called it live. A revoked node and the nodes below it read as revoked; the rest stay live.
+    #[test]
+    fn the_tree_shows_a_child_of_an_expired_parent_as_expired() {
+        let clock = Rc::new(ManualClock::new(1000));
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock.clone()));
+        let rw = || Authority::new(eff(&["Read"]), Scopes::default());
+        let top = b.issue(holder(), rw(), None);
+        let short = b.attenuate(&top, rw(), holder(), Some(2000)).unwrap();
+        let child = b.attenuate(&short, rw(), holder(), None).unwrap();
+        let other = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let below = b.attenuate(&other, rw(), holder(), None).unwrap();
+        b.revoke(&other, &other).unwrap();
+        clock.set(3000);
+        assert!(matches!(b.effective_state(&child), Some(EffState::Expired { .. })), "the broker acts on the child as expired");
+        let text = b.tree();
+        let line = |id: &GrantId| text.lines().find(|l| l.trim_start().starts_with(id.as_str())).unwrap_or("").to_string();
+        assert!(line(&short).contains("[expired]"), "{text}");
+        assert!(line(&child).contains("[expired]"), "a child of an expired parent is shown as the broker acts on it:\n{text}");
+        assert!(line(&other).contains("[revoked@") && line(&below).contains("[revoked@"), "{text}");
+        assert!(line(&top).contains("[live]"), "{text}");
+        assert!(line(&child).starts_with("    ") && line(&below).starts_with("    "), "each under its parent:\n{text}");
     }
 
     #[test]

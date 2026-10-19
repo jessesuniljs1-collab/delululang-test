@@ -25,6 +25,53 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### loops run on the WASM engine, and a lambda inlined there sees its own names, 2026-10-19
+
+- **Added (RW 3.4, D-V2-163): `delulu run --engine wasm` compiles `while`, `break`, `continue`, assignment to a `var`, and
+  `Str.len()`.** Before, any of these made the program DL1201 and it had to run on the interpreter. Four of the six
+  Study-C kernels now run on the WASM engine (one before); in a debug build `loop_sum_1m` took 29 ms there against
+  2,244 ms on the interpreter. `for` and every `List` remain DL1201. `str` of a `Bool` compiles in every program now (it
+  needed a program that also used a foreign library).
+- **Fixed: a WASM program's strings may grow past its first megabyte.** The engine's heap was a fixed 1 MiB that was never
+  reused, so a program that built enough strings — recursively, before loops compiled — stopped with `DL0903: memory access
+  out of bounds` where the interpreter ran it; reading a file larger than that failed the same way. The memory now grows,
+  and the run's memory budget (`--limits mem=`) holds it, as on the interpreter.
+- **Fixed (WASM-HYGIENE-1): a lambda passed to a generic function could read the wrong variable on the WASM engine.** The
+  engine inlines both, and a name in the lambda found the generic function's own variable of that name first: a program
+  printed 103 on WASM and 4 on the interpreter. Each inlined body now sees only the names of where it was written.
+- **Fixed (WASM-HYGIENE-2): on the WASM engine, a function value bound inside an `if`, `else` or `while` body replaced the
+  outer one of the same name for the rest of the function.** `let f = fn…` in such a block went into the function's own
+  table of function values, so a later `f(0)` outside the block called the inner `f`: a program printed `2` and then `2` on
+  WASM where the interpreter printed `2` and then `1`. A block's function values now end with the block, as its variables
+  do. (The `if` form miscompiled before loops did too.)
+
+### `grants list` and `grants tree` read a large tree, and the tree shows what the broker enforces, 2026-10-19
+
+- **Fixed (TREE-STATE-1, RW 4.70): `delulu grants tree` showed a child of an expired grant as `[live]`.** It read each
+  node's own state; `grants list`, `grants inspect` and every check already treated such a child as expired. The tree now
+  shows each node in the state the broker acts on.
+- **Fixed (RW 4.70, D-V2-162): `delulu grants list` and `delulu grants tree` read a tree of any size.** Each asked the daemon
+  for the whole tree in one answer, capped at one 16 MiB frame, so a large tree (by hand: 550 nodes with 30,000-character
+  descriptions) could not be listed at all. They now read it page by page. A paged listing is not a snapshot: a node added or
+  revoked while it is read may or may not appear.
+- **Faster: drawing the tree no longer holds the broker daemon.** The daemon found each node's children by scanning every
+  node — 10.9 s at 16,000 nodes in a debug build — and served nothing else meanwhile, an operator's e-stop included. `grants
+  tree` is drawn by the CLI from the pages now, and the daemon's own `Tree` answer (kept for older clients) uses one index.
+
+### a monitor over a large grant tree keeps watching, 2026-10-19
+
+- **Fixed (RW 4.69, D-V2-161): `delulu monitor watch` no longer stops — and lets its dead-man revoke every run it watches —
+  when the broker's grant tree is large.** Each poll asked the daemon for the whole tree, which keeps every node it ever
+  held, anyone's, each with its holder's description. Past one protocol frame (16 MiB) the daemon could not send that
+  listing at all; the monitor took the dropped connection for a broker that was not there, stopped, and its dead-man revoked
+  its node and every run under it (by hand: 550 nodes with 30,000-character descriptions, none of them under the monitor).
+  Below that size each listing held the daemon — an operator's e-stop included — while it was built. Now a poll asks only
+  about the monitor's own node and the nodes its newly read records name.
+- **Fixed: a broker answer too large for one frame is refused in words** — `DL1401: the broker's answer to this request is N
+  bytes, larger than one protocol frame (16777216 bytes), and was not sent` — instead of a dropped connection that every
+  client reported as `broker unreachable`. `delulu grants list` over such a tree now says so; it still cannot list it
+  (RW 4.70).
+
 ### a monitor over a long audit chain no longer revokes its own runs, 2026-10-19
 
 - **Fixed (MONITOR-CHAIN-1, D-V2-158): `delulu monitor watch` no longer quarantines every run it watches once the audit

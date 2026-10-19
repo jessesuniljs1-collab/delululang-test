@@ -524,11 +524,15 @@ Fail-closed at the edge is the property that makes a partial backend safe to hav
 on a sum type, string concatenation, `str(Int)`, and console output. That is enough to compile `fib`
 and `gcd` and print the answer.
 
-What is **DL1201** today includes `while` loops, `Float` arithmetic, record field access (outside
-`self.field`), `List` and `.len()`, the clock, every string method (`.trim`, `.split`), `.narrow`,
+What is **DL1201** today includes `for` and every `List`, `Float` arithmetic, record field access
+(outside `self.field`), every string method but `.len()` (`.trim`, `.split`), `.narrow`,
 `.fs_write`, embedded Python, and actor state outside the `Int`/actor-reference subset. Of the
-entry-point programs in this repository's corpus and examples, **6 of 19** compile to WASM, and
-**none of this book's own guide chapters do**.
+entry-point programs in this repository's corpus and examples, **6 of 19** compiled to WASM when this
+was first measured, and **none of this book's own guide chapters do**. Since 2026-10-19 (RW 3.4)
+`while`, `break`, `continue`, assignment to a `var` and `Str.len()` compile, and a program's strings
+may grow past the first megabyte; measured that day with `delulu build FILE --target wasm`, 3 of the
+17 entry points now in `tests/corpus` and `examples` compile on their own, and each of the others
+stops at something else — a `List`, a string method, Python, a plugin, or a package's other modules.
 
 So: if you are writing ordinary DeluluLang — anything with a loop, a float, a record, or a list —
 **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code

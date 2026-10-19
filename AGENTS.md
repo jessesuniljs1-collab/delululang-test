@@ -119,7 +119,9 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
    defect, watch it go red). A gate that cannot fail is not a gate.
 3. `cargo clippy --workspace --all-targets -- -D warnings` (zero warnings) and the tests —
    `cargo test --workspace --no-fail-fast -j 4`. **Freeze the tree while a suite runs.** Read cargo's
-   own exit code, never a pipeline's.
+   own exit code, never a pipeline's. **If the laptop cannot run or finish the suite, GitHub runs it** (owner,
+   2026-10-19): push the branch to `origin`, dispatch `ci.yml` (`-f jobs=everything`) or `witness.yml` at it, read the run
+   to its end, and land only on green — the record names the run (`HANDOFF.md` §11.1).
 4. **Regenerate the Survey LAST** — `cargo run -p delulu-survey -- build`, `-- check`, `-- findings`
    (0 errors) — then `cargo run -p delulu -- doctor --check` (all checks must pass). A stale map fails
    `doctor_cli` and the freshness test.

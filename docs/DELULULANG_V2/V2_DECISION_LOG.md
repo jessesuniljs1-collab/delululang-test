@@ -3890,6 +3890,68 @@ alone. Named, not hidden. (4) An anchor without the note — every log written b
 re-affirmed with it; an older binary reads `head` and `records` and ignores the rest. (5) Hardening the cost, not the meaning:
 the chain, its records, `verify` and the anchor's two original fields are unchanged.
 
+## D-V2-161 — A monitor asks the daemon about the nodes its records name, never for the whole tree; an answer too large for one frame is refused in words (RW 4.69) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first.** The on-demand routine's third run timed the cost (RW 4.69: at 30,003 nodes a recorded request's max went
+from 17 to 371 ms beside a monitor polling every 25 ms). The laptop then found the cliff behind it (2026-10-19, Windows,
+debug build): every wire frame is capped at 16 MiB (`broker_ipc::MAX_FRAME`); the tree keeps every node it ever held with its
+holder's description, words of any length; and past the cap the daemon dropped the connection ("response write failed").
+The monitor read that as `broker unreachable`, stopped, and its dead-man revoked its node and the run under it — 550 nodes of
+30,000-byte descriptions, none under the monitor, did it.
+
+**Decision.** (1) A new additive `broker/1` request, `RunsUnder { root, nodes }`, answered `Runs { state, runs }`: the root's
+effective state, and for each asked node under the root the run it belongs to — the child of the root on its path, or the root
+itself (`Broker::run_under`, a walk up parent pointers: its cost is the depth of what is asked, never the size of the tree). At
+most `MAX_RUNS_ASKED` (4,096) names a request; more are refused DL1401, and the monitor asks in parts. (2) The monitor asks its
+node's state at the top of each poll (a `RunsUnder` naming nothing), and the runs of the actors its newly read records name
+AFTER reading them — so a node minted between an earlier question and the reading of its records is in the tree when asked
+after. The old order (list, then read) skipped such a node's records for good; that is closed by construction and not
+witnessed (the window was a few milliseconds, and no test holds it open). (3) An answer whose encoding is larger than one
+frame is answered DL1401 in words and the connection kept for it, never dropped: `write_frame` writes nothing of an oversize
+frame and says so with `broker_ipc::FrameTooLarge`. (4) Not changed: `grants list`, `grants tree` and `atlas`'s custody overlay
+still read the whole tree, and past one frame they now say why they cannot (RW 4.70, open); `List`, its answer, and the
+monitor's rules, dead-man, judging and report are unchanged. Hardening the monitor's reach, not what it means.
+
+## D-V2-162 — The whole-tree reads come in pages, and the tree is drawn in the state the broker acts on (RW 4.70) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-19): past one 16 MiB frame `grants list`, `grants tree` and `atlas`'s custody overlay
+could not read the tree (RW 4.70, opened beside RW 4.69); `Broker::tree` found each node's children by scanning every node —
+0.13 s at 2,000 nodes, 0.54 s at 4,000, 2.6 s at 8,000, 10.9 s at 16,000 (debug build), the serial daemon serving nothing
+else meanwhile; and the tree drew each node in its OWN state, so a child of an expired grant read `[live]` where `list`,
+`inspect` and every check said expired (TREE-STATE-1, witnessed with the real binary).
+
+**Decision.** (1) A new additive `broker/1` request, `ListPage { after }`, answered `ListedPage { nodes, next }`: the nodes
+after `after` in id order, as `List` gives them, at most `LIST_PAGE_BYTES` (4 MiB) of encoded entries a page and at least one;
+`next` is the page's last id, `None` on the last page. One entry larger than a frame is refused in words, as any answer that
+size is (D-V2-161). (2) `brokerd::list_all` reads every page; `grants list`, `grants tree` and the atlas overlay use it. A
+paged listing is not a snapshot, and says so: a node made or revoked while it is read may or may not appear; a node whose
+parent the pages do not hold is drawn as a root. (3) `grants tree` is drawn by the CLI from the pages (`cli::render_tree`), in
+the daemon's text format — a test holds the two to one text byte for byte. (4) The daemon's `Tree` stays for older clients:
+its children from one index, drawn from a stack rather than a call per level (a node's depth has no bound at its creation),
+each node in its inherited state. (5) `List` and its answer are unchanged. Display only: no decision reads either text.
+
+## D-V2-163 — The WASM fragment takes loops, a growing memory and `Str.len()`; an inlined body sees the names of where it was written (RW 3.4, WASM-HYGIENE-1) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-19): five of the six Study-C kernels were DL1201, `loop_sum_1m`, `string_build_20k`
+and `nested_calls_macro` on `while` alone (and `Str.len()`); the WASM heap was a fixed 1 MiB, never reused, so a program
+whose strings added up past it trapped (`DL0903`) where the interpreter ran it — witnessed with a recursion that compiled
+already; and the backend's inliner looked a name up through every frame below it, so a lambda passed to a generic function
+read the generic's own variable (WASM-HYGIENE-1: 103 on WASM, 4 on the interpreter).
+
+**Decision.** (1) `while c { body }` lowers to `block { loop { br_if 1 (!c); body; br 0 } }`; `break` and `continue` branch to
+the enclosing loop's block and loop, counted by a label depth that `Cx::emit` keeps for every `block`, `loop`, `if` and
+`end`. (2) Assignment to a local: the variable's slot, the value compiled at its type; the checker has already held it to a
+`var`. An assignment from inside an inlined function value to a variable of the frame that defined it is refused (DL1201):
+the interpreter's closures share their frame, and the backend does not reproduce that sharing for writes — it is not
+guessed. An inlined body's `break`/`continue` reach no loop of its caller's. (3) `for` and every `List` stay DL1201. (4)
+Every guest allocation goes through one helper, `__alloc`, which grows the memory by the pages an allocation needs, and
+traps when it cannot; the host's allocator grows it by the same rule. The run's memory budget holds the growth, as it holds
+the interpreter's. (5) `Str.len()` counts Unicode scalar values, as the interpreter does (`__str_len`: the bytes that do not
+continue a character; a guest string is UTF-8). (6) An inlined body sees the frames of where it was written and no others:
+a generic function's body none of its caller's, a lambda's the frames visible at its definition (`Callable` records them;
+`Cx::hidden` hides the rest from every lookup). (7) The interpreter stays the reference engine and `--engine wasm` stays
+opt-in. The Study-C table is not re-measured by this decision (`HOT_PATH_TABLE.md` says so).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

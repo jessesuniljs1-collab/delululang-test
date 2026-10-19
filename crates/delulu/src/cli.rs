@@ -6589,8 +6589,13 @@ fn grants_rpc(
     body: crate::broker_ipc::ReqBody,
     json: bool,
 ) -> Result<crate::broker_ipc::Response, i32> {
+    grants_answer(crate::brokerd::request(state_dir, body), json)
+}
+
+/// [`grants_rpc`]'s reading of an answer: a refusal or an unreachable broker printed, and its exit code.
+fn grants_answer(answer: std::io::Result<crate::broker_ipc::Response>, json: bool) -> Result<crate::broker_ipc::Response, i32> {
     let map = SourceMap::new();
-    match crate::brokerd::request(state_dir, body) {
+    match answer {
         Ok(crate::broker_ipc::Response::Error { code, message, .. }) => {
             let d = Diagnostic::error(crate::broker_client::static_code(&code), message);
             print_diagnostics("grants", &[d], &map, None, json);
@@ -6610,6 +6615,56 @@ fn grants_rpc(
             Err(1)
         }
     }
+}
+
+/// RW 4.70: every node of the tree, read page by page ([`crate::brokerd::list_all`]).
+fn list_all_nodes(state_dir: &std::path::Path, json: bool) -> Result<Vec<crate::broker_ipc::NodeInfo>, i32> {
+    match grants_answer(crate::brokerd::list_all(state_dir), json)? {
+        crate::broker_ipc::Response::Listed { nodes } => Ok(nodes),
+        other => {
+            eprintln!("error: unexpected list response: {other:?}");
+            Err(2)
+        }
+    }
+}
+
+/// RW 4.70: `grants tree` drawn from the paged listing — the text the daemon's `Tree` draws (`Broker::tree`; the test
+/// `the_clis_tree_is_the_daemons_tree` holds them to one text), so a tree past one frame is drawn too. Each node in the
+/// state the broker acts on. A node whose parent the listing does not hold — the tree changed between pages — is a root here.
+pub(crate) fn render_tree(nodes: &[crate::broker_ipc::NodeInfo]) -> String {
+    use delulu_diag::terminal_line;
+    let ids: BTreeSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
+    let mut roots: Vec<&crate::broker_ipc::NodeInfo> = Vec::new();
+    let mut children: HashMap<&str, Vec<&crate::broker_ipc::NodeInfo>> = HashMap::new();
+    for n in nodes {
+        match n.parent.as_deref().filter(|p| ids.contains(p)) {
+            Some(p) => children.entry(p).or_default().push(n),
+            None => roots.push(n),
+        }
+    }
+    roots.sort_by(|a, b| a.id.cmp(&b.id));
+    children.values_mut().for_each(|c| c.sort_by(|a, b| a.id.cmp(&b.id)));
+    let mut out = String::new();
+    let mut todo: Vec<(&crate::broker_ipc::NodeInfo, usize)> = roots.into_iter().rev().map(|r| (r, 0)).collect();
+    while let Some((n, depth)) = todo.pop() {
+        let state = match (n.state.as_str(), n.by_seq) {
+            ("revoked", Some(seq)) => format!("revoked@{seq}"),
+            (s, _) => s.to_string(),
+        };
+        let authority = crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact();
+        out.push_str(&format!(
+            "{}{} [{}] {} ({}) — {}
+",
+            "  ".repeat(depth),
+            terminal_line(&n.id),
+            state,
+            terminal_line(&authority),
+            terminal_line(&n.holder_kind),
+            terminal_line(&n.holder_desc),
+        ));
+        todo.extend(children.get(n.id.as_str()).into_iter().flatten().rev().map(|c| (*c, depth + 1)));
+    }
+    out
 }
 
 /// One wire node as a compact human line (`grants list`). Holder fields are display DATA — never a
@@ -6680,13 +6735,9 @@ fn cmd_grants(rest: &[String]) -> i32 {
 
     match sub {
         "list" => {
-            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::List, json) {
-                Ok(r) => r,
+            let nodes = match list_all_nodes(&state_dir, json) {
+                Ok(n) => n,
                 Err(c) => return c,
-            };
-            let crate::broker_ipc::Response::Listed { nodes } = resp else {
-                eprintln!("error: unexpected list response: {resp:?}");
-                return 2;
             };
             if json {
                 let arr: Vec<Json> = nodes.iter().map(|n| serde_json::to_value(n).expect("node serializes")).collect();
@@ -6702,13 +6753,9 @@ fn cmd_grants(rest: &[String]) -> i32 {
             0
         }
         "tree" => {
-            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::Tree, json) {
-                Ok(r) => r,
+            let text = match list_all_nodes(&state_dir, json) {
+                Ok(n) => render_tree(&n),
                 Err(c) => return c,
-            };
-            let crate::broker_ipc::Response::Tree { text } = resp else {
-                eprintln!("error: unexpected tree response: {resp:?}");
-                return 2;
             };
             if json {
                 print_success_envelope("grants", json!({ "subcommand": "tree", "tree": text }));
@@ -10274,7 +10321,8 @@ fn atlas_custody_overlay() -> Result<Json, Diagnostic> {
             "custody overlay unavailable — cannot resolve the broker state directory; atlas emitted without it",
         ));
     };
-    match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::List) {
+    // RW 4.70: page by page, so a tree past one frame still gives its overlay.
+    match crate::brokerd::list_all(&state_dir) {
         Ok(crate::broker_ipc::Response::Listed { nodes }) => {
             let grants: Vec<Json> = nodes
                 .iter()

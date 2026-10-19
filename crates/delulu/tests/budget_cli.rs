@@ -165,11 +165,50 @@ fn an_actor_mailbox_flood_is_stopped_by_the_memory_budget() {
     assert_eq!(v["outcome"]["stopped_by"]["dimension"], "memory", "the MAILBOX is what grew: {v}\n{}", r.stderr);
 }
 
+/// RW 3.4: the WASM engine compiles `while` now, so an endless loop runs there too — compiled, and stopped by the same
+/// processor-time budget, attributed the same way.
+#[test]
+fn an_endless_loop_on_the_wasm_engine_is_stopped_by_its_cpu_budget() {
+    let dir = tmp("wasmspin");
+    program(&dir, "spin.delulu", SPIN);
+    let r = run(
+        &dir,
+        &["run", "spin.delulu", "--engine", "wasm", "--grant", "console", "--limits", "cpu=1", "--report-out", "rep.json"],
+        Duration::from_secs(60),
+    )
+    .expect("an endless loop on the WASM engine under `--limits cpu=1` must be STOPPED");
+    assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
+    assert!(!r.stderr.contains("DL1201"), "it compiled: {}", r.stderr);
+    let v = report(&dir);
+    assert_eq!(v["outcome"]["ran"], true, "it ran on the WASM engine: {v}\n{}", r.stderr);
+    assert_eq!(v["outcome"]["stopped_by"]["dimension"], "cpu", "{v}");
+}
+
+/// RW 3.4: a string doubled in a loop on the WASM engine grows its memory (`__alloc`), and the memory budget stops it as it
+/// stops the interpreter's — the engine's growth is the process's.
+#[test]
+fn a_runaway_allocation_on_the_wasm_engine_is_stopped_by_its_memory_budget() {
+    let dir = tmp("wasmgrow");
+    program(&dir, "grow.delulu", GROW);
+    let budget = 256u64 * 1024 * 1024;
+    let limit = format!("mem={budget}");
+    let r = run(
+        &dir,
+        &["run", "grow.delulu", "--engine", "wasm", "--grant", "console", "--limits", &limit, "--report-out", "rep.json"],
+        Duration::from_secs(60),
+    )
+    .expect("a doubling string on the WASM engine under a 256 MiB budget must be STOPPED");
+    assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
+    let v = report(&dir);
+    assert_eq!(v["outcome"]["ran"], true, "it ran on the WASM engine: {v}\n{}", r.stderr);
+    assert_eq!(v["outcome"]["stopped_by"]["dimension"], "memory", "{v}\n{}", r.stderr);
+}
+
 /// The same budget holds on the WASM engine — the watchdog measures the process, not an engine.
 ///
-/// The WASM fragment has no `while` (DL1201), so the endless work here is naive recursion: `fib(60)`
-/// makes on the order of 10^12 calls from a stack only sixty frames deep, which no depth bound
-/// touches and which compiled code would need hours to finish. Only a processor-time budget stops it.
+/// Naive recursion, kept beside the loop above: `fib(60)` makes on the order of 10^12 calls from a stack only sixty
+/// frames deep, which no depth bound touches and which compiled code would need hours to finish. Only a processor-time
+/// budget stops it.
 #[test]
 fn the_wasm_engine_is_held_to_the_same_budget() {
     let dir = tmp("wasm");

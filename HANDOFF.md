@@ -607,6 +607,13 @@ wins, and you should update the memory to match.
   `delululang-test`; no session pushes to `DeluluLang` or any other repository, pushes a tag, switches `origin`, moves the
   routine's repository or changes a repository's visibility until he says so. It outranks the commission's launch steps
   (D-V2-153 §3, `CHECKLIST-2.0.md` steps 4–10 on `launch/2.0.0`): the launch is prepared and waits for his word.
+- **When the laptop cannot run or finish the tests, GitHub runs them** (owner, 2026-10-19): *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete successfully and review the results."* A suite
+  the laptop cannot start or finish — stopped for low memory, too long for the session, a target that needs another OS —
+  goes to GitHub without asking: push the branch to `origin` (the test repository) and dispatch `ci.yml` at it
+  (`-f jobs=everything`; its `test` matrix is the full suite on Linux, macOS and Windows) or `witness.yml` for one target.
+  A slice reaches `master` only once that run is READ to its end and green, and its record names the run and says the
+  laptop's suite did not run. (The occasion: on 2026-10-17 the laptop's suite for RW 6.1 was stopped for low memory
+  before a test ran; the on-demand routine then ran it, 2,318 passed, in `a3d7678`.)
 - **Once the owner says to move (D-V2-153), and not before, `origin` becomes `github.com/jessesuniljs1-collab/DeluluLang`,
   branch `main`**; until then this bullet is the rule. **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
@@ -1059,6 +1066,36 @@ spells the same thing?**
   D-V2-159): every writer's catch-up re-read the whole chain under the append lock once another had written, so a daemon request
   beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); and every opening read every day file twice (0.2–0.3 s
   there; D-V2-160: the anchor notes where the chain stood, and an opening whose files still measure so reads one line).
+
+- **MONITOR-FRAME-1 — a tree too large for one answer killed a healthy monitor's fleet** (the laptop, 2026-10-19,
+  D-V2-161, RW 4.69): the monitor asked for the whole grant tree each poll; every wire frame is capped at 16 MiB
+  (`broker_ipc::MAX_FRAME`), and past it the daemon dropped the connection. The monitor took that for an absent broker,
+  stopped, and its dead-man revoked everything under it — 550 nodes of another holder's long descriptions did it. Routine
+  run 3 had measured the same listing and filed it as a latency (371 ms); the cliff was a constant in the wire code. Search
+  key: for every answer that grows with history, find the size limit it will meet and what its client does when it cannot be
+  sent — a dropped connection reads as "unreachable", and a monitor that hears "unreachable" stops.
+
+- **WASM-HYGIENE-1 — an inlined lambda read the generic function's variable** (the laptop, 2026-10-19, D-V2-163): the WASM
+  backend inlines generic functions and the lambdas passed to them, and looked every name up through all the frames below
+  the inlined body — so `apply(fn(v) { v + n }, 3)`, with `apply` declaring its own `n`, read that one: 103 on WASM, 4 on
+  the interpreter, silently. The 50,000-program differential gate never generated a lambda. Search key: wherever code is
+  moved to where it is used (inlining, macros, templates), its names must still mean what they meant where it was written —
+  and a differential fuzzer only covers the shapes its generator writes.
+
+- **WASM-HYGIENE-2 — an inner block's function value replaced the outer one** (on-demand routine run 4, 2026-10-19, RW 3.8):
+  the same backend keeps locals in one table and function values in another, and a block opened a frame in the first only,
+  so `let f = fn…` inside an `if` or a `while` body replaced the outer `f` for the rest of the function — `2 / 1` on the
+  interpreter, `2 / 2` on WASM; on `master` before RW 3.4 too (the `if` form). Found while verifying WASM-HYGIENE-1's fix,
+  which had asked which frames an inlined body sees and not whether each block opens each kind of frame. The line above
+  said the gate never generated a lambda, and the generator stayed as it was: it binds, calls and shadows one now, its count
+  asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
+  a generator cannot write a shape, teach it the shape in the same change.
+
+- **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
+  each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
+  as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the
+  tree for RW 4.70, with a second: the same render scanned every node for each node's children (10.9 s at 16,000 nodes, the
+  serial daemon held). Search key: when two surfaces show one fact, does each compute it the same way?
 
 - **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
   and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the
@@ -1576,6 +1613,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   own check, while the next command (not joined by `&&`) ran the records script on the placeholders. Four one-letter lines
   reached the tree, caught by reading the result before any commit. Join every step a script depends on with `&&`, and
   write a dry run's inputs where the real run never looks.
+
+- **A Python string eats a backslash-newline** (the laptop, 2026-10-19): a Rust message continued with `\` at a line's end,
+  written into the source through a Python triple-quoted string, lost the backslash to Python's own continuation; the
+  message printed thirty spaces mid-line, and `message_spacing.rs` turned all four suites red on the pull request. Write a
+  Rust string literal with the Edit tool, or keep it on one line — and grep the written file for the text before building.
 
 - **A cost recorded as a latency may be a deadline** (on-demand routine run 3, MONITOR-CHAIN-1): "each poll re-reads the
   whole chain, ≈200 ms at 10,000 records" sat in RW 4.49 as LOW for nine days; the same loop beats a 2 s dead-man, so the

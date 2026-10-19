@@ -516,15 +516,20 @@ fn deny_response(d: &delulu_broker::Denial) -> Response {
     Response::Error { code: diag.code.to_string(), message: diag.message, requires_human: d.requires_human() }
 }
 
+/// An effective state's wire name, and the seq that revoked it.
+fn state_name(eff: &delulu_broker::EffState) -> (&'static str, Option<u64>) {
+    match eff {
+        delulu_broker::EffState::Live => ("live", None),
+        delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(*by_seq)),
+        delulu_broker::EffState::Expired { .. } => ("expired", None),
+    }
+}
+
 /// One grant-tree node → its wire form (phase 5j `grants list|inspect`). `eff` is the node's
 /// effective state (revocation + TTL folded against the broker clock). Holder fields are copied as
 /// DATA — displayed by the CLI, never switched on (criterion 9).
 fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo {
-    let (state, by_seq) = match eff {
-        delulu_broker::EffState::Live => ("live", None),
-        delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(by_seq)),
-        delulu_broker::EffState::Expired { .. } => ("expired", None),
-    };
+    let (state, by_seq) = state_name(&eff);
     let names = |s: &std::collections::BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>();
     NodeInfo {
         id: n.id.as_str().to_string(),
@@ -1056,6 +1061,45 @@ fn handle(
                 .collect();
             (Response::Listed { nodes }, false)
         }
+        ReqBody::ListPage { after } => {
+            let mut nodes: Vec<NodeInfo> = Vec::new();
+            let (mut bytes, mut next) = (0usize, None);
+            for n in broker.nodes().into_iter().filter(|n| after.as_deref().is_none_or(|a| n.id.as_str() > a)) {
+                let info = node_info(n, broker.effective_state(&n.id).unwrap_or(delulu_broker::EffState::Live));
+                let size = crate::broker_ipc::encoded_len(&info);
+                if !nodes.is_empty() && bytes.saturating_add(size) > crate::broker_ipc::LIST_PAGE_BYTES {
+                    next = nodes.last().map(|l| l.id.clone());
+                    break;
+                }
+                bytes = bytes.saturating_add(size);
+                nodes.push(info);
+            }
+            (Response::ListedPage { nodes, next }, false)
+        }
+        ReqBody::RunsUnder { root, nodes } if nodes.len() > crate::broker_ipc::MAX_RUNS_ASKED => (
+            Response::Error {
+                code: "DL1401".to_string(),
+                message: format!(
+                    "a question about the runs under `{root}` names {} nodes, and one asks after at most {} — ask in parts",
+                    nodes.len(),
+                    crate::broker_ipc::MAX_RUNS_ASKED
+                ),
+                requires_human: false,
+            },
+            false,
+        ),
+        ReqBody::RunsUnder { root, nodes } => {
+            // RW 4.69: a monitor's per-poll question, answered from the nodes it names — never from a walk of the tree.
+            let root = GrantId::from_trusted(root);
+            let state = broker.effective_state(&root).map(|e| state_name(&e).0.to_string());
+            let runs = nodes
+                .into_iter()
+                .filter_map(|n| {
+                    broker.run_under(&root, &GrantId::from_trusted(n.clone())).map(|run| (n, run.as_str().to_string()))
+                })
+                .collect();
+            (Response::Runs { state, runs }, false)
+        }
         ReqBody::Inspect { node } => {
             let node = GrantId::from_trusted(node);
             match (broker.inspect(&node), broker.effective_state(&node)) {
@@ -1550,7 +1594,27 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
         if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
-            eprintln!("delulu broker: response write failed (dropping connection): {e}");
+            match e.get_ref().and_then(|i| i.downcast_ref::<crate::broker_ipc::FrameTooLarge>()) {
+                // RW 4.69: nothing of the answer was written. Say so — a dropped connection reads as a broker that is not
+                // there, and a monitor that hears that stops watching and lets its dead-man revoke everything it watched.
+                Some(big) => {
+                    let refusal = Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "the broker's answer to this request is {} bytes, larger than one protocol frame ({} bytes), and was not sent",
+                            big.len,
+                            crate::broker_ipc::MAX_FRAME
+                        ),
+                        requires_human: false,
+                    };
+                    if let Err(e) =
+                        write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &refusal)
+                    {
+                        eprintln!("delulu broker: response write failed (dropping connection): {e}");
+                    }
+                }
+                None => eprintln!("delulu broker: response write failed (dropping connection): {e}"),
+            }
         }
         drop(conn);
         if stop {
@@ -1606,6 +1670,34 @@ pub const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs
 /// [`REQUEST_DEADLINE`]: a daemon that does not answer is an error in words, never a hang.
 pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
     request_timed(state_dir, body, REQUEST_DEADLINE)
+}
+
+/// RW 4.70: the whole tree, read page by page (`ListPage`) and answered as one `Listed` — or the first answer that is not a
+/// page (a refusal), or the transport's error. Each page is its own request, so a tree past one frame is listed whole and the
+/// daemon serves other requests between pages; a paged listing is not a snapshot (the tree may change between pages).
+pub fn list_all(state_dir: &Path) -> io::Result<Response> {
+    let mut all: Vec<NodeInfo> = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        match request(state_dir, ReqBody::ListPage { after: after.clone() })? {
+            Response::ListedPage { nodes, next } => {
+                all.extend(nodes);
+                match next {
+                    // A page's `next` is past the `after` it answered, or the daemon is not paging.
+                    Some(n) if after.as_deref().is_none_or(|a| n.as_str() > a) => after = Some(n),
+                    Some(n) => {
+                        return Ok(Response::Error {
+                            code: "DL1401".to_string(),
+                            message: format!("the broker's listing did not advance past `{n}`"),
+                            requires_human: false,
+                        })
+                    }
+                    None => return Ok(Response::Listed { nodes: all }),
+                }
+            }
+            other => return Ok(other),
+        }
+    }
 }
 
 /// [`request`] with the caller's own bound on the whole answer, so a hung or slow broker cannot block the
@@ -2894,6 +2986,139 @@ mod tests {
              jitter tolerance = 150 ms); took {elapsed:?}"
         );
 
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.69: a monitor's question over the wire — its node's state, and the run of each asked node under it, with nothing
+    /// about any other node; a revoked node still names its run; more than `MAX_RUNS_ASKED` names are refused in words. And an
+    /// answer too large for one frame — a listing whose two descriptions together pass 16 MiB — is refused in words, never a
+    /// dropped connection, and the daemon serves on.
+    #[test]
+    fn a_monitors_question_is_answered_from_the_nodes_it_names() {
+        let state = temp_state("runsunder");
+        let handle = start_daemon(&state);
+        let child = |parent: &str, desc: String| -> String {
+            let authority = AuthoritySpec { effects: vec!["Write".to_string()], holder_desc: desc, ..Default::default() };
+            match request(&state, ReqBody::Attenuate { parent: parent.to_string(), authority, owner: None }).unwrap() {
+                Response::Issued { node } => node,
+                other => panic!("attenuate: {other:?}"),
+            }
+        };
+        let Response::Issued { node: top } = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap() else { panic!("issue") };
+        let m = child(&top, "monitor".into());
+        let run = child(&m, "a run".into());
+        let dev = child(&run, "its device".into());
+        let other = child(&top, "someone else".into());
+        let ask = |root: &str, nodes: &[&str]| {
+            let nodes = nodes.iter().map(|n| n.to_string()).collect();
+            match request(&state, ReqBody::RunsUnder { root: root.to_string(), nodes }).unwrap() {
+                Response::Runs { state, runs } => {
+                    (state, runs.into_iter().collect::<std::collections::HashMap<String, String>>())
+                }
+                other => panic!("runs under: {other:?}"),
+            }
+        };
+        let (s, runs) = ask(&m, &[&dev, &run, &other, &m, &top, "g_0000000000000000000000000000dead"]);
+        assert_eq!(s.as_deref(), Some("live"));
+        let want: std::collections::HashMap<String, String> =
+            [(dev.clone(), run.clone()), (run.clone(), run.clone()), (m.clone(), m.clone())].into_iter().collect();
+        assert_eq!(runs, want, "only the asked nodes under the root, each with its run");
+        assert_eq!(ask("g_0000000000000000000000000000dead", &[&run]), (None, std::collections::HashMap::new()), "no such root");
+        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: m.clone(), target: run.clone() }).unwrap()
+        else {
+            panic!("revoke")
+        };
+        assert_eq!(ask(&run, &[&dev]), (Some("revoked".to_string()), [(dev.clone(), dev.clone())].into_iter().collect()));
+        let many = (0..=crate::broker_ipc::MAX_RUNS_ASKED).map(|i| format!("g_{i}")).collect();
+        let resp = request(&state, ReqBody::RunsUnder { root: m.clone(), nodes: many }).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("ask in parts")),
+            "{resp:?}"
+        );
+
+        let _ = child(&top, "x".repeat(9 << 20));
+        let _ = child(&top, "y".repeat(9 << 20));
+        let resp = request(&state, ReqBody::List).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("larger than one protocol frame")),
+            "an answer past one frame is refused in words: {}",
+            format!("{resp:?}").chars().take(300).collect::<String>()
+        );
+        assert!(matches!(request(&state, ReqBody::Status).unwrap(), Response::Status { .. }), "and the daemon serves on");
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// RW 4.70: the listing in pages. Every page after the first starts past the one before, carries at most
+    /// `LIST_PAGE_BYTES` of entries (one entry alone may be larger), and the pages together are `List`'s answer, node for
+    /// node — for a tree whose whole listing, here, passes one frame (`List` refused in words). And the CLI's tree, drawn
+    /// from the pages, is the daemon's `Tree` text byte for byte: nested nodes, a revoked one, a child of an expired parent,
+    /// an authority with scopes, and a description a terminal would act on.
+    #[test]
+    fn the_listing_comes_in_pages_and_the_clis_tree_is_the_daemons_tree() {
+        let state = temp_state("listpage");
+        let handle = start_daemon(&state);
+        let child = |parent: &str, desc: String, ttl_millis: Option<i64>| -> String {
+            let authority = AuthoritySpec {
+                effects: vec!["Write".to_string()],
+                fs_write: vec!["./out".to_string()],
+                holder_kind: "delegate".to_string(),
+                holder_desc: desc,
+                ttl_millis,
+                ..Default::default()
+            };
+            match request(&state, ReqBody::Attenuate { parent: parent.to_string(), authority, owner: None }).unwrap() {
+                Response::Issued { node } => node,
+                other => panic!("attenuate: {other:?}"),
+            }
+        };
+        let Response::Issued { node: top } = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap() else { panic!("issue") };
+        let mid = child(&top, "a run".into(), None);
+        let _ = child(&mid, "its device\nforged: line \u{1b}[2J".into(), None);
+        let gone = child(&top, "revoked".into(), None);
+        let _ = child(&gone, "under the revoked".into(), None);
+        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: gone.clone(), target: gone }).unwrap() else {
+            panic!("revoke")
+        };
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        let short = child(&top, "short-lived".into(), Some(now + 500));
+        let _ = child(&short, "a child of the short-lived".into(), None);
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        let Response::Tree { text } = request(&state, ReqBody::Tree).unwrap() else { panic!("tree") };
+        let Response::Listed { nodes } = list_all(&state).unwrap() else { panic!("list_all") };
+        assert_eq!(crate::cli::render_tree(&nodes), text, "the CLI draws the daemon's tree");
+        assert!(text.contains("[expired]") && text.contains("[revoked@"), "{text}");
+
+        // Past one frame: four 5 MiB descriptions.
+        for i in 0..4 {
+            let _ = child(&top, format!("{i}").repeat(5 << 20), None);
+        }
+        let resp = request(&state, ReqBody::List).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1401"), "the whole listing is more than one frame");
+        let (mut after, mut paged, mut pages) = (None::<String>, Vec::new(), 0);
+        loop {
+            let Response::ListedPage { nodes, next } = request(&state, ReqBody::ListPage { after: after.clone() }).unwrap()
+            else {
+                panic!("a page")
+            };
+            pages += 1;
+            assert!(!nodes.is_empty(), "a page carries at least one node");
+            assert!(nodes.windows(2).all(|w| w[0].id < w[1].id), "in id order");
+            assert!(after.as_deref().is_none_or(|a| nodes[0].id.as_str() > a), "each page starts past the one before");
+            let bytes: usize = nodes.iter().map(crate::broker_ipc::encoded_len).sum();
+            assert!(nodes.len() == 1 || bytes <= crate::broker_ipc::LIST_PAGE_BYTES, "{} bytes in {} nodes", bytes, nodes.len());
+            assert_eq!(next.as_ref(), next.as_ref().and(nodes.last().map(|l| &l.id)), "`next` is the page's last id");
+            paged.extend(nodes);
+            match next {
+                Some(n) => after = Some(n),
+                None => break,
+            }
+        }
+        assert!(pages >= 4, "{pages} pages");
+        let Response::Listed { nodes: all } = list_all(&state).unwrap() else { panic!("list_all") };
+        assert_eq!(paged, all);
+        assert_eq!(all.len(), 11, "every node, once");
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }

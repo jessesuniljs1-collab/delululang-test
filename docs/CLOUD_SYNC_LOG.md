@@ -4008,3 +4008,158 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   remainder (the serial daemon behind other writers' appends on a short chain — routine run 16's measurement, not re-run);
   RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67; (5) *[laptop]* the launch, only on the owner's
   word.
+
+### 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; and `launch/2.0.0`   Base: `4c8e44a`   Commits: this entry's commit; on `launch/2.0.0` `6c01264`, the merge
+  of `4c8e44a`.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `4c8e44a`'s push runs — CI `39210944095` and `ocsf` `39210944303` — **success**; `master` is green on every slice
+  of this run. `launch/2.0.0` at `6c01264`: the release dry run `39212180218` — success; `jobs=everything` `39212177717` —
+  running at this entry (its `miri-slow` jobs take hours).
+- Measured: the monitor's per-poll `List` — at 3,002 nodes no material cost to other daemon requests; at 30,003 nodes a
+  recorded request's max went from 17 ms to 371 ms beside one monitor polling every 25 ms (`V2_LOG.md`) — **RW 4.69 added,
+  open**. (Added in a second commit: `docs/REMAINING_WORK.md` too.)
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39212177717` (`jobs=everything`
+  on `6c01264`, the branch's newest commit); `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the final launch
+  commit, so a launch session merges `master` once more and reads it again; (3) RW 4.69 — the monitor asks only for the live
+  subtree under its node (measured first, red before); RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
+  RW 6.2, RW 4.63, 4.66, 4.67; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — the laptop syncs the on-demand routine's three runs; the owner: the tests go to GitHub when the laptop cannot run them
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a   Base: `71cae40`
+- Commits: this entry's commit.
+- Synced: the laptop fast-forwarded `master` `640a7d5` → `71cae40` (26 commits — the on-demand routine's runs 1–3) and
+  `launch/2.0.0` `0a3ff6e` → `6c01264`. The laptop's uncommitted RW 6.1 draft was byte-identical to the autosave snapshot
+  `b4a9e18`, which run 1 recovered, corrected and committed as `a3d7678`; the draft is kept in `git stash` (never applied).
+  CI read at the sync: `master`'s push runs on `7aa0744` (`39213390618`) and `71cae40` (`39213772400`) — **success**;
+  `launch/2.0.0`'s release dry run `39212180218` — success; its `jobs=everything` runs `39208467616` (`d2814e8`) and
+  `39212177717` (`6c01264`) — still running (`miri-slow`).
+- **The owner, 2026-10-19:** *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any
+  reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete
+  successfully and review the results."* Recorded in `HANDOFF.md` §11.1, `AGENTS.md` step 3 and the memory
+  (`docs/assistant-memory/tests-on-github-when-laptop-cannot.md`, and the laptop's).
+- The autosave task (`DeluluLang-autosave`) had run out its 7 hours on 2026-10-18; re-installed for 7 hours.
+- The laptop's memory took the three files the routine added (`a-fix-for-one-node-asks-every-node.md`,
+  `a-latency-may-be-a-deadline.md`, `autosave-snapshot-is-a-draft.md`).
+- Files and folders: M `AGENTS.md`, `HANDOFF.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `docs/assistant-memory/tests-on-github-when-laptop-cannot.md`. Deleted, renamed: nothing.
+- Survey and doctor (session start, on `71cae40`): `survey check` ok (1523 nodes, 14930 edges); `doctor --check` ok (29
+  checks). After the last edit: in the commit message.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.69 — the monitor asks only for the live subtree under its
+  node; (3) `launch/2.0.0`'s two `everything` runs, once `miri-slow` ends; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.69: a tree too large for one listing killed a healthy monitor's fleet (MONITOR-FRAME-1, D-V2-161) — made on the laptop
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69`, then `master` (fast-forward) once its CI is read green   Base: `0a9afbf`
+- Commits: this entry's commit.
+- Files and folders: M `crates/delulu-broker/src/tree.rs` (`Broker::run_under`), `crates/delulu/src/broker_ipc.rs`
+  (`RunsUnder`/`Runs`, `MAX_RUNS_ASKED`, `FrameTooLarge`, `MAX_FRAME` public), `crates/delulu/src/brokerd.rs` (the handler, the
+  oversize answer in words, a unit test), `crates/delulu/src/monitor_cmd.rs` (a poll asks `RunsUnder`; `runs_under` and its
+  unit test moved to `tree.rs`), `crates/delulu/tests/monitor_cli.rs` (the witness), `CHANGELOG.md`, `HANDOFF.md` (§11.4),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-161), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.69 closed,
+  4.70 added), `docs/assistant-memory/a-latency-may-be-a-deadline.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Found and fixed:** past one 16 MiB frame the daemon could not send the monitor's whole-tree listing; the monitor stopped
+  (`broker unreachable`) and its dead-man revoked its node and every run under it — 550 nodes of 30,000-byte descriptions
+  outside its subtree, by hand on Windows. Witness red on the old code; four mutants red (`V2_LOG.md`).
+- **The full suite did not run on the laptop** (the owner, 2026-10-19: the tests go to GitHub when the laptop cannot run
+  them — its 2026-10-17 suite had been stopped for low memory): it runs as this branch's pull-request CI, read to its end
+  before `master` moves. Locally green: the ten test targets that read the tree, the `delulu` and `delulu-broker` unit tests,
+  clippy 0, fmt clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this branch's CI, then `master`; (2) RW 4.70 — `grants list` past one frame; (3) `launch/2.0.0`:
+  merge `master`, dispatch `everything` and the release dry run; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.63: a watch held outside the daemon lets its dead-man fire; M346 red (made on the laptop)
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69` (pull request #1), then `master` once its CI is read green   Base: `ea7d42b`
+- Commits: this entry's commit.
+- Files and folders: M `crates/delulu/tests/monitor_cli.rs`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.63
+  closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- A witness only — no product code changed: one 32 MiB record written through the chain's writer holds the monitor's watch
+  in its own read for three dead-man periods; its dead-man fires. M346 (the beater beats whatever the watch does), which
+  survived since routine run 22, is red.
+- The full suite runs on GitHub as the pull request's CI (the owner's rule of 2026-10-19). Locally: `monitor_cli` 23 passed;
+  clippy 0; fmt clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before.
+
+### 2026-10-19 — RW 4.70: the whole-tree reads come in pages; TREE-STATE-1; the pull request's suite read red and fixed (D-V2-162) — made on the laptop
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69` (pull request #1), then `master` once its CI is read green   Base: `3203d3f`
+- Commits: this entry's commit.
+- CI read: pull request #1's `39224116908` (`ea7d42b`) and `39224995083` (`3203d3f`) — **failure**, each suite red on one
+  test, `message_spacing` (a continuation flattened by my Python edit of `brokerd.rs`; fixed here) — Windows 2,279 passed,
+  Ubuntu 2,344, macOS 2,318, arm64 2,344, 1 failed each; every other job success; `monitor_cli` green on all four.
+- Files and folders: M `crates/delulu-broker/src/tree.rs` (the tree render: one index, a stack, the inherited state; a unit
+  test), `crates/delulu/src/broker_ipc.rs` (`ListPage`/`ListedPage`, `LIST_PAGE_BYTES`, `encoded_len`),
+  `crates/delulu/src/brokerd.rs` (the handler, `list_all`, the DL1401 text on one line, a unit test),
+  `crates/delulu/src/cli.rs` (`grants list`/`tree` and the atlas overlay page; `render_tree`; `grants_answer`),
+  `crates/delulu/tests/grants_cli.rs` (the witness), `crates/delulu/tests/monitor_cli.rs` (RW 4.69's state measured from the
+  paged listing), `CHANGELOG.md`, `HANDOFF.md` (§11.4, §11.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-162),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.70 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) the pull request's CI on this commit, then `master` fast-forwards; (2) `launch/2.0.0`: merge
+  `master`, dispatch `everything` and the release dry run; (3) RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the
+  launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.4: loops on the WASM engine; its memory grows; WASM-HYGIENE-1 (D-V2-163) — made on the laptop
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-loops` (a pull request into `master`), then `master` once its CI is read green   Base: `98edf2f`
+- Commits: this entry's commit.
+- CI read: pull request #1's `39229088627` on `98edf2f` — **success on every job** (Windows 2,283, Ubuntu 2,348, macOS
+  2,322, arm64 2,348 passed, 0 failed); `master` fast-forwarded `0a9afbf` → `98edf2f` and pushed; the pull request merged.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (loops, assignment, `__alloc`, `__str_len`, the lexical
+  model), `crates/delulu-wasm/src/host.rs` (the host's allocator grows the memory), `crates/delulu-wasm/src/gen.rs` (the
+  loop generator), `crates/delulu-wasm/tests/differential.rs` (loop programs in the gate), `crates/delulu/tests/budget_cli.rs`
+  (two WASM budget witnesses), `crates/delulu/tests/wasm_cli.rs` (the DL1201 example is a `for`), `docs/book/
+  THE_DELULULANG_BOOK.md`, `measurements/study-c/HOT_PATH_TABLE.md` (a dated note; the table not re-measured),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-163), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (3.4 widened, 3.7 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/loop_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this branch's CI, then `master`; (2) re-run Study-C in release (all three lanes) — WSL has
+  gcc; (3) `launch/2.0.0`: merge `master`, dispatch `everything` and the release dry run; (4) the WASM fragment's next
+  pieces — `str(Bool)` without the foreign interface, `List`; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.4 (postscript): `str(Bool)` in any WASM program (made on the laptop)
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-loops` (pull request #2)   Base: `c3445be`   Commits: this entry's commit.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before.
+
+### 2026-10-19 — on-demand routine run 4: the laptop's RW 3.4 verified and merged (pull request #2); WASM-HYGIENE-2 (RW 3.8)
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; `.claude/settings.json` sets xhigh — the session is not shown its own effort; no
+  sous-chef)
+- Branch: `master`; the code's runner reads on `claude/wasm-hygiene-2`   Pull request: #2 merged by fast-forward   Base: `98edf2f`
+- Commits: `c3445be` and `4d11575` (the laptop's, pull request #2 — `master` fast-forwarded to them); this entry's commit.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`compile_block_inner`: a frame of function values per block),
+  `crates/delulu-wasm/src/gen.rs` (the loop generator binds, calls and shadows a function value),
+  `crates/delulu-wasm/tests/loop_parity.rs` (the witness; the random test counts shadowing programs and prints its readings),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 WASM-HYGIENE-2), `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (3.8 added, closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `docs/assistant-memory/two-name-tables-one-scope.md`. Deleted, renamed: nothing.
+- Start of session (on `98edf2f`): `survey check` ok (1524 nodes, 14985 edges); `doctor --check` ok (26 checks in this VM).
+  `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- Verified (pull request #2): its CI `39233385903` success on every job; in the VM `delulu-wasm`'s suite, `wasm_cli` 10,
+  `budget_cli` 10 and the release differential (50,000 checked, 46,855 agreed, 3,145 both faulted, 0 mismatches — the
+  laptop's figures). The autosave snapshot `bbb8ea3` is the draft of `c3445be`, superseded by the two commits (checked file
+  by file). `launch/2.0.0`'s `everything` runs `39208467616` and `39212177717` — success.
+- **Fixed (WASM-HYGIENE-2, RW 3.8):** a `let f = fn…` inside an `if`, `else` or `while` body replaced the outer `f` for the
+  rest of the function on `--engine wasm` (`2 / 1` on the interpreter, `2 / 2` on WASM — the `if` form on `98edf2f` too).
+  Witness red on the old backend; the generator now writes the shape (149 of 400 sampled programs shadow `h`), red on the
+  old backend too; differential with it 50,000 checked, 0 mismatches; M510–M512 red, control green (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (WASM-HYGIENE-2); `docs/assistant-memory/two-name-tables-one-scope.md`.
+- Open / next, in order: (1) this commit's push run and its runner reads on `claude/wasm-hygiene-2`; (2) `launch/2.0.0`: merge
+  `master` (RW 4.69, 4.63, 4.70, RW 3.4, 3.8), dispatch `everything` and the release dry run; (3) re-run Study-C in release
+  (all three lanes) before any row of `HOT_PATH_TABLE.md` changes; (4) the WASM fragment's next pieces — `for` and `List`;
+  RW 4.66, 4.67, 6.1's further strings, 6.2; (5) *[laptop]* the launch, only on the owner's word.

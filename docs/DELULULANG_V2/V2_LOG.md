@@ -6584,3 +6584,186 @@ Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners befor
 routine run 16's original measurement — the serial daemon's queue behind other writers' appends on a SHORT chain — not re-run.
 
 **CI read:** `7f1a4a1`'s push runs — CI `39208000005` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.98x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39207999996` — success. `launch/2.0.0` at `d2814e8` (this run's merge of `7f1a4a1`): the release dry run `39208470155` — success; `jobs=everything` `39208467616` — at 06:33 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` running (they take hours): the next run reads them.
+
+## 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`; the monitor's listing measured
+
+**CI read:** `4c8e44a`'s push runs — CI `39210944095` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every
+push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.12x, passed; Ubuntu and Windows NOT MEASURED, busy;
+macOS NOT MEASURED, 3 threads) and `ocsf` `39210944303` — success. `master` is green on every slice of this run.
+
+**`launch/2.0.0` at `6c01264`**, the merge of `4c8e44a` (release procedure step 1): the CHANGELOG change and the decision log
+merged by themselves (D-V2-155, D-V2-158 to D-V2-160); the map rebuilt there (1524 nodes, 14955 edges, 0 errors); `doctor
+--check` ok; book, core_invariance, distribution, doctor_cli, evidence_claims, governance, repository_structure, release and
+`monitor_cli` (23) green, `audit::tests` 30 and `audit_truncation` 4 green on the launch tree. Dispatched: the release dry
+run `39212180218` — success; `jobs=everything` `39212177717` — running at this entry. `39208467616` (`d2814e8`): 17 of 18
+success, `miri-slow (delulu-broker)` still running — superseded by `39212177717`, kept as evidence.
+
+**Measured, not a defect at this size: the monitor's listing.** MONITOR-CHAIN-1's question put to the monitor's other per-poll
+work — it asks the daemon for the whole grant tree (`List`) every poll, and the tree keeps every revoked node. A scratch
+daemon (debug build) with 3,002 nodes: the CLI's `grants list --json` 238–304 ms for 1.7 MB (most of it the CLI's own
+rendering); a recorded daemon request (`grants delegate`) took median 12 ms (max 16) alone and 13 ms (max 23) with a monitor
+polling that tree every 25 ms — the daemon's own listing costs it little at this size. **At 30,003 nodes** (a 17 MB listing;
+the CLI's `grants list --json` 2.7 s) the median stayed 13 ms but the **max went from 17 ms to 371 ms** beside the monitor —
+each whole-tree listing holds the serial daemon, and an e-stop's revoke waits behind it. Not a deadline for the monitor (its
+beater beats while it waits on the daemon, D-V2-127). Recorded as RW 4.69 (open, measured): ask only for the live subtree
+under the monitor's node.
+
+## 2026-10-19 — RW 4.69: a tree too large for one listing killed a healthy monitor's fleet (MONITOR-FRAME-1, D-V2-161)
+
+**What.** The on-demand routine's third run measured the monitor's per-poll `List` as a latency (371 ms at 30,003 nodes) and
+recorded RW 4.69. Putting its own question further — what does the listing's growth meet? — the laptop found a constant:
+`broker_ipc::MAX_FRAME`, 16 MiB a frame. The tree keeps every node for the daemon's life, each with its holder's description
+(no bound), and past the cap the daemon's `write_frame` refused, the serve loop dropped the connection, and the client read
+`broker unreachable`. By hand on Windows (debug build, a scratch daemon): a monitor on `g_M` with one run under it, then
+nodes of another holder with 30,000-byte descriptions — at 500 the listing answered (15.6 MB of JSON), at 550 `grants list`
+failed, the monitor ended `broker unreachable: PeekNamedPipe: win32 error 233`, and four seconds later `g_M` and its run were
+revoked by the monitor's own dead-man (`by_seq 1106` both).
+
+**Why this way (D-V2-161).** The monitor needs two things of the tree each poll: its node's state, and the run each newly read
+record's actor belongs to. `RunsUnder { root, nodes }` answers exactly those, from parent pointers (`Broker::run_under`), so
+its cost is what is asked — never the tree. Asking AFTER the read also closes what the old order left open: a node minted
+between the listing and the read had its records skipped for good (by construction; not witnessed). An oversize answer is
+now `DL1401` in words, so no client reads "unreachable" from a broker that is there. The human surfaces that read the whole
+tree (`grants list`, `grants tree`, the atlas overlay) still cannot read one past a frame: RW 4.70, open.
+
+**Evidence.** `monitor_cli.rs` `a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor` — the state measured by
+`grants list` itself failing past one frame (562 nodes of 30,000 bytes on Windows, 142 of 120,000 elsewhere, four writers at
+once), then three dead-man periods, then the run under the monitor quarantined at its first envelope refusal: **red on the old
+product code** (`("revoked", "revoked")` for the monitor's node and its run), green after (14 s locally).
+`brokerd.rs` `a_monitors_question_is_answered_from_the_nodes_it_names` (only asked nodes under the root, with their runs; a
+revoked node still names its run; an unknown root `None`; 4,097 names refused; two 9 MiB descriptions make `List` a DL1401 in
+words and the daemon serves on); `tree.rs` `a_node_maps_to_its_run_under_a_root_and_nothing_outside_is_under_it` (the old
+`monitor_cmd.rs` unit test's tree, moved to where the walk lives). Mutants, each on its own target: M494 — the oversize
+answer dropped as before: the daemon test red, the e2e red at its last assertion (the monitor itself survived: the two halves
+are separate); M495 — `run_under` answering any node as its own run: the tree test and `a_monitor_sees_nothing_outside_its_own_subtree`
+red; M496 — the asked node instead of its run: the tree test red; M497 — the cap removed: the daemon test red. Locally green:
+`monitor_cli` 22, `audit_cli`, `broker_cli`, `budget_cli`, `estop_cli`, `grants_cli`, `json_contract`, `plugin_load_cli`,
+`sandbox_devices_cli`, `within_cli`, the `delulu` binary's 183 unit tests and `delulu-broker`'s; clippy 0; fmt clean. **The
+full suite did not run on the laptop** (the owner's rule of 2026-10-19: it runs on GitHub — the run is named in
+`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 4.63: a watch held outside the daemon lets its dead-man fire — M346 red at last
+
+**What.** DEADMAN-BUSY-1's fix (D-V2-127, routine run 22) gave the monitor a thread that beats for it while its watch waits
+on the daemon, and only then; a watch held anywhere else must go silent, so its dead-man fires as a stopped monitor's does.
+No test held the watch outside the daemon for a period, and mutant M346 — the beater beating whatever the watch does —
+survived (RW 4.63). The row asked for a seam: "a test-only pause, or a chain read made slow on purpose".
+
+**Why this way.** Not a pause: no test-only switch in a safety component. The hold is the monitor's own work on data a second
+writer may legitimately append: one record whose authority carries a long padding, written through the chain's own writer
+(`AuditLog::append` — its lock and anchor, as a sandboxed run's host writes) while the monitor watches. The follower reads that
+line whole, parses and hashes it before it can beat again; the test first measures, with the same `audit::Follower` on a
+scratch chain, the size whose one read takes three periods on this machine (doubling from 4 MiB), so the state is measured
+rather than assumed.
+
+**Evidence.** `monitor_cli.rs` `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`: a 32 MiB record, one read 1.4 s here,
+`--death-after 200` — the monitor's node revoked by its dead-man, the monitor ending `the broker's dead-man revoked …` with a
+failing exit, in 11.7 s. **M346** (the beater's `waiting` test removed) **red**: the watch was still being beaten for 31 s after
+the record landed. `monitor_cli` 23 passed together; clippy 0; fmt clean. **The full suite did not run on the laptop** — it
+runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 4.70: the whole-tree reads come in pages; TREE-STATE-1; and the pull request's suite read red (D-V2-162)
+
+**The CI of RW 4.69 and 4.63, read** (pull request #1, branch `laptop/rw-4-69` — the owner's rule of 2026-10-19: the suite
+the laptop does not run runs on GitHub and is read before `master` moves): `39224116908` (`ea7d42b`) and `39224995083`
+(`3203d3f`) — **failure**: every job but the four suites success, and each suite red on ONE test,
+`message_spacing.rs` `no_message_carries_a_flattened_continuation` — Windows 2,279 passed, Ubuntu 2,344, macOS 2,318, arm64
+2,344, 1 failed on each. The cause was mine: D-V2-161's DL1401 text was written into `brokerd.rs` through a Python string,
+and a backslash-newline continuation lost its backslash, so the message printed thirty spaces mid-line — the class that test
+exists for. Rewritten on one line here; `message_spacing` green. Both new monitor witnesses passed on all four runners
+(`monitor_cli` 23–25 by OS). `master` did not move.
+
+**What (RW 4.70).** Past one frame `grants list`, `grants tree` and the atlas overlay could not read the tree. Reading
+`Broker::tree` to page it found two more: each node's children by a scan of every node — measured 0.13 s at 2,000 nodes,
+0.54 s at 4,000, 2.6 s at 8,000, 10.9 s at 16,000 (debug, a flat tree), the serial daemon serving nothing else, an e-stop's
+revoke included; and each node drawn in its own state — with the real binary, a grant delegated `--ttl 2s` and a child
+under it, three seconds later: `grants list` and `grants inspect` said the child was `expired`, `grants tree` said `[live]`
+(TREE-STATE-1). D-V2-162: `ListPage` (4 MiB pages in id order), `brokerd::list_all` for all three surfaces, the tree drawn by
+the CLI from the pages in the daemon's format, and the daemon's `Tree` kept for older clients with one index, a stack and the
+inherited state.
+
+**Evidence.** `grants_cli.rs` `grants_list_and_tree_read_a_tree_past_one_frame` — 562 nodes of 30,000-byte descriptions under
+one parent (Windows; 142 of 120,000 elsewhere): every node listed once, one tree line each, each under the parent; **red on
+the old product code** (`grants list` refused), green after (7.8 s). `brokerd.rs`
+`the_listing_comes_in_pages_and_the_clis_tree_is_the_daemons_tree` — the CLI's tree equals the daemon's `Tree` text byte for
+byte over nested nodes, a revoked subtree, a child of an expired grant and a description carrying a line break and an escape;
+then four 5 MiB descriptions: `List` refused in words, the pages each past the one before, within the budget, together `List`'s
+nodes. `tree.rs` `the_tree_shows_a_child_of_an_expired_parent_as_expired` (red on the old render). Mutants M498–M502 red, each
+on its own target. The RW 4.69 witness measured its state by `grants list` failing; it reads the paged listing now and asks
+that the descriptions alone pass one frame. Locally green: sixteen integration targets (the atlas, grants, monitor, broker,
+audit, e-stop, CLI-contract and JSON-contract ones, `message_spacing`), the `delulu` binary's 184 unit tests,
+`delulu-broker`'s 215; clippy 0; fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 3.4: loops on the WASM engine; its memory grows; WASM-HYGIENE-1 (D-V2-163)
+
+**`master` moved.** Pull request #1's third run `39229088627` on `98edf2f` (RW 4.69, 4.63, 4.70) — **success on every job**:
+Windows 2,283 passed, Ubuntu 2,348, macOS 2,322, arm64 2,348, 0 failed on each; `fuzz`,
+`formal`, `microvm`, `miri` (diag, atlas, ffi), `supply-chain`, `editor`, `lints` success. `master` fast-forwarded
+`0a9afbf` → `98edf2f` and pushed; GitHub marked the pull request merged.
+
+**What (RW 3.4).** The WASM backend refused every loop, so a program that counted, accumulated or built a string ran only
+on the interpreter — five of the six Study-C kernels among them. Now: `while`, `break`, `continue` (a label depth kept by
+`Cx::emit`, a loop stack), assignment to a local, and `Str.len()`. Two defects found on the way, each witnessed on the OLD
+backend with a program that compiled there: **its heap was a fixed 1 MiB, never reused** — a recursion building 4 MB of
+strings stopped with `DL0903: memory access out of bounds` where the interpreter printed the string — so every allocation
+now goes through `__alloc`, which grows the memory, and the host's allocator grows it too; and **WASM-HYGIENE-1** — the
+inliner resolved a lambda's names through the generic function's frames: `apply(fn(v) { v + n }, 3)` with `apply` holding
+its own `n = 100` printed 103 on WASM, 4 on the interpreter. An inlined body now sees the frames of where it was written.
+
+**Evidence.** `delulu-wasm/tests/loop_parity.rs` (six): loops with `break`/`continue`, nested loops, `return` from a loop,
+`while false`, shadowing, a `Bool` loop flag and `"héllo ✓".len()` == 7, against the interpreter and against the values
+themselves; the growth witness and the hygiene witness — **both red on the old backend** (`DL0903`; `103 210 101` against
+`4 12 2`); the host growth (a 3 MiB file read); 400 generated loop programs (agreed, both faulted, looping — all counted);
+and what stays out (`for`, a lambda assigning its frame's variable). The 50,000-program differential gate now draws a fifth
+of its programs from the loop generator: **50,000 checked, 46,855 agreed, 3,145 both faulted, 0 mismatches** (release, the
+laptop). `budget_cli.rs`: an endless `while` on WASM stopped by `--limits cpu=1`, a doubling string on WASM stopped by its
+256 MiB memory budget. Mutants M503 (no growth in `__alloc`), M504 (none in the host), M505 (`len` counts bytes), M506 (no
+hygiene), M507 (`break` continues), M508 (an inlined body may assign its definer's variables), M509 (`continue` breaks) —
+all red. `wasm_cli`'s DL1201 example was a `while`; it is a `for` now. Study-C's kernels on WASM: 4 of 6 compile, each
+printing the interpreter's output (debug build: `loop_sum_1m` 29 ms against 2,244; not a measurement of record —
+`HOT_PATH_TABLE.md` says the table is not re-measured). The book's DL1201 list corrected (it also named the clock, which
+compiles since phase 3k). Locally: `delulu-wasm`'s whole suite, the ten `delulu` targets that run the WASM engine,
+clippy 0, fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+**Postscript (RW 3.4): `str(Bool)` in any program.** It was DL1201 unless the program also used a foreign library, which
+was what interned `"true"` and `"false"`; every module interns them now (a loop's flag is a `Bool`). `loop_parity.rs`'s first
+test prints `str(ok)` and `str(t > 4)` on both engines. `delulu-wasm` green; `wasm_cli` and `cli` green.
+
+## 2026-10-19 — on-demand routine run 4: the laptop's RW 3.4 verified and merged; WASM-HYGIENE-2 (RW 3.8)
+
+**The laptop's pull request #2 (`laptop/wasm-loops`, RW 3.4, D-V2-163) — verified, then merged.** Its CI `39233385903` on
+`4d11575` — **success on every job** (the suites on Ubuntu, Windows, macOS and arm64, `fuzz`, `microvm`, `miri` diag, atlas
+and ffi, `supply-chain`, `formal`, `editor`, `lints`; `heavy-gates` and `miri-slow` skipped, as on every pull request). Re-run
+in the VM on `4d11575`: `delulu-wasm`'s whole suite (91 lib, `loop_parity` 6, every parity target), `wasm_cli` 10,
+`budget_cli` 10, and the 50,000-program differential by hand in release — **50,000 checked, 46,855 agreed, 3,145 both
+faulted, 0 mismatches**, the laptop's figures exactly. The autosave snapshot `bbb8ea3` (09:39 UTC) is the draft of `c3445be`;
+the two committed later are a superset of it (its `codegen.rs` lacked the `str(Bool)` commit, its `loop_parity.rs` the same
+test's two values). `master` fast-forwarded `98edf2f` → `4d11575`. Also read: `master`'s push runs on `98edf2f` — CI
+`39232237537`, `openshell` `39232237530`, `ocsf` `39232237519` — success; the release schedule `39235210830` and the CI
+schedule `39222644536` (on `0a9afbf`) — success; `launch/2.0.0`'s `jobs=everything` runs `39208467616` (`d2814e8`) and
+`39212177717` (`6c01264`) — **success**, their `miri-slow` jobs included.
+
+**Found while reading the diff: WASM-HYGIENE-2.** The backend resolves locals through `Cx::scopes` and function values
+(the lambdas it inlines) through `Cx::callables`. `compile_block_inner` pushed a frame onto the first only, so `let f = fn…`
+inside an `if`, `else` or `while` body went into the FUNCTION's frame of function values and replaced the outer `f` for the
+rest of the function. Probes, both engines (`delulu run … --engine wasm`): an `if` whose body shadows `f` — the interpreter
+`2` then `1`, WASM `2` then `2`, **and the same on `98edf2f`'s backend** (the `if` form compiled before RW 3.4); a `while` whose
+body shadows it — `300 1` against `300 0` (new with RW 3.4, which made `while` compile). Silent wrong output. Four other
+probes agreed on both engines (a capture shadowed or re-assigned after the definition reads the new value on both — the
+interpreter's frame is shared; an inner `var n` shadowing a captured `n`; a loop that calls a capturing lambda). The
+differential could not have seen it: the generator wrote no function value at all, as WASM-HYGIENE-1's own note says.
+
+**Fixed:** a block opens a frame of function values beside its locals (`compile_block_inner` pushes and pops both, on its
+error path too). **And the gate is taught the shape:** `random_loop_program` binds `h = fn(x: Int) -> Int { … }` (capturing
+`a`) before the loop in half its programs, calls it in the loop body and in the tail, and in three of four of those shadows
+it in the loop body or in an `if` there — drawn from an RNG stream of its own, so every other line is what each seed gave
+before. `random_loop_programs_agree_with_the_interpreter` counts the shadowing programs and asserts more than 80 of 400.
+
+**Evidence.** `loop_parity.rs` `a_function_value_bound_in_a_block_is_that_blocks` (the `if`, the `else` and the `while`
+forms, against the values themselves) — **red on the old backend**: `2 23 33 300` against `7 21 31 301`; and
+`random_loop_programs_agree_with_the_interpreter` with the new generator — **red on the old backend** at its first shadowing
+program (`interp=Ok(1651022093) wasm=Ok(2)`). Green after: 7 of 7; the sample's readings, printed by the test — 346 agreed,
+54 both faulted, 371 looping, **149 shadowing a function value**. The differential with the new generator, release:
+**50,000 checked, 46,235 agreed, 3,765 both faulted, 0 mismatches**. Mutants (`scripts/mutants.py`): M510 (no frame of
+function values pushed) red in three tests, M511 (pushed, never popped) red in two, M512 (the generator never shadows) red
+on the count; control green. clippy (`delulu-wasm`, all targets) 0; fmt clean.

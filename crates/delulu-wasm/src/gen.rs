@@ -134,3 +134,63 @@ fn gen_safe_cmp(r: &mut Rng) -> String {
     let b = r.below(40) as i64 - 20;
     format!("{a} {} {b}", OPS[r.below(OPS.len() as u64) as usize])
 }
+
+// ----- RW 3.4: random LOOP programs (`while`, `break`, `continue`, assignment) ---------------------
+//
+// Bounded `while` loops over an accumulator: the counter advances first in every body (so a
+// `continue` cannot spin), a `continue` and a `break` sometimes guard the rest, an inner loop
+// sometimes runs, and the arithmetic is the pure generator's — so signed overflow and divide-by-zero
+// occur inside loops, and both engines must agree on the value or both fault. Half the programs bind a
+// function value `h` before the loop (capturing `a`), call it in the loop and in the tail, and some
+// shadow it in the loop's body or in an `if` there — the WASM backend inlines function values, and
+// which `h` a call reaches is the scope question both engines must answer alike (WASM-HYGIENE-2).
+
+/// Generate a random `f(a, b, c) -> Int` built on bounded `while` loops, plus three arguments — half
+/// the time small, so the loops run to their end before an overflow. Deterministic in `seed`; it
+/// type-checks and stays inside the WASM fragment.
+pub fn random_loop_program(seed: u64) -> (String, Vec<i64>) {
+    let mut r = Rng::new(seed);
+    let outer = ["acc", "i", "a", "b", "c"];
+    let mut body = String::from("    i = i + 1\n");
+    if r.chance(1, 3) {
+        body.push_str(&format!("    if {} {{ continue }}\n", gen_cmp(&mut r, &outer)));
+    }
+    if r.chance(1, 3) {
+        body.push_str(&format!("    if {} {{ break }}\n", gen_cmp(&mut r, &outer)));
+    }
+    if r.chance(1, 3) {
+        let inner = ["acc", "i", "j", "a"];
+        let limit = r.below(6);
+        let step = gen_expr(&mut r, 2, &inner, false);
+        let stop = if r.chance(1, 2) { format!("      if {} {{ break }}\n", gen_cmp(&mut r, &inner)) } else { String::new() };
+        body.push_str(&format!("    var j = 0\n    while j < {limit} {{\n      j = j + 1\n{stop}      acc = {step}\n    }}\n"));
+    }
+    // The function value draws from a stream of its own, so every other line is what this seed always gave.
+    let mut q = Rng::new(seed ^ 0xA076_1D64_78BD_642F);
+    let lambda = |q: &mut Rng| format!("fn(x: Int) -> Int {{ {} }}", gen_expr(q, 2, &["x", "a"], false));
+    let (bind, tail) = if q.chance(1, 2) {
+        if q.chance(1, 2) {
+            body.push_str(&format!("    let h = {}\n", lambda(&mut q)));
+        } else if q.chance(1, 2) {
+            body.push_str(&format!(
+                "    if {} {{\n      let h = {}\n      acc = h(acc)\n    }}\n",
+                gen_cmp(&mut q, &outer),
+                lambda(&mut q)
+            ));
+        }
+        body.push_str("    acc = h(acc)\n");
+        (format!("  let h = {}\n", lambda(&mut q)), "h(acc)")
+    } else {
+        (String::new(), "acc")
+    };
+    body.push_str(&format!("    acc = {}\n", gen_expr(&mut r, 2, &outer, false)));
+    let init = gen_leaf(&mut r, &["a", "b", "c"]);
+    let limit = r.below(13);
+    let src = format!(
+        "module gl\nfn f(a: Int, b: Int, c: Int) -> Int {{\n{bind}  var acc = {init}\n  var i = 0\n  while i < {limit} {{\n{body}  }}\n  {tail}\n}}\n"
+    );
+    let small = r.chance(1, 2);
+    let arg = |r: &mut Rng| if small { r.below(100) as i64 - 50 } else { gen_arg(r) };
+    let args = vec![arg(&mut r), arg(&mut r), arg(&mut r)];
+    (src, args)
+}

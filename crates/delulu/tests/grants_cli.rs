@@ -239,3 +239,60 @@ fn a_delegations_strings_are_shown_escaped_in_tree_list_and_inspect() {
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("inspect --json");
     assert!(v.to_string().contains("evil\\u001b[31m.example"), "the JSON carries the delegation's own bytes: {v}");
 }
+
+/// **RW 4.70: `grants list` and `grants tree` read a tree past one frame.** Each asked the daemon for the whole tree in one
+/// answer, and every answer is capped at one 16 MiB frame — the tree keeps every node with its holder's description, words of
+/// any length — so past it both were refused (before D-V2-161, a dropped connection read as `broker unreachable`). They read
+/// it page by page now: every node listed once, and every node drawn in the tree under its parent.
+#[test]
+fn grants_list_and_tree_read_a_tree_past_one_frame() {
+    let base = std::env::temp_dir().join(format!("dlgr-{}-big", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Write", "--json", "--holder-desc", "the parent"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let parent = serde_json::from_str::<serde_json::Value>(&stdout(&o)).unwrap()["node"].as_str().unwrap().to_string();
+    // Under each OS's limit on one argument (Windows: 32,767 characters a command line).
+    let desc_len: usize = if cfg!(windows) { 30_000 } else { 120_000 };
+    let count = (16 * 1024 * 1024) / desc_len + 2;
+    let desc = "x".repeat(desc_len);
+    std::thread::scope(|s| {
+        for w in 0..4 {
+            let (cwd, state, desc, parent) = (&cwd, &state, &desc, &parent);
+            s.spawn(move || {
+                for _ in (w..count).step_by(4) {
+                    let o = delulu_in(
+                        cwd,
+                        state,
+                        &["grants", "delegate", "--effects", "Write", "--parent", parent, "--holder-desc", desc],
+                    );
+                    assert!(o.status.success(), "grants delegate: {}", stderr(&o));
+                }
+            });
+        }
+    });
+
+    let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
+    assert!(o.status.success(), "grants list over {count} nodes of {desc_len}-byte descriptions: {}{}", stdout(&o), stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list --json");
+    let nodes = v["nodes"].as_array().unwrap();
+    // The parent, its root (`grants delegate` mints one), and the described nodes.
+    assert_eq!((v["count"].as_u64(), nodes.len()), (Some(count as u64 + 2), count + 2), "every node, once");
+    let described: usize = nodes.iter().map(|n| n["holder_desc"].as_str().unwrap_or("").len()).sum();
+    assert!(described > 16 * 1024 * 1024, "the state: the descriptions alone are more than one frame ({described} bytes)");
+    let ids: std::collections::BTreeSet<&str> = nodes.iter().filter_map(|n| n["id"].as_str()).collect();
+    assert_eq!(ids.len(), nodes.len(), "no node twice");
+
+    let o = delulu_in(&cwd, &state, &["grants", "tree"]);
+    assert!(o.status.success(), "grants tree: {}", stderr(&o));
+    let text = stdout(&o);
+    assert_eq!(text.lines().count(), count + 2, "one line a node");
+    assert_eq!(text.lines().filter(|l| l.starts_with("    g_") && l.ends_with(&desc)).count(), count, "each under the parent");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
