@@ -1461,9 +1461,10 @@ fn inspect_state(f: &Fixture, id: &str) -> String {
 /// unbounded words. Past one protocol frame (16 MiB) the daemon could not send the listing and dropped the connection; the
 /// monitor read that as a broker that was not there, stopped watching, and its dead-man revoked its node and every run under
 /// it — nothing under it having misbehaved (by hand on Windows, 2026-10-19: 550 nodes of 30,000-byte descriptions, outside
-/// the monitor's subtree). The state this needs is a tree whose whole listing does not fit a frame, measured here by
-/// `grants list` itself. The monitor must stay live across three periods past it, and then still quarantine the run under
-/// it at its first envelope refusal — so "not revoked" is not a monitor that judges nothing.
+/// the monitor's subtree). The state this needs is a tree whose whole listing does not fit a frame, measured here from
+/// `grants list` (paged since RW 4.70): the descriptions it lists, alone, pass one frame. The monitor must stay live across
+/// three periods past it, and then still quarantine the run under it at its first envelope refusal — so "not revoked" is not
+/// a monitor that judges nothing.
 #[test]
 fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
     const PERIOD_MS: u64 = 1000;
@@ -1492,12 +1493,14 @@ fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
             });
         }
     });
-    // The state, measured: a whole-tree listing no longer fits one frame.
+    // The state, measured: the descriptions the tree holds, alone, are more than one frame — so a whole-tree answer is.
     let listed = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    assert!(listed.status.success(), "grants list (paged): {}", stderr(&listed));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&listed)).expect("grants list --json");
+    let described: usize = v["nodes"].as_array().unwrap().iter().map(|n| n["holder_desc"].as_str().unwrap_or("").len()).sum();
     assert!(
-        !listed.status.success(),
-        "{count} nodes of {desc_len}-byte descriptions are more than one frame, and the whole listing answered — the state \
-         this witness needs was not reached"
+        described > 16 * 1024 * 1024,
+        "{count} nodes: {described} bytes of descriptions, not more than one frame — the state this witness needs was not reached"
     );
 
     // Three periods of the monitor's dead-man past that size: the monitor polled throughout.
@@ -1518,12 +1521,6 @@ fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
     assert_eq!(q.len(), 1, "one run, one quarantine: {all}");
     assert_eq!((q[0]["target"].as_str(), q[0]["rule"].as_str()), (Some(run.as_str()), Some("envelope")), "{all}");
     assert!(report["ended"].as_str().is_some_and(|e| e.contains("nothing left to watch")), "{all}");
-
-    // An answer too large for a frame is refused in words — never a dropped connection, which reads as a broker that is not
-    // there.
-    let said = format!("{}{}", stdout(&listed), stderr(&listed));
-    assert!(said.contains("DL1401") && said.contains("larger than one protocol frame"), "{said}");
-
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
 }

@@ -3050,6 +3050,78 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
+    /// RW 4.70: the listing in pages. Every page after the first starts past the one before, carries at most
+    /// `LIST_PAGE_BYTES` of entries (one entry alone may be larger), and the pages together are `List`'s answer, node for
+    /// node — for a tree whose whole listing, here, passes one frame (`List` refused in words). And the CLI's tree, drawn
+    /// from the pages, is the daemon's `Tree` text byte for byte: nested nodes, a revoked one, a child of an expired parent,
+    /// an authority with scopes, and a description a terminal would act on.
+    #[test]
+    fn the_listing_comes_in_pages_and_the_clis_tree_is_the_daemons_tree() {
+        let state = temp_state("listpage");
+        let handle = start_daemon(&state);
+        let child = |parent: &str, desc: String, ttl_millis: Option<i64>| -> String {
+            let authority = AuthoritySpec {
+                effects: vec!["Write".to_string()],
+                fs_write: vec!["./out".to_string()],
+                holder_kind: "delegate".to_string(),
+                holder_desc: desc,
+                ttl_millis,
+                ..Default::default()
+            };
+            match request(&state, ReqBody::Attenuate { parent: parent.to_string(), authority, owner: None }).unwrap() {
+                Response::Issued { node } => node,
+                other => panic!("attenuate: {other:?}"),
+            }
+        };
+        let Response::Issued { node: top } = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap() else { panic!("issue") };
+        let mid = child(&top, "a run".into(), None);
+        let _ = child(&mid, "its device\nforged: line \u{1b}[2J".into(), None);
+        let gone = child(&top, "revoked".into(), None);
+        let _ = child(&gone, "under the revoked".into(), None);
+        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: gone.clone(), target: gone }).unwrap() else {
+            panic!("revoke")
+        };
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        let short = child(&top, "short-lived".into(), Some(now + 500));
+        let _ = child(&short, "a child of the short-lived".into(), None);
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        let Response::Tree { text } = request(&state, ReqBody::Tree).unwrap() else { panic!("tree") };
+        let Response::Listed { nodes } = list_all(&state).unwrap() else { panic!("list_all") };
+        assert_eq!(crate::cli::render_tree(&nodes), text, "the CLI draws the daemon's tree");
+        assert!(text.contains("[expired]") && text.contains("[revoked@"), "{text}");
+
+        // Past one frame: four 5 MiB descriptions.
+        for i in 0..4 {
+            let _ = child(&top, format!("{i}").repeat(5 << 20), None);
+        }
+        let resp = request(&state, ReqBody::List).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1401"), "the whole listing is more than one frame");
+        let (mut after, mut paged, mut pages) = (None::<String>, Vec::new(), 0);
+        loop {
+            let Response::ListedPage { nodes, next } = request(&state, ReqBody::ListPage { after: after.clone() }).unwrap() else {
+                panic!("a page")
+            };
+            pages += 1;
+            assert!(!nodes.is_empty(), "a page carries at least one node");
+            assert!(nodes.windows(2).all(|w| w[0].id < w[1].id), "in id order");
+            assert!(after.as_deref().is_none_or(|a| nodes[0].id.as_str() > a), "each page starts past the one before");
+            let bytes: usize = nodes.iter().map(crate::broker_ipc::encoded_len).sum();
+            assert!(nodes.len() == 1 || bytes <= crate::broker_ipc::LIST_PAGE_BYTES, "{} bytes in {} nodes", bytes, nodes.len());
+            assert_eq!(next.as_ref(), next.as_ref().and(nodes.last().map(|l| &l.id)), "`next` is the page's last id");
+            paged.extend(nodes);
+            match next {
+                Some(n) => after = Some(n),
+                None => break,
+            }
+        }
+        assert!(pages >= 4, "{pages} pages");
+        let Response::Listed { nodes: all } = list_all(&state).unwrap() else { panic!("list_all") };
+        assert_eq!(paged, all);
+        assert_eq!(all.len(), 11, "every node, once");
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
     /// Phase 5j: the `grants list`/`inspect` read surface over the wire — node detail round-trips,
     /// unknown ids fail closed, and revocation state is folded in.
     #[test]
