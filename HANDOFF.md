@@ -607,6 +607,13 @@ wins, and you should update the memory to match.
   `delululang-test`; no session pushes to `DeluluLang` or any other repository, pushes a tag, switches `origin`, moves the
   routine's repository or changes a repository's visibility until he says so. It outranks the commission's launch steps
   (D-V2-153 §3, `CHECKLIST-2.0.md` steps 4–10 on `launch/2.0.0`): the launch is prepared and waits for his word.
+- **When the laptop cannot run or finish the tests, GitHub runs them** (owner, 2026-10-19): *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete successfully and review the results."* A suite
+  the laptop cannot start or finish — stopped for low memory, too long for the session, a target that needs another OS —
+  goes to GitHub without asking: push the branch to `origin` (the test repository) and dispatch `ci.yml` at it
+  (`-f jobs=everything`; its `test` matrix is the full suite on Linux, macOS and Windows) or `witness.yml` for one target.
+  A slice reaches `master` only once that run is READ to its end and green, and its record names the run and says the
+  laptop's suite did not run. (The occasion: on 2026-10-17 the laptop's suite for RW 6.1 was stopped for low memory
+  before a test ran; the on-demand routine then ran it, 2,318 passed, in `a3d7678`.)
 - **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
   which held from the first commit and is why CI never ran before that date. The remote is for

@@ -3985,3 +3985,27 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   commit, so a launch session merges `master` once more and reads it again; (3) RW 4.69 — the monitor asks only for the live
   subtree under its node (measured first, red before); RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
   RW 6.2, RW 4.63, 4.66, 4.67; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — the laptop syncs the on-demand routine's three runs; the owner: the tests go to GitHub when the laptop cannot run them
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a   Base: `71cae40`
+- Commits: this entry's commit.
+- Synced: the laptop fast-forwarded `master` `640a7d5` → `71cae40` (26 commits — the on-demand routine's runs 1–3) and
+  `launch/2.0.0` `0a3ff6e` → `6c01264`. The laptop's uncommitted RW 6.1 draft was byte-identical to the autosave snapshot
+  `b4a9e18`, which run 1 recovered, corrected and committed as `a3d7678`; the draft is kept in `git stash` (never applied).
+  CI read at the sync: `master`'s push runs on `7aa0744` (`39213390618`) and `71cae40` (`39213772400`) — **success**;
+  `launch/2.0.0`'s release dry run `39212180218` — success; its `jobs=everything` runs `39208467616` (`d2814e8`) and
+  `39212177717` (`6c01264`) — still running (`miri-slow`).
+- **The owner, 2026-10-19:** *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any
+  reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete
+  successfully and review the results."* Recorded in `HANDOFF.md` §11.1, `AGENTS.md` step 3 and the memory
+  (`docs/assistant-memory/tests-on-github-when-laptop-cannot.md`, and the laptop's).
+- The autosave task (`DeluluLang-autosave`) had run out its 7 hours on 2026-10-18; re-installed for 7 hours.
+- The laptop's memory took the three files the routine added (`a-fix-for-one-node-asks-every-node.md`,
+  `a-latency-may-be-a-deadline.md`, `autosave-snapshot-is-a-draft.md`).
+- Files and folders: M `AGENTS.md`, `HANDOFF.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `docs/assistant-memory/tests-on-github-when-laptop-cannot.md`. Deleted, renamed: nothing.
+- Survey and doctor (session start, on `71cae40`): `survey check` ok (1523 nodes, 14930 edges); `doctor --check` ok (29
+  checks). After the last edit: in the commit message.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.69 — the monitor asks only for the live subtree under its
+  node; (3) `launch/2.0.0`'s two `everything` runs, once `miri-slow` ends; (4) *[laptop]* the launch, only on the owner's word.
