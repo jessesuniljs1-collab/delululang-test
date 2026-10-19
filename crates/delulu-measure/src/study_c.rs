@@ -76,6 +76,12 @@ fn tool_available(cmd: &str, arg: &str) -> bool {
     Command::new(cmd).arg(arg).output().map(|o| o.status.success()).unwrap_or(false)
 }
 
+/// The CPython lane's command: `python3`, or else `python`. A machine with only `python3` (Ubuntu without
+/// `python-is-python3`, the laptop's WSL on 2026-10-20) had its lane reported UNRUN, "no CPython", while CPython was there.
+fn python_command() -> Option<&'static str> {
+    ["python3", "python"].into_iter().find(|c| tool_available(c, "--version"))
+}
+
 /// Time a command, returning (min_us, spread_us, what its first run printed) over REPEATS runs, or None if it ever
 /// failed.
 fn time_it(mut make: impl FnMut() -> Command) -> Option<(u128, u128, String)> {
@@ -151,7 +157,8 @@ fn machine(dl_bin: &Path) -> Vec<(String, String)> {
     if let Some(cpu) = cpu {
         m.push(("processor".into(), cpu));
     }
-    for (lane, cmd) in [("delulu", dl_bin.to_string_lossy().to_string()), ("gcc", "gcc".into()), ("python", "python".into())] {
+    let python = python_command().unwrap_or("python");
+    for (lane, cmd) in [("delulu", dl_bin.to_string_lossy().to_string()), ("gcc", "gcc".into()), ("python", python.into())] {
         if let Some(v) = first_line(&cmd, &["--version"]) {
             m.push((lane.into(), v));
         }
@@ -220,7 +227,8 @@ pub fn run_study(work: &Path) -> std::io::Result<Results> {
         ));
     };
     let have_gcc = tool_available("gcc", "--version");
-    let have_python = tool_available("python", "--version");
+    let python = python_command();
+    let have_python = python.is_some();
 
     let mut lanes_available = vec!["interp".to_string(), "wasm".to_string()];
     let mut lanes_unavailable = Vec::new();
@@ -296,7 +304,7 @@ pub fn run_study(work: &Path) -> std::io::Result<Results> {
             let py_path = work.join(format!("{name}.py"));
             std::fs::write(&py_path, &py_src)?;
             let py = time_it(|| {
-                let mut c = Command::new("python");
+                let mut c = Command::new(python.unwrap_or("python"));
                 c.arg(&py_path);
                 c
             });
@@ -587,6 +595,16 @@ pub fn report(r: &Results) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The CPython lane runs wherever either name answers, `python3` first.
+    #[test]
+    fn the_python_lane_finds_python3_or_python() {
+        let (three, plain) = (tool_available("python3", "--version"), tool_available("python", "--version"));
+        assert_eq!(python_command().is_some(), three || plain);
+        if three {
+            assert_eq!(python_command(), Some("python3"));
+        }
+    }
 
     #[test]
     fn utc_minute_is_the_civil_calendar() {

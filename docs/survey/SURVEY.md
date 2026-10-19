@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 312 |
-| Rust lines | 175984 |
+| Rust lines | 176163 |
 | Rust files outside `src/` (test/bench targets) | 143 |
-| Markdown documents | 267 |
-| Markdown lines | 80865 |
+| Markdown documents | 268 |
+| Markdown lines | 81074 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1533 / 15198 |
+| Nodes / edges in this map | 1535 / 15216 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -271,7 +271,7 @@ The DeluluLang measurement program (Stage 9): the published, reproducible eviden
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 7 files, 2964 lines
+- **Modules:** 7 files, 2982 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -281,7 +281,7 @@ The DeluluLang measurement program (Stage 9): the published, reproducible eviden
 | `src/main.rs` | 262 | `delulu-measure` — runs the Stage 9 measurement studies and writes their raw data. |
 | `src/study_a.rs` | 460 | Study A — whole-program authority verification at scale (Stage 9d, spec §3.1). |
 | `src/study_b.rs` | 444 | Study B — agent task success and repair loops (Stage 9e, spec §3.2). |
-| `src/study_c.rs` | 739 | Study C — the performance honesty baseline (Stage 9e, spec §3.3). |
+| `src/study_c.rs` | 757 | Study C — the performance honesty baseline (Stage 9e, spec §3.3). |
 
 ### `delulu-registry`
 
@@ -383,16 +383,16 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 8292 lines
+- **Modules:** 8 files, 8417 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 169 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 311 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 3590 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 3697 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
-| `src/gen.rs` | 239 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 1669 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/gen.rs` | 247 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
+| `src/host.rs` | 1679 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 830 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 

@@ -206,6 +206,32 @@ fn main(root: Root) ! {Write} {
     );
 }
 
+/// `Str == Str` and `!=` compare the bytes on both engines: one interned literal against itself, a built string against a
+/// literal, differing lengths, a differing byte, multi-byte characters, empty strings — and words split from a line.
+#[test]
+fn str_equality_matches_the_interpreter() {
+    let src = r#"module m
+
+fn b(x: Bool) -> Str {
+  if x { "1" } else { "0" }
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let abc = "ab" + "c"
+  out.println(b("abc" == "abc") + b(abc == "abc") + b(abc != "abc") + b("abc" == "abcd") + b("abd" == "abc"))
+  out.println(b("é" == "e") + b("é" == "é") + b("" == "") + b("" == "a") + b("✓x" != "✓y"))
+  var hits = 0
+  for w in "the cat and the hat".split(" ") {
+    if w == "the" { hits = hits + 1 }
+    if w != "cat" && w.len() == 3 { hits = hits + 10 }
+  }
+  out.println(str(hits))
+}
+"#;
+    assert_eq!(assert_parity(src), "11000\n01101\n42\n");
+}
+
 /// An index outside the list faults DL0903 on both engines, in the interpreter's words; what was printed before stays.
 #[test]
 fn an_index_outside_the_list_is_the_interpreters_dl0903() {

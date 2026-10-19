@@ -4356,3 +4356,24 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `master` into `launch/2.0.0` again; (2) Study C over all six kernels on one machine (release, all lanes); (3) `Str == Str`,
   `pop` and the other list methods on WASM; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the
   owner's word.
+
+### 2026-10-20 — `Str == Str` on the WASM engine; Study C re-measured over all six kernels (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-streq` (on `laptop/wasm-list`)   Pull request: #6   Merged: not yet (after #5, on green CI)
+- Base: `e85fcb5`. Pull request #4 landed on `master` by fast-forward (`a53f90a`) after its CI `39301188012` read
+  success on every job, its `microvm` job building the guest image under the new `kernel.config`.
+- What: `V2_LOG.md` (this date, the second entry); the published Study C run (2026-10-19 18:46 UTC, the laptop's WSL).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`__str_eq`, `module_any`, `module_compares`),
+  `crates/delulu-wasm/src/host.rs` (`write_str_list` in one write), `crates/delulu-wasm/src/gen.rs` (comparisons in the
+  console generator), `crates/delulu-wasm/tests/list_parity.rs`, `crates/delulu-wasm/tests/conformance_parity.rs`,
+  `crates/delulu-measure/src/study_c.rs` (`python_command`), `measurements/study-c/REPORT.md`, `results.json`,
+  `HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md`, `README.md`, `docs/QUESTIONS.md`, `docs/for-agents.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `measurements/study-c/runs/2026-10-19-vm/`
+  (`REPORT.md`, `results.json` — the run this one replaces). Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (a cloud run of Study C would be a second machine's figures, welcome, not owed).
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #5 and #6, landing each on green; the launch `everything` run `39296491537`; then merge `master` into
+  `launch/2.0.0`; (2) `pop` and the other list methods on WASM; `split` without the host crossing; RW 4.66, 4.67, 6.1, 6.2;
+  (3) *[laptop]* the launch, only on the owner's word.

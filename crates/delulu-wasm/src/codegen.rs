@@ -421,6 +421,8 @@ struct Imports {
     index_fault: u32,
     list_new: u32,
     list_slot: u32,
+    /// `__str_eq` (`Str == Str`), after the list helpers; `u32::MAX` when the module compares nothing.
+    str_eq: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -610,37 +612,59 @@ fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
     module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body, names)))
 }
 
-/// Does any compilable function make or index a `List`, or call `split`, `push` or `map`? Then the module carries the
-/// list helpers (`__list_new`, `__list_slot`, after the user functions) and the `delulu:list` imports, and every other
-/// module is byte-identical to before (the WASM `List`, RW 3.4).
+/// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
+/// module carries the list helpers (`__list_new`, `__list_slot`, after the user functions) and the `delulu:list` imports,
+/// and every other module is byte-identical to before (the WASM `List`, RW 3.4).
 fn module_uses_lists(env: &EnumEnv, module: &Module) -> bool {
-    fn in_block(b: &Block) -> bool {
+    let hit = |e: &Expr| match e {
+        Expr::List { .. } | Expr::Index { .. } => true,
+        Expr::Method { name, .. } => matches!(name.name.as_str(), "split" | "push" | "map"),
+        _ => false,
+    };
+    module_any(env, module, &hit, true)
+}
+
+/// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
+/// which a comparison of two `Str`s calls.
+fn module_compares(env: &EnumEnv, module: &Module) -> bool {
+    module_any(env, module, &|e| matches!(e, Expr::Binary { op: BinOp::Eq | BinOp::Ne, .. }), false)
+}
+
+/// Does any compilable function hold an expression for which `hit` holds — or, with `fors`, a `for`? Every expression
+/// form is named: a walk that passes over one misses what it holds (WASM-INTERN-1).
+fn module_any(env: &EnumEnv, module: &Module, hit: &dyn Fn(&Expr) -> bool, fors: bool) -> bool {
+    fn block(b: &Block, hit: &dyn Fn(&Expr) -> bool, fors: bool) -> bool {
         b.stmts.iter().any(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value),
-            Stmt::While { cond, body, .. } => in_expr(cond) || in_block(body),
-            Stmt::For { .. } => true,
+            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => expr(value, hit, fors),
+            Stmt::While { cond, body, .. } => expr(cond, hit, fors) || block(body, hit, fors),
+            Stmt::For { iter, body, .. } => fors || expr(iter, hit, fors) || block(body, hit, fors),
+            Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => expr(e, hit, fors),
             Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Return { value: None, .. } => false,
-            Stmt::Return { value: Some(e), .. } => in_expr(e),
-            Stmt::Expr(e) => in_expr(e),
         })
     }
-    fn in_expr(e: &Expr) -> bool {
+    fn expr(e: &Expr, hit: &dyn Fn(&Expr) -> bool, fors: bool) -> bool {
+        if hit(e) {
+            return true;
+        }
+        let ex = |x: &Expr| expr(x, hit, fors);
         match e {
-            Expr::List { .. } | Expr::Index { .. } => true,
-            Expr::Method { name, recv, args, .. } => {
-                matches!(name.name.as_str(), "split" | "push" | "map") || in_expr(recv) || args.iter().any(in_expr)
-            }
-            Expr::Call { callee, args, .. } => in_expr(callee) || args.iter().any(in_expr),
-            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
-            Expr::Unary { operand, .. } => in_expr(operand),
-            Expr::If { cond, then_, else_, .. } => in_expr(cond) || in_block(then_) || else_.as_ref().is_some_and(|e| in_expr(e)),
-            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee) || arms.iter().any(|a| in_expr(&a.body)),
-            Expr::Try { inner, .. } => in_expr(inner),
-            Expr::Block(b) | Expr::Lambda { body: b, .. } => in_block(b),
-            _ => false,
+            Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => false,
+            Expr::List { items, .. } => items.iter().any(ex),
+            Expr::Record { fields, .. } => fields.iter().any(|(_, x)| ex(x)),
+            Expr::Call { callee, args, .. } => ex(callee) || args.iter().any(ex),
+            Expr::Method { recv, args, .. } => ex(recv) || args.iter().any(ex),
+            Expr::Field { recv, .. } => ex(recv),
+            Expr::Index { recv, index, .. } => ex(recv) || ex(index),
+            Expr::Unary { operand, .. } => ex(operand),
+            Expr::Binary { lhs, rhs, .. } => ex(lhs) || ex(rhs),
+            Expr::If { cond, then_, else_, .. } => ex(cond) || block(then_, hit, fors) || else_.as_deref().is_some_and(ex),
+            Expr::Match { scrutinee, arms, .. } => ex(scrutinee) || arms.iter().any(|a| ex(&a.body)),
+            Expr::Try { inner, .. } => ex(inner),
+            Expr::Block(b) | Expr::Lambda { body: b, .. } | Expr::Recover { body: b, .. } => block(b, hit, fors),
+            Expr::Spawn { args, .. } => args.iter().any(ex),
         }
     }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body)))
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && block(&f.body, hit, fors)))
 }
 
 /// Does the module perform console output (so it needs the console host imports)? Public helper;
@@ -723,6 +747,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         index_fault: u32::MAX,
         list_new: u32::MAX,
         list_slot: u32::MAX,
+        str_eq: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -763,6 +788,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     }
     // RW 3.4: the `delulu:list` imports follow the actors' (so a program without a list is unchanged).
     let needs_lists = module_uses_lists(&env, module);
+    let needs_str_eq = module_compares(&env, module);
     if needs_lists {
         imp.str_split = n_imports;
         imp.index_fault = n_imports + 1;
@@ -1000,6 +1026,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         funcsec.function(alloc_type); // __list_new(len) -> list
         funcsec.function(alloc_type); // __list_slot(list) -> the address of a new last slot
     }
+    if needs_str_eq {
+        funcsec.function(concat_type); // __str_eq(a, b) -> Bool
+    }
 
     let mut mems = MemorySection::new();
     // Reserve the interned literal image plus HEAP_PAGES of bump-allocation heap to start; `__alloc` grows the memory past
@@ -1027,9 +1056,15 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     for (j, (_, _, _, _, export)) in member_plans.iter().enumerate() {
         exports.export(export, ExportKind::Func, actor_base + j as u32);
     }
+    // The late helpers follow the actor members, each only where the module uses it.
+    let mut late = actor_base + member_plans.len() as u32;
     if needs_lists {
-        imp.list_new = actor_base + member_plans.len() as u32;
-        imp.list_slot = imp.list_new + 1;
+        imp.list_new = late;
+        imp.list_slot = late + 1;
+        late += 2;
+    }
+    if needs_str_eq {
+        imp.str_eq = late;
     }
 
     let mut code = CodeSection::new();
@@ -1065,6 +1100,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     if needs_lists {
         code.function(&list_new_fn(alloc));
         code.function(&list_slot_fn(alloc));
+    }
+    if needs_str_eq {
+        code.function(&str_eq_fn());
     }
 
     let mut datas = DataSection::new();
@@ -2966,6 +3004,17 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     }
     // Phase 3i: `Str + Str` concatenates at runtime via the `__concat` bump-allocating helper. Both
     // operand pointers are already on the stack; the helper allocates and returns the new pointer.
+    // `Str == Str` and `!=` compare the bytes (`__str_eq`), as the interpreter's `String` equality does.
+    if lt == Ty::Str && rt == Ty::Str && matches!(op, Eq | Ne) {
+        if cx.imp.str_eq == u32::MAX {
+            return Err(CompileError::Unsupported("`Str` equality in a module compiled without `__str_eq`".into()));
+        }
+        cx.emit(Instruction::Call(cx.imp.str_eq));
+        if op == Ne {
+            cx.emit(Instruction::I32Eqz);
+        }
+        return Ok(Ty::I32);
+    }
     if lt == Ty::Str && rt == Ty::Str && op == Add {
         cx.emit(Instruction::Call(cx.concat_fn));
         return Ok(Ty::Str);
@@ -3426,6 +3475,64 @@ fn list_slot_fn(alloc: u32) -> Function {
             I32Const(8),
             I32Mul,
             I32Add,
+        ],
+    )
+}
+
+/// `__str_eq(a, b) -> Bool`: the same bytes — what the interpreter's `Str == Str` compares (Rust's `String` equality).
+fn str_eq_fn() -> Function {
+    use Instruction::*;
+    let byte = MemArg { offset: 4, align: 0, memory_index: 0 }; // past the length prefix
+    build(
+        &[(2, ValType::I32)], // 2 = the length, 3 = i
+        &[
+            // The same string is equal to itself.
+            LocalGet(0),
+            LocalGet(1),
+            I32Eq,
+            If(BlockType::Empty),
+            I32Const(1),
+            Return,
+            End,
+            LocalGet(0),
+            I32Load(u32_at()),
+            LocalTee(2),
+            LocalGet(1),
+            I32Load(u32_at()),
+            I32Ne,
+            If(BlockType::Empty),
+            I32Const(0),
+            Return,
+            End,
+            I32Const(0),
+            LocalSet(3),
+            Block(BlockType::Empty),
+            Loop(BlockType::Empty),
+            LocalGet(3),
+            LocalGet(2),
+            I32GeU,
+            BrIf(1),
+            LocalGet(0),
+            LocalGet(3),
+            I32Add,
+            I32Load8U(byte),
+            LocalGet(1),
+            LocalGet(3),
+            I32Add,
+            I32Load8U(byte),
+            I32Ne,
+            If(BlockType::Empty),
+            I32Const(0),
+            Return,
+            End,
+            LocalGet(3),
+            I32Const(1),
+            I32Add,
+            LocalSet(3),
+            Br(0),
+            End,
+            End,
+            I32Const(1),
         ],
     )
 }

@@ -6,7 +6,7 @@
 
 Measured facts, and nothing else. Constitution §5.11 explicitly rejects *"faster than C"* as false — C sits near the hardware floor. The committed claim is *competitive with C on hot paths, with safety C cannot offer*, and this study **assesses** that claim rather than asserting it. Stage 10 is where it gets worked.
 
-These numbers were measured **2026-10-19 14:26 UTC** on the machine below, and are published as they came out. The first run (2026-07-20) was the v1.0 baseline; each earlier run is kept whole under `runs/`.
+These numbers were measured **2026-10-19 18:46 UTC** on the machine below, and are published as they came out. The first run (2026-07-20) was the v1.0 baseline; each earlier run is kept whole under `runs/`.
 
 ## Method
 
@@ -24,33 +24,33 @@ All lanes compute the same result by the same algorithm, and the study checks it
 |---|---|
 | os | linux x86_64 |
 | logical CPUs | 4 |
-| kernel | Linux 6.18.44-fc-v139 |
-| processor | Intel(R) Xeon(R) Processor @ 2.10GHz |
+| kernel | Linux 6.6.87.2-microsoft-standard-WSL2 |
+| processor | AMD Ryzen 7 7840HS w/ Radeon 780M Graphics |
 | delulu | delulu 1.0.0 |
-| gcc | gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 |
-| python | Python 3.11.17 |
+| gcc | gcc (Ubuntu 9.4.0-1ubuntu1~20.04.2) 9.4.0 |
+| python | Python 3.8.10 |
 
 ## Results (milliseconds, lower is better)
 
 | Benchmark | Kind | interp | wasm | C (gcc -O2) | CPython |
 |---|---|---|---|---|---|
-| `fib_recursive_24` | micro | 96.19 | 9.74 | 1.50 | 17.68 |
-| `loop_sum_1m` | micro | 349.30 | 11.14 | 0.97 | 72.46 |
-| `string_build_20k` | micro | 14.77 | 8.31 | 1.03 | 13.66 |
-| `wordcount_macro` | macro | 11.34 | — | 0.99 | 13.60 |
-| `list_map_macro` | macro | 11.24 | — | 1.27 | 13.12 |
-| `nested_calls_macro` | macro | 267.98 | 11.11 | 1.10 | 45.15 |
+| `fib_recursive_24` | micro | 50.58 | 7.01 | 0.69 | 18.02 |
+| `loop_sum_1m` | micro | 285.88 | 9.15 | 0.58 | 52.02 |
+| `string_build_20k` | micro | 12.29 | 6.24 | 0.64 | 14.26 |
+| `wordcount_macro` | macro | 5.61 | 8.70 | 0.63 | 12.23 |
+| `list_map_macro` | macro | 7.46 | 6.63 | 0.60 | 12.28 |
+| `nested_calls_macro` | macro | 169.21 | 9.58 | 0.62 | 41.25 |
 
 ### Spread across repeats (max − min, ms)
 
 | Benchmark | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| `fib_recursive_24` | 32.92 | 3.30 | 0.26 | 8.96 |
-| `loop_sum_1m` | 172.10 | 2.35 | 0.12 | 12.68 |
-| `string_build_20k` | 4.83 | 2.80 | 0.74 | 5.30 |
-| `wordcount_macro` | 0.98 | — | 0.47 | 3.37 |
-| `list_map_macro` | 1.67 | — | 0.27 | 3.51 |
-| `nested_calls_macro` | 163.70 | 3.69 | 0.42 | 32.11 |
+| `fib_recursive_24` | 3.43 | 1.18 | 0.28 | 18.64 |
+| `loop_sum_1m` | 10.69 | 0.97 | 0.17 | 2.63 |
+| `string_build_20k` | 1.02 | 0.98 | 0.23 | 3.18 |
+| `wordcount_macro` | 0.75 | 1.06 | 0.20 | 0.79 |
+| `list_map_macro` | 1.25 | 1.17 | 0.26 | 1.33 |
+| `nested_calls_macro` | 6.29 | 0.35 | 0.19 | 3.99 |
 
 ## Start-up, measured
 
@@ -58,7 +58,7 @@ A program that prints `0` and does nothing else, on every lane — the floor und
 
 | | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| start-up | 4.70 [1.35] | 7.01 [1.08] | 0.92 [0.15] | 11.91 [8.00] |
+| start-up | 3.58 [0.75] | 6.24 [0.85] | 0.55 [0.37] | 11.67 [0.78] |
 
 ### Above start-up (each benchmark less its lane's floor, ms)
 
@@ -66,12 +66,12 @@ A ratio of two whole processes is not a ratio of compute; this table is the figu
 
 | Benchmark | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| `fib_recursive_24` | 91.49 | 2.73 | 0.58 | 5.77 |
-| `loop_sum_1m` | 344.60 | 4.13 | 0.05 | 60.55 |
-| `string_build_20k` | 10.07 | 1.30 | 0.11 | 1.75 |
-| `wordcount_macro` | 6.64 | — | 0.07 | 1.69 |
-| `list_map_macro` | 6.54 | — | 0.34 | 1.21 |
-| `nested_calls_macro` | 263.28 | 4.10 | 0.18 | 33.23 |
+| `fib_recursive_24` | 47.00 | 0.77 | 0.14 | 6.35 |
+| `loop_sum_1m` | 282.30 | 2.91 | 0.04 | 40.35 |
+| `string_build_20k` | 8.71 | 0.00 | 0.09 | 2.58 |
+| `wordcount_macro` | 2.03 | 2.46 | 0.08 | 0.56 |
+| `list_map_macro` | 3.88 | 0.39 | 0.06 | 0.61 |
+| `nested_calls_macro` | 165.63 | 3.34 | 0.07 | 29.58 |
 
 ## The assessment
 
@@ -79,23 +79,25 @@ Interpreter time divided by C time, per benchmark:
 
 | Benchmark | interp ÷ C |
 |---|---|
-| `fib_recursive_24` | 64.2× |
-| `loop_sum_1m` | 359.0× |
-| `string_build_20k` | 14.3× |
-| `wordcount_macro` | 11.4× |
-| `list_map_macro` | 8.9× |
-| `nested_calls_macro` | 242.5× |
+| `fib_recursive_24` | 73.4× |
+| `loop_sum_1m` | 489.5× |
+| `string_build_20k` | 19.3× |
+| `wordcount_macro` | 8.9× |
+| `list_map_macro` | 12.4× |
+| `nested_calls_macro` | 274.7× |
 
-Range: **8.9× to 359.0× slower than C** on these benchmarks.
+Range: **8.9× to 489.5× slower than C** on these benchmarks.
 
-The WASM engine (`--engine wasm`) ran **4 of 6** benchmarks with the interpreter's answer. WASM time divided by C time where both ran:
+The WASM engine (`--engine wasm`) ran **6 of 6** benchmarks with the interpreter's answer. WASM time divided by C time where both ran:
 
 | Benchmark | wasm ÷ C |
 |---|---|
-| `fib_recursive_24` | 6.5× |
-| `loop_sum_1m` | 11.5× |
-| `string_build_20k` | 8.1× |
-| `nested_calls_macro` | 10.1× |
+| `fib_recursive_24` | 10.2× |
+| `loop_sum_1m` | 15.7× |
+| `string_build_20k` | 9.8× |
+| `wordcount_macro` | 13.8× |
+| `list_map_macro` | 11.0× |
+| `nested_calls_macro` | 15.6× |
 
 **The honest reading: `delulu 1.0.0` is NOT competitive with C on these workloads.** The constitution's committed claim is about *hot paths under a tiered backend with a JIT*; DeluluLang ships a tree-walking interpreter and a WASM backend without the DIR-level optimizer, and neither is that. The gap above is the baseline Stage 10 works against, and stating it plainly is the only way later numbers will mean anything.
 
@@ -104,9 +106,4 @@ Nothing in a release announcement may imply otherwise. If a sentence about perfo
 ## Lanes not run
 
 - **go: UNRUN** — no Go toolchain on the measurement machine
-
-### Benchmarks a lane could not run
-
-- `wordcount_macro` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
-- `list_map_macro` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
 

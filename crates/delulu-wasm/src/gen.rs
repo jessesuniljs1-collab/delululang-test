@@ -108,6 +108,14 @@ pub fn random_console_program(seed: u64) -> String {
     for _ in 0..nlines {
         body.push_str(&format!("  out.println({})\n", gen_str_expr(&mut r, 2)));
     }
+    // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
+    // this seed always gave: a string against itself as often as against another.
+    let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);
+    if q.chance(1, 2) {
+        let (a, b) = (gen_str_expr(&mut q, 1), gen_str_expr(&mut q, 1));
+        let same = if q.chance(1, 2) { a.clone() } else { b.clone() };
+        body.push_str(&format!("  out.println(str({a} == {same}) + str({a} != {b}))\n"));
+    }
     format!("module gc\nfn main(root: Root) ! {{Write}} {{\n{body}}}\n")
 }
 

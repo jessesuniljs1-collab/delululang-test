@@ -536,7 +536,8 @@ stops at something else — a `List`, a string method, Python, a plugin, or a pa
 Since 2026-10-20 a `List` of `Int`, `Bool`, `Float`, `Str` or a sum type compiles as well: a literal, `len`,
 `is_empty`, `get`, `push`, indexing, `for` over it, `map`, and `Str.split`. Each behaves as on the interpreter: a
 list is shared, a `for` walks the list as it was when the loop began, and an index outside it faults `DL0903`. A list
-of lists, `pop`, `filter`, `fold`, `sort` and `Str == Str` are among what stays `DL1201`.
+of lists, `pop`, `filter`, `fold` and `sort` are among what stays `DL1201`; `Str == Str` and `!=` compile since the same
+day, comparing bytes as the interpreter does.
 
 So: if you are writing ordinary DeluluLang — anything with a loop, a float, a record, or a list —
 **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code

@@ -24,7 +24,33 @@ optimizer** §2.1 also describes — cross-package inlining, monomorphization, e
 ## The table
 
 Lane figures are the **minimum of 5 repeats**, whole-process wall clock in milliseconds, from the
-2026-10-19 14:26 UTC Study-C results (`delulu 1.0.0` built in release from `79f83d6`; gcc 13.3 `-O2`; each lane
+2026-10-19 18:46 UTC Study-C results — the laptop's WSL (an AMD Ryzen 7 7840HS, 4 logical CPUs), `delulu 1.0.0` built
+in release from the tree that publishes them (D-V2-164's `List` and `Str == Str`), gcc 9.4 `-O2`, CPython 3.8; each
+lane timed only when it printed the interpreter's answer. `wasm ÷ C` is the criterion-1 ratio; `interp ÷ C` is shown
+because the interpreter is the default engine. The last row is the start-up control — a program that prints `0` and
+nothing else — and the bracketed figures are each benchmark less its lane's start-up. **The WASM engine runs all six.**
+
+| Benchmark | Kind | C (gcc -O2) | wasm (opt backend) | interp | **wasm ÷ C** | interp ÷ C |
+|---|---|---|---|---|---|---|
+| `fib_recursive_24` | micro | 0.69 ms [0.14] | 7.01 ms [0.77] | 50.58 ms [47.00] | **10.2×** | 73.4× |
+| `loop_sum_1m` | micro | 0.58 ms [0.04] | 9.15 ms [2.91] | 285.88 ms [282.30] | **15.7×** | 489.5× |
+| `string_build_20k` | micro | 0.64 ms [0.09] | 6.24 ms [0.00] | 12.29 ms [8.71] | **9.8×** | 19.3× |
+| `wordcount_macro` | macro | 0.63 ms [0.08] | 8.70 ms [2.46] | 5.61 ms [2.03] | **13.8×** | 8.9× |
+| `list_map_macro` | macro | 0.60 ms [0.05] | 6.63 ms [0.39] | 7.46 ms [3.88] | **11.0×** | 12.4× |
+| `nested_calls_macro` | macro | 0.62 ms [0.07] | 9.58 ms [3.34] | 169.21 ms [165.63] | **15.6×** | 274.7× |
+| *start-up control* | control | 0.55 ms | 6.24 ms | 3.58 ms | — | — |
+
+Where both engines ran, WASM took up to 31.2× less time than the interpreter (`loop_sum_1m`). On `wordcount_macro` it
+took more: 8.70 ms against 5.61, and 2.46 ms against 2.03 above start-up. Each of its 2,000 `split`s crosses to the
+host and back, and the interpreter's does not. The first run of the day, before the host wrote a split's list in one
+allocation instead of one per word, read 12.01 ms, so that part is measured too. CPython ran every benchmark, at
+12.23–52.02 ms whole and 0.56–40.35 ms above its 11.67 ms start-up.
+
+### The 2026-10-19 14:26 UTC table — the first re-measure, on a cloud VM, kept as it was
+
+
+Lane figures as above, from the
+2026-10-19 14:26 UTC Study-C results, a 4-vCPU Linux cloud VM (`delulu 1.0.0` built in release from `79f83d6`; gcc 13.3 `-O2`; each lane
 timed only when it printed the interpreter's answer). `wasm ÷ C` is the criterion-1 ratio; `interp ÷ C` is
 shown because the interpreter is the default engine and runs the whole suite. The last row is the start-up
 control — a program that prints `0` and nothing else — and the bracketed figures are each benchmark less its
@@ -72,27 +98,24 @@ not an omission.
 
 ## The honest verdict: criterion 1 is NOT met, and this is the deferral
 
-**The geo-mean ≤ 2.5× C target is not met, and the honest reason is twofold** (the 2026-10-19 figures;
-the 2026-07-20 ones in brackets):
+**The geo-mean ≤ 2.5× C target is not met** (the 2026-10-19 18:46 UTC figures; the cloud VM's earlier run, and
+the 2026-07-20 baseline, in brackets):
 
-1. **Coverage.** The optimizing backend runs **4 of 6** compute kernels [1 of 6]. A geo-mean "on the
-   compute-kernel suite under the optimizing backend" is not computable when the backend runs two
-   thirds of the suite; over the four it does run the geo-mean is **8.8× C**, and each of them is past
-   2.5× — **6.5× to 11.5×** [`fib_recursive_24` alone, 2.0×]. A geo-mean over the kernels a backend
-   happens to compile is not the suite's, and reporting it as one would be the dishonesty this table
-   exists to avoid.
+1. **Coverage is no longer the reason.** The optimizing backend runs **6 of 6** compute kernels [4 of 6; 1 of 6], so
+   the suite's geo-mean is computable, and it is **12.4× C**. Every kernel is past 2.5×: **9.8× to 15.7×** [6.5× to
+   11.5× over four; `fib_recursive_24` alone, 2.0×].
 2. **Every figure is a whole process, and start-up is most of the small ones.** On this machine a C
    process starts and exits in about 1 ms [5–6 ms on the laptop, whose spread of 44–77 ms exceeded its
    minimum], and every DeluluLang figure also holds DeluluLang's own start-up — reading and checking the
-   program and, on WASM, compiling it with Cranelift. The start-up control measures it: 0.92 ms for C,
-   4.70 ms for the interpreter, 7.01 ms for the WASM engine. Less their floors, the four WASM kernels took
-   1.30–4.13 ms and C 0.05–0.58 ms — so the whole-process ratios still **understate** the compute gap,
-   and a compute-only ratio is not offered: C's figures above its floor are within the noise of a
-   millisecond's start-up (its floor's spread is 0.15 ms).
+   program and, on WASM, compiling it with Cranelift. The start-up control measures it: 0.55 ms for C,
+   3.58 ms for the interpreter, 6.24 ms for the WASM engine [0.92, 4.70, 7.01]. Less their floors, the six WASM
+   kernels took 0.00–3.34 ms and C 0.04–0.14 ms. So the whole-process ratios still **understate** the compute gap,
+   and a compute-only ratio is not offered: C's figures above its floor are within the noise of its start-up
+   (its floor's spread is 0.37 ms).
 
-The interpreter — the default engine, which runs the whole suite — is **8.9× to 359.0× C** on this
-machine [2.0× to 60.5×]. It did not get slower: its own figures are within a run's spread of the
-2026-07-20 ones (`loop_sum_1m` 349 ms against 363); the C lane's start-up shrank. DeluluLang is **not
+The interpreter — the default engine, which runs the whole suite — is **8.9× to 489.5× C** on this
+machine [8.9× to 359.0×; 2.0× to 60.5×]. It did not get slower: `loop_sum_1m` took 286 ms here, 349 on the cloud VM
+and 363 in v1.0. The ratios grew because C's start-up shrank to about half a millisecond. DeluluLang is **not
 competitive with C** on these workloads, and Study-C's own write-up says so in those words.
 
 **This is the D4 outcome, and D4 makes it a passing one:** "not production-ready, deferred, here is
@@ -119,11 +142,12 @@ and why:
   0 from every ratio without a word; and it timed any lane that exited 0, whatever it printed — a lane is now timed only
   when it printed the interpreter's answer.
 
-  **Since 2026-10-20 (the WASM `List`) the last two compile too.** `wordcount_macro` (`Str.split`, then `len`) and
-  `list_map_macro` (a list literal, `map`, `len`) run on the WASM engine and print the interpreter's answers, 18000 and
-  16000, so **6 of the 6 kernels** compile. **The table above is NOT re-measured for them**: their rows are those of the
-  2026-10-19 run, and a criterion-1 ratio over all six needs Study C run again on one machine, all lanes. Until it is,
-  the geo-mean above is of four kernels and says so.
+  **Since 2026-10-20 (the WASM `List`, D-V2-164) it has landed for this suite.** `wordcount_macro` (`Str.split`, then
+  `len`) and `list_map_macro` (a list literal, `map`, `len`) run on the WASM engine and print the interpreter's answers,
+  so **6 of the 6 kernels** run there, and Study C was run again over all six on one machine, every lane but Go (the
+  table above, 2026-10-19 18:46 UTC, on the laptop's WSL). That run also found the CPython lane reported UNRUN on a
+  machine with only `python3`, which the harness now finds. The coverage half of the deferral is closed for this suite;
+  the speed half stands.
 
 ## What is NOT deferred, and did ship
 

@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `Str == Str` on the WASM engine; the performance figures re-measured over all six benchmarks, 2026-10-20
+
+- **Added: `--engine wasm` compiles `==` and `!=` on two `Str`s.** It compares the bytes, as the interpreter does.
+- **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`, `measurements/METHODOLOGY.md`) are Study C's run of 2026-10-19 18:46 UTC on the laptop's WSL,
+  every lane but Go. **The WASM engine runs all six benchmarks**, 9.8×–15.7× slower than C (geo-mean 12.4×), and the
+  interpreter is 8.9×–489.5× slower. Both are whole processes, start-up included. DeluluLang is still not competitive with
+  C, and the hot-path criterion (geo-mean ≤ 2.5×) is still not met. The previous run is kept whole in
+  `measurements/study-c/runs/2026-10-19-vm/`.
+- **Fixed: `Str.split` on the WASM engine wrote each part with its own allocation,** which left `wordcount_macro` more
+  than twice as slow there as on the interpreter. It now writes the whole list at once; the WASM engine is still somewhat
+  slower on that benchmark, and the table says so.
+- **Fixed: Study C reported CPython missing on a machine that had only `python3`.** It now uses `python3`, or else
+  `python`.
+
 ## Unreleased — `List` on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles a `List`** of `Int`, `Bool`, `Float`, `Str` or a sum type: a literal, `len`,

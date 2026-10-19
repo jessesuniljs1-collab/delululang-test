@@ -6996,3 +6996,38 @@ literal is refused rather than panicked over.
   - `delulu-wasm` whole (lib 87, `list_parity` 9, `loop_parity` 7, `fault_parity` 6 and the rest) green;
   - the CLI targets that run the WASM engine green (artifact_review, budget_cli, cli, guard_e2e, json_contract,
     plugin_cli, release, sandbox_modes_cli, wasm_cli, message_spacing, book).
+
+## 2026-10-20 — the laptop: `Str == Str` on WASM; Study C over all six kernels; two harness and host fixes
+
+**`Str == Str` and `!=`** compile to `__str_eq` (same pointer, then length, then each byte). It is a late helper, emitted
+only in a module that contains an `==` or `!=`. That is detected by `module_any`, a module walker that names every
+expression form, after WASM-INTERN-1's lesson; the list detection uses it too. `list_parity.rs`
+`str_equality_matches_the_interpreter` covers an interned literal against itself, a built string, differing lengths and
+bytes, multi-byte characters, empty strings and split words. The console generator now writes a comparison in about
+half its programs, from a stream of its own. `conformance_parity`'s 2,000 programs assert over 700 comparisons, over 200
+of them equal and over 200 unequal. Mutants M541 (the bytes read from the length prefix) and M542 (`!=` as `==`) are red
+in both tests; control green.
+
+**Study C, all six kernels on one machine.** It ran in the laptop's WSL, release, from a fresh clone of
+`laptop/wasm-list` at `e85fcb5`.
+
+The first run (2026-10-19 18:43 UTC) found two things:
+- the CPython lane reported UNRUN, "no CPython", on a machine that had only `python3`: the harness ran `python`;
+- `wordcount_macro` took 12.01 ms on WASM against 5.35 on the interpreter, 5.58 against 1.69 above start-up. Each
+  host-side `split` wrote every part with its own allocation and four export lookups.
+
+Fixed: `python_command()` tries `python3` then `python` (`the_python_lane_finds_python3_or_python`), and `write_str_list`
+writes a split's list in one allocation and one write.
+
+The second run (18:46 UTC, the same machine, the fixes applied) is published:
+- interpreter 8.9×–489.5× C; WASM **6 of 6**, 9.8×–15.7× C (geo-mean 12.4×);
+- start-up 0.55 ms C, 3.58 interpreter, 6.24 WASM, 11.67 CPython;
+- `wordcount_macro` on WASM 8.70 ms (2.46 above start-up) against the interpreter's 5.61 (2.03). It is still slower,
+  and the table says so.
+
+The previous published run (the cloud VM's, 14:26 UTC) is kept whole in `runs/2026-10-19-vm/`. HOT_PATH_TABLE,
+METHODOLOGY §3.3, README, QUESTIONS (twice), for-agents and REMAINING_WORK 3.4 quote the new run. Criterion 1 is still
+not met. Its coverage half is closed for this suite; its speed half stands.
+
+**Evidence.** `delulu-measure` 15 unit tests (`study_c::tests` with the new one); `list_parity` 10; `conformance_parity` 6;
+mutants above; the second run's `REPORT.md` and `results.json` as published.

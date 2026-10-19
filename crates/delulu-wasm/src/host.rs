@@ -461,21 +461,31 @@ fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
 const MEMORY_EXHAUSTED: &str =
     "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)";
 
-/// Write a `List[Str]` of `parts` (RW 3.4): each part a string cell, their pointers in 8-byte slots, and the header
-/// `codegen.rs` reads, `[len][cap][data]`, with exactly as many slots as parts. Returns the header's pointer.
+/// Write a `List[Str]` of `parts` (RW 3.4) in one allocation and one write: the header `codegen.rs` reads,
+/// `[len][cap][data]`, with exactly as many slots as parts; the slots, each holding a string cell's pointer; then the
+/// cells, `[len][bytes]` each. Returns the header's pointer. (Written a cell at a time, each with its own allocation and
+/// export lookups, `wordcount_macro` ran slower on the WASM engine than on the interpreter — Study C, 2026-10-20.)
 fn write_str_list(caller: &mut Caller<'_, HostState>, parts: &[String]) -> Result<i32, ()> {
-    let n = i32::try_from(parts.len()).map_err(|_| ())?;
-    let mut slots = Vec::with_capacity(parts.len() * 8);
-    for p in parts {
-        let cell = write_str_cell(caller, p)?;
-        slots.extend_from_slice(&u64::from(cell as u32).to_le_bytes());
+    let n = u32::try_from(parts.len()).map_err(|_| ())?;
+    let head = 12 + 8 * parts.len();
+    let total = head + parts.iter().map(|p| 4 + p.len()).sum::<usize>();
+    let base = guest_alloc(caller, i32::try_from(total).map_err(|_| ())?)? as u32;
+    let mut bytes = Vec::with_capacity(total);
+    let data = base + 12;
+    for field in [n, n, data] {
+        bytes.extend_from_slice(&field.to_le_bytes());
     }
-    let data = guest_alloc(caller, n.checked_mul(8).ok_or(())?)?;
-    guest_write(caller, data, &slots)?;
-    let header = guest_alloc(caller, 12)?;
-    let fields: Vec<u8> = [n as u32, n as u32, data as u32].iter().flat_map(|f| f.to_le_bytes()).collect();
-    guest_write(caller, header, &fields)?;
-    Ok(header)
+    let mut cell = base + head as u32;
+    for p in parts {
+        bytes.extend_from_slice(&u64::from(cell).to_le_bytes());
+        cell += 4 + p.len() as u32;
+    }
+    for p in parts {
+        bytes.extend_from_slice(&(p.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(p.as_bytes());
+    }
+    guest_write(caller, base as i32, &bytes)?;
+    Ok(base as i32)
 }
 
 fn guest_write(caller: &mut Caller<'_, HostState>, ptr: i32, bytes: &[u8]) -> Result<(), ()> {

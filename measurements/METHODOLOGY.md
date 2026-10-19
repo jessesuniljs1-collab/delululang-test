@@ -209,10 +209,13 @@ nobody runs.
 
 ### 3.3 The result
 
-**2026-10-19, a 4-vCPU Linux cloud VM:** the interpreter **8.9× to 359.0× slower than C**, the WASM engine
-**6.5× to 11.5×** on the 4 of 6 benchmarks it runs — whole processes, a C process starting and exiting in
-about 1 ms. The interpreter's own times are within a run's spread of the v1.0 figures; the C lane's
-start-up shrank, so the ratios grew (`study-c/HOT_PATH_TABLE.md`).
+**2026-10-19 18:46 UTC, the laptop's WSL (4 logical CPUs), the published run:** the interpreter **8.9× to 489.5×
+slower than C**, the WASM engine **9.8× to 15.7×** on all six benchmarks (geo-mean 12.4×) — whole processes, a C
+process starting and exiting in about half a millisecond. Every lane ran but Go.
+
+**2026-10-19 14:26 UTC, a 4-vCPU Linux cloud VM** (kept whole in `study-c/runs/2026-10-19-vm/`): the interpreter **8.9×
+to 359.0×**, the WASM engine **6.5× to 11.5×** on the 4 of 6 it then ran. The interpreter's own times are within a run's
+spread of the v1.0 figures; the C lane's start-up shrank, so the ratios grew (`study-c/HOT_PATH_TABLE.md`).
 
 **The v1.0 baseline (2026-07-20, the development laptop): 2.0× to 60.5× slower than C**, depending on the benchmark, as of the release-gate regeneration
 (the 9e run measured 2.0×–51.1×; re-timed at the cut, the worst benchmark came out worse, and the

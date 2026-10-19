@@ -100,6 +100,8 @@ fn deeply_chained_concatenation_matches() {
 #[test]
 fn random_console_programs_match_across_engines() {
     let mut compared = 0u32;
+    // Programs that compared two strings, and how many of those comparisons were equal (`str(a == a)` prints `true`).
+    let (mut compares, mut equal) = (0u32, 0u32);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -121,6 +123,10 @@ fn random_console_programs_match_across_engines() {
         match (&wasm_res, &interp_res) {
             (Ok(wo), Ok(_)) => {
                 compared += 1;
+                if src.contains(" == ") {
+                    compares += 1;
+                    equal += u32::from(wo.lines().last().is_some_and(|l| l.starts_with("true")));
+                }
                 if *wo != interp_out {
                     mismatches.push(format!("seed {seed}: wasm={wo:?} interp={interp_out:?}\n{src}"));
                 }
@@ -137,6 +143,10 @@ fn random_console_programs_match_across_engines() {
         mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n")
     );
     assert!(compared > 1500, "the generator produced too few comparable programs: {compared}");
+    assert!(
+        compares > 700 && equal > 200 && compares - equal > 200,
+        "string comparisons: {compares} programs, {equal} of them equal"
+    );
 }
 
 #[test]
