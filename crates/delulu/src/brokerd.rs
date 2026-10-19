@@ -1601,7 +1601,7 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
                     let refusal = Response::Error {
                         code: "DL1401".to_string(),
                         message: format!(
-                            "the broker's answer to this request is {} bytes, larger than one protocol frame ({} bytes), and                              was not sent",
+                            "the broker's answer to this request is {} bytes, larger than one protocol frame ({} bytes), and was not sent",
                             big.len,
                             crate::broker_ipc::MAX_FRAME
                         ),
@@ -3098,7 +3098,8 @@ mod tests {
         assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1401"), "the whole listing is more than one frame");
         let (mut after, mut paged, mut pages) = (None::<String>, Vec::new(), 0);
         loop {
-            let Response::ListedPage { nodes, next } = request(&state, ReqBody::ListPage { after: after.clone() }).unwrap() else {
+            let Response::ListedPage { nodes, next } = request(&state, ReqBody::ListPage { after: after.clone() }).unwrap()
+            else {
                 panic!("a page")
             };
             pages += 1;

@@ -266,7 +266,11 @@ fn grants_list_and_tree_read_a_tree_past_one_frame() {
             let (cwd, state, desc, parent) = (&cwd, &state, &desc, &parent);
             s.spawn(move || {
                 for _ in (w..count).step_by(4) {
-                    let o = delulu_in(cwd, state, &["grants", "delegate", "--effects", "Write", "--parent", parent, "--holder-desc", desc]);
+                    let o = delulu_in(
+                        cwd,
+                        state,
+                        &["grants", "delegate", "--effects", "Write", "--parent", parent, "--holder-desc", desc],
+                    );
                     assert!(o.status.success(), "grants delegate: {}", stderr(&o));
                 }
             });
@@ -274,7 +278,7 @@ fn grants_list_and_tree_read_a_tree_past_one_frame() {
     });
 
     let o = delulu_in(&cwd, &state, &["grants", "list", "--json"]);
-    assert!(o.status.success(), "grants list over {count} nodes of {desc_len}-byte descriptions: {}", stderr(&o));
+    assert!(o.status.success(), "grants list over {count} nodes of {desc_len}-byte descriptions: {}{}", stdout(&o), stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants list --json");
     let nodes = v["nodes"].as_array().unwrap();
     // The parent, its root (`grants delegate` mints one), and the described nodes.

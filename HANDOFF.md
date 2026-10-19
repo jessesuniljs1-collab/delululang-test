@@ -1074,6 +1074,12 @@ spells the same thing?**
   key: for every answer that grows with history, find the size limit it will meet and what its client does when it cannot be
   sent — a dropped connection reads as "unreachable", and a monitor that hears "unreachable" stops.
 
+- **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
+  each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
+  as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the
+  tree for RW 4.70, with a second: the same render scanned every node for each node's children (10.9 s at 16,000 nodes, the
+  serial daemon held). Search key: when two surfaces show one fact, does each compute it the same way?
+
 - **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
   and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the
   operator had passed, and a comment claimed compute was refused by name. The refusal list's own comment named the class
@@ -1590,6 +1596,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   own check, while the next command (not joined by `&&`) ran the records script on the placeholders. Four one-letter lines
   reached the tree, caught by reading the result before any commit. Join every step a script depends on with `&&`, and
   write a dry run's inputs where the real run never looks.
+
+- **A Python string eats a backslash-newline** (the laptop, 2026-10-19): a Rust message continued with `\` at a line's end,
+  written into the source through a Python triple-quoted string, lost the backslash to Python's own continuation; the
+  message printed thirty spaces mid-line, and `message_spacing.rs` turned all four suites red on the pull request. Write a
+  Rust string literal with the Edit tool, or keep it on one line — and grep the written file for the text before building.
 
 - **A cost recorded as a latency may be a deadline** (on-demand routine run 3, MONITOR-CHAIN-1): "each poll re-reads the
   whole chain, ≈200 ms at 10,000 records" sat in RW 4.49 as LOW for nine days; the same loop beats a 2 s dead-man, so the

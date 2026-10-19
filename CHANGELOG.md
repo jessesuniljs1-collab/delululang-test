@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `grants list` and `grants tree` read a large tree, and the tree shows what the broker enforces, 2026-10-19
+
+- **Fixed (TREE-STATE-1, RW 4.70): `delulu grants tree` showed a child of an expired grant as `[live]`.** It read each
+  node's own state; `grants list`, `grants inspect` and every check already treated such a child as expired. The tree now
+  shows each node in the state the broker acts on.
+- **Fixed (RW 4.70, D-V2-162): `delulu grants list` and `delulu grants tree` read a tree of any size.** Each asked the daemon
+  for the whole tree in one answer, capped at one 16 MiB frame, so a large tree (by hand: 550 nodes with 30,000-character
+  descriptions) could not be listed at all. They now read it page by page. A paged listing is not a snapshot: a node added or
+  revoked while it is read may or may not appear.
+- **Faster: drawing the tree no longer holds the broker daemon.** The daemon found each node's children by scanning every
+  node — 10.9 s at 16,000 nodes in a debug build — and served nothing else meanwhile, an operator's e-stop included. `grants
+  tree` is drawn by the CLI from the pages now, and the daemon's own `Tree` answer (kept for older clients) uses one index.
+
 ## Unreleased — a monitor over a large grant tree keeps watching, 2026-10-19
 
 - **Fixed (RW 4.69, D-V2-161): `delulu monitor watch` no longer stops — and lets its dead-man revoke every run it watches —

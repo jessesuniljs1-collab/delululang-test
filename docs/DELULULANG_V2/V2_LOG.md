@@ -6630,3 +6630,35 @@ rather than assumed.
 failing exit, in 11.7 s. **M346** (the beater's `waiting` test removed) **red**: the watch was still being beaten for 31 s after
 the record landed. `monitor_cli` 23 passed together; clippy 0; fmt clean. **The full suite did not run on the laptop** — it
 runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 4.70: the whole-tree reads come in pages; TREE-STATE-1; and the pull request's suite read red (D-V2-162)
+
+**The CI of RW 4.69 and 4.63, read** (pull request #1, branch `laptop/rw-4-69` — the owner's rule of 2026-10-19: the suite
+the laptop does not run runs on GitHub and is read before `master` moves): `39224116908` (`ea7d42b`) and `39224995083`
+(`3203d3f`) — **failure**: every job but the four suites success, and each suite red on ONE test,
+`message_spacing.rs` `no_message_carries_a_flattened_continuation` — Windows 2,279 passed, Ubuntu 2,344, macOS 2,318, arm64
+2,344, 1 failed on each. The cause was mine: D-V2-161's DL1401 text was written into `brokerd.rs` through a Python string,
+and a backslash-newline continuation lost its backslash, so the message printed thirty spaces mid-line — the class that test
+exists for. Rewritten on one line here; `message_spacing` green. Both new monitor witnesses passed on all four runners
+(`monitor_cli` 23–25 by OS). `master` did not move.
+
+**What (RW 4.70).** Past one frame `grants list`, `grants tree` and the atlas overlay could not read the tree. Reading
+`Broker::tree` to page it found two more: each node's children by a scan of every node — measured 0.13 s at 2,000 nodes,
+0.54 s at 4,000, 2.6 s at 8,000, 10.9 s at 16,000 (debug, a flat tree), the serial daemon serving nothing else, an e-stop's
+revoke included; and each node drawn in its own state — with the real binary, a grant delegated `--ttl 2s` and a child
+under it, three seconds later: `grants list` and `grants inspect` said the child was `expired`, `grants tree` said `[live]`
+(TREE-STATE-1). D-V2-162: `ListPage` (4 MiB pages in id order), `brokerd::list_all` for all three surfaces, the tree drawn by
+the CLI from the pages in the daemon's format, and the daemon's `Tree` kept for older clients with one index, a stack and the
+inherited state.
+
+**Evidence.** `grants_cli.rs` `grants_list_and_tree_read_a_tree_past_one_frame` — 562 nodes of 30,000-byte descriptions under
+one parent (Windows; 142 of 120,000 elsewhere): every node listed once, one tree line each, each under the parent; **red on
+the old product code** (`grants list` refused), green after (7.8 s). `brokerd.rs`
+`the_listing_comes_in_pages_and_the_clis_tree_is_the_daemons_tree` — the CLI's tree equals the daemon's `Tree` text byte for
+byte over nested nodes, a revoked subtree, a child of an expired grant and a description carrying a line break and an escape;
+then four 5 MiB descriptions: `List` refused in words, the pages each past the one before, within the budget, together `List`'s
+nodes. `tree.rs` `the_tree_shows_a_child_of_an_expired_parent_as_expired` (red on the old render). Mutants M498–M502 red, each
+on its own target. The RW 4.69 witness measured its state by `grants list` failing; it reads the paged listing now and asks
+that the descriptions alone pass one frame. Locally green: sixteen integration targets (the atlas, grants, monitor, broker,
+audit, e-stop, CLI-contract and JSON-contract ones, `message_spacing`), the `delulu` binary's 184 unit tests,
+`delulu-broker`'s 215; clippy 0; fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).

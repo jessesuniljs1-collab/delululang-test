@@ -3895,6 +3895,24 @@ frame and says so with `broker_ipc::FrameTooLarge`. (4) Not changed: `grants lis
 still read the whole tree, and past one frame they now say why they cannot (RW 4.70, open); `List`, its answer, and the
 monitor's rules, dead-man, judging and report are unchanged. Hardening the monitor's reach, not what it means.
 
+## D-V2-162 — The whole-tree reads come in pages, and the tree is drawn in the state the broker acts on (RW 4.70) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-19): past one 16 MiB frame `grants list`, `grants tree` and `atlas`'s custody overlay
+could not read the tree (RW 4.70, opened beside RW 4.69); `Broker::tree` found each node's children by scanning every node —
+0.13 s at 2,000 nodes, 0.54 s at 4,000, 2.6 s at 8,000, 10.9 s at 16,000 (debug build), the serial daemon serving nothing
+else meanwhile; and the tree drew each node in its OWN state, so a child of an expired grant read `[live]` where `list`,
+`inspect` and every check said expired (TREE-STATE-1, witnessed with the real binary).
+
+**Decision.** (1) A new additive `broker/1` request, `ListPage { after }`, answered `ListedPage { nodes, next }`: the nodes
+after `after` in id order, as `List` gives them, at most `LIST_PAGE_BYTES` (4 MiB) of encoded entries a page and at least one;
+`next` is the page's last id, `None` on the last page. One entry larger than a frame is refused in words, as any answer that
+size is (D-V2-161). (2) `brokerd::list_all` reads every page; `grants list`, `grants tree` and the atlas overlay use it. A
+paged listing is not a snapshot, and says so: a node made or revoked while it is read may or may not appear; a node whose
+parent the pages do not hold is drawn as a root. (3) `grants tree` is drawn by the CLI from the pages (`cli::render_tree`), in
+the daemon's text format — a test holds the two to one text byte for byte. (4) The daemon's `Tree` stays for older clients:
+its children from one index, drawn from a stack rather than a call per level (a node's depth has no bound at its creation),
+each node in its inherited state. (5) `List` and its answer are unchanged. Display only: no decision reads either text.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
