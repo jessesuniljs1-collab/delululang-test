@@ -202,6 +202,46 @@ fn a_lease_run_refuses_a_local_device_grant_by_name_instead_of_dropping_it() {
     }
 }
 
+/// RW 4.68 (LEASE-DROP-1): EVERY local grant beside `--lease` is refused by name before anything is redeemed — except a
+/// foreign library's PATH, which is grant data the lease cannot carry. Generated from the grant grammar the binary itself
+/// publishes (`delulu toolchain --json`), so a kind added later is asked the same question. Before, `plugin=`,
+/// `compute=` and `exec.native` were dropped in silence and the run went on (a `plugin=` program then met DL0703 asking
+/// for the flag the operator had passed).
+#[test]
+fn run_lease_refuses_every_local_grant_but_a_foreign_library_path() {
+    let t = delulu(&["toolchain", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&t)).expect("toolchain --json");
+    let forms = v["toolchain"]["grants"].as_array().expect("the grant grammar");
+    assert!(forms.len() >= 16, "the grammar read must be the whole of it: {forms:?}");
+    let (mut asked, mut wrong) = (0, Vec::new());
+    for f in forms {
+        let (key, example) = (f["key"].as_str().unwrap(), f["example"].as_str().unwrap());
+        let o = delulu(&["run", &program(), "--lease", "dlt1_not-a-real-token", "--grant", example, "--no-prompt"]);
+        let err = stderr(&o);
+        if key == "foreign.c" {
+            // The control: the one grant a lease run may take gets past argument validation, to the token.
+            assert_ne!(o.status.code(), Some(2), "a foreign library's path may accompany a lease:\n{err}");
+            continue;
+        }
+        asked += 1;
+        // Refused as an argument (exit 2), naming the lease, before anything is redeemed.
+        let refused = o.status.code() == Some(2)
+            && err.contains("`--lease` run")
+            && !err.contains("DL1401")
+            && !err.contains("DL1407")
+            && !err.contains("DL0703");
+        if !refused {
+            wrong.push(format!("`--grant {example}` → exit {:?}: {}", o.status.code(), err.lines().next().unwrap_or("")));
+        }
+    }
+    assert_eq!(asked, forms.len() - 1, "every form but `foreign.c` was asked");
+    assert!(
+        wrong.is_empty(),
+        "a local grant beside `--lease` that is not refused by name is dropped in silence:\n{}",
+        wrong.join("\n")
+    );
+}
+
 /// The control, and the reason the scenario is not circular: with no ground delegation at all, the
 /// HGA is refused at the MINT (DL0703) — earlier and for a different reason than a lease expiring.
 ///
