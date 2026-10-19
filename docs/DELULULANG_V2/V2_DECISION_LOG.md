@@ -3809,10 +3809,12 @@ so it is reaped this way too. (3) **The period is 10 s**, generous on purpose �
 healthy run whose beats a loaded machine delayed past it would lose its node mid-run; `DELULU_RUN_DEADMAN_MS` may only
 SHORTEN it (tests; an operator who wants a killed run reaped sooner), as `DELULU_FOREIGN_CALL_DEADLINE_MS` may only
 shorten its bound. (4) **A refused arming refuses the run** — its node revoked at once, the daemon's code and words
-reported: a run whose authority could not be reaped does not start. (5) **Not a lease run:** its node is the delegator's
-(a `--multi` lease is redeemed by several runs), so no one run revokes or dead-mans it; a killed lease run's plugin nodes
-stay live below the lease node — inside authority that is live anyway, by the delegator's choice. That is the half of
-RW 4.57 left open. (6) **Hardening, not redefinition:** a node may always revoke itself, and arming a future
+reported: a run whose authority could not be reaped does not start. (5) **Not a lease run's own node:** it is the delegator's
+(a `--multi` lease is redeemed by several runs), so no one run revokes or dead-mans it. **What a lease run MINTS under it
+is dead-manned as it is minted** (the same run, `6f98ae5`): its custody client arms a dead-man on each node it mints — a
+lease run's are its devices', since a lease carries no plugin authority — and the run's beater keeps each alive; a node
+that cannot be armed is revoked and not handed out. Killed, the run's minted nodes are reaped and the lease lives on
+(witnessed, plain and sandboxed). *(This point first said the lease half was left open; it was built later the same run.)* (6) **Hardening, not redefinition:** a node may always revoke itself, and arming a future
 self-revocation adds no authority (D-V2-106's argument); the holder model (§3.3) already says a node is its holder's —
 the tree now says when the holder is gone. (7) **A run that is suspended past the period is treated as dead** — Ctrl-Z,
 `SIGSTOP`, a debugger's halt: its beats stop, the daemon reaps its node, and once it resumes its next use is refused (fail

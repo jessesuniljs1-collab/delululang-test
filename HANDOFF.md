@@ -1049,6 +1049,13 @@ spells the same thing?**
   dead-man when the run dies first. Search key: when a fix answers "does X outlive its holder?" for one kind of node,
   list every node the same holder holds — the parent first.
 
+- **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
+  and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the
+  operator had passed, and a comment claimed compute was refused by name. The refusal list's own comment named the class
+  ("a refusal list is a skip branch wearing a disguise") and the list still fell behind. Now every kind is asked by a
+  witness generated from the grammar the binary publishes (`delulu toolchain --json`). Search key: a list that names
+  what to refuse needs a generated witness over everything it could name.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -1552,6 +1559,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   done &` to load four CPUs before a timing-shaped witness was denied by the auto-mode classifier. Load the machine with
   the witness's own work instead — four concurrent copies of its test binary (`target/debug/deps/<target>-<hash>`, with
   `CARGO_BIN_EXE_delulu` set), each of which spins — and with the full suite, which runs it beside everything else.
+
+- **A dry run's dummy input is a trap for the real run** (on-demand routine run 2): a records script was tried against a
+  COPY with a placeholder evidence file — right — and the step that should then have written the real evidence failed its
+  own check, while the next command (not joined by `&&`) ran the records script on the placeholders. Four one-letter lines
+  reached the tree, caught by reading the result before any commit. Join every step a script depends on with `&&`, and
+  write a dry run's inputs where the real run never looks.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

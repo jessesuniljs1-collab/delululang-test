@@ -476,8 +476,8 @@ as above.
 alone. The run revokes it (recorded) as it ends, and the broker holds a dead-man on it meanwhile: a run that is killed, crashes
 or is stopped by its budget stops beating, and 10 s later the broker revokes its node and every node below it (its plugins',
 its devices'), the record naming the silence. `DELULU_RUN_DEADMAN_MS` shortens the 10 s, never lengthens it. So `grants list`
-shows as live only what a running holder holds — except below a lease: a `--lease` run's node is the delegator's, and what a
-killed lease run minted stays live under it until the lease is revoked or expires (RW 4.57). A run SUSPENDED past the period
+shows as live only what a running holder holds. A `--lease` run's own node is the delegator's and outlives the run (a
+`--multi` lease serves the next one); what the run mints under it — its devices' nodes — is dead-manned the same way. A run SUSPENDED past the period
 (Ctrl-Z, `SIGSTOP`) is reaped the same way, and its next use after it resumes is refused.
 
 ---

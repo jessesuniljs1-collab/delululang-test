@@ -3798,3 +3798,42 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   with its root's beats; (3) merge `master` into `launch/2.0.0` again for D-V2-157 (its CHANGELOG lines into the 2.0.0
   section) and read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (5)
   *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 2 (continued): RW 4.57's lease half; LEASE-DROP-1 (RW 4.68) closed; `launch/2.0.0` kept current
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/rw-4-57-run-node` (the runner witnesses), fast-forwarded into `master`; and `launch/2.0.0`   Pull request: none
+- Base: `d144882`
+- Commits: `6f98ae5` A lease run's minted nodes are dead-manned as they are minted (RW 4.57); `86ad969` A lease run refuses
+  a local plugin, compute or native grant by name (RW 4.68); and this entry's commit. On `launch/2.0.0`: `b4748fa`, the merge of
+  `d144882` (release procedure step 1).
+- Files and folders: M `crates/delulu/src/broker_client.rs` (`Reaper`; `RunNode::for_lease`; `attenuate` arms under a lease),
+  `crates/delulu/src/run_cmd.rs` (the lease hold; three more lease refusals; DL1911 steps aside beside `--lease`),
+  `crates/delulu/src/guest.rs` (the lease hold), `crates/delulu/src/cli.rs` (a false comment corrected),
+  `crates/delulu/tests/plugin_load_cli.rs` (three lease witnesses), `crates/delulu/tests/satellite_demo.rs` (the generated
+  lease-grant witness), `crates/delulu/tests/monitor_cli.rs` (the opt-out witness asks about the monitor's node), `CHANGELOG.md`, `HANDOFF.md` (§11.4 LEASE-DROP-1; §11.5 the dry-run trap), `docs/CLOUD_ROUTINE.md`
+  (step 5: join a script's input with `&&`), `docs/DEPLOYMENT.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-157 (5): the
+  lease half built), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.57 closed; 4.68 added and closed; 4.35's
+  stale status cell corrected — closed since routine run 10), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed:
+  nothing. On `launch/2.0.0` (`b4748fa`): the merge, its CHANGELOG section moved into `## [2.0.0]`, `docs/survey/*` rebuilt there.
+- **RW 4.57 closed:** a `--lease` run's own node is the delegator's and is never ended by a run; what the run mints under
+  it — its devices' nodes — is dead-manned as it is minted, so a killed lease run leaves none live and the lease lives on.
+  Plain and sandboxed, witnessed; mutants M461–M467 red.
+- **LEASE-DROP-1 (RW 4.68), found and closed:** `run --lease` dropped a local `--grant plugin=`, `compute=` or `exec.native`
+  in silence and ran on (witnessed: exit 0); a plugin program then met DL0703 asking for the flag the operator had passed.
+  Each is refused by name now; the witness is generated from `delulu toolchain --json`'s grant grammar; mutants M468–M471 red.
+- **The container restarted at 01:20 UTC** and killed the third full suite mid-run (`egress_cli`); the tree, the commits and
+  the scratchpad survived; the suite was run again over everything.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: suite 4 (all of this run's code and records) 2,329 passed, 1 failed — `monitor_cli`'s opt-out witness asked
+  whether ANY dead-man was armed, and a lease run's device node now is; narrowed to the monitor's node, M472 red,
+  `monitor_cli` 22/22; suite 5 over the final tree: 2,330 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved); clippy 0.
+- CI read: `d144882`'s push runs CI `39183143824` and `ocsf` `39183143907` — success; `launch/2.0.0`'s release dry run
+  `39183562777` on `b4748fa` — success; the lease-half runner reads `39184608216` (macOS) and `39184606157` (Windows) — 11
+  passed each; RW 4.68's at `86ad969` — `39187175838` (macOS) and `39187173387` (Windows): `compute_cli` 18 and
+  `satellite_demo` 5 passed each (Windows terminated only `vctip`).
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (LEASE-DROP-1 — a refusal list needs a generated witness over everything it
+  could name) and §11.5 (a dry run's dummy input is a trap for the real run).
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39183559939` (`jobs=everything` on `b4748fa`;
+  `miri-slow` takes hours), then merge `master` into it again for the lease half and RW 4.68 and dispatch `everything` on
+  the result; (3) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (4) *[laptop]* the launch, only on the owner's word.
