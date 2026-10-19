@@ -90,11 +90,11 @@ fn main(root: Root) ! {Write} {
     t = t + 1
     ok = t < 5
   }
-  out.println(str(t) + " " + str("héllo ✓".len()) + " " + str("".len()))
+  out.println(str(t) + " " + str("héllo ✓".len()) + " " + str("".len()) + " " + str(ok) + " " + str(t > 4))
 }
 "#;
     let out = assert_parity(src);
-    assert_eq!(out, "37 333667 13\n00|13|26|39|\n7 1 10\n5 7 0\n", "the values themselves");
+    assert_eq!(out, "37 333667 13\n00|13|26|39|\n7 1 10\n5 7 0 false true\n", "the values themselves");
 }
 
 /// The heap had been a fixed 1 MiB with no `memory.grow`, and the bump allocator never frees: any program whose strings

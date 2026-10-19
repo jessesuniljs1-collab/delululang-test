@@ -6693,3 +6693,7 @@ printing the interpreter's output (debug build: `loop_sum_1m` 29 ms against 2,24
 `HOT_PATH_TABLE.md` says the table is not re-measured). The book's DL1201 list corrected (it also named the clock, which
 compiles since phase 3k). Locally: `delulu-wasm`'s whole suite, the ten `delulu` targets that run the WASM engine,
 clippy 0, fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+**Postscript (RW 3.4): `str(Bool)` in any program.** It was DL1201 unless the program also used a foreign library, which
+was what interned `"true"` and `"false"`; every module interns them now (a loop's flag is a `Bool`). `loop_parity.rs`'s first
+test prints `str(ok)` and `str(t > 4)` on both engines. `delulu-wasm` green; `wasm_cli` and `cli` green.

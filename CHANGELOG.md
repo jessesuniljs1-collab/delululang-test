@@ -16,7 +16,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Added (RW 3.4, D-V2-163): `delulu run --engine wasm` compiles `while`, `break`, `continue`, assignment to a `var`, and
   `Str.len()`.** Before, any of these made the program DL1201 and it had to run on the interpreter. Four of the six
   Study-C kernels now run on the WASM engine (one before); in a debug build `loop_sum_1m` took 29 ms there against
-  2,244 ms on the interpreter. `for` and every `List` remain DL1201.
+  2,244 ms on the interpreter. `for` and every `List` remain DL1201. `str` of a `Bool` compiles in every program now (it
+  needed a program that also used a foreign library).
 - **Fixed: a WASM program's strings may grow past its first megabyte.** The engine's heap was a fixed 1 MiB that was never
   reused, so a program that built enough strings — recursively, before loops compiled — stopped with `DL0903: memory access
   out of bounds` where the interpreter ran it; reading a file larger than that failed the same way. The memory now grows,

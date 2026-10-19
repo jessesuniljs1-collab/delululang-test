@@ -698,10 +698,11 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
                 intern_string(&m.name, &mut str_off, &mut data);
             }
         }
-        // `str(Bool)` (a Bool from a foreign return, spec §4.2 marshalling matrix) selects one of these.
-        intern_string("true", &mut str_off, &mut data);
-        intern_string("false", &mut str_off, &mut data);
     }
+    // `str(Bool)` selects one of these — any `Bool`, a foreign return's included (spec §4.2 marshalling matrix). Interned
+    // for every module since RW 3.4: a loop's flag is a `Bool` too, and `str` of it was DL1201 without the foreign interface.
+    intern_string("true", &mut str_off, &mut data);
+    intern_string("false", &mut str_off, &mut data);
 
     // Function index map: name -> (absolute wasm function index, return type).
     let mut index: HashMap<String, (u32, Vec<Ty>, Ty)> = HashMap::new();
@@ -2311,17 +2312,17 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         Ok(Ty::Str)
                     }
                     // Stage 4 phase 4g: `str(Bool)` selects the interned "true"/"false" literal (matches
-                    // `Value::Bool.display()`). Available with the foreign interface (which interns them).
+                    // `Value::Bool.display()`). Every module interns them (RW 3.4).
                     Ty::I32 => {
                         let t = *cx
                             .str_off
                             .get("true")
-                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))?
+                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
                             as i32;
                         let f = *cx
                             .str_off
                             .get("false")
-                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))?
+                            .ok_or_else(|| CompileError::Unsupported("str(Bool) without its interned literals".into()))?
                             as i32;
                         cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
                         cx.emit(Instruction::I32Const(t));

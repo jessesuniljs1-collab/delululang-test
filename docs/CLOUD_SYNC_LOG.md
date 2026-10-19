@@ -4084,3 +4084,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (1) this branch's CI, then `master`; (2) re-run Study-C in release (all three lanes) — WSL has
   gcc; (3) `launch/2.0.0`: merge `master`, dispatch `everything` and the release dry run; (4) the WASM fragment's next
   pieces — `str(Bool)` without the foreign interface, `List`; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.4 (postscript): `str(Bool)` in any WASM program (made on the laptop)
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-loops` (pull request #2)   Base: `c3445be`   Commits: this entry's commit.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/loop_parity.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before.
