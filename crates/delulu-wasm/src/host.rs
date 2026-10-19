@@ -1165,6 +1165,34 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             },
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `parse_int(s)` by the interpreter's own rule (`call_builtin`): whether it parsed, and the number — the guest builds
+    // the `Option[Int]` from the two.
+    linker
+        .func_wrap("delulu:str", "parse_int", |mut caller: Caller<'_, HostState>, s: i32| -> (i32, i64) {
+            if caller.data().refused.is_some() {
+                return (0, 0);
+            }
+            let Some(s) = read_guest_str(&mut caller, s) else {
+                caller.data_mut().refused = Some("DL0903: a string given to `parse_int` lies outside the guest's memory".into());
+                return (0, 0);
+            };
+            let answer = delulu_runtime::prim::call_builtin("parse_int", &[Value::str(s)], delulu_diag::Span::new(0, 0, 0));
+            match &answer {
+                Some(Ok(Value::Variant { name, fields })) => match (&**name, fields.as_slice()) {
+                    ("Some", [Value::Int(n)]) => return (1, *n),
+                    ("None", []) => return (0, 0),
+                    _ => {}
+                },
+                Some(Err(fault)) => {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    return (0, 0);
+                }
+                _ => {}
+            }
+            caller.data_mut().refused = Some(format!("`parse_int` answered {answer:?}, which the WASM engine does not hold"));
+            (0, 0)
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
     // `spawn`, `send`, and field access all cross as i64 (Int and actor-ref slot ids are i64).

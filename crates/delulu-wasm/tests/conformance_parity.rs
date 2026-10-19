@@ -106,6 +106,8 @@ fn random_console_programs_match_across_engines() {
     const STR_METHODS: [&str; 8] =
         [".trim(", ".to_upper(", ".to_lower(", ".chars(", ".contains(", ".starts_with(", ".replace(", ".slice("];
     let mut calls = [0u32; STR_METHODS.len()];
+    // Programs that called `parse_int`, and how many of those printed its `None`.
+    let (mut parsed, mut unparsed) = (0u32, 0u32);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -129,6 +131,10 @@ fn random_console_programs_match_across_engines() {
                 compared += 1;
                 for (n, m) in calls.iter_mut().zip(STR_METHODS) {
                     *n += u32::from(src.contains(m));
+                }
+                if src.contains("parse_int(") {
+                    parsed += 1;
+                    unparsed += u32::from(wo.lines().any(|l| l == "none"));
                 }
                 if src.contains(" == ") {
                     compares += 1;
@@ -155,6 +161,7 @@ fn random_console_programs_match_across_engines() {
         "string comparisons: {compares} programs, {equal} of them equal"
     );
     assert!(calls.iter().all(|n| *n > 100), "Str methods: {STR_METHODS:?} called in {calls:?} programs");
+    assert!(parsed > 300 && unparsed > 100, "parse_int: {parsed} programs, {unparsed} of them printing `none`");
 }
 
 #[test]

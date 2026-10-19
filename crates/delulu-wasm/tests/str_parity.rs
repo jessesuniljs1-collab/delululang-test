@@ -119,3 +119,51 @@ fn only_a_module_that_calls_a_str_method_imports_the_interface() {
     assert!(imports("module m\nfn f(s: Str) -> Int {\n  s.trim().len()\n}\n"));
     assert!(imports("module m\nfn f(s: Str) -> Bool {\n  s.contains(\"x\")\n}\n"));
 }
+
+/// `parse_int` answers what the interpreter's own rule answers: the text trimmed, a sign allowed, the whole `Int` range
+/// and nothing past it, and `None` for anything else — an underscore, a hex prefix, digits from another script, an
+/// inner space, the empty string.
+#[test]
+fn parse_int_matches_the_interpreter() {
+    let src = r#"module m
+
+fn show(s: Str) -> Str {
+  match parse_int(s) {
+    Some(n) => str(n),
+    None => "none",
+  }
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(show("42") + " " + show("  -17  ") + " " + show("+5") + " " + show("\t7\n") + " " + show("0") + " " + show("-0"))
+  out.println(show("9223372036854775807") + " " + show("-9223372036854775808") + " " + show("9223372036854775808"))
+  out.println(show("") + " " + show("1_000") + " " + show("0x10") + " " + show("١٢") + " " + show("4 2") + " " + show("x"))
+  var total = 0
+  for w in "3 x 4 -2".split(" ") {
+    total = total + match parse_int(w) {
+      Some(n) => n,
+      None => 100,
+    }
+  }
+  out.println(str(total))
+}
+"#;
+    assert_eq!(
+        assert_parity(src),
+        "42 -17 5 7 0 0\n9223372036854775807 -9223372036854775808 none\nnone none none none none none\n105\n"
+    );
+}
+
+/// Only a module that calls `parse_int` imports it.
+#[test]
+fn only_a_module_that_calls_parse_int_imports_it() {
+    let imports = |src: &str| {
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).unwrap_or_else(|e| panic!("should compile: {e:?}\n{src}"));
+        wasm.windows(b"parse_int".len()).any(|w| w == b"parse_int")
+    };
+    assert!(!imports("module m\nfn f(s: Str) -> Int {\n  s.trim().len()\n}\n"));
+    assert!(imports("module m\nfn f(s: Str) -> Int {\n  match parse_int(s) {\n    Some(n) => n,\n    None => 0,\n  }\n}\n"));
+}

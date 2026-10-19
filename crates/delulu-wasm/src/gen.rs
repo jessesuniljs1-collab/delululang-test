@@ -114,6 +114,21 @@ pub fn random_console_program(seed: u64) -> String {
     if s.chance(1, 2) {
         body.push_str(&format!("  out.println({})\n", gen_str_method(&mut s, 2)));
     }
+    // `parse_int` (on the WASM engine since 2026-10-20), from a stream of its own: text that parses — padded, signed, the
+    // ends of the `Int` range — and text that does not, or a number printed and read back.
+    let mut p = Rng::new(seed ^ 0x6A09_E667_F3BC_C909);
+    if p.chance(1, 3) {
+        const NUMS: [&str; 10] =
+            ["42", " -17 ", "+5", "9223372036854775807", "-9223372036854775808", "9223372036854775808", "", "1_000", "x1", "4 2"];
+        let text = if p.chance(1, 3) {
+            format!("str({})", gen_safe_int(&mut p, 2))
+        } else {
+            format!("\"{}\"", NUMS[p.below(NUMS.len() as u64) as usize])
+        };
+        body.push_str(&format!(
+            "  out.println(match parse_int({text}) {{\n    Some(n) => str(n),\n    None => \"none\",\n  }})\n"
+        ));
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);

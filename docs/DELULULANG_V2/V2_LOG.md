@@ -7121,3 +7121,33 @@ Mutants, all red, control green:
 
 **Evidence.** `named_fn_parity` 3; `loop_parity` 7; the whole `delulu-wasm` suite green; the release differential with the
 new loop generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: `parse_int` on the WASM engine (RW 3.4)
+
+**`parse_int` compiles.** It is one host import, `delulu:str.parse_int(s) -> (parsed, value)`, which uses WebAssembly's
+multiple results. The host reads the text and calls the interpreter's own `prim::call_builtin("parse_int", …)`. It
+answers 1 and the number for `Some`, or 0 and 0 for `None`, and refuses anything else rather than reading it as `None`.
+The guest builds the `Option[Int]` from the two, as `List.get` builds its own. The import is declared only in a module
+whose compiled bodies call `parse_int`, found by `module_calls_builtin` (a builtin's name cannot be redefined, DL0302).
+`examples/guide/03_errors.delulu` now compiles and prints the interpreter's output on both engines, byte for byte. The
+corpus's entry points: 7 of 17.
+
+`str_parity.rs`:
+- `parse_int_matches_the_interpreter` — padded, signed and tab-and-newline-wrapped text, `0` and `-0`, both ends of the
+  `Int` range and one past it, the empty string, `1_000`, `0x10`, Arabic-Indic digits, an inner space, a word, and a sum
+  over split words;
+- `only_a_module_that_calls_parse_int_imports_it`.
+
+The console generator writes a `match parse_int(…)` line in a third of its programs, from a stream of its own, before the
+comparison line. Its texts are numbers that parse, numbers that do not, and `str` of a generated `Int`.
+`conformance_parity` asserts over 300 programs call it and over 100 print its `None`.
+
+Mutants, all red, control green:
+- M558 — the host answering `None` for every number;
+- M559 — the guest's test inverted;
+- M560 — the import never declared;
+- M561 — the import always declared (red in both import tests);
+- M562 — the generator writing no `parse_int`.
+
+**Evidence.** `str_parity` 5; `conformance_parity` 6; the whole `delulu-wasm` suite green; the release differential with
+the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.

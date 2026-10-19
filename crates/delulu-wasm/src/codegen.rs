@@ -425,6 +425,8 @@ struct Imports {
     str_eq: u32,
     /// `delulu:str.str_method` — a `Str` method run host-side by the interpreter's own `call_str_method`.
     str_method: u32,
+    /// `delulu:str.parse_int` — the builtin `parse_int`, run host-side by the interpreter's own `call_builtin`.
+    parse_int: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -638,6 +640,13 @@ fn module_calls_str_methods(env: &EnumEnv, module: &Module) -> bool {
     module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if str_method_sig(&name.name).is_some()), false)
 }
 
+/// Does any function whose body is compiled call the builtin `name` (`parse_int`)? A builtin's name cannot be redefined
+/// (DL0302), so a call by that name is the builtin's.
+fn module_calls_builtin(env: &EnumEnv, module: &Module, name: &str) -> bool {
+    let hit = |e: &Expr| matches!(e, Expr::Call { callee, .. } if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == name));
+    module_any(env, module, &hit, false)
+}
+
 /// The `Str` methods the WASM engine runs host-side, through the interpreter's own `call_str_method` — so each answers
 /// exactly what the interpreter answers, Unicode and all (RW 3.4). A method's id is its index here; `host.rs` reads it
 /// back. `len` and `split` have their own paths (`__str_len`, `delulu:list.str_split`).
@@ -796,6 +805,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         list_slot: u32::MAX,
         str_eq: u32::MAX,
         str_method: u32::MAX,
+        parse_int: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -845,6 +855,11 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let needs_str_methods = module_calls_str_methods(&env, module);
     if needs_str_methods {
         imp.str_method = n_imports;
+        n_imports += 1;
+    }
+    let needs_parse_int = module_calls_builtin(&env, module, "parse_int");
+    if needs_parse_int {
+        imp.parse_int = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -986,6 +1001,13 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I64, ValType::I64], [ValType::I32]);
         next_type += 1;
     }
+    let mut parse_int_ty = 0;
+    if needs_parse_int {
+        parse_int_ty = next_type;
+        // parse_int(s) -> (parsed, value): 1 and the number, or 0 and 0
+        types.ty().function([ValType::I32], [ValType::I32, ValType::I64]);
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1075,6 +1097,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     }
     if needs_str_methods {
         imports.import("delulu:str", "str_method", EntityType::Function(str_method_ty));
+    }
+    if needs_parse_int {
+        imports.import("delulu:str", "parse_int", EntityType::Function(parse_int_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -1198,7 +1223,15 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors || needs_lists || needs_str_methods
+    if needs_console
+        || needs_clock
+        || needs_rand
+        || needs_fs
+        || needs_foreign
+        || needs_actors
+        || needs_lists
+        || needs_str_methods
+        || needs_parse_int
     {
         m.section(&imports);
     }
@@ -2659,6 +2692,10 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 _ => return Err(CompileError::Unsupported("an indirect or builtin call".into())),
             };
             // Phase 3j: `str(x)` — Int formats via `__int_to_str`; a Str is already a string (identity).
+            // RW 3.4: `parse_int(s)`, parsed host-side by the interpreter's own rule into `Some(n)` or `None`.
+            if name == "parse_int" && args.len() == 1 {
+                return compile_parse_int(&args[0], cx);
+            }
             if name == "str" && args.len() == 1 {
                 let at = compile_expr(&args[0], cx)?;
                 return match at {
@@ -2765,6 +2802,44 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
         Expr::Block(b) => compile_block(b, cx),
         _ => Err(CompileError::Unsupported("this expression form".into())),
     }
+}
+
+/// `parse_int(s)` (RW 3.4): the host parses by the interpreter's own rule (`call_builtin`) and answers whether it parsed
+/// and the number; the guest builds the `Option[Int]` from the two, as `List.get` builds its own.
+fn compile_parse_int(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.parse_int == u32::MAX {
+        return Err(CompileError::Unsupported("`parse_int` in a module compiled without the string interface".into()));
+    }
+    compile_expr_as(arg, cx, Ty::Str)?;
+    cx.emit(Instruction::Call(cx.imp.parse_int));
+    let (parsed, value) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I64)?);
+    cx.emit(Instruction::LocalSet(value));
+    cx.emit(Instruction::LocalSet(parsed));
+    let opt = Ty::Option(Scalar::I64);
+    let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+    let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+    let (some, none) = (tag("Some"), tag("None"));
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(cell));
+    cx.emit(Instruction::LocalGet(parsed));
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(some));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(field_offset(0)));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalGet(value));
+    store_scalar(cx, Scalar::I64);
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(none));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(cell));
+    Ok(opt)
 }
 
 /// A `Str` method run host-side (`delulu:str.str_method`), the receiver on the stack: its arguments are computed in order,

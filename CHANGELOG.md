@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `parse_int` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `parse_int`.** The WASM engine hands the text to the interpreter's own
+  implementation, so it gives the same answers: surrounding whitespace ignored, a sign allowed, `None` past the `Int`
+  range and for anything that is not a plain decimal number. `examples/guide/03_errors.delulu` now runs on the WASM engine
+  with the interpreter's output.
+
 ## Unreleased — a function's name as a value on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles a function named as a value** — `apply(double, 21)`, `xs.map(double)`,
