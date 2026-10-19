@@ -237,6 +237,93 @@ fn rpc(state_dir: &std::path::Path, body: ReqBody) -> Result<Response, CustodyDe
     brokerd::request(state_dir, body).map_err(|e| dl1401(&e.to_string()))
 }
 
+// ----- a run's own node ends with the run (RW 4.57, D-V2-157) ----------------------------------------
+
+/// How long a run's own node outlives its run's last beat (RW 4.57, D-V2-157). Generous on purpose: the dead-man is there
+/// to reap a KILLED run's authority, and a run whose beats a loaded machine delayed past it would lose its node mid-run.
+pub const RUN_DEADMAN_PERIOD: Duration = Duration::from_secs(10);
+
+/// The period in force: [`RUN_DEADMAN_PERIOD`], or a SHORTER one from `DELULU_RUN_DEADMAN_MS` (tests; an operator who
+/// wants a killed run's node gone sooner). It can only shorten: a longer, unparseable or sub-minimum value is ignored, so
+/// the knob can neither keep a dead run's node longer nor make the broker refuse the arming.
+pub fn run_deadman_period(requested: Option<&str>) -> Duration {
+    requested
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .filter(|d| *d >= delulu_broker::deadman::MIN_PERIOD && *d < RUN_DEADMAN_PERIOD)
+        .unwrap_or(RUN_DEADMAN_PERIOD)
+}
+
+/// The root node a `run --broker daemon --grant …` issued for itself alone (issue-then-run, spec §3.2), held for exactly
+/// as long as the run (RW 4.57, D-V2-157). Before, it stayed `[live]` after every run — and, with it, any node a KILLED
+/// run had minted below it (a plugin's, a device's): authority nobody holds, for the daemon's whole life.
+///
+/// Two halves, because a run cannot always reach its own end. **A run that ends** revokes the node as itself when this
+/// is dropped — after its devices are closed, so the device nodes' order (`close_devices`) is unchanged, and transitively,
+/// so anything still live below goes with it. **A run that never reaches its end** (killed, crashed, its machine lost)
+/// is reaped by the broker's dead-man (D-V2-106), armed on the node here: a thread of this run's own beats it every fifth
+/// of the period, and if the beats stop the daemon revokes the node and its subtree as itself, the cause in the record.
+/// Neither half adds authority — a node may always revoke itself — and a lease run's node is the delegator's, so it is
+/// never held this way.
+pub struct RunNode {
+    state_dir: PathBuf,
+    node: GrantId,
+    /// Dropped to stop the beater; the beater is never joined, so a run's end never waits on a wedged daemon.
+    stop: Option<std::sync::mpsc::Sender<()>>,
+}
+
+impl RunNode {
+    /// Arm the dead-man on `custody`'s node and start beating it. A refused arming is the run's refusal: the node is revoked
+    /// at once (a run that cannot be reaped does not start) and the daemon's own code and words are returned.
+    pub fn hold(custody: &BrokerClientCustody) -> Result<RunNode, CustodyDenial> {
+        let (state_dir, node) = (custody.state_dir.clone(), custody.node.clone());
+        let period = run_deadman_period(std::env::var("DELULU_RUN_DEADMAN_MS").ok().as_deref());
+        let refused = |d: CustodyDenial| {
+            let _ = rpc(&state_dir, ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() });
+            Err(d)
+        };
+        let key = match rpc(
+            &state_dir,
+            ReqBody::ArmDeadman { node: node.as_str().to_string(), period_ms: period.as_millis() as u64 },
+        ) {
+            Ok(Response::DeadmanArmed { key, .. }) => key,
+            Ok(Response::Error { code, message, .. }) => return refused(CustodyDenial::new(static_code(&code), message)),
+            Ok(other) => return refused(dl1401(&format!("unexpected dead-man response: {other:?}"))),
+            Err(d) => return refused(d),
+        };
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        let (dir, beaten) = (state_dir.clone(), node.as_str().to_string());
+        let spawned = std::thread::Builder::new().name("delulu-run-beat".into()).spawn(move || loop {
+            match stopped.recv_timeout(period / 5) {
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                _ => return,
+            }
+            match rpc(&dir, ReqBody::Beat { node: beaten.clone(), key: key.clone() }) {
+                Ok(Response::Ok) => {}
+                // Revoked (an operator, an e-stop), or the dead-man already fired: nothing is left to keep alive.
+                Ok(_) => return,
+                // Unreachable for a moment: the next beat may still arrive within the period.
+                Err(_) => {}
+            }
+        });
+        if let Err(e) = spawned {
+            return refused(dl1401(&format!("the run's beat thread could not start: {e}")));
+        }
+        Ok(RunNode { state_dir, node, stop: Some(stop) })
+    }
+}
+
+impl Drop for RunNode {
+    fn drop(&mut self) {
+        drop(self.stop.take());
+        // Best effort: a broker that cannot be reached now has the dead-man to fall back on.
+        let _ = rpc(
+            &self.state_dir,
+            ReqBody::Revoke { caller: self.node.as_str().to_string(), target: self.node.as_str().to_string() },
+        );
+    }
+}
+
 impl Custody for BrokerClientCustody {
     fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
         match op.class() {
@@ -483,6 +570,19 @@ mod tests {
         assert_eq!(clamp_epoch_ms(Some(10)), 10);
         assert_eq!(clamp_epoch_ms(Some(0)), 1, "floor 1 ms");
         assert_eq!(clamp_epoch_ms(Some(1000)), 250, "ceiling 250 ms (spec §4.1)");
+    }
+
+    /// RW 4.57 (D-V2-157): `DELULU_RUN_DEADMAN_MS` can only SHORTEN a run's dead-man — a longer, unparseable, zero or
+    /// sub-minimum value leaves the default, so the knob can neither keep a killed run's node longer nor make the arming
+    /// fail.
+    #[test]
+    fn the_run_dead_man_period_can_only_be_shortened() {
+        assert_eq!(run_deadman_period(None), RUN_DEADMAN_PERIOD);
+        assert_eq!(run_deadman_period(Some("3000")), Duration::from_millis(3000));
+        assert_eq!(run_deadman_period(Some("100")), Duration::from_millis(100), "the broker's own minimum is allowed");
+        for ignored in ["99", "0", "10000", "60000", "-5", "3s", ""] {
+            assert_eq!(run_deadman_period(Some(ignored)), RUN_DEADMAN_PERIOD, "`{ignored}` must leave the default");
+        }
     }
 
     #[test]
