@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — every `Str` method on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and
+  `slice`.** With `len` and `split`, every `Str` method compiles now. The WASM engine hands each call to the
+  interpreter's own implementation, so the answers are the same: whitespace beyond ASCII, `ß` uppercasing to `SS`,
+  character-indexed slices, and an empty `replace` pattern that leaves the string alone. A program that calls none of
+  them compiles to the same module as before.
+
 ## Unreleased — `Str == Str` on the WASM engine; the performance figures re-measured over all six benchmarks, 2026-10-20
 
 - **Added: `--engine wasm` compiles `==` and `!=` on two `Str`s.** It compares the bytes, as the interpreter does.

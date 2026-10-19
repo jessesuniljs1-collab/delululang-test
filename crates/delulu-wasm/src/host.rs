@@ -93,7 +93,7 @@ use delulu_runtime::foreign::{self, FVal, ForeignErr, ForeignHandle, ForeignSig}
 // Stage 5 phase 5f: the WASM host calls the SAME `Custody` seam the interpreter does (playbook §1 —
 // "the interpreter and the WASM host both call the trait"). `None` = embedded (Stage 1–4 behavior).
 use delulu_runtime::{Custody, CustodyDecision, Op as CustodyOp};
-use delulu_runtime::{TraceRecord, TraceSink};
+use delulu_runtime::{TraceRecord, TraceSink, Value};
 
 /// The custody handle shared between `HostConfig` and `HostState`: interior-mutable because custody
 /// `check` refreshes the epoch cache, `Rc` because the config is `Clone`.
@@ -1102,6 +1102,68 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         .func_wrap("delulu:list", "index_fault", |mut caller: Caller<'_, HostState>, index: i64, len: i32| {
             caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
         })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:str` host interface (pure: neither traced nor gated) ----------------------------------
+    // A `Str` method (`codegen.rs`'s `STR_METHODS`) run by the interpreter's own `call_str_method`, so the WASM engine
+    // answers exactly what the interpreter answers — Unicode case mappings, character-indexed `slice`, `replace` of an
+    // empty pattern — rather than a second implementation that could drift. Its answer is written back as the guest
+    // reads it: a `Str` as a string cell, a `Bool` as 0 or 1, a `List[Str]` as a list.
+    linker
+        .func_wrap(
+            "delulu:str",
+            "str_method",
+            |mut caller: Caller<'_, HostState>, s: i32, method: i32, a: i32, b: i32, lo: i64, hi: i64| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let Some((name, strs, ints)) = crate::codegen::str_method_arity(method) else {
+                    caller.data_mut().refused = Some(format!("DL0907: no `Str` method numbered {method}"));
+                    return 0;
+                };
+                let recv = read_guest_str(&mut caller, s);
+                let given: Option<Vec<String>> = [a, b].into_iter().take(strs).map(|p| read_guest_str(&mut caller, p)).collect();
+                let (Some(recv), Some(given)) = (recv, given) else {
+                    caller.data_mut().refused =
+                        Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+                    return 0;
+                };
+                let mut args: Vec<Value> = given.into_iter().map(Value::str).collect();
+                args.extend([lo, hi].into_iter().take(ints).map(Value::Int));
+                let answer = match delulu_runtime::prim::call_str_method(&recv, name, &args, delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        return 0;
+                    }
+                };
+                let parts: Option<Vec<String>> = match &answer {
+                    Value::List(xs) => xs
+                        .borrow()
+                        .iter()
+                        .map(|v| match v {
+                            Value::Str(t) => Some(t.to_string()),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => None,
+                };
+                let written = match (answer, parts) {
+                    (Value::Bool(yes), _) => return i32::from(yes),
+                    (Value::Str(t), _) => write_str_cell(&mut caller, &t),
+                    (Value::List(_), Some(parts)) => write_str_list(&mut caller, &parts),
+                    _ => {
+                        caller.data_mut().refused =
+                            Some(format!("DL0907: `{name}` answered a value the WASM engine does not hold"));
+                        return 0;
+                    }
+                };
+                written.unwrap_or_else(|()| {
+                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
+                    0
+                })
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------

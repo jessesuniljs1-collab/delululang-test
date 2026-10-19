@@ -108,6 +108,12 @@ pub fn random_console_program(seed: u64) -> String {
     for _ in 0..nlines {
         body.push_str(&format!("  out.println({})\n", gen_str_expr(&mut r, 2)));
     }
+    // The `Str` methods (on the WASM engine since 2026-10-20), from a stream of their own, before the comparison line so
+    // that line stays the last.
+    let mut s = Rng::new(seed ^ 0xE703_7ED1_A0B4_28DB);
+    if s.chance(1, 2) {
+        body.push_str(&format!("  out.println({})\n", gen_str_method(&mut s, 2)));
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);
@@ -127,6 +133,30 @@ fn gen_str_expr(r: &mut Rng, depth: u32) -> String {
         };
     }
     format!("({} + {})", gen_str_expr(r, depth - 1), gen_str_expr(r, depth - 1))
+}
+
+/// A `Str` from a chain of `Str` methods over text that is not all ASCII — whitespace beyond ASCII, a `ß` that
+/// uppercases to two letters, a titlecase `ǅ` — with patterns that sometimes match and sometimes are empty, and slice
+/// bounds that are sometimes negative, past the end or crossed; a `Bool` or a count is printed through `str`.
+fn gen_str_method(r: &mut Rng, depth: u32) -> String {
+    const TEXTS: [&str; 7] = ["  ab c ", "Straße", "héllo ✓", "x.y.x", "MiXeD", "", "\\u{3000}ǅé\\t"];
+    const PATS: [&str; 8] = ["", "a", "x", "ß", "é", " ", "X", "l"];
+    let pat = |r: &mut Rng| format!("\"{}\"", PATS[r.below(PATS.len() as u64) as usize]);
+    let recv = if depth == 0 || r.chance(1, 3) {
+        format!("\"{}\"", TEXTS[r.below(TEXTS.len() as u64) as usize])
+    } else {
+        gen_str_method(r, depth - 1)
+    };
+    match r.below(8) {
+        0 => format!("{recv}.trim()"),
+        1 => format!("{recv}.to_upper()"),
+        2 => format!("{recv}.to_lower()"),
+        3 => format!("str({recv}.chars().len())"),
+        4 => format!("str({recv}.contains({}))", pat(r)),
+        5 => format!("str({recv}.starts_with({}))", pat(r)),
+        6 => format!("{recv}.replace({}, {})", pat(r), pat(r)),
+        _ => format!("{recv}.slice({}, {})", r.below(9) as i64 - 2, r.below(9) as i64 - 2),
+    }
 }
 
 fn gen_word(r: &mut Rng) -> &'static str {

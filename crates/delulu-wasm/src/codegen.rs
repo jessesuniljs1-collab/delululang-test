@@ -651,6 +651,16 @@ fn str_method_sig(name: &str) -> Option<(u32, &'static [Ty], Ty)> {
     Some((id, args, ret))
 }
 
+/// What `host.rs` hands `call_str_method` for the method numbered `id`: its name, and how many `Str` arguments (the
+/// import's `a` and `b`) and `Int` arguments (`lo` and `hi`) it takes — read from `str_method_sig`, so the two sides
+/// cannot disagree on a slot.
+pub(crate) fn str_method_arity(id: i32) -> Option<(&'static str, usize, usize)> {
+    let name = *STR_METHODS.get(usize::try_from(id).ok()?)?;
+    let (_, params, _) = str_method_sig(name)?;
+    let strs = params.iter().filter(|t| **t == Ty::Str).count();
+    Some((name, strs, params.len() - strs))
+}
+
 /// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
 /// which a comparison of two `Str`s calls.
 fn module_compares(env: &EnumEnv, module: &Module) -> bool {

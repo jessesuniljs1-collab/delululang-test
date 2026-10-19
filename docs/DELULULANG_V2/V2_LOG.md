@@ -7031,3 +7031,46 @@ not met. Its coverage half is closed for this suite; its speed half stands.
 
 **Evidence.** `delulu-measure` 15 unit tests (`study_c::tests` with the new one); `list_parity` 10; `conformance_parity` 6;
 mutants above; the second run's `REPORT.md` and `results.json` as published.
+
+## 2026-10-20 — the laptop: every `Str` method on the WASM engine (RW 3.4)
+
+**`trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and `slice`** compile. Each is one host
+import, `delulu:str.str_method(s, method, a, b, lo, hi) -> i32`: the method's number in `STR_METHODS`, its `Str`
+arguments in `a` and `b`, its `Int` arguments in `lo` and `hi`. The host reads the strings, calls the interpreter's own
+`prim::call_str_method`, and writes the answer back as the guest reads it: a string cell, 0 or 1, or a list written in one
+allocation. The WASM engine therefore cannot disagree with the interpreter about Unicode, because there is one
+implementation, not two. Both sides read the argument slots from one table (`str_method_sig` through
+`str_method_arity`). A module that calls none of these methods imports nothing new. With `len` and `split`, every `Str`
+method the checker knows compiles.
+
+The codegen half was committed unfinished at the end of the previous session (`3ae3b3f`, marked WIP); this entry
+finishes it: the host function, the tests, the generator and the records.
+
+`str_parity.rs`:
+- `each_str_method_matches_the_interpreter` — whitespace beyond ASCII (U+3000, tab, newline), `straße` uppercasing to
+  `STRASSE`, a precomposed `é` that does not contain `e`, an empty pattern for `contains` and `replace`, the empty
+  string, and slices with a negative start, an end past the string and crossed bounds;
+- `str_methods_compose_with_the_rest_of_the_fragment` — chained calls in a pure function, a word split from a line with
+  an empty part, a `for` over `chars`, arguments computed from variables, answers compared and counted;
+- `only_a_module_that_calls_a_str_method_imports_the_interface`.
+
+The console generator writes a chain of `Str` methods in about half its programs, from a stream of its own, before the
+comparison line. Its texts include U+3000, `ß`, `ǅ` and `é`; its patterns include the empty one; its slice bounds run
+from −2 to 6. `conformance_parity` asserts each of the eight methods appears in over 100 of its 2,000 programs.
+`fragment_external_programs_are_compile_errors` named `s.trim()` as outside the fragment; it now names `fold`.
+
+Mutants, all red, control green:
+- M543 — the argument counts swapped;
+- M544 — the `Str` arguments reversed;
+- M545 — a `Bool` answer inverted;
+- M546 — `lo` and `hi` swapped;
+- M547 — the import never declared;
+- M548 — the import always declared (red only in the import test);
+- M549 — the generator writing no method (red only in the per-method count).
+
+Measured with `delulu build FILE --target wasm` over the corpus's 17 entry points: still 5 compile. The two that
+stopped at `.trim` move on: `04_effects` now stops at a named function passed as a value (`apply(double, 21)`),
+`telemetry_report` at `parse_float`.
+
+**Evidence.** `str_parity` 3; `conformance_parity` 6; the whole `delulu-wasm` suite (87 unit tests and every test file)
+green; the release differential with the new generator: 50,000 checked, 45,007 agreed, 4,993 both faulted, 0 mismatches.

@@ -4377,3 +4377,28 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) the CI of #5 and #6, landing each on green; the launch `everything` run `39296491537`; then merge `master` into
   `launch/2.0.0`; (2) `pop` and the other list methods on WASM; `split` without the host crossing; RW 4.66, 4.67, 6.1, 6.2;
   (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — every `Str` method on the WASM engine; #5 and #6 landed (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-strmethods`   Pull request: #7   Merged: not yet (on green CI)
+- CI read before this branch: #5's run `39304227543` and #6's run `39305971992` read success on every job (`miri-slow` and
+  `heavy-gates` skipped, as on every pull request), so `master` was fast-forwarded to `46caa70` (#6, which carries #5) and
+  pushed; GitHub marked both merged. Also read success: `launch/2.0.0` at `c3b33f3`, `ci.yml` `everything`
+  `39296491537` (both `miri-slow` jobs included) and the release dry run `39296497024`; `master`'s push runs
+  `39296967930` (`6a26c1f`), `39303198616` (`9367b13`) and `39304283373` (`a53f90a`).
+- Base: `46caa70`. The branch's first commit `3ae3b3f` is the previous session's unfinished codegen half (its message
+  says so); the second finishes it.
+- What: `V2_LOG.md` (this date, the third entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`STR_METHODS`, `str_method_sig`, `str_method_arity`,
+  `compile_str_method`, the `delulu:str` import), `crates/delulu-wasm/src/host.rs` (`delulu:str.str_method`),
+  `crates/delulu-wasm/src/gen.rs` (`gen_str_method`), `crates/delulu-wasm/tests/conformance_parity.rs`, `CHANGELOG.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `crates/delulu-wasm/tests/str_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M543–M549; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) this branch's CI, landing on green; then merge `master` into `launch/2.0.0` and dispatch its
+  `everything` and release dry runs; (2) on WASM: a named function passed as a value, `parse_int`/`parse_float`, an empty
+  list typed from the checker, `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only
+  on the owner's word.
