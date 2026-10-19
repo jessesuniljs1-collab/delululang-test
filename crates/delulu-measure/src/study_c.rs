@@ -618,7 +618,7 @@ mod tests {
             c
         })
         .expect("the test binary lists its tests");
-        assert!(min >= 100 && min < 60_000_000 && spread < 60_000_000, "{min} µs, spread {spread} µs");
+        assert!((100..60_000_000).contains(&min) && spread < 60_000_000, "{min} µs, spread {spread} µs");
         assert!(printed.contains("time_it_reads_a_process_in_microseconds"), "{printed}");
     }
 }
