@@ -15,6 +15,9 @@
 //! * **It reads only what the host recorded** — the hash-chained audit, as it is appended — and
 //!   trusts nothing a guest says. It resumes after the last record HASH it read, never a seq: a hash
 //!   also shows a chain rewritten under it (and until D-V2-102 two writers numbered the chain apart).
+//!   Each poll reads only what was appended since (`audit::Follower`), and acts only on a record that
+//!   names the one before it and whose hash is its own (MONITOR-CHAIN-1, D-V2-158): a whole read of a
+//!   long chain outlasted the dead-man's period, and a healthy monitor was revoked by its own broker.
 //! * **Its rules are declarative and few:** `envelope` (any envelope refusal — a `use` `deny` with
 //!   `refused_by: envelope`, D-V2-100), `special-use` (any fetch the egress client refused because its
 //!   host is, or resolved to, a special-use address — a `use` `deny` with `refused_by: egress` and
@@ -302,12 +305,14 @@ fn cmd_watch(rest: &[String]) -> i32 {
         Some(n) => return fail(format!("`{}` is {} — there is nothing under it to watch", o.node, n.state)),
         None => return fail(format!("`{}` is not a node of this broker's tree", o.node)),
     }
-    // Watch from NOW: the chain's last record at start is the cursor, by hash (AUDIT-SEQ-1).
-    let mut cursor: Option<String> = match read_chain() {
-        Ok(recs) => recs.last().map(|r| r.hash.clone()),
-        Err(e) => return fail(e),
+    // Watch from NOW: the chain's last record at start is where the watch begins, by hash (AUDIT-SEQ-1). MONITOR-CHAIN-1
+    // (RW 4.49): each poll reads only what was appended since — a whole read of a long chain outlasted the dead-man's period
+    // and a healthy monitor was revoked by its own broker — and acts only on records that verify against the one before.
+    let mut follower = match delulu_broker::audit::Follower::at_end(&audit_dir) {
+        Ok(f) => f,
+        Err(e) => return fail(format!("the audit chain at `{}` cannot be read: {e}", audit_dir.display())),
     };
-    let from = cursor.clone();
+    let from = Some(follower.head().to_string()).filter(|h| h != delulu_broker::GENESIS_HASH);
     let rule_names: Vec<String> = o.rules.iter().map(Rule::name).collect();
     // P8-04 step 5: the dead-man, armed BEFORE the watch begins, so a monitor killed the moment it says
     // "watching" is already one whose death quarantines.
@@ -450,37 +455,40 @@ fn cmd_watch(rest: &[String]) -> i32 {
             break;
         }
         let runs = runs_under(&o.node, &nodes);
-        let recs = match read_chain() {
-            Ok(r) => r,
+        let got = match follower.read_new() {
+            Ok(got) => got,
             Err(e) => {
                 refused_any = true;
-                ended = e;
+                ended = format!("the audit chain at `{}` cannot be read: {e}", audit_dir.display());
                 break;
             }
         };
-        // A long chain is a slow read: beat again once it is read, so the period covers one read, not two.
+        // A large append is a slow read: beat again once it is read, so the period covers one read, not two.
         if let Err((fatal, why)) = beat() {
             refused_any |= fatal;
             clean_end = !fatal;
             ended = why;
             break;
         }
-        let start = match &cursor {
-            None => 0,
-            Some(h) => match recs.iter().position(|r| &r.hash == h) {
-                Some(i) => i + 1,
-                None => {
-                    // The record the monitor last read is gone: the chain was rewritten under it. Say
-                    // so, and read on from the head — never re-judge records already judged.
-                    eprintln!("monitor: WARNING — the record it last read is no longer in the chain; reading on from the head");
-                    recs.len()
-                }
-            },
-        };
+        if got.rewritten {
+            // The record the monitor last read is gone: the chain was rewritten under it. Say so, and read on from the
+            // head — never re-judge records already judged.
+            eprintln!("monitor: WARNING — the record it last read is no longer in the chain; reading on from the head");
+        }
+        if !got.unverified.is_empty() {
+            // Evidence the chain does not vouch for is never acted on: a damaged line, or one written without the format.
+            let seqs: Vec<String> = got.unverified.iter().map(|s| s.map_or("?".into(), |s| s.to_string())).collect();
+            eprintln!(
+                "monitor: WARNING — {} line(s) past where it had read do not verify against the chain (seq {}) — judged nothing \
+                 on them; `delulu audit verify` names where the chain breaks",
+                seqs.len(),
+                seqs.join(", ")
+            );
+        }
         // Evidence per run, in chain order; each run fires at most once.
         let mut fire: BTreeMap<String, Evidence> = BTreeMap::new();
-        records_read += recs.len() - start;
-        for r in &recs[start..] {
+        records_read += got.records.len();
+        for r in &got.records {
             let Some(run) = r.actor_node.as_deref().and_then(|a| runs.get(a)) else { continue };
             // A run is a node UNDER the monitor's; what the monitor's own node does — a refused
             // delegation under it, an operator's typo — is not a run's misbehaviour, and quarantining
@@ -520,7 +528,6 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 }
             }
         }
-        cursor = recs.last().map(|r| r.hash.clone()).or(cursor);
         for (run, ev) in fire {
             quarantined.insert(run.clone());
             let seqs: Vec<String> = ev.records.iter().map(|r| r.0.to_string()).collect();
