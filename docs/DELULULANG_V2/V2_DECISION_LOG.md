@@ -3789,6 +3789,37 @@ tree (`url` → `idna` → `idna_adapter`; Unicode-3.0, allowed by `deny.toml`),
 not a new crate, and the broker stays transport-free (its Ruling 1). RW 4.17's other half — a UNC path in an operator's
 grant on Windows — stays open.
 
+## D-V2-157 — A run's own root node ends with the run: revoked at its end, reaped by a dead-man when it is killed (RW 4.57) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 2: a scratch daemon, then three witnesses in `plugin_load_cli.rs`, red on the
+old code). Under the daemon, `run --grant …` issues a root node for itself alone (issue-then-run, `STAGE5_SPECIFICATION.md`
+§3.2). After a run that ended CLEANLY its plugin's node was revoked (RW 4.51) and its own root stayed `[live]`; after a
+run stopped by its budget or killed, both stayed `[live]` — 30 s after a `kill -9`, still `[live]`. The daemon's tree
+lives in its memory, so every run left root authority nobody held, for the daemon's whole life, and `grants list` showed
+it to the operator as live. RW 4.57 (the red team's F-01, routine run 17) had named the killed half from code reading;
+the clean-end half was new.
+
+**Decision.** (1) **A run's own root is held for exactly as long as the run** (`broker_client::RunNode`, at both places a
+root is issued for a run: `run_cmd.rs` and the sandboxed host in `guest.rs`). At the run's end it is revoked AS ITSELF —
+after `close_devices`, so the device nodes' order is unchanged — and transitively, so anything still live below it goes
+with it. (2) **A run that never reaches its end is reaped by the broker's dead-man** (D-V2-106), armed on the root as it is
+issued and beaten by a thread of the run's own every fifth of the period: when the beats stop, the daemon revokes the root
+and its subtree as itself, its record naming the silence. A budget stop ends the process without returning (`process::exit`),
+so it is reaped this way too. (3) **The period is 10 s**, generous on purpose — it reaps a dead run's authority, and a
+healthy run whose beats a loaded machine delayed past it would lose its node mid-run; `DELULU_RUN_DEADMAN_MS` may only
+SHORTEN it (tests; an operator who wants a killed run reaped sooner), as `DELULU_FOREIGN_CALL_DEADLINE_MS` may only
+shorten its bound. (4) **A refused arming refuses the run** — its node revoked at once, the daemon's code and words
+reported: a run whose authority could not be reaped does not start. (5) **Not a lease run:** its node is the delegator's
+(a `--multi` lease is redeemed by several runs), so no one run revokes or dead-mans it; a killed lease run's plugin nodes
+stay live below the lease node — inside authority that is live anyway, by the delegator's choice. That is the half of
+RW 4.57 left open. (6) **Hardening, not redefinition:** a node may always revoke itself, and arming a future
+self-revocation adds no authority (D-V2-106's argument); the holder model (§3.3) already says a node is its holder's —
+the tree now says when the holder is gone. (7) **A run that is suspended past the period is treated as dead** — Ctrl-Z,
+`SIGSTOP`, a debugger's halt: its beats stop, the daemon reaps its node, and once it resumes its next use is refused (fail
+closed), the record naming the silence. Not measured: a host that sleeps past the period — whether the daemon's monotonic
+clock counts the sleep is the platform's; where it does, a run's node may be reaped on waking in the same way. The cost, stated: each daemon run's chain gains two records (its root's
+`deadman-arm` and its end's `revoke`) and its broker one beat every 2 s per run.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

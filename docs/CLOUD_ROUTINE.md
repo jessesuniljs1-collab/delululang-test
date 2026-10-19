@@ -430,7 +430,8 @@ fool. Keep this file short enough to read at the start of every run.
 - **Never weaken a test to make it pass, never lengthen a sleep to make a timing test green** — a timing
   test failing only on CI may be measuring the runner (`HANDOFF.md` §11.5). **A witness's baseline is the state it needs, never a
   throughput** (run 17: "200 requests in 1.6 s" — CI's parallel test job answered 45 and `master` went red); run a new timing-shaped
-  witness with all four CPUs busy before it reaches `master`, and assert the guarantee before the baseline.
+  witness with all four CPUs busy before it reaches `master`, and assert the guarantee before the baseline — loaded by four
+  concurrent copies of the witness's own test binary (on-demand run 2: the harness refuses shell busy loops).
   **A witness whose subject races the program is timing-shaped even when it measures no time** (run 19: the break-glass
   witness took the program's output as its baseline, and on a loaded machine the monitor quarantined the run before it
   printed — red once in the full suite, 1 of 5 with four CPUs busy, after `master` had it).
