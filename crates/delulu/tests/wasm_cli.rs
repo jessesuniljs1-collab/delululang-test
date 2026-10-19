@@ -30,13 +30,16 @@ fn run_engine_wasm_prints_console_output() {
 }
 
 /// The book's guide chapters that the WASM engine runs since 2026-10-20 (RW 3.4), end to end through the command line:
-/// `02` (a list begun empty, typed by the checker — what `compile_checked` is for), `03` (`parse_int`), `04` (a function
-/// named as a value, `.trim`) — each the interpreter's output, byte for byte.
+/// `01` (records, `Float`, sums with payloads), `02` (a list begun empty, typed by the checker — what `compile_checked` is
+/// for), `03` (`parse_int`), `04` (a function named as a value, `.trim`) — each the interpreter's output, byte for byte.
 #[test]
 fn the_guide_chapters_the_wasm_engine_runs_match_the_interpreter() {
-    for chapter in
-        ["examples/guide/02_option_and_lists.delulu", "examples/guide/03_errors.delulu", "examples/guide/04_effects.delulu"]
-    {
+    for chapter in [
+        "examples/guide/01_types.delulu",
+        "examples/guide/02_option_and_lists.delulu",
+        "examples/guide/03_errors.delulu",
+        "examples/guide/04_effects.delulu",
+    ] {
         let w = delulu(&["run", chapter, "--engine", "wasm", "--grant", "console"]);
         let i = delulu(&["run", chapter, "--grant", "console"]);
         assert!(w.status.success(), "{chapter} on the WASM engine: {}", String::from_utf8_lossy(&w.stderr));

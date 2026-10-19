@@ -542,11 +542,12 @@ day, comparing bytes as the interpreter does. So does every other `Str` method �
 the two engines cannot disagree about Unicode. A function's name passed as a value compiles as well
 (`apply(double, 21)`, `xs.map(double)`): calling the value calls the function. So do `parse_int` and `Float` —
 arithmetic, comparison, `float`, `int`, `str` and `parse_float` — the same to the bit on both engines — and an empty
-list whose type only the checker knows (`let out = []`, filled later). Measured again that day, 9 of the 17 entry
-points compile.
+list whose type only the checker knows (`let out = []`, filled later), and records: a literal, reading and writing a
+field, a record shared as on the interpreter. Measured again that day, 10 of the 17 entry points compile, five of the
+six guide chapters among them.
 
-So: if you are writing ordinary DeluluLang — anything with a record, a map, or a list of lists —
-**you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
+So: if you are writing ordinary DeluluLang — anything with a map, a list of lists, a record holding an `Option`, or
+`str` of a whole record — **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
 cases described below, and it is grown deliberately, one construct at a time, with the boundary
 refusing rather than guessing.
 

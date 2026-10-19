@@ -7320,3 +7320,65 @@ at `host.denied().1 == 1`. The panic text was not kept, and the next 25 runs wer
   - M589 — the channel walking into a cycle.
 - The whole `delulu-runtime` suite (282 unit tests and every test file) and `actors_cli`, `actors_bounded_cli`,
   `actors_cycles_cli` green.
+
+## 2026-10-20 — the laptop: no `==` on functions; an opaque type inside a record field is seen (RW 2.15, 2.17, D-V2-166)
+
+Asking after EQ-RECORD-1 whether the runtime answers `==` for every type the checker admits found two more:
+- **EQ-FN-1** — `g == g` on a closure checked clean and answered `false`. A function has no structural equality, so
+  `==`, `!=`, `assert_eq` and `List.contains` now refuse a type holding one (DL0605, in words about functions). `str`
+  of a function stays `<fn>`.
+- **OPAQUE-FIELD-1** — the walk over a record's written field types named no `Map`, no `Plugin` and no actor. So
+  `type Vault { m: Map[Str, Secret[Str]] }` compared and printed, and so did records holding a plugin or an actor
+  reference, all refused outside a record. Nothing secret reached the program, but R-5 did not hold in a field. The
+  field walk now names what the type walk names.
+
+One walk answers both questions, `opaque_for(t, fns)`: `is_opaque` for `str`, `lacks_equality` for the equality sites.
+The DL0605 `explain` text now names functions and opaque values in containers.
+
+**Evidence.**
+- `delulu-check` `equality_on_a_function_is_dl0605_in_its_own_words` and `an_opaque_type_inside_a_record_field_is_seen`,
+  both red on the old `check.rs`.
+- Mutants M591–M598, all red, control green:
+  - M591, M592 — functions uncounted in the two walks;
+  - M593 — no `Map`;
+  - M594 — no actor;
+  - M595 — no `Plugin`;
+  - M596 — the opaque wording for a function;
+  - M597 — `==` asking `is_opaque`;
+  - M598 — `str` refusing a function.
+- `delulu-check` (all), `delulu-conform`, `delulu-diag`, `conformance`, `core_invariance`, `corpus_cli`,
+  `examples_run`, `actors_cli`, `cli`, `json_contract`, `palette_cli`, `message_spacing` green.
+
+## 2026-10-20 — the laptop: records on the WASM engine (RW 3.4)
+
+**Records compile.** A non-generic `type R { … }` whose fields the backend can hold (any scalar, `Float`, an enum,
+another record) is `Ty::Record(id)`: an i32 pointer to a cell with one 8-byte slot per field, in declaration order
+(`RecordDesc`, registered in `build_enum_env`). The cell is shared, as the interpreter's `Rc<RefCell<…>>` is, so
+`var q = p; q.n = 70` is read through `p`. What compiles:
+- a literal, whose fields are computed in the order written, as the interpreter computes them;
+- a field read;
+- a field write through a variable or a field (`p.x = v`, `l.a.x = v`), the value computed before the place, as on
+  the interpreter.
+
+A write through a list element (`ps[i].x = v`) is refused by the checker (DL1604), so the backend holds no path for
+it. `str` and `==` of a whole record, and a record with an `Option` or `List` field, stay DL1201.
+`examples/guide/01_types.delulu` now compiles and prints the interpreter's output; the corpus's entry points: 10 of 17,
+five of the six guide chapters among them.
+
+Tests:
+- `record_parity.rs` `records_match_the_interpreter` (every scalar kind, sharing, a two-level write, records in a list,
+  walked, indexed and read with `get`);
+- `a_literal_computes_its_fields_in_the_order_written` (the index fault before the division);
+- `what_the_record_fragment_leaves_out_is_refused`;
+- `wasm_cli.rs`'s chapter test now runs `01` too.
+
+Mutants M599–M603, all red, control green:
+- M599 — fields computed in reverse;
+- M600 — slots stored reversed;
+- M601 — a read at slot 0;
+- M602 — a write at slot 0;
+- M603 — records not registered.
+
+**Evidence.** `record_parity` 3; `wasm_cli` 12. The whole `delulu-wasm` suite and the release differential were
+started before the owner's *"97% current session usage used. Commit and push everything"*, and their results were not
+read before this commit. This branch's CI is the record.

@@ -121,6 +121,10 @@ enum Ty {
     // 8-byte slots. Lists are shared, as the interpreter's are: `let ys = xs` names the same header, so a `push`
     // through either is seen by both. A list of lists is outside the fragment (a `Scalar` holds no list).
     List(Scalar),
+    // RW 3.4: a record of a declared, non-generic `type R { … }`, an i32 pointer to its cell — one 8-byte slot per field,
+    // in declaration order (`RecordDesc`). Shared, as the interpreter's `Rc<RefCell<…>>` is: `let q = p` names one cell,
+    // so `q.x = 1` is seen through `p`.
+    Record(u32),
 }
 
 /// The list header's fields (`Ty::List`): its length, its capacity in slots, and a pointer to its slots.
@@ -140,6 +144,7 @@ enum Scalar {
     Enum(u32),
     Foreign(u32), // a bound `foreign` lib handle payload — e.g. the `Ok(m)` of `Result[M, ForeignErr]`
     ForeignPtr,
+    Record(u32), // a record's cell pointer (RW 3.4)
 }
 
 impl Scalar {
@@ -153,6 +158,7 @@ impl Scalar {
             Scalar::Enum(i) => Ty::Enum(i),
             Scalar::Foreign(i) => Ty::Foreign(i),
             Scalar::ForeignPtr => Ty::ForeignPtr,
+            Scalar::Record(i) => Ty::Record(i),
         }
     }
 }
@@ -168,6 +174,7 @@ fn ty_to_scalar(t: Ty) -> Option<Scalar> {
         Ty::Enum(i) => Some(Scalar::Enum(i)),
         Ty::Foreign(i) => Some(Scalar::Foreign(i)),
         Ty::ForeignPtr => Some(Scalar::ForeignPtr),
+        Ty::Record(i) => Some(Scalar::Record(i)),
         _ => None,
     }
 }
@@ -177,7 +184,7 @@ fn store_scalar(cx: &mut Cx, s: Scalar) {
     match s {
         Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
         Scalar::F64 => cx.emit(Instruction::F64Store(i64_at())),
-        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr => {
+        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr | Scalar::Record(_) => {
             cx.emit(Instruction::I32Store(u32_at()))
         }
         Scalar::Unit => {}
@@ -189,7 +196,7 @@ fn load_scalar(cx: &mut Cx, s: Scalar) {
     match s {
         Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
         Scalar::F64 => cx.emit(Instruction::F64Load(i64_at())),
-        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr => {
+        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr | Scalar::Record(_) => {
             cx.emit(Instruction::I32Load(u32_at()))
         }
         Scalar::Unit => {}
@@ -236,9 +243,29 @@ struct EnumEnv {
     /// lower an actor-typed field/param (`from: Ping`) to `Ty::ActorRef(idx)`. Same declaration
     /// order as [`actor_table`], so the indices agree with the host's dispatch table.
     actors_by_name: HashMap<String, u32>,
+    /// RW 3.4: the module's non-generic record types, by declaration order, and their names.
+    records: Vec<RecordDesc>,
+    records_by_name: HashMap<String, u32>,
+}
+
+/// A record type the backend lays out: its fields in declaration order, each a slot's `Scalar` — or `None` when a field
+/// holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
+struct RecordDesc {
+    fields: Option<Vec<(String, Scalar)>>,
 }
 
 impl EnumEnv {
+    /// The record id for a name introduced by a non-generic `type R { … }` (RW 3.4).
+    fn record_id(&self, name: &str) -> Option<u32> {
+        self.records_by_name.get(name).copied()
+    }
+    /// Record `id`'s fields, if the backend can lay them out.
+    fn record_fields(&self, id: u32) -> Result<&[(String, Scalar)], CompileError> {
+        self.records[id as usize]
+            .fields
+            .as_deref()
+            .ok_or_else(|| CompileError::Unsupported("a record with a field of a type outside the WASM fragment".into()))
+    }
     fn id(&self, name: &str) -> Option<u32> {
         self.by_name.get(name).copied()
     }
@@ -311,12 +338,28 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         }
     }
 
+    // Record names → declaration-order index (RW 3.4); their fields are resolved once every name is known.
+    let mut records_by_name: HashMap<String, u32> = HashMap::new();
+    for it in &module.items {
+        if let Item::Type(td) = it {
+            if td.generics.is_empty()
+                && matches!(td.kind, TypeDeclKind::Record(_))
+                && !records_by_name.contains_key(&td.name.name)
+            {
+                let id = records_by_name.len() as u32;
+                records_by_name.insert(td.name.name.clone(), id);
+            }
+        }
+    }
+
     let mut env = EnumEnv {
         descs: vec![EnumDesc { ctors: Vec::new() }; by_name.len()],
         by_name,
         foreign_libs: Vec::new(),
         foreign_by_name,
         actors_by_name,
+        records: Vec::new(),
+        records_by_name,
     };
     // Prelude descriptors.
     let str_payload = vec![Scalar::Str];
@@ -387,6 +430,22 @@ fn build_enum_env(module: &Module) -> EnumEnv {
             }
         }
     }
+    // Record layouts (RW 3.4), resolved against the populated names: a field the backend cannot hold leaves the record
+    // without a layout, refused where it is built or read.
+    let mut records: Vec<RecordDesc> = (0..env.records_by_name.len()).map(|_| RecordDesc { fields: None }).collect();
+    for it in &module.items {
+        if let Item::Type(td) = it {
+            if let (TypeDeclKind::Record(fields), true) = (&td.kind, td.generics.is_empty()) {
+                if let Some(&id) = env.records_by_name.get(&td.name.name) {
+                    records[id as usize].fields = fields
+                        .iter()
+                        .map(|f| wasm_ty(&env, &f.ty).and_then(ty_to_scalar).map(|s| (f.name.name.clone(), s)))
+                        .collect();
+                }
+            }
+        }
+    }
+    env.records = records;
     env
 }
 
@@ -480,7 +539,8 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::Result(..)
         | Ty::Option(..)
         | Ty::Enum(_)
-        | Ty::List(_) => Some(ValType::I32),
+        | Ty::List(_)
+        | Ty::Record(_) => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -496,7 +556,7 @@ fn block_type(t: Ty) -> BlockType {
 /// The element types a `List` may hold on the WASM engine: the scalars a slot can carry and a `match` can bind.
 fn list_element(t: Ty) -> Option<Scalar> {
     match ty_to_scalar(t)? {
-        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_)) => Some(s),
+        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_) | Scalar::Record(_)) => Some(s),
         _ => None,
     }
 }
@@ -556,12 +616,13 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                     "Unit" => Some(Ty::Unit),
                     "ForeignPtr" => Some(Ty::ForeignPtr),
                     // A named sum type (prelude or user `enum`), else a `foreign … lib M` handle
-                    // type, else an actor type used as a reference (`tag A` — Stage 7 phase 7h).
+                    // type, else an actor type used as a reference (`tag A` — Stage 7 phase 7h), else a record (RW 3.4).
                     other => env
                         .id(other)
                         .map(Ty::Enum)
                         .or_else(|| env.foreign_id(other).map(Ty::Foreign))
-                        .or_else(|| env.actor_id(other).map(Ty::ActorRef)),
+                        .or_else(|| env.actor_id(other).map(Ty::ActorRef))
+                        .or_else(|| env.record_id(other).map(Ty::Record)),
                 };
             }
         }
@@ -1919,7 +1980,135 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
             }
         }
     }
-    Err(CompileError::Unsupported("an assignment target other than a local or `self.field` (indices unsupported)".into()))
+    if let LValue::Field(base, name) = target {
+        return compile_field_assign(base, &name.name, value, cx);
+    }
+    Err(CompileError::Unsupported("an assignment target other than a local or a field (indices unsupported)".into()))
+}
+
+// ----- RW 3.4: records ---------------------------------------------------------------------------------------------
+//
+// A record is an i32 pointer to its cell: one 8-byte slot per field, in declaration order (`RecordDesc`). The cell is
+// shared — `let q = p` names it — as the interpreter's `Rc<RefCell<…>>` is, so a field written through one name is read
+// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar.
+
+/// A record literal: its fields computed in the order written, as the interpreter computes them, each into a local; then
+/// the cell, each value stored in its field's slot.
+fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) -> Result<Ty, CompileError> {
+    let name = &path.segs.last().expect("a record literal names its type").name;
+    let id = cx
+        .env
+        .record_id(name)
+        .ok_or_else(|| CompileError::Unsupported(format!("the record `{name}` (generic, or not a record type)")))?;
+    let layout = cx.env.record_fields(id)?.to_vec();
+    if fields.len() != layout.len() {
+        return Err(CompileError::Unsupported(format!("a `{name}` literal that does not name each field once")));
+    }
+    let mut held: Vec<Option<u32>> = vec![None; layout.len()];
+    for (fname, fexpr) in fields {
+        let k = layout
+            .iter()
+            .position(|(n, _)| *n == fname.name)
+            .ok_or_else(|| CompileError::Unsupported(format!("`{name}` has no field `{}`", fname.name)))?;
+        let s = layout[k].1;
+        compile_expr_as(fexpr, cx, s.to_ty())?;
+        if s != Scalar::Unit {
+            let l = cx.alloc_local(s.to_ty())?;
+            cx.emit(Instruction::LocalSet(l));
+            held[k] = Some(l);
+        }
+    }
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(i32::try_from(layout.len() * 8).unwrap_or(i32::MAX)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(cell));
+    for (k, (_, s)) in layout.iter().enumerate() {
+        if let Some(l) = held[k] {
+            cx.emit(Instruction::LocalGet(cell));
+            cx.emit(Instruction::I32Const(k as i32 * 8));
+            cx.emit(Instruction::I32Add);
+            cx.emit(Instruction::LocalGet(l));
+            store_scalar(cx, *s);
+        }
+    }
+    cx.emit(Instruction::LocalGet(cell));
+    Ok(Ty::Record(id))
+}
+
+/// Field `name` of record `id`: its slot and its `Scalar`.
+fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Scalar), CompileError> {
+    cx.env
+        .record_fields(id)?
+        .iter()
+        .enumerate()
+        .find_map(|(k, (n, s))| (n == name).then_some((k, *s)))
+        .ok_or_else(|| CompileError::Unsupported(format!("a record with no field `{name}`")))
+}
+
+/// `r.name`: the record, then its field's slot read.
+fn compile_field(recv: &Expr, name: &str, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let Ty::Record(id) = compile_expr(recv, cx)? else {
+        return Err(CompileError::Unsupported("a field of a value that is not a record (or `self` outside an actor)".into()));
+    };
+    let (k, s) = record_slot(cx, id, name)?;
+    if s == Scalar::Unit {
+        cx.emit(Instruction::Drop);
+        return Ok(Ty::Unit);
+    }
+    cx.emit(Instruction::I32Const(k as i32 * 8));
+    cx.emit(Instruction::I32Add);
+    load_scalar(cx, s);
+    Ok(s.to_ty())
+}
+
+/// The type of an assignment's place, from the names alone — nothing is emitted — so its value can be computed first.
+fn lvalue_ty(lv: &LValue, cx: &Cx) -> Result<Ty, CompileError> {
+    match lv {
+        LValue::Var(v) => cx
+            .lookup(&v.name)
+            .map(|(_, t)| t)
+            .ok_or_else(|| CompileError::Unsupported(format!("an assignment through `{}`, which is no local here", v.name))),
+        LValue::Field(base, f) => match lvalue_ty(base, cx)? {
+            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1.to_ty()),
+            _ => Err(CompileError::Unsupported("a field of a value that is not a record".into())),
+        },
+        // A field written through a list element (`ps[i].x = v`): the checker refuses the write (DL1604, an element
+        // read through a list is `val`), so the backend holds no path for it.
+        LValue::Index(..) => Err(CompileError::Unsupported("a field written through a list element".into())),
+    }
+}
+
+/// The expression an assignment's place reads (`p`, `p.next.v`), compiled as any read is.
+fn lvalue_expr(lv: &LValue) -> Result<Expr, CompileError> {
+    Ok(match lv {
+        LValue::Var(v) => Expr::Var { path: Path { segs: vec![v.clone()] }, id: NodeId(0), span: v.span },
+        LValue::Field(base, f) => {
+            Expr::Field { recv: Box::new(lvalue_expr(base)?), name: f.clone(), id: NodeId(0), span: f.span }
+        }
+        LValue::Index(..) => return Err(CompileError::Unsupported("a field written through a list element".into())),
+    })
+}
+
+/// `base.name = value`: the value first, then the record it goes into, as the interpreter evaluates them; then the store.
+fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let Ty::Record(id) = lvalue_ty(base, cx)? else {
+        return Err(CompileError::Unsupported("a field assignment to a value that is not a record".into()));
+    };
+    let (k, s) = record_slot(cx, id, name)?;
+    compile_expr_as(value, cx, s.to_ty())?;
+    if s == Scalar::Unit {
+        return Ok(Ty::Unit);
+    }
+    let v = cx.alloc_local(s.to_ty())?;
+    cx.emit(Instruction::LocalSet(v));
+    if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
+        return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
+    }
+    cx.emit(Instruction::I32Const(k as i32 * 8));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalGet(v));
+    store_scalar(cx, s);
+    Ok(Ty::Unit)
 }
 
 /// Resolve a `self` field to `(field index, lowered type, self-slot local)` in the current actor
@@ -2557,8 +2746,9 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     return Ok(fty);
                 }
             }
-            Err(CompileError::Unsupported("a field access other than `self.field`".into()))
+            compile_field(recv, &name.name, cx)
         }
+        Expr::Record { path, fields, .. } => compile_record_literal(path, fields, cx),
         // Stage 7 phase 7h, T-Spawn.
         Expr::Spawn { actor, args, .. } => compile_spawn(actor, args, cx),
         Expr::Unary { op, operand, .. } => {

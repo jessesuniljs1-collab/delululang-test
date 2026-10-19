@@ -11,6 +11,24 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — records on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles records**: a literal, a field read, and a field write (`p.x = v`, `l.a.x = v`),
+  with records passed to and returned from functions, held in lists and options, and fields of any scalar type,
+  `Float` included. A record is shared as on the interpreter (`var q = p; q.n = 1` is seen through `p`), and a literal's
+  fields are computed in the order written. `examples/guide/01_types.delulu` now runs on the WASM engine with the
+  interpreter's output. `str` and `==` of a whole record, and a record with an `Option` or list field, still run only
+  on the interpreter.
+
+## Unreleased — no `==` on functions; an opaque value inside a record is seen, 2026-10-20
+
+- **Changed: `==`, `!=`, `assert_eq` and `List.contains` refuse a function** (DL0605, "a function has no structural
+  equality"), alone or inside a list, option, map or record. Before, `f == f` was accepted and answered `false`.
+  `str` of a function still gives `<fn>`.
+- **Fixed: a record whose field held a `Map` of secrets, a plugin or an actor reference could be compared with `==`
+  and printed with `str`**, although each is refused outside a record. Each is now refused there too (DL0605, DL0604).
+  No secret was ever revealed this way.
+
 ## Unreleased — moving a value that holds itself to an actor, 2026-10-20
 
 - **Fixed: sending an actor a value that holds itself crashed the process with a stack overflow.** For example, a
@@ -30,8 +48,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed: `str` (and `println`) of a value that holds itself crashed the process with a stack overflow** — a record
   whose field holds the record (`n.next = Some(n)`), or a list holding a record that holds the list. Such a value now
   prints `...` where it meets itself (`Node { v: 1, next: Some(Node { ... }) }`), and `==` on two such values ends.
-- **Known: `==` on two functions is always `false`** (RW 2.15). It is recorded and is next. (Sending such a value
-  to an actor crashed too; the next entry fixes it.)
+- (`==` on two functions, and sending such a value to an actor, are fixed in the entries above.)
 
 ## Unreleased — an empty list typed by the checker on the WASM engine, 2026-10-20
 
