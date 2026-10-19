@@ -670,7 +670,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         n_imports += 4;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
-                                // `__concat`, `__int_to_str` and `__alloc` follow; user functions start after them.
+                                // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
 
     // Collect string literals into a length-prefixed linear-memory image.
@@ -795,6 +795,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let alloc_type = next_type; // __alloc(n) -> ptr
     types.ty().function([ValType::I32], [ValType::I32]);
     next_type += 1;
+    let str_len_type = next_type; // __str_len(s) -> n
+    types.ty().function([ValType::I32], [ValType::I64]);
+    next_type += 1;
     let mut user_types = Vec::new();
     for f in &fns {
         let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&env, &p.ty).unwrap()).unwrap()).collect();
@@ -864,8 +867,8 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         imports.import("delulu:actors", "actor_field_set", EntityType::Function(actor_field_set_ty));
     }
 
-    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, users, then
-    // the actor members (Stage 7 phase 7h).
+    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
+    // then the actor members (Stage 7 phase 7h).
     let mut funcsec = FunctionSection::new();
     for _ in 0..N_ARITH_HELPERS {
         funcsec.function(helper_type);
@@ -873,6 +876,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     funcsec.function(concat_type);
     funcsec.function(int_to_str_type);
     funcsec.function(alloc_type);
+    funcsec.function(str_len_type);
     for t in &user_types {
         funcsec.function(*t);
     }
@@ -916,6 +920,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     code.function(&concat_fn(alloc));
     code.function(&int_to_str_fn(alloc));
     code.function(&alloc_fn(HEAP_GLOBAL));
+    code.function(&str_len_fn());
     for f in &fns {
         code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds)?);
     }
@@ -1047,9 +1052,9 @@ fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
 /// `checked_div`, so it needs no helper.
 const N_ARITH_HELPERS: u32 = 4;
 
-/// Number of synthetic helpers emitted after the arithmetic helpers: `__concat`, `__int_to_str`, then `__alloc` (in that
-/// order).
-const N_STR_HELPERS: u32 = 3;
+/// Number of synthetic helpers emitted after the arithmetic helpers: `__concat`, `__int_to_str`, `__alloc`, then
+/// `__str_len` (in that order).
+const N_STR_HELPERS: u32 = 4;
 
 /// Pages (64 KiB each) reserved for the runtime bump-allocation heap at start, above the interned literals. Every guest
 /// allocation goes through `__alloc`, which grows the memory past them when it must (RW 3.4: a loop that builds a string
@@ -1065,6 +1070,27 @@ const HEAP_GLOBAL: u32 = 0;
 struct Callable {
     params: Vec<Param>,
     body: Block,
+    /// Where it was defined (WASM-HYGIENE-1): the frames hidden there, and how many scope and callable frames there
+    /// were. Inlined anywhere, its body sees those frames and no other — as the interpreter's closure sees its own.
+    hidden: Vec<Hidden>,
+    scopes_at: usize,
+    callables_at: usize,
+}
+
+/// A run of scope frames and a run of callable frames, `start..end` each, that a body being inlined cannot see
+/// (WASM-HYGIENE-1): a generic function's body sees none of its caller's frames, a lambda's only its definition's.
+#[derive(Clone, Copy, Debug)]
+struct Hidden {
+    scopes: (usize, usize),
+    callables: (usize, usize),
+}
+
+/// Whose names an inlined body sees (WASM-HYGIENE-1).
+enum Lexical<'c> {
+    /// A generic function: its parameters, and nothing of its caller's.
+    Generic,
+    /// A function value: what was visible where it was defined.
+    Value(&'c Callable),
 }
 
 struct Cx<'a> {
@@ -1090,6 +1116,8 @@ struct Cx<'a> {
     int_to_str_fn: u32,
     /// Function index of the `__alloc` helper — every guest allocation (RW 3.4).
     alloc_fn: u32,
+    /// Function index of the `__str_len` helper (`Str.len()`, RW 3.4).
+    str_len_fn: u32,
     /// The WASM labels open at this point of `instrs` — each `block`, `loop` and `if` opens one, each `end` closes it —
     /// which is what a `br` counts outward (RW 3.4).
     depth: u32,
@@ -1099,6 +1127,8 @@ struct Cx<'a> {
     /// The first scope of the body being inlined (`inline_call`), or 0: an assignment inside an inlined body may name only
     /// a variable that body declared — what a function value does to its caller's variables is not this backend's to guess.
     inline_floor: usize,
+    /// The frames the body being compiled cannot see — empty in a function's own body (WASM-HYGIENE-1).
+    hidden: Vec<Hidden>,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
@@ -1118,10 +1148,26 @@ struct Cx<'a> {
 
 impl<'a> Cx<'a> {
     fn lookup(&self, name: &str) -> Option<(u32, Ty)> {
-        self.scopes.iter().rev().find_map(|s| s.get(name).copied())
+        self.lookup_frame(name).map(|(_, b)| b)
+    }
+    /// A local's binding and the index of the scope frame that holds it — the innermost frame this body can see.
+    fn lookup_frame(&self, name: &str) -> Option<(usize, (u32, Ty))> {
+        let seen = |i: usize| !self.hidden.iter().any(|h| (h.scopes.0..h.scopes.1).contains(&i));
+        self.scopes.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(i, s)| s.get(name).map(|b| (i, *b)))
     }
     fn lookup_callable(&self, name: &str) -> Option<Callable> {
-        self.callables.iter().rev().find_map(|s| s.get(name).cloned())
+        let seen = |i: usize| !self.hidden.iter().any(|h| (h.callables.0..h.callables.1).contains(&i));
+        self.callables.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(_, s)| s.get(name).cloned())
+    }
+    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1).
+    fn callable(&self, params: &[Param], body: &Block) -> Callable {
+        Callable {
+            params: params.to_vec(),
+            body: body.clone(),
+            hidden: self.hidden.clone(),
+            scopes_at: self.scopes.len(),
+            callables_at: self.callables.len(),
+        }
     }
     fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
         let vt = wasm_valtype(ty).ok_or_else(|| CompileError::Unsupported("a `let` binding of type Unit".into()))?;
@@ -1171,9 +1217,11 @@ fn compile_fn<'a>(
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         alloc_fn: arith_base + N_ARITH_HELPERS + 2,
+        str_len_fn: arith_base + N_ARITH_HELPERS + 3,
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        hidden: Vec::new(),
         imp,
         foreign_binds,
         actors,
@@ -1251,9 +1299,11 @@ fn compile_actor_member<'a>(
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         alloc_fn: arith_base + N_ARITH_HELPERS + 2,
+        str_len_fn: arith_base + N_ARITH_HELPERS + 3,
         depth: 0,
         loops: Vec::new(),
         inline_floor: 0,
+        hidden: Vec::new(),
         imp,
         foreign_binds,
         actors,
@@ -1318,7 +1368,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
         Stmt::Let { name, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
             if let Expr::Lambda { params, body, .. } = value {
-                let c = Callable { params: params.clone(), body: body.clone() };
+                let c = cx.callable(params, body);
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
@@ -1411,9 +1461,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
 /// anything else), and `x = …` to a local (RW 3.4: the checker has already held it to a `let mut` of the value's type).
 fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     if let LValue::Var(v) = target {
-        let Some((depth, (idx, ty))) =
-            cx.scopes.iter().enumerate().rev().find_map(|(i, s)| s.get(&v.name).map(|b| (i, *b)))
-        else {
+        let Some((depth, (idx, ty))) = cx.lookup_frame(&v.name) else {
             return Err(CompileError::Unsupported(format!("an assignment to `{}`, which is no local here", v.name)));
         };
         if depth < cx.inline_floor {
@@ -1914,7 +1962,7 @@ fn is_fn_type(t: &TypeExpr) -> bool {
 /// already bound to a callable.
 fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
     match arg {
-        Expr::Lambda { params, body, .. } => Ok(Callable { params: params.clone(), body: body.clone() }),
+        Expr::Lambda { params, body, .. } => Ok(cx.callable(params, body)),
         Expr::Var { path, .. } if path.segs.len() == 1 => cx
             .lookup_callable(&path.segs[0].name)
             .ok_or_else(|| CompileError::Unsupported(format!("`{}` is not a function value", path.dotted()))),
@@ -1926,7 +1974,7 @@ fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
 /// into fresh locals in the current scope, bind function-typed arguments as callables, then compile
 /// the body in a new frame. This is how the backend handles generics and non-capturing lambdas —
 /// `apply(fn(x) { x * 2 }, 21)` reduces to inlined arithmetic, no function table needed (Phase 3r).
-fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx, lexical: Lexical) -> Result<Ty, CompileError> {
     if cx.inline_depth >= 64 {
         return Err(CompileError::Unsupported("inlining too deep (recursive generic or lambda?)".into()));
     }
@@ -1946,8 +1994,19 @@ fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Re
             local_binds.push((p.name.name.clone(), l, ty));
         }
     }
-    // Enter the inlined body with the parameters bound. Its `break`/`continue` reach no loop of the caller's, and its
-    // assignments no variable of the caller's (RW 3.4).
+    // Enter the inlined body with the parameters bound. It sees the names of where it was written and no others
+    // (WASM-HYGIENE-1); its `break`/`continue` reach no loop of the caller's, and its assignments no variable of the
+    // caller's (RW 3.4).
+    let here = Hidden { scopes: (0, cx.scopes.len()), callables: (0, cx.callables.len()) };
+    let env = match lexical {
+        Lexical::Generic => vec![here],
+        Lexical::Value(c) => {
+            let mut env = c.hidden.clone();
+            env.push(Hidden { scopes: (c.scopes_at, here.scopes.1), callables: (c.callables_at, here.callables.1) });
+            env
+        }
+    };
+    let hidden = std::mem::replace(&mut cx.hidden, env);
     cx.inline_depth += 1;
     let floor = std::mem::replace(&mut cx.inline_floor, cx.scopes.len());
     let loops = std::mem::take(&mut cx.loops);
@@ -1959,6 +2018,7 @@ fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Re
     cx.loops = loops;
     cx.inline_floor = floor;
     cx.inline_depth -= 1;
+    cx.hidden = hidden;
     r
 }
 
@@ -2218,6 +2278,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if let Ty::ActorRef(aidx) = recv_ty {
                 return compile_send(aidx, &name.name, args, cx);
             }
+            // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).
+            if recv_ty == Ty::Str && name.name == "len" && args.is_empty() {
+                cx.emit(Instruction::Call(cx.str_len_fn));
+                return Ok(Ty::I64);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -2267,10 +2332,10 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
             if let Some(c) = cx.lookup_callable(&name) {
-                return inline_call(&c.params, &c.body, args, cx);
+                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
             }
             if let Some(g) = cx.generics.get(&name).cloned() {
-                return inline_call(&g.params, &g.body, args, cx);
+                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
             }
             let (fidx, ptys, ret) = {
                 let e = cx
