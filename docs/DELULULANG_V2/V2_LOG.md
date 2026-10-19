@@ -7074,3 +7074,50 @@ stopped at `.trim` move on: `04_effects` now stops at a named function passed as
 
 **Evidence.** `str_parity` 3; `conformance_parity` 6; the whole `delulu-wasm` suite (87 unit tests and every test file)
 green; the release differential with the new generator: 50,000 checked, 45,007 agreed, 4,993 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: a function's name as a value on the WASM engine; a generic body brings what it needs (RW 3.4)
+
+**A function named as a value compiles**: `apply(double, 21)`, `xs.map(double)`, `let h = double` and `let g = h`. The
+backend keeps a table, `named`, built by `named_value`:
+- a compilable function becomes a function value whose body is a call to it, so its recursion and an early `return`
+  stay its own;
+- a generic function becomes its own body, inlined as a direct call to it already is.
+
+Either sees what a function's own body sees and nothing of where it is named. A function value of the same name (a
+lambda bound in a block, a generic function's parameter) hides the table, as does a local in a `let`. Direct calls are
+compiled as before, so a module that names no function as a value is unchanged.
+`examples/guide/04_effects.delulu`, which stopped at `apply(double, 21)` once `.trim` compiled, now compiles and prints
+the interpreter's output (`--grant console`, both engines byte for byte). The corpus's entry points: 6 of 17.
+
+**A generic function's body now brings what it needs.** The module's imports and helpers (`Str` methods, `__str_eq`, the
+list helpers, the console) were chosen from the compilable functions' bodies alone, and the string literals were
+interned from them alone. Yet a generic body is inlined into every function that calls it. So a generic using `.trim()`,
+`==` on `Str`s, a list, `println`, or a literal found nowhere else was refused with DL1201. It was refused, never
+miscompiled, but the same body compiled in an ordinary function. Probe, before the fix: DL1201 ("a `Str` method in a
+module compiled without the string interface"); after: the interpreter's output. `body_is_compiled` now decides the
+walks, and a generic body's literals are interned after the others in declaration order, so a module without a generic
+is byte-identical.
+
+`named_fn_parity.rs`:
+- `a_named_function_is_a_value_as_on_the_interpreter` — `apply`, `twice`, a recursive `fact` with an early `return`, a
+  `Str` function, `let`-bound and aliased, `map`, a generic `identity`, and a function named inside a generic body;
+- `a_function_value_or_a_local_of_the_same_name_hides_the_function` — a lambda `double` in a block, a generic parameter
+  named `double`, a local `double` copied by `let`;
+- `a_generic_body_brings_what_it_needs`.
+
+The loop generator, from a stream of its own, declares a top-level `step` in a third of its programs, binds the outer
+`h` to it (`let h = step`), and gives it to `map` in place of a lambda half the time. `random_loop_programs_agree_with_the_interpreter`:
+63 of 400 bind it, 21 map it (asserted over 30 and over 10).
+
+Mutants, all red, control green:
+- M550 — the table empty;
+- M551 — the table before the function values (red in the hiding test);
+- M552 — `let y = double` without its local check;
+- M553 — a compilable function inlined as its body instead of called (red on `fact`'s `return`);
+- M554 — no `let h = double`;
+- M555 — `body_is_compiled` as `is_compilable`;
+- M556 — a generic body's literals not interned;
+- M557 — the generator naming no function.
+
+**Evidence.** `named_fn_parity` 3; `loop_parity` 7; the whole `delulu-wasm` suite green; the release differential with the
+new loop generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.

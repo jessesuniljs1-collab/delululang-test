@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a function's name as a value on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a function named as a value** — `apply(double, 21)`, `xs.map(double)`,
+  `let h = double` — whether the function is generic or not. Calling the value calls the function, so its recursion and
+  an early `return` behave as in a direct call. A function value or a local of the same name hides it, as on the
+  interpreter. `examples/guide/04_effects.delulu` now runs on the WASM engine, with the interpreter's output.
+- **Fixed: a generic function whose body used a `Str` method, `==` on two `Str`s, a list, the console or a string
+  literal found nowhere else was refused by `--engine wasm` (`DL1201`)**, although the same body compiled in an
+  ordinary function. The module now carries what a generic body needs.
+
 ## Unreleased — every `Str` method on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and

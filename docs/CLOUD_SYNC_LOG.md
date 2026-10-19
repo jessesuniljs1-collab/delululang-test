@@ -4402,3 +4402,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `everything` and release dry runs; (2) on WASM: a named function passed as a value, `parse_int`/`parse_float`, an empty
   list typed from the checker, `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only
   on the owner's word.
+
+### 2026-10-20 — a function's name as a value on the WASM engine; a generic body brings what it needs (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-fnref` (on `laptop/wasm-strmethods`, #7)   Pull request: #8   Merged: not yet (after #7, on green CI)
+- Base: `650387a`.
+- What: `V2_LOG.md` (this date, the fourth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`named`, `named_value`, `resolve_callable`, `let h = double`,
+  `body_is_compiled`, a generic body's literals), `crates/delulu-wasm/src/gen.rs` (`step` in the loop generator),
+  `crates/delulu-wasm/tests/loop_parity.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/named_fn_parity.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M550–M557; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) #7's and this branch's CI, landing each on green; then `launch/2.0.0`; (2) on WASM: `parse_int`
+  (`03_errors`), `Float` arithmetic and `parse_float` (`01_types`, `telemetry_report`), an empty list typed from the checker
+  (`02`), `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

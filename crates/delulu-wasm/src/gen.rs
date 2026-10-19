@@ -220,7 +220,7 @@ pub fn random_loop_program(seed: u64) -> (String, Vec<i64>) {
     // The function value draws from a stream of its own, so every other line is what this seed always gave.
     let mut q = Rng::new(seed ^ 0xA076_1D64_78BD_642F);
     let lambda = |q: &mut Rng| format!("fn(x: Int) -> Int {{ {} }}", gen_expr(q, 2, &["x", "a"], false));
-    let (bind, tail) = if q.chance(1, 2) {
+    let (mut bind, tail) = if q.chance(1, 2) {
         if q.chance(1, 2) {
             body.push_str(&format!("    let h = {}\n", lambda(&mut q)));
         } else if q.chance(1, 2) {
@@ -264,11 +264,25 @@ pub fn random_loop_program(seed: u64) -> (String, Vec<i64>) {
             )
         };
     }
+    // A function named as a value (RW 3.4), from a stream of its own as the list's is: a top-level `step`, which the outer
+    // `h` is sometimes bound to (`let h = step`) and `map` is sometimes given (`xs.map(step)`) in place of a lambda.
+    let mut n = Rng::new(seed ^ 0x2545_F491_4F6C_DD1D);
+    let mut step = String::new();
+    if n.chance(1, 3) {
+        step = format!("fn step(x: Int) -> Int {{\n  {}\n}}\n", gen_expr(&mut n, 2, &["x"], false));
+        if !bind.is_empty() {
+            bind = "  let h = step\n".to_string();
+        }
+        if let (true, Some(at)) = (n.chance(1, 2), after.find("xs.map(fn")) {
+            let end = after[at..].find(") {\n").map(|e| at + e).expect("the map's lambda ends its line");
+            after.replace_range(at..end, "xs.map(step");
+        }
+    }
     body.push_str(&format!("    acc = {}\n", gen_expr(&mut r, 2, &outer, false)));
     let init = gen_leaf(&mut r, &["a", "b", "c"]);
     let limit = r.below(13);
     let src = format!(
-        "module gl\nfn f(a: Int, b: Int, c: Int) -> Int {{\n{bind}{list_decl}  var acc = {init}\n  var i = 0\n  while i < {limit} {{\n{body}  }}\n{after}  {tail}\n}}\n"
+        "module gl\n{step}fn f(a: Int, b: Int, c: Int) -> Int {{\n{bind}{list_decl}  var acc = {init}\n  var i = 0\n  while i < {limit} {{\n{body}  }}\n{after}  {tail}\n}}\n"
     );
     let small = r.chance(1, 2);
     let arg = |r: &mut Rng| if small { r.below(100) as i64 - 50 } else { gen_arg(r) };

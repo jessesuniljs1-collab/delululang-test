@@ -575,6 +575,13 @@ fn is_compilable(env: &EnumEnv, f: &FnDecl) -> bool {
         && ret_ty(env, f).is_some()
 }
 
+/// Is `f`'s body compiled into the module? A compilable function's is, and so is a generic one's, inlined into each
+/// function that calls it (Phase 3r) — so what a generic body needs, an import, a helper or a string literal, the module
+/// needs too (RW 3.4: a generic body's `.trim()`, `==` on `Str`s or list was refused for want of what it needed).
+fn body_is_compiled(env: &EnumEnv, f: &FnDecl) -> bool {
+    !f.generics.is_empty() || is_compilable(env, f)
+}
+
 /// Does any compilable function call a method whose name is in `names`? Used to decide which host
 /// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
 fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
@@ -611,7 +618,7 @@ fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
             _ => false,
         }
     }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body, names)))
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && in_block(&f.body, names)))
 }
 
 /// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
@@ -701,7 +708,7 @@ fn module_any(env: &EnumEnv, module: &Module, hit: &dyn Fn(&Expr) -> bool, fors:
             Expr::Spawn { args, .. } => args.iter().any(ex),
         }
     }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && block(&f.body, hit, fors)))
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && block(&f.body, hit, fors)))
 }
 
 /// Does the module perform console output (so it needs the console host imports)? Public helper;
@@ -740,6 +747,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         .filter_map(|it| if let Item::Fn(f) = it { Some(f) } else { None })
         .filter(|f| is_compilable(&env, f))
         .collect();
+    // RW 3.4: each function a value may name — a compilable one, or a generic one.
+    let named: HashMap<String, Callable> =
+        fns.iter().copied().chain(generics.values()).map(|f| (f.name.name.clone(), named_value(f))).collect();
 
     // Stage 7 phase 7h: the module's actor table (declaration order, shared with the host) and the
     // ordered plan of members to compile as exports (ctor then behaviours, per actor).
@@ -846,6 +856,14 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let mut data: Vec<u8> = Vec::new();
     for f in &fns {
         collect_strings_block(&f.body, &mut str_off, &mut data);
+    }
+    // A generic function's literals too, after the others' (so a module without one is unchanged): its body is inlined.
+    for it in &module.items {
+        if let Item::Fn(f) = it {
+            if !f.generics.is_empty() {
+                collect_strings_block(&f.body, &mut str_off, &mut data);
+            }
+        }
     }
     // Stage 7 phase 7h: actor member bodies may hold string literals too (Int-only witnesses do
     // not, but intern any so the fragment composes if a future body prints).
@@ -1131,7 +1149,19 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     code.function(&alloc_fn(HEAP_GLOBAL));
     code.function(&str_len_fn());
     for f in &fns {
-        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds)?);
+        code.function(&compile_fn(
+            f,
+            &env,
+            &generics,
+            &named,
+            &index,
+            &str_off,
+            arith_base,
+            imp,
+            actor_imp,
+            &table,
+            foreign_binds,
+        )?);
     }
     for (actor_idx, decl, params, body, _) in &member_plans {
         code.function(&compile_actor_member(
@@ -1141,6 +1171,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
             body,
             &env,
             &generics,
+            &named,
             &index,
             &str_off,
             arith_base,
@@ -1335,6 +1366,9 @@ struct Cx<'a> {
     env: &'a EnumEnv,
     /// Generic user functions, inlined (monomorphised) at each call site (Phase 3r).
     generics: &'a HashMap<String, FnDecl>,
+    /// Each function a value may name — `apply(double, 21)`, `xs.map(double)`, `let h = double` (RW 3.4) — built by
+    /// `named_value`. Seen wherever no local or function value of the same name hides it.
+    named: &'a HashMap<String, Callable>,
     scopes: Vec<HashMap<String, (u32, Ty)>>,
     /// Function-value bindings (lambdas / generic fn params of function type), a stack of frames
     /// pushed at each inline boundary. A name is a local xor a callable.
@@ -1425,6 +1459,7 @@ fn compile_fn<'a>(
     f: &FnDecl,
     env: &'a EnumEnv,
     generics: &'a HashMap<String, FnDecl>,
+    named: &'a HashMap<String, Callable>,
     index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
     str_off: &'a HashMap<String, u32>,
     arith_base: u32,
@@ -1443,6 +1478,7 @@ fn compile_fn<'a>(
         str_off,
         env,
         generics,
+        named,
         scopes: vec![params],
         callables: vec![HashMap::new()],
         extra_locals: Vec::new(),
@@ -1489,6 +1525,7 @@ fn compile_actor_member<'a>(
     body: &Block,
     env: &'a EnumEnv,
     generics: &'a HashMap<String, FnDecl>,
+    named: &'a HashMap<String, Callable>,
     index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
     str_off: &'a HashMap<String, u32>,
     arith_base: u32,
@@ -1525,6 +1562,7 @@ fn compile_actor_member<'a>(
         str_off,
         env,
         generics,
+        named,
         scopes: vec![scope],
         callables: vec![HashMap::new()],
         extra_locals: Vec::new(),
@@ -1612,6 +1650,15 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
                 let c = cx.callable(params, body);
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
+            }
+            // So does binding a name that is one — `let h = double`, `let g = h` (RW 3.4).
+            if let Expr::Var { path, .. } = value {
+                if path.segs.len() == 1 && cx.lookup(&path.segs[0].name).is_none() {
+                    if let Ok(c) = resolve_callable(value, cx) {
+                        cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
+                        return Ok(Ty::Unit);
+                    }
+                }
             }
             // An empty list says its element type only on its `let` (`let xs: List[Int] = []`).
             let ty = match (value, ty.as_ref().and_then(|t| wasm_ty(cx.env, t))) {
@@ -2205,14 +2252,33 @@ fn is_fn_type(t: &TypeExpr) -> bool {
     matches!(t, TypeExpr::Fn { .. })
 }
 
-/// Resolve a function-typed argument to the `Callable` we will inline: a lambda literal, or a name
-/// already bound to a callable.
+/// A function named as a value (RW 3.4). A generic one is its own body, inlined as a call to it is; any other is a body
+/// that calls it, so a recursion or a `return` in it stays the call's own. Either sees what a function's own body sees:
+/// its parameters, and nothing of where it is named.
+fn named_value(f: &FnDecl) -> Callable {
+    let body = if f.generics.is_empty() {
+        let (id, span) = (f.body.id, f.name.span);
+        let var = |n: &Ident| Expr::Var { path: Path { segs: vec![n.clone()] }, id, span };
+        let args = f.params.iter().map(|p| var(&p.name)).collect();
+        Block { stmts: vec![Stmt::Expr(Expr::Call { callee: Box::new(var(&f.name)), args, id, span })], id, span }
+    } else {
+        f.body.clone()
+    };
+    Callable { params: f.params.clone(), body, hidden: Vec::new(), scopes_at: 0, callables_at: 0 }
+}
+
+/// Resolve a function-typed argument to the `Callable` we will inline: a lambda literal, a name already bound to a
+/// callable, or a function's own name. (A local is never one: the checker types a function-typed argument, and no local
+/// of a function type compiles.)
 fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
     match arg {
         Expr::Lambda { params, body, .. } => Ok(cx.callable(params, body)),
-        Expr::Var { path, .. } if path.segs.len() == 1 => cx
-            .lookup_callable(&path.segs[0].name)
-            .ok_or_else(|| CompileError::Unsupported(format!("`{}` is not a function value", path.dotted()))),
+        Expr::Var { path, .. } if path.segs.len() == 1 => {
+            let name = &path.segs[0].name;
+            cx.lookup_callable(name)
+                .or_else(|| cx.named.get(name).cloned())
+                .ok_or_else(|| CompileError::Unsupported(format!("`{}` is not a function value", path.dotted())))
+        }
         _ => Err(CompileError::Unsupported("a function argument that is not a lambda or function value".into())),
     }
 }

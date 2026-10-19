@@ -217,6 +217,8 @@ fn the_host_grows_the_memory_for_what_it_writes() {
 #[test]
 fn random_loop_programs_agree_with_the_interpreter() {
     let (mut agreed, mut faulted, mut ran, mut shadowed, mut listed) = (0u32, 0u32, 0u32, 0u32, 0u32);
+    // A top-level function named as a value: `h` bound to it, and `map` given it (RW 3.4).
+    let (mut bound, mut mapped) = (0u32, 0u32);
     for k in 0..400u64 {
         let (src, args) = random_loop_program(k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let checked = check_source(0, &src);
@@ -238,14 +240,17 @@ fn random_loop_programs_agree_with_the_interpreter() {
         if src.contains("let xs = [") && (src.contains("xs.push(") || src.contains("xs[") || src.contains("xs.get(")) {
             listed += 1;
         }
+        bound += u32::from(src.contains("let h = step"));
+        mapped += u32::from(src.contains("xs.map(step)"));
     }
     eprintln!(
         "loop programs: agreed {agreed}, faulted {faulted}, looping {ran}, shadowing a function value {shadowed}, with a \
-         list {listed}"
+         list {listed}, binding a named function {bound}, mapping one {mapped}"
     );
     assert!(
-        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80 && listed > 120,
-        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}, list programs {listed}"
+        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80 && listed > 120 && bound > 30 && mapped > 10,
+        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}, list programs {listed}, \
+         named-function programs {bound} bound and {mapped} mapped"
     );
 }
 
