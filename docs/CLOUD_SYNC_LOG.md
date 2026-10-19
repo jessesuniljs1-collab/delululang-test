@@ -4242,3 +4242,45 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   launch runs on `ece2454`; then merge `master` into `launch/2.0.0` once more (for `205f0f4` above all); (2) the red-team
   pass's findings on the WASM fragment (`V2_LOG.md`, next entry); (3) the WASM fragment's next pieces — `for`, `List`,
   `split`, `map`; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — the laptop syncs on-demand routine run 4; the routine's effort pinned by an environment variable; `launch/2.0.0` at `c3b33f3`
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `master` (the effort commit); `launch/2.0.0` (`c3b33f3`)   Base: `8fc42f8`
+- **Synced:** `master` fast-forwarded `98edf2f..8fc42f8` (run 4's nine commits, pull request #2's two among them). Every
+  `origin/claude/*` branch's tip is in `master`. `origin/autosave/laptop`'s newest snapshot, `bbb8ea3` (09:39 UTC), predates
+  `4d11575` (09:52 UTC), so there was nothing to recover. On `8fc42f8`: `survey check` ok (1531 nodes, 15097 edges);
+  `doctor --check` ok (29 checks).
+- **CI read (run 4's open items):** `205f0f4`'s push run `39274259721` and `8fc42f8`'s `39275805346` succeeded on every job,
+  `formal` included, which witnesses the Lean fix. `launch/2.0.0`'s `everything` run `39272359850` on `ece2454` succeeded on
+  every job (`heavy-gates` and the three `miri-slow` jobs included), and so did its release dry run `39272366257` (four
+  packages).
+- **What run 4 left unfinished** (its run log, read with the routine API; the usage limit stopped it at 15:12 UTC). Two
+  WASM fixes were built and their mutants read red in the VM, but never committed: **negating `Int::MIN`** (the backend's
+  `x * -1` wraps where the interpreter faults DL0901) and **`&&`/`||` evaluating both sides** (the interpreter short-circuits).
+  Its Sonnet 5.5 red-team pass on the WASM fragment was cut off too, and its notes stayed in the VM. The log names
+  some of what it found: `rand.int(lo, hi)` with `hi - lo` past `Int`'s range **panics the interpreter** (`prim.rs`, "attempt
+  to subtract with overflow"); a refused `fs.read_text` reported DL0903 on WASM against DL0904 or DL0703 on the interpreter
+  for some programs; and output printed before a fault was missing on WASM for one program. Redone on the laptop from this
+  entry on, each witnessed first.
+- **Effort (the owner, 2026-10-19: *"I noticed that routine runs or scheduled task runs is using claude opus 5.5 at medium
+  effort but I want it to be always at xhigh effort"*):** `.claude/settings.json` now sets `env.CLAUDE_CODE_EFFORT_LEVEL` to
+  `xhigh`. Its `effortLevel` and `modelSettings` keys already said `xhigh`, so the cloud session must have been setting effort
+  explicitly, and only this variable outranks `--effort`, `/effort` and both keys (Claude Code's environment-variable reference,
+  read today). A project file may set it, and single-repository cloud sessions read that file. The routine API was asked to
+  carry it as well, sending its full unchanged configuration plus the variable. It refused (HTTP 400: `session_request.environment_variables is not supported on triggers`),
+  and the routine is unchanged. The owner can add the same variable to the cloud environment in claude.ai as a second layer.
+  The variable holds sous-chefs at `xhigh` too. `docs/CLOUD_ROUTINE.md` (*Effort*) and `HANDOFF.md` §11.3 say so. **To
+  verify:** the next routine run's session header shows its effort.
+- **`launch/2.0.0`:** `c3b33f3` merges `master` `6c26aed..8fc42f8` (`205f0f4`, WASM-OOM-1). The merge moved the Unreleased
+  section into `## [2.0.0]` and rebuilt the map: 1532 nodes, 0 errors. `doctor --check` ok; `scripts/clippy.sh -j 4` clean
+  and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and
+  book green. Dispatched at it: `ci.yml` `everything` `39296491537`, release dry run `39296497024`.
+- Files and folders (the effort commit): M `.claude/settings.json`, `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`,
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `cloud-routine-on-demand-2026-10-17.md` (the effort variable), copied both ways.
+- Open / next, in order: (1) the launch runs above and this commit's push run; (2) redo run 4's two WASM fixes and the red
+  team's findings, each witnessed first; (3) the WASM fragment's next pieces: `for`, `List`, `split`, `map`; RW 4.66, 4.67,
+  6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.

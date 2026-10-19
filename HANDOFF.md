@@ -754,7 +754,10 @@ wins, and you should update the memory to match.
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
   2026-10-15 — no longer used as an agent, §11.1). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
-  `medium` effort — the repository's `effortLevel: xhigh` is what raises them; a cybersecurity-flagged
+  `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
+  `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
+  both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
+  environment variables on a trigger. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 
@@ -1115,7 +1118,11 @@ spells the same thing?**
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
 mechanism. **PowerShell 5.1 `*>` writes UTF-16LE** — `iconv` before grepping. **`cargo test` stops at
-the first failing target** — always `--no-fail-fast`. **Freeze the tree during verification**; editing
+the first failing target** — always `--no-fail-fast`. **A worktree that shares the main checkout's `CARGO_TARGET_DIR`
+leaves its own `target/debug/delulu` behind** (2026-10-19). A rebuild of the same package from the other tree can count as
+fresh and skip copying its binary back, so `doctor_cli` on `master` read the launch branch's `2.0.0` against `1.0.0`. Give
+a worktree its own target directory, or touch a source file of the binary's crate before testing in the other tree.
+**Freeze the tree during verification**; editing
 while a suite runs makes the Survey stale and produces three `doctor_cli` failures that look like
 product defects.
 

@@ -74,6 +74,14 @@ without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, re
 the settings reference (read 2026-10-17) says a top-level `effortLevel` in a project file applies to every model, but Opus 5.5
 ignores one in *user* settings, and `modelSettings` is how a level is saved per model. The routine's own `environment_variables`
 (`CLAUDE_CODE_EFFORT_LEVEL`) was tried and the API stored nothing, so the repository file is the one control (D-V2-146).
+**Since 2026-10-19** the file also sets `env.CLAUDE_CODE_EFFORT_LEVEL` to `xhigh`. The owner saw the routine's runs at
+`medium` although both keys above said `xhigh`, so something in the cloud session was setting effort explicitly, and an explicit
+choice outranks every settings key. The environment variable outranks `--effort`, `/effort`, `modelSettings` and
+`effortLevel` (the environment-variable reference, read 2026-10-19), and a project file may set it. The routine API refuses it
+outright now: `session_request.environment_variables is not supported on triggers` (HTTP 400, 2026-10-19). The two places
+that can carry it are this file and the cloud environment's own variables (claude.ai → the routine → Edit → the environment
+→ Environment variables), which only the owner can edit. The variable also holds every sous-chef at `xhigh`, because a
+sub-agent's own `effort` does not outrank it.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the

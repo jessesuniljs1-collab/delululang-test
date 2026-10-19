@@ -6830,3 +6830,23 @@ fix) and a growth the memory's maximum refuses — **red on the old `__alloc`** 
 Mutants M522 (the wrap branch back to `unreachable`), M523 (the growth branch), M524 (DL0903's old text) red; control green.
 `delulu-wasm` 129 passed; `wasm_cli` 10, `budget_cli` 10; the release differential 50,000 checked, 46,235 agreed, 3,765 both
 faulted, 0 mismatches; `scripts/clippy.sh` clean (stamped).
+
+## 2026-10-19 — the laptop: run 4 synced; the routine held at xhigh by an environment variable; `launch/2.0.0` at `c3b33f3`
+
+**Synced.** `master` fast-forwarded to `8fc42f8`. Run 4's open CI items were read green: `205f0f4` (`39274259721`),
+`8fc42f8` (`39275805346`), and `launch/2.0.0`'s `everything` and release dry run on `ece2454` (`39272359850`,
+`39272366257`). The routine's own log, read through the routine API, shows what the usage limit cut off at 15:12 UTC: two
+WASM fixes built but not committed (negating `Int::MIN`; `&&`/`||` short-circuit), and a red-team pass whose notes never
+left the VM. Among its findings the log shows an interpreter panic in `rand.int` when `hi - lo` overflows. All are to be
+redone on the laptop, each witnessed first (`docs/CLOUD_SYNC_LOG.md`, this date).
+
+**Effort.** The owner saw the routine running Opus 5.5 at `medium`, although `.claude/settings.json` set `effortLevel` and
+`modelSettings` to `xhigh`. Claude Code puts an explicit choice (`--effort`, `/effort`, `CLAUDE_CODE_EFFORT_LEVEL`) above
+both settings keys, and its environment-variable reference says the variable outranks `--effort` and `/effort`. The file
+now sets `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`. The routine API refuses environment variables on a trigger (HTTP 400,
+tried with the routine's full unchanged configuration). Nothing was changed there. Whether the next run starts at `xhigh`
+is read from that run, not assumed.
+
+**`launch/2.0.0`.** `c3b33f3` merges `master` up to `8fc42f8`. On its tree the map is 1532 nodes with 0 errors,
+`doctor --check` is ok, clippy is clean and stamped, and the document gates are green. Its `everything` run `39296491537`
+and release dry run `39296497024` were dispatched. Their results are read in a later entry.
