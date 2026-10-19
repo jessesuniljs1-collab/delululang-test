@@ -503,7 +503,8 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 cargo build --release                              # first build fetches everything
 cargo test --workspace --no-fail-fast              # 150 test binaries (--no-fail-fast MATTERS:
                                                    #  without it cargo stops at the first failing target)
-cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
+scripts/clippy.sh -j 4                             # the workspace clippy (-D warnings), ZERO warnings, and a
+                                                   #  stamp the pre-commit hook checks for any Rust commit
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # every case an exact exit code; it counts its own
 cargo run -p delulu-survey -- build                # ALWAYS, after any change
 ./target/release/delulu doctor                     # the health command: environment,
@@ -1633,7 +1634,9 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the fastest lane there, and what it times when a lane is wrong.
   **The same run's slip:** clippy ran, a test was added, and the commit said "clippy 0" — `master` red on `lints` (`81da0ae`,
   fixed in `45ca06d`). A commit message's evidence is about the commit: run the lint after the LAST edit of any `.rs` file,
-  tests included.
+  tests included. **Now a hook** (run 15's lesson — a rule a run must remember is one it forgets): `scripts/clippy.sh` stamps
+  a hash of the Rust inputs it passed, and `pre-commit` refuses a commit staging Rust inputs that hash otherwise — git only,
+  so a commit made while a suite holds the build lock still goes through when the lint ran first.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

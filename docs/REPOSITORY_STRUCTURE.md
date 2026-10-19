@@ -299,7 +299,11 @@ DeluluLang/
 │   │                               #   mtime, and a CONTROL run that must be green — routine run 15
 │   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
 │   │                               #   COMMITS (the index, exported and checked) — `git config
-│   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering
+│   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering —
+│   │                               #   and one staging Rust inputs `clippy.sh` has not passed (on-demand run 4)
+│   ├── hooks/rust-inputs-hash      # one hash of every Rust input in the working tree or the index, git
+│   │                               #   only — what `clippy.sh` stamps and the hook compares
+│   ├── clippy.sh                   # the workspace clippy CI's `lints` runs, stamping what it passed
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught

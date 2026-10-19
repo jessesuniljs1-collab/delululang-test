@@ -4182,3 +4182,32 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `45ca06d`); (2) the WASM fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels), and kernels long
   enough for C's work to be measured above its start-up; RW 4.66, 4.67, 6.1's further strings, 6.2; (3) *[laptop]* the
   launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): loop engineering — a Rust commit needs the lint it claims (`scripts/clippy.sh`, the pre-commit hook)
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `0e4e9a2`   Commits: this entry's commit.
+- **Why:** this run's `81da0ae` said "clippy 0" and went red on `lints` — clippy had run, then a test was written (fixed in
+  `45ca06d`). "Lint after the LAST edit" was already written down twice (routine runs 12 and 25); routine run 15's lesson is
+  that a rule a run must remember is one it forgets.
+- **What:** `scripts/clippy.sh` runs the workspace clippy CI's `lints` job runs (`--workspace --all-targets -- -D warnings`,
+  extra cargo arguments such as `-j 4` passed through) and, only when it exits 0 with the Rust inputs unchanged meanwhile,
+  stamps one hash of them in the git directory (`git rev-parse --git-path clippy-stamp`, so each worktree has its own).
+  `scripts/hooks/rust-inputs-hash worktree|index` computes that hash from git alone — blob ids of every `*.rs`, manifest,
+  `Cargo.lock`, `clippy.toml` and `rust-toolchain.toml`; untracked-but-not-ignored files count; `.claude/` is excluded by name
+  (the laptop's second copy). `scripts/hooks/pre-commit` now refuses a commit that STAGES any such input unless the index
+  hashes to the stamp — no cargo in the hook, so a commit made while a suite holds the build lock still goes through when
+  the lint ran before it. A records-only commit is not checked.
+- **Falsified both ways** (a throwaway worktree, the hook called directly): no stamp → refused; after `clippy.sh` → its check
+  passes; an edit staged after the lint → refused; an edit left unstaged after the lint → passes (the commit holds what was
+  linted); a Markdown-only change → not checked. A nested git worktree's files are not listed by `git ls-files -o`
+  (measured in a scratch repository); a plain copy's are, hence the `.claude/` exclusion.
+- **For every session, laptop included:** run `scripts/clippy.sh -j 4` after the last `.rs` edit and before a commit that
+  holds one — merges too (the launch branch's merge of `master` brings Rust in). AGENTS.md step 3, `CLOUD_ROUTINE.md` steps 4
+  and 5, `HANDOFF.md` (§7's commands, §11.5), `CONTRIBUTING.md` §6 and `REPOSITORY_STRUCTURE.md` say so.
+- Files and folders: M `scripts/hooks/pre-commit`, `AGENTS.md`, `CONTRIBUTING.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/REPOSITORY_STRUCTURE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `scripts/clippy.sh`,
+  `scripts/hooks/rust-inputs-hash`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: the first Rust commit there meets the new check — `scripts/clippy.sh -j 4` (Git-Bash) before it; if
+  the hook refuses with everything staged and clippy clean, an untracked `.rs` file in the tree is the likely cause.
+- Open / next: as the entry before.
