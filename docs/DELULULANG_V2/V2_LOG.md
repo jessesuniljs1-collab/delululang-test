@@ -6767,3 +6767,68 @@ program (`interp=Ok(1651022093) wasm=Ok(2)`). Green after: 7 of 7; the sample's 
 **50,000 checked, 46,235 agreed, 3,765 both faulted, 0 mismatches**. Mutants (`scripts/mutants.py`): M510 (no frame of
 function values pushed) red in three tests, M511 (pushed, never popped) red in two, M512 (the generator never shadows) red
 on the count; control green. clippy (`delulu-wasm`, all targets) 0; fmt clean.
+
+## 2026-10-19 — on-demand routine run 4 (continued): Study C re-measured; the harness checks each lane's answer and times in microseconds
+
+**Why.** RW 3.4 put four of Study C's six kernels on the WASM engine, and `HOT_PATH_TABLE.md` said its own figures were
+NOT re-measured — "re-running Study-C (release, all three lanes) is the next step before any row changes" (the laptop's
+inbox, and this run's). The VM has gcc 13.3 and CPython 3.11, so every lane runs here.
+
+**Two harness defects, found by reading it and by its first run here.** (1) A lane was timed whenever its process exited 0:
+nothing compared what it printed with the interpreter's answer, though the code's own comment said "a benchmark where the
+lanes do different work measures nothing" — and the WASM lane had just gone from one benchmark to four. Now `checked` times a
+lane only when it printed the interpreter's answer (line endings aside); any other answer is listed, with both, among the
+benchmarks that lane could not run. (2) It timed in whole milliseconds. The first run here read every C process as `1` or
+`0` ms, and `nested_calls_macro`, whose C read 0, vanished from both ratio tables without a word (the laptop's C processes had
+read 5–6 ms, so it never showed there). Now microseconds, published as fractional milliseconds, and a benchmark a ratio leaves
+out is named. The record also carries its date and machine (`measured_at`, `machine`: OS, CPUs, kernel, processor, the
+`delulu`, gcc and CPython versions; schema `study-c/2`), and the report no longer prints "These numbers are the v1.0
+baseline" over whatever it measured.
+
+**Evidence.** `study_c::tests` (five): the civil date against Python's at a leap day and a century; the answer check; a
+report from a lane that printed `2` where the interpreter printed `46368` — listed, untimed, in no ratio; a 0.64 ms C time
+kept (545.3×) and a 0 µs one named; `time_it` reads a real process (the test binary's `--list`) at ≥ 100 µs and keeps what it
+printed. Mutants M513 (the mismatch arm skipped), M514 (every answer the same), M515 (no machine table), M516 (`as_millis`
+again), M517 (a zero-C benchmark not named), M518 (microseconds published as milliseconds) — all red; control green. clippy
+(`delulu-measure`) 0.
+
+**The measurement** (`measurements/study-c/REPORT.md`, `results.json`; 2026-10-19 14:14 UTC; release `delulu 1.0.0` from
+`79f83d6`; Linux 6.18 x86_64, 4 vCPUs, Intel Xeon @ 2.10GHz; nothing else running): C 0.99–1.30 ms on every benchmark —
+process start-up; WASM 7.64–11.97 ms on the four it runs (`wordcount_macro` needs `split`, `list_map_macro` a `List`);
+interpreter 8.63–365.36 ms; CPython 13.74–80.39 ms. **wasm ÷ C 6.7×–11.7× (geo-mean of the four 9.3×); interp ÷ C
+7.5×–311.4×.** Every WASM answer matched the interpreter's. The interpreter is within a run's spread of 2026-07-20
+(`loop_sum_1m` 365 ms against 363, `fib_recursive_24` 83 against 77): the ratios grew because the C lane's start-up shrank
+(5–6 ms there). Where both engines ran, WASM took 1.7× (`string_build_20k`) to 30.6× (`loop_sum_1m`) less time than the
+interpreter. The first run, before the microsecond fix, read the same shape (interp 82/349/17/9/10/284 ms; WASM 8/10/8/11).
+**Criterion 1 is still not met** — coverage 4 of 6, and each of the four past 2.5× — and the hot-path table says so, with
+the 2026-07-20 table kept beneath it verbatim and that run whole in `measurements/study-c/runs/2026-07-20/`. The same range
+was updated where it is quoted (`README.md`, `docs/QUESTIONS.md` twice, `docs/for-agents.md`, `measurements/METHODOLOGY.md`
+§3.2–3.3); the dated phase records and the 1.0 announcement keep theirs. **Not measured:** a compute-only ratio — every
+figure is a whole process, and the study has no start-up control per lane (an empty `main`); RW 3.4 names it.
+
+## 2026-10-19 — on-demand routine run 4 (continued): Study C measures start-up; `master` red on `lints` once, fixed (`45ca06d`)
+
+**`master` red, and why.** `81da0ae`'s push run `39268713452` went red on `lints` alone — clippy's `manual_range_contains`
+on `time_it_reads_a_process_in_microseconds`, a test written after this run's last clippy, in a commit whose message said
+"clippy 0". Read from the job's log (one error, nothing else); fixed in `45ca06d` — made in a worktree at `81da0ae` so it held
+nothing else, `cargo clippy -p delulu-measure --all-targets -D warnings` exit 0 and the crate's tests green there — and pushed
+within minutes. The run's other jobs were not waited for before the fix went up; its push run is read below.
+
+**What (the start-up control).** The hot-path table said a compute-only ratio needs a start-up control per lane. Study C now
+runs one — a program that prints `0` and nothing else — through the same per-lane code as every benchmark, then takes it out
+of the benchmarks (`take_control`), so no table, count or ratio includes it. The report shows its figure per lane, with its
+spread, and each benchmark less its lane's floor; no ratio is computed from those differences, and the report says why.
+
+**The published record is now this run** (2026-10-19 14:26 UTC; the same build, machine and quiet as 14:14): start-up C
+0.92 ms, interpreter 4.70, WASM 7.01, CPython 11.91. WASM 8.31–11.14 ms on its four kernels, 1.30–4.13 ms above its floor;
+C 0.97–1.50 ms, **0.05–0.58 ms above its floor** — so the C lane's work is inside a millisecond's noise and no compute ratio
+is offered. `wasm ÷ C` **6.5×–11.5×** (geo-mean 8.8×), `interp ÷ C` **8.9×–359.0×**. Between the 14:14 run and this one,
+single ratios moved by up to a quarter (`loop_sum_1m`'s `interp ÷ C` 290.4× then 359.0×), mostly through C's ~1 ms
+denominator — the table now says so. Every document quoting the range was updated to this run (README, QUESTIONS twice,
+for-agents, METHODOLOGY, CHANGELOG, RW 3.4); this log's previous entry keeps the 14:14 figures as what that run read.
+
+**Evidence.** `study_c::tests` seven: two new — the floor shown per lane with its spread, each benchmark less it
+(360.00, 4.75, 0.27), a lane where the control failed named, and the control absent from the timings table and the WASM
+count; and `take_control` removes the control and only it (`startup_program`'s kind is the one taken). Mutants M519 (the
+control copied, not taken out), M520 (no subtraction), M521 (the control's failures unshown) red; control green. clippy
+(`delulu-measure`, all targets) 0 after the last edit.

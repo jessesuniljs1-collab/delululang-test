@@ -145,6 +145,7 @@ cargo run -p delulu-conform -- --coverage           # the coverage law
 cargo run -p delulu-conform -- --check-reference    # the reference must not be stale
 cargo run -p delulu -- fmt --check examples         # one style, no options
 cargo clippy --workspace --all-targets -- -D warnings  # no warnings at all
+scripts/clippy.sh -j 4                              # the same, stamped for the pre-commit hook (scripts/hooks)
 cargo fmt --all                                     # the Rust is rustfmt's (rustfmt.toml); CI checks it
 ```
 

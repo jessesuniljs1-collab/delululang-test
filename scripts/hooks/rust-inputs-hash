@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Print one hash of every input clippy reads — the Rust sources, the manifests, the lockfile, the toolchain pin — as
+# they stand in the WORKING TREE (`worktree`) or in the INDEX (`index`). The two agree exactly when the index holds what
+# the working tree held: `scripts/clippy.sh` stamps the working tree's hash after a clean run, and the pre-commit hook
+# compares the index's with it (on-demand routine run 4, loop engineering).
+#
+# Git only — no cargo — so the hook never waits on the build lock while a suite runs. A blob id is what `git add` would
+# store (filters and line endings applied), so a Windows checkout hashes the same as a Linux one.
+#
+# usage: scripts/hooks/rust-inputs-hash worktree|index
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+specs=('*.rs' '*Cargo.toml' 'Cargo.lock' '*clippy.toml' 'rust-toolchain.toml')
+case "${1:-}" in
+    worktree)
+        # Tracked and untracked-but-not-ignored files that exist: a new module the index lacks is a difference.
+        # `.claude/` is excluded by name: the laptop keeps a second copy of the repository under `.claude/worktrees/`.
+        list=$(git ls-files -co --exclude-standard -- "${specs[@]}" ':(exclude).claude' | LC_ALL=C sort -u | while IFS= read -r f; do
+            if [ -f "$f" ]; then printf '%s\n' "$f"; fi
+        done)
+        [ -n "$list" ] || { echo "rust-inputs-hash: no Rust inputs found" >&2; exit 2; }
+        paste -d' ' <(printf '%s\n' "$list" | git hash-object --stdin-paths) <(printf '%s\n' "$list") | git hash-object --stdin
+        ;;
+    index)
+        # The index is kept in byte order of its paths — the order `LC_ALL=C sort` gives the working tree's list.
+        git ls-files -s -- "${specs[@]}" | sed -E 's/^[0-7]+ ([0-9a-f]+) [0-9]+\t/\1 /' | git hash-object --stdin
+        ;;
+    *)
+        echo "usage: $0 worktree|index" >&2
+        exit 2
+        ;;
+esac

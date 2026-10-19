@@ -4163,3 +4163,92 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `master` (RW 4.69, 4.63, 4.70, RW 3.4, 3.8), dispatch `everything` and the release dry run; (3) re-run Study-C in release
   (all three lanes) before any row of `HOT_PATH_TABLE.md` changes; (4) the WASM fragment's next pieces — `for` and `List`;
   RW 4.66, 4.67, 6.1's further strings, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): Study C re-measured — the harness checks each lane's answer and times in microseconds; `launch/2.0.0` at `9e2eed8`
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; and `launch/2.0.0`   Base: `79f83d6`   Commits: this entry's commit; on `launch/2.0.0` `9e2eed8`, the
+  merge of `79f83d6` (release procedure step 1).
+- Files and folders: M `crates/delulu-measure/src/study_c.rs` (`checked`, `same_answer`, microseconds, `utc_minute`,
+  `machine`, the report's machine table, `wasm ÷ C`, five unit tests), `measurements/study-c/REPORT.md` and `results.json`
+  (regenerated, 2026-10-19), `measurements/study-c/HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md` (§3.2, §3.3),
+  `README.md`, `docs/QUESTIONS.md`, `docs/for-agents.md`, `docs/REPOSITORY_STRUCTURE.md` (§5.9, `runs/`), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `measurements/study-c/runs/2026-07-20/REPORT.md` and `results.json` (the v1.0
+  run, copied whole before the harness overwrote it), `docs/assistant-memory/a-benchmark-checks-its-answer.md`. Deleted,
+  renamed: nothing. On `launch/2.0.0` (`9e2eed8`): the merge; `master`'s three Unreleased CHANGELOG sections moved into
+  `## [2.0.0]`; `HANDOFF.md` §11.1 both bullets kept; `docs/survey/*` rebuilt there.
+- **Fixed (Study C):** a lane was timed whatever it printed — now only with the interpreter's answer; times were whole
+  milliseconds, which read a Linux C process as 0 or 1 and dropped a benchmark from every ratio in silence — now
+  microseconds, the left-out named; the record names its date and machine (`study-c/2`). Mutants M513–M518 red, control green.
+- **Measured (2026-10-19 14:14 UTC, release `79f83d6`, this VM, nothing else running):** WASM runs 4 of 6 at **6.7×–11.7×
+  C** whole-process (geo-mean 9.3×); the interpreter **7.5×–311.4× C** (2.0×–60.5× in the v1.0 run, where C read 5–6 ms;
+  the interpreter's own times are unchanged within spread). Criterion 1 still not met. Every quoting document updated.
+- **`launch/2.0.0`:** `9e2eed8` merges `master` `6c01264..79f83d6` (RW 4.69, 4.63, 4.70, 3.4, 3.8); on its tree survey 1527
+  nodes, 0 errors; `doctor --check` ok; book, core_invariance, distribution, doctor_cli, evidence_claims, governance,
+  release, repository_structure and `loop_parity` green. Dispatched at it: `ci.yml` `jobs=everything` and the release dry
+  run — results in the next entry or the next run's.
+- CI read: `4d11575`'s push run `39261866776` — **success**; `79f83d6`'s runner reads `39263152681` (macOS) and
+  `39263157384` (Windows) — success, `loop_parity` 7 passed on each; its push run `39264737843` — running at this entry.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (a laptop re-run of Study C would be a second machine's figures, welcome but not owed).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a benchmark checks its answer); `docs/assistant-memory/a-benchmark-checks-its-answer.md`.
+- Open / next, in order: (1) the push runs of `79f83d6` and this commit; `launch/2.0.0`'s `everything` and release runs on
+  `9e2eed8`; (2) Study C's start-up control (an empty `main` per lane) so a ratio can be read as compute; (3) the WASM
+  fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels); RW 4.66, 4.67, 6.1's further strings, 6.2;
+  (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): `master` red on `lints` once, fixed (`45ca06d`); Study C measures start-up
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `81da0ae`   Commits: `45ca06d` Study C's time_it witness says its range with contains (clippy,
+  master red on lints); and this entry's commit.
+- **`master` was red:** `81da0ae`'s push run `39268713452` — `lints` failure (clippy `manual_range_contains` in a test written
+  after this run's last clippy; its message said "clippy 0"). Fixed in `45ca06d`, a one-line commit made in a worktree at
+  `81da0ae` and linted there; its push run `39269260235` is read in the next entry (or by the next run).
+- Files and folders (this entry's commit): M `crates/delulu-measure/src/study_c.rs` (the start-up control:
+  `startup_program`, `take_control`, the report's start-up table and the table above start-up, `startup` in the record; two
+  unit tests), `measurements/study-c/REPORT.md` and `results.json` (regenerated 14:26 UTC, with the control),
+  `measurements/study-c/HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`, `CHANGELOG.md`, `HANDOFF.md` (§11.5), `docs/assistant-memory/a-benchmark-checks-its-answer.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Measured (the published record, 14:26 UTC):** start-up C 0.92 ms, interpreter 4.70, WASM 7.01; C's work above its floor
+  0.05–0.58 ms (no compute ratio offered), WASM's 1.30–4.13 ms; `wasm ÷ C` 6.5×–11.5× (geo-mean 8.8×), `interp ÷ C`
+  8.9×–359.0×. The 14:14 run's ratios differ by up to a quarter; the table says so. Every quoting document updated to this run.
+- Verified: `study_c::tests` 7; M519–M521 red, control green; clippy (`delulu-measure`) 0 after the last edit.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (the slip: a commit's lint claim is about the commit).
+- Open / next, in order: (1) `45ca06d`'s and this commit's push runs; `launch/2.0.0`'s `everything` run `39266597313` on
+  `9e2eed8` (the release dry run `39266602442` there — success); then merge `master` into it again (this run's Study C and
+  `45ca06d`); (2) the WASM fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels), and kernels long
+  enough for C's work to be measured above its start-up; RW 4.66, 4.67, 6.1's further strings, 6.2; (3) *[laptop]* the
+  launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): loop engineering — a Rust commit needs the lint it claims (`scripts/clippy.sh`, the pre-commit hook)
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `0e4e9a2`   Commits: this entry's commit.
+- **Why:** this run's `81da0ae` said "clippy 0" and went red on `lints` — clippy had run, then a test was written (fixed in
+  `45ca06d`). "Lint after the LAST edit" was already written down twice (routine runs 12 and 25); routine run 15's lesson is
+  that a rule a run must remember is one it forgets.
+- **What:** `scripts/clippy.sh` runs the workspace clippy CI's `lints` job runs (`--workspace --all-targets -- -D warnings`,
+  extra cargo arguments such as `-j 4` passed through) and, only when it exits 0 with the Rust inputs unchanged meanwhile,
+  stamps one hash of them in the git directory (`git rev-parse --git-path clippy-stamp`, so each worktree has its own).
+  `scripts/hooks/rust-inputs-hash worktree|index` computes that hash from git alone — blob ids of every `*.rs`, manifest,
+  `Cargo.lock`, `clippy.toml` and `rust-toolchain.toml`; untracked-but-not-ignored files count; `.claude/` is excluded by name
+  (the laptop's second copy). `scripts/hooks/pre-commit` now refuses a commit that STAGES any such input unless the index
+  hashes to the stamp — no cargo in the hook, so a commit made while a suite holds the build lock still goes through when
+  the lint ran before it. A records-only commit is not checked.
+- **Falsified both ways** (a throwaway worktree, the hook called directly): no stamp → refused; after `clippy.sh` → its check
+  passes; an edit staged after the lint → refused; an edit left unstaged after the lint → passes (the commit holds what was
+  linted); a Markdown-only change → not checked. A nested git worktree's files are not listed by `git ls-files -o`
+  (measured in a scratch repository); a plain copy's are, hence the `.claude/` exclusion.
+- **For every session, laptop included:** run `scripts/clippy.sh -j 4` after the last `.rs` edit and before a commit that
+  holds one — merges too (the launch branch's merge of `master` brings Rust in). AGENTS.md step 3, `CLOUD_ROUTINE.md` steps 4
+  and 5, `HANDOFF.md` (§7's commands, §11.5), `CONTRIBUTING.md` §6 and `REPOSITORY_STRUCTURE.md` say so.
+- Files and folders: M `scripts/hooks/pre-commit`, `AGENTS.md`, `CONTRIBUTING.md`, `HANDOFF.md`, `docs/CLOUD_ROUTINE.md`,
+  `docs/REPOSITORY_STRUCTURE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `scripts/clippy.sh`,
+  `scripts/hooks/rust-inputs-hash`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: the first Rust commit there meets the new check — `scripts/clippy.sh -j 4` (Git-Bash) before it; if
+  the hook refuses with everything staged and clippy clean, an untracked `.rs` file in the tree is the likely cause.
+- Open / next: as the entry before.

@@ -503,7 +503,8 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 cargo build --release                              # first build fetches everything
 cargo test --workspace --no-fail-fast              # 150 test binaries (--no-fail-fast MATTERS:
                                                    #  without it cargo stops at the first failing target)
-cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
+scripts/clippy.sh -j 4                             # the workspace clippy (-D warnings), ZERO warnings, and a
+                                                   #  stamp the pre-commit hook checks for any Rust commit
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # every case an exact exit code; it counts its own
 cargo run -p delulu-survey -- build                # ALWAYS, after any change
 ./target/release/delulu doctor                     # the health command: environment,
@@ -1624,6 +1625,19 @@ Added in V2 (2026-09-17 → 2026-09-28):
   latency had a ceiling past which it revoked everything the monitor watched. Grow the input until the cost crosses the
   nearest deadline before grading it — a witness whose STATE is "one read takes twice the period", grown with the writer's
   own code and measured in the test, made it red on the first try.
+
+- **A benchmark that does not check its answer can time a wrong one — and a unit sized for one machine reads another as
+  zero** (on-demand routine run 4, Study C): the harness timed any lane that exited 0, though its comment said lanes doing
+  different work measure nothing, and the WASM lane had just grown from one benchmark to four; and it truncated to whole
+  milliseconds, which the laptop's 5–6 ms C processes survived and a Linux VM's sub-millisecond ones did not — `0`, and a
+  benchmark silently gone from every ratio. Now each lane is held to the interpreter's answer and timed in microseconds,
+  and the record names its date and machine. Before re-running a measurement on a new machine, ask what its unit reads at
+  the fastest lane there, and what it times when a lane is wrong.
+  **The same run's slip:** clippy ran, a test was added, and the commit said "clippy 0" — `master` red on `lints` (`81da0ae`,
+  fixed in `45ca06d`). A commit message's evidence is about the commit: run the lint after the LAST edit of any `.rs` file,
+  tests included. **Now a hook** (run 15's lesson — a rule a run must remember is one it forgets): `scripts/clippy.sh` stamps
+  a hash of the Rust inputs it passed, and `pre-commit` refuses a commit staging Rust inputs that hash otherwise — git only,
+  so a commit made while a suite holds the build lock still goes through when the lint ran first.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

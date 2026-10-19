@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Refuse a commit whose Survey map does not match what the commit holds (routine run 15, loop engineering).
+# Refuse a commit whose Survey map does not match what the commit holds (routine run 15, loop engineering), and one
+# that stages Rust inputs `scripts/clippy.sh` has not passed (on-demand routine run 4; the check below `cd`).
 #
 # Routine run 14's closing commit, `75bb33b`, carried a map built before its last 21 lines of documents were
 # written. Nothing in the VM said so — the run had checked the map, then edited the sync-log entry — and the
@@ -17,6 +18,23 @@
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+
+# A commit that stages a Rust input must be the tree `scripts/clippy.sh` last passed (on-demand routine run 4): `81da0ae`
+# said "clippy 0" and went red on `lints` — clippy had run, then a test was written. Git only, no cargo: the stamp is
+# compared with the INDEX's hash, so a commit made while a suite holds the build lock still goes through when the lint
+# ran before it.
+if git diff --cached --name-only -- '*.rs' '*Cargo.toml' 'Cargo.lock' '*clippy.toml' 'rust-toolchain.toml' | grep -q .; then
+    stamp=$(git rev-parse --git-path clippy-stamp)
+    staged=$(scripts/hooks/rust-inputs-hash index)
+    if [ ! -f "$stamp" ] || [ "$(cat "$stamp")" != "$staged" ]; then
+        echo "pre-commit: this commit stages Rust inputs that scripts/clippy.sh has not passed." >&2
+        echo "  Run it after the LAST edit, with everything staged that the commit holds:" >&2
+        echo "    scripts/clippy.sh -j 4 && git commit …" >&2
+        echo "  (An untracked .rs file in the tree counts too — stage it, delete it or ignore it.)" >&2
+        exit 1
+    fi
+fi
+
 bin="$root/target/debug/delulu-survey"
 [ -x "$bin.exe" ] && bin="$bin.exe"
 # Reuse the built Survey unless its own sources are newer — a `cargo build` here would wait on the build lock

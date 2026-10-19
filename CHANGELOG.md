@@ -25,6 +25,24 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### the performance figures re-measured, and Study C checks each lane's answer, 2026-10-19
+
+- **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`) are Study C's run of 2026-10-19 — release build, all four lanes on one Linux VM. The interpreter is
+  8.9×–359.0× slower than C there, and the WASM engine, which now runs 4 of the 6 benchmarks, 6.5×–11.5×; both are whole
+  processes, start-up included. The v1.0 figures (2.0×–60.5×, measured on a machine where a C process took 5–6 ms to
+  start) are kept whole in `measurements/study-c/runs/2026-07-20/`. DeluluLang is still not competitive with C, and the
+  hot-path criterion is still not met.
+- **Fixed: Study C timed a lane whatever it printed.** A lane that exited 0 with another answer than the interpreter's would
+  have been timed as though it had done the work; it is now listed, with both answers, among the benchmarks that lane
+  could not run.
+- **Fixed: Study C timed in whole milliseconds,** which read a C process on Linux as 0 or 1 ms and dropped a benchmark whose
+  C time read 0 from every ratio without saying so. It times in microseconds now, names any benchmark a ratio leaves out,
+  and records the date and the machine it ran on (`results.json` schema `study-c/2`).
+- **Added: Study C measures start-up.** A program that prints `0` and nothing else runs on every lane (0.92 ms for C, 4.70 ms
+  for the interpreter, 7.01 ms for the WASM engine), and the report shows each benchmark less its lane's start-up, so work
+  can be told from start-up; no ratio is computed from those differences.
+
 ### loops run on the WASM engine, and a lambda inlined there sees its own names, 2026-10-19
 
 - **Added (RW 3.4, D-V2-163): `delulu run --engine wasm` compiles `while`, `break`, `continue`, assignment to a `var`, and

@@ -299,7 +299,11 @@ DeluluLang/
 │   │                               #   mtime, and a CONTROL run that must be green — routine run 15
 │   ├── hooks/pre-commit            # refuses a commit whose Survey map does not match the files it
 │   │                               #   COMMITS (the index, exported and checked) — `git config
-│   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering
+│   │                               #   core.hooksPath scripts/hooks`; routine run 15's loop engineering —
+│   │                               #   and one staging Rust inputs `clippy.sh` has not passed (on-demand run 4)
+│   ├── hooks/rust-inputs-hash      # one hash of every Rust input in the working tree or the index, git
+│   │                               #   only — what `clippy.sh` stamps and the hook compares
+│   ├── clippy.sh                   # the workspace clippy CI's `lints` runs, stamping what it passed
 │   ├── openshell-install.sh        # [PS-E-05] a pinned OpenShell release on a runner, checksums verified
 │   ├── openshell-prove.sh          # [PS-E-05] the OpenShell export checked by OpenShell's own prover
 │   │                               #   against a boundary written by hand; each widening must be caught
@@ -677,7 +681,9 @@ checked first, and what was kept.
 Every `measurements/*/RECORD.md` (and `study-*/REPORT.md`) is the **reproducible evidence** behind one
 published claim: `agent-loop` (why to batch `check`), `compute`, `dead-man`, `federation-demo`,
 `first-run`, `fleet-update`, `lts-cycle`, `robotics-demo`, `satellite-demo`, `scale`,
-`pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`). These are
+`pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`, and
+`measurements/study-c/runs/` keeps each earlier Study-C run whole — `runs/2026-07-20/`, the v1.0 baseline
+pinned at the v1.0.0 release commit `198bf44`, with its `REPORT.md` and `results.json`). These are
 **measurements, not benchmarks**: each records the machine, the method and the numbers, so a reader
 can disagree with the method rather than only with the conclusion. `measurements/METHODOLOGY.md` is
 the rule they all follow — what counts as a measurement here, and what disqualifies one.
