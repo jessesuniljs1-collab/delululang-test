@@ -1686,11 +1686,9 @@ impl<'a> Checker<'a> {
                     self.expect_type(a, b, span, "assert_eq compares two values of one type");
                     // R-5: opaque types have no structural equality — comparing secrets in
                     // tests is refused exactly like `==` refuses it everywhere else.
-                    if self.is_opaque(a, &mut HashSet::new()) || self.is_opaque(b, &mut HashSet::new()) {
-                        self.diags.push(
-                            Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
-                                .with_span(span, "use `Secret.verify` for secrets"),
-                        );
+                    if self.lacks_equality(a) || self.lacks_equality(b) {
+                        let d = self.no_equality(a, b, span);
+                        self.diags.push(d);
                     }
                 }
                 Some((Type::Unit, acc))
@@ -2523,11 +2521,9 @@ impl<'a> Checker<'a> {
                 // back a confident, wrong `false` — an equality answer derived from secret data,
                 // which is the shape of finding IF-1. D-V2-29 decision 3; no new code (D-V2-26).
                 "contains" => {
-                    if self.is_opaque(elem, &mut HashSet::new()) {
-                        self.diags.push(
-                            Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
-                                .with_span(span, "use `Secret.verify` for secrets"),
-                        );
+                    if self.lacks_equality(elem) {
+                        let d = self.no_equality(elem, elem, span);
+                        self.diags.push(d);
                     } else {
                         self.expect_arg(args, 0, elem, span);
                     }
@@ -2865,11 +2861,9 @@ impl<'a> Checker<'a> {
                 Type::Bool
             }
             Eq | Ne => {
-                if self.is_opaque(&lt, &mut HashSet::new()) || self.is_opaque(&rt, &mut HashSet::new()) {
-                    self.diags.push(
-                        Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
-                            .with_span(span, "use `Secret.verify` for secrets"),
-                    );
+                if self.lacks_equality(&lt) || self.lacks_equality(&rt) {
+                    let d = self.no_equality(&lt, &rt, span);
+                    self.diags.push(d);
                 } else {
                     self.expect_type(&lt, &rt, span, "equality requires matching types");
                 }
@@ -3449,7 +3443,20 @@ impl<'a> Checker<'a> {
 
     /// Structural opacity (R-5): Secret/Cap/Root, or a composite containing one.
     fn is_opaque(&self, t: &Type, visiting: &mut HashSet<TypeDefId>) -> bool {
+        self.opaque_for(t, false, visiting)
+    }
+
+    /// Does `t` have no structural equality — an opaque type anywhere in it, or a function (D-V2-166)? What `==`, `!=`,
+    /// `assert_eq` and `List.contains` refuse with DL0605. A closure has a `str` (`<fn>`) but no equality: `Value::eq` has
+    /// no answer for two of them, so `f == f` was admitted and answered `false` (EQ-FN-1).
+    fn lacks_equality(&self, t: &Type) -> bool {
+        self.opaque_for(t, true, &mut HashSet::new())
+    }
+
+    /// The walk behind `is_opaque` and `lacks_equality`; with `fns`, a function type counts too.
+    fn opaque_for(&self, t: &Type, fns: bool, visiting: &mut HashSet<TypeDefId>) -> bool {
         match self.cx.apply_type(t) {
+            Type::Fn { .. } => fns,
             Type::Secret(_) | Type::Cap(_) | Type::Root => true,
             // R-5: ForeignPtr, PyObj, and a foreign lib handle are opaque (no str/==/serialize).
             Type::ForeignPtr | Type::PyObj | Type::Foreign(_) => true,
@@ -3459,14 +3466,14 @@ impl<'a> Checker<'a> {
             // Stage 7: an actor reference is opaque identity (tag) — no str, no ==, never
             // serialized. Identity comparison is a post-1.0 question, not an accident.
             Type::Actor(_, _) => true,
-            Type::List(inner) | Type::Option(inner) => self.is_opaque(&inner, visiting),
+            Type::List(inner) | Type::Option(inner) => self.opaque_for(&inner, fns, visiting),
             // A `Map` is opaque if EITHER side is. Added by pattern, not by instance: a new
             // composite type that forgets this arm falls into the `_` below, where opaque becomes
             // `false` and `Map[Str, Secret[Str]] == m` is silently admitted. That is the shape of
             // the skip-branch rule — write the case where the checker could not tell.
-            Type::Result(a, b) | Type::Map(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
+            Type::Result(a, b) | Type::Map(a, b) => self.opaque_for(&a, fns, visiting) || self.opaque_for(&b, fns, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
-                if args.iter().any(|a| self.is_opaque(a, visiting)) {
+                if args.iter().any(|a| self.opaque_for(a, fns, visiting)) {
                     return true;
                 }
                 if !visiting.insert(id) {
@@ -3478,11 +3485,11 @@ impl<'a> Checker<'a> {
                     genv.types.insert(g.clone(), a.clone());
                 }
                 let opaque = match &def.kind {
-                    TypeDefKind::Record(fields) => fields.iter().any(|(_, ft)| self.type_expr_opaque(ft, &genv, visiting)),
+                    TypeDefKind::Record(fields) => fields.iter().any(|(_, ft)| self.type_expr_opaque(ft, &genv, fns, visiting)),
                     TypeDefKind::Sum(variants) => {
-                        variants.iter().any(|(_, fts)| fts.iter().any(|ft| self.type_expr_opaque(ft, &genv, visiting)))
+                        variants.iter().any(|(_, fts)| fts.iter().any(|ft| self.type_expr_opaque(ft, &genv, fns, visiting)))
                     }
-                    TypeDefKind::Alias(inner) => self.type_expr_opaque(inner, &genv, visiting),
+                    TypeDefKind::Alias(inner) => self.type_expr_opaque(inner, &genv, fns, visiting),
                 };
                 visiting.remove(&id);
                 opaque
@@ -3491,36 +3498,52 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// DL0605 for an equality on `a` and `b`, in words that fit them: an opaque type's (its long-standing text), or a
+    /// function's (D-V2-166).
+    fn no_equality(&self, a: &Type, b: &Type, span: Span) -> Diagnostic {
+        if self.is_opaque(a, &mut HashSet::new()) || self.is_opaque(b, &mut HashSet::new()) {
+            Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
+                .with_span(span, "use `Secret.verify` for secrets")
+        } else {
+            Diagnostic::error("DL0605", "a function has no structural equality")
+                .with_span(span, "compare what the functions compute, not the functions")
+        }
+    }
+
     /// Opacity check that works on an AST type (used inside record/sum definitions).
-    fn type_expr_opaque(&self, t: &TypeExpr, genv: &Genv, visiting: &mut HashSet<TypeDefId>) -> bool {
+    ///
+    /// It must name every type `opaque_for` does (OPAQUE-FIELD-1: it named no `Map`, no `Plugin` and no actor, so a record
+    /// holding `Map[Str, Secret[Str]]` or an actor reference was admitted to `==`, which the same type outside a record is
+    /// refused). With `fns`, a function type counts too.
+    fn type_expr_opaque(&self, t: &TypeExpr, genv: &Genv, fns: bool, visiting: &mut HashSet<TypeDefId>) -> bool {
         match t {
             TypeExpr::Named { path, args, .. } => {
                 if path.segs.len() == 1 {
                     let name = &path.segs[0].name;
                     if let Some(v) = genv.types.get(name) {
-                        return self.is_opaque(v, visiting);
+                        return self.opaque_for(v, fns, visiting);
                     }
                     match name.as_str() {
-                        "Secret" | "Cap" | "Root" | "ForeignPtr" | "PyObj" => return true,
+                        "Secret" | "Cap" | "Root" | "ForeignPtr" | "PyObj" | "Plugin" => return true,
                         "List" | "Option" => {
-                            return args.first().map(|a| self.type_expr_opaque(a, genv, visiting)).unwrap_or(false)
+                            return args.first().map(|a| self.type_expr_opaque(a, genv, fns, visiting)).unwrap_or(false)
                         }
-                        "Result" => return args.iter().any(|a| self.type_expr_opaque(a, genv, visiting)),
+                        "Result" | "Map" => return args.iter().any(|a| self.type_expr_opaque(a, genv, fns, visiting)),
                         _ => {}
                     }
-                    if self.table.foreigns.contains_key(name) {
+                    if self.table.foreigns.contains_key(name) || self.table.actors.contains_key(name) {
                         return true;
                     }
                     if let Some(&id) = self.table.type_ix.get(name) {
                         let targs: Vec<Type> = args.iter().map(|_| Type::Unit).collect();
-                        return self.is_opaque(&Type::Sum(id, targs), &mut visiting.clone());
+                        return self.opaque_for(&Type::Sum(id, targs), fns, &mut visiting.clone());
                     }
                 }
                 false
             }
-            TypeExpr::Fn { .. } => false,
+            TypeExpr::Fn { .. } => fns,
             // Opacity is a property of the core type; the rcap prefix does not change it.
-            TypeExpr::Rcap { inner, .. } => self.type_expr_opaque(inner, genv, visiting),
+            TypeExpr::Rcap { inner, .. } => self.type_expr_opaque(inner, genv, fns, visiting),
         }
     }
 

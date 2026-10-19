@@ -1004,7 +1004,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              R-5). To reveal it deliberately, use `expose` and hold `Cap[Declassify]`.",
         "DL0605" => "An opaque type has no structural equality. `==` on a secret would leak its \
              contents a byte at a time through timing. Use `verify`, which compares in constant \
-             time and returns only a `Bool`.",
+             time and returns only a `Bool`. The same holds wherever an opaque value sits: inside a \
+             list, an option, a map or a record field.\n\n\
+             A function has no structural equality either: two closures cannot be compared by what \
+             they would compute, and comparing them by identity is not a promise the language makes. \
+             Compare what the functions return instead.",
 
         // ===== DL07xx — authority ==========================================
         "DL0701" => "`main`'s effect row exceeds what the package's `[authority]` manifest permits. \

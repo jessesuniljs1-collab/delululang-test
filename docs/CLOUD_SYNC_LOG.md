@@ -4495,3 +4495,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   size limit: twelve long lines moved whole into their topic files).
 - Open / next: (1) the CI of #10, #11 and this branch, landing each on green in order; then `launch/2.0.0`; (2) MSG-CYCLE-1
   (RW 2.16), EQ-FN-1 (RW 2.15); records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — an `iso` move carries its graph whole; the debug race checker asks for the guarantee (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/msg-cycles` (on `laptop/value-cycles`, #12)   Pull request: #13   Merged: not yet (after #10–#12, on green CI)
+- Base: `825657a`.
+- What: `V2_LOG.md` (this date, the ninth entry); D-V2-165; RW 2.16 closed, RW 7.20 opened.
+- Files and folders: M `crates/delulu-runtime/src/actors.rs` (`MsgValue::Back`, `value_to_msg_in`, `msg_to_value_in`,
+  `assert_unique_graph`, `move_graph_tests`), `crates/delulu-runtime/src/channel.rs` (`from_value_in`, a test),
+  `crates/delulu-runtime/tests/actors_trace.rs`, `crates/delulu/tests/actors_cli.rs`, `docs/design/STAGE7_SPECIFICATION.md`
+  (§6.2, not entrenched — `survey query`), `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M583–M590; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #10–#12 and this branch, landing each on green in order; then `launch/2.0.0`; (2) EQ-FN-1
+  (RW 2.15); RW 7.20 under load; records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's
+  word.

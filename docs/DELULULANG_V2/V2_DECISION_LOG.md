@@ -3977,6 +3977,48 @@ lists (176 of 400, asserted over 120); mutants M533–M540 red, control green; t
 **Not re-measured:** Study C's table keeps its 2026-10-19 rows; all six kernels compile and print the interpreter's
 answers, and a run over all six on one machine is next.
 
+## D-V2-165 — An `iso` move carries its graph whole, cycles and shared cells included, and the debug race checker asks only for references from outside it (RW 2.16, MSG-CYCLE-1) — TAKEN (head chef, 2026-10-20, under the owner's delegation)
+
+**Found** (the laptop, 2026-10-20, while making `==` and `str` safe on a value that holds itself, RW 2.13–2.14): `recover
+{ var k = Node { v: 7, next: None }; k.next = Some(k); k }` checks clean as an `iso Node` — spec §3's `recover` lifts
+whatever the block built — and moving it to an actor overflowed the stack and killed the process. `value_to_msg` walked
+the graph as a tree. Two more things followed from the same shape:
+- `--debug-rcaps` reported that graph, and the legal `recover { let a = [1]; [a, a] }`, as a compiler bug (DL1610). Its
+  walk wanted every node below the top held exactly once, following spec §6.2's *"debug builds verify refcount==1
+  across the moved graph"* — a proxy for the guarantee, not the guarantee. The same walk never looked inside a variant
+  or a map, so an alias from outside reached through `Some(xs)` passed unseen.
+- A graph holding one list twice arrived holding two copies, so a `push` through one was not seen through the other, as
+  it is on the sending side.
+
+**Decision.**
+1. **The move carries the graph.** Each `List`, `Map` and `Record` cell is numbered where it is first met, before what
+   it holds. A cell met again crosses as `MsgValue::Back(n)`. The receiver makes each cell empty, records it, then
+   rebuilds what it holds into it. A moved graph that holds itself or holds a cell twice arrives as the same graph.
+2. **The debug race checker asks for the guarantee.** A mutable node's strong count may be no more than the references
+   the moved graph itself holds to it (the top node: those, plus the binding's and the evaluator's two). One more is a
+   reference from outside, which the static proof said there was not: DL1610, as before. The walk goes through variants
+   (each payload once) and maps. Spec §6.2's sentence is amended to say so.
+3. **The sandbox channel refuses a value that holds itself.** Its wire is a tree (canonical CBOR), and it already refuses
+   rather than approximates what cannot cross honestly: `Untransferable("a value that holds itself")`, reported as
+   DL1401 like the channel's other refusals. A cell held twice without a cycle crosses as plain data, as before.
+4. **No new code.** DL1610 keeps its meaning, a uniqueness violation; it simply stops firing on legal programs.
+
+**Rejected.** Refusing a cyclic graph at the actor boundary. The program is legal, the move is sound (no reference
+outside the region survives it), and a runtime refusal of a checked program is the checker-bug class this decision
+removes. Narrowing `recover` to tree-shaped results was rejected for the same reason: it would redefine what `iso` means.
+
+**Evidence.**
+- `actors_cli.rs` `a_graph_that_holds_itself_moves_to_an_actor_whole` (plain and `--debug-rcaps`): the process died
+  before; DL1610 under the flag.
+- `actors.rs` `move_graph_tests` (shared cell and cycle survive the move, by pointer identity).
+- `actors_trace.rs`:
+  - `an_aliased_nested_node_is_a_dl1610_class_violation` rewritten to hold the list OUTSIDE the graph — it held it twice
+    inside, which `recover` admits;
+  - `a_graph_holding_a_node_twice_or_holding_itself_passes_the_uniqueness_walk`;
+  - `an_alias_reached_through_a_variant_or_a_map_is_a_dl1610_class_violation`.
+- `channel.rs` `a_value_that_holds_itself_is_refused_and_one_held_twice_crosses`.
+- Mutants M583–M590 red, control green.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
