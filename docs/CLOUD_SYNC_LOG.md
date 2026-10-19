@@ -3962,3 +3962,49 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   reads the whole chain on every opening (each sandboxed run's host, each CLI command that records); its fast path needs the
   anchor to name the newest file and its length; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66,
   4.67; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3 (last): RW 4.53's last part — an opening reads one line when the files measure as the anchor says (D-V2-160); `launch/2.0.0` at `d2814e8`
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`; and `launch/2.0.0`   Pull request: none
+- Base: `7f1a4a1`
+- Commits: `5dea22e` An opening reads one line when the files measure as the anchor says (RW 4.53); and this entry's commit.
+  On `launch/2.0.0`: `d2814e8`, the merge of `7f1a4a1` (release procedure step 1).
+- Files and folders: M `crates/delulu-broker/src/audit.rs` (`AnchorAt`, `recover_fast`, `last_line_hash`, the writer keeps
+  the note; four tests), `docs/MATHEMATICS.md` (the anchor's note), `CHANGELOG.md`, `HANDOFF.md` (§11.4 MONITOR-CHAIN-1: the
+  opening), `docs/CLOUD_ROUTINE.md` (the cleanup recipe spares proc-macro libraries; remove the launch worktree's target
+  after its push), `scripts/suite.sh` (the same recipe in its refusal), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-160),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/REMAINING_WORK.md` (4.53),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing. On `launch/2.0.0` (`d2814e8`): the merge, this run's
+  CHANGELOG section moved into `## [2.0.0]`, `docs/survey/*` rebuilt there.
+- **Fixed (RW 4.53's last part):** every `AuditLog::open` read every day file twice (180–303 ms at 100,000 records, release);
+  the anchor now notes where the chain stood, and an opening whose files still measure so reads one line (0.03–0.1 ms; the
+  first opening of an older log re-affirms the anchor with its note, 247 ms). An older record edited in place to the same
+  length is `verify`'s to find, as it always was — named in D-V2-160.
+- **`launch/2.0.0`:** `d2814e8` merges `7f1a4a1` (MONITOR-CHAIN-1, RW 4.53's first two parts); the gates green on the launch
+  tree (Survey 1524 nodes, 0 errors; `doctor --check`; book, core_invariance, distribution, doctor_cli, evidence_claims,
+  governance, repository_structure, release, monitor_cli 23; `audit::tests` 26). The release dry run `39208470155` —
+  success; `jobs=everything` `39208467616` — 16 of 18 success at 06:33 UTC, `miri-slow (delulu-check)` and `(delulu-broker)`
+  running. This run's third slice (`5dea22e`) is not on it yet.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: mutants M486–M493 red (M489 after the middle-line case was added for its survivor; M489b also in
+  `audit_truncation`), control green; clippy 0; `check-other-os.sh` (Windows, macOS) clean; runner reads at `5dea22e` — the
+  whole `delulu-broker` lib with `audit_truncation` and `audit_wiring`: macOS `39209490393` (224 passed), Windows
+  `39209493185` (222); the full suite 2,342 passed, 0 failed, 16 ignored (exit 0, the tree unmoved). CI read: `7f1a4a1`'s push
+  runs — CI `39208000005` and `ocsf` `39207999996` — success.
+- **Loop engineering:** the cleanup recipe `scripts/suite.sh` prints (and `CLOUD_ROUTINE.md` repeats) deleted the proc-macro
+  libraries with the old test executables — they are executable too — and the next suite rebuilt most of the workspace;
+  both now spare `*.so`/`*.dylib`/`*.dll`. And the launch worktree's own target (about 3 GB) made the next suite refuse to
+  start under 10 GB free: step 4 now removes it after the launch push. **This run's own slip, recorded:** a broker started
+  by hand for the 250,000-record measurement outlived it — its state directory was removed before it was stopped, so `broker
+  stop` could not find it; found by `ps` and stopped by PID about fifty minutes after it started (§11.5's directory-guard
+  trap, by hand).
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1, its writing side and the opening), §11.5 (a cost recorded
+  as a latency may be a deadline); `docs/assistant-memory/a-latency-may-be-a-deadline.md`.
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39208467616`'s two `miri-slow` jobs, then merge
+  `master` into it again for D-V2-160 and read `jobs=everything` on the result; (3) the same class elsewhere — the monitor's
+  `List` each poll returns the whole grant tree, which grows with every run's node (revoked nodes stay listed): measure it
+  against a tree of tens of thousands of nodes before grading it (§11.5, a latency may be a deadline); (4) RW 4.53's
+  remainder (the serial daemon behind other writers' appends on a short chain — routine run 16's measurement, not re-run);
+  RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67; (5) *[laptop]* the launch, only on the owner's
+  word.

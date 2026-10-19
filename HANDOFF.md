@@ -1057,7 +1057,8 @@ spells the same thing?**
   that verify. Search key: a watchdog's beat that waits on work which grows with history is a deadline that expires by
   itself — ask of every loop that beats a dead-man what its work grows with. **The writing side had the same class** (RW 4.53,
   D-V2-159): every writer's catch-up re-read the whole chain under the append lock once another had written, so a daemon request
-  beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); `AuditLog::open` still does on every opening.
+  beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); and every opening read every day file twice (0.2–0.3 s
+  there; D-V2-160: the anchor notes where the chain stood, and an opening whose files still measure so reads one line).
 
 - **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
   and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the

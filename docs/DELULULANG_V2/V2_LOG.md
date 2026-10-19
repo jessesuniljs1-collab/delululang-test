@@ -6545,3 +6545,42 @@ anchor as `catch_up` already does, which needs the anchor to name the newest fil
 slice.
 
 **CI read:** `200df1c`'s push runs — CI `39206009719` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.03x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39206009590` — success.
+
+## 2026-10-19 — RW 4.53's last part: an opening reads one line when the files measure as the anchor says (D-V2-160; on-demand routine run 3, continued)
+
+**Measured.** `AuditLog::open` — every sandboxed run's host and every command that records opens the chain — read every
+day file twice (each file's last hash, then each file's count). On the same 100,000-record chain, release builds: at
+`7f1a4a1` three openings took 303, 266 and 180 ms; at `5dea22e` the first took 247 ms (it re-affirms the anchor, now
+with its note) and the next two 0.106 and 0.033 ms. `audit verify` passed after (100,000 records).
+
+**Fixed (`5dea22e`): the anchor notes where the chain stood** (`AnchorAt`): the newest day file, its length and record
+count, every older day file's bytes together, and the top seq — fixed-size, written beside the head and count it always
+held (an older binary reads those two as before). An opening takes the anchor's count and seq when every file still
+measures so — the newest file named and of its length, the older files' bytes unchanged — and the newest file's last record,
+read from its end (64 KiB, or the whole file for a longer line), is the anchor's head. Anything else is the whole recovery,
+which refuses what it always refused; an anchor without the note (every log written before this) is read the whole way once
+and re-affirmed with it. A writer keeps the note current as it appends, rolls to a new day file, or catches up after another.
+**Not claimed:** an older record edited in place to the same length is `verify`'s to find — the opening never recomputed a
+hash; any length change in any file still sends the opening to the whole recovery.
+
+**Witnesses** (`audit` unit tests): `an_opening_reads_only_the_newest_files_last_line_when_the_files_measure_as_the_anchor_says`
+(an older record made unreadable in place, the newest record short and 70 KB — the opening takes the anchor's word and the
+next record chains onto the head; `verify` still finds the damage), `the_fast_opening_agrees_with_the_whole_recovery_after_every_append`
+(two writers, 24 appends across three midnights, each catching up after the other: after every append the fast opening is
+taken and equals what reading every file gives, field by field), `an_opening_still_refuses_an_older_line_deleted_or_the_newest_record_replaced`
+(three cases), `an_anchor_without_its_note_is_read_the_whole_way_once`. **Mutants:** M486 (the old behaviour) red in the
+first; M487 (older bytes unchecked) and M488 (the head unchecked) red in the refusal test; M489 (the newest file's length
+unchecked) **survived** its first round on the head check — and the length is the only wall for a line deleted from the
+MIDDLE of the newest file, so that case was added and M489 is red in it; M489b (length and head both) red there and in
+`audit_truncation`'s `reopening_a_truncated_log_refuses`; M490 (a writer's roll to a new file not counted), M491 (a
+catch-up's records not counted in the newest file) and M492 (the note never written) red in the agreement test (M490 and
+M492 also in the first); M493 (a newest line longer than the window read as no record) red in the first. Control green.
+Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners before `master` moved (`witness.yml`, the whole
+`delulu-broker` lib with `audit_truncation` and `audit_wiring`): `macos-latest` `39209490393` (224 passed across the three targets), `windows-latest` `39209493185` (222 passed — the FIFO tests are Unix-only; Windows terminated only `vctip`).
+
+**The full suite** over the code: 2,342 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**RW 4.53 now:** the chain's history no longer costs a daemon request (D-V2-159) or an opening (D-V2-160). What is left is
+routine run 16's original measurement — the serial daemon's queue behind other writers' appends on a SHORT chain — not re-run.
+
+**CI read:** `7f1a4a1`'s push runs — CI `39208000005` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.98x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39207999996` — success. `launch/2.0.0` at `d2814e8` (this run's merge of `7f1a4a1`): the release dry run `39208470155` — success; `jobs=everything` `39208467616` — at 06:33 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` running (they take hours): the next run reads them.

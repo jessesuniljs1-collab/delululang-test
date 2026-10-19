@@ -39,8 +39,12 @@ The sections below are V2's development record, newest first, exactly as each wa
 - **Fixed (RW 4.53, D-V2-159): a broker daemon request no longer pays for the audit chain's whole history when another
   writer — a sandboxed run's host — has just written.** Each such request re-read the whole chain before it could record;
   on a 100,000-record chain a request beside one other writer took about 3.8 s, and an operator's e-stop revoke is such a
-  request. Now the daemon reads only what was appended (14 ms in the same measurement). Opening the chain (each sandboxed
-  run, each command that records) still reads it whole.
+  request. Now the daemon reads only what was appended (14 ms in the same measurement).
+- **Faster: opening the audit chain no longer reads all of it** (RW 4.53, D-V2-160) — every sandboxed run and every command
+  that records opens it, and on a 100,000-record chain that took 0.2–0.3 s each time. The chain's anchor (`ANCHOR.json`) now
+  also notes where the chain stood; when every file still measures so, an opening reads only the newest record (well under a
+  millisecond). A chain written before this is read whole once, then the note is added. `delulu audit verify` still reads
+  and checks every record.
 
 ### a run's own grant node ends with the run, 2026-10-19
 

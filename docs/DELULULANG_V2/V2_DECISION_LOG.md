@@ -3874,6 +3874,22 @@ point that was damaged after it was written is no longer re-read by a writer's c
 `audit verify` (with the anchor and an external witness of the head) is the chain's check. (4) `AuditLog::open` is unchanged:
 it still recovers from every file (RW 4.53 keeps it).
 
+## D-V2-160 — The audit anchor notes where the chain stood, and an opening whose files still measure so reads only the newest record (RW 4.53) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): every `AuditLog::open` read every day file twice — 180–303 ms at
+100,000 records in a release build, paid by every sandboxed run's host and every command that records.
+
+**Decision.** (1) `ANCHOR.json` keeps `head` and `records` and gains `day`, `day_len`, `day_records`, `older_bytes` and
+`max_seq` — fixed in size, written with every append as before. (2) An opening takes the anchor's count and seq only when the
+newest day file is the one it names and of its length, the older files' bytes are unchanged, and the newest file's last
+record is the anchor's head; otherwise the whole recovery runs, unchanged — what it refused (a cut file, a deleted or added
+line in any file, a replaced last record, an anchor that disagrees) is still refused at the opening. (3) **What the opening no
+longer re-reads:** an older record edited in place to the same length. The opening never recomputed hashes, so such an edit
+that kept the line parseable was never its to find; one that broke the line's JSON was, by the count, and is now `verify`'s
+alone. Named, not hidden. (4) An anchor without the note — every log written before — is read the whole way once and
+re-affirmed with it; an older binary reads `head` and `records` and ignores the rest. (5) Hardening the cost, not the meaning:
+the chain, its records, `verify` and the anchor's two original fields are unchanged.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

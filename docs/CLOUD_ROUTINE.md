@@ -210,7 +210,8 @@ another OS, and then takes about seven minutes itself (run 5).
    `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
    rebuild; run `doctor --check` and the document gates there; commit, push the branch, and dispatch `ci.yml`
-   (`jobs=everything`) and `release.yml` at it. Never the reverse merge.
+   (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
+   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free).
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
@@ -455,7 +456,8 @@ fool. Keep this file short enough to read at the start of every run.
   incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
   delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A dependency change re-hashes every
   crate above it and leaves the old test executables behind (10 GB in run 6): delete the executables in
-  `target/debug/deps` older than the last build (`find … -perm -u+x -mmin +N -delete`). A witness job's log: ask `get_job_logs`
+  `target/debug/deps` older than the last build (`find … -perm -u+x ! -name '*.so' -mmin +N -delete` — on-demand run 3: without
+  the `! -name '*.so'` it also deleted the proc-macro libraries, which are executable, and the next suite rebuilt them). A witness job's log: ask `get_job_logs`
   by job id with a large `tail_lines` — a long log comes back as a file to grep, a short one (a quick job, about 450
   lines) inline, so ask about 120 lines for a job that ran one small target. And a run listing filtered by `ci.yml`,
   `branch` and `event` with `perPage` 1 returned a day-old run first (run 6): list by `event` alone, all workflows —
