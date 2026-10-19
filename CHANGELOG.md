@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the microVM's host: `doctor` reports KVM's posture, and the guest's absences are pinned, 2026-10-19
+
+- **Added: `delulu doctor` reports `KVM host posture`** on a Linux host with KVM: each vendor module's `nested`
+  setting, `/dev/kvm`'s mode and the kernel release. Nested virtualization being on, or a `/dev/kvm` every local user may
+  open, is a note naming the 2026 escapes that use them, Januscape (CVE-2026-53359) and Zapscape (CVE-2026-64561), and
+  the remedy. It never fails the run.
+- **Documented: what the microVM tier needs from its host** (`docs/DEPLOYMENT.md`, *The microVM's host*): a patched
+  kernel, KVM loaded with `nested=0`, `/dev/kvm` for the `kvm` group, and no network device for the VM. The table names
+  the path each 2026 escape takes, PwnEscape (CVE-2026-99999) among them, and why a DeluluLang guest has none of them.
+- **Hardened: the guest's absences are enforced, not just written down.** The guest kernel's configuration now names
+  network devices, virtio-net, TUN, vhost-net, virtualization and KVM as off, and the image build refuses a kernel with
+  any of them on. Tests pin that list and the launcher's whole device list: one vsock, no network interface, no drive.
+
 ## Unreleased — the WASM engine's faults, refusals and output match the interpreter's; `rand.int` over any span, 2026-10-19
 
 - **Fixed (WASM-SHORT-1): on the WASM engine, `&&` and `||` evaluated their right side even when the left side had

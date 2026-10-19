@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 310 |
-| Rust lines | 174887 |
-| Rust files outside `src/` (test/bench targets) | 141 |
+| Rust files | 311 |
+| Rust lines | 175059 |
+| Rust files outside `src/` (test/bench targets) | 142 |
 | Markdown documents | 267 |
-| Markdown lines | 80603 |
+| Markdown lines | 80716 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1531 / 15146 |
+| Nodes / edges in this map | 1532 / 15155 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 45406 lines
+- **Modules:** 44 files, 45531 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -110,7 +110,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/device_cmd.rs` | 141 | P8-03: `delulu device sim` — the in-tree simulator run as a **device**, on a line. |
-| `src/doctor.rs` | 905 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
+| `src/doctor.rs` | 1010 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/edit.rs` | 572 | P4-04 and P4-05: `delulu edit` — checked edits for an agent that is not the only writer. |
 | `src/examples.rs` | 171 | P4-10: `delulu examples [--json]` — the shipped example programs, each with its authority and the |
 | `src/fix.rs` | 438 | `delulu fix` — apply the repairs the checker already computed. |
@@ -124,7 +124,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/lsp.rs` | 1976 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 102 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 685 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
-| `src/microvm.rs` | 1456 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
+| `src/microvm.rs` | 1476 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/monitor_cmd.rs` | 762 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
 | `src/morph_file.rs` | 244 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 304 | `delulu new` — start a package that already works. |

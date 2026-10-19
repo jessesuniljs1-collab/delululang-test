@@ -166,6 +166,35 @@ You build the image from source (`scripts/microvm/build-image.sh`); it is not di
 Elsewhere, and without KVM or an image, the run refuses with `DL1408` — never a weaker boundary in
 silence.
 
+**The microVM's host (2026-10-19).** The microVM's wall is the host kernel's KVM. DeluluLang builds the guest; the
+host's kernel is the operator's, and no DeluluLang code can stand in for a patch to it. Three guest-to-host escapes
+were published in 2026, and the guest is built so that none of their paths exists inside it:
+
+| Escape | What it goes through | Inside a DeluluLang guest |
+|---|---|---|
+| PwnEscape (CVE-2026-99999; upstream fix `6785011f8b16`, mainline 2026-10-14) | Checksum-offload metadata in the packets a guest sends on a **virtio-net** device, trusted by the host's IPv4 stack. Red Hat says a local user can reach it too. | No network interface is configured (`microvm.rs` `vm_api_calls`, pinned by `the_vm_is_given_one_vsock_and_nothing_else`). The guest kernel has no network devices, no IPv4 and no packet sockets (`kernel.config`, enforced by `build-image.sh`, pinned by `microvm_guest_kernel.rs`). The process sandbox denies `socket`, `unshare` and namespace-creating `clone`. |
+| Januscape (CVE-2026-53359; in stable kernels since 2026-07-04: 7.1.3, 6.18.38, 6.12.95, 6.6.144, 6.1.177, 5.15.211, 5.10.260) | KVM x86 shadow-MMU use-after-free, reached by a guest using **nested virtualization** | The guest kernel has no KVM and no loadable modules, so it cannot host a guest of its own. |
+| Zapscape (CVE-2026-64561) | A KVM x86 shadow-page reclaim use-after-free, reached two nesting levels deep. It also gives local root wherever `/dev/kvm` is open to every user. | The same. |
+
+Sources, read 2026-10-19: AlmaLinux's PwnEscape advisory (almalinux.org/blog/2026-10-16-pwnescape-cve-2026-99999), the
+researchers' write-up (pwn.ai/blog/pwnescape), CUHK ITSC's Januscape alert and CloudLinux's Zapscape advisory
+(blog.cloudlinux.com). Check fixed versions against your distribution, not this table.
+
+So on a host that runs microVMs:
+
+- **Run a patched kernel.** DeluluLang cannot tell from a version string whether a distribution backported a fix, and
+  does not try. Check your distribution's advisory for each CVE above.
+- **Load KVM with `nested=0`** (`options kvm_intel nested=0` or `options kvm_amd nested=0` in `/etc/modprobe.d/`, then
+  reload the module or reboot), unless something else on the host needs nested virtualization. A DeluluLang guest never
+  does. Current kernels turn it on by default for both vendors, so read the setting (below) rather than assume it.
+- **Give `/dev/kvm` to the `kvm` group** (mode 660), not to every user.
+- **Never give the VM a network device.** If you need egress, the program asks the host for it under its grants, as at every
+  other level.
+
+`delulu doctor` reports the KVM settings it can read: each vendor module's `nested`, `/dev/kvm`'s mode and the kernel
+release, as **KVM host posture** in its sandbox section. It is a note, never a failure, because the settings are the
+host's to choose. GitHub's runners, for one, open `/dev/kvm` to every user.
+
 **An external launcher (L3, PS-D-01).** `--sandbox-backend external:CMD` lets a boundary DeluluLang does
 not build carry the guest: Docker with gVisor, Kata, a cloud sandbox, a Kubernetes pod, `ssh` to another
 machine. Your command runs the guest in YOUR environment and carries the channel on its standard input

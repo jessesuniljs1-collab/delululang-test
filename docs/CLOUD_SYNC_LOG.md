@@ -4310,3 +4310,26 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (PwnEscape, Januscape, Zapscape): `doctor` reports nested virtualization and a world-writable `/dev/kvm`,
   `DEPLOYMENT.md` names the host kernel the microVM tier needs, and a test pins the guest's absence of a network device;
   (3) the WASM fragment's next pieces: `List`, `for`, `split`, `map`; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.71: the microVM's host against 2026's KVM escapes; `doctor` reports KVM's posture (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/vm-posture` (on `laptop/wasm-short`)   Pull request: #4   Merged: not yet (after #3, on green CI)
+- Base: `9367b13`
+- **The owner's question** (2026-10-19): *"Linux recently patched vm issues, Search and learn about it, Is DeluluLang
+  affected by it, What should DeluluLang do differently"*. Answered in the session: PwnEscape (CVE-2026-99999), Januscape
+  (CVE-2026-53359), Zapscape (CVE-2026-64561), and the KVM CVEs of 2026-10-18. A DeluluLang guest reaches none of their
+  paths; the host's kernel is the microVM's wall. `V2_LOG.md` has the reading and the sources.
+- Files and folders: M `crates/delulu/src/doctor.rs` (`kvm_posture`, KVM host posture), `crates/delulu/src/microvm.rs`
+  (`vm_api_calls`, pinned), `scripts/microvm/kernel.config` (six absences named), `docs/DEPLOYMENT.md` (*The microVM's
+  host*), `CHANGELOG.md`, `HANDOFF.md` (§11.3, the WSL lab's `nested`), `docs/REMAINING_WORK.md` (4.71),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu/tests/microvm_guest_kernel.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (Windows and the laptop's WSL; mutants M530–M532 red). The image built under the new
+  `kernel.config` is CI's `microvm` job.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: the WSL lab's boot command, `modprobe kvm_amd nested=0`, the next time the KVM lab is used. A guest
+  image rebuild is not needed if the built `.config` is unchanged, which is reasoned, not measured. CI's `microvm` job
+  builds one.
+- For the laptop's memory: nothing beyond `HANDOFF.md` §11.3.
+- Open / next: as the entry before. Then the WASM `List` (literal, `len`, `get`, `push`, indexing, `for`, `map`) and
+  `Str.split`, for the last two Study-C kernels.

@@ -767,7 +767,10 @@ wins, and you should update the memory to match.
   with `RUSTFLAGS=--cfg delulu_kvm`; ordinary Linux runs use `~/delulu-gnu-target`. **Build a guest
   image from a clone on the Linux filesystem**, not from `/mnt/d` — libffi's configure fails on `drvfs`.
   From Git-Bash run WSL as `MSYS_NO_PATHCONV=1 wsl -e bash /mnt/d/…/script.sh`, and `wsl --shutdown`
-  afterwards to give its memory back.
+  afterwards to give its memory back. **2026-10-19:** the boot command is `modprobe kvm_amd; chgrp kvm /dev/kvm; chmod
+  660 /dev/kvm`, so `/dev/kvm` is the group's. `kvm_amd`'s `nested` defaults to on, though, and the guests never nest:
+  the next time the lab is used, make it `modprobe kvm_amd nested=0` (DEPLOYMENT.md, *The microVM's host*; RW 4.71). That
+  day KVM was not loaded at all: there was no `/dev/kvm` and no `kvm_amd` module.
 - **The GitHub CLI** is at `C:\Program Files\GitHub CLI\gh.exe`, not on Git-Bash's `PATH`; one job's
   log: `gh api --allow-escape-sequences repos/…/actions/jobs/<id>/logs` (only once the job finishes).
 - **Agent-pass folders live outside the repository**, at `D:\nelan\DeluluLang-agent-transcripts\` —

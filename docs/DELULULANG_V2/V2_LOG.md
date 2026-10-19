@@ -6903,3 +6903,47 @@ wasm_cli, message_spacing) green on Windows. The 50,000-program release differen
 tests were first written over it — the file tool did not refuse an overwrite of a file not yet read. `git status`
 showed it modified, not added; the original was restored from `HEAD` and the new tests appended to it, both sets
 green.
+
+## 2026-10-19 — the laptop: the microVM's host against 2026's KVM escapes (RW 4.71)
+
+**The owner asked** (2026-10-19): *"Linux recently patched vm issues, Search and learn about it, Is DeluluLang affected by
+it, What should DeluluLang do differently"*. Read that day:
+- **PwnEscape** (CVE-2026-99999, CVSS 9.3). The host's IPv4 stack trusted checksum-offload metadata that a guest sends on
+  a virtio-net device, and its checksum write overwrote an IPv4 header already parsed. It was demonstrated on KVM and
+  Firecracker hosts. Upstream fix `6785011f8b16` (mainline 2026-10-14). AlmaLinux shipped testing kernels on 2026-10-16;
+  Red Hat says a local user can reach it too.
+- **Januscape** (CVE-2026-53359), a KVM x86 shadow-MMU use-after-free reached through nested virtualization; fixed in
+  stable on 2026-07-04.
+- **Zapscape** (CVE-2026-64561), a KVM x86 shadow-page reclaim use-after-free reached two nesting levels deep, also a
+  local root where `/dev/kvm` is world-usable. A batch of smaller KVM CVEs followed on 2026-10-18.
+Two names (the CVE numbering of PwnEscape, an aggregator's framing) looked doubtful; AlmaLinux's and CloudLinux's
+advisories confirm it.
+
+**Is DeluluLang affected?** Its guests reach none of the paths, read from the code:
+- The launcher configures one vsock and nothing else.
+- The guest kernel is `tinyconfig` plus vsock, with no IPv4, no packet or Unix sockets, no KVM and no modules.
+- The process sandbox (`jail.rs`) denies `socket`, `socketpair`, `unshare` and namespace-creating `clone`.
+- Egress is the host's ordinary sockets.
+
+What it cannot escape is that the microVM's wall *is* the host's KVM.
+
+**What changed.**
+- The launcher's device list is one function, `vm_api_calls`, which `the_vm_is_given_one_vsock_and_nothing_else` pins.
+- `kernel.config` names network devices, virtio-net, TUN, vhost-net, virtualization and KVM as not set. `build-image.sh`
+  already refused a kernel in which any `not set` line is on, so the absences are now enforced.
+  `microvm_guest_kernel.rs` pins the lines on every platform; it is red with `# CONFIG_TUN is not set` removed. The
+  options were off under `tinyconfig` already, so the built `.config` should be unchanged. That is reasoned from
+  Kconfig, not built on the laptop: CI's `microvm` job builds the image under the new file and applies the refusal.
+- `doctor` reports **KVM host posture** (each vendor module's `nested`, `/dev/kvm`'s mode, the kernel release). It
+  notes nesting on or a world-usable device, with the escapes and the remedy, and never fails: GitHub's runners open
+  `/dev/kvm` to every user. `kvm_posture` is a pure function, so `kvm_posture_tests` run on every platform.
+- DEPLOYMENT.md *The microVM's host* gives the table, the sources and the host requirements: a patched kernel,
+  `nested=0`, `/dev/kvm` for the group, no network device.
+
+The laptop's WSL lab loads `kvm_amd` with its default `nested=1`; HANDOFF §11.3 says to pass `nested=0` next time.
+
+**Evidence (RW 4.71).** Windows: `kvm_posture_tests` 3 passed; mutants M530 (nesting never noted) and M531 (the device's
+mode never noted) red, control green; `microvm_guest_kernel` green, red with `# CONFIG_TUN is not set` removed. Linux (the
+laptop's WSL, `~/delulu-gnu-target`): `microvm::tests` and `kvm_posture_tests` 11 passed; `cargo clippy -p delulu
+--all-targets -- -D warnings` clean; M532 (a `/network-interfaces/eth0` call added to `vm_api_calls`, on a copy of the
+tree) red on `the_vm_is_given_one_vsock_and_nothing_else`. `scripts/clippy.sh -j 4` clean and stamped on Windows.
