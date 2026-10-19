@@ -6408,3 +6408,70 @@ MEASURED 2.97x where the machine gave 4.10x, passed; Ubuntu and Windows NOT MEAS
 `launch/2.0.0` at `b4748fa` (this run's merge of `d144882`): the release dry run `39183562777` — success; `jobs=everything`
 `39183559939` — at 02:05 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` still
 running: the next run reads them.
+
+## 2026-10-19 — MONITOR-CHAIN-1: a long chain killed a healthy monitor's fleet; the monitor reads only what was appended, verified (D-V2-158, RW 4.49; on-demand routine run 3)
+
+**Start of run** (05:05 UTC, no `routine-fire-payload`): `master` at `49f6c6f` (run 2's last commit), nothing newer;
+`origin/autosave/laptop`'s newest snapshot still `b4a9e18` (recovered by run 1); `claude/wonderful-hamilton-bo8k53` and
+`claude/friendly-thompson-vz6m23` one commit each, superseded as recorded 2026-10-17; every other `claude/*` branch in
+`master`. Survey `ok` (1522 nodes, 14894 edges); `doctor --check` all checks passed. Run 2's claims re-run: `monitor_cli`
+22/22, `plugin_load_cli` 24/24, `satellite_demo` 5/5, `compute_cli` 18/18 — all hold. **CI read:** `49f6c6f`'s push run
+`39190850972` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64
+MEASURED 2.93x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads,
+2.33x observed); `launch/2.0.0` at `3aafb77`: `jobs=everything` `39189498514` — **success on all 18 jobs** (`miri-slow`:
+syntax 20 min, check 77 min, broker 97 min) — and the release dry run `39189501390` — success; `39183559939` (`b4748fa`) —
+success on all 18. The sandbox properties per OS as on every run since PS-E-01 (macOS `filesystem_confinement` absent,
+reads not confined; every other OS established). The 2026-10-19 nightly had not fired (07:4x UTC).
+
+**Found: a monitor killed its own fleet once the chain was long enough.** RW 4.49 recorded, from routine run 15's red team
+(F5), that each poll of `monitor watch` re-reads the whole chain — "≈200 ms at 10,000 records", LOW, a latency. Measured
+here it is worse than a latency: the monitor beats its dead-man between polls, so once ONE whole read outlasts the
+dead-man's period, a healthy monitor stops beating and its own broker revokes `g_M` — every run under it — for nothing but
+the chain's length. By hand: a chain of 250,000 records (written by the chain's own `AuditLog`), a daemon, one node, `monitor
+watch --rule envelope` with the defaults (poll 250 ms, dead-man 2,000 ms): `ended: the broker's dead-man revoked … this
+monitor sent no beat within 2000 ms`, `records_read: 0`, the node `[revoked]` — no run had done anything. A whole read
+(`audit::query`) costs about 3 µs a record in a release build (100,000 records: 0.22–0.34 s) and 11.5 µs in a debug one
+(1.13–1.31 s); `AuditLog::open` re-reads it twice (250,000 records: 0.61–0.85 s, release). So a release monitor with the
+default period dies past roughly 600,000 records — a control loop recording 100 commands a second writes that in under
+two hours — and sooner with a shorter period.
+
+**Fixed (`90d6ddb`): `delulu_broker::audit::Follower`.** It follows the chain from a point and reads only what was
+appended after it — the rest of the day file it stopped in, from the byte it stopped at (a seek), and every later day file
+(a record is never filed behind the newest file, AUDIT-DAY-1). Complete lines only: a writer puts down a record and then
+its line break, so a line without its break is left for the next read, and the end a follower starts from never counts
+one. Each record must name the previous record's hash as its `prev_hash`, and its own hash must recompute — `verify`'s
+link check; a line that does not is returned as UNVERIFIED, never as a record, and the follower goes on from its stored
+hash so one bad line does not blind it to what follows. A day file cut short under it (or gone) is a rewritten chain: the
+follower says so, reads nothing in between, and moves to the end — the monitor's old "the record it last read is no longer
+in the chain" warning, kept. The monitor starts at the chain's end with one and reads only what is new each poll; it warns
+for an unverified line (`delulu audit verify` names where the chain breaks) and judges nothing on it — RW 4.49's other read
+residual (F4: a forged `deny` line quarantined an innocent run). The class, stated: this catches a damaged line and one
+written without the format; a same-user writer who computes the hash is category 7, as for every file in that directory.
+
+**Witnesses.** `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`: its state is a chain whose ONE whole read,
+measured in the test, takes twice a 500 ms dead-man period — grown with the writer's own lines (`into_record`, `to_line`)
+until it does (101,251 records here, one read 1.32 s), its anchor removed so the daemon's opening anchors it again, and
+`verify` asked before the watch (a control: the chain is real). The monitor must stay live four and six periods into the
+watch and then have read at least two records past its start (its own arming and a delegation made after it began — the
+witness of an absence proves it looked). **Red on the old code** (the run's lease "revoked by audit seq 101257", the
+dead-man's), green after; **4 of 4 green with four concurrent copies of its test binary loading the machine** (each
+1.03–1.16 s per whole read). Four `audit` unit tests: `a_follower_reads_only_what_was_appended_after_it_across_days` (a
+record it had passed is overwritten in place with a line that would not verify — nothing returned is about it),
+`a_follower_leaves_a_line_without_its_break_for_the_next_read` (both a reading follower and one started meanwhile),
+`a_follower_returns_lines_that_do_not_verify_as_unverified_and_reads_on` (an altered deny, a non-record, a record naming
+another predecessor; the record after them read), `a_follower_whose_file_was_cut_short_says_the_chain_was_rewritten`; and
+the FIFO refusal (RW 4.38) asks the follower too. **Mutants** (`scripts/mutants.py`, control green): M473 (each read from
+the file's start) red in three unit tests, M473b (the same) red in the monitor witness, M474 (no link check) and M475 (no
+hash check) red in the unverified test, M476 (a line without its break read) red in the partial test, M477 (a cut file not
+noticed) red in the cut test, M478 (no regular-file check) red in the FIFO test, M479 (the monitor re-starts at the end
+each poll — reads nothing) red in five `monitor_cli` tests. Clippy 0; `scripts/check-other-os.sh` clean for Windows and
+macOS. **Read on runners before `master` moved** (`witness.yml` at `90d6ddb` on `claude/monitor-chain-follower`):
+`monitor_cli` on `macos-latest` ``39205018972` (22 passed — the witness read 101,251 records, one whole read 1.22 s)` and `windows-latest` ``39205021062` (21 passed — the witness 1.23 s; Windows terminated only `vctip`)`; `delulu-broker` `lib` filtered to
+`audit::tests` on `macos-latest` ``39205023031` (23 passed)` and `windows-latest` ``39205025243` (22 passed; the FIFO test is Unix-only)`.
+
+**The full suite** over the code: 2,335 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**The same class on the writing side (RW 4.53), named:** `AuditLog::catch_up` re-reads and re-counts the whole chain under
+the append lock whenever another writer moved it, and `AuditLog::open` does on every opening — so each daemon request after
+a sandboxed host's record pays for the chain's history (the red team's 4.9 s `grants revoke` at 60,000 records). The next
+slice.

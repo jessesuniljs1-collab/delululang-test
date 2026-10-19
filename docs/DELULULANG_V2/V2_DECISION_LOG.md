@@ -3822,6 +3822,27 @@ closed), the record naming the silence. Not measured: a host that sleeps past th
 clock counts the sleep is the platform's; where it does, a run's node may be reaped on waking in the same way. The cost, stated: each daemon run's chain gains two records (its root's
 `deadman-arm` and its end's `revoke`) and its broker one beat every 2 s per run.
 
+## D-V2-158 — A monitor reads only what was appended to the chain since its last read, and acts only on a record that names the one before it and whose hash is its own (MONITOR-CHAIN-1, RW 4.49) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): `monitor watch` read the whole chain on every poll (`audit::query`,
+about 3 µs a record in a release build) and beats its dead-man between polls, so a healthy monitor over a long chain was
+revoked by its own broker — and every run under it — once one read outlasted the period: 250,000 records and the default
+2 s did it by hand, with no run doing anything. RW 4.49 had recorded the cost as a LOW latency.
+
+**Decision.** (1) **A watch's poll costs what was appended since the last, never the chain's history**:
+`delulu_broker::audit::Follower` reads the day file it stopped in from the byte it stopped at, and every later day file
+(AUDIT-DAY-1 keeps every record at or after the newest file). (2) **Only whole lines**: a line without its line break may
+still be growing, and is left for the next read; the end a follower starts from never counts one. (3) **A monitor acts only
+on what the chain vouches for**: a record must name the previous record's hash and its own must recompute — the link check
+`verify` makes. A line that does not is UNVERIFIED: named on the monitor's standard error with its seq, never judged, and
+the follower goes on from its stored hash. The monitor does not stop for it: a stopped monitor's dead-man would quarantine
+every run under it, which would make any writer able to damage one line the owner of that switch. (4) **A rewritten chain**
+(the day file cut short or gone) is said and skipped to the end, as the old cursor-by-hash did when its record vanished.
+(5) **What it does not claim:** a same-user writer who computes the hash appends a record that verifies (category 7, the
+same-uid boundary, §11.4); `audit verify` with the anchor, and an external witness of the head, stay the chain's whole
+check. (6) **Hardening, not redefinition:** the monitor's rules, its node, its dead-man and what a quarantine revokes are
+unchanged; it reads less, and acts on less.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

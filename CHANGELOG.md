@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a monitor over a long audit chain no longer revokes its own runs, 2026-10-19
+
+- **Fixed (MONITOR-CHAIN-1, D-V2-158): `delulu monitor watch` no longer quarantines every run it watches once the audit
+  chain is long.** The monitor read the whole chain on every poll and beats its dead-man between polls; once one read took
+  longer than the dead-man's period (`--death-after`, 2 s by default) the broker revoked the monitor's node — and every run
+  under it — although nothing had gone wrong (by hand: 250,000 records). A poll now reads only what was appended since the
+  last one, so its cost no longer grows with the chain's history.
+- **Changed: the monitor acts only on records the chain vouches for.** Each record it reads must name the one before it and
+  carry its own hash, as `delulu audit verify` checks. A line that does not — damaged, or written by hand — is named on the
+  monitor's standard error (`monitor: WARNING — … do not verify against the chain (seq …)`) and never acted on; before, a
+  forged `deny` line could make it quarantine an innocent run. `delulu audit verify` still checks the whole chain.
+
 ## Unreleased — a run's own grant node ends with the run, 2026-10-19
 
 - **Fixed (RW 4.57, D-V2-157): under the broker daemon, the root node a `run --grant …` issues for itself no longer
