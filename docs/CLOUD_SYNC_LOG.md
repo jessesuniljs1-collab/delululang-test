@@ -4031,3 +4031,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next, in order: (1) this branch's CI, then `master`; (2) RW 4.70 — `grants list` past one frame; (3) `launch/2.0.0`:
   merge `master`, dispatch `everything` and the release dry run; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.63: a watch held outside the daemon lets its dead-man fire; M346 red (made on the laptop)
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69` (pull request #1), then `master` once its CI is read green   Base: `ea7d42b`
+- Commits: this entry's commit.
+- Files and folders: M `crates/delulu/tests/monitor_cli.rs`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.63
+  closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- A witness only — no product code changed: one 32 MiB record written through the chain's writer holds the monitor's watch
+  in its own read for three dead-man periods; its dead-man fires. M346 (the beater beats whatever the watch does), which
+  survived since routine run 22, is red.
+- The full suite runs on GitHub as the pull request's CI (the owner's rule of 2026-10-19). Locally: `monitor_cli` 23 passed;
+  clippy 0; fmt clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before.

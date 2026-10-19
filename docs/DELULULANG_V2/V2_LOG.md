@@ -6610,3 +6610,23 @@ red; M496 — the asked node instead of its run: the tree test red; M497 — the
 `sandbox_devices_cli`, `within_cli`, the `delulu` binary's 183 unit tests and `delulu-broker`'s; clippy 0; fmt clean. **The
 full suite did not run on the laptop** (the owner's rule of 2026-10-19: it runs on GitHub — the run is named in
 `CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 4.63: a watch held outside the daemon lets its dead-man fire — M346 red at last
+
+**What.** DEADMAN-BUSY-1's fix (D-V2-127, routine run 22) gave the monitor a thread that beats for it while its watch waits
+on the daemon, and only then; a watch held anywhere else must go silent, so its dead-man fires as a stopped monitor's does.
+No test held the watch outside the daemon for a period, and mutant M346 — the beater beating whatever the watch does —
+survived (RW 4.63). The row asked for a seam: "a test-only pause, or a chain read made slow on purpose".
+
+**Why this way.** Not a pause: no test-only switch in a safety component. The hold is the monitor's own work on data a second
+writer may legitimately append: one record whose authority carries a long padding, written through the chain's own writer
+(`AuditLog::append` — its lock and anchor, as a sandboxed run's host writes) while the monitor watches. The follower reads that
+line whole, parses and hashes it before it can beat again; the test first measures, with the same `audit::Follower` on a
+scratch chain, the size whose one read takes three periods on this machine (doubling from 4 MiB), so the state is measured
+rather than assumed.
+
+**Evidence.** `monitor_cli.rs` `a_watch_held_outside_the_daemon_lets_its_dead_man_fire`: a 32 MiB record, one read 1.4 s here,
+`--death-after 200` — the monitor's node revoked by its dead-man, the monitor ending `the broker's dead-man revoked …` with a
+failing exit, in 11.7 s. **M346** (the beater's `waiting` test removed) **red**: the watch was still being beaten for 31 s after
+the record landed. `monitor_cli` 23 passed together; clippy 0; fmt clean. **The full suite did not run on the laptop** — it
+runs on GitHub (`CLOUD_SYNC_LOG.md`).
