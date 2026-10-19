@@ -1043,6 +1043,13 @@ spells the same thing?**
   fixes a spelling only for what EXISTS leaves every not-yet-created name in the caller's spelling — ask what the
   filesystem will treat as the same name, and compare in that form.
 
+- **RW 4.57 — a run's own root outlived it** (on-demand routine run 2, 2026-10-19, D-V2-157): under the daemon a
+  `run --grant …` issues a root for itself, and nothing ever ended it — `[live]` after every clean run, and with it, after
+  a kill, every node the run had minted. RW 4.51 (run 16) had asked "does a plugin's node outlive its run?" and fixed
+  the plugin's; the run's own node, the widest of them, was never asked. Now revoked at the run's end and reaped by a
+  dead-man when the run dies first. Search key: when a fix answers "does X outlive its holder?" for one kind of node,
+  list every node the same holder holds — the parent first.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -1541,6 +1548,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `gitdir: …`, and the Survey's walk excluded `.git` only as a directory — a map built in a worktree carried
   `file:.git` and could never match a clone. The pre-commit hook caught it on the first commit made from one; the
   walk skips `.git` in either shape now. An exclusion by name asks: what other SHAPE can this name take?
+
+- **The harness refuses shell busy loops as "interfering with workloads"** (on-demand routine run 2): `while :; do :;
+  done &` to load four CPUs before a timing-shaped witness was denied by the auto-mode classifier. Load the machine with
+  the witness's own work instead — four concurrent copies of its test binary (`target/debug/deps/<target>-<hash>`, with
+  `CARGO_BIN_EXE_delulu` set), each of which spins — and with the full suite, which runs it beside everything else.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

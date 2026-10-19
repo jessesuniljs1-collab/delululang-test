@@ -1079,6 +1079,7 @@ mod boundary_authority_tests {
         ("guest.rs", "the sandbox host's watchdog (SANDBOX-STOP-1): sleeps until `--limits wall=`, reads the guest's processor time (Windows) and peak memory (macOS, D-V2-90), and ends the guest"),
         ("brokerd.rs", "the broker daemon's accept thread and its per-connection readers (RW 4.40): each reads one request frame; custody is handled on the serve loop, which runs no program"),
         ("mcp.rs", "drains a tool subprocess's stdout and stderr, so a large answer cannot stall it"),
+        ("broker_client.rs", "a run's beater (RW 4.57, D-V2-157): sleeps, and beats the dead-man on the run's own node — the program runs on the run's own threads"),
         ("monitor_cmd.rs", "the monitor's beater (DEADMAN-BUSY-1): sleeps, and beats the broker while the watch waits on it — the program it watches runs elsewhere"),
         ("microvm.rs", "relays a microVM's console, bounded, and the VM's wall-clock watchdog: neither evaluates a program — the program runs in the guest"),
         ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),

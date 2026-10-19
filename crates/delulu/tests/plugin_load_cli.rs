@@ -770,6 +770,241 @@ fn under_the_broker_daemon_a_plugins_node_does_not_outlive_its_run() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// ----- a run's own node ends with the run, however it ends (RW 4.57, D-V2-157) ---------------------------
+
+/// The nodes of one state directory's tree, as `grants list --json` names them: `(id, holder_kind, state)`.
+fn tree_nodes(dir: &Path, state: &Path) -> Vec<(String, String, String)> {
+    let g = delulu_state(dir, state, &["grants", "list", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&g.stdout)).expect("grants json");
+    v["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .map(|n| {
+            let s = |k: &str| n[k].as_str().unwrap_or_default().to_string();
+            (s("id"), s("holder_kind"), s("state"))
+        })
+        .collect()
+}
+
+/// The `revoke` records of the chain, as `(actor_node, target)`.
+fn revocations(dir: &Path, state: &Path) -> Vec<(String, String)> {
+    let q = delulu_state(dir, state, &["audit", "query", "--action", "revoke", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&q.stdout)).expect("audit json");
+    v["records"]
+        .as_array()
+        .expect("records")
+        .iter()
+        .map(|r| (r["actor_node"].as_str().unwrap_or_default().to_string(), r["target"].as_str().unwrap_or_default().to_string()))
+        .collect()
+}
+
+/// RW 4.57 (D-V2-157): under the daemon, `run --grant …` issues a root node for itself alone (issue-then-run). Measured on
+/// 2026-10-19: after a run that ended CLEANLY, RW 4.51 had revoked its plugin's node and left the run's own root
+/// `[live]` — root authority nobody holds, one more for every run, for the daemon's whole life. The run revokes it as
+/// itself on its way out now.
+#[test]
+fn under_the_broker_daemon_a_runs_own_node_ends_with_the_run() {
+    let dir = tmp("root-daemon");
+    let state = daemon_state("root");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+    std::fs::write(dir.join("host.delulu"), host_program("shout.dpx")).unwrap();
+    let _daemon = Daemon::start(&state);
+    let o = delulu_state(
+        &dir,
+        &state,
+        &["run", "host.delulu", "--broker", "daemon", "--grant", "console", "--grant", "plugin=.", "--no-prompt"],
+    );
+    let text = out(&o);
+    assert!(text.contains("hello!"), "the plugin must have been loaded and called, or this proves nothing: {text}");
+    let nodes = tree_nodes(&dir, &state);
+    let roots: Vec<_> = nodes.iter().filter(|(_, kind, _)| kind == "process").collect();
+    assert_eq!(roots.len(), 1, "the run issued one root for itself: {nodes:?}");
+    let (root, _, root_state) = roots[0];
+    assert_ne!(root_state, "live", "a run's own root must not stay live after the run has ended: {nodes:?}");
+    assert!(
+        revocations(&dir, &state).iter().any(|(by, target)| by == root && target == root),
+        "the root is revoked AS ITSELF — the run's own act, recorded: {:?}",
+        revocations(&dir, &state)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The same for a SANDBOXED run (D-V2-157): its host issues the root and holds it, as the ordinary run does.
+#[test]
+fn under_the_broker_daemon_a_sandboxed_runs_own_node_ends_with_the_run() {
+    let dir = tmp("root-sandbox");
+    let state = daemon_state("rootsb");
+    std::fs::write(
+        dir.join("hello.delulu"),
+        "module hello\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"sandboxed hello\")\n}\n",
+    )
+    .unwrap();
+    let _daemon = Daemon::start(&state);
+    let o = delulu_state(
+        &dir,
+        &state,
+        &["run", "hello.delulu", "--sandbox", "--broker", "daemon", "--grant", "console", "--no-prompt"],
+    );
+    let text = out(&o);
+    assert!(text.contains("sandboxed hello"), "the guest must have run, or this proves nothing: {text}");
+    let nodes = tree_nodes(&dir, &state);
+    let roots: Vec<_> = nodes.iter().filter(|(_, kind, _)| kind == "process").collect();
+    assert_eq!(roots.len(), 1, "the host issued one root for its run: {nodes:?}\n{text}");
+    assert_ne!(roots[0].2, "live", "a sandboxed run's own root must not stay live after the run has ended: {nodes:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Kills the run on drop, so a failed assertion never strands a spinning program.
+struct Running(std::process::Child);
+impl Drop for Running {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Start `host.delulu` under the daemon with `extra` env, and wait (at most a minute) for its first line of output.
+fn start_until_first_line(
+    dir: &Path,
+    state: &Path,
+    extra: &[(&str, &str)],
+    grants: &[&str],
+) -> (Running, String, std::sync::mpsc::Receiver<String>) {
+    use std::io::BufRead;
+    let mut args = vec!["run", "host.delulu", "--broker", "daemon", "--no-prompt"];
+    for g in grants {
+        args.extend(["--grant", g]);
+    }
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_delulu"));
+    cmd.args(&args)
+        .current_dir(dir)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .env("DELULU_STATE_DIR", state)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    for (k, v) in extra {
+        cmd.env(k, v);
+    }
+    let mut child = cmd.spawn().expect("the run starts");
+    let stdout = child.stdout.take().expect("piped");
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    let first = rx.recv_timeout(std::time::Duration::from_secs(60)).unwrap_or_default();
+    (Running(child), first, rx)
+}
+
+/// A host program that loads and calls the plugin, prints the answer, then spins until it is killed.
+const SPINNING_HOST: &str = "module host\n\n\
+fn shouted(h: Cap[PluginHost]) -> Result[Str, PluginErr] ! {Load, Read} {\n\
+\x20   let g = Grant {\n\
+\x20       effects: [], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],\n\
+\x20       limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },\n\
+\x20       require_signed: false,\n\
+\x20   }\n\
+\x20   let p = load(h, \"shout.dpx\", g)?\n\
+\x20   let f: fn(Str) -> Str ! {} = p.get(\"shout\")?\n\
+\x20   Ok(f(\"hello\"))\n\
+}\n\n\
+fn main(root: Root) ! {Write, Load, Read} {\n\
+\x20   let out = root.console()\n\
+\x20   match shouted(root.plugin_host()) {\n\
+\x20       Ok(s) => out.println(s)\n\
+\x20       Err(e) => out.println(\"refused\")\n\
+\x20   }\n\
+\x20   var i = 0\n\
+\x20   while i >= 0 {\n\
+\x20       i = i + 1\n\
+\x20   }\n\
+}\n";
+
+/// RW 4.57 (the red team's F-01, D-V2-157): a run that never reaches its end — killed, here, as `kill -9`, a crash or a
+/// lost machine would end it — cannot revoke anything itself, so the daemon holds a dead-man on the run's own node:
+/// once the run's beats stop for the period, the daemon revokes the node and its subtree (the plugin's node with it)
+/// as itself. Before, both stayed `[live]` for the daemon's whole life.
+#[test]
+fn under_the_broker_daemon_a_killed_runs_nodes_are_revoked_by_its_dead_man() {
+    let dir = tmp("killed-daemon");
+    let state = daemon_state("killed");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+    std::fs::write(dir.join("host.delulu"), SPINNING_HOST).unwrap();
+    let _daemon = Daemon::start(&state);
+    let (mut run, first, _) =
+        start_until_first_line(&dir, &state, &[("DELULU_RUN_DEADMAN_MS", "3000")], &["console", "plugin=."]);
+    assert_eq!(first, "hello!", "the plugin must have been loaded and called, or this proves nothing");
+    // The baseline: while the run runs, it holds both nodes — the witness looks at a tree that HAS them.
+    let nodes = tree_nodes(&dir, &state);
+    let held: Vec<_> = nodes.iter().filter(|(_, kind, _)| kind == "process" || kind == "plugin").collect();
+    assert_eq!(held.len(), 2, "the run's root and its plugin's node: {nodes:?}");
+    assert!(held.iter().all(|(_, _, s)| s == "live"), "a running run's nodes are live: {nodes:?}");
+    let root = held.iter().find(|(_, kind, _)| kind == "process").expect("the root").0.clone();
+
+    run.0.kill().expect("the run is killed");
+    let _ = run.0.wait();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut nodes = tree_nodes(&dir, &state);
+    while nodes.iter().any(|(_, _, s)| s == "live") && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        nodes = tree_nodes(&dir, &state);
+    }
+    assert!(
+        nodes.iter().all(|(_, _, s)| s != "live"),
+        "30 s after the run was killed (its dead-man's period is 3 s), no node of it may be live: {nodes:?}"
+    );
+    assert!(
+        revocations(&dir, &state).iter().any(|(by, target)| *by == root && *target == root),
+        "the dead-man revokes the root AS ITSELF: {:?}",
+        revocations(&dir, &state)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The other side (D-V2-157): a run that is ALIVE keeps its node however long it runs — its beats, from a thread of its
+/// own, hold its dead-man off. A run that outlasts several periods, then uses its console (an epoch-class use, refused
+/// within one epoch of a revocation), must still be answered. A beater that never beats is red here.
+#[test]
+fn under_the_broker_daemon_a_live_run_outlasting_its_dead_mans_period_keeps_its_node() {
+    let dir = tmp("alive-daemon");
+    let state = daemon_state("alive");
+    std::fs::write(
+        dir.join("host.delulu"),
+        "module host\n\n\
+         fn main(root: Root) ! {Write, Clock} {\n\
+         \x20   let out = root.console()\n\
+         \x20   let clock = root.clock()\n\
+         \x20   out.println(\"started\")\n\
+         \x20   let t0 = clock.now_ms()\n\
+         \x20   while clock.now_ms() - t0 < 4000 {\n\
+         \x20       let x = 1\n\
+         \x20   }\n\
+         \x20   out.println(\"still held\")\n\
+         }\n",
+    )
+    .unwrap();
+    let _daemon = Daemon::start(&state);
+    let (mut run, first, rest) =
+        start_until_first_line(&dir, &state, &[("DELULU_RUN_DEADMAN_MS", "1500")], &["console", "clock"]);
+    assert_eq!(first, "started", "the run must have started, or this proves nothing");
+    let status = run.0.wait().expect("the run ends");
+    // Every line the run printed: the reader ends at the pipe's end, which follows the run's.
+    let last: Vec<String> = std::iter::from_fn(|| rest.recv_timeout(std::time::Duration::from_secs(10)).ok()).collect();
+    let nodes = tree_nodes(&dir, &state);
+    assert!(
+        status.success() && last == ["still held"],
+        "a live run is never revoked by its own dead-man (period 1.5 s, run 4 s): {status:?}, {last:?}, {nodes:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ----- a closure's names are its own module's (CLOSURE-SCOPE-1, RW 4.55) ---------------------------------
 
 /// A Verified plugin that takes a callback (allowed for Verified, R-4) and returns a closure — each of

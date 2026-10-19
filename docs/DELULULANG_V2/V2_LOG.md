@@ -6360,3 +6360,38 @@ and the gates green on the launch tree. `39165405002` (`jobs=everything` on `976
 still running when this was written; the release dry run `39165442908` on `9763787` — success. `39167478125`
 (`jobs=everything` on `b8f9f16`) running, unread; its release dry run `39167480432` — success. This test's fix reaches
 the launch branch with the next merge of `master`.
+
+## 2026-10-19 — RW 4.57: a run's own node ends with the run, however it ends (D-V2-157; on-demand routine run 2)
+
+**What.** RW 4.57 (the red team's F-01, routine run 17, "code reading agrees, not re-run") said a killed run leaves its
+nodes live under the daemon. Re-run first, by hand, on a scratch daemon (`/tmp/rt`): a program that loads the `shout`
+plugin and then spins, stopped by `--limits cpu=3`, left its root (`process`) and its plugin's node `[live]`; and the
+CONTROL — the same program ending cleanly — left its own root `[live]` too (RW 4.51 had revoked only the plugin's). The
+daemon's tree lives in its memory: every run added root authority nobody held, for the daemon's whole life. Fixed
+(D-V2-157): `broker_client::RunNode` holds the root a run issues for itself for exactly as long as the run — revoked as
+itself at its end (after `close_devices`), and reaped by the broker's dead-man (D-V2-106; 10 s, beaten every 2 s by a
+thread of the run's own) when the run never gets there. At both places a root is issued for a run (`run_cmd.rs`, the
+sandboxed host in `guest.rs`). A lease run's node is the delegator's and is not held — the half RW 4.57 keeps open.
+
+**Evidence.** Witnesses in `plugin_load_cli.rs`, red on the old code: `under_the_broker_daemon_a_runs_own_node_ends_with_the_run`
+(`("…", "process", "live")` after a clean end) and `…_a_killed_runs_nodes_are_revoked_by_its_dead_man` (30 s after
+`Child::kill`, both nodes `live`; the baseline asserts both live while the run runs). Beside them, green before and after
+and each falsified: `…_a_sandboxed_runs_own_node_ends_with_the_run`, `…_a_live_run_outlasting_its_dead_mans_period_keeps_its_node`
+(a 1.5 s period, a 4 s run that then prints — the dead-man must not reap a run that is alive), and the unit test
+`the_run_dead_man_period_can_only_be_shortened`. `scripts/mutants.py`: **M455** (the end revokes nothing) red in both
+clean-end witnesses; **M456** (armed for an hour) red in the kill witness; **M457** (the beater never beats) red in the
+live-run witness; **M458** (the knob may lengthen) red in the unit test; **M459** (the sandboxed host forgets its hold) and
+**M460** (the ordinary run forgets it) red each in its own; the control green (M455's first text did not compile — a typo,
+rewritten and re-run). The six RW 4.57 tests with the machine loaded by four concurrent copies of their binary: 12 of 12
+rounds green (the harness refused shell busy loops — the routine now says how to load the CPUs). clippy 0.
+Read on runners at `abd71c2` before `master` moved (`witness.yml`, `plugin_load_cli` filtered to `under_the_broker_daemon`): `windows-latest` `39181218534` — 8 passed, 0 failed (the runner terminated only `vctip`, no `delulu`);
+`macos-latest` `39181220241` — 8 passed, 0 failed, no orphan.
+The full suite at `abd71c2`: 2,325 passed, 1 failed, 16 ignored, the tree unmoved — the one red `delulu-runtime`'s thread-classification gate (`every_thread_either_sizes_its_stack_or_is_listed_as_never_running_a_program`) naming the new beater, `broker_client.rs:296`; listed with its reason (`4b0adcb`), green. Again over the fix and these records (`4b0adcb` and this entry's tree): **2,326 passed, 0 failed, 16 ignored** (cargo's exit 0, the tree unmoved).
+
+**CI read at the start of this run:** `3f2ac0d`'s push run `39170518002` and `0c84447`'s `39170730116` — success (14 jobs;
+`miri-slow` and `heavy-gates` skipped, as on every push). `actors_pingpong` on `0c84447`: arm64 MEASURED 2.87x where the
+machine gave 4.11x, passed; Ubuntu and Windows NOT MEASURED (busy); macOS NOT MEASURED (3 threads). Sandbox properties as
+recorded before (macOS `filesystem_confinement absent`, its reads not confined). On `launch/2.0.0`: `39169269103`
+(`jobs=everything` on `e098438`, the branch's newest commit) — **success on all 18 jobs**, `miri-slow (delulu-broker)` 1 h
+35 min; `39165405002` (`9763787`) — 17 success, `test (windows-latest)` red in the e-stop witness fixed since, its Miri jobs
+all green; `39167478125` (`b8f9f16`) — **success on all 18 jobs**, its `miri-slow (delulu-broker)` done at 00:12 UTC (2 h 51 min).

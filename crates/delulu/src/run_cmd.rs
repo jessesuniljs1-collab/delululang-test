@@ -1102,6 +1102,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // A lease run already bound custody to the redeemed node above; a plain `--broker daemon` run
     // issues its root here (the `--grant` flags as issue-then-run sugar, spec §3.2).
     let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = lease_custody;
+    // RW 4.57 (D-V2-157): the root this run issues for itself is held for exactly as long as the run — revoked when this
+    // drops (after `close_devices`, declared before the devices so it drops after them), and reaped by the daemon's
+    // dead-man if the run never gets here. A lease run's node is the delegator's, and is not held.
+    let mut _run_node: Option<crate::broker_client::RunNode> = None;
     if daemon_mode && daemon_custody.is_none() {
         let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
             eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
@@ -1111,8 +1115,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         // PS-B-05: the root records the budget this run is held to, so anything the program
         // delegates from it inherits that budget or narrows it, and never outspends its own run.
         spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
-        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
-            Ok(c) => daemon_custody = Some(c),
+        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
+            .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
+        {
+            Ok((c, held)) => {
+                daemon_custody = Some(c);
+                _run_node = Some(held);
+            }
             Err(d) => {
                 let diag = Diagnostic::error(d.code, d.message);
                 print_diagnostics("run", &[diag], &map, None, opts.json);

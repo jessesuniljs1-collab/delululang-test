@@ -25,6 +25,16 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### a run's own grant node ends with the run, 2026-10-19
+
+- **Fixed (RW 4.57, D-V2-157): under the broker daemon, the root node a `run --grant …` issues for itself no longer
+  outlives the run.** Before, it stayed `[live]` in `grants list` after every run — and a run that was killed, crashed or
+  stopped by its budget also left its plugins' and devices' nodes live: authority nobody held, for as long as the daemon
+  ran. Now a run revokes its own node as it ends (recorded), and the daemon holds a dead-man on it: if the run stops
+  beating for 10 s, the daemon revokes the node and everything below it, and the record says why. Plain and sandboxed
+  runs alike. `DELULU_RUN_DEADMAN_MS` may shorten the 10 s, never lengthen it. A run under `--lease` is unchanged — its
+  node is the delegator's. Each daemon run's audit chain gains two records (the arming and the end's revocation).
+
 ### a Guard path rule on macOS covers both Unicode normalizations, 2026-10-18
 
 - **Fixed (RW 4.17, D-V2-156): on macOS a Guard path rule now covers a name in either Unicode normalization.** macOS's

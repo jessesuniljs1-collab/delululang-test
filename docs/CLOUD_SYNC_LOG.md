@@ -3770,3 +3770,72 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   jobs as read in `V2_LOG.md`; then merge `master` into it again (this fix, these records) and dispatch `everything`
   on the result — criterion 1 of `CHECKLIST-2.0.md` needs a green run on the final launch commit; (3) RW 4.17's UNC
   half; RW 6.1's further strings; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-18 — on-demand routine run 1 (postscript): the last push run read; `launch/2.0.0` at `e098438`
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `9ba06d2`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- CI read: `9ba06d2`'s push run `39169109890` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push).
+- `launch/2.0.0`: the third merge, `e098438` (this fix and the records), gates green on the launch tree; CI `39169269103` (`jobs=everything`) dispatched — at 22:01 UTC 14 jobs success, the Windows tests and three `miri-slow` running. `39165405002` (`9763787`): 16 success, Windows red in the fixed witness, `miri-slow (delulu-broker)` running. `39167478125` (`b8f9f16`): 16 success, Windows green this time, two `miri-slow` running. All unread past this line.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) on `launch/2.0.0` read `39169269103`
+  (`jobs=everything` on `e098438`, the branch's newest commit), and the Miri jobs still running in `39165405002` and
+  `39167478125` — each superseded by it, kept as evidence; (3) RW 4.17's UNC half; RW 6.1's further strings; RW 6.2;
+  (4) *[laptop]* the launch, only on the owner's word — the launch session merges `master` into `launch/2.0.0` first,
+  then needs a green `everything` run on its final commit (`CHECKLIST-2.0.md` criterion 1).
+
+### 2026-10-18 — on-demand routine run 1 (postscript 2): the localization guide's key-list claim corrected
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `3f2ac0d`   Commits: this entry's commit
+- Files and folders: M `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (§2's rules: the key space named — `delulu_diag::REGISTRY`
+  and `CLI_STRINGS` — where it said `docs/for-agents.md` and a "Stage-9 reference" listed it; neither does),
+  `docs/REMAINING_WORK.md` (correction row 1.14), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: `grep` finds no catalog key in `docs/for-agents.md` and no Stage-9 reference; `docs/lang/en-US.md` §3.1 holds
+  7 of 154 codes (so the guide says "a starter set"); `delulu explain E-DL0501` answers. Document gates green.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before — this commit's push run first.
+
+### 2026-10-19 — on-demand routine run 2: RW 4.57 — a run's own node ends with the run, however it ends (D-V2-157)
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its second run (started 2026-10-19 00:06 UTC, no `routine-fire-payload`)
+- Branch: `claude/rw-4-57-run-node` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `0c84447`
+- Commits: `abd71c2` A run's own node ends with the run, however it ends (RW 4.57); `4b0adcb` The run's beater is a thread
+  that never runs a program (RW 4.57); and this entry's commit
+- Files and folders: A `docs/assistant-memory/a-fix-for-one-node-asks-every-node.md`; M `crates/delulu/src/broker_client.rs`
+  (`RunNode`, `run_deadman_period`, a unit test), `crates/delulu/src/run_cmd.rs`, `crates/delulu/src/guest.rs`,
+  `crates/delulu/tests/plugin_load_cli.rs` (four witnesses), `crates/delulu-runtime/src/actors.rs` (the beater classified),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 RW 4.57, §11.5 the CPU-load trap), `docs/CLOUD_ROUTINE.md` (how to load the CPUs),
+  `docs/DEPLOYMENT.md` (§3, a run's own node), `docs/design/STAGE5_SPECIFICATION.md` (§3.2's sugar ends with its run),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-157), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.57
+  partial; 4.64's stale status cell corrected — closed by `b3e17fc` since routine run 23), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Start of run:** `git fetch` — `master` at `0c84447` (run 1's last commit), nothing newer; `origin/autosave/laptop`'s
+  newest snapshot is still `b4a9e18`, recovered by run 1; `claude/wonderful-hamilton-bo8k53` and
+  `claude/friendly-thompson-vz6m23` carry one commit each, kept and superseded as recorded on 2026-10-17; every other
+  `claude/*` branch is in `master`. Survey `ok` (1521 nodes, 14843 edges), `doctor --check` all checks passed. `gh` is
+  installed; CI read with `curl` and the GitHub MCP tools. Run 1's claims re-run: `locale_cli` 7/7, `locale_plugin_cli` 3/3,
+  `sandbox_devices_cli` 14/14, `clean_checkout` 2/2, `delulu-broker` 204/204, `delulu-diag` 50/50 — all hold. `cargo deny
+  … advisories` ok.
+- **CI read:** `3f2ac0d` `39170518002` and `0c84447` `39170730116` — success. `launch/2.0.0`: `39169269103` (`jobs=everything`
+  on `e098438`, its newest commit) — **success on all 18 jobs**; `39167478125` (`b8f9f16`) — success on all 18;
+  `39165405002` (`9763787`) — 17 success, Windows red in the e-stop witness since fixed. Per-OS verdicts in `V2_LOG.md`.
+- **RW 4.57, witnessed and closed for issue-then-run (D-V2-157):** re-run first on a scratch daemon — a budget-stopped or
+  killed run left its root and its plugin's node `[live]`, and a cleanly ended run left its own root `[live]` (RW 4.51 had
+  ended only the plugin's). `RunNode` revokes the run's own root at its end and arms a 10 s broker dead-man on it, beaten
+  by the run, so a killed run's nodes are reaped. Witnesses red on the old code; mutants M455–M460 red; macOS and Windows
+  read green before `master` moved. The lease half stays open (RW 4.57).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite twice — at `abd71c2` 2,325 passed and 1 failed (the thread-classification gate naming the new
+  beater; fixed in `4b0adcb`), then over the fix and these records 2,326 passed, 0 failed, 16 ignored (exit 0, the tree
+  unmoved); clippy 0; the four witnesses on `macos-latest` `39181220241` and `windows-latest` `39181218534` (8 passed each);
+  the RW 4.57 tests 12 of 12 green with the machine loaded by four concurrent copies of their binary.
+- Redo on the laptop: nothing (macOS and Windows read on runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.57 — a fix for one node asks every node the holder holds) and §11.5
+  (the harness refuses shell busy loops); `docs/assistant-memory/a-fix-for-one-node-asks-every-node.md`.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.57's lease half — a lease run's minted nodes dead-manned
+  with its root's beats; (3) merge `master` into `launch/2.0.0` again for D-V2-157 (its CHANGELOG lines into the 2.0.0
+  section) and read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (5)
+  *[laptop]* the launch, only on the owner's word.
