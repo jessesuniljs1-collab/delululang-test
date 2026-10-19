@@ -233,6 +233,10 @@ pub struct AuditLog {
     /// The highest seq any record in the chain carries (0 for none) — what the next record must
     /// exceed (AUDIT-SEQ-1). Kept with the head: recovered when another writer moved the chain.
     max_seq: u64,
+    /// How many records `current_day`'s file holds, and every older day file's bytes together — the
+    /// anchor's [`AnchorAt`], so the next opening can take the anchor's word (RW 4.53).
+    day_records: usize,
+    older_bytes: u64,
 }
 
 /// The append lock's file name, beside the day files and the anchor (neither reader lists it).
@@ -347,9 +351,40 @@ fn anchor_path(dir: &Path) -> PathBuf {
 ///   operator can witness it elsewhere and check a later run against a value the attacker never
 ///   had. That is the only route to genuine tamper-evidence, and it requires an external witness —
 ///   which no file inside this directory can be.
-fn write_anchor(dir: &Path, head: &str, records: usize) -> Result<(), AuditError> {
-    let body = format!("{{\"head\":\"{head}\",\"records\":{records}}}\n");
+fn write_anchor(dir: &Path, head: &str, records: usize, at: Option<&AnchorAt>) -> Result<(), AuditError> {
+    let body = match at {
+        Some(a) => format!(
+            "{{\"head\":\"{head}\",\"records\":{records},\"day\":\"{}\",\"day_len\":{},\"day_records\":{},\"older_bytes\":{},\"max_seq\":{}}}\n",
+            a.day, a.day_len, a.day_records, a.older_bytes, a.max_seq
+        ),
+        None => format!("{{\"head\":\"{head}\",\"records\":{records}}}\n"),
+    };
     fs::write(anchor_path(dir), body).map_err(AuditError::io)
+}
+
+/// Where the chain stood when its anchor was written (RW 4.53, D-V2-160): the newest day file, its length and how many
+/// records it holds, every older day file's bytes together, and the highest seq. An opening whose files still measure so
+/// takes the anchor's count after checking that the newest file's last record is the anchor's head, and reads nothing
+/// else; any other measure sends it to the whole recovery, which refuses what it always refused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AnchorAt {
+    day: String,
+    day_len: u64,
+    day_records: usize,
+    older_bytes: u64,
+    max_seq: u64,
+}
+
+/// The anchor's [`AnchorAt`], when it has one (an anchor written before RW 4.53 has none).
+fn read_anchor_at(dir: &Path) -> Option<AnchorAt> {
+    let v: Value = serde_json::from_str(&fs::read_to_string(anchor_path(dir)).ok()?).ok()?;
+    Some(AnchorAt {
+        day: v.get("day")?.as_str()?.to_string(),
+        day_len: v.get("day_len")?.as_u64()?,
+        day_records: v.get("day_records")?.as_u64()? as usize,
+        older_bytes: v.get("older_bytes")?.as_u64()?,
+        max_seq: v.get("max_seq")?.as_u64()?,
+    })
 }
 
 /// Read the anchor, if one exists. `None` means an unanchored log (one written before anchoring
@@ -362,9 +397,22 @@ fn read_anchor(dir: &Path) -> Option<(String, usize)> {
     Some((head, records))
 }
 
+/// What a recovery found: the chain's head, its newest day file and that file's length, the record count, the highest
+/// seq, and the two counts an [`AnchorAt`] carries.
+#[derive(Debug, PartialEq, Eq)]
+struct Recovered {
+    head: String,
+    current_day: Option<String>,
+    records: usize,
+    max_seq: u64,
+    tail_len: Option<u64>,
+    day_records: usize,
+    older_bytes: u64,
+}
+
 /// What the files say — the head, the latest day file, the record count — checked against the
 /// anchor, and the anchor written if there is none. Called under the append lock.
-fn recover(dir: &Path) -> Result<(String, Option<String>, usize, u64), AuditError> {
+fn recover(dir: &Path) -> Result<Recovered, AuditError> {
     let days = list_day_files(dir)?;
     // Head = the hash of the last record across all files, in day order (robust to a trailing
     // header-only file). current_day = the latest existing file, so same-day appends don't
@@ -381,11 +429,18 @@ fn recover(dir: &Path) -> Result<(String, Option<String>, usize, u64), AuditErro
     // silently rewriting a disagreeing anchor would erase the very evidence it exists to keep.
     let mut records = 0usize;
     let mut max_seq = 0u64;
-    for day in &days {
+    let (mut day_records, mut older_bytes) = (0usize, 0u64);
+    for (i, day) in days.iter().enumerate() {
         let (n, top) = count_records(&day_path(dir, day))?;
         records += n;
         max_seq = max_seq.max(top);
+        if i + 1 < days.len() {
+            older_bytes += file_len(&day_path(dir, day)).unwrap_or(0);
+        } else {
+            day_records = n;
+        }
     }
+    let tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(dir, d)));
     match read_anchor(dir) {
         Some((a_head, a_records)) if a_head != head || a_records != records => {
             return Err(AuditError::corrupt(
@@ -397,9 +452,68 @@ fn recover(dir: &Path) -> Result<(String, Option<String>, usize, u64), AuditErro
                 ),
             ));
         }
-        _ => write_anchor(dir, &head, records)?,
+        _ => {
+            let at = current_day.clone().zip(tail_len).map(|(day, day_len)| AnchorAt {
+                day,
+                day_len,
+                day_records,
+                older_bytes,
+                max_seq,
+            });
+            write_anchor(dir, &head, records, at.as_ref())?
+        }
     }
-    Ok((head, current_day, records, max_seq))
+    Ok(Recovered { head, current_day, records, max_seq, tail_len, day_records, older_bytes })
+}
+
+/// RW 4.53 (D-V2-160): an opening that reads the newest day file's last line and nothing else, when every file still
+/// measures as the anchor says — the newest file named and of its length, the older files' bytes together unchanged — and
+/// that line is the anchor's head. `None` for anything else, and the whole recovery decides. What it does not re-read: an
+/// older record changed in place to the same length — never the opening's to find (`verify` recomputes every hash).
+fn recover_fast(dir: &Path) -> Result<Option<Recovered>, AuditError> {
+    let (Some((head, records)), Some(at)) = (read_anchor(dir), read_anchor_at(dir)) else { return Ok(None) };
+    let days = list_day_files(dir)?;
+    let Some((newest, older)) = days.split_last() else { return Ok(None) };
+    if *newest != at.day || at.day_records == 0 || file_len(&day_path(dir, newest)) != Some(at.day_len) {
+        return Ok(None);
+    }
+    let mut older_bytes = 0u64;
+    for day in older {
+        let Some(len) = file_len(&day_path(dir, day)) else { return Ok(None) };
+        older_bytes += len;
+    }
+    if older_bytes != at.older_bytes || last_line_hash(&day_path(dir, newest), at.day_len)?.as_deref() != Some(head.as_str()) {
+        return Ok(None);
+    }
+    Ok(Some(Recovered {
+        head,
+        current_day: Some(at.day),
+        records,
+        max_seq: at.max_seq,
+        tail_len: Some(at.day_len),
+        day_records: at.day_records,
+        older_bytes,
+    }))
+}
+
+/// The hash of a day file's last record line, read from its end: the last 64 KiB, or the whole file when its last line is
+/// longer. `None` when the last line is not a record.
+fn last_line_hash(path: &Path, len: u64) -> Result<Option<String>, AuditError> {
+    let from = len.saturating_sub(64 * 1024);
+    let mut bytes = read_day_from(path, from).map_err(AuditError::io)?;
+    let complete = complete_lines(&bytes).len();
+    bytes.truncate(complete);
+    let body = bytes.strip_suffix(b"\n").unwrap_or(&bytes);
+    let line = match body.iter().rposition(|b| *b == b'\n') {
+        Some(i) => &body[i + 1..],
+        None if from == 0 => body,
+        None => return last_line_hash(path, 0),
+    };
+    let v: Value = match serde_json::from_slice(line) {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    Ok(v.get("seq").and(v.get("hash")).and_then(Value::as_str).map(str::to_string))
 }
 
 fn file_len(path: &Path) -> Option<u64> {
@@ -414,9 +528,44 @@ impl AuditLog {
         // Under the lock: a recovery that raced another writer's append would see its record
         // without its anchor, and refuse a chain that is fine.
         let _lock = AppendLock::take(&dir)?;
-        let (head, current_day, records, max_seq) = recover(&dir)?;
-        let tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&dir, d)));
-        Ok(AuditLog { dir, head, current_day, records, tail_len, max_seq })
+        // RW 4.53: an opening read every day file twice; when the files measure as the anchor says, it reads one line.
+        let r = match recover_fast(&dir)? {
+            Some(r) => r,
+            None => recover(&dir)?,
+        };
+        let mut log = AuditLog {
+            dir,
+            head: String::new(),
+            current_day: None,
+            records: 0,
+            tail_len: None,
+            max_seq: 0,
+            day_records: 0,
+            older_bytes: 0,
+        };
+        log.take(r);
+        Ok(log)
+    }
+
+    fn take(&mut self, r: Recovered) {
+        self.head = r.head;
+        self.current_day = r.current_day;
+        self.records = r.records;
+        self.max_seq = r.max_seq;
+        self.tail_len = r.tail_len;
+        self.day_records = r.day_records;
+        self.older_bytes = r.older_bytes;
+    }
+
+    /// Where this handle's chain stands, for the anchor it writes.
+    fn anchor_at(&self) -> Option<AnchorAt> {
+        Some(AnchorAt {
+            day: self.current_day.clone()?,
+            day_len: self.tail_len?,
+            day_records: self.day_records,
+            older_bytes: self.older_bytes,
+            max_seq: self.max_seq,
+        })
     }
 
     /// The current chain head (for tests / cross-links).
@@ -443,12 +592,8 @@ impl AuditLog {
         if self.read_appended(anchor.as_ref())? {
             return Ok(());
         }
-        let (head, current_day, records, max_seq) = recover(&self.dir)?;
-        self.tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&self.dir, d)));
-        self.head = head;
-        self.current_day = current_day;
-        self.records = records;
-        self.max_seq = max_seq;
+        let r = recover(&self.dir)?;
+        self.take(r);
         Ok(())
     }
 
@@ -470,9 +615,15 @@ impl AuditLog {
             return Ok(false);
         }
         let (mut head, mut records, mut max_seq) = (self.head.clone(), self.records, self.max_seq);
+        let (mut day_records, mut older_bytes) = (self.day_records, self.older_bytes);
         let mut tail = (day.clone(), from);
         let later = days.iter().filter(|d| d.as_str() > day.as_str()).map(|d| (d.clone(), 0));
-        for (d, start) in std::iter::once((day.clone(), from)).chain(later) {
+        for (i, (d, start)) in std::iter::once((day.clone(), from)).chain(later).enumerate() {
+            if i > 0 {
+                // A later file: the one before it is closed — its bytes are an older file's now.
+                older_bytes += tail.1;
+                day_records = 0;
+            }
             let bytes = read_day_from(&day_path(&self.dir, &d), start).map_err(AuditError::io)?;
             for line in bytes.split(|b| *b == b'\n') {
                 if line.iter().all(u8::is_ascii_whitespace) {
@@ -485,6 +636,7 @@ impl AuditLog {
                 let Some((hash, seq)) = verified_link(&v, &head) else { return Ok(false) };
                 head = hash;
                 records += 1;
+                day_records += 1;
                 max_seq = max_seq.max(seq);
             }
             tail = (d, start + bytes.len() as u64);
@@ -497,6 +649,8 @@ impl AuditLog {
         self.max_seq = max_seq;
         self.current_day = Some(tail.0);
         self.tail_len = Some(tail.1);
+        self.day_records = day_records;
+        self.older_bytes = older_bytes;
         Ok(true)
     }
 
@@ -561,6 +715,11 @@ impl AuditLog {
         // own stamp; only where it is filed is the later of its day and the chain's (`YYYYMMDD` sorts as
         // dates do).
         let day = std::cmp::max(day_string(entry.ts), self.current_day.clone().unwrap_or_default());
+        if self.current_day.as_deref().is_some_and(|d| d != day) {
+            // The file this handle wrote is closed: its bytes are an older file's now (RW 4.53).
+            self.older_bytes += self.tail_len.unwrap_or(0);
+            self.day_records = 0;
+        }
         self.ensure_day_file(&day)?;
         let rec = entry.into_record(&self.head);
         let path = day_path(&self.dir, &day);
@@ -568,11 +727,12 @@ impl AuditLog {
         self.tail_len = file_len(&path);
         self.head = rec.hash.clone();
         self.records += 1;
+        self.day_records += 1;
         self.max_seq = rec.seq;
         // The anchor is refreshed AFTER the record lands, so a crash between the two leaves the
         // anchor one behind — which `verify` reports as a mismatch. Fail-closed: a log that may
         // have lost its last record says so rather than passing.
-        write_anchor(&self.dir, &self.head, self.records)?;
+        write_anchor(&self.dir, &self.head, self.records, self.anchor_at().as_ref())?;
         Ok(rec)
     }
 }
@@ -1886,6 +2046,124 @@ mod tests {
         fs::write(&path, text.lines().take(2).map(|l| format!("{l}\n")).collect::<String>()).unwrap();
         let e = a.append(entry(0, 1002, "use", "g_a", "allow")).expect_err("the anchor holds a record the file lost");
         assert!(format!("{e:?}").contains("anchor disagrees"), "{e:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// RW 4.53 (D-V2-160): an opening whose files measure as the anchor says reads the newest file's last line and
+    /// nothing else. A record in an OLDER day is made unreadable here, in place (its length unchanged): the opening still
+    /// takes the anchor's word and the next record chains onto the head, while `verify` finds the damage. Before, every
+    /// opening re-read and re-counted every day file, and refused here.
+    #[test]
+    fn an_opening_reads_only_the_newest_files_last_line_when_the_files_measure_as_the_anchor_says() {
+        // The newest record short, and longer than the 64 KiB read from the file's end.
+        for target_len in [0usize, 70_000] {
+            let dir = tmp_dir(&format!("open-fast-{target_len}"));
+            let (day1, day2) = (86_400_000 + 500, 2 * 86_400_000 + 500);
+            let last = {
+                let mut log = AuditLog::open(&dir).unwrap();
+                log.append(entry(0, day1, "issue", "g_a", "allow")).unwrap();
+                log.append(entry(0, day1 + 1, "use", "g_a", "allow")).unwrap();
+                let mut newest = entry(0, day2, "use", "g_a", "allow");
+                newest.target = Some("t".repeat(target_len));
+                log.append(newest).unwrap()
+            };
+            let path = day_path(&dir, "19700102");
+            let text = fs::read_to_string(&path).unwrap();
+            let older = text.lines().nth(1).unwrap().to_string();
+            fs::write(&path, text.replacen(&older, &format!("X{}", &older[1..]), 1)).unwrap();
+            let mut log = AuditLog::open(&dir)
+                .unwrap_or_else(|e| panic!("{target_len}: the files measure as the anchor says, and it was read whole: {e:?}"));
+            let rec = log.append(entry(0, day2 + 1, "revoke", "g_a", "allow")).unwrap();
+            assert_eq!((rec.prev_hash.as_str(), rec.seq), (last.hash.as_str(), last.seq + 1), "onto the head, past the top seq");
+            assert!(verify(&dir).is_err(), "the damage behind is still `verify`'s to find");
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// The fast opening is the whole recovery's answer, or none: after every append of a history two writers make across
+    /// three days — each catching up after the other, by reading what was appended — the anchor's note lets an opening
+    /// take it, and what it takes equals what reading every file gives.
+    #[test]
+    fn the_fast_opening_agrees_with_the_whole_recovery_after_every_append() {
+        let dir = tmp_dir("open-agree");
+        let mut a = AuditLog::open(&dir).unwrap();
+        let mut b = AuditLog::open(&dir).unwrap();
+        let mut ts = 86_400_000i64 + 500;
+        for i in 0..24u64 {
+            if i % 8 == 7 {
+                ts += 86_400_000; // the next day's file
+            }
+            ts += 1;
+            let w = if (i * 7) % 3 == 0 { &mut a } else { &mut b };
+            w.append(entry(0, ts, "use", "g_a", "allow")).unwrap();
+            let fast = recover_fast(&dir)
+                .unwrap()
+                .unwrap_or_else(|| panic!("after append {i} the opening could not take the anchor's word"));
+            let whole = recover(&dir).unwrap();
+            assert_eq!(fast, whole, "after append {i}");
+        }
+        assert_eq!(list_day_files(&dir).unwrap().len(), 4, "the history crossed three midnights");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// What an opening refused before it still refuses: a line deleted from an older day (its bytes change), a line
+    /// deleted from the middle of the newest day (its last line, the head, unchanged), and the newest record replaced in
+    /// place by one whose hash is not the anchor's head.
+    #[test]
+    fn an_opening_still_refuses_an_older_line_deleted_or_the_newest_record_replaced() {
+        for case in ["older line deleted", "newest middle line deleted", "newest replaced"] {
+            let dir = tmp_dir(&format!("open-refuse-{}", case.replace(' ', "-")));
+            let (day1, day2) = (86_400_000 + 500, 2 * 86_400_000 + 500);
+            {
+                let mut log = AuditLog::open(&dir).unwrap();
+                log.append(entry(0, day1, "issue", "g_a", "allow")).unwrap();
+                log.append(entry(0, day1 + 1, "use", "g_a", "allow")).unwrap();
+                log.append(entry(0, day2, "use", "g_a", "allow")).unwrap();
+                if case == "newest middle line deleted" {
+                    log.append(entry(0, day2 + 1, "use", "g_a", "allow")).unwrap();
+                }
+            }
+            let (path, text) = if case == "newest middle line deleted" {
+                let path = day_path(&dir, "19700103");
+                let text = fs::read_to_string(&path).unwrap();
+                let line = text.lines().nth(1).unwrap().to_string();
+                (path, text.replacen(&format!("{line}\n"), "", 1))
+            } else if case == "older line deleted" {
+                let path = day_path(&dir, "19700102");
+                let text = fs::read_to_string(&path).unwrap();
+                let line = text.lines().nth(1).unwrap().to_string();
+                (path, text.replacen(&format!("{line}\n"), "", 1))
+            } else {
+                let path = day_path(&dir, "19700103");
+                let text = fs::read_to_string(&path).unwrap();
+                // The same length, so only the head's check can tell: another record in its place.
+                let rec = entry(3, day2, "use", "g_b", "allow").into_record(GENESIS_HASH);
+                let line = text.lines().last().unwrap().to_string();
+                assert_eq!(rec.to_line().len(), line.len());
+                (path, text.replacen(&line, &rec.to_line(), 1))
+            };
+            fs::write(&path, text).unwrap();
+            let e = AuditLog::open(&dir).err().unwrap_or_else(|| panic!("{case}: the opening must refuse"));
+            assert!(format!("{e:?}").contains("anchor disagrees"), "{case}: {e:?}");
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// An anchor written before RW 4.53 has no note of where the chain stood: the opening reads every file, as before, and
+    /// the anchor it re-affirms carries the note, so the next opening can take its word.
+    #[test]
+    fn an_anchor_without_its_note_is_read_the_whole_way_once() {
+        let dir = tmp_dir("open-old-anchor");
+        let head = {
+            let mut log = AuditLog::open(&dir).unwrap();
+            log.append(entry(0, 1000, "issue", "g_a", "allow")).unwrap();
+            log.append(entry(0, 1001, "use", "g_a", "allow")).unwrap().hash
+        };
+        fs::write(anchor_path(&dir), format!("{{\"head\":\"{head}\",\"records\":2}}\n")).unwrap();
+        assert!(read_anchor_at(&dir).is_none() && recover_fast(&dir).unwrap().is_none());
+        let log = AuditLog::open(&dir).expect("the old anchor agrees with the files");
+        assert_eq!(log.head(), head);
+        assert!(recover_fast(&dir).unwrap().is_some(), "the re-affirmed anchor carries its note");
         let _ = fs::remove_dir_all(&dir);
     }
 }

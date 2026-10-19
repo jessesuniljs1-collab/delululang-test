@@ -24,10 +24,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 309 |
-| Rust lines | 172683 |
+| Rust lines | 172961 |
 | Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 263 |
-| Markdown lines | 79273 |
+| Markdown lines | 79278 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -162,11 +162,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 13609 lines
+- **Modules:** 19 files, 13887 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/audit.rs` | 1891 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
+| `src/audit.rs` | 2169 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 586 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/budget_scope.rs` | 187 | PS-B-05: the resource-budget dimension of authority. |
 | `src/cert.rs` | 1698 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |

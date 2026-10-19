@@ -238,6 +238,11 @@ resumed chaining from the truncated head and every later record was genuinely va
 
 `ANCHOR.json` now records the head and the record count **outside the log**, refreshed on every
 append; `verify` compares against it and `AuditLog::open` refuses to start on a disagreement.
+Since D-V2-160 (2026-10-19) it also notes where the chain stood — the newest day file, its length and
+record count, the older files' bytes together, the top seq — so an opening whose files still measure
+so reads only the newest record and takes the anchor's count; any other measure is the whole recovery,
+as before. An older record edited in place to the same length is `verify`'s to find, as it always was:
+the opening never recomputed a hash.
 
 **The claim is now "detects modification, reordering, and truncation" — but still NOT
 "tamper-proof".** The anchor sits beside the log, so an attacker who deletes records can also
