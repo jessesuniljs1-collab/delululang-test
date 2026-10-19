@@ -6850,3 +6850,56 @@ is read from that run, not assumed.
 **`launch/2.0.0`.** `c3b33f3` merges `master` up to `8fc42f8`. On its tree the map is 1532 nodes with 0 errors,
 `doctor --check` is ok, clippy is clean and stamped, and the document gates are green. Its `everything` run `39296491537`
 and release dry run `39296497024` were dispatched. Their results are read in a later entry.
+
+## 2026-10-19 — the laptop: run 4's lost WASM fixes and its red team's findings, redone (RW 3.10–3.14)
+
+**Where they came from.** On-demand routine run 4 built two WASM fixes and ran a Sonnet 5.5 red-team pass on the WASM
+fragment, and the usage limit stopped it before either was committed. Its run log, read through the routine API, names
+the defects and some of the red team's programs; the VM and the agent's notes are gone. Each was witnessed again on the
+laptop's binary at `6a26c1f` before any fix.
+
+**The five.**
+- **WASM-SHORT-1 (RW 3.10).** `&&`/`||` compiled both operands, then `i32.and`/`i32.or`. `let a = z != 0 && 10 / z > 1`
+  with `z = 0`: `false` on the interpreter, `DL0902: division by zero` on `--engine wasm`. Now the right operand is compiled
+  inside an `if` on the left (`compile_binary`, before either operand). The `And | Or` arm of the `Int` match is
+  `unreachable!`, because the typed `&&` never reaches it.
+- **WASM-NEG-1 (RW 3.11).** `-x` was `x * -1` with a bare `i64.mul`, so `-Int::MIN` printed `-9223372036854775808` where
+  the interpreter faults `DL0901 integer overflow negating Int::MIN`. Now it calls the checked-multiply helper.
+- **WASM-REFUSAL-1 (RW 3.12).** A program that matched on the error of an `fs.read_text("../x.txt")` outside its grant
+  reported `DL0903: memory access out of bounds` on WASM and `DL0904 … escapes the granted scope` on the interpreter.
+  Ungranted, it reported `DL0903` against `DL0703`. A refused host call returns a placeholder and the guest runs on, and
+  `finish` reported whatever trapped next. `trap_or_refusal` now reports the recorded refusal first, in `run_main` and in
+  the actor `main` alike.
+- **WASM-OUTPUT-1 (RW 3.13).** On the same program the interpreter printed `start`, the first read and `NotFound` before
+  its fault, and WASM printed nothing. The CLI printed the engine's captured output only on `Ok`, so a run that faulted,
+  was refused or was stopped by its budget lost every line it printed. `HostConfig::stream_console` (default `false`, so
+  every harness that captures is unchanged) prints each line as it is printed. The CLI sets it for `.delulu` and `.dwx`
+  runs.
+- **RAND-SPAN-1 (RW 3.14).** `r.int(0 - 1, 9223372036854775807)` panicked the debug interpreter at `prim.rs`
+  (`attempt to subtract with overflow`). A release build wrapped to the right values. Now `hi.wrapping_sub(lo) as u64` and
+  `lo.wrapping_add(…)` are exact, which is what the WASM host computes.
+
+**Why the 50,000-program gate missed all five.** Its generators wrote no `&&`/`||` and no negation. They never refused a
+host call, and the comparison is fault against fault, never the output before a fault. `gen_cmp` now writes a guarded
+short-circuit in a third of its conditions (`d != 0 && x / d …`, `d == 0 || x % d …`), whose right side faults exactly
+when the guard is false. `gen_expr` writes `(-e)` where it had written a second leaf.
+
+**Evidence.** `crates/delulu-wasm/tests/fault_parity.rs` (new): `negating_int_min_faults_on_both_engines`,
+`and_and_or_short_circuit_on_both_engines` (faults guarded off and right-side effects on both engines),
+`rand_int_over_a_span_past_int_max_draws_the_same_values_on_both_engines` (three seeds),
+`a_refusal_is_reported_even_when_the_guest_traps_after_it`. `wasm_cli.rs`
+`what_a_program_printed_before_a_fault_reaches_stdout_on_both_engines`; `budget_cli.rs`'s WASM CPU-budget test now asserts
+the line printed before the stop. Mutants (`scripts/mutants.py`): M525 (WASM-SHORT-1 restored), M526 (the bare `i64.mul`),
+M527 (`hi - lo` in `Int`), M528 (the trap over the refusal), M529 (no streaming), each red; control green. Readings:
+M525 red in three targets (`and_and_or_short_circuit_on_both_engines`, `random_loop_programs_agree_with_the_interpreter`,
+`tests::wasm_matches_interpreter_on_random_programs_including_faults` — so both generators now write the shape); M526,
+M527, M528 each red on their one test; M529 red on the `wasm_cli` witness and on `budget_cli`'s WASM CPU-budget test;
+control green (`delulu-wasm` lib 87, `fault_parity`, `loop_parity` 7). After the last edit: `scripts/clippy.sh -j 4` clean
+and stamped; `delulu-wasm` whole (87 lib, `fault_parity` 6, `loop_parity` 7 and the rest) and the CLI targets that run
+the WASM engine (artifact_review, budget_cli, cli, guard_e2e, json_contract, plugin_cli, release, sandbox_modes_cli,
+wasm_cli, message_spacing) green on Windows. The 50,000-program release differential runs in CI's `fuzz` job.
+
+**A slip, caught before the commit.** `fault_parity.rs` already existed (C20's two fault-parity tests), and the new
+tests were first written over it — the file tool did not refuse an overwrite of a file not yet read. `git status`
+showed it modified, not added; the original was restored from `HEAD` and the new tests appended to it, both sets
+green.

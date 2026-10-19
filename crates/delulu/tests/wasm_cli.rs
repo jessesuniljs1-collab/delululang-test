@@ -37,6 +37,29 @@ fn run_engine_wasm_matches_the_interpreter() {
     assert_eq!(stdout(&w), stdout(&i), "WASM and interpreter output must be identical");
 }
 
+/// WASM-OUTPUT-1: the CLI printed the WASM engine's captured output only when the run succeeded, so a program that
+/// printed and then faulted showed nothing on stdout, where the interpreter shows every line it printed. The fault's
+/// code is the same on both engines.
+#[test]
+fn what_a_program_printed_before_a_fault_reaches_stdout_on_both_engines() {
+    let path = std::env::temp_dir().join(format!("delulu_printfault_{}.delulu", std::process::id()));
+    std::fs::write(
+        &path,
+        "module m\nfn main(root: Root) ! {Write} {\n  let out = root.console()\n  out.println(\"first\")\n  let z = 0\n  \
+         out.println(\"second\")\n  out.println(str(10 / z))\n  out.println(\"never\")\n}\n",
+    )
+    .expect("write");
+    let p = path.to_string_lossy().to_string();
+    let w = delulu(&["run", &p, "--engine", "wasm", "--grant", "console"]);
+    let i = delulu(&["run", &p, "--grant", "console"]);
+    let _ = std::fs::remove_file(&path);
+    assert!(!w.status.success() && !i.status.success(), "both fault");
+    assert_eq!(stdout(&i), "first\nsecond\n", "the interpreter");
+    assert_eq!(stdout(&w), stdout(&i), "the WASM engine prints what the interpreter printed before the fault");
+    let (we, ie) = (String::from_utf8_lossy(&w.stderr), String::from_utf8_lossy(&i.stderr));
+    assert!(we.contains("DL0902") && ie.contains("DL0902"), "a division by zero on both:\n{we}\n{ie}");
+}
+
 #[test]
 fn run_engine_wasm_ungranted_console_is_refused() {
     // No console grant → root.console() is refused host-side; the run fails.

@@ -11,6 +11,24 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the WASM engine's faults, refusals and output match the interpreter's; `rand.int` over any span, 2026-10-19
+
+- **Fixed (WASM-SHORT-1): on the WASM engine, `&&` and `||` evaluated their right side even when the left side had
+  decided the answer.** `z != 0 && 10 / z > 1` with `z = 0` stopped with a division by zero on `--engine wasm` and was
+  `false` on the interpreter. A right side that printed printed too. Both operators now short-circuit on both engines.
+- **Fixed (WASM-NEG-1): on the WASM engine, `-x` of `Int::MIN` gave `Int::MIN`.** The interpreter stops with `DL0901`
+  (integer overflow), and the WASM engine now does too.
+- **Fixed (WASM-REFUSAL-1): a refused capability call could be reported as a memory error on the WASM engine.** For
+  example, a program that read a path outside its `fs.read` grant and matched on the result's error stopped with
+  `DL0903` (memory access out of bounds), where the interpreter reports `DL0904` (the path escapes the granted scope).
+  An ungranted read gave `DL0903` for `DL0703`. The WASM engine now reports the refusal.
+- **Fixed (WASM-OUTPUT-1): on the WASM engine, `delulu run` printed a program's output only when the program finished.**
+  A program that printed and then faulted, was refused or was stopped by its `--limits` budget showed nothing on stdout.
+  Each line is now printed when the program prints it, as on the interpreter.
+- **Fixed (RAND-SPAN-1): `rand.int(lo, hi)` with `hi - lo` greater than `Int::MAX` crashed a debug build of the
+  interpreter** (a release build drew the right values). Every span now draws the same values on both engines, each
+  inside `lo..hi`.
+
 ## Unreleased — an exhausted WASM memory is no longer reported as an integer overflow, 2026-10-19
 
 - **Fixed (WASM-OOM-1): on the WASM engine, a program whose memory could not grow any further was reported as

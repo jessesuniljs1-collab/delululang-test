@@ -1094,6 +1094,17 @@ spells the same thing?**
   asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
   a generator cannot write a shape, teach it the shape in the same change.
 
+- **WASM-SHORT-1, WASM-NEG-1, WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1 — the WASM engine's faults, refusals and output,
+  held to the interpreter's** (found by on-demand routine run 4's verification and red-team pass, 2026-10-19; its fixes
+  were lost with the VM when the usage limit hit, and the laptop redid them from its run log, RW 3.10–3.14). The engine
+  computed both sides of `&&`/`||`, so it faulted where the interpreter short-circuited. Its `-x` was a bare `i64.mul`,
+  which wraps on `Int::MIN`. After a host refusal the guest ran on with a placeholder, and the trap that followed was
+  reported instead of the refusal. The CLI printed the engine's captured output only on success. The interpreter's
+  `rand.int` computed `hi - lo` in `Int`. **The 50,000-program differential saw none of them.** Its generator wrote no
+  `&&`/`||`, no negation and no host refusal, and it compares a fault with a fault, not the output printed before one.
+  Search key: a differential is as wide as its generator and its comparison. For each defect class, ask whether
+  the generator can write it and whether the comparison can see it.
+
 - **WASM-OOM-1 — an exhausted WASM memory read as an overflow** (on-demand routine run 4, 2026-10-19, RW 3.9): RW 3.4's
   `__alloc` trapped with `unreachable`, and the host had long read every `unreachable` as the arithmetic helpers' overflow
   (`DL0901`) — so a string doubled past WebAssembly's 4 GiB (a budget above 4 GiB lets a program get there) was "integer

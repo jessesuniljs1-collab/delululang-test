@@ -233,6 +233,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         fs_read_roots: grants.build_root().fs_read,
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
+        stream_console: true,
         ..delulu_wasm::HostConfig::default()
     };
     note_program_started();
@@ -1236,6 +1237,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             fs_read_roots: root.fs_read.clone(),
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
+            stream_console: true, // WASM-OUTPUT-1: printed as printed, so a fault or a budget's stop loses none of it
             foreign_load: root.foreign_load,
             foreign_grants: grants.foreign_c.clone(),
             foreign_sigs: delulu_wasm::foreign_sigs(&checked.module),

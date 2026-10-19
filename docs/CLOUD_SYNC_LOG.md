@@ -4284,3 +4284,29 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (1) the launch runs above and this commit's push run; (2) redo run 4's two WASM fixes and the red
   team's findings, each witnessed first; (3) the WASM fragment's next pieces: `for`, `List`, `split`, `map`; RW 4.66, 4.67,
   6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.10–3.14: the WASM engine's faults, refusals and output held to the interpreter's; `rand.int` over any span (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-short`   Pull request: #3   Merged: not yet (lands on `master` by fast-forward after its CI reads green)
+- Base: `6a26c1f`
+- **Redone from on-demand routine run 4** (its fixes and its red team's notes were lost with the VM at the usage limit; its
+  run log named them). Each defect was witnessed on the laptop's binary before any fix: WASM-SHORT-1, WASM-NEG-1,
+  WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1. Details are in `V2_LOG.md` and REMAINING_WORK 3.10–3.14.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (short-circuit `&&`/`||`; negation through the checked
+  multiply), `crates/delulu-wasm/src/host.rs` (`trap_or_refusal`; `HostConfig::stream_console`),
+  `crates/delulu-wasm/src/gen.rs` (guarded short-circuits, negation), `crates/delulu-runtime/src/prim.rs` (`rand.int`'s
+  span), `crates/delulu/src/run_cmd.rs` (the CLI streams), `crates/delulu-wasm/tests/fault_parity.rs` (four tests added
+  after C20's two), `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/budget_cli.rs`, `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4), `docs/REMAINING_WORK.md` (3.10–3.14), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`
+  (row 17, the launch runs), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: mutants M525–M529 red, control green; `scripts/clippy.sh -j 4` clean and stamped; `delulu-wasm` whole and
+  the ten CLI targets that run the WASM engine green on Windows. The full suite on four runners and the 50,000-program
+  differential are this pull request's CI (the owner's rule of 2026-10-19).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (a differential is as wide as its generator and its comparison).
+- Open / next, in order: (1) this pull request's CI, then fast-forward `master`; the launch `everything` run
+  `39296491537` and `6a26c1f`'s push run; (2) the host-virtualization posture after the owner's question of 2026-10-19
+  (PwnEscape, Januscape, Zapscape): `doctor` reports nested virtualization and a world-writable `/dev/kvm`,
+  `DEPLOYMENT.md` names the host kernel the microVM tier needs, and a test pins the guest's absence of a network device;
+  (3) the WASM fragment's next pieces: `List`, `for`, `split`, `map`; (4) *[laptop]* the launch, only on the owner's word.

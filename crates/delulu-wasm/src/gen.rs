@@ -59,7 +59,8 @@ fn gen_expr(r: &mut Rng, depth: u32, vars: &[&str], allow_call: bool) -> String 
         3 => format!("({} / {})", sub(r), r.below(4)),
         4 => format!("({} % {})", sub(r), r.below(4)),
         5 => format!("if {} {{ {} }} else {{ {} }}", gen_cmp(r, vars), sub(r), sub(r)),
-        6 => gen_leaf(r, vars),
+        // Negation goes through the checked multiply on WASM (WASM-NEG-1); here it is exercised on ordinary values.
+        6 => format!("(-{})", sub(r)),
         _ => format!("g({})", gen_leaf(r, vars)),
     }
 }
@@ -75,7 +76,20 @@ fn gen_leaf(r: &mut Rng, vars: &[&str]) -> String {
 fn gen_cmp(r: &mut Rng, vars: &[&str]) -> String {
     const OPS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
     let op = OPS[r.below(OPS.len() as u64) as usize];
-    format!("{} {op} {}", gen_leaf(r, vars), gen_leaf(r, vars))
+    // A third of the conditions are short-circuits whose right side divides by the left side's operand: it faults
+    // exactly when that operand is 0, which the left side rules out, so an engine that evaluates both sides faults
+    // where the interpreter does not (WASM-SHORT-1).
+    match r.below(6) {
+        0 => {
+            let d = gen_leaf(r, vars);
+            format!("({d} != 0 && {} / {d} {op} {})", gen_leaf(r, vars), gen_leaf(r, vars))
+        }
+        1 => {
+            let d = gen_leaf(r, vars);
+            format!("({d} == 0 || {} % {d} {op} {})", gen_leaf(r, vars), gen_leaf(r, vars))
+        }
+        _ => format!("{} {op} {}", gen_leaf(r, vars), gen_leaf(r, vars)),
+    }
 }
 
 // ----- Phase 3m: random CONSOLE programs (str/concat/print parity) --------------------------

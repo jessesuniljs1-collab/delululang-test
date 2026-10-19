@@ -179,6 +179,9 @@ fn an_endless_loop_on_the_wasm_engine_is_stopped_by_its_cpu_budget() {
     .expect("an endless loop on the WASM engine under `--limits cpu=1` must be STOPPED");
     assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
     assert!(!r.stderr.contains("DL1201"), "it compiled: {}", r.stderr);
+    // WASM-OUTPUT-1: what the program printed before the budget stopped it is on stdout, as on the interpreter. The
+    // engine had held it in memory until the run ended, and a stopped run never ends.
+    assert!(r.stdout.contains("started"), "the line printed before the stop: {:?}", r.stdout);
     let v = report(&dir);
     assert_eq!(v["outcome"]["ran"], true, "it ran on the WASM engine: {v}\n{}", r.stderr);
     assert_eq!(v["outcome"]["stopped_by"]["dimension"], "cpu", "{v}");

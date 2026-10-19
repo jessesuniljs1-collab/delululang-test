@@ -229,6 +229,8 @@ struct HostState {
     /// `rand.int` sequences match byte-for-byte (spec §6.2, two-engine parity).
     rng: u64,
     output: String,
+    /// `HostConfig::stream_console`: each printed line goes to stdout when printed, not into `output`.
+    stream_console: bool,
     /// Set host-side when a capability check fails. We record it and return without trapping (an
     /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
     /// into a clean `WasmError` after the call.
@@ -634,6 +636,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // followed in the trace by its refusal (D-V2-129).
                 if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
                     caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
+                    return;
+                }
+                if caller.data().stream_console {
+                    println!("{s}");
                     return;
                 }
                 let out = &mut caller.data_mut().output;
@@ -1147,9 +1153,17 @@ fn read_i64_args(caller: &mut Caller<'_, HostState>, ptr: i32, argc: i32) -> Opt
     Some(out)
 }
 
+/// The error of a call that trapped: the host's recorded refusal if there is one, else the trap. A refused host call
+/// returns a placeholder and the guest runs on, so what traps next is a consequence of the refusal, not the cause the
+/// interpreter reports (WASM-REFUSAL-1: a refused `fs.read_text` matched on its error read a placeholder pointer and
+/// reported DL0903, an access out of bounds, where the interpreter reported DL0904).
+fn trap_or_refusal(store: &Store<HostState>, e: &wasmtime::Error) -> WasmError {
+    WasmError::Trap(store.data().refused.clone().unwrap_or_else(|| clean_trap(e)))
+}
+
 fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
     let mut results: [Val; 0] = [];
-    func.call(&mut store, params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    func.call(&mut store, params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
     let state = store.into_data();
     if let Some(reason) = state.refused {
         return Err(WasmError::Trap(reason));
@@ -1171,6 +1185,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
+        stream_console: false,
         refused: None,
         foreign_load_granted: false,
         foreign_grants: HashMap::new(),
@@ -1207,6 +1222,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
+        stream_console: cfg.stream_console,
         refused: None,
         foreign_load_granted: cfg.foreign_load,
         foreign_grants: cfg.foreign_grants.clone(),
@@ -1234,6 +1250,11 @@ pub struct HostConfig {
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.
     pub rand_seed: Option<u64>,
+    /// `true`: each `println` goes to stdout as it is printed, as the interpreter's does, and the run returns an
+    /// empty string. `false` (the default): the output is captured and returned. The CLI streams, so what a program
+    /// printed before a fault, a refusal or a budget's stop is on stdout on both engines (WASM-OUTPUT-1: the CLI
+    /// printed the captured output only when the run succeeded).
+    pub stream_console: bool,
     // ----- Stage 4 phase 4g: foreign C FFI + effect tracing ------------------------------------
     /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` (any `foreign.c` lib or
     /// `foreign.python` pattern granted — mirrors the interpreter's `RootVal.foreign_load`).
@@ -1281,7 +1302,7 @@ pub fn run_main_actors(wasm: &[u8], cfg: &HostConfig, table: &ActorTable) -> Res
     let main = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
     // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
     let mut results: [Val; 0] = [];
-    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
     if let Some(reason) = store.data().refused.clone() {
         return Err(WasmError::Trap(reason));
     }

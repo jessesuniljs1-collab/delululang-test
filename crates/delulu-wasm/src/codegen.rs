@@ -2095,9 +2095,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
         Expr::Unary { op, operand, .. } => {
             let ty = compile_expr(operand, cx)?;
             match op {
+                // `-x` is `x * -1` through the checked multiply, which traps on `Int::MIN` exactly where the
+                // interpreter's `checked_neg` faults DL0901 (WASM-NEG-1: a bare `i64.mul` wrapped to `Int::MIN`).
                 UnOp::Neg if ty == Ty::I64 => {
                     cx.emit(Instruction::I64Const(-1));
-                    cx.emit(Instruction::I64Mul);
+                    cx.emit(Instruction::Call(cx.arith_base + 2));
                     Ok(Ty::I64)
                 }
                 UnOp::Not if ty == Ty::I32 => {
@@ -2459,6 +2461,30 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
 }
 
 fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    // `&&` and `||` short-circuit, as the interpreter's do: the right side runs only when the left does not decide
+    // the answer, so its fault or effect happens on exactly the runs it happens on there (WASM-SHORT-1: both sides
+    // were computed and then combined with `i32.and`/`i32.or`).
+    if matches!(op, BinOp::And | BinOp::Or) {
+        if compile_expr(lhs, cx)? != Ty::I32 {
+            return Err(CompileError::Unsupported("`&&`/`||` on a non-Bool".into()));
+        }
+        cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+        let rt = if op == BinOp::And {
+            let rt = compile_expr(rhs, cx)?;
+            cx.emit(Instruction::Else);
+            cx.emit(Instruction::I32Const(0));
+            rt
+        } else {
+            cx.emit(Instruction::I32Const(1));
+            cx.emit(Instruction::Else);
+            compile_expr(rhs, cx)?
+        };
+        cx.emit(Instruction::End);
+        if rt != Ty::I32 {
+            return Err(CompileError::Unsupported("`&&`/`||` on a non-Bool".into()));
+        }
+        return Ok(Ty::I32);
+    }
     let lt = compile_expr(lhs, cx)?;
     let rt = compile_expr(rhs, cx)?;
     use BinOp::*;
@@ -2479,15 +2505,13 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
             Ge => (Instruction::I64GeS, Ty::I32),
             Eq => (Instruction::I64Eq, Ty::I32),
             Ne => (Instruction::I64Ne, Ty::I32),
-            And | Or => return Err(CompileError::Unsupported("`&&`/`||` on Int".into())),
+            And | Or => unreachable!("`&&`/`||` are compiled above, before either operand"),
         };
         cx.emit(ins);
         return Ok(ty);
     }
     if lt == Ty::I32 && rt == Ty::I32 {
         let ins: Instruction<'static> = match op {
-            And => Instruction::I32And,
-            Or => Instruction::I32Or,
             Eq => Instruction::I32Eq,
             Ne => Instruction::I32Ne,
             _ => return Err(CompileError::Unsupported("this operator on Bool".into())),
