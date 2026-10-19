@@ -1074,6 +1074,13 @@ spells the same thing?**
   key: for every answer that grows with history, find the size limit it will meet and what its client does when it cannot be
   sent — a dropped connection reads as "unreachable", and a monitor that hears "unreachable" stops.
 
+- **WASM-HYGIENE-1 — an inlined lambda read the generic function's variable** (the laptop, 2026-10-19, D-V2-163): the WASM
+  backend inlines generic functions and the lambdas passed to them, and looked every name up through all the frames below
+  the inlined body — so `apply(fn(v) { v + n }, 3)`, with `apply` declaring its own `n`, read that one: 103 on WASM, 4 on
+  the interpreter, silently. The 50,000-program differential gate never generated a lambda. Search key: wherever code is
+  moved to where it is used (inlining, macros, templates), its names must still mean what they meant where it was written —
+  and a differential fuzzer only covers the shapes its generator writes.
+
 - **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
   each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
   as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the

@@ -34,7 +34,12 @@
 //! host fns now carry a `(file,start,end)` span so the host records `TraceRecord`s identical to the
 //! interpreter's (criterion 6). `Float` literals, `str(Float)`, and `str(Bool)` compile in support.
 //!
-//! Constructs outside this fragment (`while`, embedded Python (`root.python`/`py.*` — head-chef
+//! RW 3.4 (D-V2-163): `while`, `break`, `continue` and assignment to a local; `Str.len()` (`__str_len`, Unicode scalar
+//! values, as the interpreter counts); every allocation through `__alloc`, which grows the memory (the heap had been a
+//! fixed 1 MiB). An inlined body — a generic function's, a lambda's — sees the names of where it was written and no
+//! others (WASM-HYGIENE-1: a lambda's captured name had resolved to the generic function's own local).
+//!
+//! Constructs outside this fragment (`for` and every `List`, embedded Python (`root.python`/`py.*` — head-chef
 //! ruling: the DL1201 interpreter fallback, since `py.list` needs guest `List` values), GC types,
 //! user enums with non-scalar payloads) are `CompileError::Unsupported` (DL1201) and stay on the
 //! interpreter, which remains the reference engine. Secret-handling constructs (`root.secret(...)`,
@@ -670,7 +675,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         n_imports += 4;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
-                                // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
+                                // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
 
     // Collect string literals into a length-prefixed linear-memory image.
@@ -792,6 +797,12 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     let int_to_str_type = next_type; // __int_to_str(n) -> ptr
     types.ty().function([ValType::I64], [ValType::I32]);
     next_type += 1;
+    let alloc_type = next_type; // __alloc(n) -> ptr
+    types.ty().function([ValType::I32], [ValType::I32]);
+    next_type += 1;
+    let str_len_type = next_type; // __str_len(s) -> n
+    types.ty().function([ValType::I32], [ValType::I64]);
+    next_type += 1;
     let mut user_types = Vec::new();
     for f in &fns {
         let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&env, &p.ty).unwrap()).unwrap()).collect();
@@ -861,14 +872,16 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         imports.import("delulu:actors", "actor_field_set", EntityType::Function(actor_field_set_ty));
     }
 
-    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, users, then
-    // the actor members (Stage 7 phase 7h).
+    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
+    // then the actor members (Stage 7 phase 7h).
     let mut funcsec = FunctionSection::new();
     for _ in 0..N_ARITH_HELPERS {
         funcsec.function(helper_type);
     }
     funcsec.function(concat_type);
     funcsec.function(int_to_str_type);
+    funcsec.function(alloc_type);
+    funcsec.function(str_len_type);
     for t in &user_types {
         funcsec.function(*t);
     }
@@ -877,9 +890,8 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     }
 
     let mut mems = MemorySection::new();
-    // Reserve the interned literal image plus a fixed bump-allocation heap for runtime strings.
-    // The heap has no `memory.grow` yet, so a concatenation-heavy run could exhaust it (a trap =
-    // an error, honestly surfaced); HEAP_PAGES keeps everyday programs comfortably within bounds.
+    // Reserve the interned literal image plus HEAP_PAGES of bump-allocation heap to start; `__alloc` grows the memory past
+    // them when an allocation needs it (RW 3.4).
     let data_pages = (data.len() as u64).div_ceil(65536);
     let min_pages = data_pages + HEAP_PAGES;
     mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
@@ -909,8 +921,11 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     code.function(&ovf_sub_fn());
     code.function(&ovf_mul_fn());
     code.function(&chk_rem_fn());
-    code.function(&concat_fn(HEAP_GLOBAL));
-    code.function(&int_to_str_fn(HEAP_GLOBAL));
+    let alloc = arith_base + N_ARITH_HELPERS + 2;
+    code.function(&concat_fn(alloc));
+    code.function(&int_to_str_fn(alloc));
+    code.function(&alloc_fn(HEAP_GLOBAL));
+    code.function(&str_len_fn());
     for f in &fns {
         code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds)?);
     }
@@ -1042,12 +1057,14 @@ fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
 /// `checked_div`, so it needs no helper.
 const N_ARITH_HELPERS: u32 = 4;
 
-/// Number of synthetic string helpers emitted after the arithmetic helpers: `__concat` then
-/// `__int_to_str` (in that order).
-const N_STR_HELPERS: u32 = 2;
+/// Number of synthetic helpers emitted after the arithmetic helpers: `__concat`, `__int_to_str`, `__alloc`, then
+/// `__str_len` (in that order).
+const N_STR_HELPERS: u32 = 4;
 
-/// Pages (64 KiB each) reserved for the runtime bump-allocation heap, above the interned literals.
-const HEAP_PAGES: u64 = 16; // 1 MiB — no `memory.grow` yet, so this is the fixed heap ceiling
+/// Pages (64 KiB each) reserved for the runtime bump-allocation heap at start, above the interned literals. Every guest
+/// allocation goes through `__alloc`, which grows the memory past them when it must (RW 3.4: a loop that builds a string
+/// outgrew a fixed 1 MiB); the run's memory budget holds the growth, as it holds the interpreter's.
+const HEAP_PAGES: u64 = 16;
 
 /// Index of the bump-heap pointer global (the module emits exactly one global).
 const HEAP_GLOBAL: u32 = 0;
@@ -1058,6 +1075,27 @@ const HEAP_GLOBAL: u32 = 0;
 struct Callable {
     params: Vec<Param>,
     body: Block,
+    /// Where it was defined (WASM-HYGIENE-1): the frames hidden there, and how many scope and callable frames there
+    /// were. Inlined anywhere, its body sees those frames and no other — as the interpreter's closure sees its own.
+    hidden: Vec<Hidden>,
+    scopes_at: usize,
+    callables_at: usize,
+}
+
+/// A run of scope frames and a run of callable frames, `start..end` each, that a body being inlined cannot see
+/// (WASM-HYGIENE-1): a generic function's body sees none of its caller's frames, a lambda's only its definition's.
+#[derive(Clone, Copy, Debug)]
+struct Hidden {
+    scopes: (usize, usize),
+    callables: (usize, usize),
+}
+
+/// Whose names an inlined body sees (WASM-HYGIENE-1).
+enum Lexical<'c> {
+    /// A generic function: its parameters, and nothing of its caller's.
+    Generic,
+    /// A function value: what was visible where it was defined.
+    Value(&'c Callable),
 }
 
 struct Cx<'a> {
@@ -1081,6 +1119,21 @@ struct Cx<'a> {
     concat_fn: u32,
     /// Function index of the `__int_to_str` helper (`str(Int)`).
     int_to_str_fn: u32,
+    /// Function index of the `__alloc` helper — every guest allocation (RW 3.4).
+    alloc_fn: u32,
+    /// Function index of the `__str_len` helper (`Str.len()`, RW 3.4).
+    str_len_fn: u32,
+    /// The WASM labels open at this point of `instrs` — each `block`, `loop` and `if` opens one, each `end` closes it —
+    /// which is what a `br` counts outward (RW 3.4).
+    depth: u32,
+    /// Each enclosing `while`, innermost last: the label depths of its `block` (`break` leaves it) and its `loop`
+    /// (`continue` runs it again).
+    loops: Vec<(u32, u32)>,
+    /// The first scope of the body being inlined (`inline_call`), or 0: an assignment inside an inlined body may name only
+    /// a variable that body declared — what a function value does to its caller's variables is not this backend's to guess.
+    inline_floor: usize,
+    /// The frames the body being compiled cannot see — empty in a function's own body (WASM-HYGIENE-1).
+    hidden: Vec<Hidden>,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
@@ -1100,10 +1153,26 @@ struct Cx<'a> {
 
 impl<'a> Cx<'a> {
     fn lookup(&self, name: &str) -> Option<(u32, Ty)> {
-        self.scopes.iter().rev().find_map(|s| s.get(name).copied())
+        self.lookup_frame(name).map(|(_, b)| b)
+    }
+    /// A local's binding and the index of the scope frame that holds it — the innermost frame this body can see.
+    fn lookup_frame(&self, name: &str) -> Option<(usize, (u32, Ty))> {
+        let seen = |i: usize| !self.hidden.iter().any(|h| (h.scopes.0..h.scopes.1).contains(&i));
+        self.scopes.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(i, s)| s.get(name).map(|b| (i, *b)))
     }
     fn lookup_callable(&self, name: &str) -> Option<Callable> {
-        self.callables.iter().rev().find_map(|s| s.get(name).cloned())
+        let seen = |i: usize| !self.hidden.iter().any(|h| (h.callables.0..h.callables.1).contains(&i));
+        self.callables.iter().enumerate().rev().filter(|(i, _)| seen(*i)).find_map(|(_, s)| s.get(name).cloned())
+    }
+    /// A function value defined here: it will see what this body sees (WASM-HYGIENE-1).
+    fn callable(&self, params: &[Param], body: &Block) -> Callable {
+        Callable {
+            params: params.to_vec(),
+            body: body.clone(),
+            hidden: self.hidden.clone(),
+            scopes_at: self.scopes.len(),
+            callables_at: self.callables.len(),
+        }
     }
     fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
         let vt = wasm_valtype(ty).ok_or_else(|| CompileError::Unsupported("a `let` binding of type Unit".into()))?;
@@ -1112,6 +1181,11 @@ impl<'a> Cx<'a> {
         Ok(idx)
     }
     fn emit(&mut self, i: Instruction<'static>) {
+        match i {
+            Instruction::Block(_) | Instruction::Loop(_) | Instruction::If(_) => self.depth += 1,
+            Instruction::End => self.depth = self.depth.saturating_sub(1),
+            _ => {}
+        }
         self.instrs.push(i);
     }
 }
@@ -1147,6 +1221,12 @@ fn compile_fn<'a>(
         arith_base,
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
+        alloc_fn: arith_base + N_ARITH_HELPERS + 2,
+        str_len_fn: arith_base + N_ARITH_HELPERS + 3,
+        depth: 0,
+        loops: Vec::new(),
+        inline_floor: 0,
+        hidden: Vec::new(),
         imp,
         foreign_binds,
         actors,
@@ -1223,6 +1303,12 @@ fn compile_actor_member<'a>(
         arith_base,
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
+        alloc_fn: arith_base + N_ARITH_HELPERS + 2,
+        str_len_fn: arith_base + N_ARITH_HELPERS + 3,
+        depth: 0,
+        loops: Vec::new(),
+        inline_floor: 0,
+        hidden: Vec::new(),
         imp,
         foreign_binds,
         actors,
@@ -1287,7 +1373,7 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
         Stmt::Let { name, value, .. } => {
             // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
             if let Expr::Lambda { params, body, .. } = value {
-                let c = Callable { params: params.clone(), body: body.clone() };
+                let c = cx.callable(params, body);
                 cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
                 return Ok(Ty::Unit);
             }
@@ -1340,17 +1426,59 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
         // Stage 7 phase 7h: `self.field = …` lowers to the actor-state host import. Other
         // assignment targets (locals, indices) stay outside the subset (honest DL1201).
         Stmt::Assign { target, value, .. } => compile_assign(target, value, cx),
-        Stmt::While { .. } => Err(CompileError::Unsupported("`while`".into())),
-        Stmt::For { .. } => Err(CompileError::Unsupported("`for`".into())),
-        Stmt::Break { .. } => Err(CompileError::Unsupported("`break`".into())),
-        Stmt::Continue { .. } => Err(CompileError::Unsupported("`continue`".into())),
+        // RW 3.4: `while c { body }` is `block { loop { br_if 1 (!c); body; br 0 } }` — `break` leaves the block,
+        // `continue` runs the loop again. The run's processor budget holds an endless one, as it holds the interpreter's.
+        Stmt::While { cond, body, .. } => {
+            cx.emit(Instruction::Block(BlockType::Empty));
+            let brk = cx.depth;
+            cx.emit(Instruction::Loop(BlockType::Empty));
+            let cont = cx.depth;
+            if compile_expr(cond, cx)? != Ty::I32 {
+                return Err(CompileError::Unsupported("a non-Bool `while` condition".into()));
+            }
+            cx.emit(Instruction::I32Eqz);
+            cx.emit(Instruction::BrIf(cx.depth - brk));
+            cx.loops.push((brk, cont));
+            let body_ty = compile_block(body, cx);
+            cx.loops.pop();
+            if body_ty? != Ty::Unit {
+                cx.emit(Instruction::Drop);
+            }
+            cx.emit(Instruction::Br(cx.depth - cont));
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::End);
+            Ok(Ty::Unit)
+        }
+        Stmt::For { .. } => Err(CompileError::Unsupported("`for` (a `List` is outside the WASM fragment)".into())),
+        Stmt::Break { .. } | Stmt::Continue { .. } => {
+            let Some(&(brk, cont)) = cx.loops.last() else {
+                return Err(CompileError::Unsupported("`break` or `continue` outside a compiled `while`".into()));
+            };
+            let to = if matches!(stmt, Stmt::Break { .. }) { brk } else { cont };
+            cx.emit(Instruction::Br(cx.depth - to));
+            Ok(Ty::Unit)
+        }
     }
 }
 
-/// Compile an assignment. Only `self.field = …` is in the phase-7h subset: actor state lives
-/// host-side, reached through the `delulu:actors.field_set` import (an actor may write only its
-/// OWN fields — the checker's viewpoint/tag rules deny anything else).
+/// Compile an assignment: `self.field = …` (phase 7h: actor state lives host-side, reached through the
+/// `delulu:actors.field_set` import — an actor may write only its OWN fields, the checker's viewpoint/tag rules deny
+/// anything else), and `x = …` to a local (RW 3.4: the checker has already held it to a `let mut` of the value's type).
 fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if let LValue::Var(v) = target {
+        let Some((depth, (idx, ty))) = cx.lookup_frame(&v.name) else {
+            return Err(CompileError::Unsupported(format!("an assignment to `{}`, which is no local here", v.name)));
+        };
+        if depth < cx.inline_floor {
+            return Err(CompileError::Unsupported(format!(
+                "an assignment to `{}` from inside an inlined function value",
+                v.name
+            )));
+        }
+        compile_expr_as(value, cx, ty)?;
+        cx.emit(Instruction::LocalSet(idx));
+        return Ok(Ty::Unit);
+    }
     if let LValue::Field(base, name) = target {
         if let LValue::Var(v) = &**base {
             if v.name == "self" {
@@ -1367,7 +1495,7 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
             }
         }
     }
-    Err(CompileError::Unsupported("an assignment target other than `self.field` (locals/indices unsupported)".into()))
+    Err(CompileError::Unsupported("an assignment target other than a local or `self.field` (indices unsupported)".into()))
 }
 
 /// Resolve a `self` field to `(field index, lowered type, self-slot local)` in the current actor
@@ -1412,11 +1540,9 @@ fn emit_args_buffer(cx: &mut Cx, args: &[Expr]) -> Result<u32, CompileError> {
         cx.emit(Instruction::LocalSet(base));
         return Ok(base);
     }
-    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
-    cx.emit(Instruction::LocalTee(base));
     cx.emit(Instruction::I32Const(args.len() as i32 * 8));
-    cx.emit(Instruction::I32Add);
-    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(base));
     for (i, arg) in args.iter().enumerate() {
         cx.emit(Instruction::LocalGet(base));
         cx.emit(Instruction::I32Const(i as i32 * 8));
@@ -1556,11 +1682,9 @@ fn compile_foreign_call(
     // Bump-allocate an `argc * FVAL_CELL` argument buffer and remember its base.
     let argc = args.len() as i32;
     let base = cx.alloc_local(Ty::I32)?;
-    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
-    cx.emit(Instruction::LocalTee(base));
     cx.emit(Instruction::I32Const(argc * FVAL_CELL));
-    cx.emit(Instruction::I32Add);
-    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(base));
 
     for (i, (arg, pty)) in args.iter().zip(m.params.iter()).enumerate() {
         let off = i as i32 * FVAL_CELL;
@@ -1703,11 +1827,9 @@ fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<
     let cell = variant_cell_size(&ctors);
 
     let rp = cx.alloc_local(Ty::I32)?;
-    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
-    cx.emit(Instruction::LocalTee(rp));
     cx.emit(Instruction::I32Const(cell));
-    cx.emit(Instruction::I32Add);
-    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(rp));
     cx.emit(Instruction::LocalGet(rp));
     cx.emit(Instruction::I32Const(tag as i32));
     cx.emit(Instruction::I32Store(u32_at()));
@@ -1845,7 +1967,7 @@ fn is_fn_type(t: &TypeExpr) -> bool {
 /// already bound to a callable.
 fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
     match arg {
-        Expr::Lambda { params, body, .. } => Ok(Callable { params: params.clone(), body: body.clone() }),
+        Expr::Lambda { params, body, .. } => Ok(cx.callable(params, body)),
         Expr::Var { path, .. } if path.segs.len() == 1 => cx
             .lookup_callable(&path.segs[0].name)
             .ok_or_else(|| CompileError::Unsupported(format!("`{}` is not a function value", path.dotted()))),
@@ -1857,7 +1979,7 @@ fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
 /// into fresh locals in the current scope, bind function-typed arguments as callables, then compile
 /// the body in a new frame. This is how the backend handles generics and non-capturing lambdas —
 /// `apply(fn(x) { x * 2 }, 21)` reduces to inlined arithmetic, no function table needed (Phase 3r).
-fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx, lexical: Lexical) -> Result<Ty, CompileError> {
     if cx.inline_depth >= 64 {
         return Err(CompileError::Unsupported("inlining too deep (recursive generic or lambda?)".into()));
     }
@@ -1877,14 +1999,31 @@ fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Re
             local_binds.push((p.name.name.clone(), l, ty));
         }
     }
-    // Enter the inlined body with the parameters bound.
+    // Enter the inlined body with the parameters bound. It sees the names of where it was written and no others
+    // (WASM-HYGIENE-1); its `break`/`continue` reach no loop of the caller's, and its assignments no variable of the
+    // caller's (RW 3.4).
+    let here = Hidden { scopes: (0, cx.scopes.len()), callables: (0, cx.callables.len()) };
+    let env = match lexical {
+        Lexical::Generic => vec![here],
+        Lexical::Value(c) => {
+            let mut env = c.hidden.clone();
+            env.push(Hidden { scopes: (c.scopes_at, here.scopes.1), callables: (c.callables_at, here.callables.1) });
+            env
+        }
+    };
+    let hidden = std::mem::replace(&mut cx.hidden, env);
     cx.inline_depth += 1;
+    let floor = std::mem::replace(&mut cx.inline_floor, cx.scopes.len());
+    let loops = std::mem::take(&mut cx.loops);
     cx.scopes.push(local_binds.into_iter().map(|(n, l, t)| (n, (l, t))).collect());
     cx.callables.push(fn_binds.into_iter().collect());
     let r = compile_block(body, cx);
     cx.scopes.pop();
     cx.callables.pop();
+    cx.loops = loops;
+    cx.inline_floor = floor;
     cx.inline_depth -= 1;
+    cx.hidden = hidden;
     r
 }
 
@@ -2144,6 +2283,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if let Ty::ActorRef(aidx) = recv_ty {
                 return compile_send(aidx, &name.name, args, cx);
             }
+            // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).
+            if recv_ty == Ty::Str && name.name == "len" && args.is_empty() {
+                cx.emit(Instruction::Call(cx.str_len_fn));
+                return Ok(Ty::I64);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -2193,10 +2337,10 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
             if let Some(c) = cx.lookup_callable(&name) {
-                return inline_call(&c.params, &c.body, args, cx);
+                return inline_call(&c.params, &c.body, args, cx, Lexical::Value(&c));
             }
             if let Some(g) = cx.generics.get(&name).cloned() {
-                return inline_call(&g.params, &g.body, args, cx);
+                return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
             }
             let (fidx, ptys, ret) = {
                 let e = cx
@@ -2502,11 +2646,9 @@ fn byte_at() -> MemArg {
     MemArg { offset: 0, align: 0, memory_index: 0 }
 }
 
-/// `__concat(a, b)`: bump-allocate `[len_a+len_b : u32-le][a-bytes][b-bytes]` at the heap pointer,
-/// advance the pointer, and return the new buffer's pointer. `memory.copy` (bulk memory) moves the
-/// operand bytes. An allocation past the reserved heap traps on the store — an honest error, matched
-/// against the interpreter only for pathological sizes (everyday strings stay well within HEAP_PAGES).
-fn concat_fn(heap_global: u32) -> Function {
+/// `__concat(a, b)`: allocate `[len_a+len_b : u32-le][a-bytes][b-bytes]` (`__alloc`, function `alloc`) and return the
+/// new buffer's pointer. `memory.copy` (bulk memory) moves the operand bytes.
+fn concat_fn(alloc: u32) -> Function {
     use Instruction::*;
     // params: local 0 = a, local 1 = b; extra locals: 2 = len_a, 3 = len_b, 4 = result_ptr, 5 = total.
     build(
@@ -2522,8 +2664,11 @@ fn concat_fn(heap_global: u32) -> Function {
             LocalGet(3),
             I32Add,
             LocalSet(5), // total = len_a + len_b
-            GlobalGet(heap_global),
-            LocalSet(4), // result_ptr = heap
+            LocalGet(5),
+            I32Const(4),
+            I32Add,
+            Call(alloc),
+            LocalSet(4), // result_ptr = __alloc(4 + total)
             LocalGet(4),
             LocalGet(5),
             I32Store(u32_at()), // mem[result_ptr] = total
@@ -2547,13 +2692,6 @@ fn concat_fn(heap_global: u32) -> Function {
             I32Add,
             LocalGet(3),
             MemoryCopy { src_mem: 0, dst_mem: 0 },
-            // heap = result_ptr + 4 + total
-            LocalGet(4),
-            I32Const(4),
-            I32Add,
-            LocalGet(5),
-            I32Add,
-            GlobalSet(heap_global),
             LocalGet(4), // return result_ptr
         ],
     )
@@ -2565,8 +2703,9 @@ fn concat_fn(heap_global: u32) -> Function {
 /// take `0 - n` (two's-complement wrap gives the `i64::MIN` bit pattern) and format it with UNSIGNED
 /// division — reading that bit pattern as u64 is exactly the right magnitude (9223372036854775808).
 ///
-/// locals: 0 = n (param); 1 = mag, 2 = tmp (i64); 3 = sign, 4 = count, 5 = ptr, 6 = pos, 7 = len (i32).
-fn int_to_str_fn(heap_global: u32) -> Function {
+/// locals: 0 = n (param); 1 = mag, 2 = tmp (i64); 3 = sign, 4 = count, 5 = ptr, 6 = pos, 7 = len (i32). The buffer
+/// comes from `__alloc` (function `alloc`).
+fn int_to_str_fn(alloc: u32) -> Function {
     use Instruction::*;
     build(
         &[(2, ValType::I64), (5, ValType::I32)],
@@ -2619,8 +2758,11 @@ fn int_to_str_fn(heap_global: u32) -> Function {
             LocalGet(3),
             I32Add,
             LocalSet(7),
-            // ptr = heap; store total_len header
-            GlobalGet(heap_global),
+            // ptr = __alloc(4 + total_len); store total_len header
+            LocalGet(7),
+            I32Const(4),
+            I32Add,
+            Call(alloc),
             LocalSet(5),
             LocalGet(5),
             LocalGet(7),
@@ -2681,14 +2823,107 @@ fn int_to_str_fn(heap_global: u32) -> Function {
             End,
             End,
             End,
-            // heap = ptr + 4 + total_len ; return ptr
-            LocalGet(5),
-            I32Const(4),
-            I32Add,
-            LocalGet(7),
-            I32Add,
-            GlobalSet(heap_global),
+            // return ptr
             LocalGet(5),
         ],
     )
+}
+
+/// `__str_len(s)`: the string's length as the interpreter counts it — Unicode scalar values (`chars().count()`). A guest
+/// string is UTF-8 (literals, concatenations, `str(Int)` and the host's own writes), so that is the count of its bytes
+/// that do not continue a character (`0b10xx_xxxx`). RW 3.4.
+///
+/// locals: 0 = s (param); 1 = at, 2 = end (i32); 3 = n (i64).
+fn str_len_fn() -> Function {
+    use Instruction::*;
+    build(
+        &[(2, ValType::I32), (1, ValType::I64)],
+        &[
+            LocalGet(0),
+            I32Const(4),
+            I32Add,
+            LocalTee(1), // at = s + 4
+            LocalGet(0),
+            I32Load(u32_at()),
+            I32Add,
+            LocalSet(2), // end = at + byte length
+            Block(BlockType::Empty),
+            Loop(BlockType::Empty),
+            LocalGet(1),
+            LocalGet(2),
+            I32GeU,
+            BrIf(1),
+            LocalGet(1),
+            I32Load8U(byte_at()),
+            I32Const(0xC0),
+            I32And,
+            I32Const(0x80),
+            I32Ne,
+            If(BlockType::Empty),
+            LocalGet(3),
+            I64Const(1),
+            I64Add,
+            LocalSet(3),
+            End,
+            LocalGet(1),
+            I32Const(1),
+            I32Add,
+            LocalSet(1),
+            Br(0),
+            End,
+            End,
+            LocalGet(3),
+        ],
+    )
+}
+
+/// `__alloc(n)`: `n` bytes from the bump heap — the heap pointer's old value, the pointer moved past them. The memory
+/// grows by the pages the allocation needs when it would end past the memory's size (RW 3.4); an allocation that cannot be
+/// had — past 4 GiB, or refused by the engine — traps (`unreachable`). Every guest allocation goes through here; the host
+/// allocates by the same rule (`host.rs` `guest_alloc`). The run's memory budget holds the growth.
+///
+/// locals: 0 = n (param); 1 = ptr, 2 = end (i32).
+fn alloc_fn(heap_global: u32) -> Function {
+    use Instruction::*;
+    // The memory's size in bytes, as an i64 (65,536 pages is 2^32 bytes, past an i32).
+    let size_bytes = [MemorySize(0), I64ExtendI32U, I64Const(16), I64Shl];
+    let mut code = vec![
+        GlobalGet(heap_global),
+        LocalTee(1),
+        LocalGet(0),
+        I32Add,
+        LocalSet(2), // end = ptr + n
+        // end < ptr: the sum wrapped past 4 GiB.
+        LocalGet(2),
+        LocalGet(1),
+        I32LtU,
+        If(BlockType::Empty),
+        Unreachable,
+        End,
+        // end > size: grow by ceil((end - size) / 65536) pages, or trap.
+        LocalGet(2),
+        I64ExtendI32U,
+    ];
+    code.extend(size_bytes.iter().cloned());
+    code.extend([I64GtU, If(BlockType::Empty), LocalGet(2), I64ExtendI32U]);
+    code.extend(size_bytes.iter().cloned());
+    code.extend([
+        I64Sub,
+        I64Const(65535),
+        I64Add,
+        I64Const(16),
+        I64ShrU,
+        I32WrapI64,
+        MemoryGrow(0),
+        I32Const(-1),
+        I32Eq,
+        If(BlockType::Empty),
+        Unreachable,
+        End,
+        End,
+        LocalGet(2),
+        GlobalSet(heap_global),
+        LocalGet(1),
+    ]);
+    build(&[(2, ValType::I32)], &code)
 }

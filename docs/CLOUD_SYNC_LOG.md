@@ -4065,3 +4065,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (1) the pull request's CI on this commit, then `master` fast-forwards; (2) `launch/2.0.0`: merge
   `master`, dispatch `everything` and the release dry run; (3) RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the
   launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.4: loops on the WASM engine; its memory grows; WASM-HYGIENE-1 (D-V2-163) — made on the laptop
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-loops` (a pull request into `master`), then `master` once its CI is read green   Base: `98edf2f`
+- Commits: this entry's commit.
+- CI read: pull request #1's `39229088627` on `98edf2f` — **success on every job** (Windows 2,283, Ubuntu 2,348, macOS
+  2,322, arm64 2,348 passed, 0 failed); `master` fast-forwarded `0a9afbf` → `98edf2f` and pushed; the pull request merged.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (loops, assignment, `__alloc`, `__str_len`, the lexical
+  model), `crates/delulu-wasm/src/host.rs` (the host's allocator grows the memory), `crates/delulu-wasm/src/gen.rs` (the
+  loop generator), `crates/delulu-wasm/tests/differential.rs` (loop programs in the gate), `crates/delulu/tests/budget_cli.rs`
+  (two WASM budget witnesses), `crates/delulu/tests/wasm_cli.rs` (the DL1201 example is a `for`), `docs/book/
+  THE_DELULULANG_BOOK.md`, `measurements/study-c/HOT_PATH_TABLE.md` (a dated note; the table not re-measured),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-163), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (3.4 widened, 3.7 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/loop_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this branch's CI, then `master`; (2) re-run Study-C in release (all three lanes) — WSL has
+  gcc; (3) `launch/2.0.0`: merge `master`, dispatch `everything` and the release dry run; (4) the WASM fragment's next
+  pieces — `str(Bool)` without the foreign interface, `List`; (5) *[laptop]* the launch, only on the owner's word.

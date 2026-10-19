@@ -6662,3 +6662,34 @@ on its own target. The RW 4.69 witness measured its state by `grants list` faili
 that the descriptions alone pass one frame. Locally green: sixteen integration targets (the atlas, grants, monitor, broker,
 audit, e-stop, CLI-contract and JSON-contract ones, `message_spacing`), the `delulu` binary's 184 unit tests,
 `delulu-broker`'s 215; clippy 0; fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 3.4: loops on the WASM engine; its memory grows; WASM-HYGIENE-1 (D-V2-163)
+
+**`master` moved.** Pull request #1's third run `39229088627` on `98edf2f` (RW 4.69, 4.63, 4.70) — **success on every job**:
+Windows 2,283 passed, Ubuntu 2,348, macOS 2,322, arm64 2,348, 0 failed on each; `fuzz`,
+`formal`, `microvm`, `miri` (diag, atlas, ffi), `supply-chain`, `editor`, `lints` success. `master` fast-forwarded
+`0a9afbf` → `98edf2f` and pushed; GitHub marked the pull request merged.
+
+**What (RW 3.4).** The WASM backend refused every loop, so a program that counted, accumulated or built a string ran only
+on the interpreter — five of the six Study-C kernels among them. Now: `while`, `break`, `continue` (a label depth kept by
+`Cx::emit`, a loop stack), assignment to a local, and `Str.len()`. Two defects found on the way, each witnessed on the OLD
+backend with a program that compiled there: **its heap was a fixed 1 MiB, never reused** — a recursion building 4 MB of
+strings stopped with `DL0903: memory access out of bounds` where the interpreter printed the string — so every allocation
+now goes through `__alloc`, which grows the memory, and the host's allocator grows it too; and **WASM-HYGIENE-1** — the
+inliner resolved a lambda's names through the generic function's frames: `apply(fn(v) { v + n }, 3)` with `apply` holding
+its own `n = 100` printed 103 on WASM, 4 on the interpreter. An inlined body now sees the frames of where it was written.
+
+**Evidence.** `delulu-wasm/tests/loop_parity.rs` (six): loops with `break`/`continue`, nested loops, `return` from a loop,
+`while false`, shadowing, a `Bool` loop flag and `"héllo ✓".len()` == 7, against the interpreter and against the values
+themselves; the growth witness and the hygiene witness — **both red on the old backend** (`DL0903`; `103 210 101` against
+`4 12 2`); the host growth (a 3 MiB file read); 400 generated loop programs (agreed, both faulted, looping — all counted);
+and what stays out (`for`, a lambda assigning its frame's variable). The 50,000-program differential gate now draws a fifth
+of its programs from the loop generator: **50,000 checked, 46,855 agreed, 3,145 both faulted, 0 mismatches** (release, the
+laptop). `budget_cli.rs`: an endless `while` on WASM stopped by `--limits cpu=1`, a doubling string on WASM stopped by its
+256 MiB memory budget. Mutants M503 (no growth in `__alloc`), M504 (none in the host), M505 (`len` counts bytes), M506 (no
+hygiene), M507 (`break` continues), M508 (an inlined body may assign its definer's variables), M509 (`continue` breaks) —
+all red. `wasm_cli`'s DL1201 example was a `while`; it is a `for` now. Study-C's kernels on WASM: 4 of 6 compile, each
+printing the interpreter's output (debug build: `loop_sum_1m` 29 ms against 2,244; not a measurement of record —
+`HOT_PATH_TABLE.md` says the table is not re-measured). The book's DL1201 list corrected (it also named the clock, which
+compiles since phase 3k). Locally: `delulu-wasm`'s whole suite, the ten `delulu` targets that run the WASM engine,
+clippy 0, fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).

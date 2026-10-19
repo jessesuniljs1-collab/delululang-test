@@ -72,6 +72,15 @@ and why:
   feature (lowering loops-in-`main`, string building, the macro workloads), also deferred rather than
   rushed. Until it lands, the `n/a` rows above stand.
 
+  **Since 2026-10-19 (RW 3.4, D-V2-163) it has partly landed:** `while`, `break`, `continue`, assignment to a `var`,
+  `Str.len()` and a memory that grows compile, so `loop_sum_1m`, `string_build_20k` and `nested_calls_macro` run on the
+  WASM engine — **4 of the 6 kernels** — each printing what the interpreter prints. `wordcount_macro` (`split`) and
+  `list_map_macro` (a `List` and `map`) stay DL1201. **The table above is NOT re-measured**: its figures are the pinned
+  2026-07-20 release-build Study-C, and a criterion-1 ratio needs the C lane measured on the same machine. Observed on
+  the laptop the day it landed, a debug build and not a measurement of record: `loop_sum_1m` 29 ms on WASM against
+  2,244 ms on the interpreter, `nested_calls_macro` 30 against 1,762, `string_build_20k` 26 against 100. Re-running
+  Study-C (release, all three lanes) is the next step before any row above changes.
+
 ## What is NOT deferred, and did ship
 
 - The Cranelift-optimized Wasmtime tier itself (`--engine wasm`), now with its optimization level

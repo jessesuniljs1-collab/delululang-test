@@ -430,14 +430,21 @@ fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String
     Some(String::from_utf8_lossy(&data[hend..bend]).to_string())
 }
 
-/// Bump-allocate `n` bytes in the guest heap (via the `__heap` global); returns the old pointer.
+/// Bump-allocate `n` bytes in the guest heap (via the `__heap` global); returns the old pointer. The memory grows by the
+/// pages the allocation needs, as the guest's own `__alloc` grows it (RW 3.4).
 fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
     let g = caller.get_export("__heap").and_then(|e| e.into_global()).ok_or(())?;
     let base = match g.get(&mut *caller) {
         Val::I32(v) => v,
         _ => return Err(()),
     };
-    g.set(&mut *caller, Val::I32(base + n)).map_err(|_| ())?;
+    let end = (base as u32 as u64).checked_add(u64::try_from(n).map_err(|_| ())?).filter(|e| *e <= u32::MAX as u64).ok_or(())?;
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory()).ok_or(())?;
+    let size = mem.data_size(&*caller) as u64;
+    if end > size {
+        mem.grow(&mut *caller, (end - size).div_ceil(65536)).map_err(|_| ())?;
+    }
+    g.set(&mut *caller, Val::I32(end as u32 as i32)).map_err(|_| ())?;
     Ok(base)
 }
 

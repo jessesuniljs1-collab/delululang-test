@@ -3913,6 +3913,28 @@ the daemon's text format — a test holds the two to one text byte for byte. (4)
 its children from one index, drawn from a stack rather than a call per level (a node's depth has no bound at its creation),
 each node in its inherited state. (5) `List` and its answer are unchanged. Display only: no decision reads either text.
 
+## D-V2-163 — The WASM fragment takes loops, a growing memory and `Str.len()`; an inlined body sees the names of where it was written (RW 3.4, WASM-HYGIENE-1) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-19): five of the six Study-C kernels were DL1201, `loop_sum_1m`, `string_build_20k`
+and `nested_calls_macro` on `while` alone (and `Str.len()`); the WASM heap was a fixed 1 MiB, never reused, so a program
+whose strings added up past it trapped (`DL0903`) where the interpreter ran it — witnessed with a recursion that compiled
+already; and the backend's inliner looked a name up through every frame below it, so a lambda passed to a generic function
+read the generic's own variable (WASM-HYGIENE-1: 103 on WASM, 4 on the interpreter).
+
+**Decision.** (1) `while c { body }` lowers to `block { loop { br_if 1 (!c); body; br 0 } }`; `break` and `continue` branch to
+the enclosing loop's block and loop, counted by a label depth that `Cx::emit` keeps for every `block`, `loop`, `if` and
+`end`. (2) Assignment to a local: the variable's slot, the value compiled at its type; the checker has already held it to a
+`var`. An assignment from inside an inlined function value to a variable of the frame that defined it is refused (DL1201):
+the interpreter's closures share their frame, and the backend does not reproduce that sharing for writes — it is not
+guessed. An inlined body's `break`/`continue` reach no loop of its caller's. (3) `for` and every `List` stay DL1201. (4)
+Every guest allocation goes through one helper, `__alloc`, which grows the memory by the pages an allocation needs, and
+traps when it cannot; the host's allocator grows it by the same rule. The run's memory budget holds the growth, as it holds
+the interpreter's. (5) `Str.len()` counts Unicode scalar values, as the interpreter does (`__str_len`: the bytes that do not
+continue a character; a guest string is UTF-8). (6) An inlined body sees the frames of where it was written and no others:
+a generic function's body none of its caller's, a lambda's the frames visible at its definition (`Callable` records them;
+`Cx::hidden` hides the rest from every lookup). (7) The interpreter stays the reference engine and `--engine wasm` stays
+opt-in. The Study-C table is not re-measured by this decision (`HOT_PATH_TABLE.md` says so).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
