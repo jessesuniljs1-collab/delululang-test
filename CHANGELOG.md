@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an exhausted WASM memory is no longer reported as an integer overflow, 2026-10-19
+
+- **Fixed (WASM-OOM-1): on the WASM engine, a program whose memory could not grow any further was reported as
+  `DL0901: integer overflow`.** Since RW 3.4 the engine's memory grows, up to WebAssembly's 4 GiB; an allocation past that
+  — reachable only with a memory budget above 4 GiB (`--limits mem=`), since the default 1 GiB budget stops a program
+  first — stopped with an overflow message although the program did no arithmetic. It now stops with `DL0903`, whose text
+  says the WASM engine's memory is exhausted.
+
 ## Unreleased — the performance figures re-measured, and Study C checks each lane's answer, 2026-10-19
 
 - **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,

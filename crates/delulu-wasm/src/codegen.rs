@@ -2886,8 +2886,11 @@ fn str_len_fn() -> Function {
 
 /// `__alloc(n)`: `n` bytes from the bump heap — the heap pointer's old value, the pointer moved past them. The memory
 /// grows by the pages the allocation needs when it would end past the memory's size (RW 3.4); an allocation that cannot be
-/// had — past 4 GiB, or refused by the engine — traps (`unreachable`). Every guest allocation goes through here; the host
-/// allocates by the same rule (`host.rs` `guest_alloc`). The run's memory budget holds the growth.
+/// had — past 4 GiB, or refused by the engine — traps as an access out of bounds (a load at 0xFFFF_FFFF, past any 32-bit
+/// memory), which the host reports as DL0903, the code the fixed heap's end had. Never `unreachable`: the host reads that
+/// as the arithmetic helpers' overflow, and an exhausted memory was reported as `DL0901: integer overflow`. Every guest
+/// allocation goes through here; the host allocates by the same rule (`host.rs` `guest_alloc`). The run's memory budget
+/// holds the growth.
 ///
 /// locals: 0 = n (param); 1 = ptr, 2 = end (i32).
 fn alloc_fn(heap_global: u32) -> Function {
@@ -2905,7 +2908,9 @@ fn alloc_fn(heap_global: u32) -> Function {
         LocalGet(1),
         I32LtU,
         If(BlockType::Empty),
-        Unreachable,
+        I32Const(-1),
+        I32Load(u32_at()),
+        Drop,
         End,
         // end > size: grow by ceil((end - size) / 65536) pages, or trap.
         LocalGet(2),
@@ -2925,7 +2930,9 @@ fn alloc_fn(heap_global: u32) -> Function {
         I32Const(-1),
         I32Eq,
         If(BlockType::Empty),
-        Unreachable,
+        I32Const(-1),
+        I32Load(u32_at()),
+        Drop,
         End,
         End,
         LocalGet(2),
@@ -2933,4 +2940,62 @@ fn alloc_fn(heap_global: u32) -> Function {
         LocalGet(1),
     ]);
     build(&[(2, ValType::I32)], &code)
+}
+
+#[cfg(test)]
+mod alloc_tests {
+    use super::*;
+
+    /// A module holding `__alloc` alone (function 0) and an exported `t(n)` that calls it, its heap pointer starting at 16
+    /// in a memory of one page that may grow to `max_pages`.
+    fn alloc_module(max_pages: u64) -> Vec<u8> {
+        let mut types = TypeSection::new();
+        types.ty().function([ValType::I32], [ValType::I32]);
+        let mut funcs = FunctionSection::new();
+        funcs.function(0);
+        funcs.function(0);
+        let mut mems = MemorySection::new();
+        mems.memory(MemoryType { minimum: 1, maximum: Some(max_pages), memory64: false, shared: false, page_size_log2: None });
+        let mut globals = GlobalSection::new();
+        globals.global(GlobalType { val_type: ValType::I32, mutable: true, shared: false }, &ConstExpr::i32_const(16));
+        let mut exports = ExportSection::new();
+        exports.export("t", ExportKind::Func, 1);
+        let mut code = CodeSection::new();
+        code.function(&alloc_fn(0));
+        code.function(&build(&[], &[Instruction::LocalGet(0), Instruction::Call(0)]));
+        let mut m = WasmModule::new();
+        m.section(&types);
+        m.section(&funcs);
+        m.section(&mems);
+        m.section(&globals);
+        m.section(&exports);
+        m.section(&code);
+        m.finish()
+    }
+
+    /// What `t(n)` answers: the pointer, or the trap as the host reports it to the operator.
+    fn call(wasm: &[u8], n: i32) -> Result<i32, String> {
+        let engine = crate::host::optimizing_engine();
+        let module = wasmtime::Module::new(&engine, wasm).expect("the test module validates");
+        let mut store = wasmtime::Store::new(&engine, ());
+        let instance = wasmtime::Instance::new(&mut store, &module, &[]).expect("it instantiates");
+        let t = instance.get_typed_func::<i32, i32>(&mut store, "t").expect("t is exported");
+        t.call(&mut store, n).map_err(|e| crate::host::clean_trap(&e))
+    }
+
+    /// An allocation the memory cannot give is the WASM engine's memory exhausted — and was reported as `DL0901: integer
+    /// overflow` (RW 3.4's `__alloc` trapped with `unreachable`, which the host reads as the arithmetic helpers' overflow):
+    /// a program that doubled a string past WebAssembly's 4 GiB under `--limits mem=12G` printed exactly that, with no
+    /// arithmetic in it. Both ways to fail: a size whose end wraps past 4 GiB, and a memory that may not grow.
+    #[test]
+    fn an_allocation_the_memory_cannot_give_is_not_an_overflow() {
+        // From a heap pointer of 16, `-8` is 0xFFFF_FFF8 bytes: its end wraps past 2^32.
+        let wasm = alloc_module(4);
+        assert_eq!(call(&wasm, 100), Ok(16), "an allocation that fits is the heap pointer's old value");
+        for (what, n, max_pages) in [("wraps past 4 GiB", -8, 65_536), ("needs a page the memory may not have", 300_000, 4)] {
+            let got = call(&alloc_module(max_pages), n);
+            let err = got.clone().expect_err(what);
+            assert!(err.starts_with("DL0903") && err.contains("exhausted") && !err.contains("overflow"), "{what}: {got:?}");
+        }
+    }
 }

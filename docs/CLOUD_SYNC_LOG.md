@@ -4211,3 +4211,34 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: the first Rust commit there meets the new check — `scripts/clippy.sh -j 4` (Git-Bash) before it; if
   the hook refuses with everything staged and clippy clean, an untracked `.rs` file in the tree is the likely cause.
 - Open / next: as the entry before.
+
+### 2026-10-19 — on-demand routine run 4 (continued): `master` red on `formal` (Lean's download host), fixed (`205f0f4`); WASM-OOM-1 (RW 3.9); `launch/2.0.0` at `ece2454`
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; one Sonnet
+  5.5 sous-chef running — the WASM red-team pass, below)
+- Branch: `master`; and `launch/2.0.0`   Base: `6c26aed`   Commits: `205f0f4` formal installs Lean from its GitHub release,
+  pinned by SHA-256; this entry's commit. On `launch/2.0.0`: `ece2454`, the merge of `6c26aed`.
+- **`master` was red:** `0e4e9a2` (`39270059515`) and `6c26aed` (`39271301242`) — `formal` only, elan's download from
+  `releases.lean-lang.org` refused by TLS before any proof ran. `205f0f4` fetches the same tarball from Lean's GitHub
+  release, SHA-256-pinned, verified by running the step's script in the VM; its push run is read in the next entry or by
+  the next run. `81da0ae`'s `39268713452` (`lints`, fixed by `45ca06d`) and `45ca06d`'s `39269260235` — success.
+- **Fixed (WASM-OOM-1, RW 3.9):** an allocation the WASM memory could not give (past WebAssembly's 4 GiB) was reported as
+  `DL0901: integer overflow`; now DL0903, naming the exhaustion. Witness red on the old `__alloc`; M522–M524 red.
+- Files and folders (this entry's commit): M `crates/delulu-wasm/src/codegen.rs` (`__alloc`'s failure branches; the
+  `alloc_tests` module), `crates/delulu-wasm/src/host.rs` (DL0903's text), `CHANGELOG.md`, `HANDOFF.md` (§11.4),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/REMAINING_WORK.md` (3.9),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. In `205f0f4`: M `.github/workflows/ci.yml`, `docs/survey/survey.json`. Deleted,
+  renamed: nothing.
+- **`launch/2.0.0`:** `ece2454` merges `master` `79f83d6..6c26aed` (Study C re-measured, `45ca06d`, the lint stamp); on its
+  tree the map 1532 nodes, 0 errors; `doctor --check` ok; `scripts/clippy.sh` clean and stamped (the first commit the hook's
+  lint check passed for real); the document gates and `delulu-measure` green. `9e2eed8`'s release dry run `39266602442` —
+  success; its `everything` run `39266597313` and `ece2454`'s (`39272359850`, with the release dry run `39272366257`) —
+  running at this entry. `205f0f4` (the `formal` fix) reaches the launch branch at its next merge.
+- Verified: as in `V2_LOG.md` (the step's script in the VM; `delulu-wasm` 129, `wasm_cli` 10, `budget_cli` 10, the
+  differential 0 mismatches, clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (WASM-OOM-1: a new user of a shared signal inherits its meaning).
+- Open / next, in order: (1) `205f0f4`'s and this commit's push runs — `formal` green is the witness of the fix; the
+  launch runs on `ece2454`; then merge `master` into `launch/2.0.0` once more (for `205f0f4` above all); (2) the red-team
+  pass's findings on the WASM fragment (`V2_LOG.md`, next entry); (3) the WASM fragment's next pieces — `for`, `List`,
+  `split`, `map`; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.
