@@ -3837,3 +3837,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39183559939` (`jobs=everything` on `b4748fa`;
   `miri-slow` takes hours), then merge `master` into it again for the lease half and RW 4.68 and dispatch `everything` on
   the result; (3) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 2 (postscript): `e200edb`'s push run read; `launch/2.0.0` at `3aafb77`
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `e200edb`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (step 5: a container restart
+  kills a background suite without a word), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `e200edb`'s push runs — CI `39189114719`, `ocsf` `39189114737` and `openshell` `39189114674` — **success** (CI's 14
+  jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.82x, passed; Ubuntu and
+  Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads). `master` is green on this run's last code.
+- `launch/2.0.0`: `3aafb77`, the merge of `e200edb` (release procedure step 1) — the CHANGELOG's changes merged into the
+  2.0.0 section's dated entry by themselves; the map rebuilt there (1523 nodes, 14919 edges, 0 errors); `doctor --check` ok;
+  `doctor_cli`, `repository_structure`, `evidence_claims`, `governance`, `distribution`, `book`, `core_invariance`,
+  `release`, `plugin_load_cli` (24), `satellite_demo` (5) and `monitor_cli` (22) green on the launch tree. Dispatched on it:
+  `jobs=everything` `39189498514` and the release dry run `39189501390` — unread at this entry. `39183559939` (`everything`
+  on `b4748fa`): 16 of 18 success at 02:05 UTC, its two `miri-slow` jobs running; superseded by `39189498514`, kept as evidence.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39189498514` and
+  `39189501390` on `3aafb77` — the branch's newest commit; `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the
+  final launch commit, so a launch session merges `master` once more and reads it again; (3) RW 4.17's UNC half, RW 6.1's
+  further strings, RW 6.2, the open containment rows (4.63, 4.66, 4.67); (4) *[laptop]* the launch, only on the owner's word.
