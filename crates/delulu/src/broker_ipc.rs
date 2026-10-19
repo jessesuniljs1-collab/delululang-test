@@ -23,6 +23,26 @@ pub const MAX_FRAME: u32 = 16 * 1024 * 1024;
 /// RW 4.69: the most nodes one [`ReqBody::RunsUnder`] may ask after — a monitor asks in parts of at most this many.
 pub const MAX_RUNS_ASKED: usize = 4096;
 
+/// RW 4.70: the most encoded bytes of entries one [`ReqBody::ListPage`] answer carries — a quarter of a frame. A page always
+/// carries at least one entry; one entry larger than a frame is refused in words, as any answer that size is.
+pub const LIST_PAGE_BYTES: usize = 4 * 1024 * 1024;
+
+/// The length of `msg`'s encoding in a frame (without the length prefix).
+pub fn encoded_len<T: Serialize>(msg: &T) -> usize {
+    struct Count(usize);
+    impl Write for Count {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0 += buf.len();
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut c = Count(0);
+    ciborium::into_writer(msg, &mut c).map(|()| c.0).unwrap_or(usize::MAX)
+}
+
 /// A descriptive authority the client asks the broker to issue/attenuate/delegate (spec §3.1). The
 /// broker maps `effects`/scopes to its `Authority`; `holder_*` is descriptive metadata, never
 /// switched on (criterion 9).
@@ -259,6 +279,10 @@ pub enum ReqBody {
     /// the tree: a whole-tree `List` each poll held the serial daemon as long as the tree was large, and past one frame
     /// could not be answered at all. At most [`MAX_RUNS_ASKED`] nodes. Answered `Runs`. Additive `broker/1` variant.
     RunsUnder { root: String, nodes: Vec<String> },
+    /// RW 4.70: [`ReqBody::List`] in pages — the nodes after `after` in id order, at most [`LIST_PAGE_BYTES`] of them, each
+    /// page its own request: neither one answer's frame nor the serial daemon's time is the whole tree's. A paged listing is
+    /// not a snapshot — the tree may change between pages. Answered `ListedPage`. Additive `broker/1` variant.
+    ListPage { after: Option<String> },
 
     // ----- The Guard (Stage 5 chunk 6, phases 5k–5m). Read verbs carry no owner (awareness is
     // free, addendum §2.2); admin verbs carry `owner`. All additive `broker/1` variants. ---------
@@ -426,6 +450,12 @@ pub enum Response {
     Runs {
         state: Option<String>,
         runs: Vec<(String, String)>,
+    },
+    /// `ListPage` reply (RW 4.70): the page's nodes in id order, as `Listed` gives them, and `next` — the `after` that asks
+    /// for the following page — or `None` when this page holds the last node.
+    ListedPage {
+        nodes: Vec<NodeInfo>,
+        next: Option<String>,
     },
 
     // ----- The Guard (Stage 5 chunk 6). Additive `broker/1` variants. --------------------------

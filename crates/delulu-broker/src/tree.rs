@@ -950,19 +950,35 @@ impl Broker {
     /// A human-facing tree rendering (spec §3.2 `tree`). Includes the holder for display — this is
     /// the one place holder fields are read, and they are DATA, never a decision input.
     pub fn tree(&self) -> String {
-        let mut roots: Vec<&GrantId> = self.nodes.values().filter(|n| n.parent.is_none()).map(|n| &n.id).collect();
+        // RW 4.70: each node's children from one index — a scan of every node for each node's children held the serial
+        // daemon for 10.9 s at 16,000 nodes (debug build, 2026-10-19), an e-stop's revoke waiting behind it.
+        let mut roots: Vec<&GrantId> = Vec::new();
+        let mut children: HashMap<&GrantId, Vec<&GrantId>> = HashMap::new();
+        for n in self.nodes.values() {
+            match &n.parent {
+                Some(p) => children.entry(p).or_default().push(&n.id),
+                None => roots.push(&n.id),
+            }
+        }
         roots.sort();
+        children.values_mut().for_each(|c| c.sort());
+        let now = self.now();
         let mut out = String::new();
-        for root in roots {
-            self.render_node(root, 0, &mut out);
+        // Depth-first in id order, from a stack rather than a call per level: a node's depth has no bound at its creation.
+        let mut todo: Vec<(&GrantId, usize)> = roots.into_iter().rev().map(|r| (r, 0)).collect();
+        while let Some((id, depth)) = todo.pop() {
+            self.render_line(id, depth, now, &mut out);
+            todo.extend(children.get(id).into_iter().flatten().rev().map(|c| (*c, depth + 1)));
         }
         out
     }
 
-    fn render_node(&self, id: &GrantId, depth: usize, out: &mut String) {
+    fn render_line(&self, id: &GrantId, depth: usize, now: i64, out: &mut String) {
         let Some(n) = self.nodes.get(id) else { return };
         let indent = "  ".repeat(depth);
-        let state = match effective_state(n, self.now()) {
+        // TREE-STATE-1 (RW 4.70): the state the broker acts on — a child of an expired parent is expired — as `grants list`
+        // and `inspect` show it; the node's own state alone called such a child live.
+        let state = match self.effective_state_inherited(id, now).unwrap_or(EffState::Live) {
             EffState::Live => "live".to_string(),
             EffState::Revoked { by_seq } => format!("revoked@{by_seq}"),
             EffState::Expired { .. } => "expired".to_string(),
@@ -981,11 +997,6 @@ impl Broker {
             terminal_line(holder_kind),
             terminal_line(holder_desc),
         ));
-        let mut children: Vec<&GrantId> = self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();
-        children.sort();
-        for child in children {
-            self.render_node(child, depth + 1, out);
-        }
     }
 }
 
@@ -1070,6 +1081,31 @@ mod tests {
         }
         assert_eq!(b.run_under(&m, &GrantId::from_trusted("g_never")), None, "an id the tree never held");
         assert_eq!(b.run_under(&GrantId::from_trusted("g_never"), &run1), None, "a root the tree never held");
+    }
+
+    /// TREE-STATE-1 (RW 4.70): the tree shows each node in the state the broker acts on. A child of an expired parent is
+    /// expired — `effective_state`, `grants list` and `grants inspect` said so — and the tree, reading the child's own state
+    /// alone, called it live. A revoked node and the nodes below it read as revoked; the rest stay live.
+    #[test]
+    fn the_tree_shows_a_child_of_an_expired_parent_as_expired() {
+        let clock = Rc::new(ManualClock::new(1000));
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock.clone()));
+        let rw = || Authority::new(eff(&["Read"]), Scopes::default());
+        let top = b.issue(holder(), rw(), None);
+        let short = b.attenuate(&top, rw(), holder(), Some(2000)).unwrap();
+        let child = b.attenuate(&short, rw(), holder(), None).unwrap();
+        let other = b.attenuate(&top, rw(), holder(), None).unwrap();
+        let below = b.attenuate(&other, rw(), holder(), None).unwrap();
+        b.revoke(&other, &other).unwrap();
+        clock.set(3000);
+        assert!(matches!(b.effective_state(&child), Some(EffState::Expired { .. })), "the broker acts on the child as expired");
+        let text = b.tree();
+        let line = |id: &GrantId| text.lines().find(|l| l.trim_start().starts_with(id.as_str())).unwrap_or("").to_string();
+        assert!(line(&short).contains("[expired]"), "{text}");
+        assert!(line(&child).contains("[expired]"), "a child of an expired parent is shown as the broker acts on it:\n{text}");
+        assert!(line(&other).contains("[revoked@") && line(&below).contains("[revoked@"), "{text}");
+        assert!(line(&top).contains("[live]"), "{text}");
+        assert!(line(&child).starts_with("    ") && line(&below).starts_with("    "), "each under its parent:\n{text}");
     }
 
     #[test]
