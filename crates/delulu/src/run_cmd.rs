@@ -1128,6 +1128,16 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 return 1;
             }
         }
+    } else if let Some(c) = daemon_custody.as_mut() {
+        // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+        match crate::broker_client::RunNode::for_lease(c) {
+            Ok(held) => _run_node = Some(held),
+            Err(d) => {
+                let diag = Diagnostic::error(d.code, d.message);
+                print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
     }
 
     // D-V2-21 / PS-0-02, the second time: the grants are final now (a lease's or a manifest's

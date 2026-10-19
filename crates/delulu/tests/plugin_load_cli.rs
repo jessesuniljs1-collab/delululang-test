@@ -870,13 +870,11 @@ fn start_until_first_line(
     dir: &Path,
     state: &Path,
     extra: &[(&str, &str)],
-    grants: &[&str],
+    more: &[&str],
 ) -> (Running, String, std::sync::mpsc::Receiver<String>) {
     use std::io::BufRead;
     let mut args = vec!["run", "host.delulu", "--broker", "daemon", "--no-prompt"];
-    for g in grants {
-        args.extend(["--grant", g]);
-    }
+    args.extend(more);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_delulu"));
     cmd.args(&args)
         .current_dir(dir)
@@ -938,8 +936,12 @@ fn under_the_broker_daemon_a_killed_runs_nodes_are_revoked_by_its_dead_man() {
     std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
     std::fs::write(dir.join("host.delulu"), SPINNING_HOST).unwrap();
     let _daemon = Daemon::start(&state);
-    let (mut run, first, _) =
-        start_until_first_line(&dir, &state, &[("DELULU_RUN_DEADMAN_MS", "3000")], &["console", "plugin=."]);
+    let (mut run, first, _) = start_until_first_line(
+        &dir,
+        &state,
+        &[("DELULU_RUN_DEADMAN_MS", "3000")],
+        &["--grant", "console", "--grant", "plugin=."],
+    );
     assert_eq!(first, "hello!", "the plugin must have been loaded and called, or this proves nothing");
     // The baseline: while the run runs, it holds both nodes — the witness looks at a tree that HAS them.
     let nodes = tree_nodes(&dir, &state);
@@ -992,7 +994,7 @@ fn under_the_broker_daemon_a_live_run_outlasting_its_dead_mans_period_keeps_its_
     .unwrap();
     let _daemon = Daemon::start(&state);
     let (mut run, first, rest) =
-        start_until_first_line(&dir, &state, &[("DELULU_RUN_DEADMAN_MS", "1500")], &["console", "clock"]);
+        start_until_first_line(&dir, &state, &[("DELULU_RUN_DEADMAN_MS", "1500")], &["--grant", "console", "--grant", "clock"]);
     assert_eq!(first, "started", "the run must have started, or this proves nothing");
     let status = run.0.wait().expect("the run ends");
     // Every line the run printed: the reader ends at the pipe's end, which follows the run's.
@@ -1287,5 +1289,118 @@ fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_t
         "{landed_after} commands landed after the plugin's node was revoked — the revoke reached only the export's next CALL:\n{so}\n{se}"
     );
     assert!(!so.contains("landed=120"), "the export must not have landed every command:\n{so}\n{se}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A delegation carrying a device: the lease a run is given in the lease tests below (RW 4.57's lease half).
+const RUDDER: &str = "uav0/rudder:deflect_deg=-25..25,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
+
+/// Commands the rudder once, says so, then spins until it is killed (`spin = false`: ends at once).
+fn rudder_host(spin: bool) -> String {
+    format!(
+        "module host\n\n\
+         type Cmd {{ deflect_deg: Float }}\n\n\
+         fn main(root: Root) ! {{Write, Actuate}} {{\n\
+         \x20   let out = root.console()\n\
+         \x20   match root.actuator(\"uav0/rudder\").command(Cmd {{ deflect_deg: 3.0 }}) {{\n\
+         \x20       Ok(u) => out.println(\"COMMANDED\")\n\
+         \x20       Err(e) => out.println(\"refused\")\n\
+         \x20   }}\n\
+         \x20   var i = 0\n\
+         \x20   while {} {{\n\
+         \x20       i = i + 1\n\
+         \x20   }}\n\
+         }}\n",
+        if spin { "i >= 0" } else { "i < 0" }
+    )
+}
+
+/// `grants delegate` a lease carrying [`RUDDER`]: `(node, token)`.
+fn delegate_rudder(dir: &Path, state: &Path) -> (String, String) {
+    let o =
+        delulu_state(dir, state, &["grants", "delegate", "--effects", "Actuate,Write", "--device", RUDDER, "--multi", "--json"]);
+    assert_eq!(o.status.code(), Some(0), "delegate: {}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("delegate --json");
+    (v["node"].as_str().expect("node").to_string(), v["token"].as_str().expect("token").to_string())
+}
+
+/// RW 4.57's lease half (D-V2-157): a `--lease` run's node is the DELEGATOR's — a `--multi` lease serves several runs —
+/// so no run ends it; but what the run MINTS under it (here its device's node) is dead-manned as it is minted. Killed,
+/// the run's device node is reaped by its dead-man, and the lease's own node stays live. Before, the device node stayed
+/// `[live]` for the daemon's whole life.
+fn a_killed_lease_runs_minted_node_is_reaped(tag: &str, sandbox: bool) {
+    let dir = tmp(tag);
+    let state = daemon_state(tag);
+    std::fs::write(dir.join("host.delulu"), rudder_host(true)).unwrap();
+    let _daemon = Daemon::start(&state);
+    let (lease, token) = delegate_rudder(&dir, &state);
+    let (mut run, first, _) = start_until_first_line(
+        &dir,
+        &state,
+        &[("DELULU_RUN_DEADMAN_MS", "3000")],
+        &if sandbox {
+            vec!["--lease", &token, "--broker-profile", "sim", "--sandbox"]
+        } else {
+            vec!["--lease", &token, "--broker-profile", "sim"]
+        },
+    );
+    assert_eq!(first, "COMMANDED", "the run must have commanded its device, or this proves nothing");
+    let nodes = tree_nodes(&dir, &state);
+    let device = nodes.iter().find(|(_, kind, _)| kind == "device").expect("the run minted its device's node").clone();
+    assert_eq!(device.2, "live", "a running run's device node is live: {nodes:?}");
+
+    run.0.kill().expect("the run is killed");
+    let _ = run.0.wait();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let state_of = |id: &str| tree_nodes(&dir, &state).into_iter().find(|(n, _, _)| n == id).map(|(_, _, s)| s);
+    while state_of(&device.0).as_deref() == Some("live") && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let nodes = tree_nodes(&dir, &state);
+    assert_eq!(
+        state_of(&device.0).as_deref(),
+        Some("revoked"),
+        "30 s after the run was killed (its dead-man's period is 3 s), its device node may not be live: {nodes:?}"
+    );
+    assert!(
+        revocations(&dir, &state).iter().any(|(by, target)| *by == device.0 && *target == device.0),
+        "the dead-man revokes the device node AS ITSELF: {:?}",
+        revocations(&dir, &state)
+    );
+    assert_eq!(state_of(&lease).as_deref(), Some("live"), "the lease is the delegator's: no run of it ends it: {nodes:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn under_a_lease_a_killed_runs_minted_node_is_revoked_by_its_dead_man_and_the_lease_lives() {
+    a_killed_lease_runs_minted_node_is_reaped("klease", false);
+}
+
+/// The same for a SANDBOXED lease run: its host mints the device's node and holds its dead-man (`guest.rs`); killed,
+/// the host takes its guest with it, and the dead-man reaps the node.
+#[test]
+fn under_a_lease_a_killed_sandboxed_runs_minted_node_is_revoked_by_its_dead_man() {
+    a_killed_lease_runs_minted_node_is_reaped("ksblease", true);
+}
+
+/// The other side: a lease run that ENDS leaves the lease live (a `--multi` lease serves the next run), and its device's
+/// node revoked, as before (`close_devices`).
+#[test]
+fn under_a_lease_a_run_that_ends_leaves_the_lease_live() {
+    let dir = tmp("ended-lease");
+    let state = daemon_state("elease");
+    std::fs::write(dir.join("host.delulu"), rudder_host(false)).unwrap();
+    let _daemon = Daemon::start(&state);
+    let (lease, token) = delegate_rudder(&dir, &state);
+    let o = delulu_state(&dir, &state, &["run", "host.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let text = out(&o);
+    assert!(o.status.success() && text.contains("COMMANDED"), "the lease run must have run, or this proves nothing: {text}");
+    let nodes = tree_nodes(&dir, &state);
+    let lease_state = nodes.iter().find(|(n, _, _)| *n == lease).map(|(_, _, s)| s.clone());
+    assert_eq!(lease_state.as_deref(), Some("live"), "a run's end never ends the delegator's lease: {nodes:?}");
+    assert!(
+        nodes.iter().filter(|(_, kind, _)| kind == "device").all(|(_, _, s)| s != "live"),
+        "the run's device node ends with it: {nodes:?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
