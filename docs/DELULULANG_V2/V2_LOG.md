@@ -7204,3 +7204,31 @@ Mutants, all red, control green:
 
 **Evidence.** `float_parity` 4; `conformance_parity` 6; `foreign_parity` 8; the whole `delulu-wasm` suite green; the
 release differential with the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: an empty list typed by the checker on the WASM engine (RW 3.4)
+
+**An empty list whose element type no `let` writes compiles**: `let out = []`, filled by `out.push(i)` later, or `[]`
+passed straight to a function. The backend saw only syntax, so it refused such a list (DL1201). Yet the checker had
+already inferred its type, and `CheckResult::node_types` records the type of every expression node. A new entry point,
+`delulu_wasm::compile_checked(module, check_result)`, threads that table into the codegen (`Cx::node_types`). An empty
+list literal takes its element type from there when the backend holds it: `Int`, `Bool`, `Float` or `Str`
+(`list_scalar`). The command line's three compile sites (`run --engine wasm` in `run_cmd.rs`, and `build --target
+wasm` and the sealed-artifact path in `cli.rs`) now call `compile_checked`. `compile_module` and `compile_module_with`
+pass no types and still refuse such a list rather than guess.
+
+`examples/guide/02_option_and_lists.delulu` now compiles and prints the interpreter's output; the corpus's entry points:
+9 of 17. Of the book's six guide chapters, four now run on the WASM engine: `02`, `03`, `04`, `06`.
+
+Tests:
+- `list_parity.rs` `an_empty_list_takes_the_type_the_checker_inferred` — `let evens = []` then `push`, a function's
+  `let out = []`, `total([])`, lists of `Bool` and `Float` begun empty. The test confirms `compile_module` refuses the
+  program and `compile_checked` compiles it with the interpreter's output.
+- `what_the_list_fragment_leaves_out_is_refused` loses its empty-list case and asserts the rest refused by
+  `compile_checked` too.
+- `wasm_cli.rs` `the_guide_chapters_the_wasm_engine_runs_match_the_interpreter` — chapters `02`, `03` and `04` through
+  the command line, both engines byte for byte.
+
+Mutants, all red, control green:
+- M574 — no inferred type;
+- M575 — an `Int` list typed `Str`;
+- M576 — `run --engine wasm` back on `compile_module_with` (red in the CLI test).

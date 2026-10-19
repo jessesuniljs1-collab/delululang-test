@@ -767,6 +767,21 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 /// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
 /// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
 pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, String>) -> Result<Vec<u8>, CompileError> {
+    compile_module_typed(module, foreign_binds, &HashMap::new())
+}
+
+/// Compile with everything the checker knows that the syntax does not say: the foreign bind sites, and the type it
+/// inferred for each node — so an empty list whose element type no `let` writes (`let out = []`, filled by
+/// `out.push(i)` later) has the type the checker gave it (RW 3.4). What the command line compiles with.
+pub fn compile_checked(module: &Module, checked: &delulu_check::CheckResult) -> Result<Vec<u8>, CompileError> {
+    compile_module_typed(module, &checked.foreign_binds, &checked.node_types)
+}
+
+fn compile_module_typed(
+    module: &Module,
+    foreign_binds: &HashMap<NodeId, String>,
+    node_types: &HashMap<NodeId, delulu_check::Type>,
+) -> Result<Vec<u8>, CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
     let env = build_enum_env(module);
 
@@ -1264,6 +1279,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
             actor_imp,
             &table,
             foreign_binds,
+            node_types,
         )?);
     }
     for (actor_idx, decl, params, body, _) in &member_plans {
@@ -1282,6 +1298,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
             actor_imp,
             &table,
             foreign_binds,
+            node_types,
         )?);
     }
     if needs_lists {
@@ -1516,6 +1533,9 @@ struct Cx<'a> {
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
     /// lib a bind site resolves to (the grammar has no method type-argument syntax).
     foreign_binds: &'a HashMap<NodeId, String>,
+    /// The checker's type for each node (`compile_checked`; empty through `compile_module`): what an empty list holds
+    /// when no `let` says (RW 3.4).
+    node_types: &'a HashMap<NodeId, delulu_check::Type>,
     /// The module's actor table (Stage 7 phase 7h): `spawn`/send index resolution + ctor arity.
     actors: &'a ActorTable,
     /// The `delulu:actors` host import indices (Stage 7 phase 7h).
@@ -1580,6 +1600,7 @@ fn compile_fn<'a>(
     actor_imp: ActorImports,
     actors: &'a ActorTable,
     foreign_binds: &'a HashMap<NodeId, String>,
+    node_types: &'a HashMap<NodeId, delulu_check::Type>,
 ) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
@@ -1608,6 +1629,7 @@ fn compile_fn<'a>(
         hidden: Vec::new(),
         imp,
         foreign_binds,
+        node_types,
         actors,
         actor_imp,
         actor: None,
@@ -1646,6 +1668,7 @@ fn compile_actor_member<'a>(
     actor_imp: ActorImports,
     actors: &'a ActorTable,
     foreign_binds: &'a HashMap<NodeId, String>,
+    node_types: &'a HashMap<NodeId, delulu_check::Type>,
 ) -> Result<Function, CompileError> {
     // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
     let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
@@ -1692,6 +1715,7 @@ fn compile_actor_member<'a>(
         hidden: Vec::new(),
         imp,
         foreign_binds,
+        node_types,
         actors,
         actor_imp,
         actor: Some(ActorCtx { self_slot: 0, actor_idx, fields }),
@@ -2560,7 +2584,12 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
         }
         Expr::Binary { op, lhs, rhs, .. } => compile_binary(*op, lhs, rhs, cx),
-        Expr::List { items, .. } => compile_list_literal(items, cx, None),
+        // An empty list's element type, when no `let` writes it, is the one the checker inferred (`let out = []`, then
+        // `out.push(i)`); a list with items says its own.
+        Expr::List { items, id, .. } => {
+            let inferred = if items.is_empty() { cx.node_types.get(id).and_then(list_scalar) } else { None };
+            compile_list_literal(items, cx, inferred)
+        }
         Expr::Index { recv, index, .. } => compile_index(recv, index, cx),
         Expr::If { cond, then_, else_, .. } => {
             let ct = compile_expr(cond, cx)?;
@@ -3054,10 +3083,24 @@ fn compile_list_literal(items: &[Expr], cx: &mut Cx, want: Option<Scalar>) -> Re
         store_scalar(cx, s);
         elem = Some(s);
     }
-    let s =
-        elem.ok_or_else(|| CompileError::Unsupported("an empty list whose element type is not written on its `let`".into()))?;
+    let s = elem.ok_or_else(|| CompileError::Unsupported("an empty list whose element type the backend was not given".into()))?;
     cx.emit(Instruction::LocalGet(list));
     Ok(Ty::List(s))
+}
+
+/// The element type of a `List` the checker inferred, where the backend holds it: an `Int`, `Bool`, `Float` or `Str`.
+fn list_scalar(t: &delulu_check::Type) -> Option<Scalar> {
+    use delulu_check::Type;
+    match t {
+        Type::List(e) => match **e {
+            Type::Int => Some(Scalar::I64),
+            Type::Bool => Some(Scalar::I32),
+            Type::Float => Some(Scalar::F64),
+            Type::Str => Some(Scalar::Str),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// `xs[i]`: the element, or DL0903 in the interpreter's words when `i` is outside the list.

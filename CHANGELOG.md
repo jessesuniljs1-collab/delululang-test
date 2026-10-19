@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an empty list typed by the checker on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` and `delulu build --target wasm` compile an empty list whose element type is not written**
+  (`let out = []`, filled by `out.push(i)` later). The type the checker inferred is used.
+  `examples/guide/02_option_and_lists.delulu` now runs on the WASM engine with the interpreter's output. For embedders:
+  `delulu_wasm::compile_checked(module, check_result)` compiles with everything the checker knows;
+  `compile_module` and `compile_module_with` still refuse such a list rather than guess.
+
 ## Unreleased — `Float` on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `Float` arithmetic** — `+ - * / %`, comparisons, negation, `float(…)`, `int(…)`,

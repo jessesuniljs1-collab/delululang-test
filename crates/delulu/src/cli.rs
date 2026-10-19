@@ -4690,7 +4690,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         print_diagnostics("build", &[d], &map, None, opts.json);
         return 1;
     }
-    let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
+    let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
         Ok(w) => w,
         Err(e) => {
             let d = Diagnostic::error(
@@ -4899,19 +4899,15 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     // Class-specific payload (spec §2.2 table). DIR for Verified; the compiled module for Contained.
     let (dir_bytes, wasm_bytes): (Option<Vec<u8>>, Option<Vec<u8>>) = match pm.class {
         delulu_check::PluginClass::Verified => (Some(delulu_check::dir_serialize(&checked.module, &checked.result)), None),
-        delulu_check::PluginClass::Contained => {
-            match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
-                Ok(w) => (None, Some(w)),
-                Err(e) => {
-                    let d = Diagnostic::error(
-                        e.code(),
-                        format!("{} — this program can't be built into a contained plugin", e.message()),
-                    );
-                    print_diagnostics("plugin", &[d], &map, None, opts.json);
-                    return 1;
-                }
+        delulu_check::PluginClass::Contained => match delulu_wasm::compile_checked(&checked.module, &checked.result) {
+            Ok(w) => (None, Some(w)),
+            Err(e) => {
+                let d =
+                    Diagnostic::error(e.code(), format!("{} — this program can't be built into a contained plugin", e.message()));
+                print_diagnostics("plugin", &[d], &map, None, opts.json);
+                return 1;
             }
-        }
+        },
     };
     let lock_bytes = std::fs::read(root.join("delulu.lock")).ok();
 

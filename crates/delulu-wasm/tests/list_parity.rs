@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_module, run_main, HostConfig};
+use delulu_wasm::{compile_checked, compile_module, run_main, HostConfig};
 
 /// Run `main` on both engines with the console and return `(wasm, interp)`: the output, or the fault's text.
 fn run_both(src: &str) -> (Result<String, String>, Result<String, String>) {
@@ -272,17 +272,70 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "b left a value and a literal\n");
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a list of lists, an empty list with no type written
-/// for it, and the list methods not yet compiled (`pop`, whose reuse of a slot a `for`'s snapshot could see).
+/// What stays outside the fragment is refused, never miscompiled: a list of lists, and the list methods not yet compiled
+/// (`pop`, whose reuse of a slot a `for`'s snapshot could see) — by `compile_checked` too, which knows every node's type.
 #[test]
 fn what_the_list_fragment_leaves_out_is_refused() {
     for src in [
         "module m\nfn f() -> Int {\n  let xs = [[1], [2]]\n  xs.len()\n}\n",
-        "module m\nfn f() -> Int {\n  var xs = []\n  xs.push(1)\n  xs.len()\n}\n",
         "module m\nfn f() -> Int {\n  let xs = [1, 2]\n  match xs.pop() {\n    Some(v) => v,\n    None => 0,\n  }\n}\n",
     ] {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);
         assert!(compile_module(&checked.module).is_err(), "stays on the interpreter:\n{src}");
+        assert!(compile_checked(&checked.module, &checked.result).is_err(), "stays on the interpreter:\n{src}");
     }
+}
+
+/// An empty list whose element type no `let` writes takes the type the checker inferred — through `compile_checked`,
+/// which the command line compiles with: `let evens = []` filled by `push` later, a function's `let out = []`, an empty
+/// literal passed straight to a function, lists of `Bool` and `Float` begun empty. Without the checker's types
+/// (`compile_module`) the same program is refused, never guessed.
+#[test]
+fn an_empty_list_takes_the_type_the_checker_inferred() {
+    let src = r#"module m
+
+fn total(xs: List[Int]) -> Int {
+  var t = 0
+  for x in xs { t = t + x }
+  t
+}
+
+fn words(n: Int) -> List[Str] {
+  let out = []
+  var i = 0
+  while i < n {
+    out.push("w" + str(i))
+    i = i + 1
+  }
+  out
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let evens = []
+  var i = 0
+  while i <= 10 {
+    if i % 2 == 0 { evens.push(i) }
+    i = i + 1
+  }
+  let flags = []
+  flags.push(true)
+  let fs = []
+  fs.push(2.5)
+  out.println(str(evens.len()) + " " + str(total(evens)) + " " + str(total([])) + " " + str(words(3).len()) + words(3)[2])
+  out.println(str(flags[0]) + " " + str(fs[0]) + " " + str(words(0).len()))
+}
+"#;
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    assert!(compile_module(&checked.module).is_err(), "without the checker's types, an empty list is refused");
+    let wasm = compile_checked(&checked.module, &checked.result).expect("with them, it compiles");
+    let w = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() }).map_err(|e| e.message());
+    set_capture(true);
+    let g = Grants { console: true, ..Default::default() };
+    let i = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root()))).map_err(|e| format!("{e:?}"));
+    let out = take_capture().unwrap_or_default();
+    assert_eq!(w, i.map(|_| out), "two-engine parity broken");
+    assert_eq!(w.unwrap(), "6 30 0 3w2\ntrue 2.5 0\n");
 }

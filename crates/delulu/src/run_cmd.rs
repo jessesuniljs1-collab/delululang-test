@@ -1205,7 +1205,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         if foreign_process && program_binds_foreign && !opts.json {
             eprintln!("note: --foreign-isolation process is not yet applied on the WASM engine (foreign runs in-process); use the interpreter engine for worker isolation");
         }
-        let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
+        let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
             Ok(w) => w,
             Err(e) => {
                 let d =
