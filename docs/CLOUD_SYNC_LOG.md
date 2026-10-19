@@ -4478,3 +4478,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) the CI of #9, #10 and this branch, landing each on green in order; then `launch/2.0.0`; (2) on WASM:
   records (`01_types`), `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the
   owner's word.
+
+### 2026-10-20 — `==` on records and maps; values that hold themselves; the autosave task back on (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/value-cycles` (on `laptop/wasm-emptylist`, #11)   Pull request: #12   Merged: not yet (after #10 and #11, on green CI)
+- Base: `4d200b6`.
+- What: `V2_LOG.md` (this date, the eighth entry); RW 2.13 and 2.14 closed, 2.15 and 2.16 opened.
+- Files and folders: M `crates/delulu-runtime/src/value.rs` (`display_in`, `eq_in`, `cell_addr`, `within`; record and map
+  equality; `cycle_tests`), `CHANGELOG.md`, `HANDOFF.md` (§11.1 the autosave task, §11.4 the lesson),
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-runtime/tests/value_semantics.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M577–M582; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: done on the laptop (the autosave task note, its index line, and an index compacted under its
+  size limit: twelve long lines moved whole into their topic files).
+- Open / next: (1) the CI of #10, #11 and this branch, landing each on green in order; then `launch/2.0.0`; (2) MSG-CYCLE-1
+  (RW 2.16), EQ-FN-1 (RW 2.15); records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

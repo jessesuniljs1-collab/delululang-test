@@ -603,7 +603,11 @@ wins, and you should update the memory to match.
   snapshot of a checkout still on the development history would publish all of it there (guard falsified on throwaway
   repositories: the unguarded script pushed, the guarded one refused). Log: `%LOCALAPPDATA%\DeluluLang\autosave.log`. **A snapshot is not a verified commit — never
   merge it**; the next session recovers from it (`docs/CLOUD_ROUTINE.md` step 1). A laptop session re-runs `-Install`
-  when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it.
+  when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it. **The
+  owner, 2026-10-20: *"push everything to test github repo frequently. enable that windows task scheduler for automatic
+  github push"*** — re-installed that day for 7 days (`-Hours 168`, 2026-10-19 22:42 UTC → 2026-10-26); its first run by
+  hand pushed snapshot `c94cbba`. A session pushes each verified commit at once and keeps the task installed: at the
+  start of every laptop session, if `NextRunTime` is empty, run `-Install -Hours 168` again.
 - **Only the test repository until the owner says otherwise** (owner, 2026-10-17, night): *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. Every push goes to
   `delululang-test`; no session pushes to `DeluluLang` or any other repository, pushes a tag, switches `origin`, moves the
   routine's repository or changes a repository's visibility until he says so. It outranks the commission's launch steps
@@ -1136,6 +1140,16 @@ spells the same thing?**
   ("a refusal list is a skip branch wearing a disguise") and the list still fell behind. Now every kind is asked by a
   witness generated from the grammar the binary publishes (`delulu toolchain --json`). Search key: a list that names
   what to refuse needs a generated witness over everything it could name.
+
+- **EQ-RECORD-1, DISPLAY-CYCLE-1, MSG-CYCLE-1 — a value can hold itself** (the laptop, 2026-10-20, RW 2.13–2.16):
+  `Value::eq` had no arm for a record or a map, so `p == p` was `false` although the checker admits it (the doc
+  above `eq` promised structural equality for whatever `==` accepts — the checker's rule and the runtime's had
+  drifted). Fixing it meant asking what a structural walk meets: `n.next = Some(n)` is a legal program, and `str` of it
+  already overflowed the stack and killed the process. So did sending a `recover`ed self-referencing graph to an
+  actor (MSG-CYCLE-1, open). Search keys: when the checker admits an operation, does the runtime answer it for every
+  type it admits? And every recursive walk over runtime values (display, equality, a boundary's conversion, a
+  uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
+  where a cycle closes.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
