@@ -4122,3 +4122,36 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `master` (RW 4.69, 4.63, 4.70, RW 3.4, 3.8), dispatch `everything` and the release dry run; (3) re-run Study-C in release
   (all three lanes) before any row of `HOT_PATH_TABLE.md` changes; (4) the WASM fragment's next pieces — `for` and `List`;
   RW 4.66, 4.67, 6.1's further strings, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 4 (continued): Study C re-measured — the harness checks each lane's answer and times in microseconds; `launch/2.0.0` at `9e2eed8`
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; and `launch/2.0.0`   Base: `79f83d6`   Commits: this entry's commit; on `launch/2.0.0` `9e2eed8`, the
+  merge of `79f83d6` (release procedure step 1).
+- Files and folders: M `crates/delulu-measure/src/study_c.rs` (`checked`, `same_answer`, microseconds, `utc_minute`,
+  `machine`, the report's machine table, `wasm ÷ C`, five unit tests), `measurements/study-c/REPORT.md` and `results.json`
+  (regenerated, 2026-10-19), `measurements/study-c/HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md` (§3.2, §3.3),
+  `README.md`, `docs/QUESTIONS.md`, `docs/for-agents.md`, `docs/REPOSITORY_STRUCTURE.md` (§5.9, `runs/`), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `measurements/study-c/runs/2026-07-20/REPORT.md` and `results.json` (the v1.0
+  run, copied whole before the harness overwrote it), `docs/assistant-memory/a-benchmark-checks-its-answer.md`. Deleted,
+  renamed: nothing. On `launch/2.0.0` (`9e2eed8`): the merge; `master`'s three Unreleased CHANGELOG sections moved into
+  `## [2.0.0]`; `HANDOFF.md` §11.1 both bullets kept; `docs/survey/*` rebuilt there.
+- **Fixed (Study C):** a lane was timed whatever it printed — now only with the interpreter's answer; times were whole
+  milliseconds, which read a Linux C process as 0 or 1 and dropped a benchmark from every ratio in silence — now
+  microseconds, the left-out named; the record names its date and machine (`study-c/2`). Mutants M513–M518 red, control green.
+- **Measured (2026-10-19 14:14 UTC, release `79f83d6`, this VM, nothing else running):** WASM runs 4 of 6 at **6.7×–11.7×
+  C** whole-process (geo-mean 9.3×); the interpreter **7.5×–311.4× C** (2.0×–60.5× in the v1.0 run, where C read 5–6 ms;
+  the interpreter's own times are unchanged within spread). Criterion 1 still not met. Every quoting document updated.
+- **`launch/2.0.0`:** `9e2eed8` merges `master` `6c01264..79f83d6` (RW 4.69, 4.63, 4.70, 3.4, 3.8); on its tree survey 1527
+  nodes, 0 errors; `doctor --check` ok; book, core_invariance, distribution, doctor_cli, evidence_claims, governance,
+  release, repository_structure and `loop_parity` green. Dispatched at it: `ci.yml` `jobs=everything` and the release dry
+  run — results in the next entry or the next run's.
+- CI read: `4d11575`'s push run `39261866776` — **success**; `79f83d6`'s runner reads `39263152681` (macOS) and
+  `39263157384` (Windows) — success, `loop_parity` 7 passed on each; its push run `39264737843` — running at this entry.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (a laptop re-run of Study C would be a second machine's figures, welcome but not owed).
+- For the laptop's memory: `HANDOFF.md` §11.5 (a benchmark checks its answer); `docs/assistant-memory/a-benchmark-checks-its-answer.md`.
+- Open / next, in order: (1) the push runs of `79f83d6` and this commit; `launch/2.0.0`'s `everything` and release runs on
+  `9e2eed8`; (2) Study C's start-up control (an empty `main` per lane) so a ratio can be read as compute; (3) the WASM
+  fragment's next pieces — `for`, `List`, `split`, `map` (the last two kernels); RW 4.66, 4.67, 6.1's further strings, 6.2;
+  (4) *[laptop]* the launch, only on the owner's word.

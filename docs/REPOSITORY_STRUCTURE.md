@@ -676,7 +676,9 @@ checked first, and what was kept.
 Every `measurements/*/RECORD.md` (and `study-*/REPORT.md`) is the **reproducible evidence** behind one
 published claim: `agent-loop` (why to batch `check`), `compute`, `dead-man`, `federation-demo`,
 `first-run`, `fleet-update`, `lts-cycle`, `robotics-demo`, `satellite-demo`, `scale`,
-`pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`). These are
+`pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`, and
+`measurements/study-c/runs/` keeps each earlier Study-C run whole — `runs/2026-07-20/`, the v1.0 baseline
+pinned at the v1.0.0 release commit `198bf44`, with its `REPORT.md` and `results.json`). These are
 **measurements, not benchmarks**: each records the machine, the method and the numbers, so a reader
 can disagree with the method rather than only with the conclusion. `measurements/METHODOLOGY.md` is
 the rule they all follow — what counts as a measurement here, and what disqualifies one.

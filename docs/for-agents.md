@@ -738,8 +738,9 @@ overstate it downstream:
 - **Not everything is covered yet.** `docs/reference/coverage.md` reports per-item conformance
   status from a live run. Items marked other than `covered` are outside the stability promise.
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
-  v1.0 is **not competitive with C** on the measured workloads (2.0×–60.5× slower), and the report
-  says so in those words. Do not let a harness's marketing copy imply otherwise.
+  DeluluLang is **not competitive with C** on the measured workloads (7.5×–311.4× slower on the
+  interpreter, 6.7×–11.7× on the WASM engine where it runs — Study C, 2026-10-19), and the report says
+  so in those words. Do not let a harness's marketing copy imply otherwise.
 - **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
   (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
   this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a

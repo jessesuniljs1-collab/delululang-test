@@ -196,7 +196,10 @@ Measured facts. Constitution §5.11 rejects *"faster than C"* as false; the comm
 
 Six benchmarks (three micro, three macro) across four lanes: the DeluluLang interpreter, the
 DeluluLang WASM backend, C at `gcc -O2`, and CPython. All lanes compute the same result by the same
-algorithm. Each runs 5 times; the **minimum** is reported with the spread beside it.
+algorithm — and since 2026-10-19 the study checks it: a lane is timed only when it printed the
+interpreter's answer. Each runs 5 times; the **minimum** is reported with the spread beside it, timed in
+microseconds (until 2026-10-19 whole milliseconds, which read a C process on Linux as 0 or 1). Each run
+records its date and its machine; an earlier run is kept whole under `study-c/runs/`.
 
 **Release only.** The study refuses to run against a debug build. The first run did measure debug,
 and the numbers were both wrong and dangerous — authoritative-looking figures describing a binary
@@ -204,7 +207,12 @@ nobody runs.
 
 ### 3.3 The result
 
-**2.0× to 60.5× slower than C**, depending on the benchmark, as of the release-gate regeneration
+**2026-10-19, a 4-vCPU Linux cloud VM:** the interpreter **7.5× to 311.4× slower than C**, the WASM engine
+**6.7× to 11.7×** on the 4 of 6 benchmarks it runs — whole processes, a C process starting and exiting in
+about 1 ms. The interpreter's own times are within a run's spread of the v1.0 figures; the C lane's
+start-up shrank, so the ratios grew (`study-c/HOT_PATH_TABLE.md`).
+
+**The v1.0 baseline (2026-07-20, the development laptop): 2.0× to 60.5× slower than C**, depending on the benchmark, as of the release-gate regeneration
 (the 9e run measured 2.0×–51.1×; re-timed at the cut, the worst benchmark came out worse, and the
 published range is the fresh measurement, not the flattering earlier one). v1.0 is **not**
 competitive with C on these workloads, and the report says so in those words. The constitution's

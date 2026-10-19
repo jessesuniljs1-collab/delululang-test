@@ -6,39 +6,51 @@
 
 Measured facts, and nothing else. Constitution §5.11 explicitly rejects *"faster than C"* as false — C sits near the hardware floor. The committed claim is *competitive with C on hot paths, with safety C cannot offer*, and this study **assesses** that claim rather than asserting it. Stage 10 is where it gets worked.
 
-These numbers are the v1.0 baseline. They are published as they came out.
+These numbers were measured **2026-10-19 14:14 UTC** on the machine below, and are published as they came out. The first run (2026-07-20) was the v1.0 baseline; each earlier run is kept whole under `runs/`.
 
 ## Method
 
-Each benchmark runs 5 times per lane; the **minimum** is reported, with the spread (max − min) beside it so the reader can see how noisy the machine was. Minimum rather than mean because the quantity of interest is the work done when nothing interferes — a mean on a laptop measures the scheduler as much as the runtime.
+Each benchmark runs 5 times per lane; the **minimum** is reported, with the spread (max − min) beside it so the reader can see how noisy the machine was. Minimum rather than mean because the quantity of interest is the work done when nothing interferes — a mean on a laptop measures the scheduler as much as the runtime. Each run is timed in microseconds and published in milliseconds (the first runs truncated to whole milliseconds, which read a C process on Linux as 0 or 1).
 
 Measured against a **release** build. The study refuses to run against a debug build at all: a performance baseline from an unoptimised binary is a number that looks authoritative and describes nothing anyone will ever run.
 
 **Wall-clock includes process startup.** For the C lane this dominates — its spread exceeds its minimum on several benchmarks, meaning the figure is mostly process creation rather than compute. The consequence matters and points the uncomfortable way: the ratios below **understate** the true compute gap, because the C denominator is inflated by startup the C code did not spend computing.
 
-All lanes compute the same result by the same algorithm.
+All lanes compute the same result by the same algorithm, and the study checks it: a lane is timed only if it printed what the interpreter printed. A lane that printed anything else is listed under *Benchmarks a lane could not run*, with both answers, and never timed.
+
+## The machine
+
+| | |
+|---|---|
+| os | linux x86_64 |
+| logical CPUs | 4 |
+| kernel | Linux 6.18.44-fc-v139 |
+| processor | Intel(R) Xeon(R) Processor @ 2.10GHz |
+| delulu | delulu 1.0.0 |
+| gcc | gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 |
+| python | Python 3.11.17 |
 
 ## Results (milliseconds, lower is better)
 
 | Benchmark | Kind | interp | wasm | C (gcc -O2) | CPython |
 |---|---|---|---|---|---|
-| `fib_recursive_24` | micro | 77 | 12 | 6 | 24 |
-| `loop_sum_1m` | micro | 363 | — | 6 | 78 |
-| `string_build_20k` | micro | 20 | — | 6 | 24 |
-| `wordcount_macro` | macro | 12 | — | 6 | 20 |
-| `list_map_macro` | macro | 17 | — | 6 | 21 |
-| `nested_calls_macro` | macro | 281 | — | 5 | 49 |
+| `fib_recursive_24` | micro | 82.88 | 7.64 | 1.14 | 17.46 |
+| `loop_sum_1m` | micro | 365.36 | 11.95 | 1.26 | 80.39 |
+| `string_build_20k` | micro | 16.70 | 9.76 | 0.99 | 14.93 |
+| `wordcount_macro` | macro | 8.63 | — | 1.15 | 13.74 |
+| `list_map_macro` | macro | 11.76 | — | 1.30 | 14.62 |
+| `nested_calls_macro` | macro | 317.95 | 11.97 | 1.02 | 46.79 |
 
 ### Spread across repeats (max − min, ms)
 
 | Benchmark | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| `fib_recursive_24` | 6 | 2 | 50 | 7 |
-| `loop_sum_1m` | 15 | — | 77 | 24 |
-| `string_build_20k` | 3 | — | 46 | 6 |
-| `wordcount_macro` | 3 | — | 52 | 4 |
-| `list_map_macro` | 5 | — | 52 | 8 |
-| `nested_calls_macro` | 13 | — | 44 | 11 |
+| `fib_recursive_24` | 17.44 | 3.04 | 0.69 | 5.96 |
+| `loop_sum_1m` | 151.02 | 3.26 | 0.27 | 38.33 |
+| `string_build_20k` | 7.56 | 18.57 | 0.96 | 3.91 |
+| `wordcount_macro` | 3.28 | — | 0.96 | 2.87 |
+| `list_map_macro` | 5.80 | — | 0.36 | 3.84 |
+| `nested_calls_macro` | 163.34 | 3.91 | 0.41 | 16.24 |
 
 ## The assessment
 
@@ -46,18 +58,27 @@ Interpreter time divided by C time, per benchmark:
 
 | Benchmark | interp ÷ C |
 |---|---|
-| `fib_recursive_24` | 12.8× |
-| `loop_sum_1m` | 60.5× |
-| `string_build_20k` | 3.3× |
-| `wordcount_macro` | 2.0× |
-| `list_map_macro` | 2.8× |
-| `nested_calls_macro` | 56.2× |
+| `fib_recursive_24` | 72.6× |
+| `loop_sum_1m` | 290.4× |
+| `string_build_20k` | 16.9× |
+| `wordcount_macro` | 7.5× |
+| `list_map_macro` | 9.0× |
+| `nested_calls_macro` | 311.4× |
 
-Range: **2.0× to 60.5× slower than C** on these benchmarks.
+Range: **7.5× to 311.4× slower than C** on these benchmarks.
 
-**The honest reading: v1.0 is NOT competitive with C on these workloads.** The constitution's committed claim is about *hot paths under a tiered backend with a JIT*; v1.0 ships a tree-walking interpreter and a straightforward WASM backend, and neither is that. The gap above is the baseline Stage 10 works against, and stating it plainly now is the only way the Stage 10 numbers will mean anything later.
+The WASM engine (`--engine wasm`) ran **4 of 6** benchmarks with the interpreter's answer. WASM time divided by C time where both ran:
 
-Nothing in the release announcement may imply otherwise. If a sentence about performance cannot cite a row in this table, it does not ship.
+| Benchmark | wasm ÷ C |
+|---|---|
+| `fib_recursive_24` | 6.7× |
+| `loop_sum_1m` | 9.5× |
+| `string_build_20k` | 9.9× |
+| `nested_calls_macro` | 11.7× |
+
+**The honest reading: `delulu 1.0.0` is NOT competitive with C on these workloads.** The constitution's committed claim is about *hot paths under a tiered backend with a JIT*; DeluluLang ships a tree-walking interpreter and a WASM backend without the DIR-level optimizer, and neither is that. The gap above is the baseline Stage 10 works against, and stating it plainly is the only way later numbers will mean anything.
+
+Nothing in a release announcement may imply otherwise. If a sentence about performance cannot cite a row in this table, it does not ship.
 
 ## Lanes not run
 
@@ -65,9 +86,6 @@ Nothing in the release announcement may imply otherwise. If a sentence about per
 
 ### Benchmarks a lane could not run
 
-- `loop_sum_1m` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
-- `string_build_20k` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
 - `wordcount_macro` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
 - `list_map_macro` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
-- `nested_calls_macro` on **wasm**: unsupported by the WASM backend for this program (DL1201) or failed to run
 

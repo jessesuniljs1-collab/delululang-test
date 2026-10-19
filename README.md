@@ -265,9 +265,10 @@ without declaring the effect. Mechanism and witness:
 
 Three more things worth knowing before you evaluate it:
 
-- **Performance is measured, never promised.** v1.0 is **not competitive with C** on the measured
-  workloads (2.0×–60.5× slower), and [`measurements/study-c/REPORT.md`](measurements/study-c/REPORT.md)
-  says so in those words.
+- **Performance is measured, never promised.** DeluluLang is **not competitive with C** on the measured
+  workloads — whole processes, 7.5×–311.4× slower on the interpreter and 6.7×–11.7× on the WASM engine
+  where it runs (4 of 6), on a Linux VM on 2026-10-19 — and
+  [`measurements/study-c/REPORT.md`](measurements/study-c/REPORT.md) says so in those words.
 - **Foreign code is outside the proof.** A `ForeignCall` is a hole in the guarantee. It is
   *enumerated* in the authority report rather than hidden, which is the honest version, not a fix.
 - **The network client is new, and deliberately narrow.** Since V2 phase PS-B (2026-09-25)

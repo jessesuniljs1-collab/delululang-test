@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 310 |
-| Rust lines | 174215 |
+| Rust lines | 174449 |
 | Rust files outside `src/` (test/bench targets) | 141 |
-| Markdown documents | 265 |
-| Markdown lines | 79952 |
+| Markdown documents | 267 |
+| Markdown lines | 80205 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1526 / 15032 |
+| Nodes / edges in this map | 1529 / 15059 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -271,7 +271,7 @@ The DeluluLang measurement program (Stage 9): the published, reproducible eviden
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 7 files, 2615 lines
+- **Modules:** 7 files, 2849 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -281,7 +281,7 @@ The DeluluLang measurement program (Stage 9): the published, reproducible eviden
 | `src/main.rs` | 262 | `delulu-measure` — runs the Stage 9 measurement studies and writes their raw data. |
 | `src/study_a.rs` | 460 | Study A — whole-program authority verification at scale (Stage 9d, spec §3.1). |
 | `src/study_b.rs` | 444 | Study B — agent task success and repair loops (Stage 9e, spec §3.2). |
-| `src/study_c.rs` | 390 | Study C — the performance honesty baseline (Stage 9e, spec §3.3). |
+| `src/study_c.rs` | 624 | Study C — the performance honesty baseline (Stage 9e, spec §3.3). |
 
 ### `delulu-registry`
 

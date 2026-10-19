@@ -1,8 +1,10 @@
 # The hot-path table — Stage 10 Track A (§2.1), acceptance criterion 1
 
 **Stage 10 phase 10l, spec §2.1 and §11 criterion 1.** This is the published hot-path table
-criterion 1 asks for, drawn from the pinned Study-C measurement (`measurements/study-c/results.json`,
-release build, 2026-07-20). It is published **as-is, both the better and the worse numbers**, which
+criterion 1 asks for, drawn from the Study-C measurement of **2026-10-19** (`measurements/study-c/results.json`,
+release build, a 4-vCPU Linux cloud VM — `REPORT.md` names the machine). The table it replaces, from the v1.0
+baseline of 2026-07-20, is kept below as it was, and that run whole in `runs/2026-07-20/`. It is published
+**as-is, both the better and the worse numbers**, which
 is exactly what criterion 1 requires and what the constitution's own performance-honesty rule
 (§5.11) demands.
 
@@ -21,9 +23,29 @@ optimizer** §2.1 also describes — cross-package inlining, monomorphization, e
 
 ## The table
 
-Lane figures are the **minimum of 5 repeats**, whole-process wall clock, from the pinned Study-C
-results. `wasm ÷ C` is the criterion-1 ratio; `interp ÷ C` is shown because the interpreter is the
-default engine and runs the whole suite.
+Lane figures are the **minimum of 5 repeats**, whole-process wall clock in milliseconds, from the
+2026-10-19 Study-C results (`delulu 1.0.0` built in release from `79f83d6`; gcc 13.3 `-O2`; each lane timed
+only when it printed the interpreter's answer). `wasm ÷ C` is the criterion-1 ratio; `interp ÷ C` is shown
+because the interpreter is the default engine and runs the whole suite.
+
+| Benchmark | Kind | C (gcc -O2) | wasm (opt backend) | interp | **wasm ÷ C** | interp ÷ C |
+|---|---|---|---|---|---|---|
+| `fib_recursive_24` | micro | 1.14 ms | 7.64 ms | 82.88 ms | **6.7×** | 72.6× |
+| `loop_sum_1m` | micro | 1.26 ms | 11.95 ms | 365.36 ms | **9.5×** | 290.4× |
+| `string_build_20k` | micro | 0.99 ms | 9.76 ms | 16.70 ms | **9.9×** | 16.9× |
+| `wordcount_macro` | macro | 1.15 ms | — (DL1201) | 8.63 ms | **n/a** | 7.5× |
+| `list_map_macro` | macro | 1.30 ms | — (DL1201) | 11.76 ms | **n/a** | 9.0× |
+| `nested_calls_macro` | macro | 1.02 ms | 11.97 ms | 317.96 ms | **11.7×** | 311.4× |
+
+`— (DL1201)` means the WASM backend could not run that program: `wordcount_macro` needs `split`, and
+`list_map_macro` a `List` and `map`, both outside the fragment it compiles (RW 3.4). Where both engines
+ran, WASM took 1.7× (`string_build_20k`) to 30.6× (`loop_sum_1m`) less time than the interpreter.
+
+### The 2026-07-20 table — the v1.0 baseline, kept as it was
+
+Release build, whole milliseconds, on the development machine — the owner's laptop, the only machine the
+project had before CI (2026-09-14); the record itself names none. There a C process read 5–6 ms, which is
+most of why its ratios were smaller.
 
 | Benchmark | Kind | C (gcc -O2) | wasm (opt backend) | interp | **wasm ÷ C** | interp ÷ C |
 |---|---|---|---|---|---|---|
@@ -41,21 +63,27 @@ not an omission.
 
 ## The honest verdict: criterion 1 is NOT met, and this is the deferral
 
-**The geo-mean ≤ 2.5× C target cannot be met by 1.x, and the honest reason is twofold:**
+**The geo-mean ≤ 2.5× C target is not met, and the honest reason is twofold** (the 2026-10-19 figures;
+the 2026-07-20 ones in brackets):
 
-1. **Coverage.** The optimizing backend runs **1 of 6** compute kernels. A geo-mean "on the
-   compute-kernel suite under the optimizing backend" is not computable when the backend runs one
-   sixth of the suite. On the single kernel it does run (`fib_recursive_24`) it is **2.0× C** — which
-   is *within* 2.5× — but one startup-dominated point is not a suite geo-mean, and reporting it as
-   one would be the dishonesty this table exists to avoid.
-2. **The startup caveat cuts against us, not for us.** The C lane's figures (5–6 ms) are dominated by
-   **process startup**, not compute — its spread (44–77 ms) exceeds its own minimum on every
-   benchmark. So the `wasm ÷ C` and `interp ÷ C` ratios **understate** the true compute gap: the C
-   denominator is mostly the cost of `fork/exec`, which the C code did not spend computing. The real
-   compute gap is wider than the table shows.
+1. **Coverage.** The optimizing backend runs **4 of 6** compute kernels [1 of 6]. A geo-mean "on the
+   compute-kernel suite under the optimizing backend" is not computable when the backend runs two
+   thirds of the suite; over the four it does run the geo-mean is **9.3× C**, and each of them is past
+   2.5× — **6.7× to 11.7×** [`fib_recursive_24` alone, 2.0×]. A geo-mean over the kernels a backend
+   happens to compile is not the suite's, and reporting it as one would be the dishonesty this table
+   exists to avoid.
+2. **Every figure is a whole process, and start-up is most of the small ones.** On this machine a C
+   process starts and exits in about 1 ms [5–6 ms on the laptop, whose spread of 44–77 ms exceeded its
+   minimum], and every DeluluLang figure also holds DeluluLang's own start-up — reading and checking the
+   program and, on WASM, compiling it with Cranelift: the smallest WASM figure is 7.64 ms. The C
+   denominator is still mostly start-up the C code did not spend computing, so the ratios still
+   **understate** the compute gap; a compute-only ratio needs a start-up control per lane (an empty
+   `main`), which the study does not yet have.
 
-The interpreter — the default engine, which runs the whole suite — is **2.0× to 60.5× C**. v1.0 is
-**not competitive with C** on these workloads, and Study-C's own write-up says so in those words.
+The interpreter — the default engine, which runs the whole suite — is **7.5× to 311.4× C** on this
+machine [2.0× to 60.5×]. It did not get slower: its own figures are within a run's spread of the
+2026-07-20 ones (`loop_sum_1m` 365 ms against 363); the C lane's start-up shrank. DeluluLang is **not
+competitive with C** on these workloads, and Study-C's own write-up says so in those words.
 
 **This is the D4 outcome, and D4 makes it a passing one:** "not production-ready, deferred, here is
 why" is a passing result for phase 10l, and criterion 1 carries this note verbatim. What is deferred,
@@ -75,11 +103,11 @@ and why:
   **Since 2026-10-19 (RW 3.4, D-V2-163) it has partly landed:** `while`, `break`, `continue`, assignment to a `var`,
   `Str.len()` and a memory that grows compile, so `loop_sum_1m`, `string_build_20k` and `nested_calls_macro` run on the
   WASM engine — **4 of the 6 kernels** — each printing what the interpreter prints. `wordcount_macro` (`split`) and
-  `list_map_macro` (a `List` and `map`) stay DL1201. **The table above is NOT re-measured**: its figures are the pinned
-  2026-07-20 release-build Study-C, and a criterion-1 ratio needs the C lane measured on the same machine. Observed on
-  the laptop the day it landed, a debug build and not a measurement of record: `loop_sum_1m` 29 ms on WASM against
-  2,244 ms on the interpreter, `nested_calls_macro` 30 against 1,762, `string_build_20k` 26 against 100. Re-running
-  Study-C (release, all three lanes) is the next step before any row above changes.
+  `list_map_macro` (a `List` and `map`) stay DL1201. **Re-measured 2026-10-19** (the on-demand routine's fourth run):
+  Study C in release, all four lanes on one machine — the table above. The same run fixed two things in the harness
+  first: it timed in whole milliseconds, which read a C process on Linux as 0 or 1 and dropped a benchmark whose C read
+  0 from every ratio without a word; and it timed any lane that exited 0, whatever it printed — a lane is now timed only
+  when it printed the interpreter's answer.
 
 ## What is NOT deferred, and did ship
 
@@ -102,7 +130,8 @@ and why:
 cargo run -p delulu-measure --release -- study-c
 ```
 
-Writes `measurements/study-c/REPORT.md` and `results.json`. The figures in this table are the pinned
-release measurement; re-running on a different machine will move the wall-clock numbers (and the C
-lane especially, being startup-bound), but not the shape of the finding: the optimizing backend runs
-a subset, and v1.0 is not competitive with C on this suite.
+Writes `measurements/study-c/REPORT.md` and `results.json` (schema `study-c/2`: microsecond timing, the
+date and the machine). Before re-running, keep the run it replaces whole under `runs/<its date>/` — this
+table's figures are the 2026-10-19 run's. Re-running on a different machine will move the wall-clock
+numbers (and the C lane especially, being startup-bound), but not the shape of the finding: the
+optimizing backend runs a subset, and DeluluLang is not competitive with C on this suite.

@@ -1,74 +1,69 @@
 {
+  "answers_checked": "a lane is timed only if it printed what the interpreter printed",
   "benchmarks": [
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 77,
-        "python": 24,
-        "wasm": 12
+        "c": 1.141,
+        "interp": 82.878,
+        "python": 17.461,
+        "wasm": 7.644
       },
       "name": "fib_recursive_24",
       "spread_ms": {
-        "c": 50,
-        "interp": 6,
-        "python": 7,
-        "wasm": 2
+        "c": 0.689,
+        "interp": 17.441,
+        "python": 5.959,
+        "wasm": 3.04
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 363,
-        "python": 78
+        "c": 1.258,
+        "interp": 365.356,
+        "python": 80.386,
+        "wasm": 11.946
       },
       "name": "loop_sum_1m",
       "spread_ms": {
-        "c": 77,
-        "interp": 15,
-        "python": 24
+        "c": 0.265,
+        "interp": 151.022,
+        "python": 38.327,
+        "wasm": 3.26
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 20,
-        "python": 24
+        "c": 0.987,
+        "interp": 16.7,
+        "python": 14.93,
+        "wasm": 9.755
       },
       "name": "string_build_20k",
       "spread_ms": {
-        "c": 46,
-        "interp": 3,
-        "python": 6
+        "c": 0.965,
+        "interp": 7.557,
+        "python": 3.913,
+        "wasm": 18.571
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 6,
-        "interp": 12,
-        "python": 20
+        "c": 1.15,
+        "interp": 8.627,
+        "python": 13.739
       },
       "name": "wordcount_macro",
       "spread_ms": {
-        "c": 52,
-        "interp": 3,
-        "python": 4
+        "c": 0.962,
+        "interp": 3.284,
+        "python": 2.874
       },
       "unrun": [
         {
@@ -80,15 +75,15 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 6,
-        "interp": 17,
-        "python": 21
+        "c": 1.303,
+        "interp": 11.764,
+        "python": 14.624
       },
       "name": "list_map_macro",
       "spread_ms": {
-        "c": 52,
-        "interp": 5,
-        "python": 8
+        "c": 0.365,
+        "interp": 5.799,
+        "python": 3.839
       },
       "unrun": [
         {
@@ -100,22 +95,19 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 5,
-        "interp": 281,
-        "python": 49
+        "c": 1.021,
+        "interp": 317.955,
+        "python": 46.789,
+        "wasm": 11.971
       },
       "name": "nested_calls_macro",
       "spread_ms": {
-        "c": 44,
-        "interp": 13,
-        "python": 11
+        "c": 0.413,
+        "interp": 163.337,
+        "python": 16.244,
+        "wasm": 3.91
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     }
   ],
   "caveat_process_startup": "Wall-clock includes process startup. For the C lane the startup cost exceeds the compute for several benchmarks (its spread exceeds its minimum), so ratios against C UNDERSTATE the true compute gap rather than overstate it.",
@@ -131,9 +123,20 @@
       "reason": "no Go toolchain on the measurement machine"
     }
   ],
+  "machine": {
+    "delulu": "delulu 1.0.0",
+    "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "kernel": "Linux 6.18.44-fc-v139",
+    "logical CPUs": "4",
+    "os": "linux x86_64",
+    "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "python": "Python 3.11.17"
+  },
+  "measured_at": "2026-10-19 14:14 UTC",
   "profile": "release",
   "repeats": 5,
-  "schema": "study-c/1",
+  "resolution": "timed in microseconds; published in milliseconds with three decimals (study-c/1 truncated to whole milliseconds)",
+  "schema": "study-c/2",
   "statistic": "minimum of repeats (spread published alongside)",
   "study": "C",
   "title": "performance honesty baseline"

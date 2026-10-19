@@ -1624,6 +1624,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   nearest deadline before grading it — a witness whose STATE is "one read takes twice the period", grown with the writer's
   own code and measured in the test, made it red on the first try.
 
+- **A benchmark that does not check its answer can time a wrong one — and a unit sized for one machine reads another as
+  zero** (on-demand routine run 4, Study C): the harness timed any lane that exited 0, though its comment said lanes doing
+  different work measure nothing, and the WASM lane had just grown from one benchmark to four; and it truncated to whole
+  milliseconds, which the laptop's 5–6 ms C processes survived and a Linux VM's sub-millisecond ones did not — `0`, and a
+  benchmark silently gone from every ratio. Now each lane is held to the interpreter's answer and timed in microseconds,
+  and the record names its date and machine. Before re-running a measurement on a new machine, ask what its unit reads at
+  the fastest lane there, and what it times when a lane is wrong.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
