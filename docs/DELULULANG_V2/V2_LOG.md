@@ -6662,3 +6662,573 @@ on its own target. The RW 4.69 witness measured its state by `grants list` faili
 that the descriptions alone pass one frame. Locally green: sixteen integration targets (the atlas, grants, monitor, broker,
 audit, e-stop, CLI-contract and JSON-contract ones, `message_spacing`), the `delulu` binary's 184 unit tests,
 `delulu-broker`'s 215; clippy 0; fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+## 2026-10-19 — RW 3.4: loops on the WASM engine; its memory grows; WASM-HYGIENE-1 (D-V2-163)
+
+**`master` moved.** Pull request #1's third run `39229088627` on `98edf2f` (RW 4.69, 4.63, 4.70) — **success on every job**:
+Windows 2,283 passed, Ubuntu 2,348, macOS 2,322, arm64 2,348, 0 failed on each; `fuzz`,
+`formal`, `microvm`, `miri` (diag, atlas, ffi), `supply-chain`, `editor`, `lints` success. `master` fast-forwarded
+`0a9afbf` → `98edf2f` and pushed; GitHub marked the pull request merged.
+
+**What (RW 3.4).** The WASM backend refused every loop, so a program that counted, accumulated or built a string ran only
+on the interpreter — five of the six Study-C kernels among them. Now: `while`, `break`, `continue` (a label depth kept by
+`Cx::emit`, a loop stack), assignment to a local, and `Str.len()`. Two defects found on the way, each witnessed on the OLD
+backend with a program that compiled there: **its heap was a fixed 1 MiB, never reused** — a recursion building 4 MB of
+strings stopped with `DL0903: memory access out of bounds` where the interpreter printed the string — so every allocation
+now goes through `__alloc`, which grows the memory, and the host's allocator grows it too; and **WASM-HYGIENE-1** — the
+inliner resolved a lambda's names through the generic function's frames: `apply(fn(v) { v + n }, 3)` with `apply` holding
+its own `n = 100` printed 103 on WASM, 4 on the interpreter. An inlined body now sees the frames of where it was written.
+
+**Evidence.** `delulu-wasm/tests/loop_parity.rs` (six): loops with `break`/`continue`, nested loops, `return` from a loop,
+`while false`, shadowing, a `Bool` loop flag and `"héllo ✓".len()` == 7, against the interpreter and against the values
+themselves; the growth witness and the hygiene witness — **both red on the old backend** (`DL0903`; `103 210 101` against
+`4 12 2`); the host growth (a 3 MiB file read); 400 generated loop programs (agreed, both faulted, looping — all counted);
+and what stays out (`for`, a lambda assigning its frame's variable). The 50,000-program differential gate now draws a fifth
+of its programs from the loop generator: **50,000 checked, 46,855 agreed, 3,145 both faulted, 0 mismatches** (release, the
+laptop). `budget_cli.rs`: an endless `while` on WASM stopped by `--limits cpu=1`, a doubling string on WASM stopped by its
+256 MiB memory budget. Mutants M503 (no growth in `__alloc`), M504 (none in the host), M505 (`len` counts bytes), M506 (no
+hygiene), M507 (`break` continues), M508 (an inlined body may assign its definer's variables), M509 (`continue` breaks) —
+all red. `wasm_cli`'s DL1201 example was a `while`; it is a `for` now. Study-C's kernels on WASM: 4 of 6 compile, each
+printing the interpreter's output (debug build: `loop_sum_1m` 29 ms against 2,244; not a measurement of record —
+`HOT_PATH_TABLE.md` says the table is not re-measured). The book's DL1201 list corrected (it also named the clock, which
+compiles since phase 3k). Locally: `delulu-wasm`'s whole suite, the ten `delulu` targets that run the WASM engine,
+clippy 0, fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
+
+**Postscript (RW 3.4): `str(Bool)` in any program.** It was DL1201 unless the program also used a foreign library, which
+was what interned `"true"` and `"false"`; every module interns them now (a loop's flag is a `Bool`). `loop_parity.rs`'s first
+test prints `str(ok)` and `str(t > 4)` on both engines. `delulu-wasm` green; `wasm_cli` and `cli` green.
+
+## 2026-10-19 — on-demand routine run 4: the laptop's RW 3.4 verified and merged; WASM-HYGIENE-2 (RW 3.8)
+
+**The laptop's pull request #2 (`laptop/wasm-loops`, RW 3.4, D-V2-163) — verified, then merged.** Its CI `39233385903` on
+`4d11575` — **success on every job** (the suites on Ubuntu, Windows, macOS and arm64, `fuzz`, `microvm`, `miri` diag, atlas
+and ffi, `supply-chain`, `formal`, `editor`, `lints`; `heavy-gates` and `miri-slow` skipped, as on every pull request). Re-run
+in the VM on `4d11575`: `delulu-wasm`'s whole suite (91 lib, `loop_parity` 6, every parity target), `wasm_cli` 10,
+`budget_cli` 10, and the 50,000-program differential by hand in release — **50,000 checked, 46,855 agreed, 3,145 both
+faulted, 0 mismatches**, the laptop's figures exactly. The autosave snapshot `bbb8ea3` (09:39 UTC) is the draft of `c3445be`;
+the two committed later are a superset of it (its `codegen.rs` lacked the `str(Bool)` commit, its `loop_parity.rs` the same
+test's two values). `master` fast-forwarded `98edf2f` → `4d11575`. Also read: `master`'s push runs on `98edf2f` — CI
+`39232237537`, `openshell` `39232237530`, `ocsf` `39232237519` — success; the release schedule `39235210830` and the CI
+schedule `39222644536` (on `0a9afbf`) — success; `launch/2.0.0`'s `jobs=everything` runs `39208467616` (`d2814e8`) and
+`39212177717` (`6c01264`) — **success**, their `miri-slow` jobs included.
+
+**Found while reading the diff: WASM-HYGIENE-2.** The backend resolves locals through `Cx::scopes` and function values
+(the lambdas it inlines) through `Cx::callables`. `compile_block_inner` pushed a frame onto the first only, so `let f = fn…`
+inside an `if`, `else` or `while` body went into the FUNCTION's frame of function values and replaced the outer `f` for the
+rest of the function. Probes, both engines (`delulu run … --engine wasm`): an `if` whose body shadows `f` — the interpreter
+`2` then `1`, WASM `2` then `2`, **and the same on `98edf2f`'s backend** (the `if` form compiled before RW 3.4); a `while` whose
+body shadows it — `300 1` against `300 0` (new with RW 3.4, which made `while` compile). Silent wrong output. Four other
+probes agreed on both engines (a capture shadowed or re-assigned after the definition reads the new value on both — the
+interpreter's frame is shared; an inner `var n` shadowing a captured `n`; a loop that calls a capturing lambda). The
+differential could not have seen it: the generator wrote no function value at all, as WASM-HYGIENE-1's own note says.
+
+**Fixed:** a block opens a frame of function values beside its locals (`compile_block_inner` pushes and pops both, on its
+error path too). **And the gate is taught the shape:** `random_loop_program` binds `h = fn(x: Int) -> Int { … }` (capturing
+`a`) before the loop in half its programs, calls it in the loop body and in the tail, and in three of four of those shadows
+it in the loop body or in an `if` there — drawn from an RNG stream of its own, so every other line is what each seed gave
+before. `random_loop_programs_agree_with_the_interpreter` counts the shadowing programs and asserts more than 80 of 400.
+
+**Evidence.** `loop_parity.rs` `a_function_value_bound_in_a_block_is_that_blocks` (the `if`, the `else` and the `while`
+forms, against the values themselves) — **red on the old backend**: `2 23 33 300` against `7 21 31 301`; and
+`random_loop_programs_agree_with_the_interpreter` with the new generator — **red on the old backend** at its first shadowing
+program (`interp=Ok(1651022093) wasm=Ok(2)`). Green after: 7 of 7; the sample's readings, printed by the test — 346 agreed,
+54 both faulted, 371 looping, **149 shadowing a function value**. The differential with the new generator, release:
+**50,000 checked, 46,235 agreed, 3,765 both faulted, 0 mismatches**. Mutants (`scripts/mutants.py`): M510 (no frame of
+function values pushed) red in three tests, M511 (pushed, never popped) red in two, M512 (the generator never shadows) red
+on the count; control green. clippy (`delulu-wasm`, all targets) 0; fmt clean.
+
+## 2026-10-19 — on-demand routine run 4 (continued): Study C re-measured; the harness checks each lane's answer and times in microseconds
+
+**Why.** RW 3.4 put four of Study C's six kernels on the WASM engine, and `HOT_PATH_TABLE.md` said its own figures were
+NOT re-measured — "re-running Study-C (release, all three lanes) is the next step before any row changes" (the laptop's
+inbox, and this run's). The VM has gcc 13.3 and CPython 3.11, so every lane runs here.
+
+**Two harness defects, found by reading it and by its first run here.** (1) A lane was timed whenever its process exited 0:
+nothing compared what it printed with the interpreter's answer, though the code's own comment said "a benchmark where the
+lanes do different work measures nothing" — and the WASM lane had just gone from one benchmark to four. Now `checked` times a
+lane only when it printed the interpreter's answer (line endings aside); any other answer is listed, with both, among the
+benchmarks that lane could not run. (2) It timed in whole milliseconds. The first run here read every C process as `1` or
+`0` ms, and `nested_calls_macro`, whose C read 0, vanished from both ratio tables without a word (the laptop's C processes had
+read 5–6 ms, so it never showed there). Now microseconds, published as fractional milliseconds, and a benchmark a ratio leaves
+out is named. The record also carries its date and machine (`measured_at`, `machine`: OS, CPUs, kernel, processor, the
+`delulu`, gcc and CPython versions; schema `study-c/2`), and the report no longer prints "These numbers are the v1.0
+baseline" over whatever it measured.
+
+**Evidence.** `study_c::tests` (five): the civil date against Python's at a leap day and a century; the answer check; a
+report from a lane that printed `2` where the interpreter printed `46368` — listed, untimed, in no ratio; a 0.64 ms C time
+kept (545.3×) and a 0 µs one named; `time_it` reads a real process (the test binary's `--list`) at ≥ 100 µs and keeps what it
+printed. Mutants M513 (the mismatch arm skipped), M514 (every answer the same), M515 (no machine table), M516 (`as_millis`
+again), M517 (a zero-C benchmark not named), M518 (microseconds published as milliseconds) — all red; control green. clippy
+(`delulu-measure`) 0.
+
+**The measurement** (`measurements/study-c/REPORT.md`, `results.json`; 2026-10-19 14:14 UTC; release `delulu 1.0.0` from
+`79f83d6`; Linux 6.18 x86_64, 4 vCPUs, Intel Xeon @ 2.10GHz; nothing else running): C 0.99–1.30 ms on every benchmark —
+process start-up; WASM 7.64–11.97 ms on the four it runs (`wordcount_macro` needs `split`, `list_map_macro` a `List`);
+interpreter 8.63–365.36 ms; CPython 13.74–80.39 ms. **wasm ÷ C 6.7×–11.7× (geo-mean of the four 9.3×); interp ÷ C
+7.5×–311.4×.** Every WASM answer matched the interpreter's. The interpreter is within a run's spread of 2026-07-20
+(`loop_sum_1m` 365 ms against 363, `fib_recursive_24` 83 against 77): the ratios grew because the C lane's start-up shrank
+(5–6 ms there). Where both engines ran, WASM took 1.7× (`string_build_20k`) to 30.6× (`loop_sum_1m`) less time than the
+interpreter. The first run, before the microsecond fix, read the same shape (interp 82/349/17/9/10/284 ms; WASM 8/10/8/11).
+**Criterion 1 is still not met** — coverage 4 of 6, and each of the four past 2.5× — and the hot-path table says so, with
+the 2026-07-20 table kept beneath it verbatim and that run whole in `measurements/study-c/runs/2026-07-20/`. The same range
+was updated where it is quoted (`README.md`, `docs/QUESTIONS.md` twice, `docs/for-agents.md`, `measurements/METHODOLOGY.md`
+§3.2–3.3); the dated phase records and the 1.0 announcement keep theirs. **Not measured:** a compute-only ratio — every
+figure is a whole process, and the study has no start-up control per lane (an empty `main`); RW 3.4 names it.
+
+## 2026-10-19 — on-demand routine run 4 (continued): Study C measures start-up; `master` red on `lints` once, fixed (`45ca06d`)
+
+**`master` red, and why.** `81da0ae`'s push run `39268713452` went red on `lints` alone — clippy's `manual_range_contains`
+on `time_it_reads_a_process_in_microseconds`, a test written after this run's last clippy, in a commit whose message said
+"clippy 0". Read from the job's log (one error, nothing else); fixed in `45ca06d` — made in a worktree at `81da0ae` so it held
+nothing else, `cargo clippy -p delulu-measure --all-targets -D warnings` exit 0 and the crate's tests green there — and pushed
+within minutes. The run's other jobs were not waited for before the fix went up; its push run is read below.
+
+**What (the start-up control).** The hot-path table said a compute-only ratio needs a start-up control per lane. Study C now
+runs one — a program that prints `0` and nothing else — through the same per-lane code as every benchmark, then takes it out
+of the benchmarks (`take_control`), so no table, count or ratio includes it. The report shows its figure per lane, with its
+spread, and each benchmark less its lane's floor; no ratio is computed from those differences, and the report says why.
+
+**The published record is now this run** (2026-10-19 14:26 UTC; the same build, machine and quiet as 14:14): start-up C
+0.92 ms, interpreter 4.70, WASM 7.01, CPython 11.91. WASM 8.31–11.14 ms on its four kernels, 1.30–4.13 ms above its floor;
+C 0.97–1.50 ms, **0.05–0.58 ms above its floor** — so the C lane's work is inside a millisecond's noise and no compute ratio
+is offered. `wasm ÷ C` **6.5×–11.5×** (geo-mean 8.8×), `interp ÷ C` **8.9×–359.0×**. Between the 14:14 run and this one,
+single ratios moved by up to a quarter (`loop_sum_1m`'s `interp ÷ C` 290.4× then 359.0×), mostly through C's ~1 ms
+denominator — the table now says so. Every document quoting the range was updated to this run (README, QUESTIONS twice,
+for-agents, METHODOLOGY, CHANGELOG, RW 3.4); this log's previous entry keeps the 14:14 figures as what that run read.
+
+**Evidence.** `study_c::tests` seven: two new — the floor shown per lane with its spread, each benchmark less it
+(360.00, 4.75, 0.27), a lane where the control failed named, and the control absent from the timings table and the WASM
+count; and `take_control` removes the control and only it (`startup_program`'s kind is the one taken). Mutants M519 (the
+control copied, not taken out), M520 (no subtraction), M521 (the control's failures unshown) red; control green. clippy
+(`delulu-measure`, all targets) 0 after the last edit.
+
+## 2026-10-19 — on-demand routine run 4 (continued): `master` red on `formal` (Lean's host refused the runners), fixed (`205f0f4`); WASM-OOM-1 (RW 3.9)
+
+**`master` red, not this run's code.** `0e4e9a2`'s push run `39270059515` and `6c26aed`'s `39271301242` went red on `formal`
+alone, each at the same step and before any proof ran: elan downloads Lean 4.32.2 from `releases.lean-lang.org`, which
+refused the runners' TLS (`[35] SSL connect error`) eight minutes apart; `45ca06d`'s `formal`, about five minutes earlier,
+had passed. Neither commit touched the model. The VM got no answer from that host either, and a 200 from the same
+tarball as a release asset of `leanprover/lean4` on GitHub. **Fixed in `205f0f4`:** the job fetches that asset with curl's
+retries, checks a pinned SHA-256 (`5f2069e6…72aa`, taken from the asset on 2026-10-19 — Lean publishes no checksum file to
+check it against), and runs that `lean` on `DeluluCore.lean`, a single core-Lean file. Verified in the VM before the push:
+the step's script, taken from the workflow by a YAML parser and run with `RUNNER_TEMP` set to a scratch directory — hash
+OK, Lean 4.32.2, every theorem "does not depend on any axioms", exit 0. Its push run is read below or by the next run.
+
+**WASM-OOM-1 (found reading the trap mapper while verifying RW 3.4).** `__alloc` trapped with `unreachable` when the
+memory could not give an allocation, and the host reads every `unreachable` as the arithmetic helpers' overflow — so a
+program that doubles a string past WebAssembly's 4 GiB, under `--limits mem=12884901888`, printed `error[DL0901]: … integer
+overflow` with no arithmetic in it (by hand, on the old backend; under the default 1 GiB budget the budget stops a program
+first, on both engines). Now `__alloc` traps as an access out of bounds (a 4-byte load at 0xFFFF_FFFF, past any 32-bit
+memory) and the host's DL0903 text says "memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's
+4 GiB)"; the same program now prints that. DL0903 is the code the fixed heap's end reported before RW 3.4. Residual, in RW
+3.9: the exhaustion has no code of its own (DL0903's explanation is about indexing) — a code would be a decision.
+
+**Evidence.** `codegen.rs` `alloc_tests::an_allocation_the_memory_cannot_give_is_not_an_overflow`: a module holding
+`__alloc` alone and an exported caller, both failure branches — an end that wraps past 2^32 (`-8` bytes from a heap pointer
+of 16; the test's first form used `-64`, which does not wrap — the memory simply grew to ~4 GiB — corrected before any
+fix) and a growth the memory's maximum refuses — **red on the old `__alloc`** (`DL0901: integer overflow`), green after.
+Mutants M522 (the wrap branch back to `unreachable`), M523 (the growth branch), M524 (DL0903's old text) red; control green.
+`delulu-wasm` 129 passed; `wasm_cli` 10, `budget_cli` 10; the release differential 50,000 checked, 46,235 agreed, 3,765 both
+faulted, 0 mismatches; `scripts/clippy.sh` clean (stamped).
+
+## 2026-10-19 — the laptop: run 4 synced; the routine held at xhigh by an environment variable; `launch/2.0.0` at `c3b33f3`
+
+**Synced.** `master` fast-forwarded to `8fc42f8`. Run 4's open CI items were read green: `205f0f4` (`39274259721`),
+`8fc42f8` (`39275805346`), and `launch/2.0.0`'s `everything` and release dry run on `ece2454` (`39272359850`,
+`39272366257`). The routine's own log, read through the routine API, shows what the usage limit cut off at 15:12 UTC: two
+WASM fixes built but not committed (negating `Int::MIN`; `&&`/`||` short-circuit), and a red-team pass whose notes never
+left the VM. Among its findings the log shows an interpreter panic in `rand.int` when `hi - lo` overflows. All are to be
+redone on the laptop, each witnessed first (`docs/CLOUD_SYNC_LOG.md`, this date).
+
+**Effort.** The owner saw the routine running Opus 5.5 at `medium`, although `.claude/settings.json` set `effortLevel` and
+`modelSettings` to `xhigh`. Claude Code puts an explicit choice (`--effort`, `/effort`, `CLAUDE_CODE_EFFORT_LEVEL`) above
+both settings keys, and its environment-variable reference says the variable outranks `--effort` and `/effort`. The file
+now sets `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`. The routine API refuses environment variables on a trigger (HTTP 400,
+tried with the routine's full unchanged configuration). Nothing was changed there. Whether the next run starts at `xhigh`
+is read from that run, not assumed.
+
+**`launch/2.0.0`.** `c3b33f3` merges `master` up to `8fc42f8`. On its tree the map is 1532 nodes with 0 errors,
+`doctor --check` is ok, clippy is clean and stamped, and the document gates are green. Its `everything` run `39296491537`
+and release dry run `39296497024` were dispatched. Their results are read in a later entry.
+
+## 2026-10-19 — the laptop: run 4's lost WASM fixes and its red team's findings, redone (RW 3.10–3.14)
+
+**Where they came from.** On-demand routine run 4 built two WASM fixes and ran a Sonnet 5.5 red-team pass on the WASM
+fragment, and the usage limit stopped it before either was committed. Its run log, read through the routine API, names
+the defects and some of the red team's programs; the VM and the agent's notes are gone. Each was witnessed again on the
+laptop's binary at `6a26c1f` before any fix.
+
+**The five.**
+- **WASM-SHORT-1 (RW 3.10).** `&&`/`||` compiled both operands, then `i32.and`/`i32.or`. `let a = z != 0 && 10 / z > 1`
+  with `z = 0`: `false` on the interpreter, `DL0902: division by zero` on `--engine wasm`. Now the right operand is compiled
+  inside an `if` on the left (`compile_binary`, before either operand). The `And | Or` arm of the `Int` match is
+  `unreachable!`, because the typed `&&` never reaches it.
+- **WASM-NEG-1 (RW 3.11).** `-x` was `x * -1` with a bare `i64.mul`, so `-Int::MIN` printed `-9223372036854775808` where
+  the interpreter faults `DL0901 integer overflow negating Int::MIN`. Now it calls the checked-multiply helper.
+- **WASM-REFUSAL-1 (RW 3.12).** A program that matched on the error of an `fs.read_text("../x.txt")` outside its grant
+  reported `DL0903: memory access out of bounds` on WASM and `DL0904 … escapes the granted scope` on the interpreter.
+  Ungranted, it reported `DL0903` against `DL0703`. A refused host call returns a placeholder and the guest runs on, and
+  `finish` reported whatever trapped next. `trap_or_refusal` now reports the recorded refusal first, in `run_main` and in
+  the actor `main` alike.
+- **WASM-OUTPUT-1 (RW 3.13).** On the same program the interpreter printed `start`, the first read and `NotFound` before
+  its fault, and WASM printed nothing. The CLI printed the engine's captured output only on `Ok`, so a run that faulted,
+  was refused or was stopped by its budget lost every line it printed. `HostConfig::stream_console` (default `false`, so
+  every harness that captures is unchanged) prints each line as it is printed. The CLI sets it for `.delulu` and `.dwx`
+  runs.
+- **RAND-SPAN-1 (RW 3.14).** `r.int(0 - 1, 9223372036854775807)` panicked the debug interpreter at `prim.rs`
+  (`attempt to subtract with overflow`). A release build wrapped to the right values. Now `hi.wrapping_sub(lo) as u64` and
+  `lo.wrapping_add(…)` are exact, which is what the WASM host computes.
+
+**Why the 50,000-program gate missed all five.** Its generators wrote no `&&`/`||` and no negation. They never refused a
+host call, and the comparison is fault against fault, never the output before a fault. `gen_cmp` now writes a guarded
+short-circuit in a third of its conditions (`d != 0 && x / d …`, `d == 0 || x % d …`), whose right side faults exactly
+when the guard is false. `gen_expr` writes `(-e)` where it had written a second leaf.
+
+**Evidence.** `crates/delulu-wasm/tests/fault_parity.rs` (new): `negating_int_min_faults_on_both_engines`,
+`and_and_or_short_circuit_on_both_engines` (faults guarded off and right-side effects on both engines),
+`rand_int_over_a_span_past_int_max_draws_the_same_values_on_both_engines` (three seeds),
+`a_refusal_is_reported_even_when_the_guest_traps_after_it`. `wasm_cli.rs`
+`what_a_program_printed_before_a_fault_reaches_stdout_on_both_engines`; `budget_cli.rs`'s WASM CPU-budget test now asserts
+the line printed before the stop. Mutants (`scripts/mutants.py`): M525 (WASM-SHORT-1 restored), M526 (the bare `i64.mul`),
+M527 (`hi - lo` in `Int`), M528 (the trap over the refusal), M529 (no streaming), each red; control green. Readings:
+M525 red in three targets (`and_and_or_short_circuit_on_both_engines`, `random_loop_programs_agree_with_the_interpreter`,
+`tests::wasm_matches_interpreter_on_random_programs_including_faults` — so both generators now write the shape); M526,
+M527, M528 each red on their one test; M529 red on the `wasm_cli` witness and on `budget_cli`'s WASM CPU-budget test;
+control green (`delulu-wasm` lib 87, `fault_parity`, `loop_parity` 7). After the last edit: `scripts/clippy.sh -j 4` clean
+and stamped; `delulu-wasm` whole (87 lib, `fault_parity` 6, `loop_parity` 7 and the rest) and the CLI targets that run
+the WASM engine (artifact_review, budget_cli, cli, guard_e2e, json_contract, plugin_cli, release, sandbox_modes_cli,
+wasm_cli, message_spacing) green on Windows. The 50,000-program release differential runs in CI's `fuzz` job.
+
+**A slip, caught before the commit.** `fault_parity.rs` already existed (C20's two fault-parity tests), and the new
+tests were first written over it — the file tool did not refuse an overwrite of a file not yet read. `git status`
+showed it modified, not added; the original was restored from `HEAD` and the new tests appended to it, both sets
+green.
+
+## 2026-10-19 — the laptop: the microVM's host against 2026's KVM escapes (RW 4.71)
+
+**The owner asked** (2026-10-19): *"Linux recently patched vm issues, Search and learn about it, Is DeluluLang affected by
+it, What should DeluluLang do differently"*. Read that day:
+- **PwnEscape** (CVE-2026-99999, CVSS 9.3). The host's IPv4 stack trusted checksum-offload metadata that a guest sends on
+  a virtio-net device, and its checksum write overwrote an IPv4 header already parsed. It was demonstrated on KVM and
+  Firecracker hosts. Upstream fix `6785011f8b16` (mainline 2026-10-14). AlmaLinux shipped testing kernels on 2026-10-16;
+  Red Hat says a local user can reach it too.
+- **Januscape** (CVE-2026-53359), a KVM x86 shadow-MMU use-after-free reached through nested virtualization; fixed in
+  stable on 2026-07-04.
+- **Zapscape** (CVE-2026-64561), a KVM x86 shadow-page reclaim use-after-free reached two nesting levels deep, also a
+  local root where `/dev/kvm` is world-usable. A batch of smaller KVM CVEs followed on 2026-10-18.
+Two names (the CVE numbering of PwnEscape, an aggregator's framing) looked doubtful; AlmaLinux's and CloudLinux's
+advisories confirm it.
+
+**Is DeluluLang affected?** Its guests reach none of the paths, read from the code:
+- The launcher configures one vsock and nothing else.
+- The guest kernel is `tinyconfig` plus vsock, with no IPv4, no packet or Unix sockets, no KVM and no modules.
+- The process sandbox (`jail.rs`) denies `socket`, `socketpair`, `unshare` and namespace-creating `clone`.
+- Egress is the host's ordinary sockets.
+
+What it cannot escape is that the microVM's wall *is* the host's KVM.
+
+**What changed.**
+- The launcher's device list is one function, `vm_api_calls`, which `the_vm_is_given_one_vsock_and_nothing_else` pins.
+- `kernel.config` names network devices, virtio-net, TUN, vhost-net, virtualization and KVM as not set. `build-image.sh`
+  already refused a kernel in which any `not set` line is on, so the absences are now enforced.
+  `microvm_guest_kernel.rs` pins the lines on every platform; it is red with `# CONFIG_TUN is not set` removed. The
+  options were off under `tinyconfig` already, so the built `.config` should be unchanged. That is reasoned from
+  Kconfig, not built on the laptop: CI's `microvm` job builds the image under the new file and applies the refusal.
+- `doctor` reports **KVM host posture** (each vendor module's `nested`, `/dev/kvm`'s mode, the kernel release). It
+  notes nesting on or a world-usable device, with the escapes and the remedy, and never fails: GitHub's runners open
+  `/dev/kvm` to every user. `kvm_posture` is a pure function, so `kvm_posture_tests` run on every platform.
+- DEPLOYMENT.md *The microVM's host* gives the table, the sources and the host requirements: a patched kernel,
+  `nested=0`, `/dev/kvm` for the group, no network device.
+
+The laptop's WSL lab loads `kvm_amd` with its default `nested=1`; HANDOFF §11.3 says to pass `nested=0` next time.
+
+**Evidence (RW 4.71).** Windows: `kvm_posture_tests` 3 passed; mutants M530 (nesting never noted) and M531 (the device's
+mode never noted) red, control green; `microvm_guest_kernel` green, red with `# CONFIG_TUN is not set` removed. Linux (the
+laptop's WSL, `~/delulu-gnu-target`): `microvm::tests` and `kvm_posture_tests` 11 passed; `cargo clippy -p delulu
+--all-targets -- -D warnings` clean; M532 (a `/network-interfaces/eth0` call added to `vm_api_calls`, on a copy of the
+tree) red on `the_vm_is_given_one_vsock_and_nothing_else`. `scripts/clippy.sh -j 4` clean and stamped on Windows.
+
+## 2026-10-20 — the laptop: `List` on the WASM engine; WASM-IFTY-1, WASM-INTERN-1 (RW 3.4, 3.15, 3.16, D-V2-164)
+
+**Why.** The last two Study-C kernels, `wordcount_macro` (`Str.split`, `len`) and `list_map_macro` (a literal, `map`,
+`len`), were DL1201 on `List` alone.
+
+**What.** D-V2-164 records the design:
+- the header `[len][cap][data]`, so lists are shared as on the interpreter;
+- `__list_new` and `__list_slot`;
+- a `for` over a snapshot;
+- `push` computing its value first;
+- `get`'s `None` outside the list;
+- `delulu:list.str_split` (the interpreter's own `split`);
+- `delulu:list.index_fault` (the interpreter's DL0903 words);
+- the imports and helpers only in a module that uses a list;
+- reference capabilities looked through;
+- `run_int_fn` under a host with nothing granted.
+
+Both kernels now print the interpreter's answers on WASM (18000, 16000); **6 of 6 compile**. The two that newly do are
+not re-measured.
+
+**Found on the way, each witnessed red first.**
+- **WASM-IFTY-1.** `pick(a, b, c) = if c { a } else { b }` over `Str`s: the interpreter printed `a left`, while
+  `--engine wasm` printed `DL0904: invalid WASM module: failed to compile`. The `if`'s block type had been guessed `Int`
+  for a variable. A `match` arm binding a `Str` was refused for the same reason.
+- **WASM-INTERN-1.** `apply(fn(s: Str) -> Str { s + " and a literal" }, "a value")` panicked the compiler at
+  `codegen.rs` `expect("interned")`.
+
+Block types are now patched from what the first branch compiled to, and the guess functions (`block_result_ty`,
+`expr_result_ty`) are deleted. The collector descends into lambdas, lists, records, fields and indexes, and a missing
+literal is refused rather than panicked over.
+
+**Evidence.**
+- `crates/delulu-wasm/tests/list_parity.rs` (new, 9 tests): literals of `Int`, `Str` and `Bool`; `get` inside and
+  outside the list; sharing through `let ys = xs` and a `ref` parameter; `push` of the list's own length; a `for` that
+  pushes during its walk; break and continue in nested `for`s; `map` with captured names and a bound function value;
+  `split` (empty parts, multi-byte characters, empty separator); the index fault at 3, -1 and `Int::MAX`; and what stays
+  refused.
+- `loop_parity.rs`'s and `wasm_cli.rs`'s refused examples became a list of lists, since a `for` over a list now
+  compiles.
+- `random_loop_program` builds, pushes, indexes, `get`s, walks and maps a list, from a stream of its own. 176 of 400
+  sampled programs do, asserted over 120: 298 agreed and 102 faulted on both engines.
+- Mutants M533–M540 each red, control green.
+- After the last edit:
+  - the 50,000-program release differential: 45,007 agreed, 4,993 faulted on both, 0 mismatches;
+  - `scripts/clippy.sh -j 4` clean and stamped;
+  - `delulu-wasm` whole (lib 87, `list_parity` 9, `loop_parity` 7, `fault_parity` 6 and the rest) green;
+  - the CLI targets that run the WASM engine green (artifact_review, budget_cli, cli, guard_e2e, json_contract,
+    plugin_cli, release, sandbox_modes_cli, wasm_cli, message_spacing, book).
+
+## 2026-10-20 — the laptop: `Str == Str` on WASM; Study C over all six kernels; two harness and host fixes
+
+**`Str == Str` and `!=`** compile to `__str_eq` (same pointer, then length, then each byte). It is a late helper, emitted
+only in a module that contains an `==` or `!=`. That is detected by `module_any`, a module walker that names every
+expression form, after WASM-INTERN-1's lesson; the list detection uses it too. `list_parity.rs`
+`str_equality_matches_the_interpreter` covers an interned literal against itself, a built string, differing lengths and
+bytes, multi-byte characters, empty strings and split words. The console generator now writes a comparison in about
+half its programs, from a stream of its own. `conformance_parity`'s 2,000 programs assert over 700 comparisons, over 200
+of them equal and over 200 unequal. Mutants M541 (the bytes read from the length prefix) and M542 (`!=` as `==`) are red
+in both tests; control green.
+
+**Study C, all six kernels on one machine.** It ran in the laptop's WSL, release, from a fresh clone of
+`laptop/wasm-list` at `e85fcb5`.
+
+The first run (2026-10-19 18:43 UTC) found two things:
+- the CPython lane reported UNRUN, "no CPython", on a machine that had only `python3`: the harness ran `python`;
+- `wordcount_macro` took 12.01 ms on WASM against 5.35 on the interpreter, 5.58 against 1.69 above start-up. Each
+  host-side `split` wrote every part with its own allocation and four export lookups.
+
+Fixed: `python_command()` tries `python3` then `python` (`the_python_lane_finds_python3_or_python`), and `write_str_list`
+writes a split's list in one allocation and one write.
+
+The second run (18:46 UTC, the same machine, the fixes applied) is published:
+- interpreter 8.9×–489.5× C; WASM **6 of 6**, 9.8×–15.7× C (geo-mean 12.4×);
+- start-up 0.55 ms C, 3.58 interpreter, 6.24 WASM, 11.67 CPython;
+- `wordcount_macro` on WASM 8.70 ms (2.46 above start-up) against the interpreter's 5.61 (2.03). It is still slower,
+  and the table says so.
+
+The previous published run (the cloud VM's, 14:26 UTC) is kept whole in `runs/2026-10-19-vm/`. HOT_PATH_TABLE,
+METHODOLOGY §3.3, README, QUESTIONS (twice), for-agents and REMAINING_WORK 3.4 quote the new run. Criterion 1 is still
+not met. Its coverage half is closed for this suite; its speed half stands.
+
+**Evidence.** `delulu-measure` 15 unit tests (`study_c::tests` with the new one); `list_parity` 10; `conformance_parity` 6;
+mutants above; the second run's `REPORT.md` and `results.json` as published.
+
+## 2026-10-20 — the laptop: every `Str` method on the WASM engine (RW 3.4)
+
+**`trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and `slice`** compile. Each is one host
+import, `delulu:str.str_method(s, method, a, b, lo, hi) -> i32`: the method's number in `STR_METHODS`, its `Str`
+arguments in `a` and `b`, its `Int` arguments in `lo` and `hi`. The host reads the strings, calls the interpreter's own
+`prim::call_str_method`, and writes the answer back as the guest reads it: a string cell, 0 or 1, or a list written in one
+allocation. The WASM engine therefore cannot disagree with the interpreter about Unicode, because there is one
+implementation, not two. Both sides read the argument slots from one table (`str_method_sig` through
+`str_method_arity`). A module that calls none of these methods imports nothing new. With `len` and `split`, every `Str`
+method the checker knows compiles.
+
+The codegen half was committed unfinished at the end of the previous session (`3ae3b3f`, marked WIP); this entry
+finishes it: the host function, the tests, the generator and the records.
+
+`str_parity.rs`:
+- `each_str_method_matches_the_interpreter` — whitespace beyond ASCII (U+3000, tab, newline), `straße` uppercasing to
+  `STRASSE`, a precomposed `é` that does not contain `e`, an empty pattern for `contains` and `replace`, the empty
+  string, and slices with a negative start, an end past the string and crossed bounds;
+- `str_methods_compose_with_the_rest_of_the_fragment` — chained calls in a pure function, a word split from a line with
+  an empty part, a `for` over `chars`, arguments computed from variables, answers compared and counted;
+- `only_a_module_that_calls_a_str_method_imports_the_interface`.
+
+The console generator writes a chain of `Str` methods in about half its programs, from a stream of its own, before the
+comparison line. Its texts include U+3000, `ß`, `ǅ` and `é`; its patterns include the empty one; its slice bounds run
+from −2 to 6. `conformance_parity` asserts each of the eight methods appears in over 100 of its 2,000 programs.
+`fragment_external_programs_are_compile_errors` named `s.trim()` as outside the fragment; it now names `fold`.
+
+Mutants, all red, control green:
+- M543 — the argument counts swapped;
+- M544 — the `Str` arguments reversed;
+- M545 — a `Bool` answer inverted;
+- M546 — `lo` and `hi` swapped;
+- M547 — the import never declared;
+- M548 — the import always declared (red only in the import test);
+- M549 — the generator writing no method (red only in the per-method count).
+
+Measured with `delulu build FILE --target wasm` over the corpus's 17 entry points: still 5 compile. The two that
+stopped at `.trim` move on: `04_effects` now stops at a named function passed as a value (`apply(double, 21)`),
+`telemetry_report` at `parse_float`.
+
+**Evidence.** `str_parity` 3; `conformance_parity` 6; the whole `delulu-wasm` suite (87 unit tests and every test file)
+green; the release differential with the new generator: 50,000 checked, 45,007 agreed, 4,993 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: a function's name as a value on the WASM engine; a generic body brings what it needs (RW 3.4)
+
+**A function named as a value compiles**: `apply(double, 21)`, `xs.map(double)`, `let h = double` and `let g = h`. The
+backend keeps a table, `named`, built by `named_value`:
+- a compilable function becomes a function value whose body is a call to it, so its recursion and an early `return`
+  stay its own;
+- a generic function becomes its own body, inlined as a direct call to it already is.
+
+Either sees what a function's own body sees and nothing of where it is named. A function value of the same name (a
+lambda bound in a block, a generic function's parameter) hides the table, as does a local in a `let`. Direct calls are
+compiled as before, so a module that names no function as a value is unchanged.
+`examples/guide/04_effects.delulu`, which stopped at `apply(double, 21)` once `.trim` compiled, now compiles and prints
+the interpreter's output (`--grant console`, both engines byte for byte). The corpus's entry points: 6 of 17.
+
+**A generic function's body now brings what it needs.** The module's imports and helpers (`Str` methods, `__str_eq`, the
+list helpers, the console) were chosen from the compilable functions' bodies alone, and the string literals were
+interned from them alone. Yet a generic body is inlined into every function that calls it. So a generic using `.trim()`,
+`==` on `Str`s, a list, `println`, or a literal found nowhere else was refused with DL1201. It was refused, never
+miscompiled, but the same body compiled in an ordinary function. Probe, before the fix: DL1201 ("a `Str` method in a
+module compiled without the string interface"); after: the interpreter's output. `body_is_compiled` now decides the
+walks, and a generic body's literals are interned after the others in declaration order, so a module without a generic
+is byte-identical.
+
+`named_fn_parity.rs`:
+- `a_named_function_is_a_value_as_on_the_interpreter` — `apply`, `twice`, a recursive `fact` with an early `return`, a
+  `Str` function, `let`-bound and aliased, `map`, a generic `identity`, and a function named inside a generic body;
+- `a_function_value_or_a_local_of_the_same_name_hides_the_function` — a lambda `double` in a block, a generic parameter
+  named `double`, a local `double` copied by `let`;
+- `a_generic_body_brings_what_it_needs`.
+
+The loop generator, from a stream of its own, declares a top-level `step` in a third of its programs, binds the outer
+`h` to it (`let h = step`), and gives it to `map` in place of a lambda half the time. `random_loop_programs_agree_with_the_interpreter`:
+63 of 400 bind it, 21 map it (asserted over 30 and over 10).
+
+Mutants, all red, control green:
+- M550 — the table empty;
+- M551 — the table before the function values (red in the hiding test);
+- M552 — `let y = double` without its local check;
+- M553 — a compilable function inlined as its body instead of called (red on `fact`'s `return`);
+- M554 — no `let h = double`;
+- M555 — `body_is_compiled` as `is_compilable`;
+- M556 — a generic body's literals not interned;
+- M557 — the generator naming no function.
+
+**Evidence.** `named_fn_parity` 3; `loop_parity` 7; the whole `delulu-wasm` suite green; the release differential with the
+new loop generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: `parse_int` on the WASM engine (RW 3.4)
+
+**`parse_int` compiles.** It is one host import, `delulu:str.parse_int(s) -> (parsed, value)`, which uses WebAssembly's
+multiple results. The host reads the text and calls the interpreter's own `prim::call_builtin("parse_int", …)`. It
+answers 1 and the number for `Some`, or 0 and 0 for `None`, and refuses anything else rather than reading it as `None`.
+The guest builds the `Option[Int]` from the two, as `List.get` builds its own. The import is declared only in a module
+whose compiled bodies call `parse_int`, found by `module_calls_builtin` (a builtin's name cannot be redefined, DL0302).
+`examples/guide/03_errors.delulu` now compiles and prints the interpreter's output on both engines, byte for byte. The
+corpus's entry points: 7 of 17.
+
+`str_parity.rs`:
+- `parse_int_matches_the_interpreter` — padded, signed and tab-and-newline-wrapped text, `0` and `-0`, both ends of the
+  `Int` range and one past it, the empty string, `1_000`, `0x10`, Arabic-Indic digits, an inner space, a word, and a sum
+  over split words;
+- `only_a_module_that_calls_parse_int_imports_it`.
+
+The console generator writes a `match parse_int(…)` line in a third of its programs, from a stream of its own, before the
+comparison line. Its texts are numbers that parse, numbers that do not, and `str` of a generated `Int`.
+`conformance_parity` asserts over 300 programs call it and over 100 print its `None`.
+
+Mutants, all red, control green:
+- M558 — the host answering `None` for every number;
+- M559 — the guest's test inverted;
+- M560 — the import never declared;
+- M561 — the import always declared (red in both import tests);
+- M562 — the generator writing no `parse_int`.
+
+**Evidence.** `str_parity` 5; `conformance_parity` 6; the whole `delulu-wasm` suite green; the release differential with
+the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: `Float` on the WASM engine (RW 3.4)
+
+**`Float` compiles**: `+ - * /`, the six comparisons, negation, `%`, `float(…)`, `int(…)`, `str(…)` and `parse_float`.
+Both engines use IEEE 754, so the guest uses WebAssembly's own `f64` instructions and the answers agree to the bit:
+- a NaN compares false, and `!=` true, on both;
+- `float(i)` is `f64.convert_i64_s` (round to nearest, as Rust's `as f64`);
+- `int(x)` is `i64.trunc_sat_f64_s`: toward zero, saturating at the `Int` range, a NaN to 0, exactly Rust's `as i64`;
+- negation is `f64.neg`.
+
+What WebAssembly lacks, the host computes with the interpreter's own code:
+- `%` is `delulu:float.rem`, Rust's `%`;
+- `str` of a `Float` is `delulu:float.to_str`, the interpreter's `Value::display` itself;
+- `parse_float` is `delulu:str.parse_float`, through `call_builtin` as `parse_int` is.
+
+The foreign interface's `float_to_str` now also calls `Value::display`. The copy of that rule, `format_float`, is
+removed, so there is one implementation, not two. `parse_int` and `parse_float` share `parse_by_builtin`.
+
+A module carries `delulu:float` only if a compiled body makes or takes a `Float`: a literal, `float(…)`,
+`parse_float(…)`, or `Float` written in a signature (`module_uses_floats`). Every other module is byte-identical.
+
+`tests/corpus/tier3-application/telemetry_report.delulu` now compiles. Given a telemetry file with good, bad, exponent,
+`inf` and padded readings, it prints the interpreter's answer on both engines. The corpus's entry points: 8 of 17.
+`01_types` now stops at a record literal.
+
+`float_parity.rs`:
+- `float_arithmetic_matches_the_interpreter` — `0.1 + 0.2`, a third, negative zero, an overflow to infinity, a NaN and
+  its comparisons, `%` with signs and by zero, and the casts at both ends of their ranges;
+- `parse_float_matches_the_interpreter` — padded, signed and exponent text, and `inf`, `nan`, `1e999`, a word, `1.2.3`;
+- `floats_are_held_as_the_interpreter_holds_them` — function signatures, a `var` in a loop, a list pushed, indexed,
+  walked and mapped, an `Option[Float]`;
+- `only_a_module_with_a_float_imports_the_float_interface`.
+
+The console generator writes a `Float` line in a third of its programs, from a stream of its own (`gen_float`). Its leaves
+are exact and inexact, overflow-prone and signed-zero; it uses every operator and an `if` on a comparison; the line is
+printed through `str`, or cast back with `int`. `conformance_parity`: 678 of 2,000 programs, 49 printing a NaN and 15 an
+infinity, asserted over 300, 20 and 10. (A first run printed 10 infinities; a leaf `0.3` became `1.0e200`.)
+
+Mutants, all red, control green:
+- M563 — `+` as `-`;
+- M564 — `<` as `<=` (red in the random programs only, which compare equal operands);
+- M565 — `%` as `rem_euclid`;
+- M566 — the trapping `i64.trunc_f64_s`;
+- M567 — an unsigned conversion;
+- M568 — negation dropped;
+- M569 — the interface never declared;
+- M570 — the interface always declared;
+- M571 — `parse_float` off by an epsilon;
+- M572 — `str` as Rust's `to_string`;
+- M573 — the generator writing no `Float`.
+
+**Evidence.** `float_parity` 4; `conformance_parity` 6; `foreign_parity` 8; the whole `delulu-wasm` suite green; the
+release differential with the new console generator: 50,000 checked, 45,027 agreed, 4,973 both faulted, 0 mismatches.
+
+## 2026-10-20 — the laptop: an empty list typed by the checker on the WASM engine (RW 3.4)
+
+**An empty list whose element type no `let` writes compiles**: `let out = []`, filled by `out.push(i)` later, or `[]`
+passed straight to a function. The backend saw only syntax, so it refused such a list (DL1201). Yet the checker had
+already inferred its type, and `CheckResult::node_types` records the type of every expression node. A new entry point,
+`delulu_wasm::compile_checked(module, check_result)`, threads that table into the codegen (`Cx::node_types`). An empty
+list literal takes its element type from there when the backend holds it: `Int`, `Bool`, `Float` or `Str`
+(`list_scalar`). The command line's three compile sites (`run --engine wasm` in `run_cmd.rs`, and `build --target
+wasm` and the sealed-artifact path in `cli.rs`) now call `compile_checked`. `compile_module` and `compile_module_with`
+pass no types and still refuse such a list rather than guess.
+
+`examples/guide/02_option_and_lists.delulu` now compiles and prints the interpreter's output; the corpus's entry points:
+9 of 17. Of the book's six guide chapters, four now run on the WASM engine: `02`, `03`, `04`, `06`.
+
+Tests:
+- `list_parity.rs` `an_empty_list_takes_the_type_the_checker_inferred` — `let evens = []` then `push`, a function's
+  `let out = []`, `total([])`, lists of `Bool` and `Float` begun empty. The test confirms `compile_module` refuses the
+  program and `compile_checked` compiles it with the interpreter's output.
+- `what_the_list_fragment_leaves_out_is_refused` loses its empty-list case and asserts the rest refused by
+  `compile_checked` too.
+- `wasm_cli.rs` `the_guide_chapters_the_wasm_engine_runs_match_the_interpreter` — chapters `02`, `03` and `04` through
+  the command line, both engines byte for byte.
+
+Mutants, all red, control green:
+- M574 — no inferred type;
+- M575 — an `Int` list typed `Str`;
+- M576 — `run --engine wasm` back on `compile_module_with` (red in the CLI test).

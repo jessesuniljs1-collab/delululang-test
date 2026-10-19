@@ -744,7 +744,11 @@ pub fn call_cap_method_pinned(
             if hi <= lo {
                 return Err(Fault::at("DL0904", "rand.int requires lo < hi", span));
             }
-            Ok(Value::Int(lo + (next_rand() % (hi - lo) as u64) as i64))
+            // The span `hi - lo` is up to 2^64 - 1, past `Int`'s range: computed modulo 2^64 it is exact as a `u64`,
+            // and the drawn offset added modulo 2^64 lands exactly in `lo..hi`. Plain `-` and `+` panicked a debug
+            // build for a span past `Int::MAX` (RAND-SPAN-1); the WASM host has always computed it this way.
+            let span = hi.wrapping_sub(lo) as u64;
+            Ok(Value::Int(lo.wrapping_add((next_rand() % span) as i64)))
         }
         (ResourceKind::Rand, "float") => Ok(Value::Float((next_rand() as f64) / (u64::MAX as f64))),
         // Stage 10 (10e): the null sensor adapter — a read that cannot observe anything says so

@@ -14,8 +14,8 @@
 use std::rc::Rc;
 
 use delulu_check::check_source;
-use delulu_runtime::{Grants, Interp, Value};
-use delulu_wasm::{compile_module, run_main, HostConfig};
+use delulu_runtime::{set_capture, set_rand_seed, take_capture, Grants, Interp, Value};
+use delulu_wasm::{compile_and_run_int, compile_module, run_main, HostConfig};
 
 /// The DL code the interpreter faults with (or "OK" if it does not fault).
 fn interp_fault_code(src: &str) -> String {
@@ -86,4 +86,169 @@ fn a_wasm_stack_overflow_is_dl0905_with_no_backtrace() {
         assert_eq!(detail.lines().count(), 1, "the fault detail must be a single line, got:\n{detail}");
         assert!(!detail.contains("backtrace"), "no guest backtrace may appear in the message: {detail}");
     });
+}
+
+// The WASM engine's faults and refusals, held to the interpreter's — the defects on-demand routine run 4 found while
+// verifying RW 3.4 and could not commit before its usage limit, and those its red-team pass named, redone on the laptop.
+//
+// Each test was red on the backend before its fix: WASM-NEG-1 (`-x` of `Int::MIN` wrapped), WASM-SHORT-1 (`&&`/`||`
+// computed both sides), RAND-SPAN-1 (the interpreter's `rand.int` panicked for a span past `Int::MAX`) and
+// WASM-REFUSAL-1 (a refusal masked by the trap that followed it). The interpreter is the reference: the same output,
+// or both a fault with the same code.
+
+/// Run `main` on both engines and return `(wasm, interp)`: the output, or the fault's text.
+fn run_both(src: &str, cfg: HostConfig, g: Grants, seed: Option<u64>) -> (Result<String, String>, Result<String, String>) {
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "program should check clean:\n{src}\n{:?}", checked.diagnostics);
+    let wasm = compile_module(&checked.module).unwrap_or_else(|e| panic!("should compile to WASM: {e:?}\n{src}"));
+    let w = run_main(&wasm, &cfg).map_err(|e| e.message());
+    set_capture(true);
+    if let Some(s) = seed {
+        set_rand_seed(s);
+    }
+    let i = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root()))).map_err(|e| format!("{e:?}"));
+    let out = take_capture().unwrap_or_default();
+    (w, i.map(|_| out))
+}
+
+fn console() -> (HostConfig, Grants) {
+    (HostConfig { console: true, ..HostConfig::default() }, Grants { console: true, ..Default::default() })
+}
+
+#[test]
+fn negating_int_min_faults_on_both_engines() {
+    let src = "module m\nfn f(x: Int) -> Int { -x }\n";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let interp = Interp::new(&checked.module);
+    for x in [5, -5, 0, i64::MAX, i64::MIN + 1] {
+        assert_eq!(compile_and_run_int(&checked.module, "f", &[x]).ok(), Some(-x), "-({x}) on WASM");
+        assert_eq!(interp.call_int_fn("f", &[x]).ok(), Some(-x), "-({x}) on the interpreter");
+    }
+    let w = compile_and_run_int(&checked.module, "f", &[i64::MIN]);
+    let i = interp.call_int_fn("f", &[i64::MIN]);
+    assert!(i.is_err(), "the interpreter faults negating Int::MIN: {i:?}");
+    assert!(w.is_err(), "so must the WASM engine, not wrap to Int::MIN: {w:?}");
+    assert!(format!("{w:?}").contains("DL0901"), "an overflow, as the interpreter says: {w:?}");
+}
+
+#[test]
+fn and_and_or_short_circuit_on_both_engines() {
+    let src = r#"module m
+
+fn noisy(o: Cap[Console], v: Bool) -> Bool ! {Write} {
+  o.println("right side ran")
+  v
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let z = 0
+  let a = z != 0 && 10 / z > 1
+  let b = z == 0 || 10 / z > 1
+  let c = z == 0 && 10 / (z + 2) > 1
+  let d = z != 0 || 10 % (z + 3) == 1
+  out.println(str(a) + " " + str(b) + " " + str(c) + " " + str(d))
+  let e = false && noisy(out, true)
+  let f = true || noisy(out, false)
+  let g = true && noisy(out, false)
+  let h = false || noisy(out, true)
+  out.println(str(e) + " " + str(f) + " " + str(g) + " " + str(h))
+  var i = 0
+  while i < 5 && 100 / (5 - i) > 0 {
+    i = i + 1
+  }
+  out.println(str(i))
+}
+"#;
+    let (cfg, g) = console();
+    let (w, i) = run_both(src, cfg, g, None);
+    assert_eq!(w, i, "two-engine parity broken for:\n{src}");
+    assert_eq!(
+        w.unwrap(),
+        "false true true true\nright side ran\nright side ran\nfalse true false true\n5\n",
+        "each right side ran only where the left did not decide"
+    );
+}
+
+/// `rand.int(lo, hi)` for a span past `Int::MAX`: the interpreter computed `hi - lo` in `Int` and a debug build
+/// panicked ("attempt to subtract with overflow") — the WASM host computed it modulo 2^64. Seeded, both engines
+/// draw the same values, every one inside `lo..hi`.
+#[test]
+fn rand_int_over_a_span_past_int_max_draws_the_same_values_on_both_engines() {
+    let src = r#"module m
+
+fn main(root: Root) ! {Write, Rand} {
+  let out = root.console()
+  let r = root.rand()
+  let min = 0 - 9223372036854775807 - 1
+  var k = 0
+  var line = ""
+  while k < 8 {
+    let a = r.int(0 - 1, 9223372036854775807)
+    let b = r.int(min, 9223372036854775807)
+    let c = r.int(min, 0)
+    if a < 0 - 1 || c >= 0 { line = line + "OUT " }
+    line = line + str(a) + "," + str(b) + "," + str(c) + ";"
+    k = k + 1
+  }
+  out.println(line)
+}
+"#;
+    for seed in [1u64, 42, 0xDEAD_BEEF] {
+        let cfg = HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() };
+        let g = Grants { console: true, rand: true, ..Default::default() };
+        let (w, i) = run_both(src, cfg, g, Some(seed));
+        assert_eq!(w, i, "two-engine parity broken under seed {seed}");
+        let out = w.unwrap();
+        assert!(!out.contains("OUT"), "every draw inside its range: {out}");
+    }
+}
+
+/// A refused host call returns a placeholder and the guest runs on; matching on the refused read's result then
+/// trapped as an access out of bounds, and that trap was reported instead of the refusal.
+#[test]
+fn a_refusal_is_reported_even_when_the_guest_traps_after_it() {
+    let dir = std::env::temp_dir().join(format!("delulu_wasm_refusal_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
+    let root = dir.to_string_lossy().replace('\\', "/");
+    let src = format!(
+        r#"module m
+
+fn show(r: Result[Str, IoErr], o: Cap[Console]) ! {{Write}} {{
+  match r {{
+    Ok(c) => o.println("ok " + str(c.len())),
+    Err(e) => match e {{
+      NotFound => o.println("NotFound"),
+      _ => o.println("other"),
+    }},
+  }}
+}}
+
+fn main(root: Root) ! {{Write, Read}} {{
+  let out = root.console()
+  let fs = root.fs_read("{root}")
+  show(fs.read_text("a.txt"), out)
+  show(fs.read_text("nope.txt"), out)
+  show(fs.read_text("../outside.txt"), out)
+  out.println("not reached")
+}}
+"#
+    );
+    let granted = (
+        HostConfig { console: true, fs_read_roots: vec![dir.clone()], ..HostConfig::default() },
+        Grants { console: true, fs_read: vec![root.clone()], ..Default::default() },
+    );
+    let (cfg, g) = granted;
+    let (w, i) = run_both(&src, cfg, g, None);
+    let (cfg, g) = console();
+    let (w_ungranted, i_ungranted) = run_both(&src, cfg, g, None);
+    let _ = std::fs::remove_dir_all(&dir);
+    let (w, i) = (w.expect_err("the escape is refused on WASM"), i.expect_err("and on the interpreter"));
+    assert!(i.contains("DL0904"), "the interpreter: {i}");
+    assert!(w.contains("DL0904") && w.contains("escapes"), "the WASM engine names the refusal, not the trap after it: {w}");
+    let (w, i) = (w_ungranted.expect_err("ungranted on WASM"), i_ungranted.expect_err("ungranted on the interpreter"));
+    assert!(i.contains("DL0703"), "the interpreter: {i}");
+    assert!(w.contains("DL0703"), "the WASM engine names the ungranted read: {w}");
 }

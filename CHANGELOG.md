@@ -11,6 +11,153 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an empty list typed by the checker on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` and `delulu build --target wasm` compile an empty list whose element type is not written**
+  (`let out = []`, filled by `out.push(i)` later). The type the checker inferred is used.
+  `examples/guide/02_option_and_lists.delulu` now runs on the WASM engine with the interpreter's output. For embedders:
+  `delulu_wasm::compile_checked(module, check_result)` compiles with everything the checker knows;
+  `compile_module` and `compile_module_with` still refuse such a list rather than guess.
+
+## Unreleased — `Float` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `Float` arithmetic** — `+ - * / %`, comparisons, negation, `float(…)`, `int(…)`,
+  `str(…)` and `parse_float` — in variables, lists, options and function signatures. The answers are the interpreter's
+  to the bit: both engines use IEEE 754, and `%`, `str` and `parse_float` are computed by the interpreter's own code.
+  `tests/corpus/tier3-application/telemetry_report.delulu` now runs on the WASM engine with the interpreter's output.
+  A module with no `Float` in it compiles to the same module as before.
+
+## Unreleased — `parse_int` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `parse_int`.** The WASM engine hands the text to the interpreter's own
+  implementation, so it gives the same answers: surrounding whitespace ignored, a sign allowed, `None` past the `Int`
+  range and for anything that is not a plain decimal number. `examples/guide/03_errors.delulu` now runs on the WASM engine
+  with the interpreter's output.
+
+## Unreleased — a function's name as a value on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a function named as a value** — `apply(double, 21)`, `xs.map(double)`,
+  `let h = double` — whether the function is generic or not. Calling the value calls the function, so its recursion and
+  an early `return` behave as in a direct call. A function value or a local of the same name hides it, as on the
+  interpreter. `examples/guide/04_effects.delulu` now runs on the WASM engine, with the interpreter's output.
+- **Fixed: a generic function whose body used a `Str` method, `==` on two `Str`s, a list, the console or a string
+  literal found nowhere else was refused by `--engine wasm` (`DL1201`)**, although the same body compiled in an
+  ordinary function. The module now carries what a generic body needs.
+
+## Unreleased — every `Str` method on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and
+  `slice`.** With `len` and `split`, every `Str` method compiles now. The WASM engine hands each call to the
+  interpreter's own implementation, so the answers are the same: whitespace beyond ASCII, `ß` uppercasing to `SS`,
+  character-indexed slices, and an empty `replace` pattern that leaves the string alone. A program that calls none of
+  them compiles to the same module as before.
+
+## Unreleased — `Str == Str` on the WASM engine; the performance figures re-measured over all six benchmarks, 2026-10-20
+
+- **Added: `--engine wasm` compiles `==` and `!=` on two `Str`s.** It compares the bytes, as the interpreter does.
+- **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`, `measurements/METHODOLOGY.md`) are Study C's run of 2026-10-19 18:46 UTC on the laptop's WSL,
+  every lane but Go. **The WASM engine runs all six benchmarks**, 9.8×–15.7× slower than C (geo-mean 12.4×), and the
+  interpreter is 8.9×–489.5× slower. Both are whole processes, start-up included. DeluluLang is still not competitive with
+  C, and the hot-path criterion (geo-mean ≤ 2.5×) is still not met. The previous run is kept whole in
+  `measurements/study-c/runs/2026-10-19-vm/`.
+- **Fixed: `Str.split` on the WASM engine wrote each part with its own allocation,** which left `wordcount_macro` more
+  than twice as slow there as on the interpreter. It now writes the whole list at once; the WASM engine is still somewhat
+  slower on that benchmark, and the table says so.
+- **Fixed: Study C reported CPython missing on a machine that had only `python3`.** It now uses `python3`, or else
+  `python`.
+
+## Unreleased — `List` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a `List`** of `Int`, `Bool`, `Float`, `Str` or a sum type: a literal, `len`,
+  `is_empty`, `get`, `push`, indexing, `for` over it and `map`. It also compiles `Str.split`. Each behaves as on the
+  interpreter: two names for a list share it, a `for` walks the list as it was when the loop began, `get` answers `None`
+  outside the list, and an index outside it stops the program with `DL0903` in the same words. All six Study-C benchmark
+  programs now run on the WASM engine; the published figures are not yet re-measured for the two that newly do. A list of
+  lists, `pop`, `filter`, `fold`, `sort` and `Str == Str` still run on the interpreter only (`DL1201` on
+  `--engine wasm`).
+- **Fixed (WASM-IFTY-1): on the WASM engine, an `if` or `match` whose value was a `Str` variable failed.** An `if` choosing
+  between two string variables stopped with "invalid WASM module" (`DL0904`), and a `match` arm binding a string was
+  refused, where the interpreter ran both.
+- **Fixed (WASM-INTERN-1): a string literal inside a lambda crashed `delulu run --engine wasm`** with an internal panic.
+
+## Unreleased — the microVM's host: `doctor` reports KVM's posture, and the guest's absences are pinned, 2026-10-19
+
+- **Added: `delulu doctor` reports `KVM host posture`** on a Linux host with KVM: each vendor module's `nested`
+  setting, `/dev/kvm`'s mode and the kernel release. Nested virtualization being on, or a `/dev/kvm` every local user may
+  open, is a note naming the 2026 escapes that use them, Januscape (CVE-2026-53359) and Zapscape (CVE-2026-64561), and
+  the remedy. It never fails the run.
+- **Documented: what the microVM tier needs from its host** (`docs/DEPLOYMENT.md`, *The microVM's host*): a patched
+  kernel, KVM loaded with `nested=0`, `/dev/kvm` for the `kvm` group, and no network device for the VM. The table names
+  the path each 2026 escape takes, PwnEscape (CVE-2026-99999) among them, and why a DeluluLang guest has none of them.
+- **Hardened: the guest's absences are enforced, not just written down.** The guest kernel's configuration now names
+  network devices, virtio-net, TUN, vhost-net, virtualization and KVM as off, and the image build refuses a kernel with
+  any of them on. Tests pin that list and the launcher's whole device list: one vsock, no network interface, no drive.
+
+## Unreleased — the WASM engine's faults, refusals and output match the interpreter's; `rand.int` over any span, 2026-10-19
+
+- **Fixed (WASM-SHORT-1): on the WASM engine, `&&` and `||` evaluated their right side even when the left side had
+  decided the answer.** `z != 0 && 10 / z > 1` with `z = 0` stopped with a division by zero on `--engine wasm` and was
+  `false` on the interpreter. A right side that printed printed too. Both operators now short-circuit on both engines.
+- **Fixed (WASM-NEG-1): on the WASM engine, `-x` of `Int::MIN` gave `Int::MIN`.** The interpreter stops with `DL0901`
+  (integer overflow), and the WASM engine now does too.
+- **Fixed (WASM-REFUSAL-1): a refused capability call could be reported as a memory error on the WASM engine.** For
+  example, a program that read a path outside its `fs.read` grant and matched on the result's error stopped with
+  `DL0903` (memory access out of bounds), where the interpreter reports `DL0904` (the path escapes the granted scope).
+  An ungranted read gave `DL0903` for `DL0703`. The WASM engine now reports the refusal.
+- **Fixed (WASM-OUTPUT-1): on the WASM engine, `delulu run` printed a program's output only when the program finished.**
+  A program that printed and then faulted, was refused or was stopped by its `--limits` budget showed nothing on stdout.
+  Each line is now printed when the program prints it, as on the interpreter.
+- **Fixed (RAND-SPAN-1): `rand.int(lo, hi)` with `hi - lo` greater than `Int::MAX` crashed a debug build of the
+  interpreter** (a release build drew the right values). Every span now draws the same values on both engines, each
+  inside `lo..hi`.
+
+## Unreleased — an exhausted WASM memory is no longer reported as an integer overflow, 2026-10-19
+
+- **Fixed (WASM-OOM-1): on the WASM engine, a program whose memory could not grow any further was reported as
+  `DL0901: integer overflow`.** Since RW 3.4 the engine's memory grows, up to WebAssembly's 4 GiB; an allocation past that
+  — reachable only with a memory budget above 4 GiB (`--limits mem=`), since the default 1 GiB budget stops a program
+  first — stopped with an overflow message although the program did no arithmetic. It now stops with `DL0903`, whose text
+  says the WASM engine's memory is exhausted.
+
+## Unreleased — the performance figures re-measured, and Study C checks each lane's answer, 2026-10-19
+
+- **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`) are Study C's run of 2026-10-19 — release build, all four lanes on one Linux VM. The interpreter is
+  8.9×–359.0× slower than C there, and the WASM engine, which now runs 4 of the 6 benchmarks, 6.5×–11.5×; both are whole
+  processes, start-up included. The v1.0 figures (2.0×–60.5×, measured on a machine where a C process took 5–6 ms to
+  start) are kept whole in `measurements/study-c/runs/2026-07-20/`. DeluluLang is still not competitive with C, and the
+  hot-path criterion is still not met.
+- **Fixed: Study C timed a lane whatever it printed.** A lane that exited 0 with another answer than the interpreter's would
+  have been timed as though it had done the work; it is now listed, with both answers, among the benchmarks that lane
+  could not run.
+- **Fixed: Study C timed in whole milliseconds,** which read a C process on Linux as 0 or 1 ms and dropped a benchmark whose
+  C time read 0 from every ratio without saying so. It times in microseconds now, names any benchmark a ratio leaves out,
+  and records the date and the machine it ran on (`results.json` schema `study-c/2`).
+- **Added: Study C measures start-up.** A program that prints `0` and nothing else runs on every lane (0.92 ms for C, 4.70 ms
+  for the interpreter, 7.01 ms for the WASM engine), and the report shows each benchmark less its lane's start-up, so work
+  can be told from start-up; no ratio is computed from those differences.
+
+## Unreleased — loops run on the WASM engine, and a lambda inlined there sees its own names, 2026-10-19
+
+- **Added (RW 3.4, D-V2-163): `delulu run --engine wasm` compiles `while`, `break`, `continue`, assignment to a `var`, and
+  `Str.len()`.** Before, any of these made the program DL1201 and it had to run on the interpreter. Four of the six
+  Study-C kernels now run on the WASM engine (one before); in a debug build `loop_sum_1m` took 29 ms there against
+  2,244 ms on the interpreter. `for` and every `List` remain DL1201. `str` of a `Bool` compiles in every program now (it
+  needed a program that also used a foreign library).
+- **Fixed: a WASM program's strings may grow past its first megabyte.** The engine's heap was a fixed 1 MiB that was never
+  reused, so a program that built enough strings — recursively, before loops compiled — stopped with `DL0903: memory access
+  out of bounds` where the interpreter ran it; reading a file larger than that failed the same way. The memory now grows,
+  and the run's memory budget (`--limits mem=`) holds it, as on the interpreter.
+- **Fixed (WASM-HYGIENE-1): a lambda passed to a generic function could read the wrong variable on the WASM engine.** The
+  engine inlines both, and a name in the lambda found the generic function's own variable of that name first: a program
+  printed 103 on WASM and 4 on the interpreter. Each inlined body now sees only the names of where it was written.
+- **Fixed (WASM-HYGIENE-2): on the WASM engine, a function value bound inside an `if`, `else` or `while` body replaced the
+  outer one of the same name for the rest of the function.** `let f = fn…` in such a block went into the function's own
+  table of function values, so a later `f(0)` outside the block called the inner `f`: a program printed `2` and then `2` on
+  WASM where the interpreter printed `2` and then `1`. A block's function values now end with the block, as its variables
+  do. (The `if` form miscompiled before loops did too.)
+
 ## Unreleased — `grants list` and `grants tree` read a large tree, and the tree shows what the broker enforces, 2026-10-19
 
 - **Fixed (TREE-STATE-1, RW 4.70): `delulu grants tree` showed a child of an expired grant as `[live]`.** It read each

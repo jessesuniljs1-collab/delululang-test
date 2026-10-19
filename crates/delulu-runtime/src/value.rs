@@ -6,7 +6,7 @@
 //! best-effort zeroized on drop.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -242,7 +242,17 @@ impl Value {
     }
 
     /// Human display (used by `println`, `str`, and the REPL). Opaque values never reveal.
+    ///
+    /// A value can hold itself through a mutable cell — `n.next = Some(n)` — so the walk keeps the cells it is inside, and
+    /// a cell met again inside itself renders as its own shape around `...`: `Node { ... }`, `[...]`, `{...}`, as Python
+    /// renders a list that holds itself. Without that, `str` of such a value recursed until the stack overflowed and the
+    /// process died (DISPLAY-CYCLE-1).
     pub fn display(&self) -> String {
+        self.display_in(&mut BTreeSet::new())
+    }
+
+    /// `display`, inside the cells in `inside` (each a `List`, `Map` or `Record` cell's address).
+    fn display_in(&self, inside: &mut BTreeSet<usize>) -> String {
         match self {
             Value::Int(i) => i.to_string(),
             Value::Float(x) => {
@@ -257,24 +267,40 @@ impl Value {
             Value::Unit => "()".to_string(),
             // Ascending by key, which is the same order `keys()` and `values()` give — so what a
             // test compares and what a program iterates cannot disagree.
-            Value::Map(m) => {
-                let inner: Vec<String> =
-                    m.borrow().iter().map(|(k, v)| format!("{}: {}", k.to_value().display(), v.display())).collect();
-                format!("{{{}}}", inner.join(", "))
-            }
-            Value::List(items) => {
-                let inner: Vec<String> = items.borrow().iter().map(|v| v.display()).collect();
-                format!("[{}]", inner.join(", "))
-            }
-            Value::Record { name, fields } => {
-                let inner: Vec<String> = fields.borrow().iter().map(|(n, v)| format!("{n}: {}", v.display())).collect();
-                format!("{name} {{ {} }}", inner.join(", "))
-            }
+            Value::Map(m) => within(
+                inside,
+                cell_addr(m),
+                || "{...}".to_string(),
+                |inside| {
+                    let inner: Vec<String> =
+                        m.borrow().iter().map(|(k, v)| format!("{}: {}", k.to_value().display(), v.display_in(inside))).collect();
+                    format!("{{{}}}", inner.join(", "))
+                },
+            ),
+            Value::List(items) => within(
+                inside,
+                cell_addr(items),
+                || "[...]".to_string(),
+                |inside| {
+                    let inner: Vec<String> = items.borrow().iter().map(|v| v.display_in(inside)).collect();
+                    format!("[{}]", inner.join(", "))
+                },
+            ),
+            Value::Record { name, fields } => within(
+                inside,
+                cell_addr(fields),
+                || format!("{name} {{ ... }}"),
+                |inside| {
+                    let inner: Vec<String> =
+                        fields.borrow().iter().map(|(n, v)| format!("{n}: {}", v.display_in(inside))).collect();
+                    format!("{name} {{ {} }}", inner.join(", "))
+                },
+            ),
             Value::Variant { name, fields } => {
                 if fields.is_empty() {
                     name.to_string()
                 } else {
-                    let inner: Vec<String> = fields.iter().map(|v| v.display()).collect();
+                    let inner: Vec<String> = fields.iter().map(|v| v.display_in(inside)).collect();
                     format!("{name}({})", inner.join(", "))
                 }
             }
@@ -308,6 +334,13 @@ impl Value {
     /// would let Rust code call it in contexts the language's own rules never sanctioned.
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &Value) -> bool {
+        self.eq_in(other, &mut BTreeSet::new())
+    }
+
+    /// `eq`, with the pairs of cells already being compared in `assumed`. A pair met again is taken as equal: the two
+    /// values then differ only if something else they hold does, and the walk of two values that hold themselves ends. A
+    /// cell is never equal to itself just for being itself — `[nan] == [nan]` is `false`, as `nan == nan` is.
+    fn eq_in(&self, other: &Value, assumed: &mut BTreeSet<(usize, usize)>) -> bool {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
@@ -315,15 +348,57 @@ impl Value {
             (Value::Str(a), Value::Str(b)) => a == b,
             (Value::Unit, Value::Unit) => true,
             (Value::Variant { name: n1, fields: f1 }, Value::Variant { name: n2, fields: f2 }) => {
-                n1 == n2 && f1.len() == f2.len() && f1.iter().zip(f2.iter()).all(|(a, b)| a.eq(b))
+                n1 == n2 && f1.len() == f2.len() && f1.iter().zip(f2.iter()).all(|(a, b)| a.eq_in(b, assumed))
             }
             (Value::List(a), Value::List(b)) => {
+                if !assumed.insert((cell_addr(a), cell_addr(b))) {
+                    return true;
+                }
                 let (a, b) = (a.borrow(), b.borrow());
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.eq(y))
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.eq_in(y, assumed))
+            }
+            // A record equals one of the same type whose fields are equal, field by field; a map, one with the same keys
+            // holding equal values (both walk ascending by key, so the walks pair each key with itself). EQ-RECORD-1:
+            // neither had an arm, so `p == p` was `false` and `p != p` `true` — for a record or a map whose contents the
+            // checker admits to `==` — and `List.contains` and `assert_eq` answered the same wrong way.
+            (Value::Record { name: n1, fields: f1 }, Value::Record { name: n2, fields: f2 }) => {
+                if !assumed.insert((cell_addr(f1), cell_addr(f2))) {
+                    return true;
+                }
+                let (a, b) = (f1.borrow(), f2.borrow());
+                n1 == n2 && a.len() == b.len() && a.iter().zip(b.iter()).all(|((k1, x), (k2, y))| k1 == k2 && x.eq_in(y, assumed))
+            }
+            (Value::Map(a), Value::Map(b)) => {
+                if !assumed.insert((cell_addr(a), cell_addr(b))) {
+                    return true;
+                }
+                let (a, b) = (a.borrow(), b.borrow());
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|((k1, x), (k2, y))| k1 == k2 && x.eq_in(y, assumed))
             }
             _ => false,
         }
     }
+}
+
+/// A mutable cell's address — what tells one `List`, `Map` or `Record` cell from another while a value is walked.
+fn cell_addr<T>(cell: &Rc<RefCell<T>>) -> usize {
+    Rc::as_ptr(cell) as *const () as usize
+}
+
+/// Render the cell at `addr` with `render`, marked as being walked while it renders — or `again` if it already is, so a
+/// value that holds itself renders in finite text (`Value::display`, DISPLAY-CYCLE-1).
+fn within(
+    inside: &mut BTreeSet<usize>,
+    addr: usize,
+    again: impl FnOnce() -> String,
+    render: impl FnOnce(&mut BTreeSet<usize>) -> String,
+) -> String {
+    if !inside.insert(addr) {
+        return again();
+    }
+    let s = render(inside);
+    inside.remove(&addr);
+    s
 }
 
 impl fmt::Debug for Value {
@@ -1012,5 +1087,31 @@ mod teardown_tests {
             }
             _ => panic!("expected a variant"),
         }
+    }
+}
+
+#[cfg(test)]
+mod cycle_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// A map holding, under `key`, a record `W` whose one field is that same map — a cycle through a `Map` cell, which no
+    /// program in `value_semantics.rs` builds as directly.
+    fn map_holding_itself(key: &str) -> Value {
+        let m = Rc::new(RefCell::new(BTreeMap::new()));
+        let w =
+            Value::Record { name: Rc::from("W"), fields: Rc::new(RefCell::new(vec![("m".to_string(), Value::Map(m.clone()))])) };
+        m.borrow_mut().insert(MapKey::Str(key.to_string()), w);
+        Value::Map(m)
+    }
+
+    /// DISPLAY-CYCLE-1 and EQ-RECORD-1 through a `Map` cell: it renders `{...}` where it meets itself, equals itself and
+    /// another built the same way, and not one under another key.
+    #[test]
+    fn a_map_that_holds_itself_renders_and_compares_in_finite_time() {
+        let (a, b, c) = (map_holding_itself("k"), map_holding_itself("k"), map_holding_itself("j"));
+        assert_eq!(a.display(), "{k: W { m: {...} }}");
+        assert!(a.eq(&a) && a.eq(&b) && b.eq(&a), "equal to itself and to its twin");
+        assert!(!a.eq(&c), "not to one under another key");
     }
 }

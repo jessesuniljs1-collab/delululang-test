@@ -3913,6 +3913,70 @@ the daemon's text format — a test holds the two to one text byte for byte. (4)
 its children from one index, drawn from a stack rather than a call per level (a node's depth has no bound at its creation),
 each node in its inherited state. (5) `List` and its answer are unchanged. Display only: no decision reads either text.
 
+## D-V2-163 — The WASM fragment takes loops, a growing memory and `Str.len()`; an inlined body sees the names of where it was written (RW 3.4, WASM-HYGIENE-1) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-19): five of the six Study-C kernels were DL1201, `loop_sum_1m`, `string_build_20k`
+and `nested_calls_macro` on `while` alone (and `Str.len()`); the WASM heap was a fixed 1 MiB, never reused, so a program
+whose strings added up past it trapped (`DL0903`) where the interpreter ran it — witnessed with a recursion that compiled
+already; and the backend's inliner looked a name up through every frame below it, so a lambda passed to a generic function
+read the generic's own variable (WASM-HYGIENE-1: 103 on WASM, 4 on the interpreter).
+
+**Decision.** (1) `while c { body }` lowers to `block { loop { br_if 1 (!c); body; br 0 } }`; `break` and `continue` branch to
+the enclosing loop's block and loop, counted by a label depth that `Cx::emit` keeps for every `block`, `loop`, `if` and
+`end`. (2) Assignment to a local: the variable's slot, the value compiled at its type; the checker has already held it to a
+`var`. An assignment from inside an inlined function value to a variable of the frame that defined it is refused (DL1201):
+the interpreter's closures share their frame, and the backend does not reproduce that sharing for writes — it is not
+guessed. An inlined body's `break`/`continue` reach no loop of its caller's. (3) `for` and every `List` stay DL1201. (4)
+Every guest allocation goes through one helper, `__alloc`, which grows the memory by the pages an allocation needs, and
+traps when it cannot; the host's allocator grows it by the same rule. The run's memory budget holds the growth, as it holds
+the interpreter's. (5) `Str.len()` counts Unicode scalar values, as the interpreter does (`__str_len`: the bytes that do not
+continue a character; a guest string is UTF-8). (6) An inlined body sees the frames of where it was written and no others:
+a generic function's body none of its caller's, a lambda's the frames visible at its definition (`Callable` records them;
+`Cx::hidden` hides the rest from every lookup). (7) The interpreter stays the reference engine and `--engine wasm` stays
+opt-in. The Study-C table is not re-measured by this decision (`HOT_PATH_TABLE.md` says so).
+
+## D-V2-164 — The WASM fragment takes `List`: shared headers, a snapshot `for`, `split` and the index fault in the interpreter's own words (RW 3.4) — TAKEN (head chef, 2026-10-20, under the owner's delegation)
+
+**Measured first** (the laptop, 2026-10-20): the last two Study-C kernels, `wordcount_macro` (`Str.split`, `len`) and
+`list_map_macro` (a list literal, `map`, `len`), were DL1201 on `List` alone. D-V2-163 (3) had left `for` and every `List`
+outside. Two defects were found and witnessed red while building this:
+- **WASM-IFTY-1.** `if`'s block type was guessed from the then-branch's syntax, and a variable was guessed `Int`. An `if`
+  choosing between two `Str` variables compiled to a module wasmtime refused at run time ("invalid WASM module", DL0904),
+  and a `match` arm binding a `Str` was refused.
+- **WASM-INTERN-1.** String literals inside a lambda were never interned. `apply(fn(s: Str) -> Str { s + "!" }, "a")`
+  panicked `compile_module` at `expect("interned")`.
+
+**Decision.**
+1. **The representation.** A `List[T]` of a scalar (`Int`, `Bool`, `Float`, `Str`, a sum type) is an i32 pointer to a
+   header `[len][cap][data]`, with `cap` 8-byte slots at `data`. `let ys = xs` names the same header, so a `push` through
+   either is seen by both, as on the interpreter (`Rc<RefCell<Vec>>`). A list of lists stays DL1201.
+2. **Growth.** `__list_slot` doubles a full list's slots into a fresh allocation and leaves the old ones untouched; the
+   bump heap never frees.
+3. **`for`.** It reads the length and the slots pointer once, so it walks the list as it was when the loop began. That
+   is the interpreter's snapshot, made exact by (2) and by `pop` staying outside: `pop` would let a later `push` reuse a
+   slot inside a running `for`'s snapshot. `pop`, `filter`, `find`, `fold`, `sort`, `reverse` and `concat` stay DL1201
+   until each is built.
+4. **`push`.** It computes its value before the list grows, as the interpreter does: `xs.push(xs.len())` pushes the old
+   length.
+5. **`get` and indexing.** `get` answers `None` outside the list, a negative index included. An index outside it faults
+   DL0903 in the interpreter's own words, through `delulu:list.index_fault`, whose record `trap_or_refusal` reports.
+6. **`Str.split`.** It runs host-side by the interpreter's rule (`delulu:list.str_split`): the same Rust `split`, and
+   `chars` for an empty separator. A pure helper needs no grant and records no effect.
+7. **Imports and helpers.** The two `delulu:list` imports and the two helpers are emitted only in a module that uses a
+   list, after the actors' imports and after the user functions, so every other module's bytes are unchanged.
+8. **Reference capabilities.** A reference-capability prefix (`ref List[Int]`) is looked through: it is the checker's
+   discipline, and the value is represented the same either way.
+9. **`run_int_fn`.** It runs under the full host with nothing granted, so a pure function that uses a list can run.
+10. **Block types (WASM-IFTY-1).** An `if`'s and a `match`'s block type is set from what the first branch compiled to, and
+    the context-free guess is deleted.
+11. **Interning (WASM-INTERN-1).** String collection descends into lambdas, lists, records, fields and indexes, and so
+    does the import scan.
+
+**Evidence.** `list_parity.rs` (9 tests); `loop_parity.rs`'s random programs now build, push, index, `get`, walk and map
+lists (176 of 400, asserted over 120); mutants M533–M540 red, control green; the release differential in `V2_LOG.md`.
+**Not re-measured:** Study C's table keeps its 2026-10-19 rows; all six kernels compile and print the interpreter's
+answers, and a run over all six on one machine is next.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

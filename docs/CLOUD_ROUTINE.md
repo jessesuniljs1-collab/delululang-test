@@ -74,6 +74,14 @@ without it Claude Code runs Opus 5.5 at `medium`, its default (official docs, re
 the settings reference (read 2026-10-17) says a top-level `effortLevel` in a project file applies to every model, but Opus 5.5
 ignores one in *user* settings, and `modelSettings` is how a level is saved per model. The routine's own `environment_variables`
 (`CLAUDE_CODE_EFFORT_LEVEL`) was tried and the API stored nothing, so the repository file is the one control (D-V2-146).
+**Since 2026-10-19** the file also sets `env.CLAUDE_CODE_EFFORT_LEVEL` to `xhigh`. The owner saw the routine's runs at
+`medium` although both keys above said `xhigh`, so something in the cloud session was setting effort explicitly, and an explicit
+choice outranks every settings key. The environment variable outranks `--effort`, `/effort`, `modelSettings` and
+`effortLevel` (the environment-variable reference, read 2026-10-19), and a project file may set it. The routine API refuses it
+outright now: `session_request.environment_variables is not supported on triggers` (HTTP 400, 2026-10-19). The two places
+that can carry it are this file and the cloud environment's own variables (claude.ai → the routine → Edit → the environment
+→ Environment variables), which only the owner can edit. The variable also holds every sous-chef at `xhigh`, because a
+sub-agent's own `effort` does not outrank it.
 
 **Models (the owner, 2026-09-28: *"run Opus 5.5 at xhigh effort. if needed use sonnet 5.5 (latest) as agents and haiku 5.5 will be launched in coming weeks, use haiku 5.5 as agent after launching"*).** The head chef is **Opus 5.5 at xhigh** (the
 routine's setting). **Sous-chefs, where one is needed, are Sonnet 5.5** (`claude-sonnet-5-5`, the
@@ -204,7 +212,7 @@ another OS, and then takes about seven minutes itself (run 5).
    ../launch-wt launch/2.0.0` with its own `CARGO_TARGET_DIR` (the build is 2.0.0's); `git merge --no-ff origin/master`; move
    `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
-   rebuild; run `doctor --check` and the document gates there; commit, push the branch, and dispatch `ci.yml`
+   rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document gates there; commit, push the branch, and dispatch `ci.yml`
    (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
    (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free).
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
@@ -276,7 +284,7 @@ Miri jobs run for hours. Such a run's test jobs say green for the whole suite, b
 named on a runner, dispatch `witness.yml` with its filter beside it — 2–4 minutes on a warm cache. Lint macOS and
 Windows code in the VM first — `rustup target add aarch64-apple-darwin x86_64-apple-darwin
 x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-musl`, then `scripts/check-other-os.sh`
-(clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `cargo clippy --workspace --all-targets -- -D warnings`; the affected
+(clippy `-D warnings` for all five — musl is the microVM guest's — compiled and never run) — so a runner is spent on the witness, not on a typo. `scripts/clippy.sh -j 4` — the workspace clippy, stamped: the pre-commit hook refuses a commit that stages Rust inputs it has not passed (on-demand run 4: a test written after the last clippy turned `master` red on `lints`, `81da0ae`), so run it after the LAST `.rs` edit and before every commit that holds one, merges included; the affected
 tests, then `cargo run -p delulu-survey -- build` (the suite checks the map: run 5's first suite lost four
 tests to a stale one), then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
 exit code; records written after it need only a second `build` and the gates that read documents —

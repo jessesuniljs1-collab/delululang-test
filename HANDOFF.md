@@ -503,7 +503,8 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 cargo build --release                              # first build fetches everything
 cargo test --workspace --no-fail-fast              # 150 test binaries (--no-fail-fast MATTERS:
                                                    #  without it cargo stops at the first failing target)
-cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
+scripts/clippy.sh -j 4                             # the workspace clippy (-D warnings), ZERO warnings, and a
+                                                   #  stamp the pre-commit hook checks for any Rust commit
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # every case an exact exit code; it counts its own
 cargo run -p delulu-survey -- build                # ALWAYS, after any change
 ./target/release/delulu doctor                     # the health command: environment,
@@ -753,7 +754,10 @@ wins, and you should update the memory to match.
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
   2026-10-15 — no longer used as an agent, §11.1). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
-  `medium` effort — the repository's `effortLevel: xhigh` is what raises them; a cybersecurity-flagged
+  `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
+  `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
+  both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
+  environment variables on a trigger. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 
@@ -763,7 +767,10 @@ wins, and you should update the memory to match.
   with `RUSTFLAGS=--cfg delulu_kvm`; ordinary Linux runs use `~/delulu-gnu-target`. **Build a guest
   image from a clone on the Linux filesystem**, not from `/mnt/d` — libffi's configure fails on `drvfs`.
   From Git-Bash run WSL as `MSYS_NO_PATHCONV=1 wsl -e bash /mnt/d/…/script.sh`, and `wsl --shutdown`
-  afterwards to give its memory back.
+  afterwards to give its memory back. **2026-10-19:** the boot command is `modprobe kvm_amd; chgrp kvm /dev/kvm; chmod
+  660 /dev/kvm`, so `/dev/kvm` is the group's. `kvm_amd`'s `nested` defaults to on, though, and the guests never nest:
+  the next time the lab is used, make it `modprobe kvm_amd nested=0` (DEPLOYMENT.md, *The microVM's host*; RW 4.71). That
+  day KVM was not loaded at all: there was no `/dev/kvm` and no `kvm_amd` module.
 - **The GitHub CLI** is at `C:\Program Files\GitHub CLI\gh.exe`, not on Git-Bash's `PATH`; one job's
   log: `gh api --allow-escape-sequences repos/…/actions/jobs/<id>/logs` (only once the job finishes).
 - **Agent-pass folders live outside the repository**, at `D:\nelan\DeluluLang-agent-transcripts\` —
@@ -1074,6 +1081,49 @@ spells the same thing?**
   key: for every answer that grows with history, find the size limit it will meet and what its client does when it cannot be
   sent — a dropped connection reads as "unreachable", and a monitor that hears "unreachable" stops.
 
+- **WASM-HYGIENE-1 — an inlined lambda read the generic function's variable** (the laptop, 2026-10-19, D-V2-163): the WASM
+  backend inlines generic functions and the lambdas passed to them, and looked every name up through all the frames below
+  the inlined body — so `apply(fn(v) { v + n }, 3)`, with `apply` declaring its own `n`, read that one: 103 on WASM, 4 on
+  the interpreter, silently. The 50,000-program differential gate never generated a lambda. Search key: wherever code is
+  moved to where it is used (inlining, macros, templates), its names must still mean what they meant where it was written —
+  and a differential fuzzer only covers the shapes its generator writes.
+
+- **WASM-HYGIENE-2 — an inner block's function value replaced the outer one** (on-demand routine run 4, 2026-10-19, RW 3.8):
+  the same backend keeps locals in one table and function values in another, and a block opened a frame in the first only,
+  so `let f = fn…` inside an `if` or a `while` body replaced the outer `f` for the rest of the function — `2 / 1` on the
+  interpreter, `2 / 2` on WASM; on `master` before RW 3.4 too (the `if` form). Found while verifying WASM-HYGIENE-1's fix,
+  which had asked which frames an inlined body sees and not whether each block opens each kind of frame. The line above
+  said the gate never generated a lambda, and the generator stayed as it was: it binds, calls and shadows one now, its count
+  asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
+  a generator cannot write a shape, teach it the shape in the same change.
+
+- **WASM-IFTY-1 and WASM-INTERN-1 — a guess and a walk that missed a form** (the laptop, 2026-10-20, while building the WASM
+  `List`, D-V2-164, RW 3.15, 3.16). The backend typed an `if` before compiling it, from a context-free guess in which every
+  variable was `Int`. Two `Str` variables built a module wasmtime refused as invalid at run time, after the backend had
+  claimed to compile it. Its string collector walked every expression form but lambdas, lists, records, fields and
+  indexes, and codegen `expect`s a collected literal, so a literal in a lambda was a Rust panic. Neither showed in the
+  50,000-program differential: its programs bind no `Str` to a variable an `if` returns, and write no literal inside a
+  lambda. Search keys: a type known before compiling is a guess, so set it from what compiled. A walk over an enum must
+  name every variant or say why not, and its consumer should refuse rather than `expect`.
+
+- **WASM-SHORT-1, WASM-NEG-1, WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1 — the WASM engine's faults, refusals and output,
+  held to the interpreter's** (found by on-demand routine run 4's verification and red-team pass, 2026-10-19; its fixes
+  were lost with the VM when the usage limit hit, and the laptop redid them from its run log, RW 3.10–3.14). The engine
+  computed both sides of `&&`/`||`, so it faulted where the interpreter short-circuited. Its `-x` was a bare `i64.mul`,
+  which wraps on `Int::MIN`. After a host refusal the guest ran on with a placeholder, and the trap that followed was
+  reported instead of the refusal. The CLI printed the engine's captured output only on success. The interpreter's
+  `rand.int` computed `hi - lo` in `Int`. **The 50,000-program differential saw none of them.** Its generator wrote no
+  `&&`/`||`, no negation and no host refusal, and it compares a fault with a fault, not the output printed before one.
+  Search key: a differential is as wide as its generator and its comparison. For each defect class, ask whether
+  the generator can write it and whether the comparison can see it.
+
+- **WASM-OOM-1 — an exhausted WASM memory read as an overflow** (on-demand routine run 4, 2026-10-19, RW 3.9): RW 3.4's
+  `__alloc` trapped with `unreachable`, and the host had long read every `unreachable` as the arithmetic helpers' overflow
+  (`DL0901`) — so a string doubled past WebAssembly's 4 GiB (a budget above 4 GiB lets a program get there) was "integer
+  overflow" in a program with no arithmetic. Search key: a new user of a shared signal inherits that signal's existing
+  meaning at every reader — before emitting `unreachable`, an error sentinel or a status code, read what its readers say
+  it means.
+
 - **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
   each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
   as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the
@@ -1091,7 +1141,11 @@ spells the same thing?**
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
 mechanism. **PowerShell 5.1 `*>` writes UTF-16LE** — `iconv` before grepping. **`cargo test` stops at
-the first failing target** — always `--no-fail-fast`. **Freeze the tree during verification**; editing
+the first failing target** — always `--no-fail-fast`. **A worktree that shares the main checkout's `CARGO_TARGET_DIR`
+leaves its own `target/debug/delulu` behind** (2026-10-19). A rebuild of the same package from the other tree can count as
+fresh and skip copying its binary back, so `doctor_cli` on `master` read the launch branch's `2.0.0` against `1.0.0`. Give
+a worktree its own target directory, or touch a source file of the binary's crate before testing in the other tree.
+**Freeze the tree during verification**; editing
 while a suite runs makes the Survey stale and produces three `doctor_cli` failures that look like
 product defects.
 
@@ -1607,6 +1661,19 @@ Added in V2 (2026-09-17 → 2026-09-28):
   latency had a ceiling past which it revoked everything the monitor watched. Grow the input until the cost crosses the
   nearest deadline before grading it — a witness whose STATE is "one read takes twice the period", grown with the writer's
   own code and measured in the test, made it red on the first try.
+
+- **A benchmark that does not check its answer can time a wrong one — and a unit sized for one machine reads another as
+  zero** (on-demand routine run 4, Study C): the harness timed any lane that exited 0, though its comment said lanes doing
+  different work measure nothing, and the WASM lane had just grown from one benchmark to four; and it truncated to whole
+  milliseconds, which the laptop's 5–6 ms C processes survived and a Linux VM's sub-millisecond ones did not — `0`, and a
+  benchmark silently gone from every ratio. Now each lane is held to the interpreter's answer and timed in microseconds,
+  and the record names its date and machine. Before re-running a measurement on a new machine, ask what its unit reads at
+  the fastest lane there, and what it times when a lane is wrong.
+  **The same run's slip:** clippy ran, a test was added, and the commit said "clippy 0" — `master` red on `lints` (`81da0ae`,
+  fixed in `45ca06d`). A commit message's evidence is about the commit: run the lint after the LAST edit of any `.rs` file,
+  tests included. **Now a hook** (run 15's lesson — a rule a run must remember is one it forgets): `scripts/clippy.sh` stamps
+  a hash of the Rust inputs it passed, and `pre-commit` refuses a commit staging Rust inputs that hash otherwise — git only,
+  so a commit made while a suite holds the build lock still goes through when the lint ran first.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

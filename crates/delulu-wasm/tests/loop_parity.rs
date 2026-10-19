@@ -20,7 +20,8 @@ fn run_both(src: &str, fs_root: Option<&std::path::Path>) -> (Result<String, Str
     let cfg = HostConfig { console: true, fs_read_roots: roots.clone(), ..HostConfig::default() };
     let w = run_main(&wasm, &cfg).map_err(|e| format!("{e:?}"));
     set_capture(true);
-    let g = Grants { console: true, fs_read: roots.iter().map(|p| p.to_string_lossy().to_string()).collect(), ..Default::default() };
+    let g =
+        Grants { console: true, fs_read: roots.iter().map(|p| p.to_string_lossy().to_string()).collect(), ..Default::default() };
     let i = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root()))).map_err(|e| format!("{e:?}"));
     let out = take_capture().unwrap_or_default();
     (w, i.map(|_| out))
@@ -89,11 +90,11 @@ fn main(root: Root) ! {Write} {
     t = t + 1
     ok = t < 5
   }
-  out.println(str(t) + " " + str("héllo ✓".len()) + " " + str("".len()))
+  out.println(str(t) + " " + str("héllo ✓".len()) + " " + str("".len()) + " " + str(ok) + " " + str(t > 4))
 }
 "#;
     let out = assert_parity(src);
-    assert_eq!(out, "37 333667 13\n00|13|26|39|\n7 1 10\n5 7 0\n", "the values themselves");
+    assert_eq!(out, "37 333667 13\n00|13|26|39|\n7 1 10\n5 7 0 false true\n", "the values themselves");
 }
 
 /// The heap had been a fixed 1 MiB with no `memory.grow`, and the bump allocator never frees: any program whose strings
@@ -145,6 +146,52 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "4 12 2\n");
 }
 
+/// **WASM-HYGIENE-2.** A function value bound inside a block went into the function's own frame of function values, so
+/// an inner `let f = fn…` replaced the outer `f` for the rest of the function: after an `if` whose body shadowed it the
+/// interpreter printed 1 and the WASM engine 2 — red on the old backend, where that `if` compiled before RW 3.4 too — and
+/// after a `while` whose body did, 1 against 0. A block's function values are the block's, in every block.
+#[test]
+fn a_function_value_bound_in_a_block_is_that_blocks() {
+    let src = r#"module m
+
+fn after_if(k: Int) -> Int {
+  let f = fn(x: Int) -> Int { x + 1 }
+  var seen = 0
+  if k > 0 {
+    let f = fn(x: Int) -> Int { x + 2 }
+    seen = f(0)
+  } else {
+    let f = fn(x: Int) -> Int { x + 3 }
+    seen = f(0)
+  }
+  seen * 10 + f(0)
+}
+
+fn after_while(n: Int) -> Int {
+  let f = fn(x: Int) -> Int { x + 1 }
+  var i = 0
+  var acc = 0
+  while i < n {
+    let f = fn(x: Int) -> Int { x * 100 }
+    acc = acc + f(1)
+    i = i + 1
+  }
+  acc + f(0)
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let f = fn(x: Int) -> Int { x + 7 }
+  if true {
+    let f = fn(x: Int) -> Int { x + 2 }
+    out.println(str(f(0)))
+  }
+  out.println(str(f(0)) + " " + str(after_if(1)) + " " + str(after_if(0)) + " " + str(after_while(3)))
+}
+"#;
+    assert_eq!(assert_parity(src), "2\n7 21 31 301\n", "the values themselves");
+}
+
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a
 /// file larger than the first heap was a refusal on WASM alone.
 #[test]
@@ -164,11 +211,14 @@ fn the_host_grows_the_memory_for_what_it_writes() {
 }
 
 /// The loop generator's programs on both engines — the value, or both a fault (overflow, a zero divisor) — and not a
-/// vacuous pass: most must run to a value, some must fault, and the loops must have run. The 50,000-program gate
-/// (`differential.rs`, CI's `fuzz` job) runs the same generator.
+/// vacuous pass: most must run to a value, some must fault, the loops must have run, and many must shadow a function
+/// value inside the loop (WASM-HYGIENE-2). The 50,000-program gate (`differential.rs`, CI's `fuzz` job) runs the same
+/// generator.
 #[test]
 fn random_loop_programs_agree_with_the_interpreter() {
-    let (mut agreed, mut faulted, mut ran) = (0u32, 0u32, 0u32);
+    let (mut agreed, mut faulted, mut ran, mut shadowed, mut listed) = (0u32, 0u32, 0u32, 0u32, 0u32);
+    // A top-level function named as a value: `h` bound to it, and `map` given it (RW 3.4).
+    let (mut bound, mut mapped) = (0u32, 0u32);
     for k in 0..400u64 {
         let (src, args) = random_loop_program(k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let checked = check_source(0, &src);
@@ -183,16 +233,34 @@ fn random_loop_programs_agree_with_the_interpreter() {
         if src.contains("while i < ") && !src.contains("while i < 0 ") {
             ran += 1;
         }
+        if src.matches("let h = ").count() > 1 {
+            shadowed += 1;
+        }
+        // The WASM `List`: a list built, and pushed to or indexed or read with `get` in the loop.
+        if src.contains("let xs = [") && (src.contains("xs.push(") || src.contains("xs[") || src.contains("xs.get(")) {
+            listed += 1;
+        }
+        bound += u32::from(src.contains("let h = step"));
+        mapped += u32::from(src.contains("xs.map(step)"));
     }
-    assert!(agreed > 150 && faulted > 5 && ran > 300, "agreed {agreed}, faulted {faulted}, looping programs {ran}");
+    eprintln!(
+        "loop programs: agreed {agreed}, faulted {faulted}, looping {ran}, shadowing a function value {shadowed}, with a \
+         list {listed}, binding a named function {bound}, mapping one {mapped}"
+    );
+    assert!(
+        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80 && listed > 120 && bound > 30 && mapped > 10,
+        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}, list programs {listed}, \
+         named-function programs {bound} bound and {mapped} mapped"
+    );
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a `for` (a `List`), and an assignment from inside an
-/// inlined function value to a variable of the frame that defined it — the same lambda reading the variable compiles.
+/// What stays outside the fragment is refused, never miscompiled: a `for` over a list of lists (a `for` over a list
+/// compiles since the WASM `List`, `list_parity.rs`), and an assignment from inside an inlined function value to a
+/// variable of the frame that defined it — the same lambda reading the variable compiles.
 #[test]
 fn what_the_loop_fragment_leaves_out_is_refused() {
     let outside = [
-        "module m\nfn f() -> Int {\n  var t = 0\n  for x in [1, 2, 3] { t = t + x }\n  t\n}\n",
+        "module m\nfn f() -> Int {\n  var t = 0\n  for x in [[1], [2, 3]] { t = t + x.len() }\n  t\n}\n",
         "module m\nfn apply[T](g: fn(T) -> T, x: T) -> T { g(x) }\nfn f() -> Int {\n  var n = 0\n  let h = fn(v: Int) -> Int {\n    n = v\n    v + 1\n  }\n  apply(h, 3)\n}\n",
     ];
     for src in outside {

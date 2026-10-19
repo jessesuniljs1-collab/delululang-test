@@ -1,121 +1,107 @@
 {
+  "answers_checked": "a lane is timed only if it printed what the interpreter printed",
   "benchmarks": [
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 77,
-        "python": 24,
-        "wasm": 12
+        "c": 0.689,
+        "interp": 50.575,
+        "python": 18.018,
+        "wasm": 7.013
       },
       "name": "fib_recursive_24",
       "spread_ms": {
-        "c": 50,
-        "interp": 6,
-        "python": 7,
-        "wasm": 2
+        "c": 0.281,
+        "interp": 3.433,
+        "python": 18.643,
+        "wasm": 1.177
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 363,
-        "python": 78
+        "c": 0.584,
+        "interp": 285.875,
+        "python": 52.02,
+        "wasm": 9.154
       },
       "name": "loop_sum_1m",
       "spread_ms": {
-        "c": 77,
-        "interp": 15,
-        "python": 24
+        "c": 0.175,
+        "interp": 10.686,
+        "python": 2.628,
+        "wasm": 0.967
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 6,
-        "interp": 20,
-        "python": 24
+        "c": 0.637,
+        "interp": 12.285,
+        "python": 14.256,
+        "wasm": 6.243
       },
       "name": "string_build_20k",
       "spread_ms": {
-        "c": 46,
-        "interp": 3,
-        "python": 6
+        "c": 0.231,
+        "interp": 1.022,
+        "python": 3.182,
+        "wasm": 0.979
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 6,
-        "interp": 12,
-        "python": 20
+        "c": 0.628,
+        "interp": 5.605,
+        "python": 12.231,
+        "wasm": 8.696
       },
       "name": "wordcount_macro",
       "spread_ms": {
-        "c": 52,
-        "interp": 3,
-        "python": 4
+        "c": 0.195,
+        "interp": 0.753,
+        "python": 0.791,
+        "wasm": 1.062
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 6,
-        "interp": 17,
-        "python": 21
+        "c": 0.601,
+        "interp": 7.457,
+        "python": 12.283,
+        "wasm": 6.628
       },
       "name": "list_map_macro",
       "spread_ms": {
-        "c": 52,
-        "interp": 5,
-        "python": 8
+        "c": 0.261,
+        "interp": 1.245,
+        "python": 1.329,
+        "wasm": 1.17
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 5,
-        "interp": 281,
-        "python": 49
+        "c": 0.616,
+        "interp": 169.211,
+        "python": 41.249,
+        "wasm": 9.579
       },
       "name": "nested_calls_macro",
       "spread_ms": {
-        "c": 44,
-        "interp": 13,
-        "python": 11
+        "c": 0.192,
+        "interp": 6.285,
+        "python": 3.991,
+        "wasm": 0.347
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     }
   ],
   "caveat_process_startup": "Wall-clock includes process startup. For the C lane the startup cost exceeds the compute for several benchmarks (its spread exceeds its minimum), so ratios against C UNDERSTATE the true compute gap rather than overstate it.",
@@ -131,9 +117,37 @@
       "reason": "no Go toolchain on the measurement machine"
     }
   ],
+  "machine": {
+    "delulu": "delulu 1.0.0",
+    "gcc": "gcc (Ubuntu 9.4.0-1ubuntu1~20.04.2) 9.4.0",
+    "kernel": "Linux 6.6.87.2-microsoft-standard-WSL2",
+    "logical CPUs": "4",
+    "os": "linux x86_64",
+    "processor": "AMD Ryzen 7 7840HS w/ Radeon 780M Graphics",
+    "python": "Python 3.8.10"
+  },
+  "measured_at": "2026-10-19 18:46 UTC",
   "profile": "release",
   "repeats": 5,
-  "schema": "study-c/1",
+  "resolution": "timed in microseconds; published in milliseconds with three decimals (study-c/1 truncated to whole milliseconds)",
+  "schema": "study-c/2",
+  "startup": {
+    "kind": "control",
+    "ms": {
+      "c": 0.546,
+      "interp": 3.578,
+      "python": 11.672,
+      "wasm": 6.241
+    },
+    "name": "startup_control",
+    "spread_ms": {
+      "c": 0.369,
+      "interp": 0.747,
+      "python": 0.782,
+      "wasm": 0.85
+    },
+    "unrun": []
+  },
   "statistic": "minimum of repeats (spread published alongside)",
   "study": "C",
   "title": "performance honesty baseline"
