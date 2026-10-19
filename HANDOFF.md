@@ -1054,7 +1054,9 @@ spells the same thing?**
   broker revoked `g_M` and every run under it — 250,000 records and the default 2 s, no run misbehaving. RW 4.49 had filed
   the cost as a LOW latency ("≈200 ms at 10,000 records"). Now a poll reads only what was appended, and acts only on records
   that verify. Search key: a watchdog's beat that waits on work which grows with history is a deadline that expires by
-  itself — ask of every loop that beats a dead-man what its work grows with.
+  itself — ask of every loop that beats a dead-man what its work grows with. **The writing side had the same class** (RW 4.53,
+  D-V2-159): every writer's catch-up re-read the whole chain under the append lock once another had written, so a daemon request
+  beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); `AuditLog::open` still does on every opening.
 
 - **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
   and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the

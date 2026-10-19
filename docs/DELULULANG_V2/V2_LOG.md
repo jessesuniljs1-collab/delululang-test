@@ -6475,3 +6475,42 @@ macOS. **Read on runners before `master` moved** (`witness.yml` at `90d6ddb` on 
 the append lock whenever another writer moved it, and `AuditLog::open` does on every opening — so each daemon request after
 a sandboxed host's record pays for the chain's history (the red team's 4.9 s `grants revoke` at 60,000 records). The next
 slice.
+
+## 2026-10-19 — RW 4.53's writer half: a writer catches up by reading only what was appended (D-V2-159; on-demand routine run 3, continued)
+
+**The same class on the writing side.** `AuditLog::catch_up` runs under the append lock before an append once another writer
+has moved the chain, and it re-read and re-counted the WHOLE chain — every day file's last hash, then every day file's
+count (`recover`). The daemon is one such writer and every sandboxed run's host another, so on a long chain each daemon
+request after a host's record — an operator's e-stop revoke among them — paid for the chain's history (routine run 17's red
+team: `grants revoke` 4.9 s median at 60,000 records beside six sandbox loops). **Measured here** (a scratch script, the
+same 100,000-record chain for each, the daemon a debug build, another writer appending one record every 50 ms through
+`AuditLog`): ten recorded daemon requests (`grants delegate`) — at `90d6ddb`, alone median 15 ms (max 20), beside the
+writer median **3,817 ms** (max 4,479); at `7ae1524`, alone 14 ms (max 17), beside the writer **14 ms** (max 21).
+`audit verify` passed after each (100,072 and 100,098 records).
+
+**Fixed (`7ae1524`): `AuditLog::read_appended`.** A catch-up first reads only what was appended since this handle last
+wrote — the rest of its day file from the byte it stopped at, and every later day file — each record linked to the one before
+and its hash its own (`verified_link`, the check the follower now shares), and then the anchor must agree with the head and
+the count that reading gives. Anything else — no file this handle wrote, a file cut short, a line that is not a record or
+does not verify, an anchor that disagrees — falls back to the whole recovery, which refuses what it refused before. A first
+draft also refused a line without its break; it was removed: a writer puts down its line, its break and then the anchor,
+all under the lock, so such a line can never come with an agreeing anchor — a wall no outcome depends on.
+
+**Witnesses** (`audit` unit tests): `a_writer_catching_up_reads_only_what_another_writer_appended` (one writer's catch-up
+across a day boundary chains onto the other's last record although a record behind both was made unreadable in place — the
+old code re-read it and refused; `verify` still finds it), `a_line_appended_without_its_anchor_is_refused_as_before`, and
+`a_file_cut_short_under_a_writer_is_refused_as_before`. **Mutants:** M480 (the old behaviour: no incremental read) red in
+the first; M481 (no anchor check) red in the second; M482 (later day files unread) red in the first; M483 and M484 (the
+shared link or hash check gone) red in the follower's unverified test; **M485 (a cut file read as "nothing appended")
+SURVIVED the first round** — the next record would have chained onto a head the file no longer held — and is red in the
+third witness, written for it. Control green. Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners
+before `master` moved (`audit::tests`): `macos-latest` `39206620758` (26 passed), `windows-latest` `39206622817` (25 passed; the FIFO test is Unix-only; Windows terminated only `vctip`).
+
+**The full suite** over the code: 2,338 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**Left in RW 4.53:** `AuditLog::open` still reads the whole chain on every opening — each sandboxed run's host and each CLI
+command that records opens it (the red team's 3–4.5 s sandboxed run at 60,000 records). Its fast path would trust the
+anchor as `catch_up` already does, which needs the anchor to name the newest file and its length; a format change, its own
+slice.
+
+**CI read:** `200df1c`'s push runs — CI `39206009719` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.03x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39206009590` — success.

@@ -22,6 +22,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   carry its own hash, as `delulu audit verify` checks. A line that does not — damaged, or written by hand — is named on the
   monitor's standard error (`monitor: WARNING — … do not verify against the chain (seq …)`) and never acted on; before, a
   forged `deny` line could make it quarantine an innocent run. `delulu audit verify` still checks the whole chain.
+- **Fixed (RW 4.53, D-V2-159): a broker daemon request no longer pays for the audit chain's whole history when another
+  writer — a sandboxed run's host — has just written.** Each such request re-read the whole chain before it could record;
+  on a 100,000-record chain a request beside one other writer took about 3.8 s, and an operator's e-stop revoke is such a
+  request. Now the daemon reads only what was appended (14 ms in the same measurement). Opening the chain (each sandboxed
+  run, each command that records) still reads it whole.
 
 ## Unreleased — a run's own grant node ends with the run, 2026-10-19
 

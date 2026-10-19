@@ -3843,6 +3843,20 @@ same-uid boundary, §11.4); `audit verify` with the anchor, and an external witn
 check. (6) **Hardening, not redefinition:** the monitor's rules, its node, its dead-man and what a quarantine revokes are
 unchanged; it reads less, and acts on less.
 
+## D-V2-159 — A writer catches up with the chain by reading only what was appended since it last wrote, verified, and falls back to the whole recovery for anything else (RW 4.53) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): beside another writer on a 100,000-record chain, a recorded daemon
+request took median 3,817 ms — every catch-up re-read and re-counted the whole chain under the append lock — and 14 ms alone.
+
+**Decision.** (1) `AuditLog::catch_up` reads the rest of the day file this handle wrote and every later one, each record
+checked as `verify` checks a link, and accepts the reading only when the anchor then agrees with its head and count — the
+same anchor `catch_up`'s fast path already trusted with the tail file's length. (2) **Everything else falls back to the whole
+recovery**, unchanged: a cut file, a broken link, an unanchored line, a missing file are refused (or recovered) exactly as
+before; the incremental read never accepts what the recovery refused. (3) **Not claimed:** a record behind the handle's
+point that was damaged after it was written is no longer re-read by a writer's catch-up — it never was by its fast path, and
+`audit verify` (with the anchor and an external witness of the head) is the chain's check. (4) `AuditLog::open` is unchanged:
+it still recovers from every file (RW 4.53 keeps it).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

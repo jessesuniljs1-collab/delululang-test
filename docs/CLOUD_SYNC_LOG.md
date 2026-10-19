@@ -3896,3 +3896,28 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   and `open` on every opening: this run's next slice; (3) merge `master` into `launch/2.0.0` (release procedure step 1) and
   read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67;
   (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3 (continued): RW 4.53's writer half — a writer catches up by reading only what was appended (D-V2-159)
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `200df1c`
+- Commits: `7ae1524` A writer catches up by reading only what was appended (RW 4.53); and this entry's commit
+- Files and folders: M `crates/delulu-broker/src/audit.rs` (`AuditLog::read_appended`, `verified_link` shared with the
+  follower, three tests), `CHANGELOG.md`, `HANDOFF.md` (§11.4 MONITOR-CHAIN-1: the writing side), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-159), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.53 partial), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Fixed (RW 4.53, partial):** every writer's catch-up re-read and re-counted the whole chain under the append lock once
+  another writer had written; a recorded daemon request beside another writer on 100,000 records took median 3,817 ms (max
+  4,479), now 14 ms (max 21). `AuditLog::open` still reads the whole chain on every opening.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: M480 (the old behaviour) red in the witness; M481–M484 red; M485 survived the first round and is red in a third
+  witness written for it; control green; clippy 0; `check-other-os.sh` (Windows, macOS) clean; runner reads at `7ae1524` —
+  `audit::tests` macOS `39206620758` (26 passed), Windows `39206622817` (25); the full suite 2,338 passed, 0 failed, 16
+  ignored (exit 0, the tree unmoved). CI read: `200df1c`'s push runs — CI `39206009719` and `ocsf` `39206009590` — success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1, the writing side).
+- Open / next, in order: (1) this commit's push run; (2) merge `master` into `launch/2.0.0` (release procedure step 1: its
+  CHANGELOG lines into the 2.0.0 section) and read `jobs=everything` on the result; (3) RW 4.53's last part — `AuditLog::open`
+  reads the whole chain on every opening (each sandboxed run's host, each CLI command that records); its fast path needs the
+  anchor to name the newest file and its length; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66,
+  4.67; (5) *[laptop]* the launch, only on the owner's word.
