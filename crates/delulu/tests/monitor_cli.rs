@@ -1047,7 +1047,8 @@ fn a_killed_monitors_runs_are_revoked_by_its_broker_and_the_chain_says_why() {
 
 /// **`--on-monitor-death continue` is the operator's opt-out:** the same kill, and the run lives on
 /// unwatched — a full dead-man period and more after the monitor died, the run is still commanding
-/// and every node is live. Nothing was armed, and the chain says so by having no arming in it.
+/// and every node is live. Nothing was armed on the monitor's node, and the chain says so: its only armings are the run's
+/// own minted nodes' (D-V2-157).
 #[test]
 fn with_on_monitor_death_continue_a_killed_monitors_runs_live_on() {
     let f = setup("mcont");
@@ -1068,7 +1069,14 @@ fn with_on_monitor_death_continue_a_killed_monitors_runs_live_on() {
     let states = node_states(&f);
     assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("live", "live"), "{states:?}");
     let recs = all_records(&f);
-    assert!(!recs.iter().any(|r| r["action"] == "deadman-arm"), "`continue` arms nothing: {recs:#?}");
+    // `continue` arms nothing on the monitor's node. The armings the chain does hold are the run's own (RW 4.57, D-V2-157): a
+    // lease run dead-mans each node it mints — here its device's, a child of the run's node — never the monitor's.
+    let armed: Vec<&str> =
+        recs.iter().filter(|r| r["action"] == "deadman-arm").map(|r| r["target"].as_str().unwrap_or("")).collect();
+    assert!(
+        !armed.is_empty() && armed.iter().all(|t| states.get(*t).and_then(|s| s.1.as_deref()) == Some(run.as_str())),
+        "`continue` arms nothing on the monitor's node — every arming is of a node the run minted: {armed:?} {states:?}"
+    );
     assert!(!recs.iter().any(|r| r["action"] == "revoke"), "and nothing revoked anything: {recs:#?}");
     // The operator ends it.
     let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &m]);

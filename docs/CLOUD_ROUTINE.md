@@ -309,7 +309,10 @@ the window CONTAINS that one path counts and another does not, and grow that unt
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
-Collect the edits, assert each anchor exactly once against the files as they are, then write. **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
+Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
+to it with `&&`, and never leave a dry run's dummy input where the real run reads it** (on-demand run 2: a heredoc that
+wrote the evidence file failed its own anchor check, the records script ran anyway on the dry run's `R`/`L`/`S`/`X`, and the
+placeholders were caught only by reading the result). **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
 part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
 subset's reason — read what a per-mutant command runs.
 **Enumerate a finding's class from its mechanism before fixing it** (run 19, RW 4.61: the red team named eight daemon handlers; `grep record_op` and reading each call against the handler that reaches it found four more). **A measurement over a corpus carries a control that must come out non-empty** (run 19: a wrong JSON path read all 23 corpus programs as pure; `scripts/authority-corpus.py` fails such a read). **A disk check reads the LAST write**: order a witness so the edit it is about is the last to persist (run 19: tightenings persisted after the loosenings would have rewritten the disk, and M244 would have lived).

@@ -963,6 +963,16 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
                 return 1;
             }
         }
+    } else if let Some(c) = custody.as_mut() {
+        // A lease run: what its host mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+        match crate::broker_client::RunNode::for_lease(c) {
+            Ok(held) => _run_node = Some(held),
+            Err(d) => {
+                let diag = delulu_diag::Diagnostic::error(d.code, d.message);
+                crate::cli::print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
     }
     let custody_record = custody.as_ref().map(|c| serde_json::json!({ "mode": "daemon", "node": c.node().to_string() }));
     // P8-01: the devices, as the ordinary run builds them — each actuator's own grant node and the e-stop

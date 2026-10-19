@@ -617,6 +617,33 @@ pub(crate) fn redeem_lease(
         );
         return Err(2);
     }
+    // RW 4.68 (LEASE-DROP-1, on-demand routine run 2): three more kinds a lease never confers were DROPPED here in silence —
+    // the shape the comment above names. `grants_from_lease` empties them and the run went on: a `plugin=` program then met
+    // DL0703 at `plugin_host()`, asking for the very flag the operator had passed. Each is refused by name, with the reason
+    // that is true today; `run_lease_refuses_every_local_grant_but_a_foreign_library_path` reads the grant grammar from
+    // `delulu toolchain --json`, so a grant kind added later meets the same question.
+    let not_conferred = [
+        (
+            !grants.plugins.is_empty(),
+            "plugin=",
+            "a lease never confers plugin loading (D-V2-27): `Load` is red-tier and an artifact's path is grant data a \
+             person supplies at the prompt. Run the program under `--broker daemon` with its own `--grant plugin=PATH` instead",
+        ),
+        (
+            !grants.computes.is_empty(),
+            "compute=",
+            "a grant node cannot carry an accelerator's envelope (10h), so the delegating side could not bound one",
+        ),
+        (
+            grants.exec_native,
+            "exec.native",
+            "the broker has no `exec.native` dimension, so a lease never confers native emission (build-order D6)",
+        ),
+    ];
+    if let Some((_, name, why)) = not_conferred.iter().find(|(given, _, _)| *given) {
+        eprintln!("error: a `--lease` run cannot take a local `--grant {name}`: {why}");
+        return Err(2);
+    }
     let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
         eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
         return Err(2);
@@ -998,7 +1025,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // cannot attest a layer below itself, the claim is single — and the run must either say so out
     // loud, via an explicit human waiver in the grant, or not happen. *Silently* single is the one
     // outcome this code exists to prevent.
-    for env in &grants.computes {
+    //
+    // Not beside `--lease` (RW 4.68): a lease run never uses a local compute grant — `redeem_lease` refuses it by name next,
+    // before the program exists — so answering DL1911 first sent the operator to a waiver that led only to that refusal.
+    for env in grants.computes.iter().filter(|_| opts.lease.is_none()) {
         if let Err(refusal) = delulu_runtime::compute::check_grant(env) {
             let d = Diagnostic::error(
                 "DL1911",
@@ -1122,6 +1152,16 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                 daemon_custody = Some(c);
                 _run_node = Some(held);
             }
+            Err(d) => {
+                let diag = Diagnostic::error(d.code, d.message);
+                print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
+    } else if let Some(c) = daemon_custody.as_mut() {
+        // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+        match crate::broker_client::RunNode::for_lease(c) {
+            Ok(held) => _run_node = Some(held),
             Err(d) => {
                 let diag = Diagnostic::error(d.code, d.message);
                 print_diagnostics("run", &[diag], &map, None, opts.json);

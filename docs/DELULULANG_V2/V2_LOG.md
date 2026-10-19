@@ -6395,3 +6395,47 @@ recorded before (macOS `filesystem_confinement absent`, its reads not confined).
 (`jobs=everything` on `e098438`, the branch's newest commit) — **success on all 18 jobs**, `miri-slow (delulu-broker)` 1 h
 35 min; `39165405002` (`9763787`) — 17 success, `test (windows-latest)` red in the e-stop witness fixed since, its Miri jobs
 all green; `39167478125` (`b8f9f16`) — **success on all 18 jobs**, its `miri-slow (delulu-broker)` done at 00:12 UTC (2 h 51 min).
+
+## 2026-10-19 — RW 4.57's lease half; LEASE-DROP-1 (RW 4.68); RW 4.35's stale cell (on-demand routine run 2, continued)
+
+**RW 4.57's lease half (`6f98ae5`).** A `--lease` run's node is the delegator's, so it is never ended by a run; what the run
+mints under it — its devices' nodes (a lease carries no plugin authority: measured, `--lease` with `--grant plugin=.` met
+DL0703) — is dead-manned as it is minted. `RunNode` now holds a `Reaper`: the set of `(node, key)` one beater keeps alive —
+the run's own root, or, under a lease, each node its custody client mints (`attenuate` arms it; one that cannot be armed is
+revoked and refused). Witnesses: `under_a_lease_a_killed_runs_minted_node_is_revoked_by_its_dead_man_and_the_lease_lives`
+and its sandboxed twin (the device node reaped as itself; the lease still `live`), `under_a_lease_a_run_that_ends_leaves_the_lease_live`.
+Mutants M461 (no arming at the mint — the old behaviour) red in both killed-lease witnesses; M462 (the lease revoked at the
+run's end) red in the ended-lease witness; M463 and M464 (each call site's lease branch skipped) red each in its own. The
+root half re-falsified on the refactor: M465 (the beater beats nothing) red in the live-run witness, M466 (the end revokes
+nothing) in both clean-end witnesses, M467 (armed for an hour) in all three kill witnesses; controls green. The reaper is
+not handed to actor-thread clients: under a lease nothing mints from another thread, so that code could not be witnessed
+(routine run 18's rule) — removed. 11 RW 4.57 tests, four concurrent copies, 12 of 12 rounds green.
+Read on runners at `6f98ae5` before `master` moved (`witness.yml`, `plugin_load_cli` filtered to `under_`): `macos-latest`
+`39184608216` and `windows-latest` `39184606157` — 11 passed, 0 failed each (Windows terminated only `vctip`).
+
+**LEASE-DROP-1 (RW 4.68), found on the way.** `redeem_lease` refuses each local grant a lease cannot take by name — except
+three. Witnessed on a scratch daemon: `run plain.delulu --lease T --grant plugin=.` (and `exec.native`, and the full compute
+envelope) printed `ran`, exit 0 — the grant dropped; `--grant console` was refused. Fixed by naming each with its reason. The
+witness, `satellite_demo.rs` `run_lease_refuses_every_local_grant_but_a_foreign_library_path`, reads every grant form from
+`delulu toolchain --json` and asks each beside `--lease` (`foreign.c` the control that passes). Red on the old code naming
+exactly `exec.native`, `compute=…` (DL1911 answering first) and `plugin=./plugins` (DL1401 at the redeem). The compute
+attestation gate (DL1911) now steps aside beside `--lease`: a lease run never uses a local compute grant, and answering
+DL1911 first sent the operator to a waiver that led only to the lease's refusal. Mutants M468–M470 (each kind's refusal
+removed) and M471 (the gate answering first) red; `compute_cli` 18/18. Runner reads at `86ad969`: the sync-log entry.
+
+**RW 4.35's status cell** said `Open — found, witnessed` beside its own text recording the close (routine run 10, D-V2-86) —
+the fix (`channel::Within` on the daemon's replies) and its witness are in the tree; corrected, as RW 4.64's was.
+
+**The container restarted at 01:20 UTC** (every process's start time) and took the third full suite with it, mid-run at
+`egress_cli`; the tree and the scratchpad survived. The suite was run again over all of it (suite 4): **2,329 passed, 1 failed** — `monitor_cli`
+`with_on_monitor_death_continue_a_killed_monitors_runs_live_on` asserted the chain held no `deadman-arm` at all, its claim
+being that `--on-monitor-death continue` arms nothing; the run under that monitor is a lease run with a device, whose
+device node is now dead-manned (`6f98ae5`). The question was too wide, not the product wrong: it now asserts that every
+arming is of a node the run minted (a child of the run's node) and that there is one — never the monitor's. Mutant M472
+(the monitor arms under `continue`) red; `monitor_cli` 22/22. Suite 5 over the final tree: 2,330 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read:** `d144882`'s push runs — CI `39183143824` and `ocsf` `39183143907` — success (14 jobs; `actors_pingpong`: arm64
+MEASURED 2.97x where the machine gave 4.10x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads).
+`launch/2.0.0` at `b4748fa` (this run's merge of `d144882`): the release dry run `39183562777` — success; `jobs=everything`
+`39183559939` — at 02:05 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` still
+running: the next run reads them.

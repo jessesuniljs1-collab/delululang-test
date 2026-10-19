@@ -32,8 +32,15 @@ The sections below are V2's development record, newest first, exactly as each wa
   stopped by its budget also left its plugins' and devices' nodes live: authority nobody held, for as long as the daemon
   ran. Now a run revokes its own node as it ends (recorded), and the daemon holds a dead-man on it: if the run stops
   beating for 10 s, the daemon revokes the node and everything below it, and the record says why. Plain and sandboxed
-  runs alike. `DELULU_RUN_DEADMAN_MS` may shorten the 10 s, never lengthen it. A run under `--lease` is unchanged — its
-  node is the delegator's. Each daemon run's audit chain gains two records (the arming and the end's revocation).
+  runs alike. `DELULU_RUN_DEADMAN_MS` may shorten the 10 s, never lengthen it. A run under `--lease` never ends the lease —
+  its node is the delegator's — but what it mints under it (its devices' nodes) is dead-manned the same way, so a killed
+  lease run leaves none of them live. Each daemon run's audit chain gains a record per dead-man armed and the end's
+  revocation.
+- **Fixed (RW 4.68): `run --lease` refuses a local `--grant plugin=`, `--grant compute=` or `--grant exec.native` by name**,
+  as it already refused the other grants a lease cannot take. Before, these three were dropped without a word and the run
+  went on — a program that loaded a plugin then failed with DL0703 asking for the `--grant plugin=PATH` the operator had
+  passed. A lease never confers plugin loading, an accelerator or native emission; run under `--broker daemon` with the
+  program's own grants instead.
 
 ### a Guard path rule on macOS covers both Unicode normalizations, 2026-10-18
 
