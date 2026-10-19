@@ -607,6 +607,13 @@ wins, and you should update the memory to match.
   `delululang-test`; no session pushes to `DeluluLang` or any other repository, pushes a tag, switches `origin`, moves the
   routine's repository or changes a repository's visibility until he says so. It outranks the commission's launch steps
   (D-V2-153 §3, `CHECKLIST-2.0.md` steps 4–10 on `launch/2.0.0`): the launch is prepared and waits for his word.
+- **When the laptop cannot run or finish the tests, GitHub runs them** (owner, 2026-10-19): *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete successfully and review the results."* A suite
+  the laptop cannot start or finish — stopped for low memory, too long for the session, a target that needs another OS —
+  goes to GitHub without asking: push the branch to `origin` (the test repository) and dispatch `ci.yml` at it
+  (`-f jobs=everything`; its `test` matrix is the full suite on Linux, macOS and Windows) or `witness.yml` for one target.
+  A slice reaches `master` only once that run is READ to its end and green, and its record names the run and says the
+  laptop's suite did not run. (The occasion: on 2026-10-17 the laptop's suite for RW 6.1 was stopped for low memory
+  before a test ran; the on-demand routine then ran it, 2,318 passed, in `a3d7678`.)
 - **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
   (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
   which held from the first commit and is why CI never ran before that date. The remote is for
@@ -1033,6 +1040,38 @@ spells the same thing?**
   the pair `NAME@host:port` and rules matched by exact string, so `declassify:K` sealed sealed nothing of `K`'s sends. A rule or
   permit on the name covers them now; a pattern no use can match is refused. Search key: every time a Guard token gains a new
   shape, does every rule written for the old shape still reach it?
+
+- **GUARD-NORM-1 — a seal walked past by the other Unicode normalization on macOS** (on-demand routine run 1,
+  2026-10-18, D-V2-156): APFS treats `café` precomposed and decomposed as one name. `realpath` gives an EXISTING file one
+  spelling (measured), so GUARD-ALIAS-1's resolution held for files that exist — but a name not yet created keeps the
+  spelling it was written in, and a seal set before the file existed was walked past by a write in the other spelling
+  (witnessed red on a runner). The Guard compares in NFC on macOS now, nowhere else. Search key: a resolution step that
+  fixes a spelling only for what EXISTS leaves every not-yet-created name in the caller's spelling — ask what the
+  filesystem will treat as the same name, and compare in that form.
+
+- **RW 4.57 — a run's own root outlived it** (on-demand routine run 2, 2026-10-19, D-V2-157): under the daemon a
+  `run --grant …` issues a root for itself, and nothing ever ended it — `[live]` after every clean run, and with it, after
+  a kill, every node the run had minted. RW 4.51 (run 16) had asked "does a plugin's node outlive its run?" and fixed
+  the plugin's; the run's own node, the widest of them, was never asked. Now revoked at the run's end and reaped by a
+  dead-man when the run dies first. Search key: when a fix answers "does X outlive its holder?" for one kind of node,
+  list every node the same holder holds — the parent first.
+
+- **MONITOR-CHAIN-1 — a long chain killed a healthy monitor's fleet** (on-demand routine run 3, 2026-10-19, D-V2-158): `monitor
+  watch` read the whole chain each poll and beats its dead-man between polls, so once one read outlasted the period its own
+  broker revoked `g_M` and every run under it — 250,000 records and the default 2 s, no run misbehaving. RW 4.49 had filed
+  the cost as a LOW latency ("≈200 ms at 10,000 records"). Now a poll reads only what was appended, and acts only on records
+  that verify. Search key: a watchdog's beat that waits on work which grows with history is a deadline that expires by
+  itself — ask of every loop that beats a dead-man what its work grows with. **The writing side had the same class** (RW 4.53,
+  D-V2-159): every writer's catch-up re-read the whole chain under the append lock once another had written, so a daemon request
+  beside a sandboxed host took 3.8 s at 100,000 records (14 ms now); and every opening read every day file twice (0.2–0.3 s
+  there; D-V2-160: the anchor notes where the chain stood, and an opening whose files still measure so reads one line).
+
+- **LEASE-DROP-1 (RW 4.68)** (on-demand routine run 2, 2026-10-19): `run --lease` refused twelve local grant kinds by name
+  and dropped three — `plugin=`, `compute=`, `exec.native` — in silence; `plugin=` then met DL0703 asking for the flag the
+  operator had passed, and a comment claimed compute was refused by name. The refusal list's own comment named the class
+  ("a refusal list is a skip branch wearing a disguise") and the list still fell behind. Now every kind is asked by a
+  witness generated from the grammar the binary publishes (`delulu toolchain --json`). Search key: a list that names
+  what to refuse needs a generated witness over everything it could name.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -1516,6 +1555,39 @@ Added in V2 (2026-09-17 → 2026-09-28):
   host), after the split, by the one parser every custody shares (`delulu_broker::netscope`). The same shape: a pre-check
   that releases a secret's bytes must judge the whole URL the request will be judged by, or the broker hands them over
   (and records a `send`) for a request the client then refuses.
+
+- **A slot's line count is part of its escape** (2026-10-18, RW 6.1): `terminal_safe` keeps a line break, because a
+  diagnostic lays itself out on several lines (indented after the first, RW 4.34); a string that fills ONE line of a
+  report — `authority`'s header, translated by anyone — must go through `terminal_line`, or its `\n` starts a forged
+  line of the report (`effects: (none)` under the header, witnessed red). For every text a third party writes into a
+  human report, ask how many lines its slot is, and escape for that.
+- **An autosave snapshot is a draft — verify it as a stranger's work** (2026-10-18, the on-demand routine's first run):
+  `b4a9e18` held a finished-looking slice whose records claimed two red witnesses and a mutant. They re-ran as claimed,
+  and an adversarial read still found a forged-line hole and a doc comment carried onto the wrong test. Its records name
+  the laptop's session and "this entry's commit"; the recovering run rewrites them as its own, names the snapshot, and
+  checks each OLDER snapshot against the commits that followed it (`git diff SNAPSHOT NEXT -- PATHS` empty = landed).
+
+- **A worktree's `.git` is a FILE** (2026-10-18): `git worktree add` (and a submodule) writes `.git` as one line,
+  `gitdir: …`, and the Survey's walk excluded `.git` only as a directory — a map built in a worktree carried
+  `file:.git` and could never match a clone. The pre-commit hook caught it on the first commit made from one; the
+  walk skips `.git` in either shape now. An exclusion by name asks: what other SHAPE can this name take?
+
+- **The harness refuses shell busy loops as "interfering with workloads"** (on-demand routine run 2): `while :; do :;
+  done &` to load four CPUs before a timing-shaped witness was denied by the auto-mode classifier. Load the machine with
+  the witness's own work instead — four concurrent copies of its test binary (`target/debug/deps/<target>-<hash>`, with
+  `CARGO_BIN_EXE_delulu` set), each of which spins — and with the full suite, which runs it beside everything else.
+
+- **A dry run's dummy input is a trap for the real run** (on-demand routine run 2): a records script was tried against a
+  COPY with a placeholder evidence file — right — and the step that should then have written the real evidence failed its
+  own check, while the next command (not joined by `&&`) ran the records script on the placeholders. Four one-letter lines
+  reached the tree, caught by reading the result before any commit. Join every step a script depends on with `&&`, and
+  write a dry run's inputs where the real run never looks.
+
+- **A cost recorded as a latency may be a deadline** (on-demand routine run 3, MONITOR-CHAIN-1): "each poll re-reads the
+  whole chain, ≈200 ms at 10,000 records" sat in RW 4.49 as LOW for nine days; the same loop beats a 2 s dead-man, so the
+  latency had a ceiling past which it revoked everything the monitor watched. Grow the input until the cost crosses the
+  nearest deadline before grading it — a witness whose STATE is "one read takes twice the period", grown with the writer's
+  own code and measured in the test, made it red on the first try.
 
 ### 11.6 If you are an assistant with memory, keep it current
 

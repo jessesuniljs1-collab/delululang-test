@@ -3768,6 +3768,111 @@ floor claimed. (6) **CODEOWNERS:** `@jessesuniljs1-collab` replaces the placehol
 `security_controls_are_decided_and_no_claim_runs_ahead_of_its_proof` replaces `pending_public_controls_are_still_marked_as_pending`
 and holds the new line; watched red on the old text. Entrenched record: this date. RW 7.8 closed.
 
+## D-V2-156 — A Guard path rule compares in NFC on macOS, whose filesystem ignores Unicode normalization (RW 4.17) — TAKEN (head chef, 2026-10-18, under the owner's delegation)
+
+*(Numbered 156: D-V2-155, the support matrix at 2.0, lives on `launch/2.0.0` until the launch.)*
+
+**Measured first** (on-demand routine run 1, `witness.yml` on `macos-latest`): APFS opens `café` written precomposed
+(NFC) and decomposed (NFD) as one file, and `realpath` already resolves an EXISTING file's two spellings to one — so the
+Guard, deciding on the resolved spelling since GUARD-ALIAS-1, was right for every file that exists. A name that does not
+exist yet keeps the spelling it was written in (`canonical_existing` re-appends it), and the Guard compared it as
+written: a seal on `/srv/out/café.txt` (NFC) set before the file exists did not cover a write to
+`/srv/out/cafe\u{301}.txt` (NFD) — the same name to the filesystem. Witnessed red on the runner (`80a6243`).
+
+**Decision.** (1) **Normalize, not refuse**, and only in the Guard's comparison: on macOS both sides of a path rule are
+compared in NFC after the case fold the same function already does there (`guard::path_within`). Refusing every
+non-NFC path would refuse a decomposed name a macOS tool wrote legitimately; normalizing at the comparison also covers
+rules stored before this change, in either spelling. (2) **Nowhere else:** on ext4 and NTFS the two spellings are two
+files, so a permit on one must not reach the other — folding there would widen a permit; and the grant lattice keeps
+comparing as written, where a mismatch can only refuse. (3) **The normalizer:** `icu_normalizer` 2.3, already in the
+tree (`url` → `idna` → `idna_adapter`; Unicode-3.0, allowed by `deny.toml`), taken by `delulu-broker` on macOS only —
+not a new crate, and the broker stays transport-free (its Ruling 1). RW 4.17's other half — a UNC path in an operator's
+grant on Windows — stays open.
+
+## D-V2-157 — A run's own root node ends with the run: revoked at its end, reaped by a dead-man when it is killed (RW 4.57) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 2: a scratch daemon, then three witnesses in `plugin_load_cli.rs`, red on the
+old code). Under the daemon, `run --grant …` issues a root node for itself alone (issue-then-run, `STAGE5_SPECIFICATION.md`
+§3.2). After a run that ended CLEANLY its plugin's node was revoked (RW 4.51) and its own root stayed `[live]`; after a
+run stopped by its budget or killed, both stayed `[live]` — 30 s after a `kill -9`, still `[live]`. The daemon's tree
+lives in its memory, so every run left root authority nobody held, for the daemon's whole life, and `grants list` showed
+it to the operator as live. RW 4.57 (the red team's F-01, routine run 17) had named the killed half from code reading;
+the clean-end half was new.
+
+**Decision.** (1) **A run's own root is held for exactly as long as the run** (`broker_client::RunNode`, at both places a
+root is issued for a run: `run_cmd.rs` and the sandboxed host in `guest.rs`). At the run's end it is revoked AS ITSELF —
+after `close_devices`, so the device nodes' order is unchanged — and transitively, so anything still live below it goes
+with it. (2) **A run that never reaches its end is reaped by the broker's dead-man** (D-V2-106), armed on the root as it is
+issued and beaten by a thread of the run's own every fifth of the period: when the beats stop, the daemon revokes the root
+and its subtree as itself, its record naming the silence. A budget stop ends the process without returning (`process::exit`),
+so it is reaped this way too. (3) **The period is 10 s**, generous on purpose — it reaps a dead run's authority, and a
+healthy run whose beats a loaded machine delayed past it would lose its node mid-run; `DELULU_RUN_DEADMAN_MS` may only
+SHORTEN it (tests; an operator who wants a killed run reaped sooner), as `DELULU_FOREIGN_CALL_DEADLINE_MS` may only
+shorten its bound. (4) **A refused arming refuses the run** — its node revoked at once, the daemon's code and words
+reported: a run whose authority could not be reaped does not start. (5) **Not a lease run's own node:** it is the delegator's
+(a `--multi` lease is redeemed by several runs), so no one run revokes or dead-mans it. **What a lease run MINTS under it
+is dead-manned as it is minted** (the same run, `6f98ae5`): its custody client arms a dead-man on each node it mints — a
+lease run's are its devices', since a lease carries no plugin authority — and the run's beater keeps each alive; a node
+that cannot be armed is revoked and not handed out. Killed, the run's minted nodes are reaped and the lease lives on
+(witnessed, plain and sandboxed). *(This point first said the lease half was left open; it was built later the same run.)* (6) **Hardening, not redefinition:** a node may always revoke itself, and arming a future
+self-revocation adds no authority (D-V2-106's argument); the holder model (§3.3) already says a node is its holder's —
+the tree now says when the holder is gone. (7) **A run that is suspended past the period is treated as dead** — Ctrl-Z,
+`SIGSTOP`, a debugger's halt: its beats stop, the daemon reaps its node, and once it resumes its next use is refused (fail
+closed), the record naming the silence. Not measured: a host that sleeps past the period — whether the daemon's monotonic
+clock counts the sleep is the platform's; where it does, a run's node may be reaped on waking in the same way. The cost, stated: each daemon run's chain gains two records (its root's
+`deadman-arm` and its end's `revoke`) and its broker one beat every 2 s per run.
+
+## D-V2-158 — A monitor reads only what was appended to the chain since its last read, and acts only on a record that names the one before it and whose hash is its own (MONITOR-CHAIN-1, RW 4.49) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): `monitor watch` read the whole chain on every poll (`audit::query`,
+about 3 µs a record in a release build) and beats its dead-man between polls, so a healthy monitor over a long chain was
+revoked by its own broker — and every run under it — once one read outlasted the period: 250,000 records and the default
+2 s did it by hand, with no run doing anything. RW 4.49 had recorded the cost as a LOW latency.
+
+**Decision.** (1) **A watch's poll costs what was appended since the last, never the chain's history**:
+`delulu_broker::audit::Follower` reads the day file it stopped in from the byte it stopped at, and every later day file
+(AUDIT-DAY-1 keeps every record at or after the newest file). (2) **Only whole lines**: a line without its line break may
+still be growing, and is left for the next read; the end a follower starts from never counts one. (3) **A monitor acts only
+on what the chain vouches for**: a record must name the previous record's hash and its own must recompute — the link check
+`verify` makes. A line that does not is UNVERIFIED: named on the monitor's standard error with its seq, never judged, and
+the follower goes on from its stored hash. The monitor does not stop for it: a stopped monitor's dead-man would quarantine
+every run under it, which would make any writer able to damage one line the owner of that switch. (4) **A rewritten chain**
+(the day file cut short or gone) is said and skipped to the end, as the old cursor-by-hash did when its record vanished.
+(5) **What it does not claim:** a same-user writer who computes the hash appends a record that verifies (category 7, the
+same-uid boundary, §11.4); `audit verify` with the anchor, and an external witness of the head, stay the chain's whole
+check. (6) **Hardening, not redefinition:** the monitor's rules, its node, its dead-man and what a quarantine revokes are
+unchanged; it reads less, and acts on less.
+
+## D-V2-159 — A writer catches up with the chain by reading only what was appended since it last wrote, verified, and falls back to the whole recovery for anything else (RW 4.53) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): beside another writer on a 100,000-record chain, a recorded daemon
+request took median 3,817 ms — every catch-up re-read and re-counted the whole chain under the append lock — and 14 ms alone.
+
+**Decision.** (1) `AuditLog::catch_up` reads the rest of the day file this handle wrote and every later one, each record
+checked as `verify` checks a link, and accepts the reading only when the anchor then agrees with its head and count — the
+same anchor `catch_up`'s fast path already trusted with the tail file's length. (2) **Everything else falls back to the whole
+recovery**, unchanged: a cut file, a broken link, an unanchored line, a missing file are refused (or recovered) exactly as
+before; the incremental read never accepts what the recovery refused. (3) **Not claimed:** a record behind the handle's
+point that was damaged after it was written is no longer re-read by a writer's catch-up — it never was by its fast path, and
+`audit verify` (with the anchor and an external witness of the head) is the chain's check. (4) `AuditLog::open` is unchanged:
+it still recovers from every file (RW 4.53 keeps it).
+
+## D-V2-160 — The audit anchor notes where the chain stood, and an opening whose files still measure so reads only the newest record (RW 4.53) — TAKEN (head chef, 2026-10-19, under the owner's delegation)
+
+**Measured first** (on-demand routine run 3, `V2_LOG.md`): every `AuditLog::open` read every day file twice — 180–303 ms at
+100,000 records in a release build, paid by every sandboxed run's host and every command that records.
+
+**Decision.** (1) `ANCHOR.json` keeps `head` and `records` and gains `day`, `day_len`, `day_records`, `older_bytes` and
+`max_seq` — fixed in size, written with every append as before. (2) An opening takes the anchor's count and seq only when the
+newest day file is the one it names and of its length, the older files' bytes are unchanged, and the newest file's last
+record is the anchor's head; otherwise the whole recovery runs, unchanged — what it refused (a cut file, a deleted or added
+line in any file, a replaced last record, an anchor that disagrees) is still refused at the opening. (3) **What the opening no
+longer re-reads:** an older record edited in place to the same length. The opening never recomputed hashes, so such an edit
+that kept the line parseable was never its to find; one that broke the line's JSON was, by the count, and is now `verify`'s
+alone. Named, not hidden. (4) An anchor without the note — every log written before — is read the whole way once and
+re-affirmed with it; an older binary reads `head` and `records` and ignores the rest. (5) Hardening the cost, not the meaning:
+the chain, its records, `verify` and the anchor's two original fields are unchanged.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

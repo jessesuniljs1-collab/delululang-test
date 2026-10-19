@@ -128,7 +128,9 @@ record why it is superseded (a witness branch whose work landed in revised form)
 every ten minutes whatever a laptop session had not committed — the owner asked for it so that work survives a session
 stopping at its usage limit. Each snapshot's message names its base. If the newest one is newer than the laptop's last
 commit on `master`, `git diff BASE origin/autosave/laptop` is unfinished work: finish it, verify it like any change, and
-commit it to `master` in your own commits. Never merge the branch itself.
+commit it to `master` in your own commits. Never merge the branch itself. **A snapshot is a draft** (on-demand run 1):
+re-run every witness its records claim, read its diff adversarially as a stranger's, rewrite its records as this run's
+(naming the snapshot), and check each older snapshot landed — `git diff SNAPSHOT NEXT_COMMIT -- PATHS` empty.
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
 `cargo run -p delulu -- doctor --check` — **first**, in the foreground, `rustup toolchain install 1.96.1 --profile
@@ -198,6 +200,13 @@ another OS, and then takes about seven minutes itself (run 5).
    images (no KVM in the VM), the VS Code test on Windows, and every launch step (configuring the public repository, the
    fresh-history push, the tag, `RELEASES=on`, publishing) — each named in *Open / next* as the laptop's. When nothing a
    VM can do is left, go on to items 4–7 below.
+   **Keeping `launch/2.0.0` current is a VM's work too** (on-demand run 1, release procedure step 1): `git worktree add
+   ../launch-wt launch/2.0.0` with its own `CARGO_TARGET_DIR` (the build is 2.0.0's); `git merge --no-ff origin/master`; move
+   `master`'s `## Unreleased` CHANGELOG sections into the `## [2.0.0]` section as `###` entries; keep both sides of the
+   decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
+   rebuild; run `doctor --check` and the document gates there; commit, push the branch, and dispatch `ci.yml`
+   (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
+   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free).
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
@@ -296,7 +305,10 @@ the window CONTAINS that one path counts and another does not, and grow that unt
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
-Collect the edits, assert each anchor exactly once against the files as they are, then write. **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
+Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
+to it with `&&`, and never leave a dry run's dummy input where the real run reads it** (on-demand run 2: a heredoc that
+wrote the evidence file failed its own anchor check, the records script ran anyway on the dry run's `R`/`L`/`S`/`X`, and the
+placeholders were caught only by reading the result). **`cli.rs`'s help text is one Rust string whose every line ends in a literal `\n\`** (run 22: two anchors rebuilt from it in Python missed — a raw string cannot end in one backslash): replace its lines by index, after asserting the line's text. **A mutant's own `test` command is
 part of the mutant** (run 18, M233): run against the two `quarantine` tests, neither of which used the rule, it "survived" for the
 subset's reason — read what a per-mutant command runs.
 **Enumerate a finding's class from its mechanism before fixing it** (run 19, RW 4.61: the red team named eight daemon handlers; `grep record_op` and reading each call against the handler that reaches it found four more). **A measurement over a corpus carries a control that must come out non-empty** (run 19: a wrong JSON path read all 23 corpus programs as pure; `scripts/authority-corpus.py` fails such a read). **A disk check reads the LAST write**: order a witness so the edit it is about is the last to persist (run 19: tightenings persisted after the loosenings would have rewritten the disk, and M244 would have lived).
@@ -340,12 +352,16 @@ workflow cannot be dispatched until it is on `master`** (the API answers 404 for
 it with its slice once the slice is read green, then dispatch it at `master` or the branch.
 **Write the next slice in a git worktree while a suite runs** (run 25): `git worktree add ../NEXT HEAD`, edit there without
 compiling (four CPUs are the suite's), then `git diff` it into the tree once the suite has reported, and `git worktree remove`
-— the suite's tree never moves, and a slice's code is ready when its predecessor lands. **A variable set in a backgrounded
+— the suite's tree never moves, and a slice's code is ready when its predecessor lands. A worktree may also BUILD and
+commit (on-demand run 1 merged `master` into `launch/2.0.0` in one, with its own `CARGO_TARGET_DIR`): its `.git` is a
+file, which the Survey did not skip until that run. **A variable set in a backgrounded
 `A && (B) &` list does not reach the next line** (run 25: `S=… && (…) &` then `cat $S/x` read `/x`) — set it on a line of its own.
 **`scripts/suite.sh OUTFILE` runs it so** (run 13) and ends `OUTFILE` with `EXIT=` and, if the tree changed under it,
 `TREE-MOVED:`; under 10 GB free, or on a stale Survey map, it does not start (`EXIT=3`, and why — run 23 lost one run to a
 full disk after a lockfile change, and four tests of another to a script edited between the map's build and the suite's
-start, which `TREE-MOVED` cannot see). Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
+start, which `TREE-MOVED` cannot see). **A container restart kills a background suite without a word** (on-demand run 2: its output stopped growing at
+`egress_cli` and never wrote `EXIT=`; every process's start time — `ps aux`'s START — was the restart's minute, 01:20): when a
+suite's file stops growing, read the start times before waiting longer, then run it again. Freeze the tree while it runs — a NEW file counts, and an edited test file too (run 13) (run 12: a script written into `scripts/` mid-suite made the map
 stale and cost `doctor_cli` three tests and the suite a re-run): draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported — and the NEXT slice's witness too (run 16 appended one to a
 test file and compiled it mid-suite; restored in time, but `TREE-MOVED` cannot see an edit that is undone). While the suite runs, a fix may be COMMITTED (a commit
@@ -420,7 +436,8 @@ fool. Keep this file short enough to read at the start of every run.
 - **Never weaken a test to make it pass, never lengthen a sleep to make a timing test green** — a timing
   test failing only on CI may be measuring the runner (`HANDOFF.md` §11.5). **A witness's baseline is the state it needs, never a
   throughput** (run 17: "200 requests in 1.6 s" — CI's parallel test job answered 45 and `master` went red); run a new timing-shaped
-  witness with all four CPUs busy before it reaches `master`, and assert the guarantee before the baseline.
+  witness with all four CPUs busy before it reaches `master`, and assert the guarantee before the baseline — loaded by four
+  concurrent copies of the witness's own test binary (on-demand run 2: the harness refuses shell busy loops).
   **A witness whose subject races the program is timing-shaped even when it measures no time** (run 19: the break-glass
   witness took the program's output as its baseline, and on a loaded machine the monitor quarantined the run before it
   printed — red once in the full suite, 1 of 5 with four CPUs busy, after `master` had it).
@@ -434,7 +451,8 @@ fool. Keep this file short enough to read at the start of every run.
   incremental caches reach about 7 GB after a few suites — run 6's fourth suite died on ENOSPC. `df -h /` before a suite;
   delete `target/<triple>` after the lint; run suites with `CARGO_INCREMENTAL=0`. A dependency change re-hashes every
   crate above it and leaves the old test executables behind (10 GB in run 6): delete the executables in
-  `target/debug/deps` older than the last build (`find … -perm -u+x -mmin +N -delete`). A witness job's log: ask `get_job_logs`
+  `target/debug/deps` older than the last build (`find … -perm -u+x ! -name '*.so' -mmin +N -delete` — on-demand run 3: without
+  the `! -name '*.so'` it also deleted the proc-macro libraries, which are executable, and the next suite rebuilt them). A witness job's log: ask `get_job_logs`
   by job id with a large `tail_lines` — a long log comes back as a file to grep, a short one (a quick job, about 450
   lines) inline, so ask about 120 lines for a job that ran one small target. And a run listing filtered by `ci.yml`,
   `branch` and `event` with `perPage` 1 returned a day-old run first (run 6): list by `event` alone, all workflows —

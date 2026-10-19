@@ -15,6 +15,9 @@
 //! * **It reads only what the host recorded** — the hash-chained audit, as it is appended — and
 //!   trusts nothing a guest says. It resumes after the last record HASH it read, never a seq: a hash
 //!   also shows a chain rewritten under it (and until D-V2-102 two writers numbered the chain apart).
+//!   Each poll reads only what was appended since (`audit::Follower`), and acts only on a record that
+//!   names the one before it and whose hash is its own (MONITOR-CHAIN-1, D-V2-158): a whole read of a
+//!   long chain outlasted the dead-man's period, and a healthy monitor was revoked by its own broker.
 //! * **Its rules are declarative and few:** `envelope` (any envelope refusal — a `use` `deny` with
 //!   `refused_by: envelope`, D-V2-100), `special-use` (any fetch the egress client refused because its
 //!   host is, or resolved to, a special-use address — a `use` `deny` with `refused_by: egress` and
@@ -214,34 +217,6 @@ fn parse(rest: &[String]) -> Result<Opts, String> {
     Ok(Opts { node, rules, poll, for_ms, state_dir, json, on_death, death_after })
 }
 
-/// For every node under (and including) `root`, the RUN it belongs to: the child of `root` on its
-/// path, or `root` itself. Built from the daemon's own listing each poll, so a node minted mid-run (a
-/// device's node) is watched from the moment it exists. Nodes outside the subtree are absent — the
-/// monitor neither counts nor revokes them.
-fn runs_under(root: &str, nodes: &[crate::broker_ipc::NodeInfo]) -> HashMap<String, String> {
-    let parent: HashMap<&str, Option<&str>> = nodes.iter().map(|n| (n.id.as_str(), n.parent.as_deref())).collect();
-    let mut out = HashMap::new();
-    for n in nodes {
-        let mut cur = n.id.as_str();
-        let mut below: Option<&str> = None;
-        // Bounded like the broker's own ancestry walk: ids are never reused, so a cycle is unreachable.
-        for _ in 0..1024 {
-            if cur == root {
-                out.insert(n.id.clone(), below.unwrap_or(root).to_string());
-                break;
-            }
-            match parent.get(cur).copied().flatten() {
-                Some(p) => {
-                    below = Some(cur);
-                    cur = p;
-                }
-                None => break,
-            }
-        }
-    }
-    out
-}
-
 /// What the rules saw, for one quarantine.
 struct Evidence {
     rule: String,
@@ -274,16 +249,41 @@ fn cmd_watch(rest: &[String]) -> i32 {
         waiting.store(false, std::sync::atomic::Ordering::SeqCst);
         answer
     };
-    let list = || -> Result<Vec<crate::broker_ipc::NodeInfo>, String> {
-        match ask(ReqBody::List) {
-            Ok(Response::Listed { nodes }) => Ok(nodes),
-            Ok(other) => Err(format!("unexpected answer to a listing: {other:?}")),
-            Err(e) => Err(format!(
-                "broker unreachable: {} — a monitor that cannot reach its broker cannot quarantine anything",
-                crate::cli::broker_unreachable_detail(&e)
-            )),
+    // RW 4.69: the monitor's node's state, and the run each of `nodes` belongs to under it — asked of the daemon about
+    // exactly these nodes, in parts of at most `MAX_RUNS_ASKED`. A whole-tree listing each poll held the serial daemon (an
+    // e-stop's revoke behind it) for as long as the tree — every revoked node of every run it ever served — was large, and
+    // past one protocol frame could not be answered at all: the monitor stopped, and its dead-man revoked every run it watched.
+    let runs_under = |nodes: Vec<String>| -> Result<(Option<String>, HashMap<String, String>), String> {
+        let mut state = None;
+        let mut runs = HashMap::new();
+        let mut parts = nodes.chunks(crate::broker_ipc::MAX_RUNS_ASKED).map(<[String]>::to_vec).collect::<Vec<_>>();
+        if parts.is_empty() {
+            parts.push(Vec::new());
         }
+        for part in parts {
+            match ask(ReqBody::RunsUnder { root: o.node.clone(), nodes: part }) {
+                Ok(Response::Runs { state: s, runs: r }) => {
+                    state = s;
+                    runs.extend(r);
+                }
+                Ok(Response::Error { code, message, .. }) => {
+                    return Err(format!(
+                        "the broker refused the monitor's question about its tree ({code}: {})",
+                        delulu_diag::terminal_line(&message)
+                    ))
+                }
+                Ok(other) => return Err(format!("unexpected answer to a question about the tree: {other:?}")),
+                Err(e) => {
+                    return Err(format!(
+                        "broker unreachable: {} — a monitor that cannot reach its broker cannot quarantine anything",
+                        crate::cli::broker_unreachable_detail(&e)
+                    ))
+                }
+            }
+        }
+        Ok((state, runs))
     };
+    let state_of_node = || runs_under(Vec::new()).map(|(state, _)| state);
     let read_chain = || -> Result<Vec<delulu_broker::audit::AuditRecord>, String> {
         if !audit_dir.exists() {
             return Ok(Vec::new());
@@ -293,21 +293,20 @@ fn cmd_watch(rest: &[String]) -> i32 {
     };
 
     // The watched node must exist and be live NOW — a monitor started on a typo watches nothing.
-    let nodes = match list() {
-        Ok(n) => n,
+    match state_of_node() {
+        Ok(Some(s)) if s == "live" => {}
+        Ok(Some(s)) => return fail(format!("`{}` is {s} — there is nothing under it to watch", o.node)),
+        Ok(None) => return fail(format!("`{}` is not a node of this broker's tree", o.node)),
         Err(e) => return fail(e),
-    };
-    match nodes.iter().find(|n| n.id == o.node) {
-        Some(n) if n.state == "live" => {}
-        Some(n) => return fail(format!("`{}` is {} — there is nothing under it to watch", o.node, n.state)),
-        None => return fail(format!("`{}` is not a node of this broker's tree", o.node)),
     }
-    // Watch from NOW: the chain's last record at start is the cursor, by hash (AUDIT-SEQ-1).
-    let mut cursor: Option<String> = match read_chain() {
-        Ok(recs) => recs.last().map(|r| r.hash.clone()),
-        Err(e) => return fail(e),
+    // Watch from NOW: the chain's last record at start is where the watch begins, by hash (AUDIT-SEQ-1). MONITOR-CHAIN-1
+    // (RW 4.49): each poll reads only what was appended since — a whole read of a long chain outlasted the dead-man's period
+    // and a healthy monitor was revoked by its own broker — and acts only on records that verify against the one before.
+    let mut follower = match delulu_broker::audit::Follower::at_end(&audit_dir) {
+        Ok(f) => f,
+        Err(e) => return fail(format!("the audit chain at `{}` cannot be read: {e}", audit_dir.display())),
     };
-    let from = cursor.clone();
+    let from = Some(follower.head().to_string()).filter(|h| h != delulu_broker::GENESIS_HASH);
     let rule_names: Vec<String> = o.rules.iter().map(Rule::name).collect();
     // P8-04 step 5: the dead-man, armed BEFORE the watch begins, so a monitor killed the moment it says
     // "watching" is already one whose death quarantines.
@@ -411,16 +410,16 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // end, after which the dead-man is disarmed or already gone — rather than on an error.
     let mut clean_end = false;
     loop {
-        let nodes = match list() {
-            Ok(n) => n,
+        let state = match state_of_node() {
+            Ok(s) => s,
             Err(e) => {
                 refused_any = true;
                 ended = e;
                 break;
             }
         };
-        match nodes.iter().find(|n| n.id == o.node) {
-            Some(n) if n.state != "live" => {
+        match state {
+            Some(s) if s != "live" => {
                 // Its own dead-man, or someone else (the operator ending the watch)? The chain says which: a
                 // monitor too slow to beat must not end as if it had been asked to.
                 let fired = deadman.as_ref().and(read_chain().ok()).and_then(|recs| deadman_fired_at(&recs, &o.node));
@@ -430,7 +429,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
                         ended = dead_man_fired(&o.node, seq, *period);
                     }
                     _ => {
-                        ended = format!("`{}` is {} — nothing left to watch", o.node, n.state);
+                        ended = format!("`{}` is {s} — nothing left to watch", o.node);
                         clean_end = true;
                     }
                 }
@@ -449,38 +448,56 @@ fn cmd_watch(rest: &[String]) -> i32 {
             ended = why;
             break;
         }
-        let runs = runs_under(&o.node, &nodes);
-        let recs = match read_chain() {
-            Ok(r) => r,
+        let got = match follower.read_new() {
+            Ok(got) => got,
             Err(e) => {
                 refused_any = true;
-                ended = e;
+                ended = format!("the audit chain at `{}` cannot be read: {e}", audit_dir.display());
                 break;
             }
         };
-        // A long chain is a slow read: beat again once it is read, so the period covers one read, not two.
+        // A large append is a slow read: beat again once it is read, so the period covers one read, not two.
         if let Err((fatal, why)) = beat() {
             refused_any |= fatal;
             clean_end = !fatal;
             ended = why;
             break;
         }
-        let start = match &cursor {
-            None => 0,
-            Some(h) => match recs.iter().position(|r| &r.hash == h) {
-                Some(i) => i + 1,
-                None => {
-                    // The record the monitor last read is gone: the chain was rewritten under it. Say
-                    // so, and read on from the head — never re-judge records already judged.
-                    eprintln!("monitor: WARNING — the record it last read is no longer in the chain; reading on from the head");
-                    recs.len()
+        // The run of every actor these records name, asked AFTER they were read: a node minted after an earlier question
+        // and before its records were read is in the tree when it is asked after (ids are never reused, nodes never leave).
+        let actors: Vec<String> =
+            got.records.iter().filter_map(|r| r.actor_node.clone()).collect::<HashSet<_>>().into_iter().collect();
+        let runs = if actors.is_empty() {
+            HashMap::new()
+        } else {
+            match runs_under(actors) {
+                Ok((_, runs)) => runs,
+                Err(e) => {
+                    refused_any = true;
+                    ended = e;
+                    break;
                 }
-            },
+            }
         };
+        if got.rewritten {
+            // The record the monitor last read is gone: the chain was rewritten under it. Say so, and read on from the
+            // head — never re-judge records already judged.
+            eprintln!("monitor: WARNING — the record it last read is no longer in the chain; reading on from the head");
+        }
+        if !got.unverified.is_empty() {
+            // Evidence the chain does not vouch for is never acted on: a damaged line, or one written without the format.
+            let seqs: Vec<String> = got.unverified.iter().map(|s| s.map_or("?".into(), |s| s.to_string())).collect();
+            eprintln!(
+                "monitor: WARNING — {} line(s) past where it had read do not verify against the chain (seq {}) — judged nothing \
+                 on them; `delulu audit verify` names where the chain breaks",
+                seqs.len(),
+                seqs.join(", ")
+            );
+        }
         // Evidence per run, in chain order; each run fires at most once.
         let mut fire: BTreeMap<String, Evidence> = BTreeMap::new();
-        records_read += recs.len() - start;
-        for r in &recs[start..] {
+        records_read += got.records.len();
+        for r in &got.records {
             let Some(run) = r.actor_node.as_deref().and_then(|a| runs.get(a)) else { continue };
             // A run is a node UNDER the monitor's; what the monitor's own node does — a refused
             // delegation under it, an operator's typo — is not a run's misbehaviour, and quarantining
@@ -520,7 +537,6 @@ fn cmd_watch(rest: &[String]) -> i32 {
                 }
             }
         }
-        cursor = recs.last().map(|r| r.hash.clone()).or(cursor);
         for (run, ev) in fire {
             quarantined.insert(run.clone());
             let seqs: Vec<String> = ev.records.iter().map(|r| r.0.to_string()).collect();
@@ -602,7 +618,7 @@ fn cmd_watch(rest: &[String]) -> i32 {
     // left armed on an error — this monitor has stopped watching, and the operator asked for that to quarantine.
     let mut disarmed_seq: Option<u64> = None;
     if let Some((key, _, period)) = &deadman {
-        let node_live = list().ok().and_then(|ns| ns.into_iter().find(|n| n.id == o.node)).is_some_and(|n| n.state == "live");
+        let node_live = state_of_node().ok().flatten().is_some_and(|s| s == "live");
         if clean_end && node_live {
             match crate::brokerd::request(&state_dir, ReqBody::DisarmDeadman { node: o.node.clone(), key: key.clone() }) {
                 Ok(Response::Recorded { seq }) => {
@@ -682,38 +698,6 @@ fn now_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn node(id: &str, parent: Option<&str>) -> crate::broker_ipc::NodeInfo {
-        crate::broker_ipc::NodeInfo {
-            id: id.into(),
-            parent: parent.map(str::to_string),
-            state: "live".into(),
-            ..Default::default()
-        }
-    }
-
-    /// The step-3 rule as the monitor sees it: every node under `g_M` maps to its run (the child of
-    /// `g_M` on its path), and nothing outside the subtree — a sibling, the parent — is there at all.
-    #[test]
-    fn a_monitor_maps_its_subtree_to_runs_and_sees_nothing_else() {
-        let nodes = [
-            node("g_root", None),
-            node("g_M", Some("g_root")),
-            node("g_run1", Some("g_M")),
-            node("g_dev1", Some("g_run1")),
-            node("g_run2", Some("g_M")),
-            node("g_sibling", Some("g_root")),
-            node("g_cousin", Some("g_sibling")),
-        ];
-        let runs = runs_under("g_M", &nodes);
-        assert_eq!(runs.get("g_M").map(String::as_str), Some("g_M"));
-        assert_eq!(runs.get("g_run1").map(String::as_str), Some("g_run1"));
-        assert_eq!(runs.get("g_dev1").map(String::as_str), Some("g_run1"), "a device's node belongs to its run");
-        assert_eq!(runs.get("g_run2").map(String::as_str), Some("g_run2"));
-        for outside in ["g_root", "g_sibling", "g_cousin"] {
-            assert!(!runs.contains_key(outside), "`{outside}` is not under the monitor: {runs:?}");
-        }
-    }
 
     /// D-V2-113: `special-use` fires on a special-use refusal by the egress client and on nothing else — not on its
     /// other refusals (a userinfo URL), not on an envelope's, not on an `allow`'s action, not on a record whose words

@@ -6415,7 +6415,8 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // And the same for accelerators (10h). The reason is sharper here than the note above:
         // 10g established that a grant node cannot express a device ENVELOPE at all (D12e), so a
         // lease could only ever confer "some compute, bounds unknown" — which is not a bound.
-        // Fail closed, and `--lease` refuses a local compute grant by name rather than dropping it.
+        // Fail closed, and `--lease` refuses a local compute grant by name rather than dropping it (since RW 4.68 —
+        // this line claimed it from 10h on, and `redeem_lease` dropped the grant in silence until 2026-10-19).
         computes: Vec::new(),
     }
 }

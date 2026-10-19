@@ -80,6 +80,10 @@ pub struct BrokerClientCustody {
     refusal_unrecorded_said: bool,
     /// The plugin nodes this client minted (RW 4.51), revoked when the run ends (`end_of_run`).
     minted: Vec<GrantId>,
+    /// Under a lease, the run's beater (RW 4.57, D-V2-157): every node this client mints is dead-manned with it. Only the
+    /// run's own client carries it: under a lease nothing mints from another thread (its devices' nodes are minted before
+    /// `main`, and a lease carries no plugin authority).
+    reaper: Option<Reaper>,
 }
 
 impl BrokerClientCustody {
@@ -105,6 +109,7 @@ impl BrokerClientCustody {
                 last_net_allow: None,
                 refusal_unrecorded_said: false,
                 minted: Vec::new(),
+                reaper: None,
             }),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected issue response: {other:?}"))),
@@ -128,6 +133,7 @@ impl BrokerClientCustody {
             last_net_allow: None,
             refusal_unrecorded_said: false,
             minted: Vec::new(),
+            reaper: None,
         }
     }
 
@@ -235,6 +241,135 @@ impl BrokerClientCustody {
 /// One request/response round-trip; any transport failure is DL1401 (fail closed, invariant 27).
 fn rpc(state_dir: &std::path::Path, body: ReqBody) -> Result<Response, CustodyDenial> {
     brokerd::request(state_dir, body).map_err(|e| dl1401(&e.to_string()))
+}
+
+// ----- a run's own node ends with the run (RW 4.57, D-V2-157) ----------------------------------------
+
+/// How long a run's own node outlives its run's last beat (RW 4.57, D-V2-157). Generous on purpose: the dead-man is there
+/// to reap a KILLED run's authority, and a run whose beats a loaded machine delayed past it would lose its node mid-run.
+pub const RUN_DEADMAN_PERIOD: Duration = Duration::from_secs(10);
+
+/// The period in force: [`RUN_DEADMAN_PERIOD`], or a SHORTER one from `DELULU_RUN_DEADMAN_MS` (tests; an operator who
+/// wants a killed run's node gone sooner). It can only shorten: a longer, unparseable or sub-minimum value is ignored, so
+/// the knob can neither keep a dead run's node longer nor make the broker refuse the arming.
+pub fn run_deadman_period(requested: Option<&str>) -> Duration {
+    requested
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .filter(|d| *d >= delulu_broker::deadman::MIN_PERIOD && *d < RUN_DEADMAN_PERIOD)
+        .unwrap_or(RUN_DEADMAN_PERIOD)
+}
+
+/// The nodes one run's beater keeps alive (RW 4.57, D-V2-157): each `(node, key)` a dead-man was armed with on the
+/// daemon, beaten every fifth of `period`. Shared between the run's [`RunNode`] and, under a lease, its custody client,
+/// which adds a node as it mints it.
+#[derive(Clone)]
+pub struct Reaper {
+    held: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    period: Duration,
+}
+
+impl Reaper {
+    fn new() -> Reaper {
+        Reaper { held: Default::default(), period: run_deadman_period(std::env::var("DELULU_RUN_DEADMAN_MS").ok().as_deref()) }
+    }
+
+    /// Arm a dead-man on `node` and keep it beaten from now on. The daemon's own refusal comes back unchanged.
+    fn arm(&self, state_dir: &std::path::Path, node: &GrantId) -> Result<(), CustodyDenial> {
+        let asked = ReqBody::ArmDeadman { node: node.as_str().to_string(), period_ms: self.period.as_millis() as u64 };
+        let key = match rpc(state_dir, asked)? {
+            Response::DeadmanArmed { key, .. } => key,
+            Response::Error { code, message, .. } => return Err(CustodyDenial::new(static_code(&code), message)),
+            other => return Err(dl1401(&format!("unexpected dead-man response: {other:?}"))),
+        };
+        self.held.lock().unwrap_or_else(|p| p.into_inner()).push((node.as_str().to_string(), key));
+        Ok(())
+    }
+
+    /// The beater: every fifth of the period, one beat per held node. A node whose beat is refused (revoked by an operator
+    /// or an e-stop, ended by its run, its dead-man already fired) is dropped from the set — nothing is left to keep alive.
+    /// Never joined, so a run's end never waits on a wedged daemon.
+    fn start(&self, state_dir: PathBuf) -> Result<std::sync::mpsc::Sender<()>, CustodyDenial> {
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        let reaper = self.clone();
+        std::thread::Builder::new()
+            .name("delulu-run-beat".into())
+            .spawn(move || loop {
+                match stopped.recv_timeout(reaper.period / 5) {
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                    _ => return,
+                }
+                let held = reaper.held.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                for (node, key) in held {
+                    match rpc(&state_dir, ReqBody::Beat { node: node.clone(), key }) {
+                        Ok(Response::Ok) => {}
+                        Ok(_) => reaper.held.lock().unwrap_or_else(|p| p.into_inner()).retain(|(n, _)| *n != node),
+                        // Unreachable for a moment: the next beat may still arrive within the period.
+                        Err(_) => {}
+                    }
+                }
+            })
+            .map_err(|e| dl1401(&format!("the run's beat thread could not start: {e}")))?;
+        Ok(stop)
+    }
+}
+
+/// What a run holds for exactly as long as it runs (RW 4.57, D-V2-157). Before, a run's nodes outlived it: the root a
+/// `run --broker daemon --grant …` issued for itself alone (issue-then-run, spec §3.2) stayed `[live]` after every run,
+/// and a KILLED run left every node it had minted (a plugin's, a device's) live too — authority nobody holds, for the
+/// daemon's whole life.
+///
+/// Two halves, because a run cannot always reach its own end. **A run that ends** revokes its own root as itself when this
+/// is dropped — after its devices are closed, so the device nodes' order (`close_devices`) is unchanged, and transitively,
+/// so anything still live below goes with it. **A run that never reaches its end** (killed, crashed, its machine lost) is
+/// reaped by the broker's dead-man (D-V2-106): armed on the root here, beaten by a thread of the run's own, and when the
+/// beats stop the daemon revokes the node and its subtree as itself, the cause in the record. **A lease run's node is the
+/// delegator's** — a `--multi` lease serves several runs — so it is neither revoked nor dead-manned; instead each node the
+/// run MINTS under it is dead-manned as it is minted ([`RunNode::for_lease`]), and its usual end (`end_of_run`,
+/// `close_devices`) revokes it. Nothing here adds authority: a node may always revoke itself.
+pub struct RunNode {
+    state_dir: PathBuf,
+    /// The run's own root, revoked at its end — `None` under a lease.
+    node: Option<GrantId>,
+    /// Dropped to stop the beater.
+    stop: Option<std::sync::mpsc::Sender<()>>,
+}
+
+impl RunNode {
+    /// Arm the dead-man on the root `custody` issued for this run and start beating it. A refused arming is the run's
+    /// refusal: the node is revoked at once (a run that cannot be reaped does not start) and the daemon's own code and
+    /// words are returned.
+    pub fn hold(custody: &BrokerClientCustody) -> Result<RunNode, CustodyDenial> {
+        let (state_dir, node) = (custody.state_dir.clone(), custody.node.clone());
+        let reaper = Reaper::new();
+        match reaper.arm(&state_dir, &node).and_then(|()| reaper.start(state_dir.clone())) {
+            Ok(stop) => Ok(RunNode { state_dir, node: Some(node), stop: Some(stop) }),
+            Err(d) => {
+                let _ = rpc(&state_dir, ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() });
+                Err(d)
+            }
+        }
+    }
+
+    /// Under a lease: from now on every node `custody` mints is dead-manned as it is minted, and beaten here. The lease's own
+    /// node is left as it is.
+    pub fn for_lease(custody: &mut BrokerClientCustody) -> Result<RunNode, CustodyDenial> {
+        let reaper = Reaper::new();
+        let stop = reaper.start(custody.state_dir.clone())?;
+        custody.reaper = Some(reaper);
+        Ok(RunNode { state_dir: custody.state_dir.clone(), node: None, stop: Some(stop) })
+    }
+}
+
+impl Drop for RunNode {
+    fn drop(&mut self) {
+        drop(self.stop.take());
+        // Best effort: a broker that cannot be reached now has the dead-man to fall back on.
+        if let Some(node) = &self.node {
+            let _ =
+                rpc(&self.state_dir, ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() });
+        }
+    }
 }
 
 impl Custody for BrokerClientCustody {
@@ -353,6 +488,17 @@ impl Custody for BrokerClientCustody {
         match resp {
             Response::Issued { node } => {
                 let node = GrantId::from_trusted(node);
+                // RW 4.57 (D-V2-157): under a lease, a node this run mints is dead-manned as it is minted, so a run killed
+                // before its end leaves none of them live. One that cannot be armed is not handed out.
+                if let Some(reaper) = &self.reaper {
+                    if let Err(d) = reaper.arm(&self.state_dir, &node) {
+                        let _ = rpc(
+                            &self.state_dir,
+                            ReqBody::Revoke { caller: node.as_str().to_string(), target: node.as_str().to_string() },
+                        );
+                        return Err(d);
+                    }
+                }
                 // RW 4.51: only a PLUGIN's node is remembered for `end_of_run`. A device's node is revoked
                 // by `close_devices` AFTER the device broker stops — revoked earlier, the watchdog reads it
                 // as an operator's e-stop (routine run 16's suite caught exactly that in `estop_cli`).
@@ -483,6 +629,19 @@ mod tests {
         assert_eq!(clamp_epoch_ms(Some(10)), 10);
         assert_eq!(clamp_epoch_ms(Some(0)), 1, "floor 1 ms");
         assert_eq!(clamp_epoch_ms(Some(1000)), 250, "ceiling 250 ms (spec §4.1)");
+    }
+
+    /// RW 4.57 (D-V2-157): `DELULU_RUN_DEADMAN_MS` can only SHORTEN a run's dead-man — a longer, unparseable, zero or
+    /// sub-minimum value leaves the default, so the knob can neither keep a killed run's node longer nor make the arming
+    /// fail.
+    #[test]
+    fn the_run_dead_man_period_can_only_be_shortened() {
+        assert_eq!(run_deadman_period(None), RUN_DEADMAN_PERIOD);
+        assert_eq!(run_deadman_period(Some("3000")), Duration::from_millis(3000));
+        assert_eq!(run_deadman_period(Some("100")), Duration::from_millis(100), "the broker's own minimum is allowed");
+        for ignored in ["99", "0", "10000", "60000", "-5", "3s", ""] {
+            assert_eq!(run_deadman_period(Some(ignored)), RUN_DEADMAN_PERIOD, "`{ignored}` must leave the default");
+        }
     }
 
     #[test]

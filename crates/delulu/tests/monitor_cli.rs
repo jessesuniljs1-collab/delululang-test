@@ -1047,7 +1047,8 @@ fn a_killed_monitors_runs_are_revoked_by_its_broker_and_the_chain_says_why() {
 
 /// **`--on-monitor-death continue` is the operator's opt-out:** the same kill, and the run lives on
 /// unwatched — a full dead-man period and more after the monitor died, the run is still commanding
-/// and every node is live. Nothing was armed, and the chain says so by having no arming in it.
+/// and every node is live. Nothing was armed on the monitor's node, and the chain says so: its only armings are the run's
+/// own minted nodes' (D-V2-157).
 #[test]
 fn with_on_monitor_death_continue_a_killed_monitors_runs_live_on() {
     let f = setup("mcont");
@@ -1068,7 +1069,14 @@ fn with_on_monitor_death_continue_a_killed_monitors_runs_live_on() {
     let states = node_states(&f);
     assert_eq!((states[&m].0.as_str(), states[&run].0.as_str()), ("live", "live"), "{states:?}");
     let recs = all_records(&f);
-    assert!(!recs.iter().any(|r| r["action"] == "deadman-arm"), "`continue` arms nothing: {recs:#?}");
+    // `continue` arms nothing on the monitor's node. The armings the chain does hold are the run's own (RW 4.57, D-V2-157): a
+    // lease run dead-mans each node it mints — here its device's, a child of the run's node — never the monitor's.
+    let armed: Vec<&str> =
+        recs.iter().filter(|r| r["action"] == "deadman-arm").map(|r| r["target"].as_str().unwrap_or("")).collect();
+    assert!(
+        !armed.is_empty() && armed.iter().all(|t| states.get(*t).and_then(|s| s.1.as_deref()) == Some(run.as_str())),
+        "`continue` arms nothing on the monitor's node — every arming is of a node the run minted: {armed:?} {states:?}"
+    );
     assert!(!recs.iter().any(|r| r["action"] == "revoke"), "and nothing revoked anything: {recs:#?}");
     // The operator ends it.
     let o = delulu_in(&f.cwd, &f.state, &["grants", "revoke", &m]);
@@ -1337,4 +1345,185 @@ fn the_break_glass_rule_quarantines_the_run_under_a_ticket_and_no_other() {
     assert_eq!(r["actor_node"], glass.as_str(), "the use names the run's own node: {r}");
     let gate = recs.iter().find(|x| x["action"] == "break-glass" && x["decision"] == "allow").expect("the gate's record");
     assert_eq!(r["target"], gate["target"], "both name the same ticket: {r}\n{gate}");
+}
+
+/// Grow `dir`'s chain with records written by the chain's own code until ONE whole read of it — `audit::query`, what the
+/// monitor read on every poll — takes at least `at_least`; return that read's time and the record count. The first record
+/// goes through `AuditLog`, so the day file and its header are the writer's own; the rest are the same writer's lines
+/// (`AuditEntry::into_record`, `to_line`) put down in bulk, and the anchor — a count the bulk lines contradict — is removed,
+/// so the next opening anchors the chain again, as a log's first opening does.
+fn grow_chain_until_a_read_takes(dir: &Path, at_least: std::time::Duration) -> (std::time::Duration, usize) {
+    use delulu_broker::audit::{AuditEntry, AuditSink};
+    use std::io::Write;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+    let entry = |seq: u64| AuditEntry {
+        seq,
+        ts: now,
+        actor_node: Some("g_00000000000000000000000000000000".into()),
+        action: "use".into(),
+        target: Some("arm0/elbow".into()),
+        authority: Some(serde_json::json!({ "effects": ["Actuate"] })),
+        span: None,
+        decision: "allow".into(),
+    };
+    let mut log = delulu_broker::AuditLog::open(dir).unwrap();
+    let first = log.append(entry(0)).unwrap();
+    let day = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .expect("the day file the first record went into");
+    drop(log);
+    let (mut head, mut seq, mut n) = (first.hash, first.seq, 1usize);
+    let mut batch = 30_000usize;
+    loop {
+        let mut text = String::new();
+        for _ in 0..batch {
+            seq += 1;
+            let rec = entry(seq).into_record(&head);
+            text.push_str(&rec.to_line());
+            text.push('\n');
+            head = rec.hash;
+        }
+        std::fs::OpenOptions::new().append(true).open(&day).unwrap().write_all(text.as_bytes()).unwrap();
+        n += batch;
+        let t = std::time::Instant::now();
+        let read = delulu_broker::audit::query(dir, &Default::default()).unwrap();
+        let took = t.elapsed();
+        assert_eq!(read.len(), n, "every line written is a record the chain's reader reads");
+        if took >= at_least {
+            std::fs::remove_file(dir.join("ANCHOR.json")).unwrap();
+            return (took, n);
+        }
+        assert!(n < 3_000_000, "{n} records still read in {took:?} — this machine reads too fast for the state this needs");
+        batch = n / 2;
+    }
+}
+
+/// **MONITOR-CHAIN-1 (RW 4.49): a long chain is not a dead monitor.** The monitor read the WHOLE chain on every poll and beats
+/// its dead-man between polls, so once one read outlasted the period a healthy monitor was revoked by its own broker — and
+/// every run under it with it — for nothing but the chain's length (by hand, 2026-10-19: 250,000 records and the default
+/// 2 s period). The state this needs is a chain whose one whole read, measured here, takes twice the period. The monitor must
+/// stay live across several periods and then read what was appended after it began — so "not revoked" is not a monitor
+/// that read nothing.
+#[test]
+fn a_long_chain_does_not_kill_a_healthy_monitor() {
+    const PERIOD_MS: u64 = 500;
+    let f = setup("mlong");
+    let audit = f.state.join("audit");
+    let (took, n) = grow_chain_until_a_read_takes(&audit, std::time::Duration::from_millis(2 * PERIOD_MS));
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let stats = delulu_broker::verify(&audit).expect("the grown chain verifies — every line is its writer's own");
+    assert!(stats.records >= n, "{stats:?}");
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, _) = delegate(&f, &["--parent", &m, "--holder-desc", "a well-behaved run"]);
+    let mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
+    let live = |when: &str| {
+        let states = node_states(&f);
+        assert_eq!(
+            (states[&m].0.as_str(), states[&run].0.as_str()),
+            ("live", "live"),
+            "{when}: a healthy monitor over {n} records (one whole read: {took:?}) was revoked by its own {PERIOD_MS} ms \
+             dead-man: {states:?}"
+        );
+    };
+    std::thread::sleep(std::time::Duration::from_millis(4 * PERIOD_MS));
+    live("four periods into the watch");
+    // Appended after the watch began: what the monitor must read.
+    let _ = delegate(&f, &["--parent", &run, "--holder-desc", "minted after the watch began"]);
+    std::thread::sleep(std::time::Duration::from_millis(2 * PERIOD_MS));
+    live("six periods into the watch");
+    let (report, seen) = stop_monitor(&f, &m, mon);
+    eprintln!("measured: {n} records, one whole read {took:?}; the monitor read {} past its start", report["records_read"]);
+    assert!(report["ended"].as_str().is_some_and(|e| !e.contains("dead-man")), "{report:#}\n{seen:?}");
+    // Its own arming and the delegation made after it began, at least.
+    assert!(
+        report["records_read"].as_u64().unwrap_or(0) >= 2,
+        "the monitor must have read what was appended after it began: {report:#}\n{seen:?}"
+    );
+    // The daemon is found through the state directory: stop it first, then remove the long chain.
+    drop(guard);
+    let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
+}
+
+/// A node's state by `grants inspect` — one node's answer, which fits a frame however large the tree is.
+fn inspect_state(f: &Fixture, id: &str) -> String {
+    let o = delulu_in(&f.cwd, &f.state, &["grants", "inspect", id, "--json"]);
+    assert!(o.status.success(), "grants inspect {id}: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("grants inspect --json");
+    v["node"]["state"].as_str().unwrap_or("").to_string()
+}
+
+/// **RW 4.69: a tree too large for one listing is not a dead monitor.** The monitor asked the daemon for the WHOLE grant tree
+/// every poll, and the tree keeps every node it ever held — another holder's included, each with its holder's description,
+/// unbounded words. Past one protocol frame (16 MiB) the daemon could not send the listing and dropped the connection; the
+/// monitor read that as a broker that was not there, stopped watching, and its dead-man revoked its node and every run under
+/// it — nothing under it having misbehaved (by hand on Windows, 2026-10-19: 550 nodes of 30,000-byte descriptions, outside
+/// the monitor's subtree). The state this needs is a tree whose whole listing does not fit a frame, measured here by
+/// `grants list` itself. The monitor must stay live across three periods past it, and then still quarantine the run under
+/// it at its first envelope refusal — so "not revoked" is not a monitor that judges nothing.
+#[test]
+fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
+    const PERIOD_MS: u64 = 1000;
+    let f = setup("mtree");
+    std::fs::write(f.cwd.join("persist.delulu"), persistent_prober(60)).unwrap();
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let (run, token) = delegate(&f, &["--parent", &m, "--holder-desc", "the run"]);
+    let mon = start_monitor_args(&f, &m, &["--for", "600000", "--death-after", &PERIOD_MS.to_string()]);
+
+    // Another holder's nodes, outside the monitor's subtree, each described at length — under each OS's limit on one
+    // argument (Windows: 32,767 characters a command line) — until together their descriptions are more than one frame.
+    let desc_len: usize = if cfg!(windows) { 30_000 } else { 120_000 };
+    let count = (16 * 1024 * 1024) / desc_len + 2;
+    let desc = "x".repeat(desc_len);
+    std::thread::scope(|s| {
+        for w in 0..4 {
+            let (f, desc) = (&f, &desc);
+            s.spawn(move || {
+                for _ in (w..count).step_by(4) {
+                    let o = delulu_in(&f.cwd, &f.state, &["grants", "delegate", "--effects", "Write", "--holder-desc", desc]);
+                    assert!(o.status.success(), "grants delegate: {}", stderr(&o));
+                }
+            });
+        }
+    });
+    // The state, measured: a whole-tree listing no longer fits one frame.
+    let listed = delulu_in(&f.cwd, &f.state, &["grants", "list", "--json"]);
+    assert!(
+        !listed.status.success(),
+        "{count} nodes of {desc_len}-byte descriptions are more than one frame, and the whole listing answered — the state \
+         this witness needs was not reached"
+    );
+
+    // Three periods of the monitor's dead-man past that size: the monitor polled throughout.
+    std::thread::sleep(std::time::Duration::from_millis(3 * PERIOD_MS));
+    assert_eq!(
+        (inspect_state(&f, &m), inspect_state(&f, &run)),
+        ("live".to_string(), "live".to_string()),
+        "a healthy monitor stopped watching once the tree's whole listing outgrew a frame, and its own {PERIOD_MS} ms \
+         dead-man revoked it and the run under it"
+    );
+    // And it still judges: the run under it is quarantined at its first envelope refusal.
+    let o = delulu_in(&f.cwd, &f.state, &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let (so, se) = (stdout(&o), stderr(&o));
+    let (report, seen) = stop_monitor(&f, &m, mon);
+    let all = format!("stdout:\n{so}\nstderr:\n{se}\nmonitor: {report}\n{seen:?}");
+    assert!(so.contains("REFUSED:"), "the baseline — the run was refused by its envelope: {all}");
+    let q = report["quarantines"].as_array().expect("quarantines");
+    assert_eq!(q.len(), 1, "one run, one quarantine: {all}");
+    assert_eq!((q[0]["target"].as_str(), q[0]["rule"].as_str()), (Some(run.as_str()), Some("envelope")), "{all}");
+    assert!(report["ended"].as_str().is_some_and(|e| e.contains("nothing left to watch")), "{all}");
+
+    // An answer too large for a frame is refused in words — never a dropped connection, which reads as a broker that is not
+    // there.
+    let said = format!("{}{}", stdout(&listed), stderr(&listed));
+    assert!(said.contains("DL1401") && said.contains("larger than one protocol frame"), "{said}");
+
+    drop(guard);
+    let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
 }

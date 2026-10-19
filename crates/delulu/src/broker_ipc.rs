@@ -18,7 +18,10 @@ pub const WIRE_VERSION: &str = "broker/1";
 
 /// Hard ceiling on a single frame (16 MiB) — a defensive bound so a corrupt/hostile length prefix
 /// cannot make the peer allocate unboundedly. Secrets/tokens are far smaller.
-const MAX_FRAME: u32 = 16 * 1024 * 1024;
+pub const MAX_FRAME: u32 = 16 * 1024 * 1024;
+
+/// RW 4.69: the most nodes one [`ReqBody::RunsUnder`] may ask after — a monitor asks in parts of at most this many.
+pub const MAX_RUNS_ASKED: usize = 4096;
 
 /// A descriptive authority the client asks the broker to issue/attenuate/delegate (spec §3.1). The
 /// broker maps `effects`/scopes to its `Authority`; `holder_*` is descriptive metadata, never
@@ -251,6 +254,11 @@ pub enum ReqBody {
     /// One node's full detail (phase 5j `delulu grants inspect <id>`; also how a `--lease` run
     /// learns its OWN node's authority after redeeming). Additive `broker/1` variant.
     Inspect { node: String },
+    /// RW 4.69: what a monitor needs of the tree, and no more — `root`'s effective state, and for each of `nodes` (the
+    /// actors its newest records name) the run it belongs to under `root`. Its cost grows with what is asked, never with
+    /// the tree: a whole-tree `List` each poll held the serial daemon as long as the tree was large, and past one frame
+    /// could not be answered at all. At most [`MAX_RUNS_ASKED`] nodes. Answered `Runs`. Additive `broker/1` variant.
+    RunsUnder { root: String, nodes: Vec<String> },
 
     // ----- The Guard (Stage 5 chunk 6, phases 5k–5m). Read verbs carry no owner (awareness is
     // free, addendum §2.2); admin verbs carry `owner`. All additive `broker/1` variants. ---------
@@ -412,6 +420,13 @@ pub enum Response {
     Inspected {
         node: Box<NodeInfo>,
     },
+    /// `RunsUnder` reply (RW 4.69): `root`'s effective state — `"live"`, `"revoked"` or `"expired"`, `None` when it is
+    /// no node of this tree — and `(node, run)` for each asked node under `root`: the child of `root` on its path, or
+    /// `root` itself. An asked node not under `root` is absent.
+    Runs {
+        state: Option<String>,
+        runs: Vec<(String, String)>,
+    },
 
     // ----- The Guard (Stage 5 chunk 6). Additive `broker/1` variants. --------------------------
     /// Guard status / policy show reply: mode, bypass, rule digest, queue sizes.
@@ -450,6 +465,21 @@ pub enum Response {
     },
 }
 
+/// A message whose encoding is larger than [`MAX_FRAME`]: [`write_frame`] wrote none of it. Carried inside its
+/// `io::Error`, so the daemon can answer the request in words instead of dropping the connection (RW 4.69).
+#[derive(Debug)]
+pub struct FrameTooLarge {
+    pub len: usize,
+}
+
+impl std::fmt::Display for FrameTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "frame exceeds the maximum size ({} bytes; one frame holds {MAX_FRAME})", self.len)
+    }
+}
+
+impl std::error::Error for FrameTooLarge {}
+
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.
 pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
     // One write, the length filled in at the front after encoding — as the sandbox channel's
@@ -458,7 +488,7 @@ pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()>
     ciborium::into_writer(msg, &mut buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
     let len = buf.len() - 4;
     if len as u64 > MAX_FRAME as u64 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "frame exceeds the maximum size"));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, FrameTooLarge { len }));
     }
     buf[..4].copy_from_slice(&(len as u32).to_le_bytes());
     w.write_all(&buf)?;

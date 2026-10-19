@@ -6206,13 +6206,14 @@ the rule; falsified by two mutants (every character admitted → red; never quot
 command exactly as DL1410 prints it, and the approved one-file permit lets the write happen (Windows). clippy 0; the
 suite on Windows 2,244 passed, the 4 map-freshness tests red until the Survey was regenerated, then green.
 
-## 2026-10-17 (night) — RW 6.1: the CLI's own lines can be translated
+## 2026-10-18 — RW 6.1: the CLI's own lines can be translated (begun on the laptop 2026-10-17; recovered from its autosave and finished by the on-demand routine's first run)
 
 **What.** `CLI_STRINGS` was empty, so no CLI prose was localizable and every `cli.*` key a guide documented got DL1704.
 Three strings are registered as constants their call sites name (`CliString`, so a missing en-US text is a compile
 error): `cli.authority.header` (`{program}`), `cli.authority.foreign-separator`, `cli.locale.add.confirm` (`{locale}`).
 `render_cli` gives the active catalog's text, or en-US whole — never half a message — and passes either through
-`terminal_safe`, since a catalog is text anyone may write and an argument may be a name a program chose. The slang
+`terminal_line` (one line, every control character shown escaped), since a catalog is text anyone may write and an
+argument may be a name a program chose — the laptop's draft used `terminal_safe`, see below. The slang
 catalog speaks all three. Not registered, on purpose: `cli.grant-prompt.*` and `cli.run.ok` (the CLI prints no such
 line) and the picker (shown before any locale exists). The guide, `docs/lang/README.md`, `en-US.md` and
 `delulu-slang.md` say so; the nine starter packs' `cli.*` blocks predate the key space.
@@ -6223,3 +6224,355 @@ slang header was en-US — green after: only the header line moves, `authority -
 code — the pirate catalog's `[cli.authority.header]` was DL1704 — green after; `locale add`'s question asked in en-US and
 in slang, `n` installing nothing. Three `catalog.rs` unit tests (placeholders declared = used; the slang catalog covers
 every string; fallback whole and terminal-safe — falsified: `render_cli` without `terminal_safe` → red).
+
+**Recovered and finished (2026-10-18, the on-demand routine's first run, `trig_01HFG6usfzmDAPQigiDu9DLq`).** The laptop
+session stopped before it committed. The autosave's newest snapshot, `b4a9e18` (2026-10-17 21:15 UTC; base `640a7d5`,
+`master`'s last commit; 14 paths), held the slice with its records written; the four older snapshots are byte-identical
+to commits that followed them (`424c391`, `3f652cf`) or to `master`. Applied to `master` and verified as a stranger's
+work: both end-to-end witnesses re-run red on the old product code (`cli.rs`, `catalog.rs`, `lib.rs` and the slang
+catalog put back to `640a7d5`, the new tests kept) — the slang header was en-US; the pirate catalog's key was DL1704 at
+`locale add` — and the mutant re-run red (`render_cli` with no escape at all). **Two defects in the draft, found by
+reading it adversarially:** (1) `terminal_safe` keeps a line break — right for a diagnostic, which lays itself out on
+several lines and is indented after its first (RW 4.34), wrong for a string that fills ONE line of a report: a catalog
+whose `[cli.authority.header]` held `{program}:\n  effects:      (none)` started a forged `effects:` line under
+`authority`'s header (witnessed red: `"m:\n  effects:      (none)"`). `render_cli` uses `terminal_line` now; the unit
+tests assert that every en-US text is one line and that a catalog's or an argument's line break is shown escaped.
+(2) The new `locale_cli` test had been inserted between `criterion7_json_bytes_identical_across_locales_human_differs`'s
+doc comment and its `#[test]`, so that comment described the wrong test — moved back (routine run 20's lesson: an
+insertion before an anchor must not carry the anchor). In the VM: `delulu-diag` 50/50; `locale_cli` 7/7,
+`locale_plugin_cli` 3/3; clippy 0; `cargo deny --all-features check advisories` ok; the full suite 2,318 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read by this run, before its push:** `master`'s push runs on `640a7d5` — CI `39069505317` and `ocsf`
+`39069505339` — success; the nightly `39108708245` (2026-10-18 07:43 UTC, on `640a7d5`, all 18 jobs, `heavy-gates`,
+the three `miri-slow` and `microvm` included) — success. `actors_pingpong`: arm64 MEASURED 2.93x where the machine
+gave 4.11x, passed; Ubuntu and Windows NOT MEASURED (busy runners — speedups 2.00–2.05x and 1.41–1.73x against
+controls of 2.17–2.24x and 2.42–2.45x); macOS NOT MEASURED (3 hardware threads; 2.26x observed). Sandbox properties
+unchanged: Linux x64 every property established, the guest a subordinate uid; arm64 the same as the same OS user;
+Windows a per-run AppContainer, privilege escalation not confined; macOS filesystem reads not confined.
+
+**The Sunday sweep (step 4 item 6), 2026-10-18.** CI: the nightly above ran every job on `master`'s code (a by-hand
+`everything` dispatch would have repeated it). An adversarial pass, by hand, on the newest security-relevant feature —
+RW 4.65's DL1410 hint, a command agents paste into a shell, built from an item the program chose. Two hypotheses, both
+**refuted**: (a) `,` is in `plain_shell_char` and left unquoted, and PowerShell's argument mode reads `a,b` as an array —
+but PowerShell 7.6.7 (installed in the VM from Microsoft's apt repository) passes `fs_write:/srv/out/report,final.txt`
+to a native command as one argument, and `=+~@:` literally; (b) a `*` in a file name would make the "narrowest" permit
+a wildcard wider than the use — but `dead_pattern_reason` refuses a glob in a path pattern and any `*` in a `declassify`
+one, so such an item gets no hint item and the rule is named. The quoted alphabet (space and `()'&#`) reads literally
+in bash, dash and pwsh 7.6.7. Unread here: `cmd.exe` and Windows PowerShell 5.1 (the laptop's). The live-document scan
+found RW 7.10 still saying `CODE_OF_CONDUCT.md` is absent (closed in the record — D-V2-151 added it 2026-10-17).
+
+## 2026-10-18 — the Survey mapped a worktree's `.git` file (on-demand routine run 1, continued)
+
+**What.** Release procedure step 1 — `master` merged into `launch/2.0.0` — was done in a `git worktree` (its own
+target directory, so the main checkout stayed on `master`). Its map, rebuilt there, had one node more than the same
+files exported from the index: `file:.git`. A worktree's (or a submodule's) `.git` is a FILE, one line `gitdir: …`,
+and `scan::walk` excluded `.git` only as a directory, so the map of a worktree could never match a clone — the
+pre-commit hook (run 15) refused the merge commit, exactly as CI's freshness gate would have refused it on every
+runner. `clean_checkout`'s gate asks `git check-ignore`, which never names `.git` itself, so nothing could see it.
+`CLOUD_ROUTINE.md` has recommended a worktree for writing a slice since run 25; none had BUILT the map in one.
+Fixed: the walk skips `.git` whatever its shape.
+
+**Evidence.** `clean_checkout.rs` `a_worktrees_git_file_is_not_mapped` (a temporary tree with a `.git` file) red on the
+old walk — it listed `.git` beside the tree's one document — green after; it also asserts the walk read the tree at all.
+Every other tree walk in the Survey goes through `scan::walk` (`grep read_dir`). clippy 0; the full suite 2,319 passed,
+0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read:** `a3d7678`'s push runs — CI `39163449226` success (14 jobs, `miri-slow` and `heavy-gates` skipped as on
+every push; `actors_pingpong`: arm64 MEASURED 2.88x where the machine gave 4.10x, passed; Ubuntu and Windows NOT
+MEASURED, busy; macOS NOT MEASURED, 3 threads) and `openshell` `39163449144` success.
+
+## 2026-10-18 — RW 4.17: a Guard seal and the other Unicode normalization on macOS (D-V2-156; on-demand routine run 1)
+
+**What.** RW 4.17 named POSIX names that change under Unicode normalization as an open question. Asked as "what else
+spells this?" of the Guard — a deny-list — on the one filesystem that treats two spellings as one name (APFS). Two
+witnesses on a branch, read on `macos-latest` before any fix: `prim.rs`
+`two_normalizations_of_one_file_resolve_to_one_spelling` printed `one file under both spellings: true` and both
+spellings resolved and pinned to one (green: `realpath` gives an existing file one spelling — that half of the
+hypothesis refuted); `guard.rs` `a_path_rule_covers_the_other_unicode_normalization_where_the_filesystem_ignores_it`
+was RED — `"/srv/café" over "/srv/cafe\u{301}/new.txt"`: a rule on a name not yet created does not cover the other
+spelling, which the filesystem creates as the same name. Linux and Windows read both green as two files (nothing
+claimed, nothing folded). Fixed (D-V2-156): on macOS `path_within` compares in NFC after its case fold.
+
+**Evidence.** Read on `macos-latest` (`witness.yml`): the measurement `39165640550` (`ccb97f5`) green — one file under
+both spellings, one resolved spelling; the Guard witness `39165785709` (`80a6243`) RED as quoted; at the fix (`7d04370`)
+the broker's whole unit suite `39166154433` 204 passed, 0 failed, the measurement `39166156467` green and printing `an
+absent name keeps its spelling: NFC Some(true), NFD Some(true)`, and `guard_e2e`, `sandbox_guard_e2e`, `broker_cli`
+`39166158256` green. Windows: the measurement `39165642238` green. In the VM: `delulu-broker` 204/204;
+`check-other-os.sh aarch64-apple-darwin` clean; clippy 0; the full suite 2,321 passed, 0 failed, 16 ignored (cargo's
+exit 0, the tree unmoved). `Cargo.lock` gains one dependency line (`icu_normalizer` under `delulu-broker`), no version
+moved.
+
+**CI read:** `c4be914`'s push run `39165158474` — success. This commit's push run: read by this run if its budget allows
+(the next entry), else first by the next run.
+
+## 2026-10-18 — the e-stop witness observes its baseline; `launch/2.0.0` kept current, its CI read (on-demand routine run 1)
+
+**What.** `launch/2.0.0`'s `jobs=everything` run `39165405002` (on `9763787`, the first merge) went red in one job:
+`test (windows-latest)` — `sandbox_devices_cli` `an_operator_revoke_stops_a_guests_arm_mid_motion`, "the arm was driving
+before the e-stop": the output was `SUPERVISOR UP`, then `REVOKED: … (operator-revoke); the safe-park fail-state is
+engaged` at every command. The product was right — revoked, parked, nothing commanded after; the witness's baseline
+("mid-motion") was a 300 ms sleep after the node appeared, and on that runner the revoke landed before the guest's first
+command. Its first recorded failure. Six CPU hogs did not reproduce it in the VM (0 of 5); growing the window did — a
+warm-up before the first command (`fib(27)`) made the old test red 3 of 3 with the runner's own message (routine run
+18's lesson: grow what the window holds). The test now streams the guest's lines and revokes once a `COMMANDED` line has
+come; the warm-up stays, so a sleep could never pass again.
+
+**Evidence.** Old test with the warm-up: red 3 of 3. New: green 3 of 3; the whole `sandbox_devices_cli` target (14
+tests) green 4 of 4 with six CPU hogs. Read on runners at `65a4ec7` (`witness.yml`, the whole target): `windows-latest`
+`39168481629` — 14 passed, 0 failed (the runner terminated only `vctip`, no `delulu`); `macos-latest` `39168483913` —
+success.
+
+**The launch branch.** Release procedure step 1 twice: `9763787` (RW 6.1 and the Survey's worktree fix) and `b8f9f16`
+(GUARD-NORM-1's fix, D-V2-156 after D-V2-155 in the decision log), each with its CHANGELOG lines in the 2.0.0 section
+and the gates green on the launch tree. `39165405002` (`jobs=everything` on `9763787`): 15 jobs success, `test
+(windows-latest)` red in this witness alone (2,253 passed, 1 failed), `miri-slow (delulu-check)` and `(delulu-broker)`
+still running when this was written; the release dry run `39165442908` on `9763787` — success. `39167478125`
+(`jobs=everything` on `b8f9f16`) running, unread; its release dry run `39167480432` — success. This test's fix reaches
+the launch branch with the next merge of `master`.
+
+## 2026-10-19 — RW 4.57: a run's own node ends with the run, however it ends (D-V2-157; on-demand routine run 2)
+
+**What.** RW 4.57 (the red team's F-01, routine run 17, "code reading agrees, not re-run") said a killed run leaves its
+nodes live under the daemon. Re-run first, by hand, on a scratch daemon (`/tmp/rt`): a program that loads the `shout`
+plugin and then spins, stopped by `--limits cpu=3`, left its root (`process`) and its plugin's node `[live]`; and the
+CONTROL — the same program ending cleanly — left its own root `[live]` too (RW 4.51 had revoked only the plugin's). The
+daemon's tree lives in its memory: every run added root authority nobody held, for the daemon's whole life. Fixed
+(D-V2-157): `broker_client::RunNode` holds the root a run issues for itself for exactly as long as the run — revoked as
+itself at its end (after `close_devices`), and reaped by the broker's dead-man (D-V2-106; 10 s, beaten every 2 s by a
+thread of the run's own) when the run never gets there. At both places a root is issued for a run (`run_cmd.rs`, the
+sandboxed host in `guest.rs`). A lease run's node is the delegator's and is not held — the half RW 4.57 keeps open.
+
+**Evidence.** Witnesses in `plugin_load_cli.rs`, red on the old code: `under_the_broker_daemon_a_runs_own_node_ends_with_the_run`
+(`("…", "process", "live")` after a clean end) and `…_a_killed_runs_nodes_are_revoked_by_its_dead_man` (30 s after
+`Child::kill`, both nodes `live`; the baseline asserts both live while the run runs). Beside them, green before and after
+and each falsified: `…_a_sandboxed_runs_own_node_ends_with_the_run`, `…_a_live_run_outlasting_its_dead_mans_period_keeps_its_node`
+(a 1.5 s period, a 4 s run that then prints — the dead-man must not reap a run that is alive), and the unit test
+`the_run_dead_man_period_can_only_be_shortened`. `scripts/mutants.py`: **M455** (the end revokes nothing) red in both
+clean-end witnesses; **M456** (armed for an hour) red in the kill witness; **M457** (the beater never beats) red in the
+live-run witness; **M458** (the knob may lengthen) red in the unit test; **M459** (the sandboxed host forgets its hold) and
+**M460** (the ordinary run forgets it) red each in its own; the control green (M455's first text did not compile — a typo,
+rewritten and re-run). The six RW 4.57 tests with the machine loaded by four concurrent copies of their binary: 12 of 12
+rounds green (the harness refused shell busy loops — the routine now says how to load the CPUs). clippy 0.
+Read on runners at `abd71c2` before `master` moved (`witness.yml`, `plugin_load_cli` filtered to `under_the_broker_daemon`): `windows-latest` `39181218534` — 8 passed, 0 failed (the runner terminated only `vctip`, no `delulu`);
+`macos-latest` `39181220241` — 8 passed, 0 failed, no orphan.
+The full suite at `abd71c2`: 2,325 passed, 1 failed, 16 ignored, the tree unmoved — the one red `delulu-runtime`'s thread-classification gate (`every_thread_either_sizes_its_stack_or_is_listed_as_never_running_a_program`) naming the new beater, `broker_client.rs:296`; listed with its reason (`4b0adcb`), green. Again over the fix and these records (`4b0adcb` and this entry's tree): **2,326 passed, 0 failed, 16 ignored** (cargo's exit 0, the tree unmoved).
+
+**CI read at the start of this run:** `3f2ac0d`'s push run `39170518002` and `0c84447`'s `39170730116` — success (14 jobs;
+`miri-slow` and `heavy-gates` skipped, as on every push). `actors_pingpong` on `0c84447`: arm64 MEASURED 2.87x where the
+machine gave 4.11x, passed; Ubuntu and Windows NOT MEASURED (busy); macOS NOT MEASURED (3 threads). Sandbox properties as
+recorded before (macOS `filesystem_confinement absent`, its reads not confined). On `launch/2.0.0`: `39169269103`
+(`jobs=everything` on `e098438`, the branch's newest commit) — **success on all 18 jobs**, `miri-slow (delulu-broker)` 1 h
+35 min; `39165405002` (`9763787`) — 17 success, `test (windows-latest)` red in the e-stop witness fixed since, its Miri jobs
+all green; `39167478125` (`b8f9f16`) — **success on all 18 jobs**, its `miri-slow (delulu-broker)` done at 00:12 UTC (2 h 51 min).
+
+## 2026-10-19 — RW 4.57's lease half; LEASE-DROP-1 (RW 4.68); RW 4.35's stale cell (on-demand routine run 2, continued)
+
+**RW 4.57's lease half (`6f98ae5`).** A `--lease` run's node is the delegator's, so it is never ended by a run; what the run
+mints under it — its devices' nodes (a lease carries no plugin authority: measured, `--lease` with `--grant plugin=.` met
+DL0703) — is dead-manned as it is minted. `RunNode` now holds a `Reaper`: the set of `(node, key)` one beater keeps alive —
+the run's own root, or, under a lease, each node its custody client mints (`attenuate` arms it; one that cannot be armed is
+revoked and refused). Witnesses: `under_a_lease_a_killed_runs_minted_node_is_revoked_by_its_dead_man_and_the_lease_lives`
+and its sandboxed twin (the device node reaped as itself; the lease still `live`), `under_a_lease_a_run_that_ends_leaves_the_lease_live`.
+Mutants M461 (no arming at the mint — the old behaviour) red in both killed-lease witnesses; M462 (the lease revoked at the
+run's end) red in the ended-lease witness; M463 and M464 (each call site's lease branch skipped) red each in its own. The
+root half re-falsified on the refactor: M465 (the beater beats nothing) red in the live-run witness, M466 (the end revokes
+nothing) in both clean-end witnesses, M467 (armed for an hour) in all three kill witnesses; controls green. The reaper is
+not handed to actor-thread clients: under a lease nothing mints from another thread, so that code could not be witnessed
+(routine run 18's rule) — removed. 11 RW 4.57 tests, four concurrent copies, 12 of 12 rounds green.
+Read on runners at `6f98ae5` before `master` moved (`witness.yml`, `plugin_load_cli` filtered to `under_`): `macos-latest`
+`39184608216` and `windows-latest` `39184606157` — 11 passed, 0 failed each (Windows terminated only `vctip`).
+
+**LEASE-DROP-1 (RW 4.68), found on the way.** `redeem_lease` refuses each local grant a lease cannot take by name — except
+three. Witnessed on a scratch daemon: `run plain.delulu --lease T --grant plugin=.` (and `exec.native`, and the full compute
+envelope) printed `ran`, exit 0 — the grant dropped; `--grant console` was refused. Fixed by naming each with its reason. The
+witness, `satellite_demo.rs` `run_lease_refuses_every_local_grant_but_a_foreign_library_path`, reads every grant form from
+`delulu toolchain --json` and asks each beside `--lease` (`foreign.c` the control that passes). Red on the old code naming
+exactly `exec.native`, `compute=…` (DL1911 answering first) and `plugin=./plugins` (DL1401 at the redeem). The compute
+attestation gate (DL1911) now steps aside beside `--lease`: a lease run never uses a local compute grant, and answering
+DL1911 first sent the operator to a waiver that led only to the lease's refusal. Mutants M468–M470 (each kind's refusal
+removed) and M471 (the gate answering first) red; `compute_cli` 18/18. Runner reads at `86ad969`: the sync-log entry.
+
+**RW 4.35's status cell** said `Open — found, witnessed` beside its own text recording the close (routine run 10, D-V2-86) —
+the fix (`channel::Within` on the daemon's replies) and its witness are in the tree; corrected, as RW 4.64's was.
+
+**The container restarted at 01:20 UTC** (every process's start time) and took the third full suite with it, mid-run at
+`egress_cli`; the tree and the scratchpad survived. The suite was run again over all of it (suite 4): **2,329 passed, 1 failed** — `monitor_cli`
+`with_on_monitor_death_continue_a_killed_monitors_runs_live_on` asserted the chain held no `deadman-arm` at all, its claim
+being that `--on-monitor-death continue` arms nothing; the run under that monitor is a lease run with a device, whose
+device node is now dead-manned (`6f98ae5`). The question was too wide, not the product wrong: it now asserts that every
+arming is of a node the run minted (a child of the run's node) and that there is one — never the monitor's. Mutant M472
+(the monitor arms under `continue`) red; `monitor_cli` 22/22. Suite 5 over the final tree: 2,330 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+
+**CI read:** `d144882`'s push runs — CI `39183143824` and `ocsf` `39183143907` — success (14 jobs; `actors_pingpong`: arm64
+MEASURED 2.97x where the machine gave 4.10x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads).
+`launch/2.0.0` at `b4748fa` (this run's merge of `d144882`): the release dry run `39183562777` — success; `jobs=everything`
+`39183559939` — at 02:05 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` still
+running: the next run reads them.
+
+## 2026-10-19 — MONITOR-CHAIN-1: a long chain killed a healthy monitor's fleet; the monitor reads only what was appended, verified (D-V2-158, RW 4.49; on-demand routine run 3)
+
+**Start of run** (05:05 UTC, no `routine-fire-payload`): `master` at `49f6c6f` (run 2's last commit), nothing newer;
+`origin/autosave/laptop`'s newest snapshot still `b4a9e18` (recovered by run 1); `claude/wonderful-hamilton-bo8k53` and
+`claude/friendly-thompson-vz6m23` one commit each, superseded as recorded 2026-10-17; every other `claude/*` branch in
+`master`. Survey `ok` (1522 nodes, 14894 edges); `doctor --check` all checks passed. Run 2's claims re-run: `monitor_cli`
+22/22, `plugin_load_cli` 24/24, `satellite_demo` 5/5, `compute_cli` 18/18 — all hold. **CI read:** `49f6c6f`'s push run
+`39190850972` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64
+MEASURED 2.93x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads,
+2.33x observed); `launch/2.0.0` at `3aafb77`: `jobs=everything` `39189498514` — **success on all 18 jobs** (`miri-slow`:
+syntax 20 min, check 77 min, broker 97 min) — and the release dry run `39189501390` — success; `39183559939` (`b4748fa`) —
+success on all 18. The sandbox properties per OS as on every run since PS-E-01 (macOS `filesystem_confinement` absent,
+reads not confined; every other OS established). The 2026-10-19 nightly had not fired (07:4x UTC).
+
+**Found: a monitor killed its own fleet once the chain was long enough.** RW 4.49 recorded, from routine run 15's red team
+(F5), that each poll of `monitor watch` re-reads the whole chain — "≈200 ms at 10,000 records", LOW, a latency. Measured
+here it is worse than a latency: the monitor beats its dead-man between polls, so once ONE whole read outlasts the
+dead-man's period, a healthy monitor stops beating and its own broker revokes `g_M` — every run under it — for nothing but
+the chain's length. By hand: a chain of 250,000 records (written by the chain's own `AuditLog`), a daemon, one node, `monitor
+watch --rule envelope` with the defaults (poll 250 ms, dead-man 2,000 ms): `ended: the broker's dead-man revoked … this
+monitor sent no beat within 2000 ms`, `records_read: 0`, the node `[revoked]` — no run had done anything. A whole read
+(`audit::query`) costs about 3 µs a record in a release build (100,000 records: 0.22–0.34 s) and 11.5 µs in a debug one
+(1.13–1.31 s); `AuditLog::open` re-reads it twice (250,000 records: 0.61–0.85 s, release). So a release monitor with the
+default period dies past roughly 600,000 records — a control loop recording 100 commands a second writes that in under
+two hours — and sooner with a shorter period.
+
+**Fixed (`90d6ddb`): `delulu_broker::audit::Follower`.** It follows the chain from a point and reads only what was
+appended after it — the rest of the day file it stopped in, from the byte it stopped at (a seek), and every later day file
+(a record is never filed behind the newest file, AUDIT-DAY-1). Complete lines only: a writer puts down a record and then
+its line break, so a line without its break is left for the next read, and the end a follower starts from never counts
+one. Each record must name the previous record's hash as its `prev_hash`, and its own hash must recompute — `verify`'s
+link check; a line that does not is returned as UNVERIFIED, never as a record, and the follower goes on from its stored
+hash so one bad line does not blind it to what follows. A day file cut short under it (or gone) is a rewritten chain: the
+follower says so, reads nothing in between, and moves to the end — the monitor's old "the record it last read is no longer
+in the chain" warning, kept. The monitor starts at the chain's end with one and reads only what is new each poll; it warns
+for an unverified line (`delulu audit verify` names where the chain breaks) and judges nothing on it — RW 4.49's other read
+residual (F4: a forged `deny` line quarantined an innocent run). The class, stated: this catches a damaged line and one
+written without the format; a same-user writer who computes the hash is category 7, as for every file in that directory.
+
+**Witnesses.** `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`: its state is a chain whose ONE whole read,
+measured in the test, takes twice a 500 ms dead-man period — grown with the writer's own lines (`into_record`, `to_line`)
+until it does (101,251 records here, one read 1.32 s), its anchor removed so the daemon's opening anchors it again, and
+`verify` asked before the watch (a control: the chain is real). The monitor must stay live four and six periods into the
+watch and then have read at least two records past its start (its own arming and a delegation made after it began — the
+witness of an absence proves it looked). **Red on the old code** (the run's lease "revoked by audit seq 101257", the
+dead-man's), green after; **4 of 4 green with four concurrent copies of its test binary loading the machine** (each
+1.03–1.16 s per whole read). Four `audit` unit tests: `a_follower_reads_only_what_was_appended_after_it_across_days` (a
+record it had passed is overwritten in place with a line that would not verify — nothing returned is about it),
+`a_follower_leaves_a_line_without_its_break_for_the_next_read` (both a reading follower and one started meanwhile),
+`a_follower_returns_lines_that_do_not_verify_as_unverified_and_reads_on` (an altered deny, a non-record, a record naming
+another predecessor; the record after them read), `a_follower_whose_file_was_cut_short_says_the_chain_was_rewritten`; and
+the FIFO refusal (RW 4.38) asks the follower too. **Mutants** (`scripts/mutants.py`, control green): M473 (each read from
+the file's start) red in three unit tests, M473b (the same) red in the monitor witness, M474 (no link check) and M475 (no
+hash check) red in the unverified test, M476 (a line without its break read) red in the partial test, M477 (a cut file not
+noticed) red in the cut test, M478 (no regular-file check) red in the FIFO test, M479 (the monitor re-starts at the end
+each poll — reads nothing) red in five `monitor_cli` tests. Clippy 0; `scripts/check-other-os.sh` clean for Windows and
+macOS. **Read on runners before `master` moved** (`witness.yml` at `90d6ddb` on `claude/monitor-chain-follower`):
+`monitor_cli` on `macos-latest` ``39205018972` (22 passed — the witness read 101,251 records, one whole read 1.22 s)` and `windows-latest` ``39205021062` (21 passed — the witness 1.23 s; Windows terminated only `vctip`)`; `delulu-broker` `lib` filtered to
+`audit::tests` on `macos-latest` ``39205023031` (23 passed)` and `windows-latest` ``39205025243` (22 passed; the FIFO test is Unix-only)`.
+
+**The full suite** over the code: 2,335 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**The same class on the writing side (RW 4.53), named:** `AuditLog::catch_up` re-reads and re-counts the whole chain under
+the append lock whenever another writer moved it, and `AuditLog::open` does on every opening — so each daemon request after
+a sandboxed host's record pays for the chain's history (the red team's 4.9 s `grants revoke` at 60,000 records). The next
+slice.
+
+## 2026-10-19 — RW 4.53's writer half: a writer catches up by reading only what was appended (D-V2-159; on-demand routine run 3, continued)
+
+**The same class on the writing side.** `AuditLog::catch_up` runs under the append lock before an append once another writer
+has moved the chain, and it re-read and re-counted the WHOLE chain — every day file's last hash, then every day file's
+count (`recover`). The daemon is one such writer and every sandboxed run's host another, so on a long chain each daemon
+request after a host's record — an operator's e-stop revoke among them — paid for the chain's history (routine run 17's red
+team: `grants revoke` 4.9 s median at 60,000 records beside six sandbox loops). **Measured here** (a scratch script, the
+same 100,000-record chain for each, the daemon a debug build, another writer appending one record every 50 ms through
+`AuditLog`): ten recorded daemon requests (`grants delegate`) — at `90d6ddb`, alone median 15 ms (max 20), beside the
+writer median **3,817 ms** (max 4,479); at `7ae1524`, alone 14 ms (max 17), beside the writer **14 ms** (max 21).
+`audit verify` passed after each (100,072 and 100,098 records).
+
+**Fixed (`7ae1524`): `AuditLog::read_appended`.** A catch-up first reads only what was appended since this handle last
+wrote — the rest of its day file from the byte it stopped at, and every later day file — each record linked to the one before
+and its hash its own (`verified_link`, the check the follower now shares), and then the anchor must agree with the head and
+the count that reading gives. Anything else — no file this handle wrote, a file cut short, a line that is not a record or
+does not verify, an anchor that disagrees — falls back to the whole recovery, which refuses what it refused before. A first
+draft also refused a line without its break; it was removed: a writer puts down its line, its break and then the anchor,
+all under the lock, so such a line can never come with an agreeing anchor — a wall no outcome depends on.
+
+**Witnesses** (`audit` unit tests): `a_writer_catching_up_reads_only_what_another_writer_appended` (one writer's catch-up
+across a day boundary chains onto the other's last record although a record behind both was made unreadable in place — the
+old code re-read it and refused; `verify` still finds it), `a_line_appended_without_its_anchor_is_refused_as_before`, and
+`a_file_cut_short_under_a_writer_is_refused_as_before`. **Mutants:** M480 (the old behaviour: no incremental read) red in
+the first; M481 (no anchor check) red in the second; M482 (later day files unread) red in the first; M483 and M484 (the
+shared link or hash check gone) red in the follower's unverified test; **M485 (a cut file read as "nothing appended")
+SURVIVED the first round** — the next record would have chained onto a head the file no longer held — and is red in the
+third witness, written for it. Control green. Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners
+before `master` moved (`audit::tests`): `macos-latest` `39206620758` (26 passed), `windows-latest` `39206622817` (25 passed; the FIFO test is Unix-only; Windows terminated only `vctip`).
+
+**The full suite** over the code: 2,338 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**Left in RW 4.53:** `AuditLog::open` still reads the whole chain on every opening — each sandboxed run's host and each CLI
+command that records opens it (the red team's 3–4.5 s sandboxed run at 60,000 records). Its fast path would trust the
+anchor as `catch_up` already does, which needs the anchor to name the newest file and its length; a format change, its own
+slice.
+
+**CI read:** `200df1c`'s push runs — CI `39206009719` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.03x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39206009590` — success.
+
+## 2026-10-19 — RW 4.53's last part: an opening reads one line when the files measure as the anchor says (D-V2-160; on-demand routine run 3, continued)
+
+**Measured.** `AuditLog::open` — every sandboxed run's host and every command that records opens the chain — read every
+day file twice (each file's last hash, then each file's count). On the same 100,000-record chain, release builds: at
+`7f1a4a1` three openings took 303, 266 and 180 ms; at `5dea22e` the first took 247 ms (it re-affirms the anchor, now
+with its note) and the next two 0.106 and 0.033 ms. `audit verify` passed after (100,000 records).
+
+**Fixed (`5dea22e`): the anchor notes where the chain stood** (`AnchorAt`): the newest day file, its length and record
+count, every older day file's bytes together, and the top seq — fixed-size, written beside the head and count it always
+held (an older binary reads those two as before). An opening takes the anchor's count and seq when every file still
+measures so — the newest file named and of its length, the older files' bytes unchanged — and the newest file's last record,
+read from its end (64 KiB, or the whole file for a longer line), is the anchor's head. Anything else is the whole recovery,
+which refuses what it always refused; an anchor without the note (every log written before this) is read the whole way once
+and re-affirmed with it. A writer keeps the note current as it appends, rolls to a new day file, or catches up after another.
+**Not claimed:** an older record edited in place to the same length is `verify`'s to find — the opening never recomputed a
+hash; any length change in any file still sends the opening to the whole recovery.
+
+**Witnesses** (`audit` unit tests): `an_opening_reads_only_the_newest_files_last_line_when_the_files_measure_as_the_anchor_says`
+(an older record made unreadable in place, the newest record short and 70 KB — the opening takes the anchor's word and the
+next record chains onto the head; `verify` still finds the damage), `the_fast_opening_agrees_with_the_whole_recovery_after_every_append`
+(two writers, 24 appends across three midnights, each catching up after the other: after every append the fast opening is
+taken and equals what reading every file gives, field by field), `an_opening_still_refuses_an_older_line_deleted_or_the_newest_record_replaced`
+(three cases), `an_anchor_without_its_note_is_read_the_whole_way_once`. **Mutants:** M486 (the old behaviour) red in the
+first; M487 (older bytes unchecked) and M488 (the head unchecked) red in the refusal test; M489 (the newest file's length
+unchecked) **survived** its first round on the head check — and the length is the only wall for a line deleted from the
+MIDDLE of the newest file, so that case was added and M489 is red in it; M489b (length and head both) red there and in
+`audit_truncation`'s `reopening_a_truncated_log_refuses`; M490 (a writer's roll to a new file not counted), M491 (a
+catch-up's records not counted in the newest file) and M492 (the note never written) red in the agreement test (M490 and
+M492 also in the first); M493 (a newest line longer than the window read as no record) red in the first. Control green.
+Clippy 0; `check-other-os.sh` clean for Windows and macOS. Read on runners before `master` moved (`witness.yml`, the whole
+`delulu-broker` lib with `audit_truncation` and `audit_wiring`): `macos-latest` `39209490393` (224 passed across the three targets), `windows-latest` `39209493185` (222 passed — the FIFO tests are Unix-only; Windows terminated only `vctip`).
+
+**The full suite** over the code: 2,342 passed, 0 failed, 16 ignored (163 binaries; cargo's exit 0, the tree unmoved).
+
+**RW 4.53 now:** the chain's history no longer costs a daemon request (D-V2-159) or an opening (D-V2-160). What is left is
+routine run 16's original measurement — the serial daemon's queue behind other writers' appends on a SHORT chain — not re-run.
+
+**CI read:** `7f1a4a1`'s push runs — CI `39208000005` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.98x where the machine gave 4.05x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `ocsf` `39207999996` — success. `launch/2.0.0` at `d2814e8` (this run's merge of `7f1a4a1`): the release dry run `39208470155` — success; `jobs=everything` `39208467616` — at 06:33 UTC 16 of 18 jobs success, `miri-slow (delulu-check)` and `miri-slow (delulu-broker)` running (they take hours): the next run reads them.
+
+## 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`; the monitor's listing measured
+
+**CI read:** `4c8e44a`'s push runs — CI `39210944095` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every
+push; `actors_pingpong`: arm64 MEASURED 2.95x where the machine gave 4.12x, passed; Ubuntu and Windows NOT MEASURED, busy;
+macOS NOT MEASURED, 3 threads) and `ocsf` `39210944303` — success. `master` is green on every slice of this run.
+
+**`launch/2.0.0` at `6c01264`**, the merge of `4c8e44a` (release procedure step 1): the CHANGELOG change and the decision log
+merged by themselves (D-V2-155, D-V2-158 to D-V2-160); the map rebuilt there (1524 nodes, 14955 edges, 0 errors); `doctor
+--check` ok; book, core_invariance, distribution, doctor_cli, evidence_claims, governance, repository_structure, release and
+`monitor_cli` (23) green, `audit::tests` 30 and `audit_truncation` 4 green on the launch tree. Dispatched: the release dry
+run `39212180218` — success; `jobs=everything` `39212177717` — running at this entry. `39208467616` (`d2814e8`): 17 of 18
+success, `miri-slow (delulu-broker)` still running — superseded by `39212177717`, kept as evidence.
+
+**Measured, not a defect at this size: the monitor's listing.** MONITOR-CHAIN-1's question put to the monitor's other per-poll
+work — it asks the daemon for the whole grant tree (`List`) every poll, and the tree keeps every revoked node. A scratch
+daemon (debug build) with 3,002 nodes: the CLI's `grants list --json` 238–304 ms for 1.7 MB (most of it the CLI's own
+rendering); a recorded daemon request (`grants delegate`) took median 12 ms (max 16) alone and 13 ms (max 23) with a monitor
+polling that tree every 25 ms — the daemon's own listing costs it little at this size. **At 30,003 nodes** (a 17 MB listing;
+the CLI's `grants list --json` 2.7 s) the median stayed 13 ms but the **max went from 17 ms to 371 ms** beside the monitor —
+each whole-tree listing holds the serial daemon, and an e-stop's revoke waits behind it. Not a deadline for the monitor (its
+beater beats while it waits on the daemon, D-V2-127). Recorded as RW 4.69 (open, measured): ask only for the live subtree
+under the monitor's node.

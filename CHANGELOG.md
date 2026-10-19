@@ -11,13 +11,59 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
-## Unreleased — the CLI's own lines can be translated, 2026-10-17
+## Unreleased — a monitor over a long audit chain no longer revokes its own runs, 2026-10-19
+
+- **Fixed (MONITOR-CHAIN-1, D-V2-158): `delulu monitor watch` no longer quarantines every run it watches once the audit
+  chain is long.** The monitor read the whole chain on every poll and beats its dead-man between polls; once one read took
+  longer than the dead-man's period (`--death-after`, 2 s by default) the broker revoked the monitor's node — and every run
+  under it — although nothing had gone wrong (by hand: 250,000 records). A poll now reads only what was appended since the
+  last one, so its cost no longer grows with the chain's history.
+- **Changed: the monitor acts only on records the chain vouches for.** Each record it reads must name the one before it and
+  carry its own hash, as `delulu audit verify` checks. A line that does not — damaged, or written by hand — is named on the
+  monitor's standard error (`monitor: WARNING — … do not verify against the chain (seq …)`) and never acted on; before, a
+  forged `deny` line could make it quarantine an innocent run. `delulu audit verify` still checks the whole chain.
+- **Fixed (RW 4.53, D-V2-159): a broker daemon request no longer pays for the audit chain's whole history when another
+  writer — a sandboxed run's host — has just written.** Each such request re-read the whole chain before it could record;
+  on a 100,000-record chain a request beside one other writer took about 3.8 s, and an operator's e-stop revoke is such a
+  request. Now the daemon reads only what was appended (14 ms in the same measurement).
+- **Faster: opening the audit chain no longer reads all of it** (RW 4.53, D-V2-160) — every sandboxed run and every command
+  that records opens it, and on a 100,000-record chain that took 0.2–0.3 s each time. The chain's anchor (`ANCHOR.json`) now
+  also notes where the chain stood; when every file still measures so, an opening reads only the newest record (well under a
+  millisecond). A chain written before this is read whole once, then the note is added. `delulu audit verify` still reads
+  and checks every record.
+
+## Unreleased — a run's own grant node ends with the run, 2026-10-19
+
+- **Fixed (RW 4.57, D-V2-157): under the broker daemon, the root node a `run --grant …` issues for itself no longer
+  outlives the run.** Before, it stayed `[live]` in `grants list` after every run — and a run that was killed, crashed or
+  stopped by its budget also left its plugins' and devices' nodes live: authority nobody held, for as long as the daemon
+  ran. Now a run revokes its own node as it ends (recorded), and the daemon holds a dead-man on it: if the run stops
+  beating for 10 s, the daemon revokes the node and everything below it, and the record says why. Plain and sandboxed
+  runs alike. `DELULU_RUN_DEADMAN_MS` may shorten the 10 s, never lengthen it. A run under `--lease` never ends the lease —
+  its node is the delegator's — but what it mints under it (its devices' nodes) is dead-manned the same way, so a killed
+  lease run leaves none of them live. Each daemon run's audit chain gains a record per dead-man armed and the end's
+  revocation.
+- **Fixed (RW 4.68): `run --lease` refuses a local `--grant plugin=`, `--grant compute=` or `--grant exec.native` by name**,
+  as it already refused the other grants a lease cannot take. Before, these three were dropped without a word and the run
+  went on — a program that loaded a plugin then failed with DL0703 asking for the `--grant plugin=PATH` the operator had
+  passed. A lease never confers plugin loading, an accelerator or native emission; run under `--broker daemon` with the
+  program's own grants instead.
+
+## Unreleased — a Guard path rule on macOS covers both Unicode normalizations, 2026-10-18
+
+- **Fixed (RW 4.17, D-V2-156): on macOS a Guard path rule now covers a name in either Unicode normalization.** macOS's
+  filesystem treats `café` written precomposed and decomposed as one name; a seal on a file that did not exist yet,
+  written in one spelling, did not stop a program creating it in the other. Rules are compared in NFC there, after the
+  case fold they already had. Linux and Windows, where the two spellings are two files, are unchanged.
+
+## Unreleased — the CLI's own lines can be translated, 2026-10-18
 
 - **Added (RW 6.1): named CLI strings in the catalogs.** A catalog can now translate the `authority` report's header
   (`[cli.authority.header]`, `{program}`), its separator above foreign code (`[cli.authority.foreign-separator]`) and
   `locale add`'s question (`[cli.locale.add.confirm]`, `{locale}`; the answer is still `y`). Before, every `cli.*` key
   was refused with DL1704. `delulu-slang` speaks all three. en-US output and every JSON envelope are unchanged; a
-  catalog's text is made safe for a terminal.
+  catalog's text is made safe for a terminal and kept to one line — a line break in a catalog's string is shown
+  escaped, so no catalog can start a forged line of the `authority` report.
 
 ## Unreleased — a Guard refusal asks for the narrowest permit, 2026-10-17
 

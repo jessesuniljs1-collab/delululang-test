@@ -938,6 +938,9 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
     if daemon_mode && !opts.json {
         eprintln!("custody: daemon");
     }
+    // RW 4.57 (D-V2-157): the root this host issues for its run is held for exactly as long as the run, as the ordinary
+    // run's is (`run_cmd`) — declared before the devices, so it drops after they are closed.
+    let mut _run_node: Option<crate::broker_client::RunNode> = None;
     if daemon_mode && custody.is_none() {
         let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
             eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
@@ -947,8 +950,23 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         spec.budget = Some(
             delulu_broker::BudgetScope { memory_bytes: limits.memory_bytes, cpu_seconds: limits.cpu_seconds }.to_grant_string(),
         );
-        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
-            Ok(c) => custody = Some(c),
+        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
+            .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
+        {
+            Ok((c, held)) => {
+                custody = Some(c);
+                _run_node = Some(held);
+            }
+            Err(d) => {
+                let diag = delulu_diag::Diagnostic::error(d.code, d.message);
+                crate::cli::print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
+    } else if let Some(c) = custody.as_mut() {
+        // A lease run: what its host mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+        match crate::broker_client::RunNode::for_lease(c) {
+            Ok(held) => _run_node = Some(held),
             Err(d) => {
                 let diag = delulu_diag::Diagnostic::error(d.code, d.message);
                 crate::cli::print_diagnostics("run", &[diag], &map, None, opts.json);

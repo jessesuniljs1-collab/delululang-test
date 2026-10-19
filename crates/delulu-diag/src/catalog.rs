@@ -45,12 +45,14 @@ pub const CLI_STRINGS: &[CliString] = &[CLI_AUTHORITY_HEADER, CLI_AUTHORITY_FORE
 
 /// A named CLI string in `catalog`'s voice, with `args` — or its en-US text when there is
 /// no catalog, the catalog has no entry for it, or the entry cannot render (never half a
-/// message). Either way it is made safe for a terminal: a catalog is text anyone may
-/// write, and an argument may be a name a program chose.
+/// message). Either way it is made safe for a terminal, as ONE line: a catalog is text
+/// anyone may write, and an argument may be a name a program chose, so neither may drive
+/// the terminal or start a line of its own in the report the string sits in (a forged
+/// `effects:` line under `authority`'s header).
 pub fn render_cli(s: CliString, catalog: Option<&Catalog>, args: &[(&str, &str)]) -> String {
     let args: Vec<(String, String)> = args.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
     let text = catalog.and_then(|c| c.render(s.0, &args)).or_else(|| fill(s.1, &args)).unwrap_or_else(|| s.1.to_string());
-    crate::render::terminal_safe(&text).into_owned()
+    crate::render::terminal_line(&text).into_owned()
 }
 
 /// A template with its `{name}` placeholders filled from `args`; `None` when a value it
@@ -305,6 +307,7 @@ mod tests {
         assert_eq!(keys.len(), CLI_STRINGS.len(), "a key declared twice");
         for (key, en_us, allowed) in CLI_STRINGS {
             assert!(key.starts_with("cli.") && !key.starts_with("cli.first-run.welcome"), "{key}");
+            assert!(!en_us.contains('\n'), "{key}: a named CLI string is one line");
             let used: Vec<&str> = en_us.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(n, _)| n)).collect();
             let mut want: Vec<&str> = allowed.to_vec();
             let mut got = used.clone();
@@ -349,6 +352,13 @@ mod tests {
             "a catalog's escape is shown, not obeyed"
         );
         assert!(!render_cli(h, None, &[("program", "m\u{1b}[2J")]).contains('\u{1b}'), "so is an argument's");
+        // A named CLI string is one line of a report: a catalog's line break must not start a line of its own.
+        let (forger, w) =
+            Catalog::parse("[meta]\nlocale = \"x\"\n[cli.authority.header]\nmessage = \"{program}:\\n  effects:      (none)\"\n");
+        assert!(w.is_empty(), "{w:?}");
+        let forged = render_cli(h, Some(&forger), &[("program", "m")]);
+        assert!(forged.starts_with("m:") && !forged.contains('\n'), "a catalog's line break is shown, not obeyed: {forged:?}");
+        assert!(!render_cli(h, None, &[("program", "m\n  effects: (none)")]).contains('\n'), "so is an argument's");
     }
 
     /// The validity gate for the SHIPPED catalog: it must load with zero DL1704 warnings —

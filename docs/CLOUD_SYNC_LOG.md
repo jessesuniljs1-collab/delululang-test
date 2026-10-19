@@ -3626,17 +3626,386 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `autosave/*` (it triggers on `master`/`main`); the launch branch is run by hand.
 - Open / next: RW 6.1 (CLI strings in the catalog); the launch waits for the owner's word.
 
-### 2026-10-17 (night) — RW 6.1: the CLI's own lines can be translated (made on the laptop)
-- Session: `https://claude.ai/code/session_01TeFcPssxRcTvPXJpY7qdyn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+### 2026-10-18 — on-demand routine run 1: RW 6.1 recovered from the laptop's autosave, finished and verified; RW 7.10's stale row
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its first run (started 2026-10-18 20:06 UTC, no `routine-fire-payload`)
 - Branch: `master`   Pull request: none   Merged: n/a
 - Base: `640a7d5`
 - Commits: (1) this entry's commit
-- Files and folders: M `crates/delulu-diag/src/catalog.rs`, `crates/delulu-diag/src/lib.rs`,
-  `crates/delulu-diag/catalogs/delulu-slang.toml`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/locale_cli.rs`,
-  `crates/delulu/tests/locale_plugin_cli.rs`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/README.md`,
-  `docs/lang/en-US.md`, `docs/lang/delulu-slang.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (6.1 partial, 6.2),
-  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
-- **RW 6.1 unblocked:** three named CLI strings (`cli.authority.header`, `cli.authority.foreign-separator`,
-  `cli.locale.add.confirm`), rendered through the active catalog or en-US whole, terminal-safe; slang speaks all three;
-  a third catalog's key installs and renders. Two end-to-end witnesses red on the old code; a mutant red.
-- Open / next: more CLI strings as surfaces earn them; the launch waits for the owner's word.
+- Files and folders: A `docs/assistant-memory/autosave-snapshot-is-a-draft.md`; M `CHANGELOG.md`, `HANDOFF.md`,
+  `crates/delulu-diag/catalogs/delulu-slang.toml`, `crates/delulu-diag/src/catalog.rs`, `crates/delulu-diag/src/lib.rs`,
+  `crates/delulu/src/cli.rs`, `crates/delulu/tests/locale_cli.rs`, `crates/delulu/tests/locale_plugin_cli.rs`,
+  `docs/CLOUD_ROUTINE.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/assistant-memory/MEMORY.md`, `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`, `docs/lang/README.md`,
+  `docs/lang/delulu-slang.md`, `docs/lang/en-US.md`, `docs/survey/*` (3). Deleted, renamed: nothing.
+- **Recovered:** `origin/autosave/laptop`'s newest snapshot `b4a9e18` (2026-10-17 21:15 UTC, base `640a7d5`, 14 paths) — the
+  laptop's RW 6.1, begun in `session_01TeFcPssxRcTvPXJpY7qdyn`, which stopped before committing; its draft entry here is
+  replaced by this one, and its `V2_LOG.md` entry rewritten as this run's. The four older snapshots are byte-identical to
+  commits that followed them (`5fb039a` → `424c391`; `6bf8f8e` → `3f652cf` on `launch/2.0.0`; `36ff555` and `4d407f5` →
+  `640a7d5`). The autosave branch is not merged (never).
+- **RW 6.1:** three named CLI strings (`cli.authority.header`, `cli.authority.foreign-separator`, `cli.locale.add.confirm`),
+  rendered through the active catalog or en-US whole; slang speaks all three; a third catalog's key installs and renders.
+  Re-witnessed here: both end-to-end witnesses red on the old product code, the mutant red. **Fixed in the draft:** a
+  catalog's line break started a forged line of the `authority` report (`terminal_safe` → `terminal_line`, witnessed red
+  first); a doc comment carried onto the wrong test.
+- **The Sunday sweep:** CI = the nightly (every job, green); an adversarial pass by hand on RW 4.65's DL1410 hint — `,`
+  under PowerShell (pwsh 7.6.7 installed in the VM) and `*` widening the permit, both refuted (`V2_LOG.md`); `cmd.exe` and
+  Windows PowerShell 5.1 unread. **RW 7.10 closed in the record:** `CODE_OF_CONDUCT.md` has existed since 2026-10-17
+  (D-V2-151); the row still said absent.
+- Survey and doctor: at the start `survey check` ok (1519 nodes, 14775 edges), `doctor --check` ok (all checks pass); after
+  the last edit: in the commit message. `gh` is installed with an invalid `GH_TOKEN` (as run 10 found); CI read with `curl`.
+- Verified: the full suite 2,318 passed, 0 failed, 16 ignored (exit 0); `delulu-diag` 50/50, `locale_cli` 7/7,
+  `locale_plugin_cli` 3/3, clippy 0, `cargo deny … advisories` ok. CI read before the push: `39069505317` (CI) and
+  `39069505339` (`ocsf`) on `640a7d5` — success; the nightly `39108708245` (all 18 jobs) — success; `actors_pingpong` and
+  the sandbox properties per OS in `V2_LOG.md`.
+- Redo on the laptop: optional — paste a DL1410 hint holding `,` and a quoted path into `cmd.exe` and Windows
+  PowerShell 5.1 (unread in the VM). The RW 6.1 change is OS-neutral; CI runs it on every OS.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a slot's line count is part of its escape; an autosave snapshot is a draft),
+  `docs/assistant-memory/autosave-snapshot-is-a-draft.md`; `docs/CLOUD_ROUTINE.md` step 1 says how to recover one.
+- Open / next: this commit's push run (read by this run if its budget allows, else first by the next); keep `launch/2.0.0`
+  current by merging `master` into it (a laptop or cloud session that can run its gates); more CLI strings as surfaces earn
+  them (RW 6.1); the launch only when the owner says.
+
+### 2026-10-18 — on-demand routine run 1 (continued): the Survey mapped a worktree's `.git` file; `launch/2.0.0` kept current
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master` (and `launch/2.0.0`, release procedure step 1)   Pull request: none   Merged: n/a
+- Base: `a3d7678`
+- Commits: (1) this entry's commit on `master`; then on `launch/2.0.0` a merge of it (its hash in the next entry)
+- Files and folders: M `crates/delulu-survey/src/scan.rs`, `crates/delulu-survey/tests/clean_checkout.rs`, `HANDOFF.md`
+  (§11.5), `docs/CLOUD_ROUTINE.md` (step 5), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- **Found:** the first commit made from a `git worktree` (the launch merge) was refused by the pre-commit hook — its map
+  held `file:.git`, a worktree's `.git` being a file the walk did not skip. Witnessed red, fixed, green (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite 2,319 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved).
+- CI read: `a3d7678`'s push runs — CI `39163449226` success (14 jobs, `miri-slow` and `heavy-gates` skipped as on every push; `actors_pingpong`: arm64 MEASURED 2.88x where the machine gave 4.10x, passed; Ubuntu and Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads) and `openshell` `39163449144` success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a worktree's `.git` is a file).
+- Open / next: the launch merge's CI (`jobs=everything`, dispatched by this run — read it); RW 6.1 grows as surfaces
+  earn strings; the launch only when the owner says.
+
+### 2026-10-18 — on-demand routine run 1 (continued): RW 4.17 — a Guard seal and the other Unicode normalization on macOS (D-V2-156)
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/rw-4-17-normalization` (the runner witnesses), fast-forwarded into `master`   Pull request: none
+- Base: `c4be914`
+- Commits: `ccb97f5` Witness (RW 4.17): two Unicode normalizations of one file, one spelling?; `80a6243` Witness (RW
+  4.17): a Guard path rule and the other Unicode normalization (RED on macOS); `7d04370` A Guard path rule covers the
+  other Unicode normalization on macOS (RW 4.17); and this entry's commit
+- Files and folders: M `crates/delulu-broker/Cargo.toml` (`icu_normalizer` on macOS only), `Cargo.lock` (one line),
+  `crates/delulu-broker/src/guard.rs`, `crates/delulu-runtime/src/prim.rs` (a test), `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4, GUARD-NORM-1), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-156), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (4.17 partial), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Found and fixed (GUARD-NORM-1):** on macOS a Guard seal on a name not yet created, written in one Unicode
+  normalization, was walked past by a write in the other — APFS treats them as one name, and only an EXISTING file's
+  spelling is unified by `realpath` (measured). The Guard compares path rules in NFC on macOS now, nowhere else.
+- Verified: the macOS reads in `V2_LOG.md` (red first, then green on four targets); the full suite 2,321 passed, 0 failed;
+  `delulu-broker` 204/204; clippy 0; `check-other-os.sh aarch64-apple-darwin` clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (macOS read on runners; Windows and Linux unchanged).
+- For the laptop's memory: `HANDOFF.md` §11.4 GUARD-NORM-1 (a resolution that fixes the spelling only of what EXISTS).
+- Open / next: this commit's push run; `launch/2.0.0`'s `jobs=everything` run `39165405002` on `9763787` (dispatched by
+  this run; read it — `miri-slow` takes hours) and its release dry run `39165442908` (success); merge `master` into
+  `launch/2.0.0` again for RW 4.17 (its CHANGELOG lines go into the 2.0.0 section); RW 4.17's UNC half.
+
+### 2026-10-18 — on-demand routine run 1 (last): the e-stop witness observes its baseline; the launch branch's CI read
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/estop-observed-baseline` (its runner reads), fast-forwarded into `master`   Pull request: none
+- Base: `c7d3187`
+- Commits: `65a4ec7` The e-stop witness waits for the guest's first command, not 300 ms; and this entry's commit
+- Files and folders: M `crates/delulu/tests/sandbox_devices_cli.rs`, `docs/CLOUD_ROUTINE.md` (step 4: how a VM keeps
+  `launch/2.0.0` current), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-156's
+  note: D-V2-155 is the support matrix, not "the release gate"), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **On `launch/2.0.0` this run:** `9763787` and `b8f9f16`, two merges of `master` (release procedure step 1), each with
+  the gates green on the launch tree; CI `jobs=everything` and the release dry run dispatched on each (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the e-stop witness red 3 of 3 with its window grown, green 3 of 3 after; its target 4 of 4 under load; the
+  runner reads in `V2_LOG.md`. `c7d3187`'s push runs — CI `39167159924` and `ocsf` `39167159926` — success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new (routine runs 17–19's baseline lessons, applied).
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39167478125` (`jobs=everything` on
+  `b8f9f16`) and `39167480432` (its release dry run) — `39165405002` on `9763787` is red only in this witness, its Miri
+  jobs as read in `V2_LOG.md`; then merge `master` into it again (this fix, these records) and dispatch `everything`
+  on the result — criterion 1 of `CHECKLIST-2.0.md` needs a green run on the final launch commit; (3) RW 4.17's UNC
+  half; RW 6.1's further strings; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-18 — on-demand routine run 1 (postscript): the last push run read; `launch/2.0.0` at `e098438`
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `9ba06d2`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Deleted, renamed: nothing.
+- CI read: `9ba06d2`'s push run `39169109890` — success (14 jobs; `miri-slow` and `heavy-gates` skipped, as on every push).
+- `launch/2.0.0`: the third merge, `e098438` (this fix and the records), gates green on the launch tree; CI `39169269103` (`jobs=everything`) dispatched — at 22:01 UTC 14 jobs success, the Windows tests and three `miri-slow` running. `39165405002` (`9763787`): 16 success, Windows red in the fixed witness, `miri-slow (delulu-broker)` running. `39167478125` (`b8f9f16`): 16 success, Windows green this time, two `miri-slow` running. All unread past this line.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) on `launch/2.0.0` read `39169269103`
+  (`jobs=everything` on `e098438`, the branch's newest commit), and the Miri jobs still running in `39165405002` and
+  `39167478125` — each superseded by it, kept as evidence; (3) RW 4.17's UNC half; RW 6.1's further strings; RW 6.2;
+  (4) *[laptop]* the launch, only on the owner's word — the launch session merges `master` into `launch/2.0.0` first,
+  then needs a green `everything` run on its final commit (`CHECKLIST-2.0.md` criterion 1).
+
+### 2026-10-18 — on-demand routine run 1 (postscript 2): the localization guide's key-list claim corrected
+- Session: `https://claude.ai/code/session_01FzcPzLxjK3s2xT743XXr51`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `3f2ac0d`   Commits: this entry's commit
+- Files and folders: M `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (§2's rules: the key space named — `delulu_diag::REGISTRY`
+  and `CLI_STRINGS` — where it said `docs/for-agents.md` and a "Stage-9 reference" listed it; neither does),
+  `docs/REMAINING_WORK.md` (correction row 1.14), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: `grep` finds no catalog key in `docs/for-agents.md` and no Stage-9 reference; `docs/lang/en-US.md` §3.1 holds
+  7 of 154 codes (so the guide says "a starter set"); `delulu explain E-DL0501` answers. Document gates green.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before — this commit's push run first.
+
+### 2026-10-19 — on-demand routine run 2: RW 4.57 — a run's own node ends with the run, however it ends (D-V2-157)
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its second run (started 2026-10-19 00:06 UTC, no `routine-fire-payload`)
+- Branch: `claude/rw-4-57-run-node` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `0c84447`
+- Commits: `abd71c2` A run's own node ends with the run, however it ends (RW 4.57); `4b0adcb` The run's beater is a thread
+  that never runs a program (RW 4.57); and this entry's commit
+- Files and folders: A `docs/assistant-memory/a-fix-for-one-node-asks-every-node.md`; M `crates/delulu/src/broker_client.rs`
+  (`RunNode`, `run_deadman_period`, a unit test), `crates/delulu/src/run_cmd.rs`, `crates/delulu/src/guest.rs`,
+  `crates/delulu/tests/plugin_load_cli.rs` (four witnesses), `crates/delulu-runtime/src/actors.rs` (the beater classified),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 RW 4.57, §11.5 the CPU-load trap), `docs/CLOUD_ROUTINE.md` (how to load the CPUs),
+  `docs/DEPLOYMENT.md` (§3, a run's own node), `docs/design/STAGE5_SPECIFICATION.md` (§3.2's sugar ends with its run),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-157), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.57
+  partial; 4.64's stale status cell corrected — closed by `b3e17fc` since routine run 23), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- **Start of run:** `git fetch` — `master` at `0c84447` (run 1's last commit), nothing newer; `origin/autosave/laptop`'s
+  newest snapshot is still `b4a9e18`, recovered by run 1; `claude/wonderful-hamilton-bo8k53` and
+  `claude/friendly-thompson-vz6m23` carry one commit each, kept and superseded as recorded on 2026-10-17; every other
+  `claude/*` branch is in `master`. Survey `ok` (1521 nodes, 14843 edges), `doctor --check` all checks passed. `gh` is
+  installed; CI read with `curl` and the GitHub MCP tools. Run 1's claims re-run: `locale_cli` 7/7, `locale_plugin_cli` 3/3,
+  `sandbox_devices_cli` 14/14, `clean_checkout` 2/2, `delulu-broker` 204/204, `delulu-diag` 50/50 — all hold. `cargo deny
+  … advisories` ok.
+- **CI read:** `3f2ac0d` `39170518002` and `0c84447` `39170730116` — success. `launch/2.0.0`: `39169269103` (`jobs=everything`
+  on `e098438`, its newest commit) — **success on all 18 jobs**; `39167478125` (`b8f9f16`) — success on all 18;
+  `39165405002` (`9763787`) — 17 success, Windows red in the e-stop witness since fixed. Per-OS verdicts in `V2_LOG.md`.
+- **RW 4.57, witnessed and closed for issue-then-run (D-V2-157):** re-run first on a scratch daemon — a budget-stopped or
+  killed run left its root and its plugin's node `[live]`, and a cleanly ended run left its own root `[live]` (RW 4.51 had
+  ended only the plugin's). `RunNode` revokes the run's own root at its end and arms a 10 s broker dead-man on it, beaten
+  by the run, so a killed run's nodes are reaped. Witnesses red on the old code; mutants M455–M460 red; macOS and Windows
+  read green before `master` moved. The lease half stays open (RW 4.57).
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the full suite twice — at `abd71c2` 2,325 passed and 1 failed (the thread-classification gate naming the new
+  beater; fixed in `4b0adcb`), then over the fix and these records 2,326 passed, 0 failed, 16 ignored (exit 0, the tree
+  unmoved); clippy 0; the four witnesses on `macos-latest` `39181220241` and `windows-latest` `39181218534` (8 passed each);
+  the RW 4.57 tests 12 of 12 green with the machine loaded by four concurrent copies of their binary.
+- Redo on the laptop: nothing (macOS and Windows read on runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (RW 4.57 — a fix for one node asks every node the holder holds) and §11.5
+  (the harness refuses shell busy loops); `docs/assistant-memory/a-fix-for-one-node-asks-every-node.md`.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.57's lease half — a lease run's minted nodes dead-manned
+  with its root's beats; (3) merge `master` into `launch/2.0.0` again for D-V2-157 (its CHANGELOG lines into the 2.0.0
+  section) and read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (5)
+  *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 2 (continued): RW 4.57's lease half; LEASE-DROP-1 (RW 4.68) closed; `launch/2.0.0` kept current
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/rw-4-57-run-node` (the runner witnesses), fast-forwarded into `master`; and `launch/2.0.0`   Pull request: none
+- Base: `d144882`
+- Commits: `6f98ae5` A lease run's minted nodes are dead-manned as they are minted (RW 4.57); `86ad969` A lease run refuses
+  a local plugin, compute or native grant by name (RW 4.68); and this entry's commit. On `launch/2.0.0`: `b4748fa`, the merge of
+  `d144882` (release procedure step 1).
+- Files and folders: M `crates/delulu/src/broker_client.rs` (`Reaper`; `RunNode::for_lease`; `attenuate` arms under a lease),
+  `crates/delulu/src/run_cmd.rs` (the lease hold; three more lease refusals; DL1911 steps aside beside `--lease`),
+  `crates/delulu/src/guest.rs` (the lease hold), `crates/delulu/src/cli.rs` (a false comment corrected),
+  `crates/delulu/tests/plugin_load_cli.rs` (three lease witnesses), `crates/delulu/tests/satellite_demo.rs` (the generated
+  lease-grant witness), `crates/delulu/tests/monitor_cli.rs` (the opt-out witness asks about the monitor's node), `CHANGELOG.md`, `HANDOFF.md` (§11.4 LEASE-DROP-1; §11.5 the dry-run trap), `docs/CLOUD_ROUTINE.md`
+  (step 5: join a script's input with `&&`), `docs/DEPLOYMENT.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-157 (5): the
+  lease half built), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.57 closed; 4.68 added and closed; 4.35's
+  stale status cell corrected — closed since routine run 10), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed:
+  nothing. On `launch/2.0.0` (`b4748fa`): the merge, its CHANGELOG section moved into `## [2.0.0]`, `docs/survey/*` rebuilt there.
+- **RW 4.57 closed:** a `--lease` run's own node is the delegator's and is never ended by a run; what the run mints under
+  it — its devices' nodes — is dead-manned as it is minted, so a killed lease run leaves none live and the lease lives on.
+  Plain and sandboxed, witnessed; mutants M461–M467 red.
+- **LEASE-DROP-1 (RW 4.68), found and closed:** `run --lease` dropped a local `--grant plugin=`, `compute=` or `exec.native`
+  in silence and ran on (witnessed: exit 0); a plugin program then met DL0703 asking for the flag the operator had passed.
+  Each is refused by name now; the witness is generated from `delulu toolchain --json`'s grant grammar; mutants M468–M471 red.
+- **The container restarted at 01:20 UTC** and killed the third full suite mid-run (`egress_cli`); the tree, the commits and
+  the scratchpad survived; the suite was run again over everything.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: suite 4 (all of this run's code and records) 2,329 passed, 1 failed — `monitor_cli`'s opt-out witness asked
+  whether ANY dead-man was armed, and a lease run's device node now is; narrowed to the monitor's node, M472 red,
+  `monitor_cli` 22/22; suite 5 over the final tree: 2,330 passed, 0 failed, 16 ignored (cargo's exit 0, the tree unmoved); clippy 0.
+- CI read: `d144882`'s push runs CI `39183143824` and `ocsf` `39183143907` — success; `launch/2.0.0`'s release dry run
+  `39183562777` on `b4748fa` — success; the lease-half runner reads `39184608216` (macOS) and `39184606157` (Windows) — 11
+  passed each; RW 4.68's at `86ad969` — `39187175838` (macOS) and `39187173387` (Windows): `compute_cli` 18 and
+  `satellite_demo` 5 passed each (Windows terminated only `vctip`).
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (LEASE-DROP-1 — a refusal list needs a generated witness over everything it
+  could name) and §11.5 (a dry run's dummy input is a trap for the real run).
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39183559939` (`jobs=everything` on `b4748fa`;
+  `miri-slow` takes hours), then merge `master` into it again for the lease half and RW 4.68 and dispatch `everything` on
+  the result; (3) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 2 (postscript): `e200edb`'s push run read; `launch/2.0.0` at `3aafb77`
+- Session: `https://claude.ai/code/session_01VboA3N3sFFxH2ptACsW8r3`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Base: `e200edb`   Commits: this entry's commit
+- Files and folders: M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/CLOUD_ROUTINE.md` (step 5: a container restart
+  kills a background suite without a word), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `e200edb`'s push runs — CI `39189114719`, `ocsf` `39189114737` and `openshell` `39189114674` — **success** (CI's 14
+  jobs; `miri-slow` and `heavy-gates` skipped, as on every push; `actors_pingpong`: arm64 MEASURED 2.82x, passed; Ubuntu and
+  Windows NOT MEASURED, busy; macOS NOT MEASURED, 3 threads). `master` is green on this run's last code.
+- `launch/2.0.0`: `3aafb77`, the merge of `e200edb` (release procedure step 1) — the CHANGELOG's changes merged into the
+  2.0.0 section's dated entry by themselves; the map rebuilt there (1523 nodes, 14919 edges, 0 errors); `doctor --check` ok;
+  `doctor_cli`, `repository_structure`, `evidence_claims`, `governance`, `distribution`, `book`, `core_invariance`,
+  `release`, `plugin_load_cli` (24), `satellite_demo` (5) and `monitor_cli` (22) green on the launch tree. Dispatched on it:
+  `jobs=everything` `39189498514` and the release dry run `39189501390` — unread at this entry. `39183559939` (`everything`
+  on `b4748fa`): 16 of 18 success at 02:05 UTC, its two `miri-slow` jobs running; superseded by `39189498514`, kept as evidence.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39189498514` and
+  `39189501390` on `3aafb77` — the branch's newest commit; `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the
+  final launch commit, so a launch session merges `master` once more and reads it again; (3) RW 4.17's UNC half, RW 6.1's
+  further strings, RW 6.2, the open containment rows (4.63, 4.66, 4.67); (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3: MONITOR-CHAIN-1 — a long chain killed a healthy monitor's fleet; the monitor reads only what was appended, verified (D-V2-158)
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (`claude-opus-5-5`; the effort is
+  `.claude/settings.json`'s xhigh — no other model or effort shown; no fallback notice; no sous-chef)
+- Routine: `trig_01HFG6usfzmDAPQigiDu9DLq`, its third run (started 2026-10-19 05:05 UTC, no `routine-fire-payload`)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `49f6c6f`
+- Commits: `90d6ddb` A monitor reads only what was appended, verified (MONITOR-CHAIN-1); and this entry's commit
+- Files and folders: A `docs/assistant-memory/a-latency-may-be-a-deadline.md`; M `crates/delulu-broker/src/audit.rs`
+  (`Follower`, `Followed`, `read_day_from`, `complete_lines`, five tests), `crates/delulu/src/monitor_cmd.rs` (the watch
+  reads through a follower), `crates/delulu/tests/monitor_cli.rs` (the witness and its chain grower), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 MONITOR-CHAIN-1, §11.5 a latency may be a deadline), `docs/DEPLOYMENT.md` (the monitor's poll),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-158), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.49 closed;
+  4.53's monitor half noted), `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed:
+  nothing.
+- **Start of run:** `master` at `49f6c6f`, nothing newer; `origin/autosave/laptop`'s newest snapshot still `b4a9e18`
+  (recovered by run 1); every `claude/*` branch in `master` but the two kept as superseded on 2026-10-17. Survey `ok` (1522
+  nodes, 14894 edges), `doctor --check` all checks passed. `gh` is installed; CI read with `curl` and the GitHub MCP tools.
+  Run 2's claims re-run: `monitor_cli` 22/22, `plugin_load_cli` 24/24, `satellite_demo` 5/5, `compute_cli` 18/18 — all hold.
+- **CI read:** `49f6c6f` `39190850972` — success; `launch/2.0.0` at `3aafb77`: `jobs=everything` `39189498514` — success on
+  all 18 jobs — and the release dry run `39189501390` — success; `39183559939` (`b4748fa`) — success on all 18.
+- **Found and fixed (MONITOR-CHAIN-1, RW 4.49 closed):** `monitor watch` read the whole chain each poll and beats its
+  dead-man between polls; at 250,000 records and the default 2 s, a healthy monitor was revoked by its own broker with every
+  run under it (by hand, nothing misbehaving). `audit::Follower` reads only what was appended, whole lines only, each record
+  linked to the one before and its hash its own; an unverified line is named and never judged.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: the witness red on the old code (a 101,251-record chain; the run's lease revoked by the dead-man), green after,
+  4 of 4 under four concurrent copies; mutants M473–M479 and M473b red, control green; clippy 0; `check-other-os.sh`
+  (Windows, macOS) clean; runner reads at `90d6ddb` — `monitor_cli` macOS `39205018972` (22 passed) and Windows
+  `39205021062` (21 passed), `audit::tests` macOS `39205023031` (23) and Windows `39205025243` (22); the full suite 2,335
+  passed, 0 failed, 16 ignored (exit 0, the tree unmoved).
+- Redo on the laptop: nothing (macOS and Windows read on runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1) and §11.5 (a cost recorded as a latency may be a deadline);
+  `docs/assistant-memory/a-latency-may-be-a-deadline.md`.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.53's writer half — `AuditLog::catch_up` re-reads and
+  re-counts the whole chain under the append lock whenever another writer moved it (the daemon's e-stop revoke behind it),
+  and `open` on every opening: this run's next slice; (3) merge `master` into `launch/2.0.0` (release procedure step 1) and
+  read `jobs=everything` on the result; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67;
+  (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3 (continued): RW 4.53's writer half — a writer catches up by reading only what was appended (D-V2-159)
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`   Pull request: none   Merged: n/a
+- Base: `200df1c`
+- Commits: `7ae1524` A writer catches up by reading only what was appended (RW 4.53); and this entry's commit
+- Files and folders: M `crates/delulu-broker/src/audit.rs` (`AuditLog::read_appended`, `verified_link` shared with the
+  follower, three tests), `CHANGELOG.md`, `HANDOFF.md` (§11.4 MONITOR-CHAIN-1: the writing side), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-159), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.53 partial), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- **Fixed (RW 4.53, partial):** every writer's catch-up re-read and re-counted the whole chain under the append lock once
+  another writer had written; a recorded daemon request beside another writer on 100,000 records took median 3,817 ms (max
+  4,479), now 14 ms (max 21). `AuditLog::open` still reads the whole chain on every opening.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: M480 (the old behaviour) red in the witness; M481–M484 red; M485 survived the first round and is red in a third
+  witness written for it; control green; clippy 0; `check-other-os.sh` (Windows, macOS) clean; runner reads at `7ae1524` —
+  `audit::tests` macOS `39206620758` (26 passed), Windows `39206622817` (25); the full suite 2,338 passed, 0 failed, 16
+  ignored (exit 0, the tree unmoved). CI read: `200df1c`'s push runs — CI `39206009719` and `ocsf` `39206009590` — success.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1, the writing side).
+- Open / next, in order: (1) this commit's push run; (2) merge `master` into `launch/2.0.0` (release procedure step 1: its
+  CHANGELOG lines into the 2.0.0 section) and read `jobs=everything` on the result; (3) RW 4.53's last part — `AuditLog::open`
+  reads the whole chain on every opening (each sandboxed run's host, each CLI command that records); its fast path needs the
+  anchor to name the newest file and its length; (4) RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66,
+  4.67; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — on-demand routine run 3 (last): RW 4.53's last part — an opening reads one line when the files measure as the anchor says (D-V2-160); `launch/2.0.0` at `d2814e8`
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `claude/monitor-chain-follower` (the runner witnesses), fast-forwarded into `master`; and `launch/2.0.0`   Pull request: none
+- Base: `7f1a4a1`
+- Commits: `5dea22e` An opening reads one line when the files measure as the anchor says (RW 4.53); and this entry's commit.
+  On `launch/2.0.0`: `d2814e8`, the merge of `7f1a4a1` (release procedure step 1).
+- Files and folders: M `crates/delulu-broker/src/audit.rs` (`AnchorAt`, `recover_fast`, `last_line_hash`, the writer keeps
+  the note; four tests), `docs/MATHEMATICS.md` (the anchor's note), `CHANGELOG.md`, `HANDOFF.md` (§11.4 MONITOR-CHAIN-1: the
+  opening), `docs/CLOUD_ROUTINE.md` (the cleanup recipe spares proc-macro libraries; remove the launch worktree's target
+  after its push), `scripts/suite.sh` (the same recipe in its refusal), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-160),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/REMAINING_WORK.md` (4.53),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing. On `launch/2.0.0` (`d2814e8`): the merge, this run's
+  CHANGELOG section moved into `## [2.0.0]`, `docs/survey/*` rebuilt there.
+- **Fixed (RW 4.53's last part):** every `AuditLog::open` read every day file twice (180–303 ms at 100,000 records, release);
+  the anchor now notes where the chain stood, and an opening whose files still measure so reads one line (0.03–0.1 ms; the
+  first opening of an older log re-affirms the anchor with its note, 247 ms). An older record edited in place to the same
+  length is `verify`'s to find, as it always was — named in D-V2-160.
+- **`launch/2.0.0`:** `d2814e8` merges `7f1a4a1` (MONITOR-CHAIN-1, RW 4.53's first two parts); the gates green on the launch
+  tree (Survey 1524 nodes, 0 errors; `doctor --check`; book, core_invariance, distribution, doctor_cli, evidence_claims,
+  governance, repository_structure, release, monitor_cli 23; `audit::tests` 26). The release dry run `39208470155` —
+  success; `jobs=everything` `39208467616` — 16 of 18 success at 06:33 UTC, `miri-slow (delulu-check)` and `(delulu-broker)`
+  running. This run's third slice (`5dea22e`) is not on it yet.
+- Survey and doctor (after the last edit): in the commit message.
+- Verified: mutants M486–M493 red (M489 after the middle-line case was added for its survivor; M489b also in
+  `audit_truncation`), control green; clippy 0; `check-other-os.sh` (Windows, macOS) clean; runner reads at `5dea22e` — the
+  whole `delulu-broker` lib with `audit_truncation` and `audit_wiring`: macOS `39209490393` (224 passed), Windows
+  `39209493185` (222); the full suite 2,342 passed, 0 failed, 16 ignored (exit 0, the tree unmoved). CI read: `7f1a4a1`'s push
+  runs — CI `39208000005` and `ocsf` `39207999996` — success.
+- **Loop engineering:** the cleanup recipe `scripts/suite.sh` prints (and `CLOUD_ROUTINE.md` repeats) deleted the proc-macro
+  libraries with the old test executables — they are executable too — and the next suite rebuilt most of the workspace;
+  both now spare `*.so`/`*.dylib`/`*.dll`. And the launch worktree's own target (about 3 GB) made the next suite refuse to
+  start under 10 GB free: step 4 now removes it after the launch push. **This run's own slip, recorded:** a broker started
+  by hand for the 250,000-record measurement outlived it — its state directory was removed before it was stopped, so `broker
+  stop` could not find it; found by `ps` and stopped by PID about fifty minutes after it started (§11.5's directory-guard
+  trap, by hand).
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (MONITOR-CHAIN-1, its writing side and the opening), §11.5 (a cost recorded
+  as a latency may be a deadline); `docs/assistant-memory/a-latency-may-be-a-deadline.md`.
+- Open / next, in order: (1) this commit's push run; (2) `launch/2.0.0`: read `39208467616`'s two `miri-slow` jobs, then merge
+  `master` into it again for D-V2-160 and read `jobs=everything` on the result; (3) the same class elsewhere — the monitor's
+  `List` each poll returns the whole grant tree, which grows with every run's node (revoked nodes stay listed): measure it
+  against a tree of tens of thousands of nodes before grading it (§11.5, a latency may be a deadline); (4) RW 4.53's
+  remainder (the serial daemon behind other writers' appends on a short chain — routine run 16's measurement, not re-run);
+  RW 4.17's UNC half, RW 6.1's further strings, RW 6.2, RW 4.63, 4.66, 4.67; (5) *[laptop]* the launch, only on the owner's
+  word.
+
+### 2026-10-19 — on-demand routine run 3 (postscript): `4c8e44a`'s push runs read; `launch/2.0.0` at `6c01264`
+- Session: `https://claude.ai/code/session_01XjDbEL9VYTEzeybn7ALWwn`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`; and `launch/2.0.0`   Base: `4c8e44a`   Commits: this entry's commit; on `launch/2.0.0` `6c01264`, the merge
+  of `4c8e44a`.
+- Files and folders: M `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- CI read: `4c8e44a`'s push runs — CI `39210944095` and `ocsf` `39210944303` — **success**; `master` is green on every slice
+  of this run. `launch/2.0.0` at `6c01264`: the release dry run `39212180218` — success; `jobs=everything` `39212177717` —
+  running at this entry (its `miri-slow` jobs take hours).
+- Measured: the monitor's per-poll `List` — at 3,002 nodes no material cost to other daemon requests; at 30,003 nodes a
+  recorded request's max went from 17 ms to 371 ms beside one monitor polling every 25 ms (`V2_LOG.md`) — **RW 4.69 added,
+  open**. (Added in a second commit: `docs/REMAINING_WORK.md` too.)
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this commit's push run (records only); (2) `launch/2.0.0`: read `39212177717` (`jobs=everything`
+  on `6c01264`, the branch's newest commit); `CHECKLIST-2.0.md` criterion 1 needs `everything` green on the final launch
+  commit, so a launch session merges `master` once more and reads it again; (3) RW 4.69 — the monitor asks only for the live
+  subtree under its node (measured first, red before); RW 4.53's remainder (routine run 16's short-chain queue measurement); RW 4.17's UNC half, RW 6.1's further strings,
+  RW 6.2, RW 4.63, 4.66, 4.67; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — the laptop syncs the on-demand routine's three runs; the owner: the tests go to GitHub when the laptop cannot run them
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`   Pull request: none   Merged: n/a   Base: `71cae40`
+- Commits: this entry's commit.
+- Synced: the laptop fast-forwarded `master` `640a7d5` → `71cae40` (26 commits — the on-demand routine's runs 1–3) and
+  `launch/2.0.0` `0a3ff6e` → `6c01264`. The laptop's uncommitted RW 6.1 draft was byte-identical to the autosave snapshot
+  `b4a9e18`, which run 1 recovered, corrected and committed as `a3d7678`; the draft is kept in `git stash` (never applied).
+  CI read at the sync: `master`'s push runs on `7aa0744` (`39213390618`) and `71cae40` (`39213772400`) — **success**;
+  `launch/2.0.0`'s release dry run `39212180218` — success; its `jobs=everything` runs `39208467616` (`d2814e8`) and
+  `39212177717` (`6c01264`) — still running (`miri-slow`).
+- **The owner, 2026-10-19:** *"Whenever tests cannot be run locally on lap or run cannot be completed from lap for any
+  reason, automatically run them using GitHub Actions runners or any other alternatives instead. Ensure the tests complete
+  successfully and review the results."* Recorded in `HANDOFF.md` §11.1, `AGENTS.md` step 3 and the memory
+  (`docs/assistant-memory/tests-on-github-when-laptop-cannot.md`, and the laptop's).
+- The autosave task (`DeluluLang-autosave`) had run out its 7 hours on 2026-10-18; re-installed for 7 hours.
+- The laptop's memory took the three files the routine added (`a-fix-for-one-node-asks-every-node.md`,
+  `a-latency-may-be-a-deadline.md`, `autosave-snapshot-is-a-draft.md`).
+- Files and folders: M `AGENTS.md`, `HANDOFF.md`, `docs/assistant-memory/MEMORY.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `docs/assistant-memory/tests-on-github-when-laptop-cannot.md`. Deleted, renamed: nothing.
+- Survey and doctor (session start, on `71cae40`): `survey check` ok (1523 nodes, 14930 edges); `doctor --check` ok (29
+  checks). After the last edit: in the commit message.
+- Open / next, in order: (1) this commit's push run; (2) RW 4.69 — the monitor asks only for the live subtree under its
+  node; (3) `launch/2.0.0`'s two `everything` runs, once `miri-slow` ends; (4) *[laptop]* the launch, only on the owner's word.

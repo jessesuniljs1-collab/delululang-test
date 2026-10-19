@@ -30,7 +30,8 @@ if [ "${avail_gb:-0}" -lt "${SUITE_MIN_FREE_GB:-10}" ]; then
     {
         echo "NOT STARTED: ${avail_gb} GB free, under the ${SUITE_MIN_FREE_GB:-10} GB a suite needs. Free it first:"
         echo "  rm -rf target/debug/incremental target/<triple>   # caches, cross-lint builds"
-        echo "  find target/debug/deps -maxdepth 1 -type f -perm -u+x -mmin +N -delete   # test executables older than the last build"
+        echo "  find target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name '*.so' ! -name '*.dylib' ! -name '*.dll' -mmin +N -delete"
+        echo "      # test executables older than the last build — not the proc-macro libraries, which are executable too"
         echo "EXIT=3"
     } | tee "$out" >&2
     exit 3

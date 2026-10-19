@@ -140,7 +140,8 @@ creates root nodes (Constitution §5.16 law 4).
 CLI: `delulu grants list|tree|inspect <id>|revoke <id>`,
 `delulu grants delegate --effects Read --fs-read ./data --ttl 1h [--multi]` → prints token,
 `delulu run app.delulu --lease <token>` (replaces `--grant` flags for delegated runs; `--grant`
-flags in daemon mode are sugar for issue-then-run at the root).
+flags in daemon mode are sugar for issue-then-run at the root). **That root ends with its run** (2026-10-19, D-V2-157):
+revoked as itself at the run's end, and reaped by the broker's dead-man if the run is killed first.
 
 ### 3.3 The holder model, restated operationally
 

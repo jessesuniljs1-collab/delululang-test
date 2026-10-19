@@ -84,14 +84,20 @@ message = "Autorité de « {program} » — ce que ce programme peut faire à vo
 
 **Rules:**
 - **Keys are stable ids** — diagnostic codes (`DL0501`) and dotted CLI names (`cli.authority.header`).
-  The full key list is enumerated in `docs/for-agents.md` / the Stage-9 reference; a catalog need not
-  define all of them (missing keys fall back), but `[meta]` must be honest about coverage.
+  The key space is exactly the registered diagnostic codes (`delulu_diag::REGISTRY`; `delulu explain E-DLnnnn`
+  describes each) and the named CLI strings (`delulu_diag::catalog::CLI_STRINGS`); `docs/lang/en-US.md` §3 gives the
+  en-US text of every CLI string and of a starter set of codes. A catalog need not define all of them (missing keys
+  fall back), but `[meta]` must be honest about coverage.
 - **Placeholders are typed and fixed per key** — `{fn}`, `{effect}`, `{program}`, `{locale}`, etc.
   You may reorder them and surround them with any prose, but you may not invent new ones: an unknown
   placeholder → **DL1704** at catalog load, and that entry falls back to en-US (the rest of the
   catalog still loads). The canonical placeholder set per key is listed in the reference.
 - **You translate prose, never structure.** No key controls a code, a JSON field, a repair id, or a
   span. Those do not exist in the catalog's vocabulary.
+- **A CLI string is one line, and the terminal only shows it.** A control character in any entry — or in an
+  argument a program chose — is shown escaped (`\u{1b}`), never obeyed; in a `cli.*` entry a line break is
+  shown escaped too, so a catalog cannot start a line of the report its string sits in (a forged
+  `effects:` line under `authority`'s header). Since 2026-10-18 (RW 6.1).
 - **The welcome note is untouchable.** There is no catalog key for Jesse's first-run welcome (Stage 8
   §6.3). It renders byte-identically in every locale, is never translated or paraphrased, and a
   catalog key attempting to override it → **DL1704**. (It is human-emotional, creator-authored text,
