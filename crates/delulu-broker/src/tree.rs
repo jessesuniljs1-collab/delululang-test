@@ -871,7 +871,7 @@ impl Broker {
         // bound answers "not under it" rather than spinning.
         for _ in 0..1024 {
             if &cur.id == root {
-                return Some(node.clone());
+                return Some(below.unwrap_or(&cur.id).clone());
             }
             below = Some(&cur.id);
             cur = self.nodes.get(cur.parent.as_ref()?)?;
@@ -950,19 +950,32 @@ impl Broker {
     /// A human-facing tree rendering (spec §3.2 `tree`). Includes the holder for display — this is
     /// the one place holder fields are read, and they are DATA, never a decision input.
     pub fn tree(&self) -> String {
-        let mut roots: Vec<&GrantId> = self.nodes.values().filter(|n| n.parent.is_none()).map(|n| &n.id).collect();
+        // RW 4.70: each node's children from one index — a scan of every node for each node's children held the serial
+        // daemon for 10.9 s at 16,000 nodes (debug build, 2026-10-19), an e-stop's revoke waiting behind it.
+        let mut roots: Vec<&GrantId> = Vec::new();
+        let mut children: HashMap<&GrantId, Vec<&GrantId>> = HashMap::new();
+        for n in self.nodes.values() {
+            match &n.parent {
+                Some(p) => children.entry(p).or_default().push(&n.id),
+                None => roots.push(&n.id),
+            }
+        }
         roots.sort();
+        children.values_mut().for_each(|c| c.sort());
+        let now = self.now();
         let mut out = String::new();
         for root in roots {
-            self.render_node(root, 0, &mut out);
+            self.render_node(root, 0, &children, now, &mut out);
         }
         out
     }
 
-    fn render_node(&self, id: &GrantId, depth: usize, out: &mut String) {
+    fn render_node(&self, id: &GrantId, depth: usize, children: &HashMap<&GrantId, Vec<&GrantId>>, now: i64, out: &mut String) {
         let Some(n) = self.nodes.get(id) else { return };
         let indent = "  ".repeat(depth);
-        let state = match effective_state(n, self.now()) {
+        // TREE-STATE-1 (RW 4.70): the state the broker acts on — a child of an expired parent is expired — as `grants list`
+        // and `inspect` show it; the node's own state alone called such a child live.
+        let state = match self.effective_state_inherited(id, now).unwrap_or(EffState::Live) {
             EffState::Live => "live".to_string(),
             EffState::Revoked { by_seq } => format!("revoked@{by_seq}"),
             EffState::Expired { .. } => "expired".to_string(),
@@ -981,10 +994,8 @@ impl Broker {
             terminal_line(holder_kind),
             terminal_line(holder_desc),
         ));
-        let mut children: Vec<&GrantId> = self.nodes.values().filter(|c| c.parent.as_ref() == Some(id)).map(|c| &c.id).collect();
-        children.sort();
-        for child in children {
-            self.render_node(child, depth + 1, out);
+        for child in children.get(id).into_iter().flatten() {
+            self.render_node(child, depth + 1, children, now, out);
         }
     }
 }

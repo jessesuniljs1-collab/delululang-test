@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 309 |
-| Rust lines | 172961 |
+| Rust lines | 173304 |
 | Rust files outside `src/` (test/bench targets) | 140 |
 | Markdown documents | 264 |
-| Markdown lines | 79484 |
+| Markdown lines | 79625 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1524 / 14935 |
+| Nodes / edges in this map | 1524 / 14970 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -90,7 +90,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 44 files, 45094 lines
+- **Modules:** 44 files, 45210 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -100,9 +100,9 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/boundary.rs` | 790 | PS-E-01 (`docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` §4.1): a guest's boundary is confirmed before |
 | `src/breakglass.rs` | 875 | PS-B-06: BREAK-GLASS — the one way past an operator's restriction, and it is not the program's. |
 | `src/broker_client.rs` | 727 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
-| `src/broker_ipc.rs` | 568 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
+| `src/broker_ipc.rs` | 598 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 676 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 4365 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 4474 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 397 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/ceiling.rs` | 102 | The guest's end of a memory ceiling (campaign finding SANDBOX-STOP-1). |
 | `src/cert_crypto.rs` | 189 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
@@ -125,7 +125,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/main.rs` | 102 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 685 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 1456 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
-| `src/monitor_cmd.rs` | 785 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
+| `src/monitor_cmd.rs` | 762 | P8-04: `delulu monitor watch` — an out-of-band monitor that quarantines a run by revoking it. |
 | `src/morph_file.rs` | 244 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 304 | `delulu new` — start a package that already works. |
 | `src/openshell.rs` | 685 | PS-E-05 (a), D-V2-82: `delulu sandbox policy <file> --format openshell` — the wall an OpenShell |
@@ -162,7 +162,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 13887 lines
+- **Modules:** 19 files, 13935 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -183,7 +183,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/proposal.rs` | 407 | P9-03 step 3 (D-V2-125): proposals — a refused run asks for authority, and an approver answers it. |
 | `src/secrets.rs` | 908 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 53 | The pluggable TTL clock (ruling 3: determinism injection). |
-| `src/tree.rs` | 1179 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
+| `src/tree.rs` | 1227 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 768 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`

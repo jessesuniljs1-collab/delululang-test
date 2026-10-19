@@ -1527,3 +1527,102 @@ fn a_tree_too_large_for_one_listing_does_not_kill_a_healthy_monitor() {
     drop(guard);
     let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
 }
+
+/// One record whose authority carries `bytes` of padding — a line the follower must read whole, parse and hash.
+fn padded_entry(bytes: usize) -> delulu_broker::audit::AuditEntry {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+    delulu_broker::audit::AuditEntry {
+        seq: 0,
+        ts: now,
+        actor_node: Some("g_00000000000000000000000000000000".into()),
+        action: "use".into(),
+        target: None,
+        authority: Some(serde_json::json!({ "padding": "x".repeat(bytes) })),
+        span: None,
+        decision: "allow".into(),
+    }
+}
+
+/// The size of one record whose read by the monitor's own follower (`audit::Follower::read_new`) takes at least `at_least`
+/// on this machine — measured on a scratch chain, doubling from 4 MiB; returns the size and the read's time.
+fn size_a_record_whose_read_takes(at_least: std::time::Duration) -> (usize, std::time::Duration) {
+    use delulu_broker::audit::AuditSink;
+    let dir = std::env::temp_dir().join(format!("dlmon-{}-msize", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut log = delulu_broker::AuditLog::open(&dir).unwrap();
+    log.append(padded_entry(16)).unwrap();
+    let mut bytes = 4 << 20;
+    loop {
+        let mut follower = delulu_broker::audit::Follower::at_end(&dir).unwrap();
+        log.append(padded_entry(bytes)).unwrap();
+        let t = std::time::Instant::now();
+        let got = follower.read_new().unwrap();
+        let took = t.elapsed();
+        assert!(got.records.len() == 1 && got.unverified.is_empty(), "the follower reads the one record and verifies it");
+        if took >= at_least {
+            drop(log);
+            let _ = std::fs::remove_dir_all(&dir);
+            return (bytes, took);
+        }
+        assert!(bytes < 1 << 30, "a {bytes}-byte record read in {took:?} — this machine reads too fast for the state this needs");
+        bytes *= 2;
+    }
+}
+
+/// **RW 4.63: a watch held outside the daemon is a silent one.** While the monitor's watch waits on the daemon a thread of its
+/// own beats for it (DEADMAN-BUSY-1, D-V2-127) — and only then, so a watch held anywhere else for longer than its dead-man's
+/// period is revoked, as a stopped monitor is. No test held the loop outside the daemon, and M346 — the beater beating
+/// whatever the watch does — passed every one. The hold here is the monitor's own read of one record far larger than any
+/// other, written through the chain's writer while it watches: a line its follower reads whole, parses and hashes, measured
+/// here to take three periods. Its dead-man must fire, and the monitor must end saying so.
+#[test]
+fn a_watch_held_outside_the_daemon_lets_its_dead_man_fire() {
+    use delulu_broker::audit::AuditSink;
+    const PERIOD_MS: u64 = 200;
+    let (bytes, took) = size_a_record_whose_read_takes(std::time::Duration::from_millis(3 * PERIOD_MS));
+    let f = setup("mheld");
+    let o = delulu_in(&f.cwd, &f.state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: f.state.clone() };
+    let (m, _) = delegate(&f, &["--holder-desc", "monitor"]);
+    let _ = delegate(&f, &["--parent", &m, "--holder-desc", "a run"]);
+    let mut mon = start_monitor_args(&f, &m, &["--for", "120000", "--death-after", &PERIOD_MS.to_string()]);
+
+    // A second writer, as a sandboxed run's host is: the record goes through the chain's own lock and anchor.
+    delulu_broker::AuditLog::open(f.state.join("audit")).unwrap().append(padded_entry(bytes)).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20) + took * 10;
+    let status = loop {
+        if let Some(s) = mon.child.try_wait().unwrap() {
+            break Some(s);
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = mon.child.kill();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut mon.child.stdout.take().unwrap(), &mut out).unwrap();
+    while let Ok(l) = mon.lines.recv_timeout(std::time::Duration::from_secs(2)) {
+        mon.stderr_seen.push(l);
+    }
+    let seen = &mon.stderr_seen;
+    let status = status.unwrap_or_else(|| {
+        panic!(
+            "a watch held {took:?} in one read of a {bytes}-byte record, against a {PERIOD_MS} ms dead-man, was still being \
+             beaten for after {:?} — something beat for it outside the daemon: {seen:?}",
+            took * 10 + std::time::Duration::from_secs(20)
+        )
+    });
+    assert!(!status.success(), "a monitor whose dead-man fired ends as a failure: {status:?}\n{out}\n{seen:?}");
+    let report: serde_json::Value = serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}\n{seen:?}"));
+    assert!(
+        report["ended"].as_str().is_some_and(|e| e.contains("dead-man revoked")),
+        "the monitor says its own dead-man ended it: {report:#}\n{seen:?}"
+    );
+    assert_eq!(inspect_state(&f, &m), "revoked", "{report:#}");
+    eprintln!("measured: one read of a {bytes}-byte record took {took:?} here (period {PERIOD_MS} ms)");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(f.state.parent().unwrap());
+}

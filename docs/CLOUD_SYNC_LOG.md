@@ -4009,3 +4009,39 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   checks). After the last edit: in the commit message.
 - Open / next, in order: (1) this commit's push run; (2) RW 4.69 — the monitor asks only for the live subtree under its
   node; (3) `launch/2.0.0`'s two `everything` runs, once `miri-slow` ends; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.69: a tree too large for one listing killed a healthy monitor's fleet (MONITOR-FRAME-1, D-V2-161) — made on the laptop
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69`, then `master` (fast-forward) once its CI is read green   Base: `0a9afbf`
+- Commits: this entry's commit.
+- Files and folders: M `crates/delulu-broker/src/tree.rs` (`Broker::run_under`), `crates/delulu/src/broker_ipc.rs`
+  (`RunsUnder`/`Runs`, `MAX_RUNS_ASKED`, `FrameTooLarge`, `MAX_FRAME` public), `crates/delulu/src/brokerd.rs` (the handler, the
+  oversize answer in words, a unit test), `crates/delulu/src/monitor_cmd.rs` (a poll asks `RunsUnder`; `runs_under` and its
+  unit test moved to `tree.rs`), `crates/delulu/tests/monitor_cli.rs` (the witness), `CHANGELOG.md`, `HANDOFF.md` (§11.4),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-161), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.69 closed,
+  4.70 added), `docs/assistant-memory/a-latency-may-be-a-deadline.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted,
+  renamed: nothing.
+- **Found and fixed:** past one 16 MiB frame the daemon could not send the monitor's whole-tree listing; the monitor stopped
+  (`broker unreachable`) and its dead-man revoked its node and every run under it — 550 nodes of 30,000-byte descriptions
+  outside its subtree, by hand on Windows. Witness red on the old code; four mutants red (`V2_LOG.md`).
+- **The full suite did not run on the laptop** (the owner, 2026-10-19: the tests go to GitHub when the laptop cannot run
+  them — its 2026-10-17 suite had been stopped for low memory): it runs as this branch's pull-request CI, read to its end
+  before `master` moves. Locally green: the ten test targets that read the tree, the `delulu` and `delulu-broker` unit tests,
+  clippy 0, fmt clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, in order: (1) this branch's CI, then `master`; (2) RW 4.70 — `grants list` past one frame; (3) `launch/2.0.0`:
+  merge `master`, dispatch `everything` and the release dry run; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.63: a watch held outside the daemon lets its dead-man fire; M346 red (made on the laptop)
+- Session: `https://claude.ai/code/session_01EL39cBh8onpAXvyY8r6d6q`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `laptop/rw-4-69` (pull request #1), then `master` once its CI is read green   Base: `ea7d42b`
+- Commits: this entry's commit.
+- Files and folders: M `crates/delulu/tests/monitor_cli.rs`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.63
+  closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- A witness only — no product code changed: one 32 MiB record written through the chain's writer holds the monitor's watch
+  in its own read for three dead-man periods; its dead-man fires. M346 (the beater beats whatever the watch does), which
+  survived since routine run 22, is red.
+- The full suite runs on GitHub as the pull request's CI (the owner's rule of 2026-10-19). Locally: `monitor_cli` 23 passed;
+  clippy 0; fmt clean.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: as the entry before.

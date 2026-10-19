@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a monitor over a large grant tree keeps watching, 2026-10-19
+
+- **Fixed (RW 4.69, D-V2-161): `delulu monitor watch` no longer stops — and lets its dead-man revoke every run it watches —
+  when the broker's grant tree is large.** Each poll asked the daemon for the whole tree, which keeps every node it ever
+  held, anyone's, each with its holder's description. Past one protocol frame (16 MiB) the daemon could not send that
+  listing at all; the monitor took the dropped connection for a broker that was not there, stopped, and its dead-man revoked
+  its node and every run under it (by hand: 550 nodes with 30,000-character descriptions, none of them under the monitor).
+  Below that size each listing held the daemon — an operator's e-stop included — while it was built. Now a poll asks only
+  about the monitor's own node and the nodes its newly read records name.
+- **Fixed: a broker answer too large for one frame is refused in words** — `DL1401: the broker's answer to this request is N
+  bytes, larger than one protocol frame (16777216 bytes), and was not sent` — instead of a dropped connection that every
+  client reported as `broker unreachable`. `delulu grants list` over such a tree now says so; it still cannot list it
+  (RW 4.70).
+
 ## Unreleased — a monitor over a long audit chain no longer revokes its own runs, 2026-10-19
 
 - **Fixed (MONITOR-CHAIN-1, D-V2-158): `delulu monitor watch` no longer quarantines every run it watches once the audit

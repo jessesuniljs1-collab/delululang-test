@@ -1079,7 +1079,9 @@ fn handle(
             let state = broker.effective_state(&root).map(|e| state_name(&e).0.to_string());
             let runs = nodes
                 .into_iter()
-                .filter_map(|n| broker.run_under(&root, &GrantId::from_trusted(n.clone())).map(|run| (n, run.as_str().to_string())))
+                .filter_map(|n| {
+                    broker.run_under(&root, &GrantId::from_trusted(n.clone())).map(|run| (n, run.as_str().to_string()))
+                })
                 .collect();
             (Response::Runs { state, runs }, false)
         }
@@ -2968,7 +2970,9 @@ mod tests {
         let ask = |root: &str, nodes: &[&str]| {
             let nodes = nodes.iter().map(|n| n.to_string()).collect();
             match request(&state, ReqBody::RunsUnder { root: root.to_string(), nodes }).unwrap() {
-                Response::Runs { state, runs } => (state, runs.into_iter().collect::<std::collections::HashMap<String, String>>()),
+                Response::Runs { state, runs } => {
+                    (state, runs.into_iter().collect::<std::collections::HashMap<String, String>>())
+                }
                 other => panic!("runs under: {other:?}"),
             }
         };
@@ -2978,13 +2982,17 @@ mod tests {
             [(dev.clone(), run.clone()), (run.clone(), run.clone()), (m.clone(), m.clone())].into_iter().collect();
         assert_eq!(runs, want, "only the asked nodes under the root, each with its run");
         assert_eq!(ask("g_0000000000000000000000000000dead", &[&run]), (None, std::collections::HashMap::new()), "no such root");
-        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: m.clone(), target: run.clone() }).unwrap() else {
+        let Response::Revoked { .. } = request(&state, ReqBody::Revoke { caller: m.clone(), target: run.clone() }).unwrap()
+        else {
             panic!("revoke")
         };
         assert_eq!(ask(&run, &[&dev]), (Some("revoked".to_string()), [(dev.clone(), dev.clone())].into_iter().collect()));
         let many = (0..=crate::broker_ipc::MAX_RUNS_ASKED).map(|i| format!("g_{i}")).collect();
         let resp = request(&state, ReqBody::RunsUnder { root: m.clone(), nodes: many }).unwrap();
-        assert!(matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("ask in parts")), "{resp:?}");
+        assert!(
+            matches!(&resp, Response::Error { code, message, .. } if code == "DL1401" && message.contains("ask in parts")),
+            "{resp:?}"
+        );
 
         let _ = child(&top, "x".repeat(9 << 20));
         let _ = child(&top, "y".repeat(9 << 20));
