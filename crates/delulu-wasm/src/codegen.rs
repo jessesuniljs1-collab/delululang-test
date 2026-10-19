@@ -423,6 +423,8 @@ struct Imports {
     list_slot: u32,
     /// `__str_eq` (`Str == Str`), after the list helpers; `u32::MAX` when the module compares nothing.
     str_eq: u32,
+    /// `delulu:str.str_method` — a `Str` method run host-side by the interpreter's own `call_str_method`.
+    str_method: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -624,6 +626,31 @@ fn module_uses_lists(env: &EnumEnv, module: &Module) -> bool {
     module_any(env, module, &hit, true)
 }
 
+/// Does any compilable function call one of the `Str` methods the host runs (`STR_METHODS`)?
+fn module_calls_str_methods(env: &EnumEnv, module: &Module) -> bool {
+    module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if str_method_sig(&name.name).is_some()), false)
+}
+
+/// The `Str` methods the WASM engine runs host-side, through the interpreter's own `call_str_method` — so each answers
+/// exactly what the interpreter answers, Unicode and all (RW 3.4). A method's id is its index here; `host.rs` reads it
+/// back. `len` and `split` have their own paths (`__str_len`, `delulu:list.str_split`).
+pub(crate) const STR_METHODS: [&str; 8] =
+    ["trim", "to_upper", "to_lower", "chars", "contains", "starts_with", "replace", "slice"];
+
+/// A `Str` method's id, its arguments' types and its result's type.
+fn str_method_sig(name: &str) -> Option<(u32, &'static [Ty], Ty)> {
+    let id = STR_METHODS.iter().position(|m| *m == name)? as u32;
+    let (args, ret): (&'static [Ty], Ty) = match name {
+        "trim" | "to_upper" | "to_lower" => (&[], Ty::Str),
+        "chars" => (&[], Ty::List(Scalar::Str)),
+        "contains" | "starts_with" => (&[Ty::Str], Ty::I32),
+        "replace" => (&[Ty::Str, Ty::Str], Ty::Str),
+        "slice" => (&[Ty::I64, Ty::I64], Ty::Str),
+        _ => return None,
+    };
+    Some((id, args, ret))
+}
+
 /// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
 /// which a comparison of two `Str`s calls.
 fn module_compares(env: &EnumEnv, module: &Module) -> bool {
@@ -748,6 +775,7 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         list_new: u32::MAX,
         list_slot: u32::MAX,
         str_eq: u32::MAX,
+        str_method: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -793,6 +821,11 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         imp.str_split = n_imports;
         imp.index_fault = n_imports + 1;
         n_imports += 2;
+    }
+    let needs_str_methods = module_calls_str_methods(&env, module);
+    if needs_str_methods {
+        imp.str_method = n_imports;
+        n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
                                 // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
@@ -918,6 +951,13 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
         types.ty().function([ValType::I64, ValType::I32], []); // index_fault(index, len): records DL0903, then the guest traps
         next_type += 2;
     }
+    let mut str_method_ty = 0;
+    if needs_str_methods {
+        str_method_ty = next_type;
+        // str_method(s, method, a, b, lo, hi) -> a Str, a List[Str] or a Bool
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I64, ValType::I64], [ValType::I32]);
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1004,6 +1044,9 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     if needs_lists {
         imports.import("delulu:list", "str_split", EntityType::Function(str_split_ty));
         imports.import("delulu:list", "index_fault", EntityType::Function(index_fault_ty));
+    }
+    if needs_str_methods {
+        imports.import("delulu:str", "str_method", EntityType::Function(str_method_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -1114,7 +1157,8 @@ pub fn compile_module_with(module: &Module, foreign_binds: &HashMap<NodeId, Stri
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors || needs_lists {
+    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors || needs_lists || needs_str_methods
+    {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -2523,6 +2567,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.str_split));
                 return Ok(Ty::List(Scalar::Str));
             }
+            if let (Ty::Str, Some((id, params, ret))) = (recv_ty, str_method_sig(&name.name)) {
+                if params.len() == args.len() {
+                    return compile_str_method(id, params, ret, args, cx);
+                }
+            }
             if let Ty::List(s) = recv_ty {
                 return compile_list_method(s, &name.name, args, cx);
             }
@@ -2640,6 +2689,44 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
         Expr::Block(b) => compile_block(b, cx),
         _ => Err(CompileError::Unsupported("this expression form".into())),
     }
+}
+
+/// A `Str` method run host-side (`delulu:str.str_method`), the receiver on the stack: its arguments are computed in order,
+/// then passed in the import's slots — `Str`s in `a` and `b`, `Int`s in `lo` and `hi`, the unused ones zero.
+fn compile_str_method(id: u32, params: &[Ty], ret: Ty, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.str_method == u32::MAX {
+        return Err(CompileError::Unsupported("a `Str` method in a module compiled without the string interface".into()));
+    }
+    let recv = cx.alloc_local(Ty::Str)?;
+    cx.emit(Instruction::LocalSet(recv));
+    let mut strs = Vec::new();
+    let mut ints = Vec::new();
+    for (arg, want) in args.iter().zip(params) {
+        compile_expr_as(arg, cx, *want)?;
+        let l = cx.alloc_local(*want)?;
+        cx.emit(Instruction::LocalSet(l));
+        if *want == Ty::Str {
+            strs.push(l);
+        } else {
+            ints.push(l);
+        }
+    }
+    cx.emit(Instruction::LocalGet(recv));
+    cx.emit(Instruction::I32Const(id as i32));
+    for k in 0..2 {
+        match strs.get(k) {
+            Some(l) => cx.emit(Instruction::LocalGet(*l)),
+            None => cx.emit(Instruction::I32Const(0)),
+        }
+    }
+    for k in 0..2 {
+        match ints.get(k) {
+            Some(l) => cx.emit(Instruction::LocalGet(*l)),
+            None => cx.emit(Instruction::I64Const(0)),
+        }
+    }
+    cx.emit(Instruction::Call(cx.imp.str_method));
+    Ok(ret)
 }
 
 // ----- RW 3.4: the WASM `List` -------------------------------------------------------------------------------------
