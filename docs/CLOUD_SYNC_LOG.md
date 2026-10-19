@@ -4092,3 +4092,33 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next: as the entry before.
+
+### 2026-10-19 — on-demand routine run 4: the laptop's RW 3.4 verified and merged (pull request #2); WASM-HYGIENE-2 (RW 3.8)
+- Session: `https://claude.ai/code/session_016kec1tYrJcvMuuS75iygGL`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; `.claude/settings.json` sets xhigh — the session is not shown its own effort; no
+  sous-chef)
+- Branch: `master`; the code's runner reads on `claude/wasm-hygiene-2`   Pull request: #2 merged by fast-forward   Base: `98edf2f`
+- Commits: `c3445be` and `4d11575` (the laptop's, pull request #2 — `master` fast-forwarded to them); this entry's commit.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`compile_block_inner`: a frame of function values per block),
+  `crates/delulu-wasm/src/gen.rs` (the loop generator binds, calls and shadows a function value),
+  `crates/delulu-wasm/tests/loop_parity.rs` (the witness; the random test counts shadowing programs and prints its readings),
+  `CHANGELOG.md`, `HANDOFF.md` (§11.4 WASM-HYGIENE-2), `docs/assistant-memory/MEMORY.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (3.8 added, closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `docs/assistant-memory/two-name-tables-one-scope.md`. Deleted, renamed: nothing.
+- Start of session (on `98edf2f`): `survey check` ok (1524 nodes, 14985 edges); `doctor --check` ok (26 checks in this VM).
+  `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- Verified (pull request #2): its CI `39233385903` success on every job; in the VM `delulu-wasm`'s suite, `wasm_cli` 10,
+  `budget_cli` 10 and the release differential (50,000 checked, 46,855 agreed, 3,145 both faulted, 0 mismatches — the
+  laptop's figures). The autosave snapshot `bbb8ea3` is the draft of `c3445be`, superseded by the two commits (checked file
+  by file). `launch/2.0.0`'s `everything` runs `39208467616` and `39212177717` — success.
+- **Fixed (WASM-HYGIENE-2, RW 3.8):** a `let f = fn…` inside an `if`, `else` or `while` body replaced the outer `f` for the
+  rest of the function on `--engine wasm` (`2 / 1` on the interpreter, `2 / 2` on WASM — the `if` form on `98edf2f` too).
+  Witness red on the old backend; the generator now writes the shape (149 of 400 sampled programs shadow `h`), red on the
+  old backend too; differential with it 50,000 checked, 0 mismatches; M510–M512 red, control green (`V2_LOG.md`).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (WASM-HYGIENE-2); `docs/assistant-memory/two-name-tables-one-scope.md`.
+- Open / next, in order: (1) this commit's push run and its runner reads on `claude/wasm-hygiene-2`; (2) `launch/2.0.0`: merge
+  `master` (RW 4.69, 4.63, 4.70, RW 3.4, 3.8), dispatch `everything` and the release dry run; (3) re-run Study-C in release
+  (all three lanes) before any row of `HOT_PATH_TABLE.md` changes; (4) the WASM fragment's next pieces — `for` and `List`;
+  RW 4.66, 4.67, 6.1's further strings, 6.2; (5) *[laptop]* the launch, only on the owner's word.

@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 310 |
-| Rust lines | 174134 |
+| Rust lines | 174215 |
 | Rust files outside `src/` (test/bench targets) | 141 |
-| Markdown documents | 264 |
-| Markdown lines | 79839 |
+| Markdown documents | 265 |
+| Markdown lines | 79952 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1525 / 15022 |
+| Nodes / edges in this map | 1526 / 15032 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -383,15 +383,15 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 7485 lines
+- **Modules:** 8 files, 7512 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 169 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 311 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 2930 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 2936 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
-| `src/gen.rs` | 175 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
+| `src/gen.rs` | 196 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 1586 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 830 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |

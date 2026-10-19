@@ -1350,8 +1350,12 @@ fn compile_block_as(b: &Block, cx: &mut Cx, expected: Ty) -> Result<(), CompileE
     compile_block_inner(b, cx, Some(expected)).map(|_| ())
 }
 
+/// A block opens a frame of locals AND a frame of function values: a `let f = fn…` inside an `if`, a `while` or a
+/// match arm is that block's, and the `f` outside it is the outer one again once it ends (WASM-HYGIENE-2 — the binding
+/// had gone into the function's own frame, so an inner `f` replaced the outer for the rest of the function).
 fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
     cx.scopes.push(HashMap::new());
+    cx.callables.push(HashMap::new());
     let mut result = Ty::Unit;
     let n = b.stmts.len();
     for (i, stmt) in b.stmts.iter().enumerate() {
@@ -1360,11 +1364,13 @@ fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<T
         match r {
             Ok(ty) => result = ty,
             Err(e) => {
+                cx.callables.pop();
                 cx.scopes.pop();
                 return Err(e);
             }
         }
     }
+    cx.callables.pop();
     cx.scopes.pop();
     Ok(result)
 }

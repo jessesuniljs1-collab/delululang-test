@@ -25,6 +25,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **Fixed (WASM-HYGIENE-1): a lambda passed to a generic function could read the wrong variable on the WASM engine.** The
   engine inlines both, and a name in the lambda found the generic function's own variable of that name first: a program
   printed 103 on WASM and 4 on the interpreter. Each inlined body now sees only the names of where it was written.
+- **Fixed (WASM-HYGIENE-2): on the WASM engine, a function value bound inside an `if`, `else` or `while` body replaced the
+  outer one of the same name for the rest of the function.** `let f = fn…` in such a block went into the function's own
+  table of function values, so a later `f(0)` outside the block called the inner `f`: a program printed `2` and then `2` on
+  WASM where the interpreter printed `2` and then `1`. A block's function values now end with the block, as its variables
+  do. (The `if` form miscompiled before loops did too.)
 
 ## Unreleased — `grants list` and `grants tree` read a large tree, and the tree shows what the broker enforces, 2026-10-19
 

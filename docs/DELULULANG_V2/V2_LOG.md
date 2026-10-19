@@ -6697,3 +6697,42 @@ clippy 0, fmt clean. The full suite runs on GitHub (`CLOUD_SYNC_LOG.md`).
 **Postscript (RW 3.4): `str(Bool)` in any program.** It was DL1201 unless the program also used a foreign library, which
 was what interned `"true"` and `"false"`; every module interns them now (a loop's flag is a `Bool`). `loop_parity.rs`'s first
 test prints `str(ok)` and `str(t > 4)` on both engines. `delulu-wasm` green; `wasm_cli` and `cli` green.
+
+## 2026-10-19 — on-demand routine run 4: the laptop's RW 3.4 verified and merged; WASM-HYGIENE-2 (RW 3.8)
+
+**The laptop's pull request #2 (`laptop/wasm-loops`, RW 3.4, D-V2-163) — verified, then merged.** Its CI `39233385903` on
+`4d11575` — **success on every job** (the suites on Ubuntu, Windows, macOS and arm64, `fuzz`, `microvm`, `miri` diag, atlas
+and ffi, `supply-chain`, `formal`, `editor`, `lints`; `heavy-gates` and `miri-slow` skipped, as on every pull request). Re-run
+in the VM on `4d11575`: `delulu-wasm`'s whole suite (91 lib, `loop_parity` 6, every parity target), `wasm_cli` 10,
+`budget_cli` 10, and the 50,000-program differential by hand in release — **50,000 checked, 46,855 agreed, 3,145 both
+faulted, 0 mismatches**, the laptop's figures exactly. The autosave snapshot `bbb8ea3` (09:39 UTC) is the draft of `c3445be`;
+the two committed later are a superset of it (its `codegen.rs` lacked the `str(Bool)` commit, its `loop_parity.rs` the same
+test's two values). `master` fast-forwarded `98edf2f` → `4d11575`. Also read: `master`'s push runs on `98edf2f` — CI
+`39232237537`, `openshell` `39232237530`, `ocsf` `39232237519` — success; the release schedule `39235210830` and the CI
+schedule `39222644536` (on `0a9afbf`) — success; `launch/2.0.0`'s `jobs=everything` runs `39208467616` (`d2814e8`) and
+`39212177717` (`6c01264`) — **success**, their `miri-slow` jobs included.
+
+**Found while reading the diff: WASM-HYGIENE-2.** The backend resolves locals through `Cx::scopes` and function values
+(the lambdas it inlines) through `Cx::callables`. `compile_block_inner` pushed a frame onto the first only, so `let f = fn…`
+inside an `if`, `else` or `while` body went into the FUNCTION's frame of function values and replaced the outer `f` for the
+rest of the function. Probes, both engines (`delulu run … --engine wasm`): an `if` whose body shadows `f` — the interpreter
+`2` then `1`, WASM `2` then `2`, **and the same on `98edf2f`'s backend** (the `if` form compiled before RW 3.4); a `while` whose
+body shadows it — `300 1` against `300 0` (new with RW 3.4, which made `while` compile). Silent wrong output. Four other
+probes agreed on both engines (a capture shadowed or re-assigned after the definition reads the new value on both — the
+interpreter's frame is shared; an inner `var n` shadowing a captured `n`; a loop that calls a capturing lambda). The
+differential could not have seen it: the generator wrote no function value at all, as WASM-HYGIENE-1's own note says.
+
+**Fixed:** a block opens a frame of function values beside its locals (`compile_block_inner` pushes and pops both, on its
+error path too). **And the gate is taught the shape:** `random_loop_program` binds `h = fn(x: Int) -> Int { … }` (capturing
+`a`) before the loop in half its programs, calls it in the loop body and in the tail, and in three of four of those shadows
+it in the loop body or in an `if` there — drawn from an RNG stream of its own, so every other line is what each seed gave
+before. `random_loop_programs_agree_with_the_interpreter` counts the shadowing programs and asserts more than 80 of 400.
+
+**Evidence.** `loop_parity.rs` `a_function_value_bound_in_a_block_is_that_blocks` (the `if`, the `else` and the `while`
+forms, against the values themselves) — **red on the old backend**: `2 23 33 300` against `7 21 31 301`; and
+`random_loop_programs_agree_with_the_interpreter` with the new generator — **red on the old backend** at its first shadowing
+program (`interp=Ok(1651022093) wasm=Ok(2)`). Green after: 7 of 7; the sample's readings, printed by the test — 346 agreed,
+54 both faulted, 371 looping, **149 shadowing a function value**. The differential with the new generator, release:
+**50,000 checked, 46,235 agreed, 3,765 both faulted, 0 mismatches**. Mutants (`scripts/mutants.py`): M510 (no frame of
+function values pushed) red in three tests, M511 (pushed, never popped) red in two, M512 (the generator never shadows) red
+on the count; control green. clippy (`delulu-wasm`, all targets) 0; fmt clean.

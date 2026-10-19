@@ -146,6 +146,52 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "4 12 2\n");
 }
 
+/// **WASM-HYGIENE-2.** A function value bound inside a block went into the function's own frame of function values, so
+/// an inner `let f = fn…` replaced the outer `f` for the rest of the function: after an `if` whose body shadowed it the
+/// interpreter printed 1 and the WASM engine 2 — red on the old backend, where that `if` compiled before RW 3.4 too — and
+/// after a `while` whose body did, 1 against 0. A block's function values are the block's, in every block.
+#[test]
+fn a_function_value_bound_in_a_block_is_that_blocks() {
+    let src = r#"module m
+
+fn after_if(k: Int) -> Int {
+  let f = fn(x: Int) -> Int { x + 1 }
+  var seen = 0
+  if k > 0 {
+    let f = fn(x: Int) -> Int { x + 2 }
+    seen = f(0)
+  } else {
+    let f = fn(x: Int) -> Int { x + 3 }
+    seen = f(0)
+  }
+  seen * 10 + f(0)
+}
+
+fn after_while(n: Int) -> Int {
+  let f = fn(x: Int) -> Int { x + 1 }
+  var i = 0
+  var acc = 0
+  while i < n {
+    let f = fn(x: Int) -> Int { x * 100 }
+    acc = acc + f(1)
+    i = i + 1
+  }
+  acc + f(0)
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let f = fn(x: Int) -> Int { x + 7 }
+  if true {
+    let f = fn(x: Int) -> Int { x + 2 }
+    out.println(str(f(0)))
+  }
+  out.println(str(f(0)) + " " + str(after_if(1)) + " " + str(after_if(0)) + " " + str(after_while(3)))
+}
+"#;
+    assert_eq!(assert_parity(src), "2\n7 21 31 301\n", "the values themselves");
+}
+
 /// The host writes what it reads into the guest's heap too (`fs.read_text`), and grows the memory by the same rule — a
 /// file larger than the first heap was a refusal on WASM alone.
 #[test]
@@ -165,11 +211,12 @@ fn the_host_grows_the_memory_for_what_it_writes() {
 }
 
 /// The loop generator's programs on both engines — the value, or both a fault (overflow, a zero divisor) — and not a
-/// vacuous pass: most must run to a value, some must fault, and the loops must have run. The 50,000-program gate
-/// (`differential.rs`, CI's `fuzz` job) runs the same generator.
+/// vacuous pass: most must run to a value, some must fault, the loops must have run, and many must shadow a function
+/// value inside the loop (WASM-HYGIENE-2). The 50,000-program gate (`differential.rs`, CI's `fuzz` job) runs the same
+/// generator.
 #[test]
 fn random_loop_programs_agree_with_the_interpreter() {
-    let (mut agreed, mut faulted, mut ran) = (0u32, 0u32, 0u32);
+    let (mut agreed, mut faulted, mut ran, mut shadowed) = (0u32, 0u32, 0u32, 0u32);
     for k in 0..400u64 {
         let (src, args) = random_loop_program(k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let checked = check_source(0, &src);
@@ -184,8 +231,15 @@ fn random_loop_programs_agree_with_the_interpreter() {
         if src.contains("while i < ") && !src.contains("while i < 0 ") {
             ran += 1;
         }
+        if src.matches("let h = ").count() > 1 {
+            shadowed += 1;
+        }
     }
-    assert!(agreed > 150 && faulted > 5 && ran > 300, "agreed {agreed}, faulted {faulted}, looping programs {ran}");
+    eprintln!("loop programs: agreed {agreed}, faulted {faulted}, looping {ran}, shadowing a function value {shadowed}");
+    assert!(
+        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80,
+        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}"
+    );
 }
 
 /// What stays outside the fragment is refused, never miscompiled: a `for` (a `List`), and an assignment from inside an

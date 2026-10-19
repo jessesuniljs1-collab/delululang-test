@@ -1081,6 +1081,15 @@ spells the same thing?**
   moved to where it is used (inlining, macros, templates), its names must still mean what they meant where it was written —
   and a differential fuzzer only covers the shapes its generator writes.
 
+- **WASM-HYGIENE-2 — an inner block's function value replaced the outer one** (on-demand routine run 4, 2026-10-19, RW 3.8):
+  the same backend keeps locals in one table and function values in another, and a block opened a frame in the first only,
+  so `let f = fn…` inside an `if` or a `while` body replaced the outer `f` for the rest of the function — `2 / 1` on the
+  interpreter, `2 / 2` on WASM; on `master` before RW 3.4 too (the `if` form). Found while verifying WASM-HYGIENE-1's fix,
+  which had asked which frames an inlined body sees and not whether each block opens each kind of frame. The line above
+  said the gate never generated a lambda, and the generator stayed as it was: it binds, calls and shadows one now, its count
+  asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
+  a generator cannot write a shape, teach it the shape in the same change.
+
 - **TREE-STATE-1 — the tree said live where the broker said expired** (the laptop, 2026-10-19, D-V2-162): `grants tree` drew
   each node in its own state, so a child of an expired grant read `[live]` while `list`, `inspect` and every check treated it
   as expired — the comment above `effective_state` already said such a report is worse than none. Found while paging the

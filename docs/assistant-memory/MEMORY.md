@@ -45,4 +45,5 @@
 - [Mutant runs: one cargo target at a time](mutant-run-per-target.md) — a `--lib NAME --test T` filter hits every target; "all survived" = check the harness first
 - [A fix for one node asks every node](a-fix-for-one-node-asks-every-node.md) — RW 4.57: RW 4.51 ended a plugin's node with its run, and the run's own root outlived every run; ask every node a holder holds, the parent first
 - [A latency may be a deadline](a-latency-may-be-a-deadline.md) — MONITOR-CHAIN-1: the monitor's whole-chain read per poll was filed LOW; it beats a dead-man, so a long chain revoked its whole fleet; grow the input past the nearest deadline before grading a cost
+- [Two name tables, one scope](two-name-tables-one-scope.md) — WASM-HYGIENE-2: a block opened a frame for locals and none for function values, so an inner `let f = fn…` replaced the outer `f`; push and pop every table a lookup reads, and list what a generator can emit before trusting its zero
 - [WSL KVM lab (2026-09-26)](wsl-kvm-lab.md) — WSL2 has /dev/kvm (nestedVirtualization + wsl.conf boot modprobe); the PS-C toolchain there (image at ~/microvm-image-a, ~/bin/firecracker) and how to run the gated microVM tests
