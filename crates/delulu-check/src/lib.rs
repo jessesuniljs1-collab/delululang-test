@@ -255,6 +255,45 @@ mod tests {
         assert!(e.contains(&"DL0605".to_string()), "{e:?}");
     }
 
+    /// EQ-FN-1 (D-V2-166): a function has no structural equality — `f == f` was admitted and answered `false` — so `==`,
+    /// `!=`, `assert_eq` and `List.contains` refuse one, in a list or a record field too, in words about functions. A
+    /// function still has a `str`.
+    #[test]
+    fn equality_on_a_function_is_dl0605_in_its_own_words() {
+        let srcs = [
+            "module m\nfn f() -> Bool {\n  let g = fn(x: Int) -> Int { x }\n  g == g\n}\n",
+            "module m\nfn f(g: fn(Int) -> Int, h: fn(Int) -> Int) -> Bool {\n  g != h\n}\n",
+            "module m\nfn f(gs: List[fn(Int) -> Int], g: fn(Int) -> Int) -> Bool {\n  gs.contains(g)\n}\n",
+            "module m\ntype Op {\n  run: fn(Int) -> Int,\n}\nfn f(a: Op, b: Op) -> Bool {\n  a == b\n}\n",
+            "module m\nfn f(g: fn(Int) -> Int) {\n  assert_eq(g, g)\n}\n",
+        ];
+        for src in srcs {
+            let c = check(src);
+            let d = c.diagnostics.iter().find(|d| d.code == "DL0605");
+            assert!(d.is_some_and(|d| d.message.contains("a function")), "{src}\n{:?}", c.diagnostics);
+        }
+        let shown = check("module m\nfn f() -> Str {\n  let g = fn(x: Int) -> Int { x }\n  str(g)\n}\n");
+        assert!(!shown.has_errors(), "a function still has a `str`: {:?}", shown.diagnostics);
+    }
+
+    /// OPAQUE-FIELD-1: the walk over a record's field types named no `Map`, no `Plugin` and no actor, so a record holding
+    /// `Map[Str, Secret[Str]]` or an actor reference was admitted to `==` (and to `str`), which the same type outside a
+    /// record is refused. A record of plain data still compares and prints.
+    #[test]
+    fn an_opaque_type_inside_a_record_field_is_seen() {
+        for src in [
+            "module m\ntype Vault {\n  m: Map[Str, Secret[Str]],\n}\nfn f(a: Vault, b: Vault) -> Bool {\n  a == b\n}\n",
+            "module m\nactor W {\n  var n: Int\n  new() { self.n = 0 }\n}\ntype Box {\n  w: W,\n}\nfn f(a: Box, b: Box) -> Bool {\n  a == b\n}\n",
+            "module m\ntype Vault {\n  m: Map[Str, Secret[Str]],\n}\nfn f(a: Vault) -> Str {\n  str(a)\n}\n",
+            "module m\ntype R {\n  p: Plugin[Verified],\n}\nfn f(a: R, b: R) -> Bool {\n  a == b\n}\n",
+        ] {
+            let e = errors(src);
+            assert!(e.contains(&"DL0605".to_string()) || e.contains(&"DL0604".to_string()), "{src}\n{e:?}");
+        }
+        let plain = check("module m\ntype P {\n  m: Map[Str, Int],\n  xs: List[Str],\n}\nfn f(a: P, b: P) -> Str {\n  str(a == b) + str(a)\n}\n");
+        assert!(!plain.has_errors(), "{:?}", plain.diagnostics);
+    }
+
     // ----- C23: no declaration may shadow a builtin type or core effect ----
     //
     // Every one of these programs was ACCEPTED before the fix, and every one of them was inert:

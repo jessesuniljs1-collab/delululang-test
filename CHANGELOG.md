@@ -25,6 +25,146 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### records on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles records**: a literal, a field read, and a field write (`p.x = v`, `l.a.x = v`),
+  with records passed to and returned from functions, held in lists and options, and fields of any scalar type,
+  `Float` included. A record is shared as on the interpreter (`var q = p; q.n = 1` is seen through `p`), and a literal's
+  fields are computed in the order written. `examples/guide/01_types.delulu` now runs on the WASM engine with the
+  interpreter's output. `str` and `==` of a whole record, and a record with an `Option` or list field, still run only
+  on the interpreter.
+
+### no `==` on functions; an opaque value inside a record is seen, 2026-10-20
+
+- **Changed: `==`, `!=`, `assert_eq` and `List.contains` refuse a function** (DL0605, "a function has no structural
+  equality"), alone or inside a list, option, map or record. Before, `f == f` was accepted and answered `false`.
+  `str` of a function still gives `<fn>`.
+- **Fixed: a record whose field held a `Map` of secrets, a plugin or an actor reference could be compared with `==`
+  and printed with `str`**, although each is refused outside a record. Each is now refused there too (DL0605, DL0604).
+  No secret was ever revealed this way.
+
+### moving a value that holds itself to an actor, 2026-10-20
+
+- **Fixed: sending an actor a value that holds itself crashed the process with a stack overflow.** For example, a
+  record built in `recover` whose field holds the record. The value now arrives whole. A list held twice inside a moved
+  value also arrives as one list held twice, where it used to arrive as two copies.
+- **Fixed: `--debug-rcaps` reported those legal values as a compiler bug (DL1610).** It now reports only a reference
+  from outside the moved value, and looks inside `Option`s, results and maps too.
+- **Changed: a sandboxed program that passes a value that holds itself to a host operation is refused (DL1401)**
+  instead of crashing.
+
+### `==` on records and maps; values that hold themselves, 2026-10-20
+
+- **Fixed: `==` on two records or two maps was always `false`**, even for a record compared with itself, and `!=`
+  always `true`. So `List.contains` could not find a record and `assert_eq` failed on equal records. They now compare
+  by their contents: a record equals one of the same type whose fields are equal, and a map equals one with the same
+  keys holding equal values.
+- **Fixed: `str` (and `println`) of a value that holds itself crashed the process with a stack overflow** — a record
+  whose field holds the record (`n.next = Some(n)`), or a list holding a record that holds the list. Such a value now
+  prints `...` where it meets itself (`Node { v: 1, next: Some(Node { ... }) }`), and `==` on two such values ends.
+- (`==` on two functions, and sending such a value to an actor, are fixed in the entries above.)
+
+### an empty list typed by the checker on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` and `delulu build --target wasm` compile an empty list whose element type is not written**
+  (`let out = []`, filled by `out.push(i)` later). The type the checker inferred is used.
+  `examples/guide/02_option_and_lists.delulu` now runs on the WASM engine with the interpreter's output. For embedders:
+  `delulu_wasm::compile_checked(module, check_result)` compiles with everything the checker knows;
+  `compile_module` and `compile_module_with` still refuse such a list rather than guess.
+
+### `Float` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `Float` arithmetic** — `+ - * / %`, comparisons, negation, `float(…)`, `int(…)`,
+  `str(…)` and `parse_float` — in variables, lists, options and function signatures. The answers are the interpreter's
+  to the bit: both engines use IEEE 754, and `%`, `str` and `parse_float` are computed by the interpreter's own code.
+  `tests/corpus/tier3-application/telemetry_report.delulu` now runs on the WASM engine with the interpreter's output.
+  A module with no `Float` in it compiles to the same module as before.
+
+### `parse_int` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `parse_int`.** The WASM engine hands the text to the interpreter's own
+  implementation, so it gives the same answers: surrounding whitespace ignored, a sign allowed, `None` past the `Int`
+  range and for anything that is not a plain decimal number. `examples/guide/03_errors.delulu` now runs on the WASM engine
+  with the interpreter's output.
+
+### a function's name as a value on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a function named as a value** — `apply(double, 21)`, `xs.map(double)`,
+  `let h = double` — whether the function is generic or not. Calling the value calls the function, so its recursion and
+  an early `return` behave as in a direct call. A function value or a local of the same name hides it, as on the
+  interpreter. `examples/guide/04_effects.delulu` now runs on the WASM engine, with the interpreter's output.
+- **Fixed: a generic function whose body used a `Str` method, `==` on two `Str`s, a list, the console or a string
+  literal found nowhere else was refused by `--engine wasm` (`DL1201`)**, although the same body compiled in an
+  ordinary function. The module now carries what a generic body needs.
+
+### every `Str` method on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `trim`, `to_upper`, `to_lower`, `chars`, `contains`, `starts_with`, `replace` and
+  `slice`.** With `len` and `split`, every `Str` method compiles now. The WASM engine hands each call to the
+  interpreter's own implementation, so the answers are the same: whitespace beyond ASCII, `ß` uppercasing to `SS`,
+  character-indexed slices, and an empty `replace` pattern that leaves the string alone. A program that calls none of
+  them compiles to the same module as before.
+
+### `Str == Str` on the WASM engine; the performance figures re-measured over all six benchmarks, 2026-10-20
+
+- **Added: `--engine wasm` compiles `==` and `!=` on two `Str`s.** It compares the bytes, as the interpreter does.
+- **Changed: the published performance figures** (`measurements/study-c/`, `README.md`, `docs/QUESTIONS.md`,
+  `docs/for-agents.md`, `measurements/METHODOLOGY.md`) are Study C's run of 2026-10-19 18:46 UTC on the laptop's WSL,
+  every lane but Go. **The WASM engine runs all six benchmarks**, 9.8×–15.7× slower than C (geo-mean 12.4×), and the
+  interpreter is 8.9×–489.5× slower. Both are whole processes, start-up included. DeluluLang is still not competitive with
+  C, and the hot-path criterion (geo-mean ≤ 2.5×) is still not met. The previous run is kept whole in
+  `measurements/study-c/runs/2026-10-19-vm/`.
+- **Fixed: `Str.split` on the WASM engine wrote each part with its own allocation,** which left `wordcount_macro` more
+  than twice as slow there as on the interpreter. It now writes the whole list at once; the WASM engine is still somewhat
+  slower on that benchmark, and the table says so.
+- **Fixed: Study C reported CPython missing on a machine that had only `python3`.** It now uses `python3`, or else
+  `python`.
+
+### `List` on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles a `List`** of `Int`, `Bool`, `Float`, `Str` or a sum type: a literal, `len`,
+  `is_empty`, `get`, `push`, indexing, `for` over it and `map`. It also compiles `Str.split`. Each behaves as on the
+  interpreter: two names for a list share it, a `for` walks the list as it was when the loop began, `get` answers `None`
+  outside the list, and an index outside it stops the program with `DL0903` in the same words. All six Study-C benchmark
+  programs now run on the WASM engine; the published figures are not yet re-measured for the two that newly do. A list of
+  lists, `pop`, `filter`, `fold`, `sort` and `Str == Str` still run on the interpreter only (`DL1201` on
+  `--engine wasm`).
+- **Fixed (WASM-IFTY-1): on the WASM engine, an `if` or `match` whose value was a `Str` variable failed.** An `if` choosing
+  between two string variables stopped with "invalid WASM module" (`DL0904`), and a `match` arm binding a string was
+  refused, where the interpreter ran both.
+- **Fixed (WASM-INTERN-1): a string literal inside a lambda crashed `delulu run --engine wasm`** with an internal panic.
+
+### the microVM's host: `doctor` reports KVM's posture, and the guest's absences are pinned, 2026-10-19
+
+- **Added: `delulu doctor` reports `KVM host posture`** on a Linux host with KVM: each vendor module's `nested`
+  setting, `/dev/kvm`'s mode and the kernel release. Nested virtualization being on, or a `/dev/kvm` every local user may
+  open, is a note naming the 2026 escapes that use them, Januscape (CVE-2026-53359) and Zapscape (CVE-2026-64561), and
+  the remedy. It never fails the run.
+- **Documented: what the microVM tier needs from its host** (`docs/DEPLOYMENT.md`, *The microVM's host*): a patched
+  kernel, KVM loaded with `nested=0`, `/dev/kvm` for the `kvm` group, and no network device for the VM. The table names
+  the path each 2026 escape takes, PwnEscape (CVE-2026-99999) among them, and why a DeluluLang guest has none of them.
+- **Hardened: the guest's absences are enforced, not just written down.** The guest kernel's configuration now names
+  network devices, virtio-net, TUN, vhost-net, virtualization and KVM as off, and the image build refuses a kernel with
+  any of them on. Tests pin that list and the launcher's whole device list: one vsock, no network interface, no drive.
+
+### the WASM engine's faults, refusals and output match the interpreter's; `rand.int` over any span, 2026-10-19
+
+- **Fixed (WASM-SHORT-1): on the WASM engine, `&&` and `||` evaluated their right side even when the left side had
+  decided the answer.** `z != 0 && 10 / z > 1` with `z = 0` stopped with a division by zero on `--engine wasm` and was
+  `false` on the interpreter. A right side that printed printed too. Both operators now short-circuit on both engines.
+- **Fixed (WASM-NEG-1): on the WASM engine, `-x` of `Int::MIN` gave `Int::MIN`.** The interpreter stops with `DL0901`
+  (integer overflow), and the WASM engine now does too.
+- **Fixed (WASM-REFUSAL-1): a refused capability call could be reported as a memory error on the WASM engine.** For
+  example, a program that read a path outside its `fs.read` grant and matched on the result's error stopped with
+  `DL0903` (memory access out of bounds), where the interpreter reports `DL0904` (the path escapes the granted scope).
+  An ungranted read gave `DL0903` for `DL0703`. The WASM engine now reports the refusal.
+- **Fixed (WASM-OUTPUT-1): on the WASM engine, `delulu run` printed a program's output only when the program finished.**
+  A program that printed and then faulted, was refused or was stopped by its `--limits` budget showed nothing on stdout.
+  Each line is now printed when the program prints it, as on the interpreter.
+- **Fixed (RAND-SPAN-1): `rand.int(lo, hi)` with `hi - lo` greater than `Int::MAX` crashed a debug build of the
+  interpreter** (a release build drew the right values). Every span now draws the same values on both engines, each
+  inside `lo..hi`.
+
 ### an exhausted WASM memory is no longer reported as an integer overflow, 2026-10-19
 
 - **Fixed (WASM-OOM-1): on the WASM engine, a program whose memory could not grow any further was reported as

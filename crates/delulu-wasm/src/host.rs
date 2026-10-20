@@ -93,7 +93,7 @@ use delulu_runtime::foreign::{self, FVal, ForeignErr, ForeignHandle, ForeignSig}
 // Stage 5 phase 5f: the WASM host calls the SAME `Custody` seam the interpreter does (playbook §1 —
 // "the interpreter and the WASM host both call the trait"). `None` = embedded (Stage 1–4 behavior).
 use delulu_runtime::{Custody, CustodyDecision, Op as CustodyOp};
-use delulu_runtime::{TraceRecord, TraceSink};
+use delulu_runtime::{TraceRecord, TraceSink, Value};
 
 /// The custody handle shared between `HostConfig` and `HostState`: interior-mutable because custody
 /// `check` refreshes the epoch cache, `Rc` because the config is `Clone`.
@@ -163,9 +163,7 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
             Trap::StackOverflow => "DL0905: recursion depth exceeded (guest stack exhausted)".to_string(),
             // `__alloc` traps this way when the memory cannot give an allocation (past WebAssembly's 4 GiB, or a growth the
             // engine refuses) — the backend emits no other out-of-bounds access — so the text names both.
-            Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => {
-                "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)".to_string()
-            }
+            Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => MEMORY_EXHAUSTED.to_string(),
             // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
             // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;
             // the two are indistinguishable from the trap alone, so the common case (overflow)
@@ -177,16 +175,23 @@ pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
     }
 }
 
-/// Run an exported PURE function with i64 arguments (no imports, no ambient authority).
+/// Run an exported PURE function with i64 arguments, under a host that grants nothing (no ambient authority). The host
+/// is there for what a pure function may still import: the `delulu:list` interface (RW 3.4), whose `split` and index
+/// fault need no grant; a capability import it reached would be refused, as an ungranted `main`'s is.
 pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmError> {
     let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
-    let mut store = Store::new(&engine, ());
-    let instance = Instance::new(&mut store, &module, &[]).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let state = main_host_state(&HostConfig::default(), ActorRuntime::new(empty_actor_table()));
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
     let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let params: Vec<Val> = args.iter().map(|&a| Val::I64(a)).collect();
     let mut results = vec![Val::I64(0)];
-    func.call(&mut store, &params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    func.call(&mut store, &params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
+    if let Some(reason) = store.data().refused.clone() {
+        return Err(WasmError::Trap(reason));
+    }
     match results.first() {
         Some(Val::I64(n)) => Ok(*n),
         Some(Val::I32(n)) => Ok(*n as i64),
@@ -229,6 +234,8 @@ struct HostState {
     /// `rand.int` sequences match byte-for-byte (spec §6.2, two-engine parity).
     rng: u64,
     output: String,
+    /// `HostConfig::stream_console`: each printed line goes to stdout when printed, not into `output`.
+    stream_console: bool,
     /// Set host-side when a capability check fails. We record it and return without trapping (an
     /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
     /// into a clean `WasmError` after the call.
@@ -351,13 +358,52 @@ impl HostState {
     }
 }
 
-/// Format an `f64` EXACTLY as `Value::display` does (`{:.1}` for a finite integral value, else
-/// `to_string`) — the guest's `str(Float)` calls this host-side, so both engines print identically.
-fn format_float(x: f64) -> String {
-    if x.fract() == 0.0 && x.is_finite() {
-        format!("{x:.1}")
-    } else {
-        x.to_string()
+/// Run the interpreter's builtin `name` (`parse_int`, `parse_float`) on the guest string at `s`: `Some(Some(payload))` for
+/// its `Some`, `Some(None)` for its `None`, and `None` once a refusal is recorded — a string outside the guest's memory, a
+/// fault, or an answer of another shape.
+fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> Option<Option<Value>> {
+    if caller.data().refused.is_some() {
+        return None;
+    }
+    let Some(text) = read_guest_str(caller, s) else {
+        caller.data_mut().refused = Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+        return None;
+    };
+    let answer = delulu_runtime::prim::call_builtin(name, &[Value::str(text)], delulu_diag::Span::new(0, 0, 0));
+    match answer {
+        Some(Ok(Value::Variant { name: ctor, fields })) => match (&*ctor, fields.as_slice()) {
+            ("Some", [v]) => return Some(Some(v.clone())),
+            ("None", []) => return Some(None),
+            _ => {}
+        },
+        Some(Err(fault)) => {
+            caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+            return None;
+        }
+        _ => {}
+    }
+    caller.data_mut().refused = Some(format!("`{name}` answered a value the WASM engine does not hold"));
+    None
+}
+
+/// Record that the interpreter's `name` answered `got`, which the guest cannot hold, and return `none`.
+fn unheld<T>(caller: &mut Caller<'_, HostState>, name: &str, got: &Value, none: T) -> T {
+    caller.data_mut().refused = Some(format!("`{name}` answered {got:?}, which the WASM engine does not hold"));
+    none
+}
+
+/// `str` of a `Float` in the guest's memory, by the interpreter's own `Value::display` — one rule for both engines, not a
+/// copy of it.
+fn float_to_guest_str(caller: &mut Caller<'_, HostState>, x: f64) -> i32 {
+    if caller.data().refused.is_some() {
+        return 0;
+    }
+    match write_str_cell(caller, &Value::Float(x).display()) {
+        Ok(ptr) => ptr,
+        Err(()) => {
+            caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
+            0
+        }
     }
 }
 
@@ -448,6 +494,37 @@ fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
     }
     g.set(&mut *caller, Val::I32(end as u32 as i32)).map_err(|_| ())?;
     Ok(base)
+}
+
+/// What an access outside the guest's memory, or a memory that could not grow, is reported as (WASM-OOM-1).
+const MEMORY_EXHAUSTED: &str =
+    "DL0903: memory access out of bounds — or the WASM engine's memory exhausted (WebAssembly's 4 GiB)";
+
+/// Write a `List[Str]` of `parts` (RW 3.4) in one allocation and one write: the header `codegen.rs` reads,
+/// `[len][cap][data]`, with exactly as many slots as parts; the slots, each holding a string cell's pointer; then the
+/// cells, `[len][bytes]` each. Returns the header's pointer. (Written a cell at a time, each with its own allocation and
+/// export lookups, `wordcount_macro` ran slower on the WASM engine than on the interpreter — Study C, 2026-10-20.)
+fn write_str_list(caller: &mut Caller<'_, HostState>, parts: &[String]) -> Result<i32, ()> {
+    let n = u32::try_from(parts.len()).map_err(|_| ())?;
+    let head = 12 + 8 * parts.len();
+    let total = head + parts.iter().map(|p| 4 + p.len()).sum::<usize>();
+    let base = guest_alloc(caller, i32::try_from(total).map_err(|_| ())?)? as u32;
+    let mut bytes = Vec::with_capacity(total);
+    let data = base + 12;
+    for field in [n, n, data] {
+        bytes.extend_from_slice(&field.to_le_bytes());
+    }
+    let mut cell = base + head as u32;
+    for p in parts {
+        bytes.extend_from_slice(&u64::from(cell).to_le_bytes());
+        cell += 4 + p.len() as u32;
+    }
+    for p in parts {
+        bytes.extend_from_slice(&(p.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(p.as_bytes());
+    }
+    guest_write(caller, base as i32, &bytes)?;
+    Ok(base as i32)
 }
 
 fn guest_write(caller: &mut Caller<'_, HostState>, ptr: i32, bytes: &[u8]) -> Result<(), ()> {
@@ -634,6 +711,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // followed in the trace by its refusal (D-V2-129).
                 if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
                     caller.data_mut().push_refusal_trace("Write", "println", "Console", file, start, end);
+                    return;
+                }
+                if caller.data().stream_console {
+                    println!("{s}");
                     return;
                 }
                 let out = &mut caller.data_mut().output;
@@ -1014,18 +1095,139 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     // print a foreign Float identically. Pure (not traced).
     linker
         .func_wrap("delulu:foreign", "float_to_str", |mut caller: Caller<'_, HostState>, x: f64| -> i32 {
+            float_to_guest_str(&mut caller, x)
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:list` host interface (pure: neither traced nor gated) ---------------------------------
+    // `Str.split` by the interpreter's own rule (`prim.rs`): the parts between occurrences of the separator, and one part
+    // per character for an empty one — written into the guest's memory as a `List[Str]`.
+    linker
+        .func_wrap("delulu:list", "str_split", |mut caller: Caller<'_, HostState>, s: i32, sep: i32| -> i32 {
             if caller.data().refused.is_some() {
                 return 0;
             }
-            let s = format_float(x);
-            match write_str_cell(&mut caller, &s) {
-                Ok(ptr) => ptr,
+            let (Some(s), Some(sep)) = (read_guest_str(&mut caller, s), read_guest_str(&mut caller, sep)) else {
+                caller.data_mut().refused = Some("DL0903: a string given to `split` lies outside the guest's memory".into());
+                return 0;
+            };
+            let parts: Vec<String> = if sep.is_empty() {
+                s.chars().map(|c| c.to_string()).collect()
+            } else {
+                s.split(sep.as_str()).map(str::to_string).collect()
+            };
+            match write_str_list(&mut caller, &parts) {
+                Ok(list) => list,
                 Err(()) => {
-                    caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
+                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
                     0
                 }
             }
         })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // An index outside a list: the guest calls this and then traps, and the run reports what is recorded here — the
+    // interpreter's own fault (`interp.rs`'s `index`), word for word.
+    linker
+        .func_wrap("delulu:list", "index_fault", |mut caller: Caller<'_, HostState>, index: i64, len: i32| {
+            caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:str` host interface (pure: neither traced nor gated) ----------------------------------
+    // A `Str` method (`codegen.rs`'s `STR_METHODS`) run by the interpreter's own `call_str_method`, so the WASM engine
+    // answers exactly what the interpreter answers — Unicode case mappings, character-indexed `slice`, `replace` of an
+    // empty pattern — rather than a second implementation that could drift. Its answer is written back as the guest
+    // reads it: a `Str` as a string cell, a `Bool` as 0 or 1, a `List[Str]` as a list.
+    linker
+        .func_wrap(
+            "delulu:str",
+            "str_method",
+            |mut caller: Caller<'_, HostState>, s: i32, method: i32, a: i32, b: i32, lo: i64, hi: i64| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let Some((name, strs, ints)) = crate::codegen::str_method_arity(method) else {
+                    caller.data_mut().refused = Some(format!("DL0907: no `Str` method numbered {method}"));
+                    return 0;
+                };
+                let recv = read_guest_str(&mut caller, s);
+                let given: Option<Vec<String>> = [a, b].into_iter().take(strs).map(|p| read_guest_str(&mut caller, p)).collect();
+                let (Some(recv), Some(given)) = (recv, given) else {
+                    caller.data_mut().refused =
+                        Some(format!("DL0903: a string given to `{name}` lies outside the guest's memory"));
+                    return 0;
+                };
+                let mut args: Vec<Value> = given.into_iter().map(Value::str).collect();
+                args.extend([lo, hi].into_iter().take(ints).map(Value::Int));
+                let answer = match delulu_runtime::prim::call_str_method(&recv, name, &args, delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        return 0;
+                    }
+                };
+                let parts: Option<Vec<String>> = match &answer {
+                    Value::List(xs) => xs
+                        .borrow()
+                        .iter()
+                        .map(|v| match v {
+                            Value::Str(t) => Some(t.to_string()),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => None,
+                };
+                let written = match (answer, parts) {
+                    (Value::Bool(yes), _) => return i32::from(yes),
+                    (Value::Str(t), _) => write_str_cell(&mut caller, &t),
+                    (Value::List(_), Some(parts)) => write_str_list(&mut caller, &parts),
+                    _ => {
+                        caller.data_mut().refused =
+                            Some(format!("DL0907: `{name}` answered a value the WASM engine does not hold"));
+                        return 0;
+                    }
+                };
+                written.unwrap_or_else(|()| {
+                    caller.data_mut().refused = Some(MEMORY_EXHAUSTED.into());
+                    0
+                })
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `parse_int(s)` by the interpreter's own rule (`call_builtin`): whether it parsed, and the number — the guest builds
+    // the `Option[Int]` from the two.
+    linker
+        .func_wrap("delulu:str", "parse_int", |mut caller: Caller<'_, HostState>, s: i32| -> (i32, i64) {
+            match parse_by_builtin(&mut caller, "parse_int", s) {
+                Some(Some(Value::Int(n))) => (1, n),
+                Some(None) => (0, 0),
+                Some(Some(other)) => unheld(&mut caller, "parse_int", &other, (0, 0)),
+                None => (0, 0),
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `parse_float(s)` the same way; the interpreter's rule answers `None` for text a `Float` literal may not be.
+    linker
+        .func_wrap("delulu:str", "parse_float", |mut caller: Caller<'_, HostState>, s: i32| -> (i32, f64) {
+            match parse_by_builtin(&mut caller, "parse_float", s) {
+                Some(Some(Value::Float(x))) => (1, x),
+                Some(None) => (0, 0.0),
+                Some(Some(other)) => unheld(&mut caller, "parse_float", &other, (0, 0.0)),
+                None => (0, 0.0),
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- RW 3.4: the `delulu:float` host interface (pure: neither traced nor gated) --------------------------------
+    // `str` of a `Float`, by the interpreter's own display, for a module without the foreign interface (which brings its
+    // own `float_to_str`); and `Float % Float`, which WebAssembly has no instruction for — Rust's `%`, as the interpreter's.
+    linker
+        .func_wrap("delulu:float", "to_str", |mut caller: Caller<'_, HostState>, x: f64| -> i32 {
+            float_to_guest_str(&mut caller, x)
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:float", "rem", |_caller: Caller<'_, HostState>, a: f64, b: f64| -> f64 { a % b })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
@@ -1147,9 +1349,17 @@ fn read_i64_args(caller: &mut Caller<'_, HostState>, ptr: i32, argc: i32) -> Opt
     Some(out)
 }
 
+/// The error of a call that trapped: the host's recorded refusal if there is one, else the trap. A refused host call
+/// returns a placeholder and the guest runs on, so what traps next is a consequence of the refusal, not the cause the
+/// interpreter reports (WASM-REFUSAL-1: a refused `fs.read_text` matched on its error read a placeholder pointer and
+/// reported DL0903, an access out of bounds, where the interpreter reported DL0904).
+fn trap_or_refusal(store: &Store<HostState>, e: &wasmtime::Error) -> WasmError {
+    WasmError::Trap(store.data().refused.clone().unwrap_or_else(|| clean_trap(e)))
+}
+
 fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
     let mut results: [Val; 0] = [];
-    func.call(&mut store, params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    func.call(&mut store, params, &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
     let state = store.into_data();
     if let Some(reason) = state.refused {
         return Err(WasmError::Trap(reason));
@@ -1171,6 +1381,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
+        stream_console: false,
         refused: None,
         foreign_load_granted: false,
         foreign_grants: HashMap::new(),
@@ -1207,6 +1418,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
+        stream_console: cfg.stream_console,
         refused: None,
         foreign_load_granted: cfg.foreign_load,
         foreign_grants: cfg.foreign_grants.clone(),
@@ -1234,6 +1446,11 @@ pub struct HostConfig {
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.
     pub rand_seed: Option<u64>,
+    /// `true`: each `println` goes to stdout as it is printed, as the interpreter's does, and the run returns an
+    /// empty string. `false` (the default): the output is captured and returned. The CLI streams, so what a program
+    /// printed before a fault, a refusal or a budget's stop is on stdout on both engines (WASM-OUTPUT-1: the CLI
+    /// printed the captured output only when the run succeeded).
+    pub stream_console: bool,
     // ----- Stage 4 phase 4g: foreign C FFI + effect tracing ------------------------------------
     /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` (any `foreign.c` lib or
     /// `foreign.python` pattern granted — mirrors the interpreter's `RootVal.foreign_load`).
@@ -1281,7 +1498,7 @@ pub fn run_main_actors(wasm: &[u8], cfg: &HostConfig, table: &ActorTable) -> Res
     let main = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
     // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
     let mut results: [Val; 0] = [];
-    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
+    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| trap_or_refusal(&store, &e))?;
     if let Some(reason) = store.data().refused.clone() {
         return Err(WasmError::Trap(reason));
     }

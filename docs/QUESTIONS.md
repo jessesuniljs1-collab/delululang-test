@@ -581,8 +581,8 @@ Switch **if** you have this problem: *code you did not write, that you must run,
 what it can do to your system before you run it.* That is the case DeluluLang is built for, and the
 one where nothing mainstream gives you a good answer.
 
-Do **not** switch for speed: the interpreter is **8.9×–359.0× slower than C** on the measured workloads,
-and the WASM engine 6.5×–11.5× where it runs (Study C, 2026-10-19, whole processes on a Linux VM; the
+Do **not** switch for speed: the interpreter is **8.9×–489.5× slower than C** on the measured workloads,
+and the WASM engine 9.8×–15.7× on all six (Study C, 2026-10-19, whole processes on the laptop's WSL; the
 v1.0 baseline on the laptop read 2.0×–60.5×), and `measurements/study-c/REPORT.md` says exactly that. Do not switch for ecosystem: there isn't one.
 
 ### 4.2 What does it offer an AI that other languages don't?
@@ -686,8 +686,8 @@ Repeated here so no reader has to assemble it from the rest:
 7. **No certification, in any regime, for any domain.**
 8. **Multi-tenancy is not provided** — several agents with different authority need separate OS
    accounts or containers.
-9. **Not competitive with C** on the measured workloads (8.9×–359.0× slower on the interpreter, 6.5×–11.5×
-   on the WASM engine where it runs — Study C, 2026-10-19).
+9. **Not competitive with C** on the measured workloads (8.9×–489.5× slower on the interpreter, 9.8×–15.7×
+   on the WASM engine — Study C, 2026-10-19).
 10. **Foreign calls are outside the proof.** Enumerated, not eliminated.
 11. **Side channels are out of scope.**
 12. **Post-quantum options are unvalidated** and gated behind `--unstable`.

@@ -4,108 +4,102 @@
     {
       "kind": "micro",
       "ms": {
-        "c": 1.498,
-        "interp": 96.186,
-        "python": 17.676,
-        "wasm": 9.74
+        "c": 0.689,
+        "interp": 50.575,
+        "python": 18.018,
+        "wasm": 7.013
       },
       "name": "fib_recursive_24",
       "spread_ms": {
-        "c": 0.255,
-        "interp": 32.919,
-        "python": 8.962,
-        "wasm": 3.302
+        "c": 0.281,
+        "interp": 3.433,
+        "python": 18.643,
+        "wasm": 1.177
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 0.973,
-        "interp": 349.299,
-        "python": 72.456,
-        "wasm": 11.145
+        "c": 0.584,
+        "interp": 285.875,
+        "python": 52.02,
+        "wasm": 9.154
       },
       "name": "loop_sum_1m",
       "spread_ms": {
-        "c": 0.118,
-        "interp": 172.104,
-        "python": 12.681,
-        "wasm": 2.345
+        "c": 0.175,
+        "interp": 10.686,
+        "python": 2.628,
+        "wasm": 0.967
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 1.031,
-        "interp": 14.773,
-        "python": 13.66,
-        "wasm": 8.313
+        "c": 0.637,
+        "interp": 12.285,
+        "python": 14.256,
+        "wasm": 6.243
       },
       "name": "string_build_20k",
       "spread_ms": {
-        "c": 0.739,
-        "interp": 4.83,
-        "python": 5.298,
-        "wasm": 2.797
+        "c": 0.231,
+        "interp": 1.022,
+        "python": 3.182,
+        "wasm": 0.979
       },
       "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 0.992,
-        "interp": 11.335,
-        "python": 13.596
+        "c": 0.628,
+        "interp": 5.605,
+        "python": 12.231,
+        "wasm": 8.696
       },
       "name": "wordcount_macro",
       "spread_ms": {
-        "c": 0.475,
-        "interp": 0.981,
-        "python": 3.367
+        "c": 0.195,
+        "interp": 0.753,
+        "python": 0.791,
+        "wasm": 1.062
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 1.266,
-        "interp": 11.242,
-        "python": 13.124
+        "c": 0.601,
+        "interp": 7.457,
+        "python": 12.283,
+        "wasm": 6.628
       },
       "name": "list_map_macro",
       "spread_ms": {
-        "c": 0.266,
-        "interp": 1.671,
-        "python": 3.511
+        "c": 0.261,
+        "interp": 1.245,
+        "python": 1.329,
+        "wasm": 1.17
       },
-      "unrun": [
-        {
-          "lane": "wasm",
-          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
-        }
-      ]
+      "unrun": []
     },
     {
       "kind": "macro",
       "ms": {
-        "c": 1.105,
-        "interp": 267.976,
-        "python": 45.145,
-        "wasm": 11.113
+        "c": 0.616,
+        "interp": 169.211,
+        "python": 41.249,
+        "wasm": 9.579
       },
       "name": "nested_calls_macro",
       "spread_ms": {
-        "c": 0.421,
-        "interp": 163.697,
-        "python": 32.111,
-        "wasm": 3.694
+        "c": 0.192,
+        "interp": 6.285,
+        "python": 3.991,
+        "wasm": 0.347
       },
       "unrun": []
     }
@@ -125,14 +119,14 @@
   ],
   "machine": {
     "delulu": "delulu 1.0.0",
-    "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-    "kernel": "Linux 6.18.44-fc-v139",
+    "gcc": "gcc (Ubuntu 9.4.0-1ubuntu1~20.04.2) 9.4.0",
+    "kernel": "Linux 6.6.87.2-microsoft-standard-WSL2",
     "logical CPUs": "4",
     "os": "linux x86_64",
-    "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-    "python": "Python 3.11.17"
+    "processor": "AMD Ryzen 7 7840HS w/ Radeon 780M Graphics",
+    "python": "Python 3.8.10"
   },
-  "measured_at": "2026-10-19 14:26 UTC",
+  "measured_at": "2026-10-19 18:46 UTC",
   "profile": "release",
   "repeats": 5,
   "resolution": "timed in microseconds; published in milliseconds with three decimals (study-c/1 truncated to whole milliseconds)",
@@ -140,17 +134,17 @@
   "startup": {
     "kind": "control",
     "ms": {
-      "c": 0.921,
-      "interp": 4.698,
-      "python": 11.91,
-      "wasm": 7.013
+      "c": 0.546,
+      "interp": 3.578,
+      "python": 11.672,
+      "wasm": 6.241
     },
     "name": "startup_control",
     "spread_ms": {
-      "c": 0.153,
-      "interp": 1.347,
-      "python": 8.003,
-      "wasm": 1.083
+      "c": 0.369,
+      "interp": 0.747,
+      "python": 0.782,
+      "wasm": 0.85
     },
     "unrun": []
   },

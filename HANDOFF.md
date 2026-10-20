@@ -603,7 +603,11 @@ wins, and you should update the memory to match.
   snapshot of a checkout still on the development history would publish all of it there (guard falsified on throwaway
   repositories: the unguarded script pushed, the guarded one refused). Log: `%LOCALAPPDATA%\DeluluLang\autosave.log`. **A snapshot is not a verified commit — never
   merge it**; the next session recovers from it (`docs/CLOUD_ROUTINE.md` step 1). A laptop session re-runs `-Install`
-  when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it.
+  when the task's hours have run out (`Get-ScheduledTaskInfo DeluluLang-autosave`); `-Uninstall` removes it. **The
+  owner, 2026-10-20: *"push everything to test github repo frequently. enable that windows task scheduler for automatic
+  github push"*** — re-installed that day for 7 days (`-Hours 168`, 2026-10-19 22:42 UTC → 2026-10-26); its first run by
+  hand pushed snapshot `c94cbba`. A session pushes each verified commit at once and keeps the task installed: at the
+  start of every laptop session, if `NextRunTime` is empty, run `-Install -Hours 168` again.
 - **Only the test repository until the owner says otherwise** (owner, 2026-10-17, night): *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. Every push goes to
   `delululang-test`; no session pushes to `DeluluLang` or any other repository, pushes a tag, switches `origin`, moves the
   routine's repository or changes a repository's visibility until he says so. It outranks the commission's launch steps
@@ -755,7 +759,10 @@ wins, and you should update the memory to match.
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
   2026-10-15 — no longer used as an agent, §11.1). **Haiku 5.5 is announced, not released.** In Claude Code, Opus 5.5 and Sonnet 5.5 default to
-  `medium` effort — the repository's `effortLevel: xhigh` is what raises them; a cybersecurity-flagged
+  `medium` effort. The repository's `effortLevel: xhigh` was meant to raise them, and **since 2026-10-19 so is
+  `.claude/settings.json`'s `env.CLAUDE_CODE_EFFORT_LEVEL = xhigh`**: the owner saw the routine's runs at `medium` despite
+  both settings keys, and only the environment variable outranks an explicit `--effort` or `/effort`. The routine API refuses
+  environment variables on a trigger. A cybersecurity-flagged
   request on Opus 5.5 re-runs on Opus 4.8 and **the session stays there**, so a commit's
   `Co-Authored-By` must name the model actually running.
 
@@ -765,7 +772,10 @@ wins, and you should update the memory to match.
   with `RUSTFLAGS=--cfg delulu_kvm`; ordinary Linux runs use `~/delulu-gnu-target`. **Build a guest
   image from a clone on the Linux filesystem**, not from `/mnt/d` — libffi's configure fails on `drvfs`.
   From Git-Bash run WSL as `MSYS_NO_PATHCONV=1 wsl -e bash /mnt/d/…/script.sh`, and `wsl --shutdown`
-  afterwards to give its memory back.
+  afterwards to give its memory back. **2026-10-19:** the boot command is `modprobe kvm_amd; chgrp kvm /dev/kvm; chmod
+  660 /dev/kvm`, so `/dev/kvm` is the group's. `kvm_amd`'s `nested` defaults to on, though, and the guests never nest:
+  the next time the lab is used, make it `modprobe kvm_amd nested=0` (DEPLOYMENT.md, *The microVM's host*; RW 4.71). That
+  day KVM was not loaded at all: there was no `/dev/kvm` and no `kvm_amd` module.
 - **The GitHub CLI** is at `C:\Program Files\GitHub CLI\gh.exe`, not on Git-Bash's `PATH`; one job's
   log: `gh api --allow-escape-sequences repos/…/actions/jobs/<id>/logs` (only once the job finishes).
 - **Agent-pass folders live outside the repository**, at `D:\nelan\DeluluLang-agent-transcripts\` —
@@ -1092,6 +1102,26 @@ spells the same thing?**
   asserted. Search key: when names live in several tables, does every scope push and pop each one? — and when a note says
   a generator cannot write a shape, teach it the shape in the same change.
 
+- **WASM-IFTY-1 and WASM-INTERN-1 — a guess and a walk that missed a form** (the laptop, 2026-10-20, while building the WASM
+  `List`, D-V2-164, RW 3.15, 3.16). The backend typed an `if` before compiling it, from a context-free guess in which every
+  variable was `Int`. Two `Str` variables built a module wasmtime refused as invalid at run time, after the backend had
+  claimed to compile it. Its string collector walked every expression form but lambdas, lists, records, fields and
+  indexes, and codegen `expect`s a collected literal, so a literal in a lambda was a Rust panic. Neither showed in the
+  50,000-program differential: its programs bind no `Str` to a variable an `if` returns, and write no literal inside a
+  lambda. Search keys: a type known before compiling is a guess, so set it from what compiled. A walk over an enum must
+  name every variant or say why not, and its consumer should refuse rather than `expect`.
+
+- **WASM-SHORT-1, WASM-NEG-1, WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1 — the WASM engine's faults, refusals and output,
+  held to the interpreter's** (found by on-demand routine run 4's verification and red-team pass, 2026-10-19; its fixes
+  were lost with the VM when the usage limit hit, and the laptop redid them from its run log, RW 3.10–3.14). The engine
+  computed both sides of `&&`/`||`, so it faulted where the interpreter short-circuited. Its `-x` was a bare `i64.mul`,
+  which wraps on `Int::MIN`. After a host refusal the guest ran on with a placeholder, and the trap that followed was
+  reported instead of the refusal. The CLI printed the engine's captured output only on success. The interpreter's
+  `rand.int` computed `hi - lo` in `Int`. **The 50,000-program differential saw none of them.** Its generator wrote no
+  `&&`/`||`, no negation and no host refusal, and it compares a fault with a fault, not the output printed before one.
+  Search key: a differential is as wide as its generator and its comparison. For each defect class, ask whether
+  the generator can write it and whether the comparison can see it.
+
 - **WASM-OOM-1 — an exhausted WASM memory read as an overflow** (on-demand routine run 4, 2026-10-19, RW 3.9): RW 3.4's
   `__alloc` trapped with `unreachable`, and the host had long read every `unreachable` as the arithmetic helpers' overflow
   (`DL0901`) — so a string doubled past WebAssembly's 4 GiB (a budget above 4 GiB lets a program get there) was "integer
@@ -1112,11 +1142,26 @@ spells the same thing?**
   witness generated from the grammar the binary publishes (`delulu toolchain --json`). Search key: a list that names
   what to refuse needs a generated witness over everything it could name.
 
+- **EQ-RECORD-1, DISPLAY-CYCLE-1, MSG-CYCLE-1 — a value can hold itself** (the laptop, 2026-10-20, RW 2.13–2.16):
+  `Value::eq` had no arm for a record or a map, so `p == p` was `false` although the checker admits it (the doc
+  above `eq` promised structural equality for whatever `==` accepts — the checker's rule and the runtime's had
+  drifted). Fixing it meant asking what a structural walk meets: `n.next = Some(n)` is a legal program, and `str` of it
+  already overflowed the stack and killed the process. So did sending a `recover`ed self-referencing graph to an
+  actor (MSG-CYCLE-1, closed by D-V2-165 — and `--debug-rcaps`, built on spec §6.2's *refcount==1*, called that legal
+  graph a compiler bug: a proxy criterion had drifted from the guarantee it stood for). Search keys: when the checker admits an operation, does the runtime answer it for every
+  type it admits? And every recursive walk over runtime values (display, equality, a boundary's conversion, a
+  uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
+  where a cycle closes.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
 mechanism. **PowerShell 5.1 `*>` writes UTF-16LE** — `iconv` before grepping. **`cargo test` stops at
-the first failing target** — always `--no-fail-fast`. **Freeze the tree during verification**; editing
+the first failing target** — always `--no-fail-fast`. **A worktree that shares the main checkout's `CARGO_TARGET_DIR`
+leaves its own `target/debug/delulu` behind** (2026-10-19). A rebuild of the same package from the other tree can count as
+fresh and skip copying its binary back, so `doctor_cli` on `master` read the launch branch's `2.0.0` against `1.0.0`. Give
+a worktree its own target directory, or touch a source file of the binary's crate before testing in the other tree.
+**Freeze the tree during verification**; editing
 while a suite runs makes the Survey stale and produces three `doctor_cli` failures that look like
 product defects.
 

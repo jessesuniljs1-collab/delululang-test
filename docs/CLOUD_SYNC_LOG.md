@@ -4283,3 +4283,311 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   launch runs on `ece2454`; then merge `master` into `launch/2.0.0` once more (for `205f0f4` above all); (2) the red-team
   pass's findings on the WASM fragment (`V2_LOG.md`, next entry); (3) the WASM fragment's next pieces — `for`, `List`,
   `split`, `map`; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — the laptop syncs on-demand routine run 4; the routine's effort pinned by an environment variable; `launch/2.0.0` at `c3b33f3`
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `master` (the effort commit); `launch/2.0.0` (`c3b33f3`)   Base: `8fc42f8`
+- **Synced:** `master` fast-forwarded `98edf2f..8fc42f8` (run 4's nine commits, pull request #2's two among them). Every
+  `origin/claude/*` branch's tip is in `master`. `origin/autosave/laptop`'s newest snapshot, `bbb8ea3` (09:39 UTC), predates
+  `4d11575` (09:52 UTC), so there was nothing to recover. On `8fc42f8`: `survey check` ok (1531 nodes, 15097 edges);
+  `doctor --check` ok (29 checks).
+- **CI read (run 4's open items):** `205f0f4`'s push run `39274259721` and `8fc42f8`'s `39275805346` succeeded on every job,
+  `formal` included, which witnesses the Lean fix. `launch/2.0.0`'s `everything` run `39272359850` on `ece2454` succeeded on
+  every job (`heavy-gates` and the three `miri-slow` jobs included), and so did its release dry run `39272366257` (four
+  packages).
+- **What run 4 left unfinished** (its run log, read with the routine API; the usage limit stopped it at 15:12 UTC). Two
+  WASM fixes were built and their mutants read red in the VM, but never committed: **negating `Int::MIN`** (the backend's
+  `x * -1` wraps where the interpreter faults DL0901) and **`&&`/`||` evaluating both sides** (the interpreter short-circuits).
+  Its Sonnet 5.5 red-team pass on the WASM fragment was cut off too, and its notes stayed in the VM. The log names
+  some of what it found: `rand.int(lo, hi)` with `hi - lo` past `Int`'s range **panics the interpreter** (`prim.rs`, "attempt
+  to subtract with overflow"); a refused `fs.read_text` reported DL0903 on WASM against DL0904 or DL0703 on the interpreter
+  for some programs; and output printed before a fault was missing on WASM for one program. Redone on the laptop from this
+  entry on, each witnessed first.
+- **Effort (the owner, 2026-10-19: *"I noticed that routine runs or scheduled task runs is using claude opus 5.5 at medium
+  effort but I want it to be always at xhigh effort"*):** `.claude/settings.json` now sets `env.CLAUDE_CODE_EFFORT_LEVEL` to
+  `xhigh`. Its `effortLevel` and `modelSettings` keys already said `xhigh`, so the cloud session must have been setting effort
+  explicitly, and only this variable outranks `--effort`, `/effort` and both keys (Claude Code's environment-variable reference,
+  read today). A project file may set it, and single-repository cloud sessions read that file. The routine API was asked to
+  carry it as well, sending its full unchanged configuration plus the variable. It refused (HTTP 400: `session_request.environment_variables is not supported on triggers`),
+  and the routine is unchanged. The owner can add the same variable to the cloud environment in claude.ai as a second layer.
+  The variable holds sous-chefs at `xhigh` too. `docs/CLOUD_ROUTINE.md` (*Effort*) and `HANDOFF.md` §11.3 say so. **To
+  verify:** the next routine run's session header shows its effort.
+- **`launch/2.0.0`:** `c3b33f3` merges `master` `6c26aed..8fc42f8` (`205f0f4`, WASM-OOM-1). The merge moved the Unreleased
+  section into `## [2.0.0]` and rebuilt the map: 1532 nodes, 0 errors. `doctor --check` ok; `scripts/clippy.sh -j 4` clean
+  and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and
+  book green. Dispatched at it: `ci.yml` `everything` `39296491537`, release dry run `39296497024`.
+- Files and folders (the effort commit): M `.claude/settings.json`, `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`,
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `cloud-routine-on-demand-2026-10-17.md` (the effort variable), copied both ways.
+- Open / next, in order: (1) the launch runs above and this commit's push run; (2) redo run 4's two WASM fixes and the red
+  team's findings, each witnessed first; (3) the WASM fragment's next pieces: `for`, `List`, `split`, `map`; RW 4.66, 4.67,
+  6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 3.10–3.14: the WASM engine's faults, refusals and output held to the interpreter's; `rand.int` over any span (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-short`   Pull request: #3   Merged: not yet (lands on `master` by fast-forward after its CI reads green)
+- Base: `6a26c1f`
+- **Redone from on-demand routine run 4** (its fixes and its red team's notes were lost with the VM at the usage limit; its
+  run log named them). Each defect was witnessed on the laptop's binary before any fix: WASM-SHORT-1, WASM-NEG-1,
+  WASM-REFUSAL-1, WASM-OUTPUT-1, RAND-SPAN-1. Details are in `V2_LOG.md` and REMAINING_WORK 3.10–3.14.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (short-circuit `&&`/`||`; negation through the checked
+  multiply), `crates/delulu-wasm/src/host.rs` (`trap_or_refusal`; `HostConfig::stream_console`),
+  `crates/delulu-wasm/src/gen.rs` (guarded short-circuits, negation), `crates/delulu-runtime/src/prim.rs` (`rand.int`'s
+  span), `crates/delulu/src/run_cmd.rs` (the CLI streams), `crates/delulu-wasm/tests/fault_parity.rs` (four tests added
+  after C20's two), `crates/delulu/tests/wasm_cli.rs`, `crates/delulu/tests/budget_cli.rs`, `CHANGELOG.md`, `HANDOFF.md`
+  (§11.4), `docs/REMAINING_WORK.md` (3.10–3.14), `docs/DELULULANG_V2/V2_LOG.md`, `docs/DELULULANG_V2/V2_PHASE_STATUS.md`
+  (row 17, the launch runs), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: mutants M525–M529 red, control green; `scripts/clippy.sh -j 4` clean and stamped; `delulu-wasm` whole and
+  the ten CLI targets that run the WASM engine green on Windows. The full suite on four runners and the 50,000-program
+  differential are this pull request's CI (the owner's rule of 2026-10-19).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (a differential is as wide as its generator and its comparison).
+- Open / next, in order: (1) this pull request's CI, then fast-forward `master`; the launch `everything` run
+  `39296491537` and `6a26c1f`'s push run; (2) the host-virtualization posture after the owner's question of 2026-10-19
+  (PwnEscape, Januscape, Zapscape): `doctor` reports nested virtualization and a world-writable `/dev/kvm`,
+  `DEPLOYMENT.md` names the host kernel the microVM tier needs, and a test pins the guest's absence of a network device;
+  (3) the WASM fragment's next pieces: `List`, `for`, `split`, `map`; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-19 — RW 4.71: the microVM's host against 2026's KVM escapes; `doctor` reports KVM's posture (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/vm-posture` (on `laptop/wasm-short`)   Pull request: #4   Merged: not yet (after #3, on green CI)
+- Base: `9367b13`
+- **The owner's question** (2026-10-19): *"Linux recently patched vm issues, Search and learn about it, Is DeluluLang
+  affected by it, What should DeluluLang do differently"*. Answered in the session: PwnEscape (CVE-2026-99999), Januscape
+  (CVE-2026-53359), Zapscape (CVE-2026-64561), and the KVM CVEs of 2026-10-18. A DeluluLang guest reaches none of their
+  paths; the host's kernel is the microVM's wall. `V2_LOG.md` has the reading and the sources.
+- Files and folders: M `crates/delulu/src/doctor.rs` (`kvm_posture`, KVM host posture), `crates/delulu/src/microvm.rs`
+  (`vm_api_calls`, pinned), `scripts/microvm/kernel.config` (six absences named), `docs/DEPLOYMENT.md` (*The microVM's
+  host*), `CHANGELOG.md`, `HANDOFF.md` (§11.3, the WSL lab's `nested`), `docs/REMAINING_WORK.md` (4.71),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu/tests/microvm_guest_kernel.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (Windows and the laptop's WSL; mutants M530–M532 red). The image built under the new
+  `kernel.config` is CI's `microvm` job.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: the WSL lab's boot command, `modprobe kvm_amd nested=0`, the next time the KVM lab is used. A guest
+  image rebuild is not needed if the built `.config` is unchanged, which is reasoned, not measured. CI's `microvm` job
+  builds one.
+- For the laptop's memory: nothing beyond `HANDOFF.md` §11.3.
+- Open / next: as the entry before. Then the WASM `List` (literal, `len`, `get`, `push`, indexing, `for`, `map`) and
+  `Str.split`, for the last two Study-C kernels.
+
+### 2026-10-20 — RW 3.4 widened: `List` on the WASM engine, all six Study-C kernels compile; WASM-IFTY-1, WASM-INTERN-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-list` (on `laptop/vm-posture`)   Pull request: #5   Merged: not yet (after #4, on green CI)
+- Base: `a53f90a`. Pull request #3 landed on `master` by fast-forward (`9367b13`) after its CI `39299693759` read
+  success on every job.
+- What: D-V2-164 (`V2_DECISION_LOG.md`), REMAINING_WORK 3.4 (widened), 3.15 and 3.16 (closed), `V2_LOG.md`.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::List`, the list operations and helpers, `for`, the
+  `delulu:list` imports, block types from what compiled, string collection), `crates/delulu-wasm/src/host.rs`
+  (`str_split`, `index_fault`, `write_str_list`, `MEMORY_EXHAUSTED`, `run_int_fn` under a host),
+  `crates/delulu-wasm/src/gen.rs` (lists in the loop generator), `crates/delulu-wasm/tests/loop_parity.rs`,
+  `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `README.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `measurements/study-c/HOT_PATH_TABLE.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/list_parity.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M533–M540; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (a type known before compiling is a guess; a walk over an enum names every variant).
+- Open / next, in order: (1) the CI of #4 and #5, landing each on green; the launch `everything` run `39296491537`; then merge
+  `master` into `launch/2.0.0` again; (2) Study C over all six kernels on one machine (release, all lanes); (3) `Str == Str`,
+  `pop` and the other list methods on WASM; RW 4.66, 4.67, 6.1's further strings, 6.2; (4) *[laptop]* the launch, only on the
+  owner's word.
+
+### 2026-10-20 — `Str == Str` on the WASM engine; Study C re-measured over all six kernels (made on the laptop)
+- Session: `https://claude.ai/code/session_01WMGSP75D6H9Xw9SgL3ZD5j`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-streq` (on `laptop/wasm-list`)   Pull request: #6   Merged: not yet (after #5, on green CI)
+- Base: `e85fcb5`. Pull request #4 landed on `master` by fast-forward (`a53f90a`) after its CI `39301188012` read
+  success on every job, its `microvm` job building the guest image under the new `kernel.config`.
+- What: `V2_LOG.md` (this date, the second entry); the published Study C run (2026-10-19 18:46 UTC, the laptop's WSL).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`__str_eq`, `module_any`, `module_compares`),
+  `crates/delulu-wasm/src/host.rs` (`write_str_list` in one write), `crates/delulu-wasm/src/gen.rs` (comparisons in the
+  console generator), `crates/delulu-wasm/tests/list_parity.rs`, `crates/delulu-wasm/tests/conformance_parity.rs`,
+  `crates/delulu-measure/src/study_c.rs` (`python_command`), `measurements/study-c/REPORT.md`, `results.json`,
+  `HOT_PATH_TABLE.md`, `measurements/METHODOLOGY.md`, `README.md`, `docs/QUESTIONS.md`, `docs/for-agents.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `measurements/study-c/runs/2026-10-19-vm/`
+  (`REPORT.md`, `results.json` — the run this one replaces). Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (a cloud run of Study C would be a second machine's figures, welcome, not owed).
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #5 and #6, landing each on green; the launch `everything` run `39296491537`; then merge `master` into
+  `launch/2.0.0`; (2) `pop` and the other list methods on WASM; `split` without the host crossing; RW 4.66, 4.67, 6.1, 6.2;
+  (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — every `Str` method on the WASM engine; #5 and #6 landed (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-strmethods`   Pull request: #7   Merged: not yet (on green CI)
+- CI read before this branch: #5's run `39304227543` and #6's run `39305971992` read success on every job (`miri-slow` and
+  `heavy-gates` skipped, as on every pull request), so `master` was fast-forwarded to `46caa70` (#6, which carries #5) and
+  pushed; GitHub marked both merged. Also read success: `launch/2.0.0` at `c3b33f3`, `ci.yml` `everything`
+  `39296491537` (both `miri-slow` jobs included) and the release dry run `39296497024`; `master`'s push runs
+  `39296967930` (`6a26c1f`), `39303198616` (`9367b13`) and `39304283373` (`a53f90a`).
+- Base: `46caa70`. The branch's first commit `3ae3b3f` is the previous session's unfinished codegen half (its message
+  says so); the second finishes it.
+- What: `V2_LOG.md` (this date, the third entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`STR_METHODS`, `str_method_sig`, `str_method_arity`,
+  `compile_str_method`, the `delulu:str` import), `crates/delulu-wasm/src/host.rs` (`delulu:str.str_method`),
+  `crates/delulu-wasm/src/gen.rs` (`gen_str_method`), `crates/delulu-wasm/tests/conformance_parity.rs`, `CHANGELOG.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `crates/delulu-wasm/tests/str_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M543–M549; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) this branch's CI, landing on green; then merge `master` into `launch/2.0.0` and dispatch its
+  `everything` and release dry runs; (2) on WASM: a named function passed as a value, `parse_int`/`parse_float`, an empty
+  list typed from the checker, `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only
+  on the owner's word.
+
+### 2026-10-20 — a function's name as a value on the WASM engine; a generic body brings what it needs (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-fnref` (on `laptop/wasm-strmethods`, #7)   Pull request: #8   Merged: not yet (after #7, on green CI)
+- Base: `650387a`.
+- What: `V2_LOG.md` (this date, the fourth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`named`, `named_value`, `resolve_callable`, `let h = double`,
+  `body_is_compiled`, a generic body's literals), `crates/delulu-wasm/src/gen.rs` (`step` in the loop generator),
+  `crates/delulu-wasm/tests/loop_parity.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/named_fn_parity.rs`.
+  Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M550–M557; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) #7's and this branch's CI, landing each on green; then `launch/2.0.0`; (2) on WASM: `parse_int`
+  (`03_errors`), `Float` arithmetic and `parse_float` (`01_types`, `telemetry_report`), an empty list typed from the checker
+  (`02`), `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — `parse_int` on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-parse` (on `laptop/wasm-fnref`, #8)   Pull request: #9   Merged: not yet (after #7 and #8, on green CI)
+- Base: `a9ca534`. Also read: `master`'s push run `39326858607` (`46caa70`, #5 and #6 landed) — success.
+- What: `V2_LOG.md` (this date, the fifth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`module_calls_builtin`, `compile_parse_int`, the
+  `delulu:str.parse_int` import), `crates/delulu-wasm/src/host.rs` (`delulu:str.parse_int`), `crates/delulu-wasm/src/gen.rs`
+  (`parse_int` in the console generator), `crates/delulu-wasm/tests/str_parity.rs`,
+  `crates/delulu-wasm/tests/conformance_parity.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M558–M562; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #7, #8 and this branch, landing each on green in order; then `launch/2.0.0`; (2) on WASM:
+  `Float` arithmetic (IEEE as the interpreter's; `%` by the host's `fmod`), `str(Float)` without the foreign interface,
+  `parse_float` (`01_types`, `telemetry_report`); an empty list typed from the checker (`02`); `pop` and the other list
+  methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — `Float` on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-float` (on `laptop/wasm-parse`, #9)   Pull request: #10   Merged: not yet (after #8 and #9, on green CI)
+- Base: `d51d8d3`. Also: #7's CI `39328647809` read success on every job; `master` fast-forwarded to `650387a` and pushed.
+- What: `V2_LOG.md` (this date, the sixth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`module_uses_floats`, `mentions_float`, the `delulu:float`
+  imports, `Float` operators, negation, `float`/`int`, `compile_parse`), `crates/delulu-wasm/src/host.rs`
+  (`delulu:float.to_str`, `delulu:float.rem`, `delulu:str.parse_float`, `parse_by_builtin`, `float_to_guest_str`;
+  `format_float` removed — `str` of a `Float` is now `Value::display` itself), `crates/delulu-wasm/src/gen.rs`
+  (`gen_float`), `crates/delulu-wasm/tests/conformance_parity.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/float_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M563–M573; the release differential 50,000, 0 mismatches; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #8, #9 and this branch, landing each on green in order; then `launch/2.0.0`; (2) on WASM:
+  records (`01_types`), an empty list typed from the checker (`02`), `pop` and the other list methods; RW 4.66, 4.67, 6.1,
+  6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — an empty list typed by the checker on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-emptylist` (on `laptop/wasm-float`, #10)   Pull request: #11   Merged: not yet (after #9 and #10, on green CI)
+- Base: `11a50bd`. Also: #8's CI `39330325778` read success on every job; `master` fast-forwarded to `a9ca534` and pushed.
+- What: `V2_LOG.md` (this date, the seventh entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`compile_checked`, `compile_module_typed`, `Cx::node_types`,
+  `list_scalar`), `crates/delulu-wasm/src/lib.rs` (exports `compile_checked`), `crates/delulu/src/cli.rs` and
+  `crates/delulu/src/run_cmd.rs` (call `compile_checked`), `crates/delulu-wasm/tests/list_parity.rs`,
+  `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M574–M576; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #9, #10 and this branch, landing each on green in order; then `launch/2.0.0`; (2) on WASM:
+  records (`01_types`), `pop` and the other list methods; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the
+  owner's word.
+
+### 2026-10-20 — `==` on records and maps; values that hold themselves; the autosave task back on (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/value-cycles` (on `laptop/wasm-emptylist`, #11)   Pull request: #12   Merged: not yet (after #10 and #11, on green CI)
+- Base: `4d200b6`.
+- What: `V2_LOG.md` (this date, the eighth entry); RW 2.13 and 2.14 closed, 2.15 and 2.16 opened.
+- Files and folders: M `crates/delulu-runtime/src/value.rs` (`display_in`, `eq_in`, `cell_addr`, `within`; record and map
+  equality; `cycle_tests`), `CHANGELOG.md`, `HANDOFF.md` (§11.1 the autosave task, §11.4 the lesson),
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-runtime/tests/value_semantics.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M577–M582; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: done on the laptop (the autosave task note, its index line, and an index compacted under its
+  size limit: twelve long lines moved whole into their topic files).
+- Open / next: (1) the CI of #10, #11 and this branch, landing each on green in order; then `launch/2.0.0`; (2) MSG-CYCLE-1
+  (RW 2.16), EQ-FN-1 (RW 2.15); records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — an `iso` move carries its graph whole; the debug race checker asks for the guarantee (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/msg-cycles` (on `laptop/value-cycles`, #12)   Pull request: #13   Merged: not yet (after #10–#12, on green CI)
+- Base: `825657a`.
+- What: `V2_LOG.md` (this date, the ninth entry); D-V2-165; RW 2.16 closed, RW 7.20 opened.
+- Files and folders: M `crates/delulu-runtime/src/actors.rs` (`MsgValue::Back`, `value_to_msg_in`, `msg_to_value_in`,
+  `assert_unique_graph`, `move_graph_tests`), `crates/delulu-runtime/src/channel.rs` (`from_value_in`, a test),
+  `crates/delulu-runtime/tests/actors_trace.rs`, `crates/delulu/tests/actors_cli.rs`, `docs/design/STAGE7_SPECIFICATION.md`
+  (§6.2, not entrenched — `survey query`), `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M583–M590; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #10–#12 and this branch, landing each on green in order; then `launch/2.0.0`; (2) EQ-FN-1
+  (RW 2.15); RW 7.20 under load; records on WASM; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's
+  word.
+
+### 2026-10-20 — no `==` on functions; an opaque type inside a record field is seen (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/eq-fn` (on `laptop/msg-cycles`, #13)   Pull request: #14   Merged: not yet (after #11–#13, on green CI)
+- Base: `d63d13d`. Also: #10's CI `39335074061` read success on every job; `master` fast-forwarded to `11a50bd`; master's
+  push run `39335645443` (`d51d8d3`) read success.
+- What: `V2_LOG.md` (this date, the tenth entry); D-V2-166; RW 2.15 closed, 2.17 added closed.
+- Files and folders: M `crates/delulu-check/src/check.rs` (`opaque_for`, `lacks_equality`, `no_equality`,
+  `type_expr_opaque`), `crates/delulu-check/src/lib.rs` (two tests), `crates/delulu-diag/src/codes.rs` (DL0605's explain),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `CHANGELOG.md`, `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M591–M598; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #11–#13 and this branch, landing each on green in order; then merge `master` into
+  `launch/2.0.0` and dispatch its `everything` and release dry runs; (2) records on WASM; RW 7.20 under load; RW 4.66,
+  4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — records on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Thnb8qMTfftSNkHSGE8WGZ`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-records` (on `laptop/eq-fn`, #14)   Pull request: #15   Merged: not yet (after #13 and #14, on green CI)
+- Base: `d18d86f`. Also: #11's CI `39336126623` and #12's `39337254137` read success on every job; `master`
+  fast-forwarded to `825657a` (both) and pushed.
+- What: `V2_LOG.md` (this date, the eleventh entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::Record`, `Scalar::Record`, `RecordDesc`, the record
+  registry in `build_enum_env`, `compile_record_literal`, `compile_field`, `compile_field_assign`, `lvalue_ty`,
+  `lvalue_expr`), `crates/delulu/tests/wasm_cli.rs` (chapter `01`), `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A
+  `crates/delulu-wasm/tests/record_parity.rs`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md` (mutants M599–M603; clippy stamped).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) the CI of #13, #14 and this branch, landing each on green in order; then merge `master` into
+  `launch/2.0.0`; (2) on WASM: `Option`/`List` fields, `str` of a record, `fs_write` (`05`); RW 7.20; RW 4.66, 4.67, 6.1,
+  6.2; (3) *[laptop]* the launch, only on the owner's word.

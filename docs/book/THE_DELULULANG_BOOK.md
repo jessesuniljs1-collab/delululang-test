@@ -533,9 +533,21 @@ was first measured, and **none of this book's own guide chapters do**. Since 202
 may grow past the first megabyte; measured that day with `delulu build FILE --target wasm`, 3 of the
 17 entry points now in `tests/corpus` and `examples` compile on their own, and each of the others
 stops at something else — a `List`, a string method, Python, a plugin, or a package's other modules.
+Since 2026-10-20 a `List` of `Int`, `Bool`, `Float`, `Str` or a sum type compiles as well: a literal, `len`,
+`is_empty`, `get`, `push`, indexing, `for` over it, `map`, and `Str.split`. Each behaves as on the interpreter: a
+list is shared, a `for` walks the list as it was when the loop began, and an index outside it faults `DL0903`. A list
+of lists, `pop`, `filter`, `fold` and `sort` are among what stays `DL1201`; `Str == Str` and `!=` compile since the same
+day, comparing bytes as the interpreter does. So does every other `Str` method — `trim`, `to_upper`, `to_lower`,
+`chars`, `contains`, `starts_with`, `replace` and `slice` — each answered by the interpreter's own implementation, so
+the two engines cannot disagree about Unicode. A function's name passed as a value compiles as well
+(`apply(double, 21)`, `xs.map(double)`): calling the value calls the function. So do `parse_int` and `Float` —
+arithmetic, comparison, `float`, `int`, `str` and `parse_float` — the same to the bit on both engines — and an empty
+list whose type only the checker knows (`let out = []`, filled later), and records: a literal, reading and writing a
+field, a record shared as on the interpreter. Measured again that day, 10 of the 17 entry points compile, five of the
+six guide chapters among them.
 
-So: if you are writing ordinary DeluluLang — anything with a loop, a float, a record, or a list —
-**you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
+So: if you are writing ordinary DeluluLang — anything with a map, a list of lists, a record holding an `Option`, or
+`str` of a whole record — **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
 cases described below, and it is grown deliberately, one construct at a time, with the boundary
 refusing rather than guessing.
 

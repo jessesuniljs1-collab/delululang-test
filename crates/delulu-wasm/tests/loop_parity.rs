@@ -216,7 +216,9 @@ fn the_host_grows_the_memory_for_what_it_writes() {
 /// generator.
 #[test]
 fn random_loop_programs_agree_with_the_interpreter() {
-    let (mut agreed, mut faulted, mut ran, mut shadowed) = (0u32, 0u32, 0u32, 0u32);
+    let (mut agreed, mut faulted, mut ran, mut shadowed, mut listed) = (0u32, 0u32, 0u32, 0u32, 0u32);
+    // A top-level function named as a value: `h` bound to it, and `map` given it (RW 3.4).
+    let (mut bound, mut mapped) = (0u32, 0u32);
     for k in 0..400u64 {
         let (src, args) = random_loop_program(k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let checked = check_source(0, &src);
@@ -234,20 +236,31 @@ fn random_loop_programs_agree_with_the_interpreter() {
         if src.matches("let h = ").count() > 1 {
             shadowed += 1;
         }
+        // The WASM `List`: a list built, and pushed to or indexed or read with `get` in the loop.
+        if src.contains("let xs = [") && (src.contains("xs.push(") || src.contains("xs[") || src.contains("xs.get(")) {
+            listed += 1;
+        }
+        bound += u32::from(src.contains("let h = step"));
+        mapped += u32::from(src.contains("xs.map(step)"));
     }
-    eprintln!("loop programs: agreed {agreed}, faulted {faulted}, looping {ran}, shadowing a function value {shadowed}");
+    eprintln!(
+        "loop programs: agreed {agreed}, faulted {faulted}, looping {ran}, shadowing a function value {shadowed}, with a \
+         list {listed}, binding a named function {bound}, mapping one {mapped}"
+    );
     assert!(
-        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80,
-        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}"
+        agreed > 150 && faulted > 5 && ran > 300 && shadowed > 80 && listed > 120 && bound > 30 && mapped > 10,
+        "agreed {agreed}, faulted {faulted}, looping programs {ran}, shadowing programs {shadowed}, list programs {listed}, \
+         named-function programs {bound} bound and {mapped} mapped"
     );
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a `for` (a `List`), and an assignment from inside an
-/// inlined function value to a variable of the frame that defined it — the same lambda reading the variable compiles.
+/// What stays outside the fragment is refused, never miscompiled: a `for` over a list of lists (a `for` over a list
+/// compiles since the WASM `List`, `list_parity.rs`), and an assignment from inside an inlined function value to a
+/// variable of the frame that defined it — the same lambda reading the variable compiles.
 #[test]
 fn what_the_loop_fragment_leaves_out_is_refused() {
     let outside = [
-        "module m\nfn f() -> Int {\n  var t = 0\n  for x in [1, 2, 3] { t = t + x }\n  t\n}\n",
+        "module m\nfn f() -> Int {\n  var t = 0\n  for x in [[1], [2, 3]] { t = t + x.len() }\n  t\n}\n",
         "module m\nfn apply[T](g: fn(T) -> T, x: T) -> T { g(x) }\nfn f() -> Int {\n  var n = 0\n  let h = fn(v: Int) -> Int {\n    n = v\n    v + 1\n  }\n  apply(h, 3)\n}\n",
     ];
     for src in outside {

@@ -268,8 +268,8 @@ without declaring the effect. Mechanism and witness:
 Three more things worth knowing before you evaluate it:
 
 - **Performance is measured, never promised.** DeluluLang is **not competitive with C** on the measured
-  workloads — whole processes, 8.9×–359.0× slower on the interpreter and 6.5×–11.5× on the WASM engine
-  where it runs (4 of 6), on a Linux VM on 2026-10-19 — and
+  workloads — whole processes, 8.9×–489.5× slower on the interpreter and 9.8×–15.7× on the WASM engine, which
+  runs all six benchmarks (Study C, 2026-10-19, on the laptop's WSL) — and
   [`measurements/study-c/REPORT.md`](measurements/study-c/REPORT.md) says so in those words.
 - **Foreign code is outside the proof.** A `ForeignCall` is a hole in the guarantee. It is
   *enumerated* in the authority report rather than hidden, which is the honest version, not a fix.

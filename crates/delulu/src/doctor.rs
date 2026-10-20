@@ -259,6 +259,71 @@ fn environment(r: &mut Report) {
 /// checkout for it.
 /// PS-0-05: what confines a program on THIS host, built on the `sandbox probe` attempts — only lines
 /// that change a decision, and none of them fails the run (a missing boundary is a fact, not a fault).
+/// The host's KVM settings that 2026's guest-to-host escapes turn on (the owner's question of 2026-10-19). The microVM
+/// tier's boundary is the host's KVM: Januscape (CVE-2026-53359) and Zapscape (CVE-2026-64561) are reachable only through
+/// nested virtualization, which a DeluluLang guest never needs (its kernel has no KVM of its own), and Zapscape also
+/// through a `/dev/kvm` every local user may open. Neither setting is DeluluLang's to change, so this is a note for the
+/// operator, never a failure: GitHub's runners, for one, open `/dev/kvm` to every user. `None` when the host has no KVM.
+fn kvm_posture(nested: &[(&str, String)], device_mode: Option<u32>, kernel: Option<&str>) -> Option<(Status, String)> {
+    if nested.is_empty() && device_mode.is_none() {
+        return None;
+    }
+    let on = |v: &str| matches!(v.trim(), "Y" | "y" | "1");
+    let mut found = Vec::new();
+    for (module, value) in nested.iter().filter(|(_, v)| on(v)) {
+        found.push(format!("nested virtualization is ON (`{module}` nested={})", value.trim()));
+    }
+    if let Some(mode) = device_mode.filter(|m| m & 0o006 != 0) {
+        found.push(format!("`/dev/kvm` is mode {:o}, open to every local user", mode & 0o777));
+    }
+    let kernel = kernel.map(|k| format!("; kernel {}", k.trim())).unwrap_or_default();
+    if found.is_empty() {
+        let params: Vec<String> = nested.iter().map(|(m, v)| format!("`{m}` nested={}", v.trim())).collect();
+        let mode = device_mode.map(|m| format!("`/dev/kvm` mode {:o}", m & 0o777)).unwrap_or_default();
+        let said: Vec<String> = params.into_iter().chain((!mode.is_empty()).then_some(mode)).collect();
+        return Some((
+            Status::Ok,
+            format!(
+                "{}{kernel} — keep the kernel patched: the microVM tier trusts its KVM (DEPLOYMENT.md, the microVM host)",
+                said.join(", ")
+            ),
+        ));
+    }
+    Some((
+        Status::Note,
+        format!(
+            "{}{kernel}. A microVM guest never needs nesting, and the 2026 KVM escapes Januscape (CVE-2026-53359) and \
+             Zapscape (CVE-2026-64561) are reached only through it, Zapscape also through a `/dev/kvm` every user may open: \
+             load KVM with `nested=0` unless something else on this host nests, and give `/dev/kvm` to the `kvm` group \
+             (DEPLOYMENT.md, the microVM host)",
+            found.join("; ")
+        ),
+    ))
+}
+
+/// `(module, value)` of each loaded KVM vendor module's `nested` parameter.
+fn kvm_nested_params() -> Vec<(&'static str, String)> {
+    ["kvm_intel", "kvm_amd"]
+        .into_iter()
+        .filter_map(|m| std::fs::read_to_string(format!("/sys/module/{m}/parameters/nested")).ok().map(|v| (m, v)))
+        .collect()
+}
+
+#[cfg(unix)]
+fn kvm_device_mode() -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata("/dev/kvm").ok().map(|m| m.permissions().mode())
+}
+
+#[cfg(not(unix))]
+fn kvm_device_mode() -> Option<u32> {
+    None
+}
+
+fn kernel_release() -> Option<String> {
+    std::fs::read_to_string("/proc/sys/kernel/osrelease").ok()
+}
+
 fn sandbox_section(r: &mut Report) {
     let levels = crate::sandbox::probe();
     let top = levels.iter().filter(|l| l.available()).map(|l| l.level).max().unwrap_or(0);
@@ -297,6 +362,9 @@ fn sandbox_section(r: &mut Report) {
             None => "not attempted".to_string(),
         },
     );
+    if let Some((status, detail)) = kvm_posture(&kvm_nested_params(), kvm_device_mode(), kernel_release().as_deref()) {
+        r.push(s, "KVM host posture", status, detail);
+    }
     let prims: Vec<String> = levels[1]
         .attempts
         .iter()
@@ -901,5 +969,42 @@ mod posture_tests {
             assert_eq!(s, Status::Ok, "`{m}` agreeing with itself is healthy");
             assert!(msg.contains(m), "and names the mode: {msg}");
         }
+    }
+}
+
+#[cfg(test)]
+mod kvm_posture_tests {
+    use super::{kvm_posture, Status};
+
+    #[test]
+    fn a_host_without_kvm_has_no_posture_to_report() {
+        assert!(kvm_posture(&[], None, Some("6.12.0")).is_none());
+    }
+
+    /// The settings each 2026 escape needs are named, with the escapes and the remedy; each alone is enough.
+    #[test]
+    fn nested_virtualization_or_a_device_open_to_everyone_is_noted() {
+        let (s, msg) = kvm_posture(&[("kvm_amd", "1\n".into())], Some(0o20660), Some("6.6.87\n")).unwrap();
+        assert_eq!(s, Status::Note, "{msg}");
+        assert!(msg.contains("nested virtualization is ON (`kvm_amd` nested=1)"), "{msg}");
+        assert!(msg.contains("CVE-2026-53359") && msg.contains("CVE-2026-64561") && msg.contains("nested=0"), "{msg}");
+        assert!(msg.contains("kernel 6.6.87") && !msg.contains("open to every"), "{msg}");
+
+        let (s, msg) = kvm_posture(&[("kvm_intel", "N".into())], Some(0o20666), None).unwrap();
+        assert_eq!(s, Status::Note, "{msg}");
+        assert!(msg.contains("`/dev/kvm` is mode 666, open to every local user") && !msg.contains("is ON"), "{msg}");
+
+        let (s, msg) = kvm_posture(&[("kvm_intel", "Y".into())], Some(0o20666), None).unwrap();
+        assert_eq!(s, Status::Note);
+        assert!(msg.contains("is ON") && msg.contains("open to every local user"), "both named: {msg}");
+    }
+
+    #[test]
+    fn nesting_off_and_a_group_device_is_healthy() {
+        let (s, msg) = kvm_posture(&[("kvm_amd", "0".into())], Some(0o20660), Some("7.1.3")).unwrap();
+        assert_eq!(s, Status::Ok, "{msg}");
+        assert!(msg.contains("`kvm_amd` nested=0") && msg.contains("mode 660") && msg.contains("kernel 7.1.3"), "{msg}");
+        let (s, _) = kvm_posture(&[("kvm_intel", "N".into())], None, None).unwrap();
+        assert_eq!(s, Status::Ok, "the module's setting alone, with no device to read");
     }
 }

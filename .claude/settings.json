@@ -6,6 +6,9 @@
       "effortLevel": "xhigh"
     }
   },
+  "env": {
+    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh"
+  },
   "hooks": {
     "SessionStart": [
       {

@@ -469,6 +469,27 @@ fn api_put(sock: &Path, path: &str, body: &serde_json::Value) -> Result<(), Stri
     Err(format!("the VMM refused `PUT {path}` (HTTP {status}): {fault}"))
 }
 
+/// Every call that configures a VM, in order: the whole of what a guest is given. One vCPU and the memory the run
+/// allows (the guest cannot use more, because it has no more), its kernel and initramfs, and **one device, the vsock**.
+/// No `/network-interfaces`, no `/drives`, no `/mmds`, no balloon, no entropy device. A guest with no network device
+/// cannot send the virtio-net packets PwnEscape (CVE-2026-99999, the host's IPv4 stack, 2026) is reached through; the
+/// test `the_vm_is_given_one_vsock_and_nothing_else` pins this list.
+fn vm_api_calls(memory_bytes: u64, vmm_path: &dyn Fn(&str) -> PathBuf) -> Vec<(&'static str, serde_json::Value)> {
+    vec![
+        ("/machine-config", serde_json::json!({ "vcpu_count": 1, "mem_size_mib": memory_bytes >> 20, "smt": false })),
+        (
+            "/boot-source",
+            serde_json::json!({
+                "kernel_image_path": vmm_path("vmlinux"),
+                "initrd_path": vmm_path("initramfs.cpio"),
+                "boot_args": boot_args(),
+            }),
+        ),
+        ("/vsock", serde_json::json!({ "guest_cid": GUEST_CID, "uds_path": vmm_path("v.sock") })),
+        ("/actions", serde_json::json!({ "action_type": "InstanceStart" })),
+    ]
+}
+
 /// The guest kernel's command line. Only parameters the guest kernel knows: an unknown word would be
 /// handed to init as an ARGUMENT, ahead of the ones after `--`, and the guest refuses arguments it
 /// does not expect. `loglevel=0` keeps the kernel's own messages off the console, so what reaches the
@@ -993,24 +1014,10 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         std::thread::sleep(Duration::from_millis(5));
     }
     let configure = || -> Result<(), String> {
-        // One vCPU, and the memory the run allows: the guest cannot use more, because it has no more.
-        api_put(
-            &api,
-            "/machine-config",
-            &serde_json::json!({ "vcpu_count": 1, "mem_size_mib": limits.memory_bytes >> 20, "smt": false }),
-        )?;
-        api_put(
-            &api,
-            "/boot-source",
-            &serde_json::json!({
-                "kernel_image_path": vmm_path("vmlinux"),
-                "initrd_path": vmm_path("initramfs.cpio"),
-                "boot_args": boot_args(),
-            }),
-        )?;
-        // The one device. No `/network-interfaces`, no `/drives`: those calls are never made.
-        api_put(&api, "/vsock", &serde_json::json!({ "guest_cid": GUEST_CID, "uds_path": vmm_path("v.sock") }))?;
-        api_put(&api, "/actions", &serde_json::json!({ "action_type": "InstanceStart" }))
+        for (path, body) in vm_api_calls(limits.memory_bytes, &vmm_path) {
+            api_put(&api, path, &body)?;
+        }
+        Ok(())
     };
     configure().map_err(|e| fail(format!("{e}{}", vm.log_tail())))?;
 
@@ -1366,6 +1373,19 @@ mod tests {
         assert!(!text.chars().any(|c| c.is_control() && c != '\n'), "a control character was relayed: {text:?}");
         assert!(text.contains(r"\u{1b}]0;PWNED\u{7}booted"), "shown, escaped: {text:?}");
         assert!(text.contains("plain line\n"), "an ordinary line is unchanged: {text:?}");
+    }
+
+    /// The guest's whole device list, pinned (the owner's question of 2026-10-19, PwnEscape): configuring a network
+    /// interface, a drive or any other device fails this test before it reaches a VM.
+    #[test]
+    fn the_vm_is_given_one_vsock_and_nothing_else() {
+        let calls = vm_api_calls(256 << 20, &|n: &str| Path::new("/jail").join(n));
+        let paths: Vec<&str> = calls.iter().map(|(p, _)| *p).collect();
+        assert_eq!(paths, ["/machine-config", "/boot-source", "/vsock", "/actions"]);
+        let machine = &calls[0].1;
+        assert_eq!((machine["vcpu_count"].as_u64(), machine["mem_size_mib"].as_u64()), (Some(1), Some(256)));
+        assert_eq!(calls[2].1["guest_cid"].as_u64(), Some(u64::from(GUEST_CID)));
+        assert_eq!(calls[2].1["uds_path"].as_str(), Some("/jail/v.sock"));
     }
 
     fn response(bytes: &[u8]) -> Result<(u16, String), String> {
