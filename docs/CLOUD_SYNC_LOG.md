@@ -4641,3 +4641,43 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #17, #18 and this branch's CI, landing each on green in order; the launch run `39364184892` read;
   (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66; RW 7.20; RW 4.67, 6.1, 6.2;
   (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5: the laptop's #17–#19 landed; RW 7.20 reproduced and fixed — a host's egress window is its own thread's
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh` in the session's
+  environment — the effort pin of 2026-10-19 holds); a Sonnet 5.5 red-team sous-chef on the WASM engine's file capabilities
+  (its result in the next entry)
+- Branch: `master`; the code's runner reads on `claude/rw-7-20-egress-window`   Pull request: none (#17–#19 landed by
+  fast-forward)   Base: `a7b6476`
+- Commits: `cba20d4`, `ce5f6ab`, `275af08` (the laptop's, pull requests #17–#19 — `master` fast-forwarded to them); `18b0adf`
+  (RW 7.20); this entry's commit.
+- Start of session (on `a7b6476`, 07:33 UTC): `survey check` ok (1540 nodes, 15400 edges); `doctor --check` ok (26 checks in
+  this VM). `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- **Landed (the laptop's session stopped at about 04:30 UTC with three green pull requests open):** #17's CI `39367623331`,
+  #18's `39368481885`, #19's `39369712525` and `a7b6476`'s push run `39368506567` — success on every job (`miri-slow` and
+  `heavy-gates` skipped, as on every pull request); `master` fast-forwarded `a7b6476..275af08`; its push run `39387600500`
+  success on every job. On `275af08`: `survey check` ok (1543 nodes, 15500 edges), `doctor --check` ok (26), the release
+  differential (50,000 programs) passed in 151 s. The autosave branch's eleven snapshots since `bbb8ea3`: six landed exactly in
+  the next commit, five were mid-edit drafts the next commit carries further (`V2_LOG.md` names each) — nothing to recover.
+- **Fixed (RW 7.20):** the laptop's once-seen red of two `channel.rs` confinement tests is another thread's refused request
+  counted in a host's `denied[]` — `HostChannel::answer` read a window on the process-wide egress log. Reproduced in the VM with
+  a frozen pre-fix test binary: 13 of 400 runs red at the laptop's two lines; the fixed binary beside it 0 of 400. The window
+  is now the answering thread's own tally; the run report's process-wide log is unchanged. Witness red on the old code; M638
+  and M639 red, control green; runners at `18b0adf`: macOS `39388976507` (284 passed), Windows `39388979829` (283 passed),
+  `delulu-runtime`'s whole library, 0 failed. The full suite alone at `18b0adf`: 2,431 passed, 0 failed, 16 ignored (173
+  binaries), cargo exit 0, the tree unmoved.
+- Files and folders: M `crates/delulu-runtime/src/egress.rs` (`MINE`, `log`, `mark`, `records_since`),
+  `crates/delulu-runtime/src/channel.rs` (the witness), `crates/delulu-runtime/src/egress/tests.rs` (tightened), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/CLOUD_ROUTINE.md` (step 5: a once-seen unit-test red is reproduced with its neighbours),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.20 closed), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/assistant-memory/a-field-fed-by-a-global.md`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a count held in a field can still be fed by a global);
+  `docs/assistant-memory/a-field-fed-by-a-global.md`, copied both ways.
+- Loop engineering: `docs/CLOUD_ROUTINE.md` step 5 says how to reproduce a once-seen unit-test red (a frozen test binary, its
+  filter a few hundred times at `--test-threads 16`, the fixed binary beside it as the control).
+- Open / next, in order: (1) this commit's push run; (2) the red-team pass on the WASM engine's `fs_read`, `narrow` and
+  `fs_write` — its findings, each re-run before use; (3) `launch/2.0.0`: merge `master` (`a7b6476`…this commit), dispatch
+  `everything` and the release dry run; (4) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66,
+  4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.

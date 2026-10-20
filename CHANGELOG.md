@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sandbox host's refusals are its own guest's, 2026-10-20
+
+- **Fixed: a host serving a sandboxed guest could record a network refusal made by another thread of its process as its
+  guest's** (RW 7.20). The refusals in a run's `denied` list are now the ones made while answering that guest's own
+  requests. The `delulu` command line hosts one guest per process, so its reports were not affected; a process that
+  hosts more than one guest through `delulu-runtime` was, and so were two of the project's own tests, which failed now
+  and then for this reason.
+
 ## Unreleased — writing files on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `root.fs_write`, `write_text` and `append_text`**, with the interpreter's

@@ -7567,3 +7567,53 @@ Control green after each spec.
 **Evidence.** `delulu-wasm` whole, green (168 tests); `delulu`'s `wasm_cli`, `corpus_cli`, `conformance`,
 `examples_run`, `cli`, `json_contract`, `budget_cli` and `core_invariance` green (102). By hand: the write program, the
 escape and the ungranted mint printed, wrote and refused alike on both engines, their traces byte-identical.
+
+## 2026-10-20 — on-demand routine run 5: the laptop's #17–#19 landed; a host's egress window is its own thread's (RW 7.20)
+
+**Landed from the laptop.** The laptop's session stopped at about 04:30 UTC with three pull requests open, each green:
+#17 (`cba20d4`, `str` and `==` of compound values on WASM, RECORD-ORDER-1), #18 (`ce5f6ab`, `narrow` on WASM) and #19
+(`275af08`, writing files on WASM). Their CI — `39367623331`, `39368481885` and `39369712525` — read success on every job
+(`miri-slow` and `heavy-gates` skipped, as on every pull request), and so did `a7b6476`'s push run `39368506567`. `master`
+was fast-forwarded `a7b6476..275af08` and pushed. On `275af08` in the VM: `survey check` ok (1543 nodes, 15500 edges);
+`doctor --check` ok (26 checks); the two-engine differential (`cargo test -p delulu-wasm --release --test differential --
+--ignored`, 50,000 programs — `heavy-gates`, which no pull request runs) passed in 151 s. **The autosave branch:** its eleven
+snapshots since `bbb8ea3` were each compared with the commit that followed their base: six landed exactly (`c94cbba`,
+`3174d05`, `fc0310c`, `301c018`, `ce67ca1`, `84eabf6`); five were mid-edit drafts that the next commit carries further
+(`902e45d` — the commit adds a §11.4 lesson; `0012e9f` and `e500da6` — `in_block`'s walk, replaced in `a7b6476` by
+`module_any`'s, WASM-SCAN-1; `3f5454e` — `compile_module` calls, replaced by `compile_checked`; `6d7557c` — `Ty`'s list
+re-laid out by `rustfmt` around `FsWrite`). Nothing to recover; no snapshot after `275af08`.
+
+**RW 7.20 — the confinement tests' flake, reproduced and explained.** The row said the two tests' count was a field of the
+`HostChannel` each test makes "and nothing global feeds it that a read found". Something does: `HostChannel::answer` takes
+`egress::mark()` on the way in and counts every refusal `egress::records_since` finds on the way out, and both read the
+PROCESS-WIDE egress log — the run report's evidence, process-wide on purpose, because an actor's `http.get` runs on a
+worker thread. Two tests in the same binary make refused requests (`a_guests_refused_network_request_is_in_the_hosts_denied_list_with_its_reason`,
+`a_guests_request_with_a_refused_header_is_refused_by_the_host_and_recorded`); when one landed between a confinement test's
+mark and its read, that test's host counted it as its guest's, and `denied().1` was 2. **Reproduced in the VM** with a frozen
+copy of the pre-fix test binary, its `channel::tests::a_` filter run at `--test-threads 16`: 11 of 500 runs red, then 13
+of 400 (6 at `channel.rs:1336`, 7 at `:1380` — the laptop's two lines — every one `left: 2`); the fixed binary, run side by
+side under the same load, 0 of 400.
+
+**The fix.** `egress::mark` and `records_since` read a thread-local tally of what THIS thread logged (`MINE`, bounded and
+counted as the process log is; `log` writes both). The sandbox host performs a guest's request on the thread that answers
+it — `LocalSink` calls the primitive table in place, and every `log` call is on the requesting thread — so the window holds
+that request's refusals and no other thread's. The process-wide log, which `take_log` and `snapshot` give the run report,
+is unchanged. The same rule already held for RW 4.46's `fetch_refusal`, read on the calling thread "never another
+thread's". In the `delulu` command line one process hosts one guest, so no shipped run reported another's refusal; a
+process hosting two guests (an embedder of `delulu-runtime`, or a test binary) could.
+
+Tests:
+- `channel.rs` `a_refusal_another_thread_logs_while_the_host_answers_is_not_the_guests`: a sink that, while performing the
+  guest's call, has ANOTHER thread make a refused request — `denied().1` is 0; the control, the same refusal made on the
+  answering thread — 1, naming the URL. Red on the old code (`left: 1`).
+- `egress/tests.rs` `records_logged_after_a_mark_are_found_by_it`, tightened: it accepted "ours is among what the mark
+  finds, or anything was refused" because other tests log concurrently; now exactly ours, with another thread's refusal
+  logged beside it.
+
+Mutants: M638 (the window read from the process log again) — red, both tests; M639 (`log` not writing the thread's tally)
+— red, four tests (the two network tests' records gone from `denied[]`). Control green.
+
+**Evidence.** `delulu-runtime`'s `channel` and `egress` tests green (70); on the runners at `18b0adf` (`witness.yml`,
+`delulu-runtime`'s whole library): macOS `39388976507` 284 passed, 0 failed, the new test and the tightened one named;
+Windows ``39388979829`` 283 passed, 0 failed, both tests named. The full suite alone at `18b0adf`: 2,431 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved (a red-team pass loaded the VM during part of it). `scripts/clippy.sh -j 4` clean and
+stamped; `cargo fmt --all` clean.
