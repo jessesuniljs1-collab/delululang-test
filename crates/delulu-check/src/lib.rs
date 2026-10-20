@@ -1097,6 +1097,36 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         assert!(e.contains(&"DL1603".to_string()), "an explicit `ref` keeps its meaning: {e:?}");
     }
 
+    /// RCAP-CTOR-1. A nullary constructor written into a field — `p.c = Red`, `n.next = None` — was refused DL1603, "an
+    /// undetermined capability", while the same value in the literal, or through a `let`, was accepted: the capability
+    /// pass knew a local, a function and a constant by name, and not a constructor. It now has its type's default
+    /// capability, as `Some(1)` has. The control: a `ref` list stored into the same `val` field is still refused.
+    #[test]
+    fn a_nullary_constructor_stored_into_a_field_has_its_types_capability() {
+        let fields = "module m
+type Color = Red | Green
+type P {
+  c: Color,
+  o: Option[Int],
+  l: List[Int],
+}
+fn f() -> Int {
+  var p = P { c: Green, o: Some(1), l: [] }
+";
+        for store in ["p.c = Red", "p.o = None", "p.c = Red\n  p.o = None\n  p.l = []"] {
+            let e = errors(&format!("{fields}  {store}\n  1\n}}\n"));
+            assert!(e.is_empty(), "`{store}` stores a value with no contents: {e:?}");
+        }
+        let e = errors(&format!("{fields}  let r: ref List[Int] = [1]\n  p.l = r\n  1\n}}\n"));
+        assert!(e.contains(&"DL1603".to_string()), "a `ref` list is still not a `val` field's: {e:?}");
+        // A local born of a nullary constructor takes the constructor called with fields, and the other way round —
+        // the shape a first version of this fix refused (it made `None` a fresh `ref`, and `Some(2)` is `val`).
+        for rebind in ["var o = None\n  o = Some(2)", "var o = Some(1)\n  o = None", "var c = Red\n  c = Green"] {
+            let e = errors(&format!("{fields}  {rebind}\n  1\n}}\n"));
+            assert!(e.is_empty(), "`{rebind}`: {e:?}");
+        }
+    }
+
     // ----- NE-02: the `val` container over `ref` contents ---------------------------------
 
     /// NE-02. `let xs: val C = [ … ]` with a `ref` element was refused DL1603 with **no repair**, a

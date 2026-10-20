@@ -967,6 +967,11 @@ impl<'a> Pass<'a> {
                     if self.lookup(name).is_some() {
                         return self.use_binding(name, *span, UseKind::Read).map(K::Known).unwrap_or(K::Unknown);
                     }
+                    // A nullary constructor (`None`, `Red`) — the type checker's next resolution after a local — has its
+                    // type's default capability, as a constructor called with fields (`Some(2)`) has (RCAP-CTOR-1).
+                    if name == "None" || self.table.variant_ctor(name).is_some_and(|(_, fields)| fields.is_empty()) {
+                        return self.default_k(e);
+                    }
                     // A top-level fn used as a value captures nothing — a `val` closure.
                     if self.table.fns.contains_key(name) {
                         return K::Known(Rcap::Val);

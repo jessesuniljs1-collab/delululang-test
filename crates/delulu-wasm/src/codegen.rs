@@ -295,6 +295,13 @@ impl EnumEnv {
     fn id(&self, name: &str) -> Option<u32> {
         self.by_name.get(name).copied()
     }
+    /// The named sum type a constructor builds, when exactly one declares it — the checker's rule (`variant_ctor`): a
+    /// name two sums share (`IoErr`'s and `NetErr`'s `Other`) names neither.
+    fn enum_of_ctor(&self, ctor: &str) -> Option<u32> {
+        let mut owners = (0..self.descs.len() as u32).filter(|&i| self.desc(i).ctors.iter().any(|c| c.name == ctor));
+        let first = owners.next()?;
+        owners.next().is_none().then_some(first)
+    }
     /// The actor index for a name introduced by an `actor A { … }` declaration (Stage 7 phase 7h).
     fn actor_id(&self, name: &str) -> Option<u32> {
         self.actors_by_name.get(name).copied()
@@ -678,41 +685,10 @@ fn body_is_compiled(env: &EnumEnv, f: &FnDecl) -> bool {
 
 /// Does any compilable function call a method whose name is in `names`? Used to decide which host
 /// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
+/// The walk is `module_any`'s, which names every expression form: this one's own walk passed over a record literal's
+/// fields, so `Stamp { at: root.clock().now_ms() }` compiled a call to an import the module did not have (WASM-SCAN-1).
 fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
-    fn in_block(b: &Block, names: &[&str]) -> bool {
-        b.stmts.iter().any(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
-            Stmt::While { cond, body, .. } => in_expr(cond, names) || in_block(body, names),
-            Stmt::For { iter, body, .. } => in_expr(iter, names) || in_block(body, names),
-            Stmt::Break { .. } | Stmt::Continue { .. } => false,
-            Stmt::Return { value: Some(e), .. } => in_expr(e, names),
-            Stmt::Return { value: None, .. } => false,
-            Stmt::Expr(e) => in_expr(e, names),
-        })
-    }
-    fn in_expr(e: &Expr, names: &[&str]) -> bool {
-        match e {
-            Expr::Method { name, recv, args, .. } => {
-                names.contains(&name.name.as_str()) || in_expr(recv, names) || args.iter().any(|a| in_expr(a, names))
-            }
-            Expr::Call { callee, args, .. } => in_expr(callee, names) || args.iter().any(|a| in_expr(a, names)),
-            Expr::Binary { lhs, rhs, .. } => in_expr(lhs, names) || in_expr(rhs, names),
-            Expr::Unary { operand, .. } => in_expr(operand, names),
-            Expr::If { cond, then_, else_, .. } => {
-                in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
-            }
-            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names)),
-            Expr::Try { inner, .. } => in_expr(inner, names),
-            Expr::Block(b) => in_block(b, names),
-            // A lambda's body, a list's items and an index run where they are inlined or evaluated, so the imports they
-            // call are the module's (WASM-INTERN-1's sibling: a `println` inside a lambda had no console import).
-            Expr::Lambda { body, .. } => in_block(body, names),
-            Expr::List { items, .. } => items.iter().any(|i| in_expr(i, names)),
-            Expr::Index { recv, index, .. } => in_expr(recv, names) || in_expr(index, names),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && in_block(&f.body, names)))
+    module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if names.contains(&name.name.as_str())), false)
 }
 
 /// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
@@ -1884,9 +1860,14 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
                     }
                 }
             }
-            // An empty list says its element type only on its `let` (`let xs: List[Int] = []`).
+            // A written type is the value's expected one: an empty list's element type (`let xs: List[Int] = []`), a
+            // constructor's other half (`let r: Result[Int, Str] = Ok(1)`, `var cur: Option[ref Node] = None`).
             let ty = match (value, ty.as_ref().and_then(|t| wasm_ty(cx.env, t))) {
                 (Expr::List { items, .. }, Some(Ty::List(s))) if items.is_empty() => compile_list_literal(items, cx, Some(s))?,
+                (_, Some(t)) => {
+                    compile_expr_as(value, cx, t)?;
+                    t
+                }
                 _ => compile_expr(value, cx)?,
             };
             let idx = cx.alloc_local(ty)?;
@@ -2451,6 +2432,67 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
     }
 }
 
+/// The type of constructor `name` used where no type is expected (`let c = Red`, `var o = None`): a named sum's when one
+/// declares it, else — `None`, `Ok`, `Err` — the type the checker inferred for the node, where the backend holds it.
+fn synthesized_ctor_ty(name: &str, node: NodeId, cx: &Cx) -> Option<Ty> {
+    if let Some(id) = cx.env.enum_of_ctor(name) {
+        return Some(Ty::Enum(id));
+    }
+    if !matches!(name, "None" | "Ok" | "Err") {
+        return None;
+    }
+    cx.node_types.get(&node).and_then(checked_ty).filter(|t| matches!(t, Ty::Option(_) | Ty::Result(..)))
+}
+
+/// A type the checker inferred, as the backend holds it — the scalars, and an `Option`, `Result` or `List` of them; a
+/// named type is not resolved here (its id is the checker's table's, which the backend is not given).
+fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
+    use delulu_check::Type;
+    Some(match t {
+        Type::Int => Ty::I64,
+        Type::Bool => Ty::I32,
+        Type::Float => Ty::F64,
+        Type::Str => Ty::Str,
+        Type::Unit => Ty::Unit,
+        Type::Option(p) => Ty::Option(ty_to_scalar(checked_ty(p)?)?),
+        Type::Result(o, e) => Ty::Result(ty_to_scalar(checked_ty(o)?)?, ty_to_scalar(checked_ty(e)?)?),
+        Type::List(e) => Ty::List(list_element(checked_ty(e)?)?),
+        _ => return None,
+    })
+}
+
+/// `Some(x)` where no type is expected: `x` first, as the interpreter computes it, then the cell of `Option` of its type.
+fn compile_some(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let t = compile_expr(arg, cx)?;
+    let s = ty_to_scalar(t).ok_or_else(|| CompileError::Unsupported(format!("`Some` of a {t:?}")))?;
+    let opt = Ty::Option(s);
+    let ctors = cx.env.ctors_of(opt).expect("an `Option` has its two constructors");
+    let tag = ctors.iter().position(|(n, _)| n == "Some").expect("an `Option` has `Some`");
+    let held = if s == Scalar::Unit {
+        None
+    } else {
+        let l = cx.alloc_local(t)?;
+        cx.emit(Instruction::LocalSet(l));
+        Some(l)
+    };
+    let rp = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(rp));
+    cx.emit(Instruction::LocalGet(rp));
+    cx.emit(Instruction::I32Const(tag as i32));
+    cx.emit(Instruction::I32Store(u32_at()));
+    if let Some(l) = held {
+        cx.emit(Instruction::LocalGet(rp));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        cx.emit(Instruction::LocalGet(l));
+        store_scalar(cx, s);
+    }
+    cx.emit(Instruction::LocalGet(rp));
+    Ok(opt)
+}
+
 /// Compile a variant constructor to a fresh heap `[tag][field…]` cell of type `expected`.
 fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
     let ctors = cx
@@ -2742,7 +2784,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Ok(Ty::F64)
             }
         },
-        Expr::Var { path, .. } => {
+        Expr::Var { path, id, .. } => {
             if path.segs.len() == 1 {
                 if let Some((idx, ty)) = cx.lookup(&path.segs[0].name) {
                     cx.emit(Instruction::LocalGet(idx));
@@ -2754,6 +2796,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         cx.emit(Instruction::LocalGet(slot));
                         return Ok(Ty::ActorRef(aidx));
                     }
+                }
+                // A nullary constructor with no expected type: its sum's, or the checker's (`None`).
+                if let Some(t) = synthesized_ctor_ty(&path.segs[0].name, *id, cx) {
+                    compile_ctor(&path.segs[0].name, &[], cx, t)?;
+                    return Ok(t);
                 }
             }
             Err(CompileError::Unsupported(format!("the name `{}` (not a local)", path.dotted())))
@@ -3095,6 +3142,16 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             if let Some(g) = cx.generics.get(&name).cloned() {
                 return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
+            }
+            // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
+            if !cx.index.contains_key(&name) {
+                if let ("Some", [arg]) = (name.as_str(), &args[..]) {
+                    return compile_some(arg, cx);
+                }
+                if let Some(t) = synthesized_ctor_ty(&name, e.id(), cx) {
+                    compile_ctor(&name, args, cx, t)?;
+                    return Ok(t);
+                }
             }
             let (fidx, ptys, ret) = {
                 let e = cx
