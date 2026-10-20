@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `.dwx` run refuses the flags it cannot apply, 2026-10-20
+
+- **Fixed: `delulu run FILE.dwx` ignored `--broker daemon`, `--lease`, `--trace-effects`, `--trace-out` and
+  `--assert-trace` without a word** (RW 3.19). Under `--broker daemon` or `--lease` the artifact ran with no broker
+  custody at all, and no effect trace was written. These flags, and every other `run` flag a `.dwx` run does not apply,
+  are now refused before anything runs (exit 2), naming the flag. The grants, `--json`, `--seed`, `--clock`, `--limits`,
+  `--report-out`, `--break-glass`, `--isolation` and `--engine wasm` work as before. Run the program's source to use the
+  others.
+
 ## Unreleased — a file capability stays where it was granted; a WASM read refuses in the interpreter's words, 2026-10-20
 
 - **Fixed (security): a file capability followed its directory if another process replaced the directory with a link

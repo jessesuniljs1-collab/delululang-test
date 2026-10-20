@@ -1161,6 +1161,12 @@ spells the same thing?**
   that resolves both sides at use time decides on whatever the root became. Search key: for each containment check,
   ask which side is resolved when — and whether the side treated as fixed is really fixed.
 
+- **DWX-FLAGS-1 — a second route through a command dropped its flags** (on-demand routine run 5, RW 3.19): `run` checks
+  and applies its custody, lease and trace flags on the source path, and dispatches a `.dwx` to its own function first,
+  which read four of them. `--broker daemon` and `--lease` ran an artifact under no custody, in silence. The sandboxed path
+  had been the same until PS-B-05 gave it an allowlist. Search key: for every command, list each route its dispatcher can
+  take, and ask of each route which flags it applies — an allowlist per route, never a list of refusals.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background

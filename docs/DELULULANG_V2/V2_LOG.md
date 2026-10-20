@@ -7688,3 +7688,35 @@ trace and no word about it. Its scope refusals hold (DL0904, DL0703; nothing wri
 **Oddities, not defects:** every runtime refusal is framed three ways (the interpreter with a source snippet, `--engine
 wasm` as "WASM engine: WASM trap: …", a `.dwx` as "`FILE`: WASM trap: …") with the same code and words; `Cap[Console].print`
 is DL1201 on WASM (`println` compiles) — RW 3.4's subset.
+
+## 2026-10-20 — on-demand routine run 5 (continued): a `.dwx` run refuses every flag it does not apply — DWX-FLAGS-1 (RW 3.19)
+
+**Found.** The red-team pass's F4: `delulu run FILE.dwx` accepted `--trace-effects`, `--trace-out` and `--assert-trace` and
+applied none — no trace file, no record, no word. The head chef's probe of the same path, against the binary at `3cb335e`,
+found it worse: `--broker daemon` with no broker running, and `--lease not-a-token`, each ran the artifact and wrote its file
+under the command line's grants, with no custody at all. `cmd_run_inner` dispatches a `.dwx` to `run_dwx_artifact` before the
+broker, the lease and the trace are set up, and that function read the grants, `--json`, the seed and the clock — nothing
+else; since `275af08` it is given the grant's write roots too. The sandboxed path had the same shape once and was closed by
+an allowlist (`guest.rs`, `APPLIED_UNDER_SANDBOX`, PS-B-05); the `.dwx` path never got one.
+
+**Fixed (`a7e50d6`).** `run_dwx_artifact` refuses, before anything runs, every flag outside `APPLIED_TO_A_DWX` — the grants,
+`--json`, `--no-prompt`, `--seed`, `--clock`, and what `cmd_run` applies for every path (`--limits`, `--report-out`,
+`--break-glass`, `--isolation`, `--sandbox=off`) — and `--engine` unless it says `wasm`: exit 2, in the sandbox's words ("a
+flag that is silently ignored reads exactly like a flag that was applied"). An allowlist, so a flag added to `run` later is
+refused here until this path applies it. Giving the path a trace and custody is the alternative the row named; refusing is
+the honest state until then.
+
+Test: `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply` — each of `--trace-effects`, `--trace-out`,
+`--assert-trace`, `--broker daemon`, `--lease`, `--engine interp`: exit 2, the flag named, nothing written; the applied flags
+still run the artifact and write. Red on the old path (exit 0, the file written). Mutants M648 (`--broker` and `--lease`
+allowed), M649 (the trace flags allowed), M650 (`--engine` unchecked) red; control green.
+
+**Evidence.** `scripts/clippy.sh -j 4` clean and stamped; `artifact_review`, `json_contract`, `package_run`, `cli_contract`,
+`plugin_cli`, `signing_cli`, `pqc_cli`, `within_cli`, `unreadable_paths`, `completions_cli`, `wasm_cli` and `message_spacing`
+green. Runners at `a7e50d6`: Windows `39396317161` (`wasm_cli`, filter `dwx`: 5 passed, the new test among them) and macOS `39396321250` (the same filter, success). The full suite alone at `a7e50d6`: 2,436 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved.
+
+**RW 4.72, end to end.** The red-team pass's own race scripts, re-run against the binary built from `a7e50d6`: the narrowed
+read with the directory swapped at 0.25, 0.3 and 0.4 s, the write minted on a sub-directory at 0.25 and 0.5 s, and the
+granted directory itself swapped (three runs) — on both engines, every run refused with DL0904 (exit 1), nothing read from
+or written outside. Before the fix the same scripts read 25,707–33,114 of 40,000 reads from outside and wrote outside on
+both engines.

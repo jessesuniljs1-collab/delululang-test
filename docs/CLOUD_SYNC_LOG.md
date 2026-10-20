@@ -4717,3 +4717,30 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   named `narrow`/`read_text`, capabilities in records or closures, `--broker daemon` and `--lease` on the WASM file path;
   (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the
   owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (continued): a `.dwx` run refuses every flag it does not apply — DWX-FLAGS-1 (RW 3.19)
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`, by fast-forward from `claude/dwx-flags`   Pull request: none   Base: `669664c`
+- Commits: `a7e50d6` (the fix); this entry's commit.
+- **Fixed (RW 3.19):** `delulu run FILE.dwx` read only the grants, `--json`, the seed and the clock; `--broker daemon` (no broker
+  running) and `--lease` (a token no broker issued) ran the artifact with no custody, and the trace flags wrote nothing — in
+  silence. Now every flag outside `APPLIED_TO_A_DWX` is refused before anything runs (exit 2), as the sandbox refuses by
+  `APPLIED_UNDER_SANDBOX`. Witness red on the old path; M648–M650 red; runners Windows `39396317161` (5 passed, filter `dwx`)
+  and macOS `39396321250` (success); the full suite at `a7e50d6` 2,436 passed, 0 failed, 16 ignored (173 binaries), exit 0.
+- **RW 4.72 end to end:** the red-team pass's own race scripts re-run against the fixed binary — every run refused, nothing
+  read or written outside (`V2_LOG.md`).
+- Files and folders: M `crates/delulu/src/run_cmd.rs` (`APPLIED_TO_A_DWX`), `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 DWX-FLAGS-1), `docs/CLOUD_ROUTINE.md` (a whole-library witness log: `tail_lines` about 130),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.19 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (DWX-FLAGS-1: an allowlist per route a command can take).
+- Loop engineering: `docs/CLOUD_ROUTINE.md` — ask a whole-library witness log for about 130 lines; 2,000 brought two whole
+  500-line logs into the context this run.
+- Open / next, in order: (1) this commit's push run and `669664c`'s (`39396073953`); `launch/2.0.0`'s `everything`
+  `39392798450` (all finished jobs success; two `miri-slow` jobs running at this entry); then merge `master` into
+  `launch/2.0.0` again; (2) the pass's untried families — a user method named `narrow`/`read_text`, capabilities in records
+  or closures, `--broker daemon` and `--lease` on the WASM file path end to end; (3) a `.dwx` run with a trace and custody, if
+  wanted, instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5)
+  *[laptop]* the launch, only on the owner's word.
