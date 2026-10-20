@@ -7754,3 +7754,10 @@ before its scope since `92d9119`, so before F1's fix WASM would have answered wi
 which a `--lease` run refuses ("a `--lease` run derives its authority from the delegated node") — the hint points a lease
 holder outside its delegation, as PS-B-05 found under `--sandbox`. Untried still: a user method named `narrow`/`read_text`.
 **CI read, last:** `318b210`'s push run `39398823386` and `8ac7ee5`'s `39400706197` success on every job.
+
+## 2026-10-20 — on-demand routine run 5: stopped on the owner's word
+
+The owner asked at 09:50 UTC for a safe stop. Nothing was half-done: every slice of the run (the laptop's #17–#19, RW 7.20,
+F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`) was already verified, recorded and on `master`. At the stop
+no job had failed; four runs were still going (`6a03165`'s push run, and `miri-slow` jobs on `launch/2.0.0` and the nightly) —
+named in `docs/CLOUD_SYNC_LOG.md` for the next session to read.

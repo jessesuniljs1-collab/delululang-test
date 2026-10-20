@@ -4764,3 +4764,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   hint under `--lease` (it names a `--grant` a lease run refuses); a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted,
   instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the
   launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5: stopped on the owner's word (09:50 UTC)
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef running)
+- **The owner, 09:50 UTC:** *"Head Chef Claude Opus 5.5, Stop safely and record and push everything to GitHub test repo"*.
+  Stopped with nothing half-done: every slice of this run is on `master` (`6a03165` before this entry), the tree was clean
+  and in step with `origin`, no worktree, no suite, no broker daemon and no sous-chef left running. The three working
+  branches (`claude/rw-7-20-egress-window`, `claude/wasm-read-scope`, `claude/dwx-flags`) are 0 commits ahead of `master`.
+- **CI at the stop** (no job failed anywhere): `6a03165`'s push run `39403469304` running (records only); `launch/2.0.0`'s
+  `everything` `39398467836` (`20666c5`) 16 jobs success, its two `miri-slow` jobs running, its release dry run `39398473807`
+  success; `3ee1370`'s `everything` `39392798450` and the nightly `39391181701` (`7355808`) 17 jobs success each, one
+  `miri-slow` job running in each. `8ac7ee5`, `318b210`, `ec4bc87`, `669664c`, `7355808` and `275af08` push runs success on every job.
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, for whoever comes next (laptop or routine): (1) read the four runs above to their end; (2) DL0703's hint under
+  `--lease`; a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted; (4) on
+  WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.
