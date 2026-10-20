@@ -7527,3 +7527,43 @@ narrowed handle keeping the wider scope): all red, control green.
 **Evidence.** `delulu-wasm` and `delulu-runtime` whole, green (484 tests); `delulu`'s `wasm_cli`, `corpus_cli`,
 `conformance`, `examples_run`, `cli` and `core_invariance` green (78). By hand on the laptop: the attenuation program
 and the four refusals printed and refused alike on both engines through `delulu run --grant fs.read=./data`.
+
+## 2026-10-20 — the laptop: writing files on the WASM engine (RW 3.4)
+
+**`root.fs_write(p)`, `write_text` and `append_text` compile**, to `delulu:cap.root_fs_write` and
+`delulu:cap.fs_write_text(cap, path, body, append, file, start, end) -> Result[Unit, IoErr]`. The mint is the
+interpreter's (`prim`'s root method): a hostile spelling refused, the path resolved from the working directory, granted
+iff it lies on disk within a granted write subtree (`HostConfig.fs_write_roots`, filled by the command line from
+`--grant fs.write=` on both of its WASM paths). The write follows the interpreter's order step for step: the dispatch
+record (the relative path, where it pointed, the scope), the custody gate on the path the write will open
+(GUARD-ALIAS-1: pinned and spelled as on disk), the scope by `prim::resolve_in_scope` in its words, then the write
+through `beneath` (FS-RACE-1); a refusal after the record is recorded as one (RW 4.62). `push_fs_read_trace` became
+`push_fs_trace`, for the three file effects. Two alignments made on the way: an ungranted `root.fs_read` on WASM now
+names the grant to pass, as the interpreter's message does; and the read path's escape at open (reachable only by a
+race between the check and the open) now records its refusal after the dispatch, as the interpreter does — by
+reading, unwitnessed.
+
+Chapter `05` now stops only at `.http`; the corpus count stays 11 of 17.
+
+Tests:
+- `wasm_cli.rs` `file_writes_on_the_wasm_engine_match_the_interpreter`, through the command line: a write, an append
+  and a write into a directory that does not exist — the interpreter's output, the same bytes on disk, the same trace
+  byte for byte; a write escaping the scope — DL0904 on both, no file, the same dispatch and refusal records; an
+  ungranted mint — DL0703 on both in the interpreter's words;
+- `lib.rs` `a_write_asks_the_custody_for_the_path_it_will_open`: a recording custody is asked once, about `FsWrite`,
+  on the on-disk spelling — the program names the directory by another spelling (upper case on Windows, a link on
+  Unix), and the test asserts it can tell the two apart; a denying custody refuses the run in its words and nothing
+  is written.
+
+Mutants:
+- M630 (the scope unchecked), M631 (no dispatch record), M633 (the mint ungated), M636 (no refusal record), M634 (no
+  custody gate), M635 (`FsRead` asked) — red;
+- M632 — the append flag dropped: first aimed at the unpinned branch, which runs only for a file that does not exist
+  yet, where appending and writing agree (an equivalent mutant, survived); aimed at the pinned branch, red;
+- M637 — the custody asked about the path as written: survived while the test's directory had one spelling; red once
+  the program named it by another.
+Control green after each spec.
+
+**Evidence.** `delulu-wasm` whole, green (168 tests); `delulu`'s `wasm_cli`, `corpus_cli`, `conformance`,
+`examples_run`, `cli`, `json_contract`, `budget_cli` and `core_invariance` green (102). By hand: the write program, the
+escape and the ungranted mint printed, wrote and refused alike on both engines, their traces byte-identical.

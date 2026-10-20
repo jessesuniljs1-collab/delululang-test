@@ -4622,3 +4622,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (2) on WASM: `fs_write` and `http` (`05`), a list of options, `str` of a map; RW 4.66 (a send bound to the run that
   redeemed the node: a wire change, its own decision); RW 7.20; RW 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the
   owner's word.
+
+### 2026-10-20 — writing files on the WASM engine (made on the laptop)
+- Session: `https://claude.ai/code/session_01Bp5eKZCQAuuUyAcFDuff8G`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-fswrite` (on `laptop/wasm-narrow`, #18)   Pull request: see the branch   Merged: not yet (after #17 and #18, on green CI)
+- Base: `ce5f6ab`. Also: #16's CI `39365652892` read success on every job; `master` fast-forwarded `d259cf2..a7b6476`.
+- What: `V2_LOG.md` (this date, the fifteenth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::FsWrite`, the `root_fs_write`/`fs_write_text`
+  imports and arms), `crates/delulu-wasm/src/host.rs` (`CapKind::FsWrite`, `fs_write_roots`, the two imports,
+  `push_fs_trace`, the read path's escape record, the fs-read refusal's grant hint), `crates/delulu-wasm/src/lib.rs`
+  (the custody test), `crates/delulu/src/run_cmd.rs` (`fs_write_roots` on both WASM paths),
+  `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) #17, #18 and this branch's CI, landing each on green in order; the launch run `39364184892` read;
+  (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66; RW 7.20; RW 4.67, 6.1, 6.2;
+  (3) *[laptop]* the launch, only on the owner's word.
