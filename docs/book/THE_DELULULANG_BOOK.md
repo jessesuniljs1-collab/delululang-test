@@ -546,8 +546,9 @@ list whose type only the checker knows (`let out = []`, filled later), and recor
 field, a record shared as on the interpreter, a field holding an `Option`, a `Result` or a `List` — a linked list, a
 tree — and a constructor with no written type (`var cur = Some(head)`). So do `str`, `==` and `!=` of a list, an
 option, a sum or a record, which the WASM engine hands to the interpreter's own rendering and equality, so the two
-cannot disagree about a value that holds itself or a `NaN`. Measured again that day, 10 of the 17 entry points
-compile, five of the six guide chapters among them.
+cannot disagree about a value that holds itself or a `NaN`; and narrowing a file capability (`fs.narrow("public")`),
+by the interpreter's own rule. Measured again that day, 11 of the 17 entry points compile, five of the six guide
+chapters among them.
 
 So: if you are writing ordinary DeluluLang — anything with a map, a list of lists, an `Option` of a list, or a list of
 options — **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code

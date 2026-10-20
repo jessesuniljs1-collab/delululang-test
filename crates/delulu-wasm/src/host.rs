@@ -978,6 +978,39 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
+    // `Cap[FsRead].narrow(sub)`: a new handle for the subtree `sub` names inside the handle's scope, by the interpreter's own
+    // `resolve_in_scope` — a hostile spelling, a `..` or a link out of the scope is refused (DL0904) as it is there, and no
+    // narrowing reaches past the scope it starts from. Pure, as on the interpreter: no trace, no custody round-trip.
+    linker
+        .func_wrap("delulu:cap", "fs_narrow", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let scope = match caller.data().caps.get(cap as usize) {
+                Some(CapKind::FsRead(scope)) => scope.clone(),
+                _ => {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                    return -1;
+                }
+            };
+            let Some(sub) = read_guest_str(&mut caller, path_ptr) else {
+                caller.data_mut().refused = Some("DL0903: narrow path pointer is out of bounds".into());
+                return -1;
+            };
+            match delulu_runtime::prim::resolve_in_scope(&scope, &sub, delulu_diag::Span::new(0, 0, 0)) {
+                Ok(narrowed) => {
+                    let st = caller.data_mut();
+                    st.caps.push(CapKind::FsRead(narrowed));
+                    (st.caps.len() - 1) as i32
+                }
+                Err(fault) => {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    -1
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
     // ----- Stage 4 phase 4g: the `delulu:foreign@0.4` host interface -------------------------------
     // `root.foreign_load()` mints a `Cap[ForeignLoad]` iff foreign loading is granted (a pure Root
     // derivation — not traced, mirroring `root.console()`).

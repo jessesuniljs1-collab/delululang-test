@@ -7500,3 +7500,30 @@ list never compared with itself — red).
 differential with the new line: 50,000 programs, all 50,000 compiled (with the checker's types), 45,027 agreed, 4,973
 both faulted, 0 mismatches. By hand, a probe of every kind printed the same on both engines, the cycle and `[NaN]`
 included.
+
+## 2026-10-20 — the laptop: `narrow` on the WASM engine; the tier-5 attenuation program compiles (RW 3.4)
+
+**`Cap[FsRead].narrow(sub)` compiles**, to the import `delulu:cap.fs_narrow(cap, path) -> cap`. The host mints the
+narrower handle by the interpreter's own `prim::resolve_in_scope` — public now for it — so the two engines draw one
+boundary in one set of words: a hostile spelling, a `..` or a link out of the handle's scope is DL0904, and no
+narrowing reaches past the scope it starts from. Pure, as on the interpreter (`effect_for("FsRead", "narrow")` is
+`None`): no trace record, no custody round-trip — the read through the narrowed handle is traced and gated as every
+read is, against the narrowed scope. The import scan names `narrow`, so a module whose only filesystem operation is a
+narrowing of a handle it was given still carries the filesystem imports. The corpus's entry points: **11 of 17**
+compile, `tests/corpus/tier5-security/attenuation.delulu` the eleventh.
+
+Tests:
+- `narrow_parity.rs` (new): `a_narrowed_handle_reads_inside_its_subtree_on_both_engines` (two independent
+  narrowings, a narrowing within a narrowing), `no_narrowing_or_read_reaches_past_the_scope_on_both_engines` (a
+  narrowing back up, reads into the sibling and the parent, a narrowing to the sibling by way of `..` — DL0904 in the
+  interpreter's words on both), `a_module_that_only_narrows_carries_the_filesystem_imports` (the module validated by
+  wasmtime);
+- `corpus_cli.rs`'s tier-5 test runs both of its grants on the WASM engine too, each with the interpreter's stdout and
+  exit code (through the command line; on the old binary the WASM run was DL1201).
+
+Mutants M626 (the narrowed path unchecked), M627 (no `narrow` arm), M628 (the scan without `narrow`), M629 (the
+narrowed handle keeping the wider scope): all red, control green.
+
+**Evidence.** `delulu-wasm` and `delulu-runtime` whole, green (484 tests); `delulu`'s `wasm_cli`, `corpus_cli`,
+`conformance`, `examples_run`, `cli` and `core_invariance` green (78). By hand on the laptop: the attenuation program
+and the four refusals printed and refused alike on both engines through `delulu run --grant fs.read=./data`.

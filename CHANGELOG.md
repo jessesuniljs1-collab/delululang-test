@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — narrowing a file capability on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `Cap[FsRead].narrow(sub)`**, the same boundary as on the interpreter: a narrowed
+  capability reads only inside its subtree, and a narrowing or read that reaches past it (`..`, a link) is refused
+  with the interpreter's DL0904. `tests/corpus/tier5-security/attenuation.delulu` now runs on the WASM engine.
+
 ## Unreleased — `str` and `==` of lists, options, sums and records on the WASM engine; a record's field order, 2026-10-20
 
 - **Added: on `--engine wasm`, `str`, `==` and `!=` of a list, an option, a result, a sum or a record**, with the
