@@ -140,6 +140,20 @@ pub fn random_console_program(seed: u64) -> String {
             format!("  out.println(str({x}))\n")
         });
     }
+    // `str`, `==` and `!=` of a list and an option (on the WASM engine since 2026-10-20, through the host's value
+    // interface), from a stream of their own: `Float`s, so a NaN, an infinity and a negative zero are rendered and
+    // compared inside them; a list against itself as often as against another. Written `]==[` without spaces, so the
+    // count of `Str == Str` lines, which looks for ` == `, stays that line's.
+    let mut v = Rng::new(seed ^ 0x3C6E_F372_FE94_F82B);
+    if v.chance(1, 3) {
+        let xs: Vec<String> = (0..1 + v.below(3)).map(|_| gen_float(&mut v, 2)).collect();
+        let list = format!("[{}]", xs.join(", "));
+        let other = if v.chance(1, 2) { list.clone() } else { format!("[{}]", gen_float(&mut v, 2)) };
+        body.push_str(&format!(
+            "  out.println(str({list}) + \" \" + str(Some({})) + \" \" + str({list}=={other}) + str({list}!={other}))\n",
+            xs[0]
+        ));
+    }
     // `Str == Str` and `!=` (on the WASM engine since 2026-10-20), from a stream of their own so every other line is what
     // this seed always gave: a string against itself as often as against another.
     let mut q = Rng::new(seed ^ 0x9FB2_1C65_1E98_DF25);

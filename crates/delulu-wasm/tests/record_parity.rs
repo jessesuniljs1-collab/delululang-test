@@ -292,13 +292,11 @@ fn main(root: Root) ! {Write, Clock, Rand} {
     assert!(w.as_deref().is_ok_and(|o| o.starts_with("1700000000000 ")), "the fixed clock, read in the literal: {w:?}");
 }
 
-/// Outside the fragment, and refused: `str` and `==` of a whole record, and a record whose field holds a type the
-/// backend does not (an `Option` of a list, a map).
+/// Outside the fragment, and refused: a record whose field holds a type the backend does not (an `Option` of a list, a
+/// map). (`str` and `==` of a whole record compile since the host's value interface; `value_parity.rs` holds them.)
 #[test]
 fn what_the_record_fragment_leaves_out_is_refused() {
     for src in [
-        "module m\ntype P {\n  x: Int,\n}\nfn f() -> Str {\n  str(P { x: 1 })\n}\n",
-        "module m\ntype P {\n  x: Int,\n}\nfn f() -> Bool {\n  P { x: 1 } == P { x: 1 }\n}\n",
         "module m\ntype N {\n  v: Int,\n  next: Option[List[Int]],\n}\nfn f() -> Int {\n  let n = N { v: 1, next: None }\n  n.v\n}\n",
         "module m\ntype N {\n  v: Int,\n  m: Map[Str, Int],\n}\nfn f() -> Int {\n  let n = N { v: 1, m: Map() }\n  n.v\n}\n",
     ] {

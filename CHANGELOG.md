@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `str` and `==` of lists, options, sums and records on the WASM engine; a record's field order, 2026-10-20
+
+- **Added: on `--engine wasm`, `str`, `==` and `!=` of a list, an option, a result, a sum or a record**, with the
+  interpreter's output: the WASM engine hands the value to the interpreter's own rendering and equality, so a value that
+  holds itself prints with `...`, and a `NaN` inside a list keeps the list unequal to itself, on both engines.
+- **Fixed: two records of one type compared unequal when their literals named the fields in different orders.**
+  `P { y: "a", x: 2 } == P { x: 2, y: "a" }` was `false`, and the two printed differently. A record now holds its
+  fields in the order its type declares them, so `str` of a record prints that order whatever order the literal
+  used. The fields are still computed in the order written.
+
 ## Unreleased — linked lists and trees on the WASM engine; a constructor stored into a field, 2026-10-20
 
 - **Added: on `--engine wasm`, a record field may hold an `Option`, a `Result` or a `List`**, so linked lists

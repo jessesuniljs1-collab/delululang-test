@@ -386,6 +386,36 @@ fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> O
     None
 }
 
+/// The guest values at `ptrs`, of the type the descriptor at `desc` writes, rebuilt as the interpreter's (`reify.rs`) —
+/// through one map of cells, so a cell two of them hold is one cell, as on the interpreter (`p == p` compares a cell with
+/// itself there too). `None` once a refusal is recorded: a descriptor this engine did not write, or a value that is not
+/// well-formed.
+fn reify_values(caller: &mut Caller<'_, HostState>, desc: i32, ptrs: &[i32]) -> Option<Vec<Value>> {
+    if caller.data().refused.is_some() {
+        return None;
+    }
+    let Some(d) = read_guest_str(caller, desc).and_then(|t| crate::reify::parse(&t)) else {
+        caller.data_mut().refused = Some("DL0903: a value's type descriptor is not one the WASM engine wrote".into());
+        return None;
+    };
+    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+        caller.data_mut().refused = Some("DL0903: a module with no memory".into());
+        return None;
+    };
+    let rebuilt: Result<Vec<Value>, String> = {
+        let data = mem.data(&caller);
+        let mut r = crate::reify::Reifier::new(data, &d);
+        ptrs.iter().map(|&p| r.root(p)).collect()
+    };
+    match rebuilt {
+        Ok(vs) => Some(vs),
+        Err(why) => {
+            caller.data_mut().refused = Some(format!("DL0903: {why}"));
+            None
+        }
+    }
+}
+
 /// Record that the interpreter's `name` answered `got`, which the guest cannot hold, and return `none`.
 fn unheld<T>(caller: &mut Caller<'_, HostState>, name: &str, got: &Value, none: T) -> T {
     caller.data_mut().refused = Some(format!("`{name}` answered {got:?}, which the WASM engine does not hold"));
@@ -1228,6 +1258,27 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:float", "rem", |_caller: Caller<'_, HostState>, a: f64, b: f64| -> f64 { a % b })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `str` and `==` of a list, an option, a result, a sum or a record: the value rebuilt from the guest's memory by its
+    // type's descriptor (`reify.rs`), then the interpreter's own `Value::display` and `Value::eq`.
+    linker
+        .func_wrap("delulu:value", "display", |mut caller: Caller<'_, HostState>, v: i32, desc: i32| -> i32 {
+            let Some(shown) = reify_values(&mut caller, desc, &[v]).map(|vs| vs[0].display()) else {
+                return 0;
+            };
+            match write_str_cell(&mut caller, &shown) {
+                Ok(ptr) => ptr,
+                Err(()) => {
+                    caller.data_mut().refused = Some("guest heap exhausted rendering a value".into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:value", "eq", |mut caller: Caller<'_, HostState>, a: i32, b: i32, desc: i32| -> i32 {
+            reify_values(&mut caller, desc, &[a, b]).map_or(0, |vs| i32::from(vs[0].eq(&vs[1])))
+        })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
