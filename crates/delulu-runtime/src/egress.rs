@@ -672,7 +672,16 @@ impl EgressLog {
 /// only the main thread's requests reach is evidence with a hole in it.
 static LOG: Mutex<EgressLog> = Mutex::new(EgressLog { records: Vec::new(), total: 0, refused: 0 });
 
+thread_local! {
+    /// RW 7.20: what THIS thread logged, bounded and counted as [`LOG`] is — the log a [`mark`] reads. The sandbox host
+    /// performs a guest's request on the thread that answers it, so a window opened and read there holds that request's
+    /// refusals and nothing of another thread's: a second host in the process, or a test beside it, whose refusal
+    /// landed in the window of the process-wide log had been counted as this guest's.
+    static MINE: std::cell::RefCell<EgressLog> = std::cell::RefCell::new(EgressLog::default());
+}
+
 fn log(rec: EgressRecord) {
+    MINE.with(|m| m.borrow_mut().push(rec.clone()));
     if let Ok(mut l) = LOG.lock() {
         l.push(rec);
     }
@@ -688,25 +697,31 @@ pub fn snapshot() -> EgressLog {
     LOG.lock().map(|l| l.clone()).unwrap_or_default()
 }
 
-/// A point in the log: both counters, so a window after it can be counted exactly even when its
-/// records were past the bound and not kept.
+/// A point in this thread's log: both counters, so a window after it can be counted exactly even when
+/// its records were past the bound and not kept.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Mark {
     total: u64,
     refused: u64,
 }
 
-/// Where the log stands now — a mark for [`records_since`].
+/// Where this thread's log stands now — a mark for [`records_since`] on the same thread.
 pub fn mark() -> Mark {
-    LOG.lock().map(|l| Mark { total: l.total, refused: l.refused }).unwrap_or_default()
+    MINE.with(|l| {
+        let l = l.borrow();
+        Mark { total: l.total, refused: l.refused }
+    })
 }
 
-/// The kept records logged after `m`, and EXACTLY how many requests were refused after it — which is
-/// more than the refusals among the kept records once the log is full.
+/// The kept records this thread logged after `m`, and EXACTLY how many of its requests were refused after
+/// it — which is more than the refusals among the kept records once the log is full. Another thread's
+/// requests are in neither (RW 7.20).
 pub fn records_since(m: Mark) -> (Vec<EgressRecord>, u64) {
-    let Ok(l) = LOG.lock() else { return (Vec::new(), 0) };
-    let kept_before = (m.total as usize).min(l.records.len());
-    (l.records[kept_before..].to_vec(), l.refused.saturating_sub(m.refused))
+    MINE.with(|l| {
+        let l = l.borrow();
+        let kept_before = (m.total as usize).min(l.records.len());
+        (l.records[kept_before..].to_vec(), l.refused.saturating_sub(m.refused))
+    })
 }
 
 thread_local! {

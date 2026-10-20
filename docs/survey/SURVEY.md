@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 320 |
-| Rust lines | 179847 |
+| Rust lines | 179915 |
 | Rust files outside `src/` (test/bench targets) | 150 |
 | Markdown documents | 268 |
 | Markdown lines | 82099 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1543 / 15500 |
+| Nodes / edges in this map | 1543 / 15503 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 22453 lines
+- **Modules:** 24 files, 22521 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -312,13 +312,13 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/adapter.rs` | 767 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 773 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 839 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 2012 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
+| `src/channel.rs` | 2063 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
 | `src/compute.rs` | 626 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 374 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 231 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1436 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
-| `src/egress.rs` | 1303 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
-| `src/egress/tests.rs` | 1194 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
+| `src/egress.rs` | 1318 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
+| `src/egress/tests.rs` | 1196 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
 | `src/interp.rs` | 2766 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 403 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |

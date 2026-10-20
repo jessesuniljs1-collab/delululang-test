@@ -1389,6 +1389,57 @@ mod tests {
         assert_eq!(host.self_applied(), ["no new programs"]);
     }
 
+    /// RW 7.20: the egress refusals a host records for a request are the ones made while answering it, on
+    /// the thread that answers — never another thread's that fell in the same window. The two tests
+    /// above failed once on the laptop with `denied().1` at 2: a refused request of a test beside them
+    /// (the two network ones below) landed between `answer`'s mark and its read of the process-wide log.
+    #[test]
+    fn a_refusal_another_thread_logs_while_the_host_answers_is_not_the_guests() {
+        /// A sink that makes one refused request while it performs the guest's call — on the
+        /// answering thread, or on another.
+        struct Refuses {
+            on_another_thread: bool,
+        }
+        impl crate::sink::EffectSink for Refuses {
+            fn cap_method(&self, _: &CapVal, _: &str, _: &[Value], _: delulu_diag::Span) -> Result<Value, crate::value::Fault> {
+                let url = format!("http://rw-7-20-{}.example/", std::process::id());
+                let refuse = move || crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
+                if self.on_another_thread {
+                    std::thread::spawn(refuse).join().expect("the other thread's request");
+                } else {
+                    refuse();
+                }
+                Ok(Value::Unit)
+            }
+            fn root_method(
+                &self,
+                _: &crate::value::RootVal,
+                _: &str,
+                _: &[Value],
+                _: delulu_diag::Span,
+            ) -> Result<Value, crate::value::Fault> {
+                unreachable!("this test mints nothing")
+            }
+        }
+        let clock = || std::rc::Rc::new(CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Clock });
+        let call = |cap| Request {
+            version: CHANNEL_VERSION.into(),
+            seq: 1,
+            body: ReqBody::CapMethod { cap, method: "now_ms".into(), args: vec![], file: 0, start: 0, end: 1 },
+        };
+        let mut host = HostChannel::new(Refuses { on_another_thread: true });
+        let h = host.mint(clock());
+        assert!(matches!(host.answer(&call(h)), Response::Ok(_)));
+        assert_eq!(host.denied().1, 0, "another thread's refusal is not this guest's: {:?}", host.denied().0);
+
+        // The control: the same refusal made while answering, on the answering thread, is the guest's.
+        let mut host = HostChannel::new(Refuses { on_another_thread: false });
+        let h = host.mint(clock());
+        assert!(matches!(host.answer(&call(h)), Response::Ok(_)));
+        assert_eq!(host.denied().1, 1, "{:?}", host.denied().0);
+        assert!(host.denied().0[0].contains("rw-7-20-"), "{:?}", host.denied().0);
+    }
+
     fn no_caps() -> impl FnMut(&std::rc::Rc<CapVal>) -> Handle {
         |_: &std::rc::Rc<CapVal>| 0
     }
