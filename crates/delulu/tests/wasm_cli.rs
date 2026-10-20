@@ -186,3 +186,61 @@ fn non_artifact_dwx_is_rejected_dl1202() {
     assert_eq!(o.status.code(), Some(1));
     let _ = std::fs::remove_file(&dwx);
 }
+
+fn delulu_in(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu")).current_dir(cwd).args(args).output().expect("failed to run delulu")
+}
+
+/// RW 3.4: `root.fs_write`, `write_text` and `append_text` on the WASM engine, end to end through the command line —
+/// the interpreter's output, the same bytes on disk, and the same effect trace byte for byte (the dispatch record, with
+/// where the path pointed and the scope; a refusal's record after it). A write that escapes the scope is DL0904 on both
+/// and leaves no file; an ungranted mint is DL0703 on both, in the interpreter's words.
+#[test]
+fn file_writes_on_the_wasm_engine_match_the_interpreter() {
+    let dir = std::env::temp_dir().join(format!("delulu_fswrite_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Read, Write} {\n  let out = root.console()\n  let w = root.fs_write(\"./out\")\n  \
+                   match w.write_text(\"log.txt\", \"started\") {\n    Ok(u) => out.println(\"wrote\"),\n    Err(e) => out.println(\"could not\"),\n  }\n  \
+                   match w.append_text(\"log.txt\", \" and more\") {\n    Ok(u) => out.println(\"appended\"),\n    Err(e) => out.println(\"could not\"),\n  }\n  \
+                   match w.write_text(\"no/such/dir.txt\", \"x\") {\n    Ok(u) => out.println(\"deep\"),\n    Err(e) => out.println(match e { NotFound => \"not found\", Denied => \"denied\", Other(m) => \"other\" }),\n  }\n}\n";
+    let escape = "module m\nfn main(root: Root) ! {Write} {\n  let w = root.fs_write(\"./out\")\n  let r = w.write_text(\"../escaped.txt\", \"x\")\n  root.console().println(\"after\")\n}\n";
+    std::fs::write(dir.join("w.delulu"), program).unwrap();
+    std::fs::write(dir.join("esc.delulu"), escape).unwrap();
+    let run = |file: &str, engine: &str, grants: &[&str]| {
+        let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
+        let trace = format!("trace_{file}_{engine}.jsonl");
+        let mut args = vec!["run", file, "--trace-effects", "--trace-out", &trace, "--grant", "console"];
+        args.extend_from_slice(grants);
+        if engine == "wasm" {
+            args.extend_from_slice(&["--engine", "wasm"]);
+        }
+        let o = delulu_in(&dir, &args);
+        let written = std::fs::read_to_string(dir.join("out").join("log.txt")).ok();
+        let traced = std::fs::read_to_string(dir.join(&trace)).unwrap_or_default();
+        (o, written, traced)
+    };
+    let (i, i_file, i_trace) = run("w.delulu", "interp", &["--grant", "fs.write=./out"]);
+    let (w, w_file, w_trace) = run("w.delulu", "wasm", &["--grant", "fs.write=./out"]);
+    assert!(i.status.success() && w.status.success(), "{}\n{}", String::from_utf8_lossy(&i.stderr), String::from_utf8_lossy(&w.stderr));
+    assert_eq!(stdout(&w), stdout(&i));
+    assert_eq!(stdout(&w), "wrote\nappended\nnot found\n");
+    assert_eq!((w_file.as_deref(), i_file.as_deref()), (Some("started and more"), Some("started and more")));
+    assert_eq!(w_trace, i_trace, "the effect traces");
+    assert_eq!(w_trace.matches("\"cap_kind\":\"FsWrite\"").count(), 3, "three writes recorded: {w_trace}");
+
+    let (i, _, i_trace) = run("esc.delulu", "interp", &["--grant", "fs.write=./out"]);
+    let (w, _, w_trace) = run("esc.delulu", "wasm", &["--grant", "fs.write=./out"]);
+    let (ie, we) = (String::from_utf8_lossy(&i.stderr).to_string(), String::from_utf8_lossy(&w.stderr).to_string());
+    assert!(ie.contains("DL0904") && we.contains("DL0904") && we.contains("escapes the granted scope"), "{ie}\n{we}");
+    assert!(!dir.join("escaped.txt").exists(), "nothing was written outside the scope");
+    assert_eq!(w_trace, i_trace, "the escape's traces: the dispatch and its refusal");
+    assert!(w_trace.contains("write_text.refused"), "{w_trace}");
+
+    let (i, _, _) = run("w.delulu", "interp", &[]);
+    let (w, _, _) = run("w.delulu", "wasm", &[]);
+    let (ie, we) = (String::from_utf8_lossy(&i.stderr).to_string(), String::from_utf8_lossy(&w.stderr).to_string());
+    let words = "filesystem write of `./out` was not granted — pass `--grant fs.write=./out`";
+    assert!(ie.contains("DL0703") && ie.contains(words) && we.contains("DL0703") && we.contains(words), "{ie}\n{we}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

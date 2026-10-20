@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — writing files on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `root.fs_write`, `write_text` and `append_text`**, with the interpreter's
+  behavior: the same files written, the same `IoErr` for a failed write, a path outside the capability refused
+  with DL0904 and nothing written, and the same effect trace. Under the broker daemon each write is decided on
+  the path it will open, as on the interpreter.
+- **Changed: on `--engine wasm`, an ungranted `root.fs_read` now names the grant to pass** (`--grant fs.read=…`),
+  as the interpreter's message does.
+
 ## Unreleased — narrowing a file capability on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `Cap[FsRead].narrow(sub)`**, the same boundary as on the interpreter: a narrowed

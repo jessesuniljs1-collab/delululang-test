@@ -748,6 +748,83 @@ mod tests {
         assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
     }
 
+    /// RW 3.4: a write on the WASM engine asks the custody for `FsWrite` on the path it will open (GUARD-ALIAS-1: the
+    /// pinned path, spelled as on disk), as the interpreter asks — and a denial there writes nothing and is the run's
+    /// refusal, in the custody's words.
+    #[test]
+    fn a_write_asks_the_custody_for_the_path_it_will_open() {
+        struct Recording(std::rc::Rc<std::cell::RefCell<Vec<(String, Option<String>)>>>, bool);
+        impl delulu_runtime::Custody for Recording {
+            fn check(&mut self, op: delulu_runtime::Op, arg: Option<&str>) -> delulu_runtime::CustodyDecision {
+                self.0.borrow_mut().push((format!("{op:?}"), arg.map(str::to_string)));
+                if self.1 || !matches!(op, delulu_runtime::Op::FsWrite) {
+                    delulu_runtime::CustodyDecision::Allow
+                } else {
+                    delulu_runtime::CustodyDecision::Deny(delulu_runtime::CustodyDenial::new("DL1403", "the lease was revoked"))
+                }
+            }
+            fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
+                Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
+            }
+            fn refresh_epoch(&mut self) {}
+            fn mode(&self) -> &'static str {
+                "daemon"
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("delulu_wcust_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // The program names the directory by another spelling of it — upper case on Windows, a link on Unix — so the
+        // path the write opens is spelled differently from the path the program wrote, and the test can tell which
+        // one the custody was asked about.
+        #[cfg(windows)]
+        let spelled = dir.to_string_lossy().to_uppercase();
+        #[cfg(unix)]
+        let spelled = {
+            let link = std::env::temp_dir().join(format!("delulu_wcust_link_{}", std::process::id()));
+            let _ = std::fs::remove_file(&link);
+            std::os::unix::fs::symlink(&dir, &link).unwrap();
+            link.to_string_lossy().to_string()
+        };
+        let at = spelled.replace('\\', "/");
+        let src = format!(
+            "module m\nfn main(root: Root) ! {{Write}} {{\n  let w = root.fs_write(\"{at}\")\n  match w.write_text(\"k.txt\", \"v\") {{\n    \
+             Ok(u) => root.console().println(\"wrote\"),\n    Err(e) => root.console().println(\"no\"),\n  }}\n}}\n"
+        );
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_checked(&checked.module, &checked.result).expect("compile");
+        for allow in [true, false] {
+            let _ = std::fs::remove_file(dir.join("k.txt"));
+            let asked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let cfg = HostConfig {
+                console: true,
+                fs_write_roots: vec![dir.clone()],
+                custody: Some(custody_handle(Recording(asked.clone(), allow))),
+                ..HostConfig::default()
+            };
+            let r = run_main(&wasm, &cfg);
+            let writes: Vec<_> = asked.borrow().iter().filter(|(op, _)| op == "FsWrite").cloned().collect();
+            assert_eq!(writes.len(), 1, "one write, one question: {:?}", asked.borrow());
+            let path = writes[0].1.clone().expect("asked about a path");
+            let on_disk = delulu_runtime::prim::disk_spelling(&std::fs::canonicalize(&dir).unwrap().join("k.txt"));
+            assert_eq!(path, on_disk, "the custody decides on the path the write opens");
+            let written = delulu_runtime::prim::resolve_norm(std::path::Path::new(&spelled), "k.txt");
+            assert_ne!(path, written.to_string_lossy(), "the test tells the spelling written from the one opened");
+            if allow {
+                assert_eq!(r.expect("allowed"), "wrote\n");
+                assert_eq!(std::fs::read_to_string(dir.join("k.txt")).unwrap(), "v");
+            } else {
+                let e = r.expect_err("a denied write refuses the run").message();
+                assert!(e.contains("DL1403") && e.contains("revoked"), "{e}");
+                assert!(!dir.join("k.txt").exists(), "a denied write writes nothing");
+            }
+        }
+        #[cfg(unix)]
+        let _ = std::fs::remove_file(&spelled);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // ----- Phase 6h: Verified-on-WASM + criterion 6 (the wasm cache is never trusted) --------
 
     #[test]
