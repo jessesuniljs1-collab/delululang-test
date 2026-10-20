@@ -248,10 +248,36 @@ struct EnumEnv {
     records_by_name: HashMap<String, u32>,
 }
 
-/// A record type the backend lays out: its fields in declaration order, each a slot's `Scalar` — or `None` when a field
-/// holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
+/// A record type the backend lays out: its fields in declaration order, each a slot's type (`field_ty`) — or `None` when
+/// a field holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
 struct RecordDesc {
-    fields: Option<Vec<(String, Scalar)>>,
+    fields: Option<Vec<(String, Ty)>>,
+}
+
+/// The types a record field may hold: a scalar, or an `Option`, `Result` or `List` of scalars — each one value in its
+/// 8-byte slot, the three compound ones a pointer to a cell shared as the interpreter shares it (`n.next`, `t.kids`).
+fn field_ty(t: Ty) -> Option<Ty> {
+    (ty_to_scalar(t).is_some() || matches!(t, Ty::Option(_) | Ty::Result(..) | Ty::List(_))).then_some(t)
+}
+
+/// Store the value on the stack into the slot whose address is under it, by the width of `t` (nothing for `Unit`).
+fn store_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Store(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Store(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Store(u32_at())),
+        None => {}
+    }
+}
+
+/// Load a value of type `t` from the slot whose address is on the stack (nothing for `Unit`).
+fn load_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Load(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Load(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Load(u32_at())),
+        None => {}
+    }
 }
 
 impl EnumEnv {
@@ -260,7 +286,7 @@ impl EnumEnv {
         self.records_by_name.get(name).copied()
     }
     /// Record `id`'s fields, if the backend can lay them out.
-    fn record_fields(&self, id: u32) -> Result<&[(String, Scalar)], CompileError> {
+    fn record_fields(&self, id: u32) -> Result<&[(String, Ty)], CompileError> {
         self.records[id as usize]
             .fields
             .as_deref()
@@ -439,7 +465,7 @@ fn build_enum_env(module: &Module) -> EnumEnv {
                 if let Some(&id) = env.records_by_name.get(&td.name.name) {
                     records[id as usize].fields = fields
                         .iter()
-                        .map(|f| wasm_ty(&env, &f.ty).and_then(ty_to_scalar).map(|s| (f.name.name.clone(), s)))
+                        .map(|f| wasm_ty(&env, &f.ty).and_then(field_ty).map(|t| (f.name.name.clone(), t)))
                         .collect();
                 }
             }
@@ -1990,7 +2016,9 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
 //
 // A record is an i32 pointer to its cell: one 8-byte slot per field, in declaration order (`RecordDesc`). The cell is
 // shared — `let q = p` names it — as the interpreter's `Rc<RefCell<…>>` is, so a field written through one name is read
-// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar.
+// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar,
+// or an `Option`, `Result` or `List` of scalars (`field_ty`) — so a record can name another, or itself: `next: Option[ref
+// Node]`.
 
 /// A record literal: its fields computed in the order written, as the interpreter computes them, each into a local; then
 /// the cell, each value stored in its field's slot.
@@ -2010,10 +2038,10 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
             .iter()
             .position(|(n, _)| *n == fname.name)
             .ok_or_else(|| CompileError::Unsupported(format!("`{name}` has no field `{}`", fname.name)))?;
-        let s = layout[k].1;
-        compile_expr_as(fexpr, cx, s.to_ty())?;
-        if s != Scalar::Unit {
-            let l = cx.alloc_local(s.to_ty())?;
+        let t = layout[k].1;
+        compile_expr_as(fexpr, cx, t)?;
+        if t != Ty::Unit {
+            let l = cx.alloc_local(t)?;
             cx.emit(Instruction::LocalSet(l));
             held[k] = Some(l);
         }
@@ -2022,26 +2050,26 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(i32::try_from(layout.len() * 8).unwrap_or(i32::MAX)));
     cx.emit(Instruction::Call(cx.alloc_fn));
     cx.emit(Instruction::LocalSet(cell));
-    for (k, (_, s)) in layout.iter().enumerate() {
+    for (k, (_, t)) in layout.iter().enumerate() {
         if let Some(l) = held[k] {
             cx.emit(Instruction::LocalGet(cell));
             cx.emit(Instruction::I32Const(k as i32 * 8));
             cx.emit(Instruction::I32Add);
             cx.emit(Instruction::LocalGet(l));
-            store_scalar(cx, *s);
+            store_ty(cx, *t);
         }
     }
     cx.emit(Instruction::LocalGet(cell));
     Ok(Ty::Record(id))
 }
 
-/// Field `name` of record `id`: its slot and its `Scalar`.
-fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Scalar), CompileError> {
+/// Field `name` of record `id`: its slot and its type.
+fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Ty), CompileError> {
     cx.env
         .record_fields(id)?
         .iter()
         .enumerate()
-        .find_map(|(k, (n, s))| (n == name).then_some((k, *s)))
+        .find_map(|(k, (n, t))| (n == name).then_some((k, *t)))
         .ok_or_else(|| CompileError::Unsupported(format!("a record with no field `{name}`")))
 }
 
@@ -2050,15 +2078,15 @@ fn compile_field(recv: &Expr, name: &str, cx: &mut Cx) -> Result<Ty, CompileErro
     let Ty::Record(id) = compile_expr(recv, cx)? else {
         return Err(CompileError::Unsupported("a field of a value that is not a record (or `self` outside an actor)".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    if t == Ty::Unit {
         cx.emit(Instruction::Drop);
         return Ok(Ty::Unit);
     }
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
-    load_scalar(cx, s);
-    Ok(s.to_ty())
+    load_ty(cx, t);
+    Ok(t)
 }
 
 /// The type of an assignment's place, from the names alone — nothing is emitted — so its value can be computed first.
@@ -2069,7 +2097,7 @@ fn lvalue_ty(lv: &LValue, cx: &Cx) -> Result<Ty, CompileError> {
             .map(|(_, t)| t)
             .ok_or_else(|| CompileError::Unsupported(format!("an assignment through `{}`, which is no local here", v.name))),
         LValue::Field(base, f) => match lvalue_ty(base, cx)? {
-            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1.to_ty()),
+            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1),
             _ => Err(CompileError::Unsupported("a field of a value that is not a record".into())),
         },
         // A field written through a list element (`ps[i].x = v`): the checker refuses the write (DL1604, an element
@@ -2094,12 +2122,12 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     let Ty::Record(id) = lvalue_ty(base, cx)? else {
         return Err(CompileError::Unsupported("a field assignment to a value that is not a record".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    compile_expr_as(value, cx, s.to_ty())?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    compile_expr_as(value, cx, t)?;
+    if t == Ty::Unit {
         return Ok(Ty::Unit);
     }
-    let v = cx.alloc_local(s.to_ty())?;
+    let v = cx.alloc_local(t)?;
     cx.emit(Instruction::LocalSet(v));
     if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
         return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
@@ -2107,7 +2135,7 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::LocalGet(v));
-    store_scalar(cx, s);
+    store_ty(cx, t);
     Ok(Ty::Unit)
 }
 
