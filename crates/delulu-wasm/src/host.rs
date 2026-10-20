@@ -924,32 +924,29 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // a hostile spelling is refused after it, as the interpreter refuses it (RW 4.64).
                 let pointed = normalize(&scope.join(&rel));
                 caller.data_mut().push_fs_trace(("Read", "read_text", "FsRead"), &rel, &pointed, &scope, file, start, end);
-                if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
-                    caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
-                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                    return 0;
-                }
-                // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
-                // The symlink half of that sentence was a comment and not a check until C84 — the
-                // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.
-                let resolved = normalize(&scope.join(&rel));
-                if !resolved.starts_with(&scope) || !delulu_runtime::prim::contains_on_disk(&scope, &resolved) {
-                    caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
-                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                    return 0;
-                }
-                // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
-                // the broker node's fs scope was granted against. Recorded refusal, never an Err (trap 5).
-                // GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
+                // Then the interpreter's order, as the write's: the custody gate (Stage 5 phase 5f, epoch class) with the
+                // RESOLVED path — the same string the broker node's fs scope was granted against; a recorded refusal,
+                // never an Err (trap 5); GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
                 let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
                 let resolved_str = match &pin {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
-                    None => resolved.to_string_lossy().to_string(),
+                    None => pointed.to_string_lossy().to_string(),
                 };
                 if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
                     caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
                     return 0;
                 }
+                // The scope, by the interpreter's own `resolve_in_scope` and in its words: a hostile spelling, a `..` or a
+                // link out of the scope (C84), or a link whose target does not exist (SYMLINK-DANGLE-1) is a hard DL0904
+                // refusal, not an `Err`. A copy of the rule here lost the last one's explanation (on-demand run 5, F1).
+                let resolved = match delulu_runtime::prim::resolve_in_scope(&scope, &rel, delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(p) => p,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                        return 0;
+                    }
+                };
                 // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
                 // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
                 // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that

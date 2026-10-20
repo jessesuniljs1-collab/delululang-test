@@ -827,6 +827,67 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A read on the WASM engine asks the custody in the interpreter's order — the dispatch, the custody's question about
+    /// the path the read would open, then the scope — so a read the scope refuses asks the same question on both engines
+    /// before its DL0904 (the red-team pass of on-demand routine run 5, F1: the WASM read checked the scope first, with a
+    /// copy of the rule, and never asked).
+    #[test]
+    fn a_read_asks_the_custody_before_its_scope_as_the_interpreter_does() {
+        type Asked = std::rc::Rc<std::cell::RefCell<Vec<(String, Option<String>)>>>;
+        struct Recording(Asked);
+        impl delulu_runtime::Custody for Recording {
+            fn check(&mut self, op: delulu_runtime::Op, arg: Option<&str>) -> delulu_runtime::CustodyDecision {
+                self.0.borrow_mut().push((format!("{op:?}"), arg.map(str::to_string)));
+                delulu_runtime::CustodyDecision::Allow
+            }
+            fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
+                Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
+            }
+            fn refresh_epoch(&mut self) {}
+            fn mode(&self) -> &'static str {
+                "daemon"
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("delulu_rcust_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("scope")).unwrap();
+        std::fs::write(dir.join("outside.txt"), "secret").unwrap();
+        let at = dir.join("scope").to_string_lossy().replace('\\', "/");
+        let src = format!(
+            "module m\nfn main(root: Root) ! {{Read, Write}} {{\n  let r = root.fs_read(\"{at}\")\n  match r.read_text(\"../outside.txt\") {{\n    \
+             Ok(s) => root.console().println(s),\n    Err(e) => root.console().println(\"no\"),\n  }}\n}}\n"
+        );
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_checked(&checked.module, &checked.result).expect("compile");
+        let g = delulu_runtime::Grants {
+            console: true,
+            fs_read: vec![dir.join("scope").to_string_lossy().to_string()],
+            ..Default::default()
+        };
+        // The WASM engine's roots as the command line fills them: the grants' own resolution.
+        let on_wasm: Asked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let cfg = HostConfig {
+            console: true,
+            fs_read_roots: g.build_root().fs_read,
+            custody: Some(custody_handle(Recording(on_wasm.clone()))),
+            ..HostConfig::default()
+        };
+        let w = run_main(&wasm, &cfg).expect_err("refused on WASM").message();
+        let on_interp: Asked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let i = Interp::new(&checked.module)
+            .with_custody(Box::new(Recording(on_interp.clone())))
+            .run_main(delulu_runtime::Value::Root(std::rc::Rc::new(g.build_root())))
+            .expect_err("refused on the interpreter");
+        let _ = std::fs::remove_dir_all(&dir);
+        let words = "path `../outside.txt` escapes the granted scope";
+        assert!(w.contains("DL0904") && w.contains(words), "{w}");
+        assert!(format!("{i:?}").contains("DL0904") && format!("{i:?}").contains(words), "{i:?}");
+        let reads = |a: &Asked| a.borrow().iter().filter(|(op, _)| op == "FsRead").cloned().collect::<Vec<_>>();
+        assert_eq!(reads(&on_interp).len(), 1, "the interpreter asks once: {:?}", on_interp.borrow());
+        assert_eq!(reads(&on_wasm), reads(&on_interp), "the same question on both engines, before the scope's refusal");
+    }
+
     // ----- Phase 6h: Verified-on-WASM + criterion 6 (the wasm cache is never trusted) --------
 
     #[test]

@@ -249,3 +249,41 @@ fn file_writes_on_the_wasm_engine_match_the_interpreter() {
     assert!(ie.contains("DL0703") && ie.contains(words) && we.contains("DL0703") && we.contains(words), "{ie}\n{we}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A read through a link whose target does not exist is refused on both engines in the interpreter's words, with the
+/// same trace (the red-team pass of on-demand routine run 5, F1): the WASM read checked its scope with a copy of
+/// `resolve_in_scope`'s rule, which lost SYMLINK-DANGLE-1's explanation from the refusal and from its trace record.
+#[cfg(unix)]
+#[test]
+fn a_read_through_a_dangling_link_is_refused_in_the_interpreters_words_on_wasm() {
+    let dir = std::env::temp_dir().join(format!("delulu_fsdangle_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("scope")).unwrap();
+    std::fs::create_dir_all(dir.join("outside")).unwrap();
+    std::os::unix::fs::symlink("../outside/created.txt", dir.join("scope").join("dang")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Read, Write} {\n  let r = root.fs_read(\"./scope\")\n  \
+                   match r.read_text(\"dang\") {\n    Ok(s) => root.console().println(\"read\"),\n    \
+                   Err(e) => root.console().println(\"err\"),\n  }\n}\n";
+    std::fs::write(dir.join("r.delulu"), program).unwrap();
+    let run = |engine: &str| {
+        let trace = format!("trace_{engine}.jsonl");
+        let mut args =
+            vec!["run", "r.delulu", "--trace-effects", "--trace-out", &trace, "--grant", "console", "--grant", "fs.read=./scope"];
+        if engine == "wasm" {
+            args.extend_from_slice(&["--engine", "wasm"]);
+        }
+        let o = delulu_in(&dir, &args);
+        let traced = std::fs::read_to_string(dir.join(&trace)).unwrap_or_default();
+        (String::from_utf8_lossy(&o.stderr).to_string(), traced, o.status.code())
+    };
+    let (ie, i_trace, i_code) = run("interp");
+    let (we, w_trace, w_code) = run("wasm");
+    let words = "path `dang` escapes the granted scope — a component is a symbolic link whose target does not exist";
+    assert!(ie.contains("DL0904") && ie.contains(words), "{ie}");
+    assert!(we.contains("DL0904") && we.contains(words), "the interpreter's words on WASM:\n{we}");
+    assert_eq!(w_code, i_code);
+    assert_eq!(w_trace, i_trace, "the traces: the dispatch and its refusal");
+    assert!(w_trace.contains("read_text.refused"), "{w_trace}");
+    assert!(!dir.join("outside").join("created.txt").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
