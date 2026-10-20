@@ -7720,3 +7720,12 @@ read with the directory swapped at 0.25, 0.3 and 0.4 s, the write minted on a su
 granted directory itself swapped (three runs) — on both engines, every run refused with DL0904 (exit 1), nothing read from
 or written outside. Before the fix the same scripts read 25,707–33,114 of 40,000 reads from outside and wrote outside on
 both engines.
+
+## 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`; the run's CI
+
+**`launch/2.0.0`** merged `master` twice this run: `3ee1370` (`d259cf2..7355808` — the laptop's #16–#19 and RW 7.20) and
+`20666c5` (`7355808..ec4bc87` — F1, RW 4.72 with D-V2-167, RW 3.19). Each time `master`'s `## Unreleased` CHANGELOG sections moved
+under `## [2.0.0]` as `###` entries (five, then three), and the second time the `Breaking` paragraph gained `run FILE.dwx`'s
+refusal of the flags it does not apply (a command line that ran under 1.x is refused now). On `20666c5`'s tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green.
+`3ee1370`'s release dry run `39392801546` success; its `everything` run `39392798450` success on every job but the two
+`miri-slow` jobs, still running at this entry. `20666c5`'s `everything` and release dry run are dispatched.

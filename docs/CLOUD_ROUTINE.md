@@ -214,7 +214,9 @@ another OS, and then takes about seven minutes itself (run 5).
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
    rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document gates there; commit, push the branch, and dispatch `ci.yml`
    (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
-   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free).
+   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
+   delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
+   beside `master`'s 16 GB of test binaries; `master`'s work is committed by then, and a later suite rebuilds it).
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last

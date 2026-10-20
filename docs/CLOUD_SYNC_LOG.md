@@ -4744,3 +4744,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   or closures, `--broker daemon` and `--lease` on the WASM file path end to end; (3) a `.dwx` run with a trace and custody, if
   wanted, instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5)
   *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `launch/2.0.0` (`20666c5`, merging `master` `7355808..ec4bc87`); `master` (this entry's commit)
+- Gates on the launch tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green. Dispatched at `20666c5`: `ci.yml` `everything` and the release dry run.
+- Files and folders (`master`): M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_ROUTINE.md` (step 4.3: free `master`'s `target/debug` before a launch build under ~15 GB), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. (`launch/2.0.0`: `CHANGELOG.md`, `docs/survey/*` and everything the merge brought.)
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing beyond the entries above.
+- **This run, in one line:** the laptop's #17–#19 landed; RW 7.20's flake reproduced and fixed; a red-team pass on the WASM
+  file capabilities found F1–F4, of which F2/F3 (RW 4.72) was a HIGH escape in BOTH engines — fixed, D-V2-167 — and F4 led to
+  DWX-FLAGS-1 (RW 3.19) — fixed; `launch/2.0.0` merged twice.
+- Open / next, in order: (1) the push runs of `669664c` (`39396073953`), `ec4bc87` (`39397818042`) and this entry's commit;
+  `launch/2.0.0`'s `everything` runs `39392798450` (its two `miri-slow` jobs) and `20666c5`'s, and `20666c5`'s release dry run; (2) the
+  red-team pass's untried families — a user method named `narrow`/`read_text`, capabilities in records or closures,
+  `--broker daemon` and `--lease` on the WASM file path end to end; (3) a `.dwx` run with a trace and custody, if wanted,
+  instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the
+  launch, only on the owner's word.
