@@ -89,7 +89,11 @@ mod tests {
     fn the_local_sink_refuses_what_the_primitive_table_refuses() {
         let cap = CapVal {
             kind: delulu_check::ResourceKind::FsRead,
-            scope: crate::value::CapScope::Fs { root: std::path::PathBuf::from("."), write: false },
+            scope: crate::value::CapScope::Fs {
+                root: std::path::PathBuf::from("."),
+                write: false,
+                anchor: std::path::PathBuf::from("."),
+            },
         };
         let span = Span::new(0, 0, 0);
         let direct = crate::prim::call_cap_method(&cap, "no_such_method", &[], span);

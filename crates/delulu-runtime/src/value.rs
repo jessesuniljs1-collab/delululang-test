@@ -733,6 +733,11 @@ pub enum CapScope {
     Fs {
         root: PathBuf,
         write: bool,
+        /// RW 4.72: where `root` resolved on disk when this capability was minted or narrowed — every use is decided
+        /// against THIS, never against `root` resolved again at the use. A directory of the scope, or the granted one,
+        /// swapped for a link after the mint would otherwise carry the capability with it (the red-team pass of
+        /// on-demand routine run 5, F2 and F3). `root` stays the path as spelled, for the trace and the custody.
+        anchor: PathBuf,
     },
     /// `allow` is the program's host list, each entry granted exactly. `special` is the subset of it
     /// the operator granted with `net.special=` (PS-B-02) — the only hosts the egress client will

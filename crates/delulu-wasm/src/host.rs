@@ -207,10 +207,12 @@ pub enum CapKind {
     Console,
     Clock,
     Rand,
-    /// A filesystem-read capability scoped to an absolute, normalized subtree (§4).
-    FsRead(PathBuf),
-    /// A filesystem-write capability, scoped the same way (`root.fs_write(p)`).
-    FsWrite(PathBuf),
+    /// A filesystem-read capability scoped to an absolute, normalized subtree (§4), and where that subtree resolved on
+    /// disk when the capability was minted or narrowed — its anchor, which every use is decided against (RW 4.72, as
+    /// the interpreter's `CapScope::Fs`).
+    FsRead(PathBuf, PathBuf),
+    /// A filesystem-write capability, scoped and anchored the same way (`root.fs_write(p)`).
+    FsWrite(PathBuf, PathBuf),
     /// `Cap[ForeignLoad]` — the loader capability minted by `root.foreign_load()` (Stage 4 phase 4g).
     ForeignLoad,
     /// A bound `foreign` lib handle (Stage 4 phase 4g): the loaded library + resolved symbols, held
@@ -883,20 +885,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // filesystem truth. Fault parity between the engines (D29) is a tested law, so a scope
             // rule that held in one engine and not the other would be a divergence in the direction
             // that matters most.
-            let granted = caller
-                .data()
-                .fs_read_roots
-                .iter()
-                // On disk only, as the interpreter's mint (a resolved lease scope against a path
-                // spelled from the working directory).
-                .any(|g| delulu_runtime::prim::contains_on_disk(g, &want));
-            if !granted {
+            // On disk only, as the interpreter's mint (a resolved lease scope against a path spelled from the working
+            // directory) — and by its own `mint_anchor` (RW 4.72): the decision and the anchor are one resolution.
+            let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_read_roots, &want) else {
                 caller.data_mut().refused =
                     Some(format!("DL0703: filesystem read of `{path}` was not granted — pass `--grant fs.read={path}`"));
                 return -1;
-            }
+            };
             let st = caller.data_mut();
-            st.caps.push(CapKind::FsRead(want));
+            st.caps.push(CapKind::FsRead(want, anchor));
             (st.caps.len() - 1) as i32
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
@@ -908,8 +905,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 if caller.data().refused.is_some() {
                     return 0;
                 }
-                let scope = match caller.data().caps.get(cap as usize) {
-                    Some(CapKind::FsRead(scope)) => scope.clone(),
+                let (scope, anchor) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
                     _ => {
                         caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
                         return 0;
@@ -927,7 +924,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // Then the interpreter's order, as the write's: the custody gate (Stage 5 phase 5f, epoch class) with the
                 // RESOLVED path — the same string the broker node's fs scope was granted against; a recorded refusal,
                 // never an Err (trap 5); GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
-                let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
+                let pin = delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel);
                 let resolved_str = match &pin {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
@@ -939,21 +936,22 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // The scope, by the interpreter's own `resolve_in_scope` and in its words: a hostile spelling, a `..` or a
                 // link out of the scope (C84), or a link whose target does not exist (SYMLINK-DANGLE-1) is a hard DL0904
                 // refusal, not an `Err`. A copy of the rule here lost the last one's explanation (on-demand run 5, F1).
-                let resolved = match delulu_runtime::prim::resolve_in_scope(&scope, &rel, delulu_diag::Span::new(0, 0, 0)) {
-                    Ok(p) => p,
-                    Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
-                        caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
-                        return 0;
-                    }
-                };
+                if let Err(fault) =
+                    delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
+                {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                    return 0;
+                }
                 // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
                 // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
                 // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that
                 // appeared after the check above is followed, and only a regular file is read.
-                let read = match &pin {
-                    Some(real) => delulu_runtime::beneath::read_text_at(real),
-                    None => delulu_runtime::beneath::read_text(&scope, &resolved),
+                // RW 4.72: opened at a path pinned inside the anchor — the one asked about, or pinned now as the
+                // interpreter pins it; a use that no longer resolves inside the anchor is refused.
+                let read = match pin.or_else(|| delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel)) {
+                    Some(real) => delulu_runtime::beneath::read_text_at(&real),
+                    None => delulu_runtime::beneath::Outcome::Escaped(delulu_runtime::beneath::OUTSIDE),
                 };
                 let built = match read {
                     delulu_runtime::beneath::Outcome::Done(content) => build_ok_str(&mut caller, &content),
@@ -991,8 +989,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             if caller.data().refused.is_some() {
                 return -1;
             }
-            let scope = match caller.data().caps.get(cap as usize) {
-                Some(CapKind::FsRead(scope)) => scope.clone(),
+            let (scope, anchor) = match caller.data().caps.get(cap as usize) {
+                Some(CapKind::FsRead(scope, anchor)) => (scope.clone(), anchor.clone()),
                 _ => {
                     caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
                     return -1;
@@ -1002,10 +1000,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: narrow path pointer is out of bounds".into());
                 return -1;
             };
-            match delulu_runtime::prim::resolve_in_scope(&scope, &sub, delulu_diag::Span::new(0, 0, 0)) {
-                Ok(narrowed) => {
+            match delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &sub, delulu_diag::Span::new(0, 0, 0)) {
+                Ok((narrowed, anchor)) => {
                     let st = caller.data_mut();
-                    st.caps.push(CapKind::FsRead(narrowed));
+                    st.caps.push(CapKind::FsRead(narrowed, anchor));
                     (st.caps.len() - 1) as i32
                 }
                 Err(fault) => {
@@ -1037,13 +1035,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
-            if !caller.data().fs_write_roots.iter().any(|g| delulu_runtime::prim::contains_on_disk(g, &want)) {
+            let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_write_roots, &want) else {
                 caller.data_mut().refused =
                     Some(format!("DL0703: filesystem write of `{path}` was not granted — pass `--grant fs.write={path}`"));
                 return -1;
-            }
+            };
             let st = caller.data_mut();
-            st.caps.push(CapKind::FsWrite(want));
+            st.caps.push(CapKind::FsWrite(want, anchor));
             (st.caps.len() - 1) as i32
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
@@ -1067,8 +1065,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     return 0;
                 }
                 let op = if append != 0 { "append_text" } else { "write_text" };
-                let scope = match caller.data().caps.get(cap as usize) {
-                    Some(CapKind::FsWrite(scope)) => scope.clone(),
+                let (scope, anchor) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsWrite(scope, anchor)) => (scope.clone(), anchor.clone()),
                     _ => {
                         caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsWrite capability"));
                         return 0;
@@ -1081,7 +1079,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 };
                 let pointed = delulu_runtime::prim::resolve_norm(&scope, &rel);
                 caller.data_mut().push_fs_trace(("Write", op, "FsWrite"), &rel, &pointed, &scope, file, start, end);
-                let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
+                let pin = delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel);
                 let at = match &pin {
                     Some(real) => delulu_runtime::prim::disk_spelling(real),
                     None => pointed.to_string_lossy().to_string(),
@@ -1090,17 +1088,17 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                     return 0;
                 }
-                let resolved = match delulu_runtime::prim::resolve_in_scope(&scope, &rel, delulu_diag::Span::new(0, 0, 0)) {
-                    Ok(p) => p,
-                    Err(fault) => {
-                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
-                        caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
-                        return 0;
-                    }
-                };
-                let wrote = match &pin {
-                    Some(real) => delulu_runtime::beneath::write_text_at(real, &body, append != 0),
-                    None => delulu_runtime::beneath::write_text(&scope, &resolved, &body, append != 0),
+                if let Err(fault) =
+                    delulu_runtime::prim::resolve_in_anchor(&scope, &anchor, &rel, delulu_diag::Span::new(0, 0, 0))
+                {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
+                    return 0;
+                }
+                // RW 4.72: as the read, at a path pinned inside the anchor.
+                let wrote = match pin.or_else(|| delulu_runtime::prim::pin_fs_at(&scope, &anchor, &rel)) {
+                    Some(real) => delulu_runtime::beneath::write_text_at(&real, &body, append != 0),
+                    None => delulu_runtime::beneath::Outcome::Escaped(delulu_runtime::beneath::OUTSIDE),
                 };
                 let built = match wrote {
                     delulu_runtime::beneath::Outcome::Done(()) => write_variant_cell(&mut caller, 0, None), // Ok(())

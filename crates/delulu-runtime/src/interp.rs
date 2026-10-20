@@ -2497,12 +2497,13 @@ pub(crate) fn fs_pin_for(recvv: &Value, method: &str, argvals: &[Value]) -> Opti
         (c.kind, method),
         (ResourceKind::FsRead, "read_text" | "list_dir") | (ResourceKind::FsWrite, "write_text" | "append_text")
     );
-    let CapScope::Fs { root, .. } = &c.scope else { return None };
+    let CapScope::Fs { root, anchor, .. } = &c.scope else { return None };
     let Some(Value::Str(rel)) = argvals.first() else { return None };
     if !file_effect {
         return None;
     }
-    prim::pin_fs(root, rel)
+    // RW 4.72: pinned inside where the capability's directory resolved at its mint, never where it resolves now.
+    prim::pin_fs_at(root, anchor, rel)
 }
 
 /// The resolved absolute path a filesystem op reaches (cap-scope root joined with the relative arg,
