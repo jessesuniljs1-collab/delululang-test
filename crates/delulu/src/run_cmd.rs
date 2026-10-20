@@ -189,7 +189,41 @@ pub(crate) fn manifest_gate(
 /// `run <file>.dwx`: re-verify a pre-built artifact's embedded `delulu:authority` manifest against
 /// its code (DL1202 on a missing/tampered section, DL1204 on an incompatible version), announce
 /// what it declares it can do, then run `main` under the deny-by-default Wasmtime host.
+/// The `run` flags a `.dwx` run applies. Every other flag `run` knows is refused for a `.dwx`, before anything runs.
+///
+/// Found by the red-team pass of on-demand routine run 5 (F4, RW 3.19): the `.dwx` path read the grants, `--json`, the
+/// seed and the clock, and accepted every other flag in silence — `--trace-effects`, `--trace-out` and `--assert-trace`
+/// wrote no trace, and `--broker daemon` and `--lease TOKEN` ran the artifact under no custody at all, with no broker
+/// running and a lease nobody redeemed, while since `275af08` the path is given the grant's write roots. The sandbox's rule
+/// (`guest.rs`, `APPLIED_UNDER_SANDBOX`), for the same reason and in the same shape: an ALLOWLIST, so a flag added to `run`
+/// later is refused here until this path applies it. `--limits`, `--report-out`, `--break-glass` and `--isolation` are
+/// applied by `cmd_run` before the dispatch, for every path.
+const APPLIED_TO_A_DWX: &[&str] = &[
+    "--grant",
+    "--json",
+    "--no-prompt",
+    "--seed",
+    "--clock",
+    "--limits",
+    "--report-out",
+    "--break-glass",
+    "--isolation",
+    "--sandbox",
+    "--engine",
+];
+
 fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
+    let dropped: Vec<&str> = opts.seen_flags.iter().map(String::as_str).filter(|f| !APPLIED_TO_A_DWX.contains(f)).collect();
+    if !dropped.is_empty() || opts.engine.as_deref().is_some_and(|e| e != "wasm") {
+        let named =
+            if dropped.is_empty() { vec!["--engine".to_string()] } else { dropped.iter().map(|f| f.to_string()).collect() };
+        eprintln!(
+            "error: a `.dwx` run does not apply {} yet. Nothing ran, because a flag that is silently ignored reads exactly \
+             like a flag that was applied. Drop it, or run the program's source instead.",
+            named.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", ")
+        );
+        return 2;
+    }
     let bytes = match std::fs::read(file) {
         Ok(b) => b,
         Err(e) => {

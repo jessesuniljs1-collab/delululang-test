@@ -130,6 +130,48 @@ fn build_dwx_then_run_matches_the_interpreter() {
     let _ = std::fs::remove_file(&dwx);
 }
 
+/// A `.dwx` run refuses, before anything runs, every `run` flag its path does not apply (the red-team pass of on-demand
+/// routine run 5, F4, RW 3.19): `--trace-effects`, `--trace-out` and `--assert-trace` wrote no trace, and `--broker daemon`
+/// and `--lease` ran the artifact under no custody — with no broker running, and a lease nobody redeemed — while it wrote
+/// under the grant. The flags it applies still run it.
+#[test]
+fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
+    let dir = std::env::temp_dir().join(format!("delulu_dwxflags_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Read, Write} {\n  let w = root.fs_write(\"./out\")\n  \
+                   match w.write_text(\"log.txt\", \"started\") {\n    Ok(u) => root.console().println(\"wrote\"),\n    \
+                   Err(e) => root.console().println(\"could not\"),\n  }\n}\n";
+    std::fs::write(dir.join("w.delulu"), program).unwrap();
+    let b = delulu_in(&dir, &["build", "w.delulu", "--target", "wasm", "-o", "w.dwx"]);
+    assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
+    let granted = ["run", "w.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+    for (flags, named) in [
+        (&["--trace-effects"][..], "--trace-effects"),
+        (&["--trace-effects", "--trace-out", "t.jsonl"][..], "--trace-out"),
+        (&["--assert-trace"][..], "--assert-trace"),
+        (&["--broker", "daemon"][..], "--broker"),
+        (&["--lease", "not-a-token"][..], "--lease"),
+        (&["--engine", "interp"][..], "--engine"),
+    ] {
+        let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
+        let args: Vec<&str> = granted.iter().chain(flags).copied().collect();
+        let o = delulu_in(&dir, &args);
+        let e = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{flags:?}: {e}");
+        assert!(e.contains("a `.dwx` run does not apply") && e.contains(&format!("`{named}`")), "{flags:?}: {e}");
+        assert!(!dir.join("out").join("log.txt").exists(), "{flags:?}: nothing ran");
+        assert!(!dir.join("t.jsonl").exists());
+    }
+    // The flags it applies: the grants, the seed, the clock, `--engine wasm`.
+    let args: Vec<&str> = granted.iter().chain(&["--seed", "1", "--clock", "fixed:0", "--engine", "wasm"]).copied().collect();
+    let o = delulu_in(&dir, &args);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(stdout(&o), "wrote\n");
+    assert_eq!(std::fs::read_to_string(dir.join("out").join("log.txt")).unwrap(), "started");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn dwx_run_without_console_grant_is_refused() {
     let dwx = temp_dwx("nogrant");
