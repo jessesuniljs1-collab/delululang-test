@@ -7744,3 +7744,13 @@ refused DL0904) and is DL1201 on WASM ("a record with a field of a type outside 
 refused rather than run. Still untried: a user method named `narrow` or `read_text`, and `--lease` on the WASM file path.
 
 **CI read.** push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
+
+**`--lease` on the WASM file path** (the last of the pass's untried families but one; by hand, a live broker, a fresh
+single-use token per run from `grants delegate --effects Read --fs-read ./data/pub`): a read inside the lease ran on both
+engines; a read through a narrowed handle reaching `../priv/f.txt` was refused at the lease's own custody gate on both, in
+the same words ("lease `g_…` does not grant `…/data/priv/f.txt` in scope `fs.read`") — the WASM read asks the custody
+before its scope since `92d9119`, so before F1's fix WASM would have answered with the scope's DL0904 instead; a mint of
+`./data/priv` was DL0703 on both. **An oddity, both engines:** that DL0703 still says "pass `--grant fs.read=./data/priv`",
+which a `--lease` run refuses ("a `--lease` run derives its authority from the delegated node") — the hint points a lease
+holder outside its delegation, as PS-B-05 found under `--sandbox`. Untried still: a user method named `narrow`/`read_text`.
+**CI read, last:** `318b210`'s push run `39398823386` and `8ac7ee5`'s `39400706197` success on every job.
