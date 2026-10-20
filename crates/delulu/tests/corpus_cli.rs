@@ -94,6 +94,19 @@ fn the_tier5_program_reads_through_two_independent_narrowings() {
         !s.contains("log 001"),
         "a capability narrowed under a grant that does not cover ./data/archive must not read it: {s:?}"
     );
+
+    // The same two runs on the WASM engine (RW 3.4: `narrow` compiles since 2026-10-20), each with the interpreter's
+    // output and outcome.
+    for grant in ["fs.read=./data", "fs.read=./data/public"] {
+        let args = |engine: &[&'static str]| {
+            let mut a = vec!["run", "attenuation.delulu", "--grant", "console", "--grant", grant];
+            a.extend_from_slice(engine);
+            a
+        };
+        let (i, w) = (delulu(&dir, &args(&[])), delulu(&dir, &args(&["--engine", "wasm"])));
+        assert_eq!(stdout(&w), stdout(&i), "the WASM engine's output under `{grant}`");
+        assert_eq!(w.status.code(), i.status.code(), "the WASM engine's outcome under `{grant}`");
+    }
 }
 
 /// The tier-4 package: four manifests, and one authority answer computed from all of them.

@@ -286,8 +286,9 @@ fn windows_hostile_path(p: &str, allow_unc: bool) -> Option<String> {
 /// Resolve `rel` inside a capability's filesystem scope, refusing escapes (DL0904).
 ///
 /// Two gates, and the second is the one a link cannot walk past: the lexical check rejects `..`,
-/// then [`contains_on_disk`] rejects anything that *resolves* outside the root (C84).
-fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault> {
+/// then [`contains_on_disk`] rejects anything that *resolves* outside the root (C84). Public so the WASM engine's
+/// `narrow` applies this rule itself rather than a copy of it.
+pub fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault> {
     if let Some(why) = hostile_path(rel, false) {
         return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", rel.escape_debug()), span));
     }

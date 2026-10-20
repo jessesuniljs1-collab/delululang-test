@@ -4603,3 +4603,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #16's CI, then this branch's, landing each on green in order; the launch run `39364184892` read;
   (2) on WASM: `fs_write` (`05`), a list of options, `str` of a map; RW 7.20; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the
   launch, only on the owner's word.
+
+### 2026-10-20 — `narrow` on the WASM engine; the attenuation program compiles (made on the laptop)
+- Session: `https://claude.ai/code/session_01Bp5eKZCQAuuUyAcFDuff8G`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-narrow` (on `laptop/wasm-show`, #17)   Pull request: see the branch   Merged: not yet (after #16 and #17, on green CI)
+- Base: `cba20d4`.
+- What: `V2_LOG.md` (this date, the fourteenth entry).
+- Files and folders: A `crates/delulu-wasm/tests/narrow_parity.rs`; M `crates/delulu-wasm/src/codegen.rs` (the
+  `fs_narrow` import and arm; the scan names `narrow`), `crates/delulu-wasm/src/host.rs` (`delulu:cap.fs_narrow`),
+  `crates/delulu-runtime/src/prim.rs` (`resolve_in_scope` public), `crates/delulu/tests/corpus_cli.rs`, `CHANGELOG.md`,
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md` (3.4), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) #16, #17 and this branch's CI, landing each on green in order; the launch run `39364184892` read;
+  (2) on WASM: `fs_write` and `http` (`05`), a list of options, `str` of a map; RW 4.66 (a send bound to the run that
+  redeemed the node: a wire change, its own decision); RW 7.20; RW 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the
+  owner's word.

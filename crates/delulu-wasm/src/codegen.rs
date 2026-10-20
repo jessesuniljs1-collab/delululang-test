@@ -614,6 +614,9 @@ struct Imports {
     rand_int: u32,
     root_fs_read: u32,
     fs_read_text: u32,
+    /// `delulu:cap.fs_narrow` — `Cap[FsRead].narrow(sub)`, a narrower handle minted host-side by the interpreter's own
+    /// `resolve_in_scope`.
+    fs_narrow: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
     foreign_load: u32,
     foreign_bind: u32,
@@ -1026,7 +1029,7 @@ fn compile_module_typed(
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
-    let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text"]);
+    let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text", "narrow"]);
     // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
     let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
 
@@ -1043,6 +1046,7 @@ fn compile_module_typed(
         rand_int: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
+        fs_narrow: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
@@ -1077,7 +1081,8 @@ fn compile_module_typed(
     if needs_fs {
         imp.root_fs_read = n_imports;
         imp.fs_read_text = n_imports + 1;
-        n_imports += 2;
+        imp.fs_narrow = n_imports + 2;
+        n_imports += 3;
     }
     if needs_foreign {
         imp.foreign_load = n_imports;
@@ -1381,6 +1386,8 @@ fn compile_module_typed(
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
         imports.import("delulu:cap", "fs_read_text", EntityType::Function(fs_read_ty));
+        imports.import("delulu:cap", "fs_narrow", EntityType::Function(fs_root_ty));
+        // fs_narrow(cap, path) -> cap
     }
     if needs_foreign {
         imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
@@ -3141,6 +3148,18 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.fs_read_text));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(io_err)));
+            }
+            // `Cap[FsRead].narrow(sub)` -> a narrower `Cap[FsRead]`, minted host-side under the interpreter's own rule; pure, as
+            // there — not traced.
+            if name.name == "narrow" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::FsRead {
+                    return Err(CompileError::Unsupported("narrow() on a receiver that is not a Cap[FsRead]".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("narrow with a non-Str path".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.fs_narrow));
+                return Ok(Ty::FsRead);
             }
             // Stage 4 phase 4g: root.foreign_load() -> Cap[ForeignLoad]. Minted host-side (grant check),
             // pure like the other root derivations — not traced.
