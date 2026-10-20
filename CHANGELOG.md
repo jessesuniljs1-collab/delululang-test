@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — linked lists and trees on the WASM engine; a constructor stored into a field, 2026-10-20
+
+- **Added: on `--engine wasm`, a record field may hold an `Option`, a `Result` or a `List`**, so linked lists
+  (`next: Option[ref Node]`) and trees (`kids: ref List[ref Tree]`) run on the WASM engine with the interpreter's output.
+  A constructor no longer needs a written type there either: `let c = Red`, `var cur = Some(head)`, and `var o = None`
+  later given a value.
+- **Fixed: `p.c = Red` and `n.next = None` were refused** (DL1603, "an undetermined capability") although the same
+  value was accepted in a record literal or through a `let`. A constructor with no fields is now accepted wherever one
+  with fields is.
+- **Fixed: on `--engine wasm`, a program that used the clock, `rand`, a file read or the console only inside a record
+  literal stopped with "DL0904: invalid WASM module".** For example, `Stamp { at: root.clock().now_ms() }`. It now runs.
+
 ## Unreleased — records on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles records**: a literal, a field read, and a field write (`p.x = v`, `l.a.x = v`),

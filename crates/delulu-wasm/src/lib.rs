@@ -13,6 +13,7 @@ mod codegen;
 mod dpx;
 pub mod gen;
 mod host;
+mod reify;
 pub mod limits;
 
 pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};

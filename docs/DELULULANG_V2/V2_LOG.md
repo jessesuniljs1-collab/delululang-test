@@ -7382,3 +7382,61 @@ Mutants M599–M603, all red, control green:
 **Evidence.** `record_parity` 3; `wasm_cli` 12. The whole `delulu-wasm` suite and the release differential were
 started before the owner's *"97% current session usage used. Commit and push everything"*, and their results were not
 read before this commit. This branch's CI is the record.
+
+## 2026-10-20 — the laptop: linked lists and trees on the WASM engine; RCAP-CTOR-1, WASM-SCAN-1 (RW 3.4, 2.18, 3.17)
+
+**A record field may hold an `Option`, a `Result` or a `List`.** `RecordDesc` keeps each field's `Ty` (`field_ty`: a
+scalar, or an `Option`, `Result` or `List` of scalars), stored and loaded by its width (`store_ty`, `load_ty`); the
+three compound kinds are pointers to cells shared as the interpreter's are. A linked list (`next: Option[ref Node]`)
+and a tree (`kids: ref List[ref Tree]`, grown through the field) run with the interpreter's output.
+
+**A constructor where no type is written compiles.** `let c = Red` and `Circle(1.5)` build the sum that declares the
+name (`enum_of_ctor`, unique, as the checker's `variant_ctor` is); `Some(x)` takes its payload's type, `x` computed
+first (`compile_some`); `None`, `Ok` and `Err` take the type the checker inferred (`checked_ty`, scalars and their
+`Option`/`Result`/`List`). A written `let` type is now the value's expected type, so `let k: Result[Color, Str] =
+Ok(Green)` compiles.
+
+**RCAP-CTOR-1 (RW 2.18), found writing the linked list.** `head.next = None` and `p.c = Red` were DL1603, "an
+undetermined capability": the capability pass resolved a name as a local, a function or a constant and not as a
+constructor, and a field store refuses an undetermined value where a literal does not. A nullary constructor now has
+its type's default capability (`default_k`), as `Some(2)` has. A first version made it a fresh composite, as `[]` is;
+that refused `var o = None; o = Some(2)` (a fresh `None` binds `ref`, and `Some(2)` is `val`), which the old checker
+accepted — caught by comparing the two binaries by hand, and now held by the test. Nothing newly refused: `check` on
+all 266 `.delulu` files in the repository gives the same verdict and codes on the old and the new binary, and so do
+eleven written-`ref`/`iso` destinations probed by hand (`let o: ref Option[Int] = None` is DL1603 on both, as
+`Some(1)` there is).
+
+**WASM-SCAN-1 (RW 3.17), found probing records.** `Stamp { at: root.clock().now_ms(), … }` stopped with "DL0904:
+invalid WASM module" on `master`: `module_calls_method` had its own walk, which passed over a record literal's fields, a
+field's receiver, a `spawn`'s arguments and a `recover` body, so the module called a clock import it did not have. It
+is now `module_any`'s walk, whose `match` names every expression form. RW 3.16's closure had said the import scan
+descends into every expression; it did not, and 3.17 says so.
+
+Tests:
+- `record_parity.rs` `records_holding_options_results_and_lists_match_the_interpreter` (the list built by prepending,
+  walked and cut; the tree grown through `t.kids.push`, summed over a `Result` field; an `Option[Str]` field written both
+  ways, seen through the list that holds the record);
+- `constructors_with_no_written_type_match_the_interpreter`;
+- `a_capability_used_inside_a_record_literal_brings_its_import` (clock and rand, fixed clock and seed on both engines;
+  the runner now takes a `HostConfig`);
+- `what_the_record_fragment_leaves_out_is_refused`: its `Option[Int]` field compiles now, so the refused cases are an
+  `Option[List[Int]]` field and a `Map` field;
+- `codegen.rs` `ctor_tests::a_constructor_two_sums_declare_names_neither`;
+- `delulu-check` `a_nullary_constructor_stored_into_a_field_has_its_types_capability` (red on the old checker).
+
+Mutants, all red, control green each time:
+- M604 — a field only a scalar;
+- M605 — the old import walk;
+- M606 — no `Some` synthesis;
+- M607 — no sum for a constructor;
+- M608 — a written `let` type not the expected one;
+- M609 — a nullary constructor `Unknown` again (the old checker);
+- M610 — no `Option` from the checker's type;
+- M611 — a constructor two sums declare taken as the first's — survived `record_parity` (the checker refuses such a
+  name before the backend sees it) and is red on `ctor_tests`, written for it;
+- M612 — the first version of the checker fix (fresh).
+
+**Evidence.** `delulu-check` and `delulu-wasm` whole, green (`--no-fail-fast`, exit 0). The release differential: 50,000
+programs, 45,027 agreed, 4,973 both faulted, 0 mismatches — the same counts as the slice before, because its generator
+writes no record and no bare constructor; the parity tests above are this slice's witnesses. The corpus's entry
+points: still 10 of 17 — this slice widens the language, not those programs.
