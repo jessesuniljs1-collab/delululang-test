@@ -17,13 +17,35 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 its first command (RW 4.19); an ordinary `run` is held to 1 GiB of memory and five minutes of processor time unless
 `--limits` sets others; a secret's name can no longer hold `@`; a compiled program or a Contained plugin may no longer use
 the WebAssembly 3.0 features the engine enabled by default; on Windows a foreign library no longer falls back to the
-application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value.
+application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value; `run FILE.dwx`
+refuses the `run` flags it does not apply (`--broker`, `--lease`, the trace flags) instead of ignoring them (RW 3.19).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### a `.dwx` run refuses the flags it cannot apply, 2026-10-20
+
+- **Fixed: `delulu run FILE.dwx` ignored `--broker daemon`, `--lease`, `--trace-effects`, `--trace-out` and
+  `--assert-trace` without a word** (RW 3.19). Under `--broker daemon` or `--lease` the artifact ran with no broker
+  custody at all, and no effect trace was written. These flags, and every other `run` flag a `.dwx` run does not apply,
+  are now refused before anything runs (exit 2), naming the flag. The grants, `--json`, `--seed`, `--clock`, `--limits`,
+  `--report-out`, `--break-glass`, `--isolation` and `--engine wasm` work as before. Run the program's source to use the
+  others.
+
+### a file capability stays where it was granted; a WASM read refuses in the interpreter's words, 2026-10-20
+
+- **Fixed (security): a file capability followed its directory if another process replaced the directory with a link
+  after the capability was made** (RW 4.72, D-V2-167). A capability narrowed with `narrow`, or minted on a sub-directory
+  of a grant or on the grant itself, read and wrote outside the grant once its directory became a symbolic link (on
+  Windows, a junction) to somewhere else — on both engines. A capability is now bound to where its directory was when it
+  was made, and a use through a directory that has since become a link is refused with DL0904. A grant that is a link
+  when the capability is made is followed then, as before.
+- **Fixed: on `--engine wasm`, a read through a symbolic link whose target does not exist is refused in the
+  interpreter's full words**, in the message and in the effect trace, and a read asks the broker before it checks its
+  scope, as on the interpreter (RW 3.18).
 
 ### a sandbox host's refusals are its own guest's, 2026-10-20
 

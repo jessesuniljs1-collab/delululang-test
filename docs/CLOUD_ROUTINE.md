@@ -343,7 +343,7 @@ the third was red at once). One dispatch per form, about three minutes each on a
 **Stop a background job by its PID, never `pkill -f PATTERN`** (run 24): the pattern was in the stopping command's own line, so
 `pkill -f check-other-os.sh` killed the shell that ran it (exit 144) — the edits queued behind it in that command never ran, and
 the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A witness log's last ~62 lines are the cache save and git's cleanup** (run 25: `tail_lines` 62 returned none of three runs'
-test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A one-test witness log: `tail_lines` 40** — its
+test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A whole-library witness log: `tail_lines` about 130** (on-demand run 5: 2,000 brought two 500-line logs into the context whole — a log under about 100 KB comes back inline, not as a file). **A one-test witness log: `tail_lines` 40** — its
 `test result` line is the last test output before the cache save; run 24 asked 3,000 of three such runs and pulled every line of
 three ~550-line logs into the context (run 13's mistake, repeated).
 **A check built as two walls is falsified as two** (run 24, M383/M383b): a mutant that removes one wall survives on the other by

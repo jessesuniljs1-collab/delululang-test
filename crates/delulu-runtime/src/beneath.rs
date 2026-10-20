@@ -37,10 +37,13 @@
 //! * **Hard links.** A hard link inside the grant IS a file inside the grant; there is no link to
 //!   refuse. A process that can make one to a file it can already reach has the file. Documented as
 //!   a residual, as it was before (HARDLINK-1).
-//! * **The grant's own path.** The walk starts at the filesystem root and refuses a link anywhere on
-//!   the canonical path, but the canonical form of the GRANTED directory is computed at use time: a
-//!   granted directory that is itself a symlink is followed when it is resolved, as it always was.
-//!   The directory an operator grants, and its parents, are the operator's to keep.
+//! * **The grant's own path, before a capability is minted.** A granted directory that is itself a
+//!   symlink is followed when a capability is minted from it, as it always was: the directory an
+//!   operator grants, and its parents, are the operator's to keep. AFTER the mint (RW 4.72, D-V2-167)
+//!   the capability is anchored where its directory resolved then — `prim::mint_anchor`, a narrowing's
+//!   own resolution — and a use through a directory that has since become a link is refused, because no
+//!   check resolves the root again. Until that fix every check did (the red-team pass of on-demand
+//!   routine run 5): a narrowed handle followed its swapped directory out of the grant.
 
 use std::fs::File;
 use std::io::{self, Read as _, Write as _};
