@@ -4550,3 +4550,31 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) the CI of #13, #14 and this branch, landing each on green in order; then merge `master` into
   `launch/2.0.0`; (2) on WASM: `Option`/`List` fields, `str` of a record, `fs_write` (`05`); RW 7.20; RW 4.66, 4.67, 6.1,
   6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — #13–#15 landed; `launch/2.0.0` merged again; linked lists and trees on WASM; RCAP-CTOR-1, WASM-SCAN-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Bp5eKZCQAuuUyAcFDuff8G`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-fields`   Pull request: see the branch   Merged: not yet (on green CI)
+- Base: `d259cf2`. Also: #13's CI `39338603052`, #14's `39339338740` and #15's `39340295795` read success on every job
+  (`miri-slow` and `heavy-gates` skipped, as on every pull request); `master` fast-forwarded `825657a..d259cf2` (all
+  three) and pushed; `master`'s push run on `825657a` (`39339368583`) read success on every job. #15's release
+  differential, unread at its commit, read afterwards: 50,000 programs, 45,027 agreed, 4,973 both faulted, 0
+  mismatches; its whole `delulu-wasm` suite finished with no failure.
+- `launch/2.0.0`: `master` merged in (`e32b3c7`, in the worktree `D:\nelan\dl-launch` with its own target directory):
+  13 `Unreleased` sections placed under `## [2.0.0]`, `docs/survey/*` rebuilt; Survey 1541 nodes, 15408 edges, 0
+  errors, 14 warnings; doctor 29 checks; clippy clean and stamped; the eight doc tests green. Its message says *"PRs
+  #1-#15"*: the range `8fc42f8..d259cf2` holds #3–#15 (#1 and #2 were in the launch branch already) — recorded here, the
+  pushed commit left as it is. Dispatched at it: CI `everything` `39364184892`, the release dry run `39364187774`.
+- What: `V2_LOG.md` (this date, the twelfth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`RecordDesc` fields as `Ty`, `field_ty`, `store_ty`,
+  `load_ty`, `module_calls_method` on `module_any`, `enum_of_ctor`, `synthesized_ctor_ty`, `checked_ty`,
+  `compile_some`, a written `let` type as the expected one, `ctor_tests`), `crates/delulu-wasm/tests/record_parity.rs`,
+  `crates/delulu-check/src/rcap_check.rs` (a nullary constructor's capability), `crates/delulu-check/src/lib.rs` (its
+  test), `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`, `docs/REMAINING_WORK.md` (3.4; 2.18 and 3.17 added),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) this branch's CI, landing on green; the launch runs `39364184892` and `39364187774` read; (2) on
+  WASM: `str` and `==` of a whole record (the interpreter's own `display`/`eq` over the guest's value, reified host-side),
+  `fs_write` (`05`); RW 7.20; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

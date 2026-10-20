@@ -248,10 +248,36 @@ struct EnumEnv {
     records_by_name: HashMap<String, u32>,
 }
 
-/// A record type the backend lays out: its fields in declaration order, each a slot's `Scalar` — or `None` when a field
-/// holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
+/// A record type the backend lays out: its fields in declaration order, each a slot's type (`field_ty`) — or `None` when
+/// a field holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
 struct RecordDesc {
-    fields: Option<Vec<(String, Scalar)>>,
+    fields: Option<Vec<(String, Ty)>>,
+}
+
+/// The types a record field may hold: a scalar, or an `Option`, `Result` or `List` of scalars — each one value in its
+/// 8-byte slot, the three compound ones a pointer to a cell shared as the interpreter shares it (`n.next`, `t.kids`).
+fn field_ty(t: Ty) -> Option<Ty> {
+    (ty_to_scalar(t).is_some() || matches!(t, Ty::Option(_) | Ty::Result(..) | Ty::List(_))).then_some(t)
+}
+
+/// Store the value on the stack into the slot whose address is under it, by the width of `t` (nothing for `Unit`).
+fn store_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Store(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Store(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Store(u32_at())),
+        None => {}
+    }
+}
+
+/// Load a value of type `t` from the slot whose address is on the stack (nothing for `Unit`).
+fn load_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Load(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Load(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Load(u32_at())),
+        None => {}
+    }
 }
 
 impl EnumEnv {
@@ -260,7 +286,7 @@ impl EnumEnv {
         self.records_by_name.get(name).copied()
     }
     /// Record `id`'s fields, if the backend can lay them out.
-    fn record_fields(&self, id: u32) -> Result<&[(String, Scalar)], CompileError> {
+    fn record_fields(&self, id: u32) -> Result<&[(String, Ty)], CompileError> {
         self.records[id as usize]
             .fields
             .as_deref()
@@ -268,6 +294,13 @@ impl EnumEnv {
     }
     fn id(&self, name: &str) -> Option<u32> {
         self.by_name.get(name).copied()
+    }
+    /// The named sum type a constructor builds, when exactly one declares it — the checker's rule (`variant_ctor`): a
+    /// name two sums share (`IoErr`'s and `NetErr`'s `Other`) names neither.
+    fn enum_of_ctor(&self, ctor: &str) -> Option<u32> {
+        let mut owners = (0..self.descs.len() as u32).filter(|&i| self.desc(i).ctors.iter().any(|c| c.name == ctor));
+        let first = owners.next()?;
+        owners.next().is_none().then_some(first)
     }
     /// The actor index for a name introduced by an `actor A { … }` declaration (Stage 7 phase 7h).
     fn actor_id(&self, name: &str) -> Option<u32> {
@@ -439,7 +472,7 @@ fn build_enum_env(module: &Module) -> EnumEnv {
                 if let Some(&id) = env.records_by_name.get(&td.name.name) {
                     records[id as usize].fields = fields
                         .iter()
-                        .map(|f| wasm_ty(&env, &f.ty).and_then(ty_to_scalar).map(|s| (f.name.name.clone(), s)))
+                        .map(|f| wasm_ty(&env, &f.ty).and_then(field_ty).map(|t| (f.name.name.clone(), t)))
                         .collect();
                 }
             }
@@ -652,41 +685,10 @@ fn body_is_compiled(env: &EnumEnv, f: &FnDecl) -> bool {
 
 /// Does any compilable function call a method whose name is in `names`? Used to decide which host
 /// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
+/// The walk is `module_any`'s, which names every expression form: this one's own walk passed over a record literal's
+/// fields, so `Stamp { at: root.clock().now_ms() }` compiled a call to an import the module did not have (WASM-SCAN-1).
 fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
-    fn in_block(b: &Block, names: &[&str]) -> bool {
-        b.stmts.iter().any(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
-            Stmt::While { cond, body, .. } => in_expr(cond, names) || in_block(body, names),
-            Stmt::For { iter, body, .. } => in_expr(iter, names) || in_block(body, names),
-            Stmt::Break { .. } | Stmt::Continue { .. } => false,
-            Stmt::Return { value: Some(e), .. } => in_expr(e, names),
-            Stmt::Return { value: None, .. } => false,
-            Stmt::Expr(e) => in_expr(e, names),
-        })
-    }
-    fn in_expr(e: &Expr, names: &[&str]) -> bool {
-        match e {
-            Expr::Method { name, recv, args, .. } => {
-                names.contains(&name.name.as_str()) || in_expr(recv, names) || args.iter().any(|a| in_expr(a, names))
-            }
-            Expr::Call { callee, args, .. } => in_expr(callee, names) || args.iter().any(|a| in_expr(a, names)),
-            Expr::Binary { lhs, rhs, .. } => in_expr(lhs, names) || in_expr(rhs, names),
-            Expr::Unary { operand, .. } => in_expr(operand, names),
-            Expr::If { cond, then_, else_, .. } => {
-                in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
-            }
-            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names)),
-            Expr::Try { inner, .. } => in_expr(inner, names),
-            Expr::Block(b) => in_block(b, names),
-            // A lambda's body, a list's items and an index run where they are inlined or evaluated, so the imports they
-            // call are the module's (WASM-INTERN-1's sibling: a `println` inside a lambda had no console import).
-            Expr::Lambda { body, .. } => in_block(body, names),
-            Expr::List { items, .. } => items.iter().any(|i| in_expr(i, names)),
-            Expr::Index { recv, index, .. } => in_expr(recv, names) || in_expr(index, names),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && in_block(&f.body, names)))
+    module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if names.contains(&name.name.as_str())), false)
 }
 
 /// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
@@ -1858,9 +1860,14 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
                     }
                 }
             }
-            // An empty list says its element type only on its `let` (`let xs: List[Int] = []`).
+            // A written type is the value's expected one: an empty list's element type (`let xs: List[Int] = []`), a
+            // constructor's other half (`let r: Result[Int, Str] = Ok(1)`, `var cur: Option[ref Node] = None`).
             let ty = match (value, ty.as_ref().and_then(|t| wasm_ty(cx.env, t))) {
                 (Expr::List { items, .. }, Some(Ty::List(s))) if items.is_empty() => compile_list_literal(items, cx, Some(s))?,
+                (_, Some(t)) => {
+                    compile_expr_as(value, cx, t)?;
+                    t
+                }
                 _ => compile_expr(value, cx)?,
             };
             let idx = cx.alloc_local(ty)?;
@@ -1990,7 +1997,9 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
 //
 // A record is an i32 pointer to its cell: one 8-byte slot per field, in declaration order (`RecordDesc`). The cell is
 // shared — `let q = p` names it — as the interpreter's `Rc<RefCell<…>>` is, so a field written through one name is read
-// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar.
+// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar,
+// or an `Option`, `Result` or `List` of scalars (`field_ty`) — so a record can name another, or itself: `next: Option[ref
+// Node]`.
 
 /// A record literal: its fields computed in the order written, as the interpreter computes them, each into a local; then
 /// the cell, each value stored in its field's slot.
@@ -2010,10 +2019,10 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
             .iter()
             .position(|(n, _)| *n == fname.name)
             .ok_or_else(|| CompileError::Unsupported(format!("`{name}` has no field `{}`", fname.name)))?;
-        let s = layout[k].1;
-        compile_expr_as(fexpr, cx, s.to_ty())?;
-        if s != Scalar::Unit {
-            let l = cx.alloc_local(s.to_ty())?;
+        let t = layout[k].1;
+        compile_expr_as(fexpr, cx, t)?;
+        if t != Ty::Unit {
+            let l = cx.alloc_local(t)?;
             cx.emit(Instruction::LocalSet(l));
             held[k] = Some(l);
         }
@@ -2022,26 +2031,26 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(i32::try_from(layout.len() * 8).unwrap_or(i32::MAX)));
     cx.emit(Instruction::Call(cx.alloc_fn));
     cx.emit(Instruction::LocalSet(cell));
-    for (k, (_, s)) in layout.iter().enumerate() {
+    for (k, (_, t)) in layout.iter().enumerate() {
         if let Some(l) = held[k] {
             cx.emit(Instruction::LocalGet(cell));
             cx.emit(Instruction::I32Const(k as i32 * 8));
             cx.emit(Instruction::I32Add);
             cx.emit(Instruction::LocalGet(l));
-            store_scalar(cx, *s);
+            store_ty(cx, *t);
         }
     }
     cx.emit(Instruction::LocalGet(cell));
     Ok(Ty::Record(id))
 }
 
-/// Field `name` of record `id`: its slot and its `Scalar`.
-fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Scalar), CompileError> {
+/// Field `name` of record `id`: its slot and its type.
+fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Ty), CompileError> {
     cx.env
         .record_fields(id)?
         .iter()
         .enumerate()
-        .find_map(|(k, (n, s))| (n == name).then_some((k, *s)))
+        .find_map(|(k, (n, t))| (n == name).then_some((k, *t)))
         .ok_or_else(|| CompileError::Unsupported(format!("a record with no field `{name}`")))
 }
 
@@ -2050,15 +2059,15 @@ fn compile_field(recv: &Expr, name: &str, cx: &mut Cx) -> Result<Ty, CompileErro
     let Ty::Record(id) = compile_expr(recv, cx)? else {
         return Err(CompileError::Unsupported("a field of a value that is not a record (or `self` outside an actor)".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    if t == Ty::Unit {
         cx.emit(Instruction::Drop);
         return Ok(Ty::Unit);
     }
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
-    load_scalar(cx, s);
-    Ok(s.to_ty())
+    load_ty(cx, t);
+    Ok(t)
 }
 
 /// The type of an assignment's place, from the names alone — nothing is emitted — so its value can be computed first.
@@ -2069,7 +2078,7 @@ fn lvalue_ty(lv: &LValue, cx: &Cx) -> Result<Ty, CompileError> {
             .map(|(_, t)| t)
             .ok_or_else(|| CompileError::Unsupported(format!("an assignment through `{}`, which is no local here", v.name))),
         LValue::Field(base, f) => match lvalue_ty(base, cx)? {
-            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1.to_ty()),
+            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1),
             _ => Err(CompileError::Unsupported("a field of a value that is not a record".into())),
         },
         // A field written through a list element (`ps[i].x = v`): the checker refuses the write (DL1604, an element
@@ -2094,12 +2103,12 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     let Ty::Record(id) = lvalue_ty(base, cx)? else {
         return Err(CompileError::Unsupported("a field assignment to a value that is not a record".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    compile_expr_as(value, cx, s.to_ty())?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    compile_expr_as(value, cx, t)?;
+    if t == Ty::Unit {
         return Ok(Ty::Unit);
     }
-    let v = cx.alloc_local(s.to_ty())?;
+    let v = cx.alloc_local(t)?;
     cx.emit(Instruction::LocalSet(v));
     if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
         return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
@@ -2107,7 +2116,7 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::LocalGet(v));
-    store_scalar(cx, s);
+    store_ty(cx, t);
     Ok(Ty::Unit)
 }
 
@@ -2423,6 +2432,67 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
     }
 }
 
+/// The type of constructor `name` used where no type is expected (`let c = Red`, `var o = None`): a named sum's when one
+/// declares it, else — `None`, `Ok`, `Err` — the type the checker inferred for the node, where the backend holds it.
+fn synthesized_ctor_ty(name: &str, node: NodeId, cx: &Cx) -> Option<Ty> {
+    if let Some(id) = cx.env.enum_of_ctor(name) {
+        return Some(Ty::Enum(id));
+    }
+    if !matches!(name, "None" | "Ok" | "Err") {
+        return None;
+    }
+    cx.node_types.get(&node).and_then(checked_ty).filter(|t| matches!(t, Ty::Option(_) | Ty::Result(..)))
+}
+
+/// A type the checker inferred, as the backend holds it — the scalars, and an `Option`, `Result` or `List` of them; a
+/// named type is not resolved here (its id is the checker's table's, which the backend is not given).
+fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
+    use delulu_check::Type;
+    Some(match t {
+        Type::Int => Ty::I64,
+        Type::Bool => Ty::I32,
+        Type::Float => Ty::F64,
+        Type::Str => Ty::Str,
+        Type::Unit => Ty::Unit,
+        Type::Option(p) => Ty::Option(ty_to_scalar(checked_ty(p)?)?),
+        Type::Result(o, e) => Ty::Result(ty_to_scalar(checked_ty(o)?)?, ty_to_scalar(checked_ty(e)?)?),
+        Type::List(e) => Ty::List(list_element(checked_ty(e)?)?),
+        _ => return None,
+    })
+}
+
+/// `Some(x)` where no type is expected: `x` first, as the interpreter computes it, then the cell of `Option` of its type.
+fn compile_some(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let t = compile_expr(arg, cx)?;
+    let s = ty_to_scalar(t).ok_or_else(|| CompileError::Unsupported(format!("`Some` of a {t:?}")))?;
+    let opt = Ty::Option(s);
+    let ctors = cx.env.ctors_of(opt).expect("an `Option` has its two constructors");
+    let tag = ctors.iter().position(|(n, _)| n == "Some").expect("an `Option` has `Some`");
+    let held = if s == Scalar::Unit {
+        None
+    } else {
+        let l = cx.alloc_local(t)?;
+        cx.emit(Instruction::LocalSet(l));
+        Some(l)
+    };
+    let rp = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(rp));
+    cx.emit(Instruction::LocalGet(rp));
+    cx.emit(Instruction::I32Const(tag as i32));
+    cx.emit(Instruction::I32Store(u32_at()));
+    if let Some(l) = held {
+        cx.emit(Instruction::LocalGet(rp));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        cx.emit(Instruction::LocalGet(l));
+        store_scalar(cx, s);
+    }
+    cx.emit(Instruction::LocalGet(rp));
+    Ok(opt)
+}
+
 /// Compile a variant constructor to a fresh heap `[tag][field…]` cell of type `expected`.
 fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
     let ctors = cx
@@ -2714,7 +2784,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Ok(Ty::F64)
             }
         },
-        Expr::Var { path, .. } => {
+        Expr::Var { path, id, .. } => {
             if path.segs.len() == 1 {
                 if let Some((idx, ty)) = cx.lookup(&path.segs[0].name) {
                     cx.emit(Instruction::LocalGet(idx));
@@ -2726,6 +2796,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         cx.emit(Instruction::LocalGet(slot));
                         return Ok(Ty::ActorRef(aidx));
                     }
+                }
+                // A nullary constructor with no expected type: its sum's, or the checker's (`None`).
+                if let Some(t) = synthesized_ctor_ty(&path.segs[0].name, *id, cx) {
+                    compile_ctor(&path.segs[0].name, &[], cx, t)?;
+                    return Ok(t);
                 }
             }
             Err(CompileError::Unsupported(format!("the name `{}` (not a local)", path.dotted())))
@@ -3067,6 +3142,16 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             if let Some(g) = cx.generics.get(&name).cloned() {
                 return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
+            }
+            // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
+            if !cx.index.contains_key(&name) {
+                if let ("Some", [arg]) = (name.as_str(), &args[..]) {
+                    return compile_some(arg, cx);
+                }
+                if let Some(t) = synthesized_ctor_ty(&name, e.id(), cx) {
+                    compile_ctor(&name, args, cx, t)?;
+                    return Ok(t);
+                }
             }
             let (fidx, ptys, ret) = {
                 let e = cx
@@ -4305,5 +4390,23 @@ mod alloc_tests {
             let err = got.clone().expect_err(what);
             assert!(err.starts_with("DL0903") && err.contains("exhausted") && !err.contains("overflow"), "{what}: {got:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod ctor_tests {
+    use super::*;
+
+    /// A constructor used with no expected type builds the sum that declares it — and, as the checker's `variant_ctor`
+    /// rules, a name two sums declare builds neither: `Other` is `IoErr`'s and `NetErr`'s, and here a user sum's too. The
+    /// checker refuses such a name first, so no checked program reaches the rule; this is where it is held.
+    #[test]
+    fn a_constructor_two_sums_declare_names_neither() {
+        let checked = delulu_check::check_source(0, "module m\ntype E = Ready | Other(Str)\n");
+        let env = build_enum_env(&checked.module);
+        assert_eq!(env.enum_of_ctor("Other"), None, "three sums declare `Other`");
+        assert_eq!(env.enum_of_ctor("Ready"), env.id("E"));
+        assert_eq!(env.enum_of_ctor("NotFound"), env.id("IoErr"));
+        assert_eq!(env.enum_of_ctor("Missing"), None);
     }
 }
