@@ -1152,6 +1152,15 @@ spells the same thing?**
   uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
   where a cycle closes.
 
+- **ROOT-RESOLVE-1 — a capability's root was resolved again at every use** (on-demand routine run 5, RW 4.72,
+  D-V2-167): FS-RACE-1 made the walk below a scope's root refuse a link that appears after the check, and every check
+  still canonicalized the ROOT afresh — `pin_fs`, `resolve_in_scope`'s on-disk gate, `beneath`'s check. So a narrowed or
+  sub-minted handle whose directory was swapped for a link went where the link went, past every check, because each
+  compared the target against the root's NEW resolution. A file capability now carries its `anchor`, the resolution its
+  mint or narrowing made, and no use resolves the root again. Never soften it back to "re-resolve and compare": a check
+  that resolves both sides at use time decides on whatever the root became. Search key: for each containment check,
+  ask which side is resolved when — and whether the side treated as fixed is really fixed.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background

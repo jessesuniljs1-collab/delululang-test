@@ -4047,6 +4047,30 @@ admits):
   record that still compares and prints). Both were red on the old `check.rs`.
 - Mutants M591–M598, red, control green.
 
+## D-V2-167 — A file capability is anchored where its directory resolved when it was minted or narrowed; no use resolves the root again (RW 4.72) — TAKEN (head chef, 2026-10-20, under the owner's delegation)
+
+**Found** (the red-team pass of on-demand routine run 5, a Sonnet 5.5 sous-chef, F2 and F3): a file capability's root
+was resolved again at every use, on both engines. A directory of the scope swapped for a link after a `narrow` — or after
+a mint on a sub-directory of the grant, or on the grant itself — carried the capability with it: reads and writes reached
+outside the grant, with no refusal. FS-RACE-1 (`beneath.rs`) refuses a link that appears on the path below a root; the
+root was the one part re-resolved, and `beneath.rs` named the granted directory's own path as a residual.
+
+**Decision.**
+1. **A capability's directory is decided once, at its mint or its narrowing.** `CapScope::Fs` (and the WASM host's file
+   handles) carry `anchor`: the root's resolution then. `prim::mint_anchor` makes the grant decision on that same
+   resolution, so the decision and the anchor cannot come apart; a narrowing's anchor is its subtree's resolution, inside
+   its parent's.
+2. **No use resolves the root again.** The scope gate (`resolve_in_anchor`), the pin the custody and the Guard decide on
+   (`pin_fs_at`) and the path opened (`pinned_in`, then `beneath`'s link-refusing walk) all compare against the anchor. A
+   use through a directory that has become a link since the mint is DL0904, in `resolve_in_scope`'s words — no new code.
+3. **The residual "the grant's own path" is closed for swaps after the mint.** A grant that is already a link when a
+   capability is minted is followed then, as before: the operator's grant names a place, and the mint fixes where it is.
+4. **What does not change:** the trace and the custody name the root as spelled; HARDLINK-1 stays a residual.
+
+**Evidence.** `prim.rs` `a_capability_directory_swapped_for_a_link_after_its_mint_reaches_nothing_outside` and
+`delulu-wasm` `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside`, both red on the old code; mutants M643–M647
+(`V2_LOG.md`, 2026-10-20).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

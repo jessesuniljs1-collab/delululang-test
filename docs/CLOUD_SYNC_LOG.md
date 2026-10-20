@@ -4681,3 +4681,39 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `fs_write` — its findings, each re-run before use; (3) `launch/2.0.0`: merge `master` (`a7b6476`…this commit), dispatch
   `everything` and the release dry run; (4) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66,
   4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (continued): a red-team pass on the WASM engine's file capabilities; RW 4.72 — a file capability is anchored at its mint (D-V2-167); `launch/2.0.0` at `3ee1370`
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice); one Sonnet
+  5.5 sous-chef, the red-team pass (a usage limit stopped it at 08:10 UTC; resumed by message; its findings were on disk)
+- Branch: `master`, by fast-forward from `claude/wasm-read-scope` (the code's runner reads)   Pull request: none   Base: `7355808`
+- Commits: `92d9119` (F1), `3cb335e` (F2 and F3, RW 4.72), this entry's commit. `launch/2.0.0`: `3ee1370`.
+- **The pass** (about 250 cases, a frozen binary in `/tmp/rtw`, nothing written in the repository): F1 — a WASM read through a
+  dangling link refused without SYMLINK-DANGLE-1's words, and before asking the custody — fixed (RW 3.18); F2 and F3 — a
+  file capability followed its directory when the directory (or the grant itself) was swapped for a link after the mint or
+  narrowing, on BOTH engines, reads and writes outside the grant — fixed (RW 4.72, D-V2-167: the capability carries its
+  `anchor`, and no use resolves the root again); F4 — `delulu run FILE.dwx` ignores the trace flags — open (RW 3.19), and
+  the head chef's probe found the same path ignores `--broker daemon` and `--lease` (next entry). Every finding re-run first.
+- **Verified:** witnesses red on the old code; mutants M640–M647 (M643 and M644 survive alone by design — two walls; their
+  double M645/M647 red); runners at `92d9119` (macOS `39393020777`, Windows `39393024452`, macOS `wasm_cli` `39393029397`) and
+  at `3cb335e` (macOS `39394517196`, `39394523755`; Windows `39394520536`, `39394527710`, `39394530798`) — all success, the new
+  tests named on each; `scripts/check-other-os.sh x86_64-pc-windows-msvc` clean; the full suite at `3cb335e` 2,435 passed, 0
+  failed, 16 ignored (173 binaries), exit 0.
+- **`launch/2.0.0` at `3ee1370`** (`master` `d259cf2..7355808` merged; five Unreleased CHANGELOG sections moved under
+  `## [2.0.0]`; Survey rebuilt 1545 nodes, 0 errors; `doctor --check` 26 ok; clippy stamped; eight doc gates green). Its release
+  dry run `39392801546` success; its `everything` run `39392798450` dispatched (read at the run's close or by the next run).
+- Files and folders: M `crates/delulu-runtime/src/value.rs` (`CapScope::Fs.anchor`), `crates/delulu-runtime/src/prim.rs`
+  (`pin_fs_at`, `mint_anchor`, `resolve_in_anchor`, `pinned_in`; the mints, `narrow`, `read_text`, `list_dir`, the writes;
+  the witness), `crates/delulu-runtime/src/interp.rs` (`fs_pin_for`), `crates/delulu-runtime/src/sink.rs`,
+  `crates/delulu-runtime/src/beneath.rs` (the residual's note), `crates/delulu-wasm/src/host.rs` (`CapKind::FsRead`/`FsWrite`
+  carry the anchor; the read in the interpreter's order), `crates/delulu-wasm/src/lib.rs` (two witnesses),
+  `crates/delulu/tests/wasm_cli.rs` (F1's witness), `CHANGELOG.md`, `HANDOFF.md` (§11.4 ROOT-RESOLVE-1),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-167), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.18, 3.19,
+  4.72), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (the junction case of the witnesses ran on the Windows runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (ROOT-RESOLVE-1: ask which side of a containment check is resolved when).
+- Open / next, in order: (1) this commit's push run; `launch/2.0.0`'s `everything` run `39392798450`; (2) RW 3.19 and the
+  `.dwx` path's unapplied `--broker`/`--lease` (the next slice of this run); (3) the pass's untried families — a user method
+  named `narrow`/`read_text`, capabilities in records or closures, `--broker daemon` and `--lease` on the WASM file path;
+  (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the
+  owner's word.
