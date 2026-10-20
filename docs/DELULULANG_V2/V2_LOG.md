@@ -7440,3 +7440,63 @@ Mutants, all red, control green each time:
 programs, 45,027 agreed, 4,973 both faulted, 0 mismatches — the same counts as the slice before, because its generator
 writes no record and no bare constructor; the parity tests above are this slice's witnesses. The corpus's entry
 points: still 10 of 17 — this slice widens the language, not those programs.
+
+## 2026-10-20 — the laptop: `str` and `==` of compound values on the WASM engine; RECORD-ORDER-1 (RW 3.4, 2.19)
+
+**`str`, `==` and `!=` of a list, an option, a result, a sum or a record compile**, answered by the interpreter's own
+`Value::display` and `Value::eq` — one rule for both engines, as `Str` methods and `parse_int` already are. The guest
+passes the value's pointer and its type's descriptor (`type_desc`: the type, then every record and sum it reaches —
+`R0=Node{v:i,next:oR0.}`), laid out after the literals on first use (`Descs`, `desc_ptr`; the memory and the heap's
+start are now set after the bodies are compiled, so a descriptor named in a body lands before the heap). The host
+(`delulu:value.display`, `delulu:value.eq`) rebuilds the value as the interpreter's `Value` from the guest's memory
+(`reify.rs`), each record and list cell once by its address, so a value that holds itself holds itself there too and
+`display` prints `Node { ... }` where the interpreter does; `p == p` compares one cell with itself on both engines; a
+`NaN` keeps `[nan] == [nan]` `false`. The module carries the two imports only when a compiled body takes `str` of, or
+compares, a value the checker typed as one of these (or as a type variable, for an inlined generic body); every other
+module is byte-identical to before, and without the checker's types (`compile_module`) such a `str` is refused.
+
+The guest's memory is read as untrusted, since a `.dwx` can be written by hand: every read is bounds-checked, a list
+header claiming more elements than the memory holds is refused before anything is allocated, a tag outside its type's
+constructors is refused, and so is a variant cell met again inside itself (no compiled program can build one — a
+variant is never written after it is made — and it would otherwise recurse without end). Each refusal is DL0903 in
+words.
+
+**RECORD-ORDER-1 (RW 2.19), found writing the probe for `str` of a record.** The interpreter held a record's fields in
+the order its literal wrote them: `P { y: "a", x: 2 } == P { x: 2, y: "a" }` was `false` (2.13's `eq` pairs fields by
+position) and the two printed differently. A literal's fields are still computed in the order written and are now held
+in the order the type declares (`Home.records`) — the order the WASM engine's cell uses.
+
+Tests:
+- `value_parity.rs` (new): `str_and_equality_of_compound_values_match_the_interpreter`,
+  `a_value_that_holds_itself_and_a_nan_match_the_interpreter` (a record held twice in a list is one cell),
+  `str_and_equality_inside_a_generic_body_match_the_interpreter`, `what_the_value_interface_leaves_out_is_refused`;
+- `reify.rs` `a_descriptor_parses_and_a_malformed_one_does_not`, `a_malformed_guest_value_is_refused`;
+- `value_semantics.rs` `a_record_holds_its_fields_in_the_order_its_type_declares` (red on the old interpreter; it also
+  holds the computing order);
+- `record_parity.rs`'s refusal test loses its `str` and `==` cases, which compile now and are held above.
+
+Mutants:
+- M613 — a record rebuilt again where met again: red (the value that holds itself);
+- M614 — a list rebuilt again where met again: **survived**, and cannot be seen in this fragment: no list can hold
+  itself without a list of lists, which does not compile, and a list met twice compares and prints the same either way;
+- M615 — the variant guard gone: red (the unit test's process overflowed its stack — the crash the guard prevents);
+- M616 — the list bound gone: red (the unit test's process aborted on the allocation);
+- M617 — a record's fields described in reverse; M618 — `!=` as `==`; M619 — no value interface; M620 — `Option`'s
+  constructors swapped; M621 — a type variable not counted; M622 — a `Bool` read inverted: all red;
+- M623 — the interpreter's sort gone: red.
+Control green after each spec.
+
+**The generator.** `random_console_program` gains a line, from a stream of its own so every other line is what each seed
+always gave: `str`, `==` and `!=` of a list and an option of `Float`s — a NaN, an infinity and a negative zero rendered
+and compared inside them, a list against itself as often as against another. `conformance_parity` and the differential
+now compile with the checker's types (`compile_checked`), as the command line does — through `compile_module` the value
+interface is never carried. `conformance_parity` asserts the line in more than 500 of its 2,000 programs, more than 150
+equal, more than 150 unequal and more than 10 with a NaN inside (mutants M624 — the line never written — and M625 — a
+list never compared with itself — red).
+
+**Evidence.** `delulu-runtime`, `delulu-wasm` and `delulu-conform` whole, green (509 tests, `--no-fail-fast`); `delulu`'s
+`wasm_cli`, `conformance`, `core_invariance`, `corpus_cli`, `examples_run`, `cli`, `json_contract`, `actors_cli`,
+`budget_cli` and `book` green (114) — the interpreter's new field order changed no golden output there. The release
+differential with the new line: 50,000 programs, all 50,000 compiled (with the checker's types), 45,027 agreed, 4,973
+both faulted, 0 mismatches. By hand, a probe of every kind printed the same on both engines, the cycle and `[NaN]`
+included.

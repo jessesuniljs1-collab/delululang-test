@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 317 |
-| Rust lines | 178537 |
-| Rust files outside `src/` (test/bench targets) | 148 |
+| Rust files | 319 |
+| Rust lines | 179350 |
+| Rust files outside `src/` (test/bench targets) | 149 |
 | Markdown documents | 268 |
-| Markdown lines | 81879 |
+| Markdown lines | 81970 |
 | DeluluLang programs | 252 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1540 / 15400 |
+| Nodes / edges in this map | 1542 / 15426 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 22439 lines
+- **Modules:** 24 files, 22452 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -320,7 +320,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/egress.rs` | 1303 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 1194 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |
 | `src/foreign.rs` | 456 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2753 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/interp.rs` | 2766 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 403 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/netclass.rs` | 334 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2200 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
@@ -383,18 +383,19 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 9354 lines
+- **Modules:** 9 files, 9934 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 169 | Stage 7 phase 7h — the WASM engine's cooperative single-threaded actor scheduler (spec §6.5). |
 | `src/artifact.rs` | 311 | The `.dwx` artifact (spec §5): a WebAssembly module that carries its compiler-computed authority |
-| `src/codegen.rs` | 4412 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
+| `src/codegen.rs` | 4606 | Phase 3a/3b code generation: DeluluLang → core WebAssembly. |
 | `src/dpx.rs` | 846 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
-| `src/gen.rs` | 343 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
-| `src/host.rs` | 1805 | The embedded Wasmtime host (Phase 3a/3b). |
-| `src/lib.rs` | 830 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
+| `src/gen.rs` | 357 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
+| `src/host.rs` | 1856 | The embedded Wasmtime host (Phase 3a/3b). |
+| `src/lib.rs` | 831 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
+| `src/reify.rs` | 320 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
 
 ## Diagnostic codes
 

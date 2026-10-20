@@ -576,7 +576,8 @@ fn build_enum_env(module: &Module) -> EnumEnv {
     }
     // Record layouts (RW 3.4), resolved against the populated names: a field the backend cannot hold leaves the record
     // without a layout, refused where it is built or read.
-    let mut records: Vec<RecordDesc> = (0..env.records_by_name.len()).map(|_| RecordDesc { name: String::new(), fields: None }).collect();
+    let mut records: Vec<RecordDesc> =
+        (0..env.records_by_name.len()).map(|_| RecordDesc { name: String::new(), fields: None }).collect();
     for it in &module.items {
         if let Item::Type(td) = it {
             if let (TypeDeclKind::Record(fields), true) = (&td.kind, td.generics.is_empty()) {

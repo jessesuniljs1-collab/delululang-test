@@ -13,8 +13,8 @@ mod codegen;
 mod dpx;
 pub mod gen;
 mod host;
-mod reify;
 pub mod limits;
+mod reify;
 
 pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
 pub use artifact::{embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION};

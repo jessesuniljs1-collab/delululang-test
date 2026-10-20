@@ -4578,3 +4578,28 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) this branch's CI, landing on green; the launch runs `39364184892` and `39364187774` read; (2) on
   WASM: `str` and `==` of a whole record (the interpreter's own `display`/`eq` over the guest's value, reified host-side),
   `fs_write` (`05`); RW 7.20; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — `str` and `==` of compound values on WASM; RECORD-ORDER-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01Bp5eKZCQAuuUyAcFDuff8G`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-show` (on `laptop/wasm-fields`, #16)   Pull request: see the branch   Merged: not yet (after #16, on green CI)
+- Base: `a7b6476`. Also: `master`'s push run on `d259cf2` (`39363663016`) read success on every job; `launch/2.0.0`'s
+  release dry run `39364187774` read success (four packages; the publishing job skipped, as without a tag).
+- What: `V2_LOG.md` (this date, the thirteenth entry).
+- Files and folders: A `crates/delulu-wasm/src/reify.rs`, `crates/delulu-wasm/tests/value_parity.rs`; M
+  `crates/delulu-wasm/src/codegen.rs` (`Descs`, `desc_ptr`, `type_desc`, `RecordDesc.name`, `module_shows_values`, the
+  `delulu:value` imports, `str`/`==` of compound values, memory and heap start set after the bodies),
+  `crates/delulu-wasm/src/host.rs` (`delulu:value.display`, `delulu:value.eq`, `reify_values`),
+  `crates/delulu-wasm/src/lib.rs`, `crates/delulu-wasm/src/gen.rs` (a console line of `str`/`==` of `Float` lists),
+  `crates/delulu-wasm/tests/{record_parity,conformance_parity,differential}.rs` (the last two compile with the checker's
+  types, as the command line does),
+  `crates/delulu-runtime/src/interp.rs` (`Home.records`, a literal held in declared order),
+  `crates/delulu-runtime/tests/value_semantics.rs`, `CHANGELOG.md`, `docs/book/THE_DELULULANG_BOOK.md`,
+  `docs/REMAINING_WORK.md` (3.4; 2.19 added), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new.
+- Open / next: (1) #16's CI, then this branch's, landing each on green in order; the launch run `39364184892` read;
+  (2) on WASM: `fs_write` (`05`), a list of options, `str` of a map; RW 7.20; RW 4.66, 4.67, 6.1, 6.2; (3) *[laptop]* the
+  launch, only on the owner's word.

@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_and_run_int, compile_module, gen, run_main, HostConfig};
+use delulu_wasm::{compile_checked, gen, run_int_fn, run_main, HostConfig};
 
 struct Stats {
     checked: u64,
@@ -31,12 +31,18 @@ fn run_pure(seed: u64, s: &mut Stats) {
     s.checked += 1;
     let interp = Interp::new(&checked.module);
     let iv = interp.call_int_fn("f", &args);
-    let wv = compile_and_run_int(&checked.module, "f", &args);
+    let wv = run_checked_int(&checked, &args);
     match (&iv, &wv) {
         (Ok(a), Ok(b)) if a == b => s.agreed += 1,
         (Err(_), Err(_)) => s.both_faulted += 1,
         _ => s.mismatches.push(format!("PURE seed {seed}: interp={iv:?} wasm={wv:?} args={args:?}\n{src}")),
     }
+}
+
+/// `f(args)` compiled with the checker's types, as the command line compiles: the value, or the refusal's or fault's text.
+fn run_checked_int(checked: &delulu_check::Checked, args: &[i64]) -> Result<i64, String> {
+    let wasm = compile_checked(&checked.module, &checked.result).map_err(|e| e.message())?;
+    run_int_fn(&wasm, "f", args).map_err(|e| e.message())
 }
 
 /// Run one random LOOP program (RW 3.4: bounded `while` loops with `break`, `continue` and assignment) on both engines.
@@ -48,7 +54,7 @@ fn run_loop(seed: u64, s: &mut Stats) {
     }
     s.checked += 1;
     let iv = Interp::new(&checked.module).call_int_fn("f", &args);
-    let wv = compile_and_run_int(&checked.module, "f", &args);
+    let wv = run_checked_int(&checked, &args);
     match (&iv, &wv) {
         (Ok(a), Ok(b)) if a == b => s.agreed += 1,
         (Err(_), Err(_)) => s.both_faulted += 1,
@@ -63,7 +69,7 @@ fn run_console(seed: u64, s: &mut Stats) {
     if checked.has_errors() {
         return;
     }
-    let wasm = match compile_module(&checked.module) {
+    let wasm = match compile_checked(&checked.module, &checked.result) {
         Ok(w) => w,
         Err(_) => return,
     };
