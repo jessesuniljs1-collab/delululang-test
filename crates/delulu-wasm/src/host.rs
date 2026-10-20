@@ -209,6 +209,8 @@ pub enum CapKind {
     Rand,
     /// A filesystem-read capability scoped to an absolute, normalized subtree (§4).
     FsRead(PathBuf),
+    /// A filesystem-write capability, scoped the same way (`root.fs_write(p)`).
+    FsWrite(PathBuf),
     /// `Cap[ForeignLoad]` — the loader capability minted by `root.foreign_load()` (Stage 4 phase 4g).
     ForeignLoad,
     /// A bound `foreign` lib handle (Stage 4 phase 4g): the loaded library + resolved symbols, held
@@ -228,6 +230,8 @@ struct HostState {
     /// Granted filesystem-read subtrees (absolute, normalized). `root.fs_read(p)` succeeds iff `p`
     /// resolves within one of these.
     fs_read_roots: Vec<PathBuf>,
+    /// Granted filesystem-write subtrees, the same way: `root.fs_write(p)` succeeds iff `p` resolves within one.
+    fs_write_roots: Vec<PathBuf>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
     /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
@@ -329,11 +333,12 @@ impl HostState {
         self.push_trace(effect, &format!("{op}.refused"), cap_kind, detail, file, start, end);
     }
 
-    /// The `read_text` record, with the two additive filesystem fields the interpreter's record
-    /// carries (REMAINING_WORK 6.13): where the path pointed, and the scope it was resolved in.
+    /// A file effect's record (`read_text`, `write_text`, `append_text`), with the two additive filesystem fields the
+    /// interpreter's record carries (REMAINING_WORK 6.13): where the path pointed, and the scope it was resolved in.
     #[allow(clippy::too_many_arguments)]
-    fn push_fs_read_trace(
+    fn push_fs_trace(
         &mut self,
+        (effect, op, cap_kind): (&str, &str, &str),
         rel: &str,
         pointed: &std::path::Path,
         scope: &std::path::Path,
@@ -346,9 +351,9 @@ impl HostState {
         self.trace_seq += 1;
         sink.push(TraceRecord {
             seq,
-            effect: "Read".to_string(),
-            op: "read_text".to_string(),
-            cap_kind: "FsRead".to_string(),
+            effect: effect.to_string(),
+            op: op.to_string(),
+            cap_kind: cap_kind.to_string(),
             detail: Some(rel.to_string()),
             span: Some((file as u32, start as u32, end as u32)),
             resolved_path: Some(pointed.to_string_lossy().to_string()),
@@ -384,6 +389,36 @@ fn parse_by_builtin(caller: &mut Caller<'_, HostState>, name: &str, s: i32) -> O
     }
     caller.data_mut().refused = Some(format!("`{name}` answered a value the WASM engine does not hold"));
     None
+}
+
+/// The guest values at `ptrs`, of the type the descriptor at `desc` writes, rebuilt as the interpreter's (`reify.rs`) —
+/// through one map of cells, so a cell two of them hold is one cell, as on the interpreter (`p == p` compares a cell with
+/// itself there too). `None` once a refusal is recorded: a descriptor this engine did not write, or a value that is not
+/// well-formed.
+fn reify_values(caller: &mut Caller<'_, HostState>, desc: i32, ptrs: &[i32]) -> Option<Vec<Value>> {
+    if caller.data().refused.is_some() {
+        return None;
+    }
+    let Some(d) = read_guest_str(caller, desc).and_then(|t| crate::reify::parse(&t)) else {
+        caller.data_mut().refused = Some("DL0903: a value's type descriptor is not one the WASM engine wrote".into());
+        return None;
+    };
+    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+        caller.data_mut().refused = Some("DL0903: a module with no memory".into());
+        return None;
+    };
+    let rebuilt: Result<Vec<Value>, String> = {
+        let data = mem.data(&caller);
+        let mut r = crate::reify::Reifier::new(data, &d);
+        ptrs.iter().map(|&p| r.root(p)).collect()
+    };
+    match rebuilt {
+        Ok(vs) => Some(vs),
+        Err(why) => {
+            caller.data_mut().refused = Some(format!("DL0903: {why}"));
+            None
+        }
+    }
 }
 
 /// Record that the interpreter's `name` answered `got`, which the guest cannot hold, and return `none`.
@@ -856,7 +891,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // spelled from the working directory).
                 .any(|g| delulu_runtime::prim::contains_on_disk(g, &want));
             if !granted {
-                caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted"));
+                caller.data_mut().refused =
+                    Some(format!("DL0703: filesystem read of `{path}` was not granted — pass `--grant fs.read={path}`"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -887,7 +923,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 // Like the interpreter, it also names where the path pointed and the scope (RW 6.13). At DISPATCH:
                 // a hostile spelling is refused after it, as the interpreter refuses it (RW 4.64).
                 let pointed = normalize(&scope.join(&rel));
-                caller.data_mut().push_fs_read_trace(&rel, &pointed, &scope, file, start, end);
+                caller.data_mut().push_fs_trace(("Read", "read_text", "FsRead"), &rel, &pointed, &scope, file, start, end);
                 if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
                     caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
                     caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
@@ -934,6 +970,154 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     }
                     delulu_runtime::beneath::Outcome::Escaped(why) => {
                         caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        // As the interpreter records an effect's own refusal after its dispatch record (RW 4.62).
+                        caller.data_mut().push_refusal_trace("Read", "read_text", "FsRead", file, start, end);
+                        return 0;
+                    }
+                };
+                match built {
+                    Ok(ptr) => ptr,
+                    Err(()) => {
+                        caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                        0
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `Cap[FsRead].narrow(sub)`: a new handle for the subtree `sub` names inside the handle's scope, by the interpreter's own
+    // `resolve_in_scope` — a hostile spelling, a `..` or a link out of the scope is refused (DL0904) as it is there, and no
+    // narrowing reaches past the scope it starts from. Pure, as on the interpreter: no trace, no custody round-trip.
+    linker
+        .func_wrap("delulu:cap", "fs_narrow", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let scope = match caller.data().caps.get(cap as usize) {
+                Some(CapKind::FsRead(scope)) => scope.clone(),
+                _ => {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                    return -1;
+                }
+            };
+            let Some(sub) = read_guest_str(&mut caller, path_ptr) else {
+                caller.data_mut().refused = Some("DL0903: narrow path pointer is out of bounds".into());
+                return -1;
+            };
+            match delulu_runtime::prim::resolve_in_scope(&scope, &sub, delulu_diag::Span::new(0, 0, 0)) {
+                Ok(narrowed) => {
+                    let st = caller.data_mut();
+                    st.caps.push(CapKind::FsRead(narrowed));
+                    (st.caps.len() - 1) as i32
+                }
+                Err(fault) => {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    -1
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // `root.fs_write(p)`: a write capability minted exactly as the interpreter mints one (`prim`'s root method): a hostile
+    // spelling refused, `p` resolved from the working directory, granted iff it lies on disk within a granted subtree.
+    linker
+        .func_wrap("delulu:cap", "root_fs_write", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            let Some(path) = read_guest_str(&mut caller, path_ptr) else {
+                caller.data_mut().refused = Some("DL0903: fs_write path pointer is out of bounds".into());
+                return -1;
+            };
+            if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
+                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                return -1;
+            }
+            let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
+            if !caller.data().fs_write_roots.iter().any(|g| delulu_runtime::prim::contains_on_disk(g, &want)) {
+                caller.data_mut().refused =
+                    Some(format!("DL0703: filesystem write of `{path}` was not granted — pass `--grant fs.write={path}`"));
+                return -1;
+            }
+            let st = caller.data_mut();
+            st.caps.push(CapKind::FsWrite(want));
+            (st.caps.len() - 1) as i32
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `write_text(rel, body)` / `append_text` (`append` 1): the interpreter's order, step for step — the record, the custody
+    // gate on the path the write will open (GUARD-ALIAS-1), the scope (`resolve_in_scope`, its words), then the write
+    // through `beneath` (FS-RACE-1), answered as `Result[Unit, IoErr]`. A refusal after the record is recorded as one.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "fs_write_text",
+            |mut caller: Caller<'_, HostState>,
+             cap: i32,
+             path_ptr: i32,
+             body_ptr: i32,
+             append: i32,
+             file: i32,
+             start: i32,
+             end: i32|
+             -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let op = if append != 0 { "append_text" } else { "write_text" };
+                let scope = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::FsWrite(scope)) => scope.clone(),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsWrite capability"));
+                        return 0;
+                    }
+                };
+                let (Some(rel), Some(body)) = (read_guest_str(&mut caller, path_ptr), read_guest_str(&mut caller, body_ptr))
+                else {
+                    caller.data_mut().refused = Some(format!("DL0903: a `{op}` argument lies outside the guest's memory"));
+                    return 0;
+                };
+                let pointed = delulu_runtime::prim::resolve_norm(&scope, &rel);
+                caller.data_mut().push_fs_trace(("Write", op, "FsWrite"), &rel, &pointed, &scope, file, start, end);
+                let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
+                let at = match &pin {
+                    Some(real) => delulu_runtime::prim::disk_spelling(real),
+                    None => pointed.to_string_lossy().to_string(),
+                };
+                if !caller.data_mut().custody_allows(CustodyOp::FsWrite, Some(&at)) {
+                    caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
+                    return 0;
+                }
+                let resolved = match delulu_runtime::prim::resolve_in_scope(&scope, &rel, delulu_diag::Span::new(0, 0, 0)) {
+                    Ok(p) => p,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
+                        return 0;
+                    }
+                };
+                let wrote = match &pin {
+                    Some(real) => delulu_runtime::beneath::write_text_at(real, &body, append != 0),
+                    None => delulu_runtime::beneath::write_text(&scope, &resolved, &body, append != 0),
+                };
+                let built = match wrote {
+                    delulu_runtime::beneath::Outcome::Done(()) => write_variant_cell(&mut caller, 0, None), // Ok(())
+                    delulu_runtime::beneath::Outcome::Io(e) => {
+                        use std::io::ErrorKind::*;
+                        match e.kind() {
+                            NotFound => build_err_ioerr(&mut caller, 0, None),
+                            PermissionDenied => build_err_ioerr(&mut caller, 1, None),
+                            _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                        }
+                    }
+                    delulu_runtime::beneath::Outcome::Escaped(why) => {
+                        caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                        caller.data_mut().push_refusal_trace("Write", op, "FsWrite", file, start, end);
                         return 0;
                     }
                 };
@@ -1229,6 +1413,27 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     linker
         .func_wrap("delulu:float", "rem", |_caller: Caller<'_, HostState>, a: f64, b: f64| -> f64 { a % b })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `str` and `==` of a list, an option, a result, a sum or a record: the value rebuilt from the guest's memory by its
+    // type's descriptor (`reify.rs`), then the interpreter's own `Value::display` and `Value::eq`.
+    linker
+        .func_wrap("delulu:value", "display", |mut caller: Caller<'_, HostState>, v: i32, desc: i32| -> i32 {
+            let Some(shown) = reify_values(&mut caller, desc, &[v]).map(|vs| vs[0].display()) else {
+                return 0;
+            };
+            match write_str_cell(&mut caller, &shown) {
+                Ok(ptr) => ptr,
+                Err(()) => {
+                    caller.data_mut().refused = Some("guest heap exhausted rendering a value".into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:value", "eq", |mut caller: Caller<'_, HostState>, a: i32, b: i32, desc: i32| -> i32 {
+            reify_values(&mut caller, desc, &[a, b]).map_or(0, |vs| i32::from(vs[0].eq(&vs[1])))
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
     // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
     // `spawn`, `send`, and field access all cross as i64 (Int and actor-ref slot ids are i64).
@@ -1378,6 +1583,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         clock_granted: false,
         rand_granted: false,
         fs_read_roots: Vec::new(),
+        fs_write_roots: Vec::new(),
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
@@ -1415,6 +1621,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         clock_granted: cfg.clock,
         rand_granted: cfg.rand,
         fs_read_roots: cfg.fs_read_roots.clone(),
+        fs_write_roots: cfg.fs_write_roots.clone(),
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
@@ -1442,6 +1649,8 @@ pub struct HostConfig {
     /// Granted filesystem-read subtrees (absolute, normalized — the same the interpreter's
     /// `granted_root` produces). `root.fs_read(p)` succeeds iff `p` resolves within one.
     pub fs_read_roots: Vec<PathBuf>,
+    /// Granted filesystem-write subtrees, the same way (`root.fs_write(p)`).
+    pub fs_write_roots: Vec<PathBuf>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.

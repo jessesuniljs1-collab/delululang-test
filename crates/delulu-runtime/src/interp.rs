@@ -248,6 +248,9 @@ type R<T> = Result<T, Escape>;
 pub struct Home {
     funcs: HashMap<String, FnDecl>,
     globals: Env,
+    /// Each record type's field names in the order the type declares them — the order its values hold them in, whatever
+    /// order a literal writes them (RECORD-ORDER-1: `==` pairs fields by position, and `str` prints them in it).
+    records: HashMap<String, Vec<String>>,
 }
 
 pub struct Interp {
@@ -341,10 +344,16 @@ impl Interp {
         let mut foreign_blocks = HashMap::new();
         let mut actors = HashMap::new();
         let mut tests = HashMap::new();
+        let mut records = HashMap::new();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
                     funcs.insert(f.name.name.clone(), f.clone());
+                }
+                Item::Type(td) => {
+                    if let TypeDeclKind::Record(fields) = &td.kind {
+                        records.insert(td.name.name.clone(), fields.iter().map(|f| f.name.name.clone()).collect());
+                    }
                 }
                 Item::Const(c) => consts.push((c.name.name.clone(), c.value.clone())),
                 Item::Foreign(fd) => {
@@ -374,7 +383,7 @@ impl Interp {
             }
         }
         Interp {
-            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root() })),
+            home: RefCell::new(Rc::new(Home { funcs, globals: Scope::root(), records })),
             tests,
             consts,
             depth: Cell::new(0),
@@ -986,6 +995,10 @@ impl Interp {
                 let mut fs = Vec::new();
                 for (fname, fexpr) in fields {
                     fs.push((fname.name.clone(), self.eval_expr(fexpr, env)?));
+                }
+                // Computed in the order written; held in the order declared (RECORD-ORDER-1).
+                if let Some(order) = self.home.borrow().records.get(&*name) {
+                    fs.sort_by_key(|(f, _)| order.iter().position(|o| o == f));
                 }
                 self.charge_alloc((fields.len() as u64).saturating_mul(16).saturating_add(16))?;
                 let v = Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) };

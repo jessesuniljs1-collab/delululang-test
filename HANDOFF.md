@@ -1691,6 +1691,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   a hash of the Rust inputs it passed, and `pre-commit` refuses a commit staging Rust inputs that hash otherwise — git only,
   so a commit made while a suite holds the build lock still goes through when the lint ran first.
 
+- **A count held in a field can still be fed by a global, through the function that raises it** (on-demand routine run
+  5, RW 7.20): the row for a once-seen red said the count was a field of the struct each test makes "and nothing global
+  feeds it that a read found" — the read stopped at the method that increments it and missed that its caller opens a
+  window on the PROCESS-WIDE egress log, which two tests beside it write. To clear a once-seen red of global state, read
+  every call the asserting path makes, transitively, for a `static`; and reproduce it with its neighbours: a frozen copy of
+  the test binary, its filter run a few hundred times at `--test-threads 16`, turned "once on the laptop" into 13 of 400
+  in the VM, and the fixed binary beside it, under the same load, into the control (0 of 400).
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

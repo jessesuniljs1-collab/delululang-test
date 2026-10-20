@@ -7413,3 +7413,238 @@ Mutants M599–M603, all red, control green:
 **Evidence.** `record_parity` 3; `wasm_cli` 12. The whole `delulu-wasm` suite and the release differential were
 started before the owner's *"97% current session usage used. Commit and push everything"*, and their results were not
 read before this commit. This branch's CI is the record.
+
+## 2026-10-20 — the laptop: linked lists and trees on the WASM engine; RCAP-CTOR-1, WASM-SCAN-1 (RW 3.4, 2.18, 3.17)
+
+**A record field may hold an `Option`, a `Result` or a `List`.** `RecordDesc` keeps each field's `Ty` (`field_ty`: a
+scalar, or an `Option`, `Result` or `List` of scalars), stored and loaded by its width (`store_ty`, `load_ty`); the
+three compound kinds are pointers to cells shared as the interpreter's are. A linked list (`next: Option[ref Node]`)
+and a tree (`kids: ref List[ref Tree]`, grown through the field) run with the interpreter's output.
+
+**A constructor where no type is written compiles.** `let c = Red` and `Circle(1.5)` build the sum that declares the
+name (`enum_of_ctor`, unique, as the checker's `variant_ctor` is); `Some(x)` takes its payload's type, `x` computed
+first (`compile_some`); `None`, `Ok` and `Err` take the type the checker inferred (`checked_ty`, scalars and their
+`Option`/`Result`/`List`). A written `let` type is now the value's expected type, so `let k: Result[Color, Str] =
+Ok(Green)` compiles.
+
+**RCAP-CTOR-1 (RW 2.18), found writing the linked list.** `head.next = None` and `p.c = Red` were DL1603, "an
+undetermined capability": the capability pass resolved a name as a local, a function or a constant and not as a
+constructor, and a field store refuses an undetermined value where a literal does not. A nullary constructor now has
+its type's default capability (`default_k`), as `Some(2)` has. A first version made it a fresh composite, as `[]` is;
+that refused `var o = None; o = Some(2)` (a fresh `None` binds `ref`, and `Some(2)` is `val`), which the old checker
+accepted — caught by comparing the two binaries by hand, and now held by the test. Nothing newly refused: `check` on
+all 266 `.delulu` files in the repository gives the same verdict and codes on the old and the new binary, and so do
+eleven written-`ref`/`iso` destinations probed by hand (`let o: ref Option[Int] = None` is DL1603 on both, as
+`Some(1)` there is).
+
+**WASM-SCAN-1 (RW 3.17), found probing records.** `Stamp { at: root.clock().now_ms(), … }` stopped with "DL0904:
+invalid WASM module" on `master`: `module_calls_method` had its own walk, which passed over a record literal's fields, a
+field's receiver, a `spawn`'s arguments and a `recover` body, so the module called a clock import it did not have. It
+is now `module_any`'s walk, whose `match` names every expression form. RW 3.16's closure had said the import scan
+descends into every expression; it did not, and 3.17 says so.
+
+Tests:
+- `record_parity.rs` `records_holding_options_results_and_lists_match_the_interpreter` (the list built by prepending,
+  walked and cut; the tree grown through `t.kids.push`, summed over a `Result` field; an `Option[Str]` field written both
+  ways, seen through the list that holds the record);
+- `constructors_with_no_written_type_match_the_interpreter`;
+- `a_capability_used_inside_a_record_literal_brings_its_import` (clock and rand, fixed clock and seed on both engines;
+  the runner now takes a `HostConfig`);
+- `what_the_record_fragment_leaves_out_is_refused`: its `Option[Int]` field compiles now, so the refused cases are an
+  `Option[List[Int]]` field and a `Map` field;
+- `codegen.rs` `ctor_tests::a_constructor_two_sums_declare_names_neither`;
+- `delulu-check` `a_nullary_constructor_stored_into_a_field_has_its_types_capability` (red on the old checker).
+
+Mutants, all red, control green each time:
+- M604 — a field only a scalar;
+- M605 — the old import walk;
+- M606 — no `Some` synthesis;
+- M607 — no sum for a constructor;
+- M608 — a written `let` type not the expected one;
+- M609 — a nullary constructor `Unknown` again (the old checker);
+- M610 — no `Option` from the checker's type;
+- M611 — a constructor two sums declare taken as the first's — survived `record_parity` (the checker refuses such a
+  name before the backend sees it) and is red on `ctor_tests`, written for it;
+- M612 — the first version of the checker fix (fresh).
+
+**Evidence.** `delulu-check` and `delulu-wasm` whole, green (`--no-fail-fast`, exit 0). The release differential: 50,000
+programs, 45,027 agreed, 4,973 both faulted, 0 mismatches — the same counts as the slice before, because its generator
+writes no record and no bare constructor; the parity tests above are this slice's witnesses. The corpus's entry
+points: still 10 of 17 — this slice widens the language, not those programs.
+
+## 2026-10-20 — the laptop: `str` and `==` of compound values on the WASM engine; RECORD-ORDER-1 (RW 3.4, 2.19)
+
+**`str`, `==` and `!=` of a list, an option, a result, a sum or a record compile**, answered by the interpreter's own
+`Value::display` and `Value::eq` — one rule for both engines, as `Str` methods and `parse_int` already are. The guest
+passes the value's pointer and its type's descriptor (`type_desc`: the type, then every record and sum it reaches —
+`R0=Node{v:i,next:oR0.}`), laid out after the literals on first use (`Descs`, `desc_ptr`; the memory and the heap's
+start are now set after the bodies are compiled, so a descriptor named in a body lands before the heap). The host
+(`delulu:value.display`, `delulu:value.eq`) rebuilds the value as the interpreter's `Value` from the guest's memory
+(`reify.rs`), each record and list cell once by its address, so a value that holds itself holds itself there too and
+`display` prints `Node { ... }` where the interpreter does; `p == p` compares one cell with itself on both engines; a
+`NaN` keeps `[nan] == [nan]` `false`. The module carries the two imports only when a compiled body takes `str` of, or
+compares, a value the checker typed as one of these (or as a type variable, for an inlined generic body); every other
+module is byte-identical to before, and without the checker's types (`compile_module`) such a `str` is refused.
+
+The guest's memory is read as untrusted, since a `.dwx` can be written by hand: every read is bounds-checked, a list
+header claiming more elements than the memory holds is refused before anything is allocated, a tag outside its type's
+constructors is refused, and so is a variant cell met again inside itself (no compiled program can build one — a
+variant is never written after it is made — and it would otherwise recurse without end). Each refusal is DL0903 in
+words.
+
+**RECORD-ORDER-1 (RW 2.19), found writing the probe for `str` of a record.** The interpreter held a record's fields in
+the order its literal wrote them: `P { y: "a", x: 2 } == P { x: 2, y: "a" }` was `false` (2.13's `eq` pairs fields by
+position) and the two printed differently. A literal's fields are still computed in the order written and are now held
+in the order the type declares (`Home.records`) — the order the WASM engine's cell uses.
+
+Tests:
+- `value_parity.rs` (new): `str_and_equality_of_compound_values_match_the_interpreter`,
+  `a_value_that_holds_itself_and_a_nan_match_the_interpreter` (a record held twice in a list is one cell),
+  `str_and_equality_inside_a_generic_body_match_the_interpreter`, `what_the_value_interface_leaves_out_is_refused`;
+- `reify.rs` `a_descriptor_parses_and_a_malformed_one_does_not`, `a_malformed_guest_value_is_refused`;
+- `value_semantics.rs` `a_record_holds_its_fields_in_the_order_its_type_declares` (red on the old interpreter; it also
+  holds the computing order);
+- `record_parity.rs`'s refusal test loses its `str` and `==` cases, which compile now and are held above.
+
+Mutants:
+- M613 — a record rebuilt again where met again: red (the value that holds itself);
+- M614 — a list rebuilt again where met again: **survived**, and cannot be seen in this fragment: no list can hold
+  itself without a list of lists, which does not compile, and a list met twice compares and prints the same either way;
+- M615 — the variant guard gone: red (the unit test's process overflowed its stack — the crash the guard prevents);
+- M616 — the list bound gone: red (the unit test's process aborted on the allocation);
+- M617 — a record's fields described in reverse; M618 — `!=` as `==`; M619 — no value interface; M620 — `Option`'s
+  constructors swapped; M621 — a type variable not counted; M622 — a `Bool` read inverted: all red;
+- M623 — the interpreter's sort gone: red.
+Control green after each spec.
+
+**The generator.** `random_console_program` gains a line, from a stream of its own so every other line is what each seed
+always gave: `str`, `==` and `!=` of a list and an option of `Float`s — a NaN, an infinity and a negative zero rendered
+and compared inside them, a list against itself as often as against another. `conformance_parity` and the differential
+now compile with the checker's types (`compile_checked`), as the command line does — through `compile_module` the value
+interface is never carried. `conformance_parity` asserts the line in more than 500 of its 2,000 programs, more than 150
+equal, more than 150 unequal and more than 10 with a NaN inside (mutants M624 — the line never written — and M625 — a
+list never compared with itself — red).
+
+**Evidence.** `delulu-runtime`, `delulu-wasm` and `delulu-conform` whole, green (509 tests, `--no-fail-fast`); `delulu`'s
+`wasm_cli`, `conformance`, `core_invariance`, `corpus_cli`, `examples_run`, `cli`, `json_contract`, `actors_cli`,
+`budget_cli` and `book` green (114) — the interpreter's new field order changed no golden output there. The release
+differential with the new line: 50,000 programs, all 50,000 compiled (with the checker's types), 45,027 agreed, 4,973
+both faulted, 0 mismatches. By hand, a probe of every kind printed the same on both engines, the cycle and `[NaN]`
+included.
+
+## 2026-10-20 — the laptop: `narrow` on the WASM engine; the tier-5 attenuation program compiles (RW 3.4)
+
+**`Cap[FsRead].narrow(sub)` compiles**, to the import `delulu:cap.fs_narrow(cap, path) -> cap`. The host mints the
+narrower handle by the interpreter's own `prim::resolve_in_scope` — public now for it — so the two engines draw one
+boundary in one set of words: a hostile spelling, a `..` or a link out of the handle's scope is DL0904, and no
+narrowing reaches past the scope it starts from. Pure, as on the interpreter (`effect_for("FsRead", "narrow")` is
+`None`): no trace record, no custody round-trip — the read through the narrowed handle is traced and gated as every
+read is, against the narrowed scope. The import scan names `narrow`, so a module whose only filesystem operation is a
+narrowing of a handle it was given still carries the filesystem imports. The corpus's entry points: **11 of 17**
+compile, `tests/corpus/tier5-security/attenuation.delulu` the eleventh.
+
+Tests:
+- `narrow_parity.rs` (new): `a_narrowed_handle_reads_inside_its_subtree_on_both_engines` (two independent
+  narrowings, a narrowing within a narrowing), `no_narrowing_or_read_reaches_past_the_scope_on_both_engines` (a
+  narrowing back up, reads into the sibling and the parent, a narrowing to the sibling by way of `..` — DL0904 in the
+  interpreter's words on both), `a_module_that_only_narrows_carries_the_filesystem_imports` (the module validated by
+  wasmtime);
+- `corpus_cli.rs`'s tier-5 test runs both of its grants on the WASM engine too, each with the interpreter's stdout and
+  exit code (through the command line; on the old binary the WASM run was DL1201).
+
+Mutants M626 (the narrowed path unchecked), M627 (no `narrow` arm), M628 (the scan without `narrow`), M629 (the
+narrowed handle keeping the wider scope): all red, control green.
+
+**Evidence.** `delulu-wasm` and `delulu-runtime` whole, green (484 tests); `delulu`'s `wasm_cli`, `corpus_cli`,
+`conformance`, `examples_run`, `cli` and `core_invariance` green (78). By hand on the laptop: the attenuation program
+and the four refusals printed and refused alike on both engines through `delulu run --grant fs.read=./data`.
+
+## 2026-10-20 — the laptop: writing files on the WASM engine (RW 3.4)
+
+**`root.fs_write(p)`, `write_text` and `append_text` compile**, to `delulu:cap.root_fs_write` and
+`delulu:cap.fs_write_text(cap, path, body, append, file, start, end) -> Result[Unit, IoErr]`. The mint is the
+interpreter's (`prim`'s root method): a hostile spelling refused, the path resolved from the working directory, granted
+iff it lies on disk within a granted write subtree (`HostConfig.fs_write_roots`, filled by the command line from
+`--grant fs.write=` on both of its WASM paths). The write follows the interpreter's order step for step: the dispatch
+record (the relative path, where it pointed, the scope), the custody gate on the path the write will open
+(GUARD-ALIAS-1: pinned and spelled as on disk), the scope by `prim::resolve_in_scope` in its words, then the write
+through `beneath` (FS-RACE-1); a refusal after the record is recorded as one (RW 4.62). `push_fs_read_trace` became
+`push_fs_trace`, for the three file effects. Two alignments made on the way: an ungranted `root.fs_read` on WASM now
+names the grant to pass, as the interpreter's message does; and the read path's escape at open (reachable only by a
+race between the check and the open) now records its refusal after the dispatch, as the interpreter does — by
+reading, unwitnessed.
+
+Chapter `05` now stops only at `.http`; the corpus count stays 11 of 17.
+
+Tests:
+- `wasm_cli.rs` `file_writes_on_the_wasm_engine_match_the_interpreter`, through the command line: a write, an append
+  and a write into a directory that does not exist — the interpreter's output, the same bytes on disk, the same trace
+  byte for byte; a write escaping the scope — DL0904 on both, no file, the same dispatch and refusal records; an
+  ungranted mint — DL0703 on both in the interpreter's words;
+- `lib.rs` `a_write_asks_the_custody_for_the_path_it_will_open`: a recording custody is asked once, about `FsWrite`,
+  on the on-disk spelling — the program names the directory by another spelling (upper case on Windows, a link on
+  Unix), and the test asserts it can tell the two apart; a denying custody refuses the run in its words and nothing
+  is written.
+
+Mutants:
+- M630 (the scope unchecked), M631 (no dispatch record), M633 (the mint ungated), M636 (no refusal record), M634 (no
+  custody gate), M635 (`FsRead` asked) — red;
+- M632 — the append flag dropped: first aimed at the unpinned branch, which runs only for a file that does not exist
+  yet, where appending and writing agree (an equivalent mutant, survived); aimed at the pinned branch, red;
+- M637 — the custody asked about the path as written: survived while the test's directory had one spelling; red once
+  the program named it by another.
+Control green after each spec.
+
+**Evidence.** `delulu-wasm` whole, green (168 tests); `delulu`'s `wasm_cli`, `corpus_cli`, `conformance`,
+`examples_run`, `cli`, `json_contract`, `budget_cli` and `core_invariance` green (102). By hand: the write program, the
+escape and the ungranted mint printed, wrote and refused alike on both engines, their traces byte-identical.
+
+## 2026-10-20 — on-demand routine run 5: the laptop's #17–#19 landed; a host's egress window is its own thread's (RW 7.20)
+
+**Landed from the laptop.** The laptop's session stopped at about 04:30 UTC with three pull requests open, each green:
+#17 (`cba20d4`, `str` and `==` of compound values on WASM, RECORD-ORDER-1), #18 (`ce5f6ab`, `narrow` on WASM) and #19
+(`275af08`, writing files on WASM). Their CI — `39367623331`, `39368481885` and `39369712525` — read success on every job
+(`miri-slow` and `heavy-gates` skipped, as on every pull request), and so did `a7b6476`'s push run `39368506567`. `master`
+was fast-forwarded `a7b6476..275af08` and pushed. On `275af08` in the VM: `survey check` ok (1543 nodes, 15500 edges);
+`doctor --check` ok (26 checks); the two-engine differential (`cargo test -p delulu-wasm --release --test differential --
+--ignored`, 50,000 programs — `heavy-gates`, which no pull request runs) passed in 151 s. **The autosave branch:** its eleven
+snapshots since `bbb8ea3` were each compared with the commit that followed their base: six landed exactly (`c94cbba`,
+`3174d05`, `fc0310c`, `301c018`, `ce67ca1`, `84eabf6`); five were mid-edit drafts that the next commit carries further
+(`902e45d` — the commit adds a §11.4 lesson; `0012e9f` and `e500da6` — `in_block`'s walk, replaced in `a7b6476` by
+`module_any`'s, WASM-SCAN-1; `3f5454e` — `compile_module` calls, replaced by `compile_checked`; `6d7557c` — `Ty`'s list
+re-laid out by `rustfmt` around `FsWrite`). Nothing to recover; no snapshot after `275af08`.
+
+**RW 7.20 — the confinement tests' flake, reproduced and explained.** The row said the two tests' count was a field of the
+`HostChannel` each test makes "and nothing global feeds it that a read found". Something does: `HostChannel::answer` takes
+`egress::mark()` on the way in and counts every refusal `egress::records_since` finds on the way out, and both read the
+PROCESS-WIDE egress log — the run report's evidence, process-wide on purpose, because an actor's `http.get` runs on a
+worker thread. Two tests in the same binary make refused requests (`a_guests_refused_network_request_is_in_the_hosts_denied_list_with_its_reason`,
+`a_guests_request_with_a_refused_header_is_refused_by_the_host_and_recorded`); when one landed between a confinement test's
+mark and its read, that test's host counted it as its guest's, and `denied().1` was 2. **Reproduced in the VM** with a frozen
+copy of the pre-fix test binary, its `channel::tests::a_` filter run at `--test-threads 16`: 11 of 500 runs red, then 13
+of 400 (6 at `channel.rs:1336`, 7 at `:1380` — the laptop's two lines — every one `left: 2`); the fixed binary, run side by
+side under the same load, 0 of 400.
+
+**The fix.** `egress::mark` and `records_since` read a thread-local tally of what THIS thread logged (`MINE`, bounded and
+counted as the process log is; `log` writes both). The sandbox host performs a guest's request on the thread that answers
+it — `LocalSink` calls the primitive table in place, and every `log` call is on the requesting thread — so the window holds
+that request's refusals and no other thread's. The process-wide log, which `take_log` and `snapshot` give the run report,
+is unchanged. The same rule already held for RW 4.46's `fetch_refusal`, read on the calling thread "never another
+thread's". In the `delulu` command line one process hosts one guest, so no shipped run reported another's refusal; a
+process hosting two guests (an embedder of `delulu-runtime`, or a test binary) could.
+
+Tests:
+- `channel.rs` `a_refusal_another_thread_logs_while_the_host_answers_is_not_the_guests`: a sink that, while performing the
+  guest's call, has ANOTHER thread make a refused request — `denied().1` is 0; the control, the same refusal made on the
+  answering thread — 1, naming the URL. Red on the old code (`left: 1`).
+- `egress/tests.rs` `records_logged_after_a_mark_are_found_by_it`, tightened: it accepted "ours is among what the mark
+  finds, or anything was refused" because other tests log concurrently; now exactly ours, with another thread's refusal
+  logged beside it.
+
+Mutants: M638 (the window read from the process log again) — red, both tests; M639 (`log` not writing the thread's tally)
+— red, four tests (the two network tests' records gone from `denied[]`). Control green.
+
+**Evidence.** `delulu-runtime`'s `channel` and `egress` tests green (70); on the runners at `18b0adf` (`witness.yml`,
+`delulu-runtime`'s whole library): macOS `39388976507` 284 passed, 0 failed, the new test and the tightened one named;
+Windows ``39388979829`` 283 passed, 0 failed, both tests named. The full suite alone at `18b0adf`: 2,431 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved (a red-team pass loaded the VM during part of it). `scripts/clippy.sh -j 4` clean and
+stamped; `cargo fmt --all` clean.

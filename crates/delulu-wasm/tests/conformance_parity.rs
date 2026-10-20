@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_module, gen::random_console_program, run_main, HostConfig};
+use delulu_wasm::{compile_checked, compile_module, gen::random_console_program, run_main, HostConfig};
 
 /// Run `main` on both engines under the same grants/determinism and return `(wasm_out, interp_out)`.
 fn run_both(src: &str, cfg: HostConfig) -> (String, String) {
@@ -111,6 +111,9 @@ fn random_console_programs_match_across_engines() {
     // Programs with a `Float` line (every leaf the generator writes holds a `.`, or is `float(…)`), and how many printed a
     // NaN and an infinity.
     let (mut floats, mut nans, mut infs) = (0u32, 0u32, 0u32);
+    // Programs printing `str`, `==` and `!=` of a list and an option of `Float`s (the host's value interface), how many
+    // of those lists were equal, and how many printed a NaN inside one.
+    let (mut shown, mut same, mut nan_inside) = (0u32, 0u32, 0u32);
     let mut mismatches: Vec<String> = Vec::new();
     for k in 0..2000u64 {
         let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -120,7 +123,7 @@ fn random_console_programs_match_across_engines() {
             mismatches.push(format!("seed {seed}: generated program did not check clean:\n{src}\n{:?}", checked.diagnostics));
             continue;
         }
-        let wasm = compile_module(&checked.module).expect("generated console program should compile");
+        let wasm = compile_checked(&checked.module, &checked.result).expect("generated console program should compile");
         let wasm_res = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() });
 
         set_capture(true);
@@ -143,6 +146,12 @@ fn random_console_programs_match_across_engines() {
                     floats += 1;
                     nans += u32::from(wo.contains("NaN"));
                     infs += u32::from(wo.contains("inf"));
+                }
+                if src.contains("]==[") {
+                    shown += 1;
+                    let line = wo.lines().find(|l| l.starts_with('[') && l.contains(" Some(")).unwrap_or_default();
+                    same += u32::from(line.ends_with("truefalse"));
+                    nan_inside += u32::from(line.contains("NaN"));
                 }
                 if src.contains(" == ") {
                     compares += 1;
@@ -171,6 +180,10 @@ fn random_console_programs_match_across_engines() {
     assert!(calls.iter().all(|n| *n > 100), "Str methods: {STR_METHODS:?} called in {calls:?} programs");
     assert!(parsed > 300 && unparsed > 100, "parse_int: {parsed} programs, {unparsed} of them printing `none`");
     assert!(floats > 300 && nans > 20 && infs > 10, "Float: {floats} programs, {nans} printing a NaN, {infs} an infinity");
+    assert!(
+        shown > 500 && same > 150 && shown - same > 150 && nan_inside > 10,
+        "lists and options of Floats: {shown} programs, {same} equal, {nan_inside} with a NaN inside"
+    );
 }
 
 #[test]

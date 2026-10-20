@@ -25,6 +25,51 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### a sandbox host's refusals are its own guest's, 2026-10-20
+
+- **Fixed: a host serving a sandboxed guest could record a network refusal made by another thread of its process as its
+  guest's** (RW 7.20). The refusals in a run's `denied` list are now the ones made while answering that guest's own
+  requests. The `delulu` command line hosts one guest per process, so its reports were not affected; a process that
+  hosts more than one guest through `delulu-runtime` was, and so were two of the project's own tests, which failed now
+  and then for this reason.
+
+### writing files on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `root.fs_write`, `write_text` and `append_text`**, with the interpreter's
+  behavior: the same files written, the same `IoErr` for a failed write, a path outside the capability refused
+  with DL0904 and nothing written, and the same effect trace. Under the broker daemon each write is decided on
+  the path it will open, as on the interpreter.
+- **Changed: on `--engine wasm`, an ungranted `root.fs_read` now names the grant to pass** (`--grant fs.read=…`),
+  as the interpreter's message does.
+
+### narrowing a file capability on the WASM engine, 2026-10-20
+
+- **Added: `--engine wasm` compiles `Cap[FsRead].narrow(sub)`**, the same boundary as on the interpreter: a narrowed
+  capability reads only inside its subtree, and a narrowing or read that reaches past it (`..`, a link) is refused
+  with the interpreter's DL0904. `tests/corpus/tier5-security/attenuation.delulu` now runs on the WASM engine.
+
+### `str` and `==` of lists, options, sums and records on the WASM engine; a record's field order, 2026-10-20
+
+- **Added: on `--engine wasm`, `str`, `==` and `!=` of a list, an option, a result, a sum or a record**, with the
+  interpreter's output: the WASM engine hands the value to the interpreter's own rendering and equality, so a value that
+  holds itself prints with `...`, and a `NaN` inside a list keeps the list unequal to itself, on both engines.
+- **Fixed: two records of one type compared unequal when their literals named the fields in different orders.**
+  `P { y: "a", x: 2 } == P { x: 2, y: "a" }` was `false`, and the two printed differently. A record now holds its
+  fields in the order its type declares them, so `str` of a record prints that order whatever order the literal
+  used. The fields are still computed in the order written.
+
+### linked lists and trees on the WASM engine; a constructor stored into a field, 2026-10-20
+
+- **Added: on `--engine wasm`, a record field may hold an `Option`, a `Result` or a `List`**, so linked lists
+  (`next: Option[ref Node]`) and trees (`kids: ref List[ref Tree]`) run on the WASM engine with the interpreter's output.
+  A constructor no longer needs a written type there either: `let c = Red`, `var cur = Some(head)`, and `var o = None`
+  later given a value.
+- **Fixed: `p.c = Red` and `n.next = None` were refused** (DL1603, "an undetermined capability") although the same
+  value was accepted in a record literal or through a `let`. A constructor with no fields is now accepted wherever one
+  with fields is.
+- **Fixed: on `--engine wasm`, a program that used the clock, `rand`, a file read or the console only inside a record
+  literal stopped with "DL0904: invalid WASM module".** For example, `Stamp { at: root.clock().now_ms() }`. It now runs.
+
 ### records on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles records**: a literal, a field read, and a field write (`p.x = v`, `l.a.x = v`),

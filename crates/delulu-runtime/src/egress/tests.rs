@@ -865,16 +865,18 @@ fn a_refusal_record_says_why_in_a_machine_readable_code() {
     assert!(j["explain"].as_str().unwrap().contains("net.special="), "the operator is told the spelling: {j}");
 }
 
-/// The process-wide log: what the primitive table records is readable by a mark, which is how the
-/// sandbox channel finds the refusals one guest request produced.
+/// What the primitive table records is readable by a mark, which is how the sandbox channel finds the
+/// refusals one guest request produced — this thread's, exactly, whatever other threads log meanwhile
+/// (RW 7.20: the mark had read the process-wide log, and a test beside it was counted as ours).
 #[test]
 fn records_logged_after_a_mark_are_found_by_it() {
     let m = mark();
     let url = format!("http://mark-test-{}.example/", std::process::id());
     note_refusal(&url, Reason::Scheme);
+    std::thread::spawn(|| note_refusal("http://another-thread.example/", Reason::Scheme)).join().unwrap();
     let (recs, refused) = records_since(m);
-    // Other tests may log concurrently; ours must be among what the mark finds.
-    assert!(recs.iter().any(|r| r.url == url && r.outcome == Err(Reason::Scheme)) || refused >= 1);
+    assert_eq!(refused, 1, "{recs:?}");
+    assert!(matches!(recs.as_slice(), [r] if r.url == url && r.outcome == Err(Reason::Scheme)), "{recs:?}");
 }
 
 // ----- the real transport, against a TLS server on loopback ----------------------------------------

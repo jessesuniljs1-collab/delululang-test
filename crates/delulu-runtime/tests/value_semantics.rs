@@ -4,7 +4,10 @@
 //!   `false` and `p != p` `true`, and `List.contains` and `assert_eq` answered the same wrong way — though the checker
 //!   admits `==` on both;
 //! - DISPLAY-CYCLE-1: a value that holds itself (`n.next = Some(n)`; a record in a list held by that record) renders in
-//!   finite text and compares in finite time. `str` of one recursed until the stack overflowed and the process died.
+//!   finite text and compares in finite time. `str` of one recursed until the stack overflowed and the process died;
+//! - RECORD-ORDER-1: a record holds its fields in the order its type declares them, whatever order a literal writes them
+//!   in. A record kept the literal's order, so `P { y: "a", x: 2 } == P { x: 2, y: "a" }` was `false` (equality pairs
+//!   fields by position) and the two printed differently.
 
 use std::rc::Rc;
 
@@ -99,4 +102,53 @@ fn main(root: Root) ! {Write} {
         run(src),
         "Node { v: 1, next: Some(Node { ... }) }\ntrue true false\nBag { items: [Bag { ... }], label: b } true\n"
     );
+}
+
+/// RECORD-ORDER-1: two literals of one type, their fields written in two orders, are equal and print alike, in the order
+/// the type declares — through a list and an option too, and after a field is written. The fields are still
+/// computed in the order written: the index fault, written first, comes before the division.
+#[test]
+fn a_record_holds_its_fields_in_the_order_its_type_declares() {
+    let src = r#"module m
+
+type P {
+  x: Int,
+  y: Str,
+  z: Bool,
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  var p = P { y: "a", z: true, x: 2 }
+  let q = P { x: 2, y: "a", z: true }
+  out.println(str(p) + " " + str(q) + " " + str(p == q) + " " + str(p != q))
+  out.println(str([p] == [q]) + " " + str(Some(p) == Some(q)) + " " + str([q].contains(p)))
+  p.x = 3
+  out.println(str(p) + " " + str(p == q))
+}
+"#;
+    assert_eq!(
+        run(src),
+        "P { x: 2, y: a, z: true } P { x: 2, y: a, z: true } true false\ntrue true true\nP { x: 3, y: a, z: true } false\n"
+    );
+    let faults = r#"module m
+
+type P {
+  x: Int,
+  y: Int,
+}
+
+fn main(root: Root) ! {Write} {
+  let xs = [1]
+  let zero = 0
+  let p = P { y: xs[5], x: 1 / zero }
+  root.console().println(str(p.x))
+}
+"#;
+    let checked = check_source(0, faults);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let g = Grants { console: true, ..Default::default() };
+    let r = Interp::new(&checked.module).run_main(Value::Root(Rc::new(g.build_root())));
+    let fault = format!("{:?}", r.expect_err("the literal faults"));
+    assert!(fault.contains("DL0903"), "the field written first is computed first: {fault}");
 }

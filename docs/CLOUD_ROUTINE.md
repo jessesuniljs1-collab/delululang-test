@@ -316,6 +316,9 @@ kept the last mutant's binary — run 15), and ends with a CONTROL run of the sa
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
+`target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
+the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
 Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step

@@ -46,6 +46,7 @@
 //! `Secret.expose(...)`) are refused as `CompileError::SecretInGuest` (DL1205, Phase 3n) so secret
 //! bytes never enter guest linear memory.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use delulu_syntax::ast::*;
@@ -90,15 +91,16 @@ impl CompileError {
 /// or arithmetic on a capability. `Unit` occupies zero stack slots.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
-    I64,    // Int
-    I32,    // Bool
-    F64,    // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
-    Str,    // i32 pointer into linear memory
-    Cap,    // i32 host handle (Console)
-    Clock,  // i32 host handle (Clock, Phase 3k)
-    Rand,   // i32 host handle (Rand, Phase 3l)
-    FsRead, // i32 host handle (Cap[FsRead], Phase 3p)
-    Root,   // i32 host handle to the root authority (Phase 3e)
+    I64,     // Int
+    I32,     // Bool
+    F64,     // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
+    Str,     // i32 pointer into linear memory
+    Cap,     // i32 host handle (Console)
+    Clock,   // i32 host handle (Clock, Phase 3k)
+    Rand,    // i32 host handle (Rand, Phase 3l)
+    FsRead,  // i32 host handle (Cap[FsRead], Phase 3p)
+    FsWrite, // i32 host handle (Cap[FsWrite], RW 3.4)
+    Root,    // i32 host handle to the root authority (Phase 3e)
     // Stage 4 phase 4g: `Cap[ForeignLoad]` (i32 host handle) and a bound `foreign` lib handle
     // `Foreign(lib_id)` (i32 host handle; `lib_id` indexes the module's foreign blocks so a method
     // call knows its marshalling signature). `ForeignPtr` is the opaque `void*` handle (i32 index
@@ -248,10 +250,142 @@ struct EnumEnv {
     records_by_name: HashMap<String, u32>,
 }
 
-/// A record type the backend lays out: its fields in declaration order, each a slot's `Scalar` — or `None` when a field
-/// holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
+/// A record type the backend lays out: its fields in declaration order, each a slot's type (`field_ty`) — or `None` when
+/// a field holds a type the backend does not (the record is then refused where it is built or read, never miscompiled).
 struct RecordDesc {
-    fields: Option<Vec<(String, Scalar)>>,
+    name: String,
+    fields: Option<Vec<(String, Ty)>>,
+}
+
+/// The types a record field may hold: a scalar, or an `Option`, `Result` or `List` of scalars — each one value in its
+/// 8-byte slot, the three compound ones a pointer to a cell shared as the interpreter shares it (`n.next`, `t.kids`).
+fn field_ty(t: Ty) -> Option<Ty> {
+    (ty_to_scalar(t).is_some() || matches!(t, Ty::Option(_) | Ty::Result(..) | Ty::List(_))).then_some(t)
+}
+
+/// Store the value on the stack into the slot whose address is under it, by the width of `t` (nothing for `Unit`).
+fn store_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Store(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Store(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Store(u32_at())),
+        None => {}
+    }
+}
+
+/// The type descriptors (`type_desc`) the module's bodies name, laid out after the interned literals as a string is —
+/// `[len:u32][bytes]` — from `base` on, each once.
+struct Descs {
+    base: u32,
+    bytes: Vec<u8>,
+    at: HashMap<String, u32>,
+}
+
+/// The address of `t`'s descriptor in the module's memory, laid out on first use.
+fn desc_ptr(cx: &Cx, t: Ty) -> Result<i32, CompileError> {
+    let text = type_desc(cx.env, t)?;
+    let mut d = cx.descs.borrow_mut();
+    if let Some(&at) = d.at.get(&text) {
+        return Ok(at as i32);
+    }
+    let at = d.base + d.bytes.len() as u32;
+    let len = u32::try_from(text.len()).map_err(|_| CompileError::Unsupported("a type too large to describe".into()))?;
+    d.bytes.extend_from_slice(&len.to_le_bytes());
+    d.bytes.extend_from_slice(text.as_bytes());
+    d.at.insert(text, at);
+    i32::try_from(at).map_err(|_| CompileError::Unsupported("a module whose data passes 2 GiB".into()))
+}
+
+/// The descriptor the host rebuilds a value of type `t` by (`reify.rs`): the type, then each record and sum it reaches,
+/// each after a `|`. A type is `i` `b` `f` `s` `u` (`Int`, `Bool`, `Float`, `Str`, `Unit`), `o`T, `r`TE, `l`T, `R`n`.` or
+/// `E`n`.` (record or sum `n`); a record is `R`n`=`Name`{`field`:`T`,`…`}`, a sum `E`n`={`Ctor`(`T…`)`,`…`}`, its
+/// constructors in tag order. A type holding a foreign handle has none: it is opaque, and the checker refuses `str` and
+/// `==` of it.
+fn type_desc(env: &EnumEnv, t: Ty) -> Result<String, CompileError> {
+    fn ty(t: Ty, out: &mut String, todo: &mut Vec<Ty>) -> Result<(), CompileError> {
+        match t {
+            Ty::I64 => out.push('i'),
+            Ty::I32 => out.push('b'),
+            Ty::F64 => out.push('f'),
+            Ty::Str => out.push('s'),
+            Ty::Unit => out.push('u'),
+            Ty::Option(s) => {
+                out.push('o');
+                ty(s.to_ty(), out, todo)?;
+            }
+            Ty::Result(o, e) => {
+                out.push('r');
+                ty(o.to_ty(), out, todo)?;
+                ty(e.to_ty(), out, todo)?;
+            }
+            Ty::List(s) => {
+                out.push('l');
+                ty(s.to_ty(), out, todo)?;
+            }
+            Ty::Record(n) => {
+                out.push_str(&format!("R{n}."));
+                todo.push(t);
+            }
+            Ty::Enum(n) => {
+                out.push_str(&format!("E{n}."));
+                todo.push(t);
+            }
+            other => return Err(CompileError::Unsupported(format!("`str` or `==` of a value holding a {other:?}"))),
+        }
+        Ok(())
+    }
+    let mut out = String::new();
+    let mut todo = Vec::new();
+    ty(t, &mut out, &mut todo)?;
+    let mut done: Vec<Ty> = Vec::new();
+    while let Some(named) = todo.pop() {
+        if done.contains(&named) {
+            continue;
+        }
+        done.push(named);
+        match named {
+            Ty::Record(n) => {
+                let name = env.record_name(n);
+                out.push_str(&format!("|R{n}={name}{{"));
+                for (k, (f, ft)) in env.record_fields(n)?.iter().enumerate() {
+                    if k > 0 {
+                        out.push(',');
+                    }
+                    out.push_str(f);
+                    out.push(':');
+                    ty(*ft, &mut out, &mut todo)?;
+                }
+                out.push('}');
+            }
+            Ty::Enum(n) => {
+                out.push_str(&format!("|E{n}={{"));
+                for (k, c) in env.desc(n).ctors.iter().enumerate() {
+                    if k > 0 {
+                        out.push(',');
+                    }
+                    out.push_str(&c.name);
+                    out.push('(');
+                    for p in &c.payloads {
+                        ty(p.to_ty(), &mut out, &mut todo)?;
+                    }
+                    out.push(')');
+                }
+                out.push('}');
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
+/// Load a value of type `t` from the slot whose address is on the stack (nothing for `Unit`).
+fn load_ty(cx: &mut Cx, t: Ty) {
+    match wasm_valtype(t) {
+        Some(ValType::I64) => cx.emit(Instruction::I64Load(i64_at())),
+        Some(ValType::F64) => cx.emit(Instruction::F64Load(i64_at())),
+        Some(_) => cx.emit(Instruction::I32Load(u32_at())),
+        None => {}
+    }
 }
 
 impl EnumEnv {
@@ -259,8 +393,12 @@ impl EnumEnv {
     fn record_id(&self, name: &str) -> Option<u32> {
         self.records_by_name.get(name).copied()
     }
+    /// Record `id`'s name.
+    fn record_name(&self, id: u32) -> &str {
+        &self.records[id as usize].name
+    }
     /// Record `id`'s fields, if the backend can lay them out.
-    fn record_fields(&self, id: u32) -> Result<&[(String, Scalar)], CompileError> {
+    fn record_fields(&self, id: u32) -> Result<&[(String, Ty)], CompileError> {
         self.records[id as usize]
             .fields
             .as_deref()
@@ -268,6 +406,13 @@ impl EnumEnv {
     }
     fn id(&self, name: &str) -> Option<u32> {
         self.by_name.get(name).copied()
+    }
+    /// The named sum type a constructor builds, when exactly one declares it — the checker's rule (`variant_ctor`): a
+    /// name two sums share (`IoErr`'s and `NetErr`'s `Other`) names neither.
+    fn enum_of_ctor(&self, ctor: &str) -> Option<u32> {
+        let mut owners = (0..self.descs.len() as u32).filter(|&i| self.desc(i).ctors.iter().any(|c| c.name == ctor));
+        let first = owners.next()?;
+        owners.next().is_none().then_some(first)
     }
     /// The actor index for a name introduced by an `actor A { … }` declaration (Stage 7 phase 7h).
     fn actor_id(&self, name: &str) -> Option<u32> {
@@ -432,14 +577,16 @@ fn build_enum_env(module: &Module) -> EnumEnv {
     }
     // Record layouts (RW 3.4), resolved against the populated names: a field the backend cannot hold leaves the record
     // without a layout, refused where it is built or read.
-    let mut records: Vec<RecordDesc> = (0..env.records_by_name.len()).map(|_| RecordDesc { fields: None }).collect();
+    let mut records: Vec<RecordDesc> =
+        (0..env.records_by_name.len()).map(|_| RecordDesc { name: String::new(), fields: None }).collect();
     for it in &module.items {
         if let Item::Type(td) = it {
             if let (TypeDeclKind::Record(fields), true) = (&td.kind, td.generics.is_empty()) {
                 if let Some(&id) = env.records_by_name.get(&td.name.name) {
+                    records[id as usize].name = td.name.name.clone();
                     records[id as usize].fields = fields
                         .iter()
-                        .map(|f| wasm_ty(&env, &f.ty).and_then(ty_to_scalar).map(|s| (f.name.name.clone(), s)))
+                        .map(|f| wasm_ty(&env, &f.ty).and_then(field_ty).map(|t| (f.name.name.clone(), t)))
                         .collect();
                 }
             }
@@ -468,6 +615,13 @@ struct Imports {
     rand_int: u32,
     root_fs_read: u32,
     fs_read_text: u32,
+    /// `delulu:cap.fs_narrow` — `Cap[FsRead].narrow(sub)`, a narrower handle minted host-side by the interpreter's own
+    /// `resolve_in_scope`.
+    fs_narrow: u32,
+    /// `delulu:cap.root_fs_write` and `fs_write_text` — `root.fs_write(p)` and `write_text`/`append_text`, performed
+    /// host-side in the interpreter's order (RW 3.4).
+    root_fs_write: u32,
+    fs_write_text: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
     foreign_load: u32,
     foreign_bind: u32,
@@ -491,6 +645,11 @@ struct Imports {
     /// `delulu:float.rem` — `Float % Float`, which WebAssembly has no instruction for, computed by the host as the
     /// interpreter computes it.
     float_rem: u32,
+    /// `delulu:value.display` and `delulu:value.eq` — `str` and `==` of a list, an option, a result, a sum or a record,
+    /// answered by the interpreter's own `Value::display` and `Value::eq` over the value rebuilt host-side by its type's
+    /// descriptor (`type_desc`, `reify.rs`).
+    value_display: u32,
+    value_eq: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -532,6 +691,7 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::Clock
         | Ty::Rand
         | Ty::FsRead
+        | Ty::FsWrite
         | Ty::Root
         | Ty::ForeignLoad
         | Ty::Foreign(_)
@@ -578,6 +738,7 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                             "Clock" => Some(Ty::Clock),
                             "Rand" => Some(Ty::Rand),
                             "FsRead" => Some(Ty::FsRead),
+                            "FsWrite" => Some(Ty::FsWrite),
                             "ForeignLoad" => Some(Ty::ForeignLoad),
                             _ => None,
                         };
@@ -652,41 +813,31 @@ fn body_is_compiled(env: &EnumEnv, f: &FnDecl) -> bool {
 
 /// Does any compilable function call a method whose name is in `names`? Used to decide which host
 /// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
+/// The walk is `module_any`'s, which names every expression form: this one's own walk passed over a record literal's
+/// fields, so `Stamp { at: root.clock().now_ms() }` compiled a call to an import the module did not have (WASM-SCAN-1).
 fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
-    fn in_block(b: &Block, names: &[&str]) -> bool {
-        b.stmts.iter().any(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
-            Stmt::While { cond, body, .. } => in_expr(cond, names) || in_block(body, names),
-            Stmt::For { iter, body, .. } => in_expr(iter, names) || in_block(body, names),
-            Stmt::Break { .. } | Stmt::Continue { .. } => false,
-            Stmt::Return { value: Some(e), .. } => in_expr(e, names),
-            Stmt::Return { value: None, .. } => false,
-            Stmt::Expr(e) => in_expr(e, names),
-        })
-    }
-    fn in_expr(e: &Expr, names: &[&str]) -> bool {
-        match e {
-            Expr::Method { name, recv, args, .. } => {
-                names.contains(&name.name.as_str()) || in_expr(recv, names) || args.iter().any(|a| in_expr(a, names))
-            }
-            Expr::Call { callee, args, .. } => in_expr(callee, names) || args.iter().any(|a| in_expr(a, names)),
-            Expr::Binary { lhs, rhs, .. } => in_expr(lhs, names) || in_expr(rhs, names),
-            Expr::Unary { operand, .. } => in_expr(operand, names),
-            Expr::If { cond, then_, else_, .. } => {
-                in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
-            }
-            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names)),
-            Expr::Try { inner, .. } => in_expr(inner, names),
-            Expr::Block(b) => in_block(b, names),
-            // A lambda's body, a list's items and an index run where they are inlined or evaluated, so the imports they
-            // call are the module's (WASM-INTERN-1's sibling: a `println` inside a lambda had no console import).
-            Expr::Lambda { body, .. } => in_block(body, names),
-            Expr::List { items, .. } => items.iter().any(|i| in_expr(i, names)),
-            Expr::Index { recv, index, .. } => in_expr(recv, names) || in_expr(index, names),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if body_is_compiled(env, f) && in_block(&f.body, names)))
+    module_any(env, module, &|e| matches!(e, Expr::Method { name, .. } if names.contains(&name.name.as_str())), false)
+}
+
+/// Does any compiled body take `str` of, or compare with `==`/`!=`, a value the checker typed as a list, an option, a
+/// result, a sum or a record — or as a type variable, which an inlined generic body may make one? Then the module carries
+/// `delulu:value`, and every other module is unchanged. Without the checker's types (`compile_module`) none is known, and
+/// such a `str` or `==` is refused where it is compiled.
+fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
+    use delulu_check::Type;
+    let compound = |e: &Expr| {
+        matches!(
+            node_types.get(&e.id()),
+            Some(Type::List(_) | Type::Option(_) | Type::Result(..) | Type::Record(..) | Type::Sum(..) | Type::Var(_))
+        )
+    };
+    let hit = |e: &Expr| match e {
+        Expr::Call { callee, args, .. } => matches!((&**callee, &args[..]),
+            (Expr::Var { path, .. }, [a]) if path.segs.len() == 1 && path.segs[0].name == "str" && compound(a)),
+        Expr::Binary { op: BinOp::Eq | BinOp::Ne, lhs, .. } => compound(lhs),
+        _ => false,
+    };
+    module_any(env, module, &hit, false)
 }
 
 /// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
@@ -885,7 +1036,7 @@ fn compile_module_typed(
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
-    let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text"]);
+    let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text", "narrow"]);
     // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
     let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
 
@@ -902,6 +1053,9 @@ fn compile_module_typed(
         rand_int: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
+        fs_narrow: u32::MAX,
+        root_fs_write: u32::MAX,
+        fs_write_text: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
@@ -915,6 +1069,8 @@ fn compile_module_typed(
         parse_int: u32::MAX,
         parse_float: u32::MAX,
         float_rem: u32::MAX,
+        value_display: u32::MAX,
+        value_eq: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -934,6 +1090,13 @@ fn compile_module_typed(
     if needs_fs {
         imp.root_fs_read = n_imports;
         imp.fs_read_text = n_imports + 1;
+        imp.fs_narrow = n_imports + 2;
+        n_imports += 3;
+    }
+    let needs_fs_write = module_calls_method(&env, module, &["fs_write", "write_text", "append_text"]);
+    if needs_fs_write {
+        imp.root_fs_write = n_imports;
+        imp.fs_write_text = n_imports + 1;
         n_imports += 2;
     }
     if needs_foreign {
@@ -988,6 +1151,12 @@ fn compile_module_typed(
         imp.float_rem = n_imports;
         n_imports += 1;
     }
+    let needs_values = module_shows_values(&env, module, node_types);
+    if needs_values {
+        imp.value_display = n_imports;
+        imp.value_eq = n_imports + 1;
+        n_imports += 2;
+    }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
                                 // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
@@ -1025,6 +1194,7 @@ fn compile_module_typed(
     // for every module since RW 3.4: a loop's flag is a `Bool` too, and `str` of it was DL1201 without the foreign interface.
     intern_string("true", &mut str_off, &mut data);
     intern_string("false", &mut str_off, &mut data);
+    let descs = RefCell::new(Descs { base: data.len() as u32, bytes: Vec::new(), at: HashMap::new() });
 
     // Function index map: name -> (absolute wasm function index, return type).
     let mut index: HashMap<String, (u32, Vec<Ty>, Ty)> = HashMap::new();
@@ -1074,6 +1244,15 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // root_fs_read(root, path) -> cap
         fs_read_ty = next_type + 1;
         types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // fs_read_text(cap, path, file, start, end) -> result_ptr
+        next_type += 2;
+    }
+    let (mut fs_write_root_ty, mut fs_write_ty) = (0, 0);
+    if needs_fs_write {
+        fs_write_root_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // root_fs_write(root, path) -> cap
+        fs_write_ty = next_type + 1;
+        // fs_write_text(cap, path, body, append, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 7], [ValType::I32]);
         next_type += 2;
     }
     let mut foreign_load_ty = 0;
@@ -1153,6 +1332,14 @@ fn compile_module_typed(
         types.ty().function([ValType::F64, ValType::F64], [ValType::F64]); // rem(a, b) -> a % b
         next_type += 1;
     }
+    let (mut value_display_ty, mut value_eq_ty) = (0, 0);
+    if needs_values {
+        value_display_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // display(v, desc) -> str ptr
+        value_eq_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // eq(a, b, desc) -> Bool
+        next_type += 2;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1223,6 +1410,12 @@ fn compile_module_typed(
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
         imports.import("delulu:cap", "fs_read_text", EntityType::Function(fs_read_ty));
+        // fs_narrow(cap, path) -> cap
+        imports.import("delulu:cap", "fs_narrow", EntityType::Function(fs_root_ty));
+    }
+    if needs_fs_write {
+        imports.import("delulu:cap", "root_fs_write", EntityType::Function(fs_write_root_ty));
+        imports.import("delulu:cap", "fs_write_text", EntityType::Function(fs_write_ty));
     }
     if needs_foreign {
         imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
@@ -1255,6 +1448,10 @@ fn compile_module_typed(
     if needs_floats {
         imports.import("delulu:float", "rem", EntityType::Function(float_rem_ty));
     }
+    if needs_values {
+        imports.import("delulu:value", "display", EntityType::Function(value_display_ty));
+        imports.import("delulu:value", "eq", EntityType::Function(value_eq_ty));
+    }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
     // then the actor members (Stage 7 phase 7h).
@@ -1279,18 +1476,6 @@ fn compile_module_typed(
     if needs_str_eq {
         funcsec.function(concat_type); // __str_eq(a, b) -> Bool
     }
-
-    let mut mems = MemorySection::new();
-    // Reserve the interned literal image plus HEAP_PAGES of bump-allocation heap to start; `__alloc` grows the memory past
-    // them when an allocation needs it (RW 3.4).
-    let data_pages = (data.len() as u64).div_ceil(65536);
-    let min_pages = data_pages + HEAP_PAGES;
-    mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
-
-    // The bump-heap pointer: a mutable i32 global starting just past the interned literals.
-    let heap_start = data.len() as i32;
-    let mut globals = GlobalSection::new();
-    globals.global(GlobalType { val_type: ValType::I32, mutable: true, shared: false }, &ConstExpr::i32_const(heap_start));
 
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
@@ -1341,6 +1526,7 @@ fn compile_module_typed(
             &table,
             foreign_binds,
             node_types,
+            &descs,
         )?);
     }
     for (actor_idx, decl, params, body, _) in &member_plans {
@@ -1360,6 +1546,7 @@ fn compile_module_typed(
             &table,
             foreign_binds,
             node_types,
+            &descs,
         )?);
     }
     if needs_lists {
@@ -1369,6 +1556,20 @@ fn compile_module_typed(
     if needs_str_eq {
         code.function(&str_eq_fn());
     }
+
+    // The type descriptors the bodies named follow the literals, so the heap starts past both.
+    data.extend(descs.into_inner().bytes);
+    let mut mems = MemorySection::new();
+    // Reserve the interned literal image plus HEAP_PAGES of bump-allocation heap to start; `__alloc` grows the memory past
+    // them when an allocation needs it (RW 3.4).
+    let data_pages = (data.len() as u64).div_ceil(65536);
+    let min_pages = data_pages + HEAP_PAGES;
+    mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
+
+    // The bump-heap pointer: a mutable i32 global starting just past the interned literals.
+    let heap_start = data.len() as i32;
+    let mut globals = GlobalSection::new();
+    globals.global(GlobalType { val_type: ValType::I32, mutable: true, shared: false }, &ConstExpr::i32_const(heap_start));
 
     let mut datas = DataSection::new();
     if !data.is_empty() {
@@ -1383,6 +1584,7 @@ fn compile_module_typed(
         || needs_clock
         || needs_rand
         || needs_fs
+        || needs_fs_write
         || needs_foreign
         || needs_actors
         || needs_lists
@@ -1390,6 +1592,7 @@ fn compile_module_typed(
         || needs_parse_int
         || needs_parse_float
         || needs_floats
+        || needs_values
     {
         m.section(&imports);
     }
@@ -1597,6 +1800,8 @@ struct Cx<'a> {
     /// The checker's type for each node (`compile_checked`; empty through `compile_module`): what an empty list holds
     /// when no `let` says (RW 3.4).
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
+    /// The type descriptors `str` and `==` of a compound value name (`desc_ptr`), shared by every body of the module.
+    descs: &'a RefCell<Descs>,
     /// The module's actor table (Stage 7 phase 7h): `spawn`/send index resolution + ctor arity.
     actors: &'a ActorTable,
     /// The `delulu:actors` host import indices (Stage 7 phase 7h).
@@ -1662,6 +1867,7 @@ fn compile_fn<'a>(
     actors: &'a ActorTable,
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
+    descs: &'a RefCell<Descs>,
 ) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
@@ -1691,6 +1897,7 @@ fn compile_fn<'a>(
         imp,
         foreign_binds,
         node_types,
+        descs,
         actors,
         actor_imp,
         actor: None,
@@ -1730,6 +1937,7 @@ fn compile_actor_member<'a>(
     actors: &'a ActorTable,
     foreign_binds: &'a HashMap<NodeId, String>,
     node_types: &'a HashMap<NodeId, delulu_check::Type>,
+    descs: &'a RefCell<Descs>,
 ) -> Result<Function, CompileError> {
     // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
     let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
@@ -1777,6 +1985,7 @@ fn compile_actor_member<'a>(
         imp,
         foreign_binds,
         node_types,
+        descs,
         actors,
         actor_imp,
         actor: Some(ActorCtx { self_slot: 0, actor_idx, fields }),
@@ -1858,9 +2067,14 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
                     }
                 }
             }
-            // An empty list says its element type only on its `let` (`let xs: List[Int] = []`).
+            // A written type is the value's expected one: an empty list's element type (`let xs: List[Int] = []`), a
+            // constructor's other half (`let r: Result[Int, Str] = Ok(1)`, `var cur: Option[ref Node] = None`).
             let ty = match (value, ty.as_ref().and_then(|t| wasm_ty(cx.env, t))) {
                 (Expr::List { items, .. }, Some(Ty::List(s))) if items.is_empty() => compile_list_literal(items, cx, Some(s))?,
+                (_, Some(t)) => {
+                    compile_expr_as(value, cx, t)?;
+                    t
+                }
                 _ => compile_expr(value, cx)?,
             };
             let idx = cx.alloc_local(ty)?;
@@ -1990,7 +2204,9 @@ fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, Comp
 //
 // A record is an i32 pointer to its cell: one 8-byte slot per field, in declaration order (`RecordDesc`). The cell is
 // shared — `let q = p` names it — as the interpreter's `Rc<RefCell<…>>` is, so a field written through one name is read
-// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar.
+// through the other. `==` and `str` of a whole record stay outside the fragment (DL1201); a field's value is any scalar,
+// or an `Option`, `Result` or `List` of scalars (`field_ty`) — so a record can name another, or itself: `next: Option[ref
+// Node]`.
 
 /// A record literal: its fields computed in the order written, as the interpreter computes them, each into a local; then
 /// the cell, each value stored in its field's slot.
@@ -2010,10 +2226,10 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
             .iter()
             .position(|(n, _)| *n == fname.name)
             .ok_or_else(|| CompileError::Unsupported(format!("`{name}` has no field `{}`", fname.name)))?;
-        let s = layout[k].1;
-        compile_expr_as(fexpr, cx, s.to_ty())?;
-        if s != Scalar::Unit {
-            let l = cx.alloc_local(s.to_ty())?;
+        let t = layout[k].1;
+        compile_expr_as(fexpr, cx, t)?;
+        if t != Ty::Unit {
+            let l = cx.alloc_local(t)?;
             cx.emit(Instruction::LocalSet(l));
             held[k] = Some(l);
         }
@@ -2022,26 +2238,26 @@ fn compile_record_literal(path: &Path, fields: &[(Ident, Expr)], cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(i32::try_from(layout.len() * 8).unwrap_or(i32::MAX)));
     cx.emit(Instruction::Call(cx.alloc_fn));
     cx.emit(Instruction::LocalSet(cell));
-    for (k, (_, s)) in layout.iter().enumerate() {
+    for (k, (_, t)) in layout.iter().enumerate() {
         if let Some(l) = held[k] {
             cx.emit(Instruction::LocalGet(cell));
             cx.emit(Instruction::I32Const(k as i32 * 8));
             cx.emit(Instruction::I32Add);
             cx.emit(Instruction::LocalGet(l));
-            store_scalar(cx, *s);
+            store_ty(cx, *t);
         }
     }
     cx.emit(Instruction::LocalGet(cell));
     Ok(Ty::Record(id))
 }
 
-/// Field `name` of record `id`: its slot and its `Scalar`.
-fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Scalar), CompileError> {
+/// Field `name` of record `id`: its slot and its type.
+fn record_slot(cx: &Cx, id: u32, name: &str) -> Result<(usize, Ty), CompileError> {
     cx.env
         .record_fields(id)?
         .iter()
         .enumerate()
-        .find_map(|(k, (n, s))| (n == name).then_some((k, *s)))
+        .find_map(|(k, (n, t))| (n == name).then_some((k, *t)))
         .ok_or_else(|| CompileError::Unsupported(format!("a record with no field `{name}`")))
 }
 
@@ -2050,15 +2266,15 @@ fn compile_field(recv: &Expr, name: &str, cx: &mut Cx) -> Result<Ty, CompileErro
     let Ty::Record(id) = compile_expr(recv, cx)? else {
         return Err(CompileError::Unsupported("a field of a value that is not a record (or `self` outside an actor)".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    if t == Ty::Unit {
         cx.emit(Instruction::Drop);
         return Ok(Ty::Unit);
     }
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
-    load_scalar(cx, s);
-    Ok(s.to_ty())
+    load_ty(cx, t);
+    Ok(t)
 }
 
 /// The type of an assignment's place, from the names alone — nothing is emitted — so its value can be computed first.
@@ -2069,7 +2285,7 @@ fn lvalue_ty(lv: &LValue, cx: &Cx) -> Result<Ty, CompileError> {
             .map(|(_, t)| t)
             .ok_or_else(|| CompileError::Unsupported(format!("an assignment through `{}`, which is no local here", v.name))),
         LValue::Field(base, f) => match lvalue_ty(base, cx)? {
-            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1.to_ty()),
+            Ty::Record(id) => Ok(record_slot(cx, id, &f.name)?.1),
             _ => Err(CompileError::Unsupported("a field of a value that is not a record".into())),
         },
         // A field written through a list element (`ps[i].x = v`): the checker refuses the write (DL1604, an element
@@ -2094,12 +2310,12 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     let Ty::Record(id) = lvalue_ty(base, cx)? else {
         return Err(CompileError::Unsupported("a field assignment to a value that is not a record".into()));
     };
-    let (k, s) = record_slot(cx, id, name)?;
-    compile_expr_as(value, cx, s.to_ty())?;
-    if s == Scalar::Unit {
+    let (k, t) = record_slot(cx, id, name)?;
+    compile_expr_as(value, cx, t)?;
+    if t == Ty::Unit {
         return Ok(Ty::Unit);
     }
-    let v = cx.alloc_local(s.to_ty())?;
+    let v = cx.alloc_local(t)?;
     cx.emit(Instruction::LocalSet(v));
     if compile_expr(&lvalue_expr(base)?, cx)? != Ty::Record(id) {
         return Err(CompileError::Unsupported("a field assignment whose record changed type".into()));
@@ -2107,7 +2323,7 @@ fn compile_field_assign(base: &LValue, name: &str, value: &Expr, cx: &mut Cx) ->
     cx.emit(Instruction::I32Const(k as i32 * 8));
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::LocalGet(v));
-    store_scalar(cx, s);
+    store_ty(cx, t);
     Ok(Ty::Unit)
 }
 
@@ -2423,6 +2639,67 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
     }
 }
 
+/// The type of constructor `name` used where no type is expected (`let c = Red`, `var o = None`): a named sum's when one
+/// declares it, else — `None`, `Ok`, `Err` — the type the checker inferred for the node, where the backend holds it.
+fn synthesized_ctor_ty(name: &str, node: NodeId, cx: &Cx) -> Option<Ty> {
+    if let Some(id) = cx.env.enum_of_ctor(name) {
+        return Some(Ty::Enum(id));
+    }
+    if !matches!(name, "None" | "Ok" | "Err") {
+        return None;
+    }
+    cx.node_types.get(&node).and_then(checked_ty).filter(|t| matches!(t, Ty::Option(_) | Ty::Result(..)))
+}
+
+/// A type the checker inferred, as the backend holds it — the scalars, and an `Option`, `Result` or `List` of them; a
+/// named type is not resolved here (its id is the checker's table's, which the backend is not given).
+fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
+    use delulu_check::Type;
+    Some(match t {
+        Type::Int => Ty::I64,
+        Type::Bool => Ty::I32,
+        Type::Float => Ty::F64,
+        Type::Str => Ty::Str,
+        Type::Unit => Ty::Unit,
+        Type::Option(p) => Ty::Option(ty_to_scalar(checked_ty(p)?)?),
+        Type::Result(o, e) => Ty::Result(ty_to_scalar(checked_ty(o)?)?, ty_to_scalar(checked_ty(e)?)?),
+        Type::List(e) => Ty::List(list_element(checked_ty(e)?)?),
+        _ => return None,
+    })
+}
+
+/// `Some(x)` where no type is expected: `x` first, as the interpreter computes it, then the cell of `Option` of its type.
+fn compile_some(arg: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    let t = compile_expr(arg, cx)?;
+    let s = ty_to_scalar(t).ok_or_else(|| CompileError::Unsupported(format!("`Some` of a {t:?}")))?;
+    let opt = Ty::Option(s);
+    let ctors = cx.env.ctors_of(opt).expect("an `Option` has its two constructors");
+    let tag = ctors.iter().position(|(n, _)| n == "Some").expect("an `Option` has `Some`");
+    let held = if s == Scalar::Unit {
+        None
+    } else {
+        let l = cx.alloc_local(t)?;
+        cx.emit(Instruction::LocalSet(l));
+        Some(l)
+    };
+    let rp = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(rp));
+    cx.emit(Instruction::LocalGet(rp));
+    cx.emit(Instruction::I32Const(tag as i32));
+    cx.emit(Instruction::I32Store(u32_at()));
+    if let Some(l) = held {
+        cx.emit(Instruction::LocalGet(rp));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        cx.emit(Instruction::LocalGet(l));
+        store_scalar(cx, s);
+    }
+    cx.emit(Instruction::LocalGet(rp));
+    Ok(opt)
+}
+
 /// Compile a variant constructor to a fresh heap `[tag][field…]` cell of type `expected`.
 fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
     let ctors = cx
@@ -2714,7 +2991,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Ok(Ty::F64)
             }
         },
-        Expr::Var { path, .. } => {
+        Expr::Var { path, id, .. } => {
             if path.segs.len() == 1 {
                 if let Some((idx, ty)) = cx.lookup(&path.segs[0].name) {
                     cx.emit(Instruction::LocalGet(idx));
@@ -2726,6 +3003,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         cx.emit(Instruction::LocalGet(slot));
                         return Ok(Ty::ActorRef(aidx));
                     }
+                }
+                // A nullary constructor with no expected type: its sum's, or the checker's (`None`).
+                if let Some(t) = synthesized_ctor_ty(&path.segs[0].name, *id, cx) {
+                    compile_ctor(&path.segs[0].name, &[], cx, t)?;
+                    return Ok(t);
                 }
             }
             Err(CompileError::Unsupported(format!("the name `{}` (not a local)", path.dotted())))
@@ -2896,6 +3178,46 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.fs_read_text));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(io_err)));
             }
+            // `Cap[FsRead].narrow(sub)` -> a narrower `Cap[FsRead]`, minted host-side under the interpreter's own rule; pure, as
+            // there — not traced.
+            if name.name == "narrow" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::FsRead {
+                    return Err(CompileError::Unsupported("narrow() on a receiver that is not a Cap[FsRead]".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("narrow with a non-Str path".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.fs_narrow));
+                return Ok(Ty::FsRead);
+            }
+            // `root.fs_write(path)` -> a scoped `Cap[FsWrite]`, minted host-side as the interpreter mints it.
+            if name.name == "fs_write" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("fs_write() on a non-Root receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("fs_write with a non-Str path".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.root_fs_write));
+                return Ok(Ty::FsWrite);
+            }
+            // `Cap[FsWrite].write_text(path, body)` and `append_text` -> `Result[Unit, IoErr]`, written host-side.
+            if (name.name == "write_text" || name.name == "append_text") && args.len() == 2 {
+                if compile_expr(recv, cx)? != Ty::FsWrite {
+                    return Err(CompileError::Unsupported(format!("{}() on a non-FsWrite receiver", name.name)));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str || compile_expr(&args[1], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported(format!("{} with a non-Str argument", name.name)));
+                }
+                let io_err = cx
+                    .env
+                    .id("IoErr")
+                    .ok_or_else(|| CompileError::Unsupported("a write without the IoErr prelude type".into()))?;
+                cx.emit(Instruction::I32Const(i32::from(name.name == "append_text")));
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.fs_write_text));
+                return Ok(Ty::Result(Scalar::Unit, Scalar::Enum(io_err)));
+            }
             // Stage 4 phase 4g: root.foreign_load() -> Cap[ForeignLoad]. Minted host-side (grant check),
             // pure like the other root derivations — not traced.
             if name.name == "foreign_load" && args.is_empty() {
@@ -3056,6 +3378,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         cx.emit(Instruction::End);
                         Ok(Ty::Str)
                     }
+                    // A list, an option, a result, a sum or a record: rendered host-side by the interpreter's own
+                    // `display`, over the value rebuilt by its type's descriptor.
+                    t @ (Ty::List(_) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
+                        if cx.imp.value_display != u32::MAX =>
+                    {
+                        cx.emit(Instruction::I32Const(desc_ptr(cx, t)?));
+                        cx.emit(Instruction::Call(cx.imp.value_display));
+                        Ok(Ty::Str)
+                    }
                     _ => Err(CompileError::Unsupported(
                         "str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into(),
                     )),
@@ -3067,6 +3398,16 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             if let Some(g) = cx.generics.get(&name).cloned() {
                 return inline_call(&g.params, &g.body, args, cx, Lexical::Generic);
+            }
+            // A constructor with no expected type: `Some(x)` takes its payload's type; another, its sum's or the checker's.
+            if !cx.index.contains_key(&name) {
+                if let ("Some", [arg]) = (name.as_str(), &args[..]) {
+                    return compile_some(arg, cx);
+                }
+                if let Some(t) = synthesized_ctor_ty(&name, e.id(), cx) {
+                    compile_ctor(&name, args, cx, t)?;
+                    return Ok(t);
+                }
             }
             let (fidx, ptys, ret) = {
                 let e = cx
@@ -3630,6 +3971,20 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     if lt == Ty::Str && rt == Ty::Str && op == Add {
         cx.emit(Instruction::Call(cx.concat_fn));
         return Ok(Ty::Str);
+    }
+    // `==` and `!=` of two lists, options, results, sums or records: the interpreter's own `eq`, host-side, over the two
+    // values rebuilt by their type's descriptor through one map of cells.
+    if lt == rt
+        && matches!(op, Eq | Ne)
+        && matches!(lt, Ty::List(_) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
+        && cx.imp.value_eq != u32::MAX
+    {
+        cx.emit(Instruction::I32Const(desc_ptr(cx, lt)?));
+        cx.emit(Instruction::Call(cx.imp.value_eq));
+        if op == Ne {
+            cx.emit(Instruction::I32Eqz);
+        }
+        return Ok(Ty::I32);
     }
     Err(CompileError::Unsupported("a binary operator on these operand types".into()))
 }
@@ -4305,5 +4660,23 @@ mod alloc_tests {
             let err = got.clone().expect_err(what);
             assert!(err.starts_with("DL0903") && err.contains("exhausted") && !err.contains("overflow"), "{what}: {got:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod ctor_tests {
+    use super::*;
+
+    /// A constructor used with no expected type builds the sum that declares it — and, as the checker's `variant_ctor`
+    /// rules, a name two sums declare builds neither: `Other` is `IoErr`'s and `NetErr`'s, and here a user sum's too. The
+    /// checker refuses such a name first, so no checked program reaches the rule; this is where it is held.
+    #[test]
+    fn a_constructor_two_sums_declare_names_neither() {
+        let checked = delulu_check::check_source(0, "module m\ntype E = Ready | Other(Str)\n");
+        let env = build_enum_env(&checked.module);
+        assert_eq!(env.enum_of_ctor("Other"), None, "three sums declare `Other`");
+        assert_eq!(env.enum_of_ctor("Ready"), env.id("E"));
+        assert_eq!(env.enum_of_ctor("NotFound"), env.id("IoErr"));
+        assert_eq!(env.enum_of_ctor("Missing"), None);
     }
 }
