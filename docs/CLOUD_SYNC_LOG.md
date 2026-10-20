@@ -4754,6 +4754,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/survey/*`. (`launch/2.0.0`: `CHANGELOG.md`, `docs/survey/*` and everything the merge brought.)
 - Survey and doctor (after the last edit): in the commit message.
 - Redo on the laptop: nothing. For the laptop's memory: nothing beyond the entries above.
+- **Postscript:** RW 4.72's race under a live broker daemon refused on both engines; a capability in a closure keeps its scope on both, one in a record field is DL1201 on WASM (`V2_LOG.md`). CI: push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
 - **This run, in one line:** the laptop's #17–#19 landed; RW 7.20's flake reproduced and fixed; a red-team pass on the WASM
   file capabilities found F1–F4, of which F2/F3 (RW 4.72) was a HIGH escape in BOTH engines — fixed, D-V2-167 — and F4 led to
   DWX-FLAGS-1 (RW 3.19) — fixed; `launch/2.0.0` merged twice.

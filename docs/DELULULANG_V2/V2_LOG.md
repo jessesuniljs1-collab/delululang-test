@@ -7729,3 +7729,18 @@ under `## [2.0.0]` as `###` entries (five, then three), and the second time the 
 refusal of the flags it does not apply (a command line that ran under 1.x is refused now). On `20666c5`'s tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green.
 `3ee1370`'s release dry run `39392801546` success; its `everything` run `39392798450` success on every job but the two
 `miri-slow` jobs, still running at this entry. `20666c5`'s `everything` and release dry run are dispatched.
+
+## 2026-10-20 — on-demand routine run 5 (postscript): two of the pass's untried families, probed; the run's CI
+
+**Under a live broker daemon** (`delulu broker start` with its state in `/tmp`, stopped with `broker stop`): a handle
+narrowed to `sub` reads its file on both engines (`--broker daemon`, `--engine wasm` or not). The swap race of RW 4.72 — `sub`
+replaced by a link to outside 0.2 s and 0.4 s into a 200,000-read loop — refused at the swap on both engines (DL0904; the
+interpreter in `resolve_in_scope`'s words, WASM at the open's walk, "a component became a symbolic link … after the scope
+check"), nothing read from outside. By hand, against the binary built from `318b210`; not a committed test.
+
+**A capability held in a closure** carries its narrowed scope on both engines (the file inside read, `../f.txt` refused
+DL0904 on both). **A capability held in a record field** runs on the interpreter (inside read, `../../outside/f.txt`
+refused DL0904) and is DL1201 on WASM ("a record with a field of a type outside the WASM fragment") — RW 3.4's subset,
+refused rather than run. Still untried: a user method named `narrow` or `read_text`, and `--lease` on the WASM file path.
+
+**CI read.** push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
