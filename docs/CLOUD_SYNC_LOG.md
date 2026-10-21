@@ -4899,3 +4899,62 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #20's CI, then this branch's, landing in order; then `launch/2.0.0`: merge `master`, dispatch
   `everything` and the release dry run; (2) on WASM: `get_with`, a list of options, `str` of a map; RW 4.66 (a bearer key
   bound at redeem — a wire change, its own D-V2), 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — a sealed artifact runs under a lease, the broker daemon and a trace (RW 3.19's rest) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-custody` (on `laptop/wasm-http`, #21)   Pull request: see the branch   Merged: not yet
+- What: `V2_LOG.md` (2026-10-21, the fifth entry).
+- Files and folders: M `crates/delulu/src/run_cmd.rs` (`lease_for_run`, `RunCustody`, `custody_for_run`, `wasm_trace_sink`,
+  `emit_wasm_trace`, `assert_wasm_trace`; the source route calls them; the `.dwx` route too; `APPLIED_TO_A_DWX`),
+  `crates/delulu/tests/grants_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.19),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) ARTIFACT-CLAIM-1, this branch's next commit; (2) #20 and #21 landing on green; then `launch/2.0.0`.
+
+### 2026-10-21 — ARTIFACT-CLAIM-1: an artifact runs only what it declares (RW 4.73); WASM-CODE-1; #20 and #21 landed (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-custody` (its second commit, on `eb2372c`)   Pull request: see the branch   Merged: not yet
+- **Landed:** #20 (`89aeefc`, `aff6dc9`, `5470b53`) on its CI `39558166090`, success on every job; #21 (`4729747`) on
+  `39558913163`, success on every job — `master` fast-forwarded `9c1d30b..5470b53..4729747` (the push runs `39561045205`
+  and `39561096457` running at this entry). The entries above that said "Merged: not yet" are these.
+- What: `V2_LOG.md` (2026-10-21, the sixth entry).
+- Files and folders: M `crates/delulu-wasm/src/host.rs` (`HostConfig`/`HostState::declared_effects`; `custody_allows`
+  refuses an undeclared effect first), `crates/delulu-wasm/src/lib.rs` (the unit witness), `crates/delulu/src/run_cmd.rs`
+  (the `.dwx` route passes its manifest's effects), `crates/delulu/src/cli.rs` (`wasm_fault_code` by the first registered
+  code, its unit test; the artifact report's `enforced:` line), `crates/delulu-diag/src/codes.rs` (DL1202's explanation),
+  `crates/delulu/tests/wasm_cli.rs` (the doctored artifact), `CHANGELOG.md`, `HANDOFF.md` (§11.4: ARTIFACT-CLAIM-1;
+  DWX-FLAGS-1's sequel), `docs/book/THE_DELULULANG_BOOK.md` (the false sentence corrected in place),
+  `docs/REMAINING_WORK.md` (4.73), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: `HANDOFF.md` §11.4 ARTIFACT-CLAIM-1 (copied as
+  `artifact-claim-1.md`).
+- Open / next: (1) this branch's CI, landing on green; (2) `launch/2.0.0`: the merge of `4729747` is staged in
+  `D:\nelan\dl-launch`; after this branch lands, merge it too, rebuild the Survey there, run its gates, dispatch
+  `everything` and the release dry run, and re-cite checklist criterion 4 (supply chain) from that run — the advisory
+  database moved on 2026-10-21; (3) RW 4.66 (left open: a same-uid process reads the secret store anyway), 4.67, 6.1, 6.2;
+  on WASM `get_with` (needs maps), a list of options; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — DWX-ACTORS-1: an actor program has no `.dwx` yet, and says so (RW 3.21) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-actors` (on `laptop/dwx-custody`, #22)   Pull request: see the branch   Merged: not yet (after #22)
+- What: `V2_LOG.md` (2026-10-21, the seventh entry).
+- Files and folders: M `crates/delulu/src/cli.rs` (`dwx_actors_refusal`; `build_wasm_artifact` refuses actors),
+  `crates/delulu/src/run_cmd.rs` (the `.dwx` route refuses an actor artifact), `crates/delulu-wasm/src/artifact.rs`
+  (`exports_actor_members`), `crates/delulu-wasm/src/lib.rs` (its re-export), `crates/delulu/tests/wasm_cli.rs`,
+  `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.21), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- **Also this day, on `launch/2.0.0`:** `6863bf7` merges `master` `9c1d30b..4729747` (#20, #21; the CHANGELOG's four
+  sections moved under `## [2.0.0]`; the Survey rebuilt — 1545 nodes, 0 errors; `doctor --check` 29 ok; clippy stamped;
+  eight doc gates, 57 passed). Dispatched there: `everything` `39562457688`, release dry run `39562463148`.
+- Open / next: (1) #22, then this branch, landing on green; (2) `launch/2.0.0`: read `39562457688` and `39562463148`,
+  re-cite checklist criterion 4 from the former; merge #22 and this branch, the 2.0.0 Breaking paragraph gaining
+  ARTIFACT-CLAIM-1's refusal and its `.dwx` clause saying the custody and trace flags are applied; (3) RW 3.21's rest (the
+  actor table in the code), P9-05's open steps (the path in the chain's record, `authority`'s path walk, methods), RW 4.67,
+  6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.

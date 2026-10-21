@@ -17,7 +17,9 @@ pub mod limits;
 mod reify;
 
 pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
-pub use artifact::{embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION};
+pub use artifact::{
+    embed_authority, exports_actor_members, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
+};
 pub use codegen::{compile_checked, compile_module, compile_module_with, uses_console, CompileError};
 pub use dpx::{
     augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,
@@ -746,6 +748,31 @@ mod tests {
         // And no custody at all (embedded) is unchanged.
         let cfg = HostConfig { console: true, ..HostConfig::default() };
         assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
+    }
+
+    /// ARTIFACT-CLAIM-1: a `.dwx`'s declared effects are a ceiling — an effect outside them is refused (DL1202) before the
+    /// custody is asked, by the grant tree's own `Op::required_effect`; one inside them runs; a program compiled here
+    /// (`None`) has its row from the checker and no ceiling.
+    #[test]
+    fn an_artifact_runs_nothing_its_manifest_does_not_declare() {
+        let src = "module m\nfn main(root: Root) ! {Write} {\n  root.console().println(\"wrote\")\n}\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let run = |declared: Option<&[&str]>| {
+            let cfg = HostConfig {
+                console: true,
+                declared_effects: declared.map(|d| d.iter().map(|e| e.to_string()).collect()),
+                ..HostConfig::default()
+            };
+            run_main(&wasm, &cfg).map_err(|e| e.message())
+        };
+        assert_eq!(run(None).as_deref(), Ok("wrote\n"));
+        assert_eq!(run(Some(&["Write"])).as_deref(), Ok("wrote\n"));
+        for declared in [&["Read", "Clock"][..], &[][..]] {
+            let msg = run(Some(declared)).expect_err("an undeclared effect is refused");
+            assert!(msg.contains("DL1202") && msg.contains("performed `Write`"), "{declared:?}: {msg}");
+        }
     }
 
     /// RW 3.4: `http.get` on the WASM engine asks the custody for `Net` on the URL's host before anything is sent, as the

@@ -7951,3 +7951,135 @@ the effect where a second implementation would cost most: the allowlist's path s
 - `scripts/clippy.sh -j 4` (rustfmt's check included) clean and stamped.
 - `delulu-wasm` whole: 173 passed, 0 failed.
 - `wasm_cli`, `examples_run`, `egress_cli`, `cli_contract`, `cli`, `corpus_cli`, `budget_cli`: 113 passed, 0 failed.
+
+## 2026-10-21 — the laptop: a sealed artifact runs under a lease, the broker daemon and a trace (RW 3.19's rest)
+
+**Why.** DWX-FLAGS-1 (RW 3.19, run 5) made `run FILE.dwx` refuse `--lease`, `--broker` and the trace flags it had ignored,
+and left "giving the path a trace and custody" open. But running code someone else built, under a delegation, is what a
+sealed artifact is for — and the dangerous way to give it custody is a second copy of the source route's.
+
+**The change.** The source route's custody and trace code became functions, and both routes call them:
+- `lease_for_run`: the redemption with its budget hold (PS-B-05) and break-glass binding (D-V2-116).
+- `custody_for_run` and `RunCustody`:
+  - the custody label;
+  - a `--broker daemon` root issued and held (RW 4.57), or the lease's mints dead-manned;
+  - `_run_node` still bound in the source route where the local was, so it drops after the devices.
+- `wasm_trace_sink`, `emit_wasm_trace`, and `assert_wasm_trace`, against a row or a set.
+
+The `.dwx` route then does what the source route does, in its order: redeem, choose the custody, refuse a runtime file in
+a scope the program can write (D-V2-21 — a lease's scopes are known only after redemption), and run with the custody and
+the sink. Its `--assert-trace` judges the trace against the effects the artifact's manifest declares.
+`APPLIED_TO_A_DWX` gains `--broker`, `--epoch-ms`, `--lease`, `--trace-effects`, `--trace-out` and `--assert-trace`.
+Every other flag is still refused (`--debug-rcaps`, `--foreign-isolation`, `--on-quiesce` and `--engine interp` in the
+witness).
+
+**Evidence.**
+- The extraction first, before the `.dwx` route used it: 13 lease and daemon CLI targets, 144 passed, 0 failed (`grants_cli`,
+  `broker_cli`, `budget_cli`, `guard_e2e`, `device_delegation_cli`, `plugin_load_cli`, `sandbox_guard_e2e`, `monitor_cli`,
+  `federation_cli`, `cli_contract`, `wasm_cli`, `dead_man_cli`, `estop_cli`).
+- `grants_cli.rs` `a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace`, a live broker:
+  - Under a single-use lease of `./data`, the artifact reads both files with daemon custody and writes its four-record
+    trace. A second use of the token is DL1407, and runs nothing.
+  - A lease of `./data/pub` refuses the artifact's mint of `./data` in the lease's words (RW 6.15).
+  - An artifact reading `../priv/f.txt` through a `./data/pub` handle is refused by the lease's custody ("lease `g_…` does
+    not grant"), which the host asks before its own scope check — so the words say the custody decided.
+  - A lease whose write scope holds `--trace-out` is refused (exit 2, nothing run).
+  - Under `--broker daemon` the run's root is issued, armed and revoked (the audit chain's last records).
+- `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply`: the four flags still refused, and the applied run writes its
+  trace and passes `--assert-trace`. An artifact whose manifest says `Clock` where it performs `Write` is DL1101 under it.
+- Mutants, each red, the control green:
+  - M672 the lease skipped;
+  - M673 the custody not handed to the host — the escape refused in the scope's words instead;
+  - M674 the trace not handed to it;
+  - M675 the assertion skipped;
+  - M676 the write-scope refusal skipped.
+
+**Found while making the last witness: ARTIFACT-CLAIM-1** — next entry.
+
+## 2026-10-21 — the laptop: ARTIFACT-CLAIM-1 — a `.dwx`'s declared effects were its builder's word; now they are a ceiling `run` enforces (RW 4.73)
+
+**Found** while writing the `--assert-trace` witness of the previous entry: to make an artifact whose trace leaves its
+declared effects, the laptop changed `"Write"` to `"Clock"` in a built `.dwx`'s `delulu:authority` section — five bytes for
+five, no hash recomputed. It verified, and it ran. The run said:
+
+> running `lie.dwx` — authority verified; declared effects: Read, Clock
+
+and it read, printed and wrote. `code_blake3` hashes the bare module with the authority section excluded (`embed_authority`,
+`read_and_verify`), so it binds the code to the manifest's own `code_blake3` field and to nothing else in the manifest.
+
+Three claims were wrong:
+- the book's "the authority claim and the code it describes cannot drift apart" (Chapter 9);
+- the run banner's "authority verified";
+- `delulu authority x.dwx`'s "effects: (none — provably pure)" for an artifact that only says so.
+
+**Severity: LOW — words, not authority.** Every effect was still refused unless its grant covered it: the host mints and
+performs everything under the run's grants, and the custody. So nothing escaped. But an operator chooses those grants from
+this report, and a review surface that a builder can edit with a hex editor is the C65 class of failure (the review surface
+vouching for what it never checked).
+
+**The fix: enforce the claim, don't sign it.** A signature would say *who* built the artifact, not that its claim is true.
+The run-time ceiling makes the claim true of what can run:
+- `HostConfig::declared_effects` — the `.dwx` route passes the manifest's effects; the source route passes `None`, since
+  there the checker computed the row.
+- `HostState::custody_allows` — every effect the WASM host performs passes it, after its dispatch record. It now refuses an
+  effect whose required effect (`Op::required_effect`, the grant tree's own rule) the manifest does not declare: DL1202,
+  "the artifact performed `Write`, an effect its `delulu:authority` manifest does not declare (it declares Clock, Read)",
+  before the custody is asked and before the effect happens. The trace shows the dispatch, then its refusal.
+- Over-declaring stays harmless.
+- No new code: DL1202 is the artifact refusal, and its explanation now says this half too.
+- `delulu authority x.dwx` gains an `enforced:` line saying the effects are the builder's claim and that `run` holds the
+  artifact to them.
+- The book's sentence is corrected in place, the false version quoted.
+
+**And a mislabel it exposed: WASM-CODE-1.** `wasm_fault_code` labelled a WASM refusal by a list of nine codes, so DL1202
+printed as `error[DL0904]` — and so would a custody's guard refusal (DL1410) or seal (DL1413), whose messages carry their
+codes. It now returns the message's first registered code (`delulu_diag::static_code`), or DL0904 when there is none.
+
+**Evidence.**
+- Witnesses, red on the old code:
+  - `lib.rs` `an_artifact_runs_nothing_its_manifest_does_not_declare`: no ceiling and `{Write}` run; `{Read, Clock}` and `{}`
+    are refused DL1202;
+  - `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply`, the doctored artifact: `error[DL1202]`, exit 1, nothing
+    written, nothing printed; under `--assert-trace`, exit 3 with DL1101 as well;
+  - `cli.rs` `a_wasm_refusal_is_labelled_with_the_code_it_carries`: nine messages, DL1410, DL1413 and DL1202 among them.
+- Mutants, each red, the control green:
+  - M677 the ceiling never consulted;
+  - M678 the `.dwx` route passes none;
+  - M679 the host state drops it;
+  - M680 and M681 the label back to a short list (the unit test and the CLI witness).
+- By hand: the honest `r.dwx` runs as before; the doctored one stops at its first `Write`, after a declared `Read`.
+- The whole of `delulu`, `delulu-wasm` and `delulu-diag` on this tree: 1,231 passed, 13 ignored, 3 failed in 120 targets
+  — the three `doctor_cli` tests that read the Survey's freshness, red because the map was built before the edits (as
+  they must be). After the rebuild: see the commit message.
+- `scripts/clippy.sh -j 4` first refused to stamp: rustfmt's check, added this morning, caught the slice's unformatted code
+  before any commit could carry it.
+
+## 2026-10-21 — the laptop: DWX-ACTORS-1 — an actor program's `.dwx` was written and could not run; refused in words (RW 3.21)
+
+**Found** probing the `.dwx` route after giving it custody (the entry before last). `delulu build
+examples/guide/06_actors.delulu --target wasm` wrote a 1,523-byte artifact. `delulu run` of it failed: "WASM trap: actor
+index 1 out of range", labelled DL0904. The source of the same chapter runs on `--engine wasm` (5 actors, 13 turns).
+
+The `.dwx` route calls `run_main` with no actor table. The source route builds the table from the AST (`actor_table`):
+each actor's behaviours, their arities, and its field count. The exports name the members (`actor$W$new`, `actor$W$job`)
+but carry no field count.
+
+**Refused, not made to run — this slice.** Making it run means the code carrying its own table: each field count as an
+exported global, read from the module. It must never come from an unhashed custom section; that is ARTIFACT-CLAIM-1's
+lesson, the entry before. That is a format change, a slice of its own (RW 3.21's "What closing it takes"). Until then:
+- `build --target wasm` refuses a program that declares actors (DL1201, `dwx_actors_refusal`), and writes nothing;
+- `run` refuses an artifact whose exports name an actor member (`delulu_wasm::exports_actor_members`, a read of the
+  export section), in the same words, before anything runs.
+
+**Evidence.**
+- `wasm_cli.rs` `an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run`: the build refused, with no file
+  written; an artifact assembled through the library, as the old build wrote it, refused at run with no "out of range".
+  Red on the old code.
+- Mutants, each red, the control green:
+  - M682 the build's refusal removed;
+  - M683 the run's;
+  - M684 the scan's prefix;
+  - M685 the scan reading the wrong section.
+- The five CLI targets that build artifacts (`wasm_cli`, `release`, `plugin_cli`, `artifact_review`, `json_contract`):
+  51 passed.
+- Chapter five and the other non-actor programs still build.

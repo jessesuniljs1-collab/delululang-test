@@ -210,6 +210,14 @@ const APPLIED_TO_A_DWX: &[&str] = &[
     "--isolation",
     "--sandbox",
     "--engine",
+    // Since 2026-10-21, by the source route's own functions: the custody (`lease_for_run`, `custody_for_run`) and the
+    // trace (`wasm_trace_sink`, `emit_wasm_trace`, `assert_wasm_trace` — against the effects the artifact declares).
+    "--broker",
+    "--epoch-ms",
+    "--lease",
+    "--trace-effects",
+    "--trace-out",
+    "--assert-trace",
 ];
 
 fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
@@ -240,6 +248,13 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
             return 1;
         }
     };
+    // DWX-ACTORS-1: an artifact of an actor program (one built before `build` refused it) is refused in words, before
+    // anything runs — not as the "actor index out of range" its first spawn met.
+    if delulu_wasm::exports_actor_members(&artifact.wasm) {
+        let d = Diagnostic::error("DL1201", crate::cli::dwx_actors_refusal(file));
+        print_diagnostics("run", &[d], &map, None, opts.json);
+        return 1;
+    }
 
     let mut grants = Grants::default();
     for g in &opts.grants {
@@ -251,30 +266,55 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
 
     // The thesis made concrete: the artifact travels with its authority. Announce it before running
     // (human mode only; JSON mode keeps stdout clean for the program's own output).
+    let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
     if !opts.json {
-        let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
         let effects_str = if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") };
         eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
     }
 
+    // The custody, chosen as the source route chooses it, by the same functions: a lease redeemed and its node bound, or
+    // a root issued and held under `--broker daemon` — before the artifact runs, fail closed.
+    let lease_custody = match lease_for_run(opts, &mut grants, &map) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let RunCustody { custody, run_node: _run_node, .. } = match custody_for_run(opts, &grants, &map, file, lease_custody) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    // D-V2-21 / PS-0-02, as on the source route: the grants are final now (a lease's included), and neither
+    // runtime-written file may lie in a scope the program can write.
+    if let Some(code) = refuse_runtime_paths_in_write_scopes(opts, &grants.build_root().fs_write) {
+        return code;
+    }
+    let sink = wasm_trace_sink(opts);
+
     // A `.dwx` carries no source AST, so it has no foreign signatures to bind: a foreign-using `.dwx`
     // is not executable in phase 4g (its authority manifest DOES record the foreign entries — the
     // manifest requirement — but running foreign code needs the source's marshalling signatures).
+    let root = grants.build_root();
     let cfg = delulu_wasm::HostConfig {
         console: grants.console,
         clock: grants.clock,
         rand: grants.rand,
-        fs_read_roots: grants.build_root().fs_read,
-        fs_write_roots: grants.build_root().fs_write,
-        net: grants.net.clone(),
-        net_special: grants.net_special.clone(),
+        fs_read_roots: root.fs_read.clone(),
+        fs_write_roots: root.fs_write.clone(),
+        lease: root.lease.clone(),
+        net: root.net.clone(),
+        net_special: root.net_special.clone(),
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
         stream_console: true,
+        trace: sink.clone(),
+        custody: custody.map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>))),
+        // ARTIFACT-CLAIM-1: what the artifact declares is all it may do — its code hash binds only its code.
+        declared_effects: Some(effects.iter().cloned().collect()),
         ..delulu_wasm::HostConfig::default()
     };
     note_program_started();
-    match delulu_wasm::run_main(&artifact.wasm, &cfg) {
+    let ran = delulu_wasm::run_main(&artifact.wasm, &cfg);
+    emit_wasm_trace(&sink, opts);
+    let code = match ran {
         Ok(output) => {
             print!("{output}");
             0
@@ -285,7 +325,10 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
-    }
+    };
+    // The trace ⊆ row law against the effects the artifact declares — the authority it was verified to carry.
+    let allowed: std::collections::BTreeSet<String> = effects.into_iter().collect();
+    assert_wasm_trace(&sink, &allowed, &map, opts).unwrap_or(code)
 }
 
 // ----- the run report (D-V2-21, PS-0-02) ---------------------------------------------------------
@@ -582,6 +625,166 @@ fn bind_break_glass_run(custody: &crate::broker_client::BrokerClientCustody) -> 
         delulu_diag::terminal_line(&why)
     );
     Err(2)
+}
+
+/// `--lease <token>` (Stage 5 phase 5j, spec §3.2/§3.3): redeem the delegated lease, and run under EXACTLY that node — the
+/// local grants become the node's (never widened locally; the broker enforces per §4 regardless), the run is held to the
+/// delegation's budget (PS-B-05) and a break-glass run's use is bound to the node (D-V2-116). `None` without `--lease`.
+/// Fail closed: broker down ⇒ DL1401; a bad, expired or spent token ⇒ DL1407/DL1402 — before `main` ever runs. One function
+/// for `run`'s two routes, a program's source and a `.dwx`, so neither applies a lease the other does not (DWX-FLAGS-1).
+fn lease_for_run(
+    opts: &Opts,
+    grants: &mut Grants,
+    map: &SourceMap,
+) -> Result<Option<crate::broker_client::BrokerClientCustody>, i32> {
+    let Some(token) = &opts.lease else { return Ok(None) };
+    // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
+    // and, for what `--limits` leaves unnamed, the default.
+    let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
+        let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), ceiling) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return Err(2);
+            }
+        };
+        if let Err(e) = hold_run_to(held) {
+            eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
+            return Err(2);
+        }
+        if !opts.json {
+            eprintln!("lease: held to the delegated budget, mem={} bytes, cpu={} s", held.memory_bytes, held.cpu_seconds);
+        }
+        Ok(())
+    };
+    let custody = redeem_lease(token, grants, opts, map, &mut hold)?;
+    bind_break_glass_run(&custody)?;
+    Ok(Some(custody))
+}
+
+/// The WASM engine's trace sink (spec §6.1): unbounded under `--assert-trace`, which judges every record; bounded under
+/// `--trace-effects` alone; none otherwise. For both of `run`'s WASM routes.
+fn wasm_trace_sink(opts: &Opts) -> Option<delulu_runtime::TraceSink> {
+    if opts.assert_trace {
+        Some(delulu_runtime::TraceSink::new())
+    } else if opts.trace_effects {
+        Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
+    } else {
+        None
+    }
+}
+
+/// `--trace-effects`: the trace, one JSON line a record, to `--trace-out` or stderr.
+fn emit_wasm_trace(sink: &Option<delulu_runtime::TraceSink>, opts: &Opts) {
+    let Some(s) = sink else { return };
+    if !opts.trace_effects {
+        return;
+    }
+    let lines = s.to_json_lines();
+    match &opts.trace_out {
+        Some(path) => {
+            if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
+                eprintln!("error: cannot write trace to `{path}`: {e}");
+            }
+        }
+        None => eprintln!("{lines}"),
+    }
+}
+
+/// `--assert-trace`: the trace ⊆ row law (spec §6.2, invariant 12) against `allowed` — `main`'s row, or a `.dwx`'s declared
+/// effects. A violation is compiler-bug class (DL1101): `Some(3)`; `None` when the law holds or nothing was asserted.
+fn assert_wasm_trace(
+    sink: &Option<delulu_runtime::TraceSink>,
+    allowed: &std::collections::BTreeSet<String>,
+    map: &SourceMap,
+    opts: &Opts,
+) -> Option<i32> {
+    let s = sink.as_ref().filter(|_| opts.assert_trace)?;
+    let violations = delulu_runtime::assert_trace(allowed, &s.records());
+    if violations.is_empty() {
+        return None;
+    }
+    let diags: Vec<Diagnostic> = violations
+        .iter()
+        .map(|v| {
+            Diagnostic::error(
+                "DL1101",
+                format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it"),
+            )
+        })
+        .collect();
+    print_diagnostics("run", &diags, map, None, opts.json);
+    Some(3)
+}
+
+/// The custody a run's effects go through (Stage 5 phase 5f), and the node it holds for its length.
+struct RunCustody {
+    /// Whether every effect is decided by the broker daemon (`--broker daemon`, or a lease).
+    daemon_mode: bool,
+    /// The daemon custody: the lease's node, or the root this run issued; `None` embedded.
+    custody: Option<crate::broker_client::BrokerClientCustody>,
+    /// RW 4.57 (D-V2-157): the root this run issued for itself, held for exactly as long as the run — revoked when it drops,
+    /// and reaped by the daemon's dead-man if the run never gets there; for a lease run, what it mints under the
+    /// delegator's node, dead-manned as it is minted (the lease's own node is the delegator's, and is not held).
+    run_node: Option<crate::broker_client::RunNode>,
+}
+
+/// Choose the custody (Stage 5 phase 5f), after the grants are final. Default: embedded — byte-identical Stage 1–4
+/// behavior (criterion 11). `--broker daemon` routes every effectful op through the broker daemon: the `--grant` flags
+/// become sugar for issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main` runs (fail
+/// closed, invariant 27 — never a silent fallback to embedded). A lease run's custody is the daemon by definition, bound to
+/// the redeemed node by `lease_for_run`. Shared by `run`'s two routes, as `lease_for_run` is.
+fn custody_for_run(
+    opts: &Opts,
+    grants: &Grants,
+    map: &SourceMap,
+    program: &str,
+    lease_custody: Option<crate::broker_client::BrokerClientCustody>,
+) -> Result<RunCustody, i32> {
+    let lease_mode = opts.lease.is_some();
+    let daemon_mode = match opts.broker.as_deref() {
+        // A `--lease` run's custody is the daemon by definition (the node lives there).
+        None | Some("embedded") => lease_mode,
+        Some("daemon") => true,
+        Some(other) => {
+            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
+            return Err(2);
+        }
+    };
+    if (opts.broker.is_some() || lease_mode) && !opts.json {
+        // The custody label (playbook 5j; printed when custody was explicitly chosen so default
+        // embedded output stays byte-identical to prior stages).
+        eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
+    }
+    let refuse = |d: delulu_runtime::CustodyDenial| {
+        let diag = Diagnostic::error(d.code, d.message);
+        print_diagnostics("run", &[diag], map, None, opts.json);
+        1
+    };
+    // A lease run already bound custody to the redeemed node; a plain `--broker daemon` run issues its root here (the
+    // `--grant` flags as issue-then-run sugar, spec §3.2).
+    match lease_custody {
+        Some(mut c) => {
+            // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+            let held = crate::broker_client::RunNode::for_lease(&mut c).map_err(refuse)?;
+            Ok(RunCustody { daemon_mode, custody: Some(c), run_node: Some(held) })
+        }
+        None if daemon_mode => {
+            let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+                eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+                return Err(2);
+            };
+            let mut spec = authority_spec_from_grants(grants, program);
+            // PS-B-05: the root records the budget this run is held to, so anything the program
+            // delegates from it inherits that budget or narrows it, and never outspends its own run.
+            spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
+            let (c, held) = crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
+                .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
+                .map_err(refuse)?;
+            Ok(RunCustody { daemon_mode, custody: Some(c), run_node: Some(held) })
+        }
+        None => Ok(RunCustody { daemon_mode, custody: None, run_node: None }),
+    }
 }
 
 pub(crate) fn redeem_lease(
@@ -1107,38 +1310,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // orchestration payoff: whoever holds a grant delegates a slice, hands the token to an agent,
     // and the agent runs under exactly that attenuated authority. Fail closed: broker down ⇒
     // DL1401; a bad/expired/already-redeemed token ⇒ DL1407/DL1402 — before `main` ever runs.
-    let lease_mode = opts.lease.is_some();
-    let mut lease_custody: Option<crate::broker_client::BrokerClientCustody> = None;
-    if let Some(token) = &opts.lease {
-        // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
-        // and, for what `--limits` leaves unnamed, the default.
-        let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
-            let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), ceiling) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    return Err(2);
-                }
-            };
-            if let Err(e) = hold_run_to(held) {
-                eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
-                return Err(2);
-            }
-            if !opts.json {
-                eprintln!("lease: held to the delegated budget, mem={} bytes, cpu={} s", held.memory_bytes, held.cpu_seconds);
-            }
-            Ok(())
-        };
-        match redeem_lease(token, &mut grants, &opts, &map, &mut hold) {
-            Ok(custody) => {
-                if let Err(code) = bind_break_glass_run(&custody) {
-                    return code;
-                }
-                lease_custody = Some(custody)
-            }
-            Err(code) => return code,
-        }
-    }
+    let lease_custody = match lease_for_run(&opts, &mut grants, &map) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
 
     // Foreign grant flow (Stage 4, spec §4.1 / criterion 4): every `foreign` lib the program binds
     // must be permitted by the manifest (if any) and granted a binary at startup. An ungranted lib
@@ -1153,60 +1328,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // routes every effectful op through the broker daemon: the `--grant` flags become sugar for
     // issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main`
     // runs (fail closed, invariant 27 — never a silent fallback to embedded).
-    let daemon_mode = match opts.broker.as_deref() {
-        // A `--lease` run's custody is the daemon by definition (the node lives there).
-        None | Some("embedded") => lease_mode,
-        Some("daemon") => true,
-        Some(other) => {
-            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
-            return 2;
-        }
-    };
-    if (opts.broker.is_some() || lease_mode) && !opts.json {
-        // The custody label (playbook 5j; printed when custody was explicitly chosen so default
-        // embedded output stays byte-identical to prior stages).
-        eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
-    }
-    // A lease run already bound custody to the redeemed node above; a plain `--broker daemon` run
-    // issues its root here (the `--grant` flags as issue-then-run sugar, spec §3.2).
-    let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = lease_custody;
-    // RW 4.57 (D-V2-157): the root this run issues for itself is held for exactly as long as the run — revoked when this
-    // drops (after `close_devices`, declared before the devices so it drops after them), and reaped by the daemon's
-    // dead-man if the run never gets here. A lease run's node is the delegator's, and is not held.
-    let mut _run_node: Option<crate::broker_client::RunNode> = None;
-    if daemon_mode && daemon_custody.is_none() {
-        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
-            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
-            return 2;
+    // RW 4.57 (D-V2-157): `_run_node` is held for exactly as long as the run — declared before the devices so it drops
+    // after `close_devices`.
+    let RunCustody { daemon_mode, custody: mut daemon_custody, run_node: _run_node } =
+        match custody_for_run(&opts, &grants, &map, &file, lease_custody) {
+            Ok(c) => c,
+            Err(code) => return code,
         };
-        let mut spec = authority_spec_from_grants(&grants, &file);
-        // PS-B-05: the root records the budget this run is held to, so anything the program
-        // delegates from it inherits that budget or narrows it, and never outspends its own run.
-        spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
-        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
-            .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
-        {
-            Ok((c, held)) => {
-                daemon_custody = Some(c);
-                _run_node = Some(held);
-            }
-            Err(d) => {
-                let diag = Diagnostic::error(d.code, d.message);
-                print_diagnostics("run", &[diag], &map, None, opts.json);
-                return 1;
-            }
-        }
-    } else if let Some(c) = daemon_custody.as_mut() {
-        // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
-        match crate::broker_client::RunNode::for_lease(c) {
-            Ok(held) => _run_node = Some(held),
-            Err(d) => {
-                let diag = Diagnostic::error(d.code, d.message);
-                print_diagnostics("run", &[diag], &map, None, opts.json);
-                return 1;
-            }
-        }
-    }
 
     // D-V2-21 / PS-0-02, the second time: the grants are final now (a lease's or a manifest's
     // scopes included), and neither runtime-written file may lie in a scope the program can write.
@@ -1253,13 +1381,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
         // Effect tracing on the WASM engine (spec §6.1; criterion 6): the host records the same
         // `TraceRecord`s the interpreter would, so a foreign program's trace is byte-identical.
-        let sink = if opts.assert_trace {
-            Some(delulu_runtime::TraceSink::new())
-        } else if opts.trace_effects {
-            Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
-        } else {
-            None
-        };
+        let sink = wasm_trace_sink(&opts);
         let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
         let root = grants.build_root();
         // Stage 5 phase 5f: the WASM host calls the SAME custody seam as the interpreter. A broker
@@ -1276,6 +1398,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             lease: root.lease.clone(), // RW 6.15: the remedy a refusal names
             net: root.net.clone(),
             net_special: root.net_special.clone(),
+            declared_effects: None, // the checker computed this program's row; ARTIFACT-CLAIM-1 is a `.dwx`'s
+
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
             stream_console: true, // WASM-OUTPUT-1: printed as printed, so a fault or a budget's stop loses none of it
@@ -1308,19 +1432,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
 
         // Emit the trace before verdicts (the witness is available even on a fault).
-        if let Some(s) = &sink {
-            if opts.trace_effects {
-                let lines = s.to_json_lines();
-                match &opts.trace_out {
-                    Some(path) => {
-                        if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
-                            eprintln!("error: cannot write trace to `{path}`: {e}");
-                        }
-                    }
-                    None => eprintln!("{lines}"),
-                }
-            }
-        }
+        emit_wasm_trace(&sink, &opts);
 
         let code = match run_result {
             Ok(output) => {
@@ -1336,21 +1448,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
 
         // The trace ⊆ row law (spec §6.2, invariant 12): a violation is compiler-bug class (DL1101).
-        if opts.assert_trace {
-            if let Some(s) = &sink {
-                let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
-                let violations = delulu_runtime::assert_trace(&allowed, &s.records());
-                if !violations.is_empty() {
-                    let diags: Vec<Diagnostic> = violations
-                        .iter()
-                        .map(|v| Diagnostic::error("DL1101", format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it")))
-                        .collect();
-                    print_diagnostics("run", &diags, &map, None, opts.json);
-                    return 3;
-                }
-            }
-        }
-        return code;
+        let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
+        return assert_wasm_trace(&sink, &allowed, &map, &opts).unwrap_or(code);
     }
 
     // Determinism knobs (spec §6.2).

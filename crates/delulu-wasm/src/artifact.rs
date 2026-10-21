@@ -159,6 +159,39 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
     Ok(Artifact { version, authority, wasm: wasm.to_vec() })
 }
 
+/// Whether the module exports an actor member (`actor$A$new`, `actor$A$beh` — `ctor_export_name`, `behavior_export_name`):
+/// a `.dwx` of an actor program, which does not run yet (DWX-ACTORS-1 — its actor table is built from the source). Read
+/// from the export section alone; a section this cannot read answers `false`, and the engine then refuses the module.
+pub fn exports_actor_members(wasm: &[u8]) -> bool {
+    fn names(body: &[u8]) -> Option<bool> {
+        let (count, mut at) = read_uleb(body)?;
+        for _ in 0..count {
+            let (len, n) = read_uleb(body.get(at..)?)?;
+            at += n;
+            let name = body.get(at..at.checked_add(len as usize)?)?;
+            if name.starts_with(b"actor$") {
+                return Some(true);
+            }
+            at += len as usize + 1; // the name, then its kind byte
+            let (_, n) = read_uleb(body.get(at..)?)?; // its index
+            at += n;
+        }
+        Some(false)
+    }
+    let mut i = 8usize;
+    while i < wasm.len() {
+        let id = wasm[i];
+        let Some((size, n)) = wasm.get(i + 1..).and_then(read_uleb) else { return false };
+        let body_start = i + 1 + n;
+        let Some(body) = body_start.checked_add(size as usize).and_then(|end| wasm.get(body_start..end)) else { return false };
+        if id == 7 {
+            return names(body).unwrap_or(false);
+        }
+        i = body_start + body.len();
+    }
+    false
+}
+
 #[cfg(test)]
 mod version_gate_tests {
     use super::*;

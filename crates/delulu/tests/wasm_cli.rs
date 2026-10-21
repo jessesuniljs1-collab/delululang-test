@@ -146,12 +146,12 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
     let b = delulu_in(&dir, &["build", "w.delulu", "--target", "wasm", "-o", "w.dwx"]);
     assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
     let granted = ["run", "w.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+    // Since 2026-10-21 the custody and trace flags are applied (`grants_cli.rs`
+    // `a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace`); what the route still does not apply is refused.
     for (flags, named) in [
-        (&["--trace-effects"][..], "--trace-effects"),
-        (&["--trace-effects", "--trace-out", "t.jsonl"][..], "--trace-out"),
-        (&["--assert-trace"][..], "--assert-trace"),
-        (&["--broker", "daemon"][..], "--broker"),
-        (&["--lease", "not-a-token"][..], "--lease"),
+        (&["--debug-rcaps"][..], "--debug-rcaps"),
+        (&["--foreign-isolation", "process"][..], "--foreign-isolation"),
+        (&["--on-quiesce", "report"][..], "--on-quiesce"),
         (&["--engine", "interp"][..], "--engine"),
     ] {
         let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
@@ -163,12 +163,36 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
         assert!(!dir.join("out").join("log.txt").exists(), "{flags:?}: nothing ran");
         assert!(!dir.join("t.jsonl").exists());
     }
-    // The flags it applies: the grants, the seed, the clock, `--engine wasm`.
-    let args: Vec<&str> = granted.iter().chain(&["--seed", "1", "--clock", "fixed:0", "--engine", "wasm"]).copied().collect();
+    // The flags it applies: the grants, the seed, the clock, `--engine wasm`, and the trace — written, and asserted
+    // against the effects the artifact declares.
+    let applied =
+        ["--seed", "1", "--clock", "fixed:0", "--engine", "wasm", "--trace-effects", "--trace-out", "t.jsonl", "--assert-trace"];
+    let args: Vec<&str> = granted.iter().chain(&applied).copied().collect();
     let o = delulu_in(&dir, &args);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     assert_eq!(stdout(&o), "wrote\n");
     assert_eq!(std::fs::read_to_string(dir.join("out").join("log.txt")).unwrap(), "started");
+    let traced = std::fs::read_to_string(dir.join("t.jsonl")).expect("the trace was written");
+    assert!(traced.contains("\"op\":\"write_text\"") && traced.contains("\"op\":\"println\""), "{traced}");
+    // ARTIFACT-CLAIM-1: an artifact whose manifest says `Clock` where its code performs `Write` (the same length, so the
+    // section stays well-formed — its code hash binds only its code, so it still verifies) is refused at its first
+    // undeclared effect, DL1202, and nothing is written; under `--assert-trace` the trace's dispatch record is DL1101 too.
+    let dwx = std::fs::read(dir.join("w.dwx")).unwrap();
+    let at = dwx.windows(7).position(|w| w == b"\"Write\"").expect("the manifest names Write");
+    let mut lie = dwx.clone();
+    lie[at..at + 7].copy_from_slice(b"\"Clock\"");
+    std::fs::write(dir.join("lie.dwx"), &lie).unwrap();
+    for (extra, exit) in [(None, 1), (Some("--assert-trace"), 3)] {
+        let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
+        let mut args = vec!["run", "lie.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+        args.extend(extra);
+        let o = delulu_in(&dir, &args);
+        let e = String::from_utf8_lossy(&o.stderr).to_string();
+        assert_eq!(o.status.code(), Some(exit), "{extra:?}: {e}");
+        assert!(e.contains("error[DL1202]") && e.contains("performed `Write`"), "{extra:?}: {e}");
+        assert!(extra.is_none() || e.contains("DL1101"), "{e}");
+        assert!(!dir.join("out").join("log.txt").exists() && stdout(&o).is_empty(), "{extra:?}: nothing it did not declare ran");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -443,5 +467,34 @@ fn http_on_the_wasm_engine_matches_the_interpreter() {
     for e in [err(&i), err(&w)] {
         assert!(e.contains("DL0703") && e.contains(words), "{e}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// DWX-ACTORS-1 (2026-10-21): `build --target wasm` wrote a `.dwx` of an actor program, and `run` of it failed "actor index
+/// 1 out of range" — the `.dwx` route has no actor table (the source route builds it from the AST, and each actor's field
+/// count is not in its exports). Both now refuse in words: the build writes nothing, and an artifact built before the
+/// refusal (assembled here as the old build wrote it) is refused before it runs.
+#[test]
+fn an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run() {
+    let dir = std::env::temp_dir().join(format!("delulu_dwx_actors_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = "module a\nactor W {\n  var n: Int\n  new() { self.n = 0 }\n  be bump(k: Int) { self.n = self.n + k }\n}\n\
+               fn main(root: Root) ! {Async} {\n  let w = spawn W()\n  w.bump(1)\n}\n";
+    std::fs::write(dir.join("a.delulu"), src).unwrap();
+    let o = delulu_in(&dir, &["build", "a.delulu", "--target", "wasm", "-o", "a.dwx"]);
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{e}");
+    assert!(e.contains("DL1201") && e.contains("declares actors"), "{e}");
+    assert!(!dir.join("a.dwx").exists(), "nothing written");
+
+    let checked = delulu_check::check_source(0, src);
+    let wasm = delulu_wasm::compile_checked(&checked.module, &checked.result).expect("the actor program compiles");
+    let old = delulu_wasm::embed_authority(&wasm, &serde_json::json!({ "effects": ["Async"] }));
+    std::fs::write(dir.join("old.dwx"), old).unwrap();
+    let o = delulu_in(&dir, &["run", "old.dwx"]);
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{e}");
+    assert!(e.contains("DL1201") && e.contains("declares actors") && !e.contains("out of range"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -18,13 +18,45 @@ its first command (RW 4.19); an ordinary `run` is held to 1 GiB of memory and fi
 `--limits` sets others; a secret's name can no longer hold `@`; a compiled program or a Contained plugin may no longer use
 the WebAssembly 3.0 features the engine enabled by default; on Windows a foreign library no longer falls back to the
 application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value; `run FILE.dwx`
-refuses the `run` flags it does not apply (`--broker`, `--lease`, the trace flags) instead of ignoring them (RW 3.19).
+refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; since 2026-10-21 it applies `--lease`,
+`--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73),
+and `build --target wasm` refuses a program with actors (RW 3.21).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### an actor program has no `.dwx` yet, and says so, 2026-10-21
+
+- **Fixed: `delulu build --target wasm` wrote a `.dwx` of an actor program that could not run** (RW 3.21). Running it
+  failed with "actor index 1 out of range". The build now refuses such a program with DL1201, saying why: the actor
+  table comes from the source, which the artifact does not carry. `delulu run` refuses an artifact like it, built
+  before this change, in the same words. Run an actor program's source with `--engine wasm`, or on the interpreter.
+
+### an artifact runs only what it declares, 2026-10-21
+
+- **Fixed (security, review surface): a `.dwx` could claim fewer effects than its code performs** (RW 4.73,
+  ARTIFACT-CLAIM-1). The artifact's code hash covers its code and not the `delulu:authority` section beside it. So the
+  declared effects could be edited in place, and the artifact still printed "authority verified" and ran. The grants
+  still bounded every effect, so no authority escaped. But `delulu authority x.dwx` and the run banner could describe
+  less than the code does.
+  - `delulu run` now refuses the first effect an artifact's manifest does not declare, before it happens (DL1202).
+  - The report says the effects are enforced.
+  - **Breaking** for an artifact whose manifest understates its effects. An artifact built by `delulu build` declares
+    what the checker computed, and is unaffected.
+- **Fixed: a refusal on the WASM engine was labelled DL0904 unless it carried one of nine codes.** A guard refusal
+  (DL1410), a seal (DL1413) and DL1202 now print under their own codes.
+
+### a sealed artifact under a lease, the broker daemon and a trace, 2026-10-21
+
+- **New: `delulu run FILE.dwx` applies `--lease`, `--broker daemon`, `--epoch-ms`, `--trace-effects`, `--trace-out` and
+  `--assert-trace`.** Since 2026-10-20 these were refused for an artifact rather than ignored. Now a sealed artifact can
+  run under a delegated lease, or under broker custody, with an effect trace. It is set up by the same code as a
+  source run: the lease redeemed and its budget held, a root issued and revoked, and a trace written inside no
+  writable scope. `--assert-trace` judges the trace against the effects the artifact declares. Other `run` flags are
+  still refused for a `.dwx`.
 
 ### the network on the WASM engine, 2026-10-21
 
