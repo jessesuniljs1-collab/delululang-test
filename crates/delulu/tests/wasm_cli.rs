@@ -146,12 +146,12 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
     let b = delulu_in(&dir, &["build", "w.delulu", "--target", "wasm", "-o", "w.dwx"]);
     assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
     let granted = ["run", "w.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+    // Since 2026-10-21 the custody and trace flags are applied (`grants_cli.rs`
+    // `a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace`); what the route still does not apply is refused.
     for (flags, named) in [
-        (&["--trace-effects"][..], "--trace-effects"),
-        (&["--trace-effects", "--trace-out", "t.jsonl"][..], "--trace-out"),
-        (&["--assert-trace"][..], "--assert-trace"),
-        (&["--broker", "daemon"][..], "--broker"),
-        (&["--lease", "not-a-token"][..], "--lease"),
+        (&["--debug-rcaps"][..], "--debug-rcaps"),
+        (&["--foreign-isolation", "process"][..], "--foreign-isolation"),
+        (&["--on-quiesce", "report"][..], "--on-quiesce"),
         (&["--engine", "interp"][..], "--engine"),
     ] {
         let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
@@ -163,12 +163,27 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
         assert!(!dir.join("out").join("log.txt").exists(), "{flags:?}: nothing ran");
         assert!(!dir.join("t.jsonl").exists());
     }
-    // The flags it applies: the grants, the seed, the clock, `--engine wasm`.
-    let args: Vec<&str> = granted.iter().chain(&["--seed", "1", "--clock", "fixed:0", "--engine", "wasm"]).copied().collect();
+    // The flags it applies: the grants, the seed, the clock, `--engine wasm`, and the trace — written, and asserted
+    // against the effects the artifact declares.
+    let applied =
+        ["--seed", "1", "--clock", "fixed:0", "--engine", "wasm", "--trace-effects", "--trace-out", "t.jsonl", "--assert-trace"];
+    let args: Vec<&str> = granted.iter().chain(&applied).copied().collect();
     let o = delulu_in(&dir, &args);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     assert_eq!(stdout(&o), "wrote\n");
     assert_eq!(std::fs::read_to_string(dir.join("out").join("log.txt")).unwrap(), "started");
+    let traced = std::fs::read_to_string(dir.join("t.jsonl")).expect("the trace was written");
+    assert!(traced.contains("\"op\":\"write_text\"") && traced.contains("\"op\":\"println\""), "{traced}");
+    // `--assert-trace` judges the trace against the effects the artifact DECLARES: one whose manifest says `Clock` where it
+    // performs `Write` (the same length, so the section stays well-formed) is DL1101.
+    let dwx = std::fs::read(dir.join("w.dwx")).unwrap();
+    let at = dwx.windows(7).position(|w| w == b"\"Write\"").expect("the manifest names Write");
+    let mut lie = dwx.clone();
+    lie[at..at + 7].copy_from_slice(b"\"Clock\"");
+    std::fs::write(dir.join("lie.dwx"), &lie).unwrap();
+    let o = delulu_in(&dir, &["run", "lie.dwx", "--grant", "console", "--grant", "fs.write=./out", "--assert-trace"]);
+    assert_eq!(o.status.code(), Some(3), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("DL1101"), "{}", String::from_utf8_lossy(&o.stderr));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -210,6 +210,14 @@ const APPLIED_TO_A_DWX: &[&str] = &[
     "--isolation",
     "--sandbox",
     "--engine",
+    // Since 2026-10-21, by the source route's own functions: the custody (`lease_for_run`, `custody_for_run`) and the
+    // trace (`wasm_trace_sink`, `emit_wasm_trace`, `assert_wasm_trace` — against the effects the artifact declares).
+    "--broker",
+    "--epoch-ms",
+    "--lease",
+    "--trace-effects",
+    "--trace-out",
+    "--assert-trace",
 ];
 
 fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
@@ -251,30 +259,55 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
 
     // The thesis made concrete: the artifact travels with its authority. Announce it before running
     // (human mode only; JSON mode keeps stdout clean for the program's own output).
+    let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
     if !opts.json {
-        let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
         let effects_str = if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") };
         eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
     }
 
+    // The custody, chosen as the source route chooses it, by the same functions: a lease redeemed and its node bound, or
+    // a root issued and held under `--broker daemon` — before the artifact runs, fail closed.
+    let lease_custody = match lease_for_run(opts, &mut grants, &map) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let RunCustody { custody, run_node: _run_node, .. } = match custody_for_run(opts, &grants, &map, file, lease_custody) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    // D-V2-21 / PS-0-02, as on the source route: the grants are final now (a lease's included), and neither
+    // runtime-written file may lie in a scope the program can write.
+    if let Some(code) = refuse_runtime_paths_in_write_scopes(opts, &grants.build_root().fs_write) {
+        return code;
+    }
+    let sink = wasm_trace_sink(opts);
+
     // A `.dwx` carries no source AST, so it has no foreign signatures to bind: a foreign-using `.dwx`
     // is not executable in phase 4g (its authority manifest DOES record the foreign entries — the
     // manifest requirement — but running foreign code needs the source's marshalling signatures).
+    let root = grants.build_root();
     let cfg = delulu_wasm::HostConfig {
         console: grants.console,
         clock: grants.clock,
         rand: grants.rand,
-        fs_read_roots: grants.build_root().fs_read,
-        fs_write_roots: grants.build_root().fs_write,
-        net: grants.net.clone(),
-        net_special: grants.net_special.clone(),
+        fs_read_roots: root.fs_read.clone(),
+        fs_write_roots: root.fs_write.clone(),
+        lease: root.lease.clone(),
+        net: root.net.clone(),
+        net_special: root.net_special.clone(),
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
         stream_console: true,
+        trace: sink.clone(),
+        custody: custody.map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>))),
+        // ARTIFACT-CLAIM-1: what the artifact declares is all it may do — its code hash binds only its code.
+        declared_effects: Some(effects.iter().cloned().collect()),
         ..delulu_wasm::HostConfig::default()
     };
     note_program_started();
-    match delulu_wasm::run_main(&artifact.wasm, &cfg) {
+    let ran = delulu_wasm::run_main(&artifact.wasm, &cfg);
+    emit_wasm_trace(&sink, opts);
+    let code = match ran {
         Ok(output) => {
             print!("{output}");
             0
@@ -285,7 +318,10 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
-    }
+    };
+    // The trace ⊆ row law against the effects the artifact declares — the authority it was verified to carry.
+    let allowed: std::collections::BTreeSet<String> = effects.into_iter().collect();
+    assert_wasm_trace(&sink, &allowed, &map, opts).unwrap_or(code)
 }
 
 // ----- the run report (D-V2-21, PS-0-02) ---------------------------------------------------------
@@ -617,6 +653,61 @@ fn lease_for_run(
     let custody = redeem_lease(token, grants, opts, map, &mut hold)?;
     bind_break_glass_run(&custody)?;
     Ok(Some(custody))
+}
+
+/// The WASM engine's trace sink (spec §6.1): unbounded under `--assert-trace`, which judges every record; bounded under
+/// `--trace-effects` alone; none otherwise. For both of `run`'s WASM routes.
+fn wasm_trace_sink(opts: &Opts) -> Option<delulu_runtime::TraceSink> {
+    if opts.assert_trace {
+        Some(delulu_runtime::TraceSink::new())
+    } else if opts.trace_effects {
+        Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
+    } else {
+        None
+    }
+}
+
+/// `--trace-effects`: the trace, one JSON line a record, to `--trace-out` or stderr.
+fn emit_wasm_trace(sink: &Option<delulu_runtime::TraceSink>, opts: &Opts) {
+    let Some(s) = sink else { return };
+    if !opts.trace_effects {
+        return;
+    }
+    let lines = s.to_json_lines();
+    match &opts.trace_out {
+        Some(path) => {
+            if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
+                eprintln!("error: cannot write trace to `{path}`: {e}");
+            }
+        }
+        None => eprintln!("{lines}"),
+    }
+}
+
+/// `--assert-trace`: the trace ⊆ row law (spec §6.2, invariant 12) against `allowed` — `main`'s row, or a `.dwx`'s declared
+/// effects. A violation is compiler-bug class (DL1101): `Some(3)`; `None` when the law holds or nothing was asserted.
+fn assert_wasm_trace(
+    sink: &Option<delulu_runtime::TraceSink>,
+    allowed: &std::collections::BTreeSet<String>,
+    map: &SourceMap,
+    opts: &Opts,
+) -> Option<i32> {
+    let s = sink.as_ref().filter(|_| opts.assert_trace)?;
+    let violations = delulu_runtime::assert_trace(allowed, &s.records());
+    if violations.is_empty() {
+        return None;
+    }
+    let diags: Vec<Diagnostic> = violations
+        .iter()
+        .map(|v| {
+            Diagnostic::error(
+                "DL1101",
+                format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it"),
+            )
+        })
+        .collect();
+    print_diagnostics("run", &diags, map, None, opts.json);
+    Some(3)
 }
 
 /// The custody a run's effects go through (Stage 5 phase 5f), and the node it holds for its length.
@@ -1283,13 +1374,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
         // Effect tracing on the WASM engine (spec §6.1; criterion 6): the host records the same
         // `TraceRecord`s the interpreter would, so a foreign program's trace is byte-identical.
-        let sink = if opts.assert_trace {
-            Some(delulu_runtime::TraceSink::new())
-        } else if opts.trace_effects {
-            Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
-        } else {
-            None
-        };
+        let sink = wasm_trace_sink(&opts);
         let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
         let root = grants.build_root();
         // Stage 5 phase 5f: the WASM host calls the SAME custody seam as the interpreter. A broker
@@ -1306,6 +1391,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             lease: root.lease.clone(), // RW 6.15: the remedy a refusal names
             net: root.net.clone(),
             net_special: root.net_special.clone(),
+            declared_effects: None, // the checker computed this program's row; ARTIFACT-CLAIM-1 is a `.dwx`'s
+
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
             stream_console: true, // WASM-OUTPUT-1: printed as printed, so a fault or a budget's stop loses none of it
@@ -1338,19 +1425,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
 
         // Emit the trace before verdicts (the witness is available even on a fault).
-        if let Some(s) = &sink {
-            if opts.trace_effects {
-                let lines = s.to_json_lines();
-                match &opts.trace_out {
-                    Some(path) => {
-                        if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
-                            eprintln!("error: cannot write trace to `{path}`: {e}");
-                        }
-                    }
-                    None => eprintln!("{lines}"),
-                }
-            }
-        }
+        emit_wasm_trace(&sink, &opts);
 
         let code = match run_result {
             Ok(output) => {
@@ -1366,21 +1441,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
         };
 
         // The trace ⊆ row law (spec §6.2, invariant 12): a violation is compiler-bug class (DL1101).
-        if opts.assert_trace {
-            if let Some(s) = &sink {
-                let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
-                let violations = delulu_runtime::assert_trace(&allowed, &s.records());
-                if !violations.is_empty() {
-                    let diags: Vec<Diagnostic> = violations
-                        .iter()
-                        .map(|v| Diagnostic::error("DL1101", format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it")))
-                        .collect();
-                    print_diagnostics("run", &diags, &map, None, opts.json);
-                    return 3;
-                }
-            }
-        }
-        return code;
+        let allowed: std::collections::BTreeSet<String> = main_row.iter().map(|e| e.name().to_string()).collect();
+        return assert_wasm_trace(&sink, &allowed, &map, &opts).unwrap_or(code);
     }
 
     // Determinism knobs (spec §6.2).

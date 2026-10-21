@@ -4858,3 +4858,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #20's CI, then this branch's, landing in order; then `launch/2.0.0`: merge `master`, dispatch
   `everything` and the release dry run; (2) on WASM: `get_with`, a list of options, `str` of a map; RW 4.66 (a bearer key
   bound at redeem — a wire change, its own D-V2), 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — a sealed artifact runs under a lease, the broker daemon and a trace (RW 3.19's rest) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-custody` (on `laptop/wasm-http`, #21)   Pull request: see the branch   Merged: not yet
+- What: `V2_LOG.md` (2026-10-21, the fifth entry).
+- Files and folders: M `crates/delulu/src/run_cmd.rs` (`lease_for_run`, `RunCustody`, `custody_for_run`, `wasm_trace_sink`,
+  `emit_wasm_trace`, `assert_wasm_trace`; the source route calls them; the `.dwx` route too; `APPLIED_TO_A_DWX`),
+  `crates/delulu/tests/grants_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.19),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) ARTIFACT-CLAIM-1, this branch's next commit; (2) #20 and #21 landing on green; then `launch/2.0.0`.

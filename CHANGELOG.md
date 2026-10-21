@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a sealed artifact under a lease, the broker daemon and a trace, 2026-10-21
+
+- **New: `delulu run FILE.dwx` applies `--lease`, `--broker daemon`, `--epoch-ms`, `--trace-effects`, `--trace-out` and
+  `--assert-trace`.** Since 2026-10-20 these were refused for an artifact rather than ignored. Now a sealed artifact can
+  run under a delegated lease, or under broker custody, with an effect trace. It is set up by the same code as a
+  source run: the lease redeemed and its budget held, a root issued and revoked, and a trace written inside no
+  writable scope. `--assert-trace` judges the trace against the effects the artifact declares. Other `run` flags are
+  still refused for a `.dwx`.
+
 ## Unreleased — the network on the WASM engine, 2026-10-21
 
 - **New: `root.http(hosts)` and `Cap[Http].get(url)` run on `--engine wasm`** (RW 3.4). The host mints the capability
