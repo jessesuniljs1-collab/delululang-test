@@ -8491,3 +8491,17 @@ Test: `actors_trace.rs` `a_graph_nested_past_the_stack_passes_the_uniqueness_wal
 the binary dies of a stack overflow. Mutants M798 (the path spelled backwards) and M800 (every step hung from the root)
 are red. With this, RW 4.75 is closed. The channel's walk still recurses, but no well-typed program can reach it, and
 the host's decoder stops at 256 levels.
+
+## 2026-10-22 (night) — the laptop: the cycle collector keeps what a map holds (GC-MAP-1, RW 4.77)
+
+Found by reading `cycles.rs` for the depth class while closing RW 4.75. The collector already used a worklist, but its
+marking `match` ended in `_ => {}`, and `Map` fell there: the collector dates from 2026-07-20 and `Map` from 2026-09-20.
+- **Witnessed on the old binary.** An actor fills `self.m` with `"k" → [1, 2, 3]`, churns 600 short-lived lists to force
+  two sweeps, then prints `{k: []}`. The live list was alive and unmarked, so the sweep broke it in place, and the only
+  trace was `1 garbage-cycle cell(s) collected`. Silent data corruption.
+- **Fixed.** A map's values are marked. The `match` now names every `Value` kind, so a kind added later does not compile
+  until the collector places it. Built with and without the `python` feature.
+- **Test.** `actors_cycles_cli.rs` `a_list_held_in_an_actors_map_survives_the_sweep` asserts the two sweeps, so the
+  witness is exercised. It is red on the old collector (`{k: []}`), and that mutant is exactly the old code.
+- **Residual.** A cycle through a map is not collected, because a map cell is not registered. That is a leak, the safe
+  direction.

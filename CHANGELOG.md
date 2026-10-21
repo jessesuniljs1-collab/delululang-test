@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the cycle collector keeps what a map holds, 2026-10-22
+
+- **Fixed: a list held in an actor's map could be emptied by the cycle collector** (GC-MAP-1, RW 4.77). The collector
+  didn't look inside maps. So a list or record that an actor could reach only through a map looked like garbage, and a
+  sweep emptied it in place. A map holding `[1, 2, 3]` read back as `[]`, and the only sign was a "collected" count
+  under `--trace-memory`. This affected actor programs since maps were added (2026-09-20).
+
 ## Unreleased — `--debug-rcaps` on a deep graph, 2026-10-22
 
 - **Fixed: `--debug-rcaps` ran out of memory on a deeply nested graph moved to an actor** (RW 4.75). A 100,000-deep

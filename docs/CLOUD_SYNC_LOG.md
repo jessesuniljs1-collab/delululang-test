@@ -5175,3 +5175,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.75), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — the cycle collector keeps what a map holds (GC-MAP-1, RW 4.77) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/gc-map` (on `laptop/rcaps-depth` `671677d`, PR #38; `master` `ec333c4` since #36 landed on its green run `39669053973`)   Pull request: the one this entry rides in
+- **What:** GC-MAP-1 — the cycle collector's marking walk passed over maps, so a sweep emptied a live list held in an
+  actor's map; witnessed on the old binary, fixed, its `match` made exhaustive over `Value`. Test in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/cycles.rs`, `crates/delulu/tests/actors_cycles_cli.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.77), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

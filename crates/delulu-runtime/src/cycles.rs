@@ -84,6 +84,14 @@ impl Registry {
                             values.extend(fields.borrow().iter().map(|(_, v)| v.clone()));
                         }
                     }
+                    // GC-MAP-1: a map was walked past, so a list or record reachable only through one — `self.m` holding
+                    // `[1, 2, 3]` — was alive and unmarked, and broken: the sweep emptied it while the actor still held it.
+                    // A map holds values as a list does; its keys are `Str`, `Int` or `Bool`, which hold none.
+                    Value::Map(c) => {
+                        if seen.insert(Rc::as_ptr(c) as *const () as usize) {
+                            values.extend(c.borrow().values().cloned());
+                        }
+                    }
                     Value::Variant { fields, .. } => {
                         // Immutable and never registered, but its children may be.
                         if seen.insert(fields.ptr_id()) {
@@ -91,7 +99,23 @@ impl Registry {
                         }
                     }
                     Value::Closure(c) => scopes.push(c.env.clone()),
-                    _ => {}
+                    // Every other kind, named, so a kind added to `Value` does not compile until it is placed here — the
+                    // catch-all this replaced is where `Map` went unwalked (GC-MAP-1). None of these holds a `Value`.
+                    Value::Int(_)
+                    | Value::Float(_)
+                    | Value::Bool(_)
+                    | Value::Str(_)
+                    | Value::Unit
+                    | Value::Cap(_)
+                    | Value::Secret(_)
+                    | Value::Root(_)
+                    | Value::Foreign(_)
+                    | Value::ForeignPtr(_)
+                    | Value::ActorRef { .. }
+                    | Value::Plugin(_)
+                    | Value::PluginFn(_) => {}
+                    #[cfg(feature = "python")]
+                    Value::PyObj(_) => {}
                 }
                 continue;
             }

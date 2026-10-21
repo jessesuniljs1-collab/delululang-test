@@ -1222,6 +1222,15 @@ spells the same thing?**
     judgement's own set, never a wider one computed separately.
   - Also, once more: a mutant run's control must rebuild every artifact the mutants rebuilt. A stale `delulu.exe` holding
     mutant M791 made a correct change look broken.
+- **GC-MAP-1 — a walk written before a kind existed drops that kind into its catch-all: name every kind** (the laptop,
+  2026-10-22, RW 4.77; HIGH, silent data corruption).
+  - The cycle collector's marking `match` named the four kinds that held values in July and ended `_ => {}`. `Map`
+    arrived in September and fell there, so a sweep emptied a live list held in an actor's map: `{k: []}` for
+    `{k: [1, 2, 3]}`.
+  - Now the `match` names every `Value` kind, so the compiler asks the next kind's author where it goes.
+  - When a type gains a variant, grep for `_ =>` in every walk over it. Better, make those walks exhaustive, so adding a
+    variant is a compile error in each.
+  - Search key: `_ => {}` in a `match` on `Value`, `Ty`, `TyDesc`, `MsgValue`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
