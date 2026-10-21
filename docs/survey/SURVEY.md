@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 323 |
-| Rust lines | 184434 |
-| Rust files outside `src/` (test/bench targets) | 153 |
+| Rust files | 324 |
+| Rust lines | 184749 |
+| Rust files outside `src/` (test/bench targets) | 154 |
 | Markdown documents | 270 |
-| Markdown lines | 83992 |
+| Markdown lines | 84057 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1550 / 15991 |
+| Nodes / edges in this map | 1551 / 16005 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 22848 lines
+- **Modules:** 24 files, 22948 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -330,7 +330,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/sim.rs` | 399 | The reference device simulator, and the device PROCESS it can be run as (P8-03). |
 | `src/sink.rs` | 104 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 570 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 1125 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 1225 | Runtime values, environments, and capability values (spec §7.1). |
 | `src/verified_adapter.rs` | 633 | P8-02: a device driver whose **logic is a Verified-class plugin** (`V2_P8_DESIGN.md`). |
 
 ### `delulu-survey`
@@ -383,7 +383,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 12213 lines
+- **Modules:** 9 files, 12310 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -395,7 +395,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/host.rs` | 2552 | The embedded Wasmtime host (Phase 3a/3b). |
 | `src/lib.rs` | 1131 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 638 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
-| `src/reify.rs` | 352 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
+| `src/reify.rs` | 449 | `str` and `==` of a list, an option, a result, a sum or a record on the WASM engine, answered by the … |
 
 ## Diagnostic codes
 
