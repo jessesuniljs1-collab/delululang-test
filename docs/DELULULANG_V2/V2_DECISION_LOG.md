@@ -4071,6 +4071,32 @@ root was the one part re-resolved, and `beneath.rs` named the granted directory'
 `delulu-wasm` `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside`, both red on the old code; mutants M643–M647
 (`V2_LOG.md`, 2026-10-20).
 
+## D-V2-168 — P9-05 (c)'s static half: `authority --json` names each request by the checker's type at its call; a package's report waits for per-module types (RW 2.12) — TAKEN (head chef, 2026-10-21, under the owner's delegation)
+
+**Context.** D-V2-140 §2 kept `authority`'s static path report open because the AST walk could not tell an `Http`
+capability's `get` from a `Map`'s without type information, and a report that guesses which call is a request is not one
+this project makes. The checker's per-node types (`CheckResult::node_types`) are now used by the WASM backend (RW 3.4), and
+they answer exactly that question.
+
+**Decision.**
+1. **Built for a program checked as one file.** `authority --json` gains `requests`: each `get`, `get_with` and
+   `get_with_secret` whose receiver the checker typed `Cap[Http]`, with the URL literal and its host and path by the egress
+   client's own parse. A computed URL, or one that client refuses (not `https://`), is `null` there. The key is present only
+   when the program makes a request, so every other report is byte-identical (criterion 11); the closed schema admits it.
+   The walk is `secret_destinations`' own, given the types, so the two static halves cannot read the source two ways.
+2. **A package's report waits.** `check_program` keeps no per-node types, and node ids are per module, so a package's
+   modules would need their own maps. That is a slice of its own (RW 2.12), not a guess in the meantime.
+3. **Methods (d) still wait for the first non-GET primitive; the path in the chain's record stays open** (D-V2-140 §3, §4).
+4. **The core-invariance snapshot moved by one case**, `examples/guide/05_capabilities.delulu :: authority --json`, which
+   gains its one request (`client.get(url)` inside `fetch`, the URL a parameter: `null`). Re-recorded as a reviewed act
+   (D-NE-3), its diff in `V2_LOG.md`.
+
+**Evidence.**
+- `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name`: a literal, a parameter
+  and an `http://` URL are named, a `List`'s `get` is not, and the schema validates.
+- Mutants M696 (decided by the name), M697 (never stamped), M698 (the path from the host) and M699 (the schema without the
+  key), each red.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

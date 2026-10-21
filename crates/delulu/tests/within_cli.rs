@@ -1390,3 +1390,51 @@ fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guard
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// P9-05 (c), D-V2-140's static half: `authority --json` names every request a program makes — each `get`, `get_with` and
+/// `get_with_secret` whose receiver the checker typed `Cap[Http]` — with its URL as far as the source shows: a literal's
+/// host and path by the egress client's own parse; a computed URL, or one that client refuses (`http://`), `null` beside
+/// the literal it may have. Decided by the checker's type at each call, never by a method's name: a `List`'s `get` is no
+/// request — what D-V2-140 kept this open for. A program that makes none has no such key.
+#[test]
+fn authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name() {
+    let dir = std::env::temp_dir().join(format!("delulu-requests-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = "module r\nfn fetch(c: Cap[Http], u: Str) -> Result[Str, NetErr] ! {Net} {\n  c.get(u)\n}\n\
+                   fn main(root: Root) ! {Net, Write} {\n  let h = root.http([\"example.com\"])\n  let xs = [1, 2, 3]\n  \
+                   let a = xs.get(0)\n  let r1 = h.get(\"https://example.com/v1/health\")\n  let r2 = fetch(h, \"https://example.com/x\")\n  \
+                   let r3 = h.get(\"http://example.com/plain\")\n  root.console().println(\"done\")\n}\n";
+    let file = dir.join("r.delulu");
+    std::fs::write(&file, program).unwrap();
+    let o = delulu(&["authority", &file.to_string_lossy(), "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let requests: Vec<(Value, Value, Value, u64)> = v["authority"]["requests"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no requests: {v:#}"))
+        .iter()
+        .map(|r| (r["url"].clone(), r["host"].clone(), r["path"].clone(), r["at"]["line"].as_u64().unwrap_or(0)))
+        .collect();
+    let j = |s: &str| serde_json::json!(s);
+    assert_eq!(
+        requests,
+        vec![
+            // The parameter's URL: computed, as far as this call shows.
+            (Value::Null, Value::Null, Value::Null, 3),
+            (j("https://example.com/v1/health"), j("example.com"), j("/v1/health"), 9),
+            // Not `https://`: the effect refuses it, and the egress client's parse names no host.
+            (j("http://example.com/plain"), Value::Null, Value::Null, 11),
+        ],
+        "the list's `get` on line 8 is no request: {v:#}"
+    );
+    let report = dir.join("report.json");
+    std::fs::write(&report, serde_json::to_string_pretty(&v["authority"]).unwrap()).unwrap();
+    let r = json_of(&delulu(&["schema", "validate", "authority", report.to_str().unwrap(), "--json"]));
+    assert_eq!(r["validate"]["valid"], true, "{}", r["validate"]["errors"]);
+    let plain = dir.join("plain.delulu");
+    std::fs::write(&plain, "module plain\n\nfn main(root: Root) ! {Write} {\n    let xs = [1]\n    let a = xs.get(0)\n    root.console().println(\"hi\")\n}\n").unwrap();
+    let v = json_of(&delulu(&["authority", &plain.to_string_lossy(), "--json"]));
+    assert!(v["authority"].is_object() && v["authority"].get("requests").is_none(), "{v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -4980,3 +4980,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing. For the laptop's memory: nothing new.
 - Open / next: (1) #25 and this branch landing on green; (2) `launch/2.0.0`: merge, the Breaking paragraph's actor clause
   removed; (3) P9-05's open steps, maps on WASM, RW 4.67, 6.1, 6.2.
+
+### 2026-10-21 (evening) — P9-05 (c)'s static half: `authority --json` names each request (D-V2-168) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/p9-05-requests` (on `laptop/dwx-actors-run`, #26)   Pull request: see the branch   Merged: not yet
+- **Landed:** #25 (`f05c329`, EPOCH-WINDOW-1) on its CI `39592905415`, success on every job — `master` `3af2b2a..f05c329`.
+- What: `V2_LOG.md` (2026-10-21, the third evening entry); `V2_DECISION_LOG.md` D-V2-168.
+- Files and folders: M `crates/delulu/src/within.rs` (`request_destinations`; `SendWalk` carries the types),
+  `crates/delulu/src/cli.rs` (the report's `requests`), `crates/delulu/src/schema.rs` (the key in the closed schema),
+  `crates/delulu/tests/within_cli.rs`, `tests/core-invariance/SNAPSHOT.txt` (one case, re-recorded — its diff in
+  `V2_LOG.md`), `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12), `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #26 and this branch landing on green; (2) `launch/2.0.0`: merge `f05c329` onward (the Breaking
+  paragraph's actor clause to go); (3) a package's `requests`, the path in the chain's record, methods; maps on WASM.
