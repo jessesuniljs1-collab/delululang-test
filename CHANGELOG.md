@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the network on the WASM engine, 2026-10-21
+
+- **New: `root.http(hosts)` and `Cap[Http].get(url)` run on `--engine wasm`** (RW 3.4). The host mints the capability
+  and performs the request with the interpreter's own code. The allowlist and its words, the egress client (TLS,
+  special-use addresses, redirects), the custody check on the URL's host and the effect trace are all the
+  interpreter's. Chapter five of the guide now runs on the WASM engine, as all six do, and 12 of the 17 programs in the
+  corpus and examples compile. `get_with` and `get_with_secret` stay on the interpreter.
+
 ## Unreleased — Wasmtime 48.0.7 and rustls-webpki 0.103.16, 2026-10-21
 
 - **Security: three advisories published on 2026-10-20 and 2026-10-21 are fixed by patch updates.**

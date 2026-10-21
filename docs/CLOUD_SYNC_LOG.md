@@ -4839,3 +4839,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #20's CI again, landing on green; then `launch/2.0.0`: merge `master` (these advisories gate its
   `supply-chain` job too), dispatch `everything` and the release dry run; (2) `http` on the WASM engine (the next branch,
   in progress); (3) RW 4.66, 4.67, 6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the network on the WASM engine: `root.http` and `Cap[Http].get`; chapter five runs (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-http` (on `laptop/lease-remedy`, #20)   Pull request: see the branch   Merged: not yet (after #20, on green CI)
+- What: `V2_LOG.md` (2026-10-21, the fourth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::Http`, the `root_http`/`http_get` imports gated on the
+  mint, the two arms), `crates/delulu-wasm/src/host.rs` (`CapKind::Http`, `HostConfig::net`/`net_special`, the two
+  imports — the interpreter's mint and `get`, in its order; `build_net_answer`), `crates/delulu-wasm/src/lib.rs` (the
+  custody test), `crates/delulu-wasm/tests/fault_parity.rs` (the `http` mint's remedy), `crates/delulu/src/run_cmd.rs`
+  (the grants' `net` on both WASM paths), `crates/delulu/tests/wasm_cli.rs` (`listen`; the parity test),
+  `crates/delulu/tests/examples_run.rs` (chapter five on both engines), `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.4: 12
+  of 17), `docs/book/THE_DELULULANG_BOOK.md` (the WASM paragraph), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #20's CI, then this branch's, landing in order; then `launch/2.0.0`: merge `master`, dispatch
+  `everything` and the release dry run; (2) on WASM: `get_with`, a list of options, `str` of a map; RW 4.66 (a bearer key
+  bound at redeem — a wire change, its own D-V2), 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

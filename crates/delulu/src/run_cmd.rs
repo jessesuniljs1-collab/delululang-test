@@ -584,6 +584,111 @@ fn bind_break_glass_run(custody: &crate::broker_client::BrokerClientCustody) -> 
     Err(2)
 }
 
+/// `--lease <token>` (Stage 5 phase 5j, spec §3.2/§3.3): redeem the delegated lease, and run under EXACTLY that node — the
+/// local grants become the node's (never widened locally; the broker enforces per §4 regardless), the run is held to the
+/// delegation's budget (PS-B-05) and a break-glass run's use is bound to the node (D-V2-116). `None` without `--lease`.
+/// Fail closed: broker down ⇒ DL1401; a bad, expired or spent token ⇒ DL1407/DL1402 — before `main` ever runs. One function
+/// for `run`'s two routes, a program's source and a `.dwx`, so neither applies a lease the other does not (DWX-FLAGS-1).
+fn lease_for_run(
+    opts: &Opts,
+    grants: &mut Grants,
+    map: &SourceMap,
+) -> Result<Option<crate::broker_client::BrokerClientCustody>, i32> {
+    let Some(token) = &opts.lease else { return Ok(None) };
+    // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
+    // and, for what `--limits` leaves unnamed, the default.
+    let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
+        let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), ceiling) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return Err(2);
+            }
+        };
+        if let Err(e) = hold_run_to(held) {
+            eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
+            return Err(2);
+        }
+        if !opts.json {
+            eprintln!("lease: held to the delegated budget, mem={} bytes, cpu={} s", held.memory_bytes, held.cpu_seconds);
+        }
+        Ok(())
+    };
+    let custody = redeem_lease(token, grants, opts, map, &mut hold)?;
+    bind_break_glass_run(&custody)?;
+    Ok(Some(custody))
+}
+
+/// The custody a run's effects go through (Stage 5 phase 5f), and the node it holds for its length.
+struct RunCustody {
+    /// Whether every effect is decided by the broker daemon (`--broker daemon`, or a lease).
+    daemon_mode: bool,
+    /// The daemon custody: the lease's node, or the root this run issued; `None` embedded.
+    custody: Option<crate::broker_client::BrokerClientCustody>,
+    /// RW 4.57 (D-V2-157): the root this run issued for itself, held for exactly as long as the run — revoked when it drops,
+    /// and reaped by the daemon's dead-man if the run never gets there; for a lease run, what it mints under the
+    /// delegator's node, dead-manned as it is minted (the lease's own node is the delegator's, and is not held).
+    run_node: Option<crate::broker_client::RunNode>,
+}
+
+/// Choose the custody (Stage 5 phase 5f), after the grants are final. Default: embedded — byte-identical Stage 1–4
+/// behavior (criterion 11). `--broker daemon` routes every effectful op through the broker daemon: the `--grant` flags
+/// become sugar for issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main` runs (fail
+/// closed, invariant 27 — never a silent fallback to embedded). A lease run's custody is the daemon by definition, bound to
+/// the redeemed node by `lease_for_run`. Shared by `run`'s two routes, as `lease_for_run` is.
+fn custody_for_run(
+    opts: &Opts,
+    grants: &Grants,
+    map: &SourceMap,
+    program: &str,
+    lease_custody: Option<crate::broker_client::BrokerClientCustody>,
+) -> Result<RunCustody, i32> {
+    let lease_mode = opts.lease.is_some();
+    let daemon_mode = match opts.broker.as_deref() {
+        // A `--lease` run's custody is the daemon by definition (the node lives there).
+        None | Some("embedded") => lease_mode,
+        Some("daemon") => true,
+        Some(other) => {
+            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
+            return Err(2);
+        }
+    };
+    if (opts.broker.is_some() || lease_mode) && !opts.json {
+        // The custody label (playbook 5j; printed when custody was explicitly chosen so default
+        // embedded output stays byte-identical to prior stages).
+        eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
+    }
+    let refuse = |d: delulu_runtime::CustodyDenial| {
+        let diag = Diagnostic::error(d.code, d.message);
+        print_diagnostics("run", &[diag], map, None, opts.json);
+        1
+    };
+    // A lease run already bound custody to the redeemed node; a plain `--broker daemon` run issues its root here (the
+    // `--grant` flags as issue-then-run sugar, spec §3.2).
+    match lease_custody {
+        Some(mut c) => {
+            // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
+            let held = crate::broker_client::RunNode::for_lease(&mut c).map_err(refuse)?;
+            Ok(RunCustody { daemon_mode, custody: Some(c), run_node: Some(held) })
+        }
+        None if daemon_mode => {
+            let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+                eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+                return Err(2);
+            };
+            let mut spec = authority_spec_from_grants(grants, program);
+            // PS-B-05: the root records the budget this run is held to, so anything the program
+            // delegates from it inherits that budget or narrows it, and never outspends its own run.
+            spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
+            let (c, held) = crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
+                .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
+                .map_err(refuse)?;
+            Ok(RunCustody { daemon_mode, custody: Some(c), run_node: Some(held) })
+        }
+        None => Ok(RunCustody { daemon_mode, custody: None, run_node: None }),
+    }
+}
+
 pub(crate) fn redeem_lease(
     token: &str,
     grants: &mut Grants,
@@ -1107,38 +1212,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // orchestration payoff: whoever holds a grant delegates a slice, hands the token to an agent,
     // and the agent runs under exactly that attenuated authority. Fail closed: broker down ⇒
     // DL1401; a bad/expired/already-redeemed token ⇒ DL1407/DL1402 — before `main` ever runs.
-    let lease_mode = opts.lease.is_some();
-    let mut lease_custody: Option<crate::broker_client::BrokerClientCustody> = None;
-    if let Some(token) = &opts.lease {
-        // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
-        // and, for what `--limits` leaves unnamed, the default.
-        let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
-            let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), ceiling) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    return Err(2);
-                }
-            };
-            if let Err(e) = hold_run_to(held) {
-                eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
-                return Err(2);
-            }
-            if !opts.json {
-                eprintln!("lease: held to the delegated budget, mem={} bytes, cpu={} s", held.memory_bytes, held.cpu_seconds);
-            }
-            Ok(())
-        };
-        match redeem_lease(token, &mut grants, &opts, &map, &mut hold) {
-            Ok(custody) => {
-                if let Err(code) = bind_break_glass_run(&custody) {
-                    return code;
-                }
-                lease_custody = Some(custody)
-            }
-            Err(code) => return code,
-        }
-    }
+    let lease_custody = match lease_for_run(&opts, &mut grants, &map) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
 
     // Foreign grant flow (Stage 4, spec §4.1 / criterion 4): every `foreign` lib the program binds
     // must be permitted by the manifest (if any) and granted a binary at startup. An ungranted lib
@@ -1153,60 +1230,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // routes every effectful op through the broker daemon: the `--grant` flags become sugar for
     // issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main`
     // runs (fail closed, invariant 27 — never a silent fallback to embedded).
-    let daemon_mode = match opts.broker.as_deref() {
-        // A `--lease` run's custody is the daemon by definition (the node lives there).
-        None | Some("embedded") => lease_mode,
-        Some("daemon") => true,
-        Some(other) => {
-            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
-            return 2;
-        }
-    };
-    if (opts.broker.is_some() || lease_mode) && !opts.json {
-        // The custody label (playbook 5j; printed when custody was explicitly chosen so default
-        // embedded output stays byte-identical to prior stages).
-        eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
-    }
-    // A lease run already bound custody to the redeemed node above; a plain `--broker daemon` run
-    // issues its root here (the `--grant` flags as issue-then-run sugar, spec §3.2).
-    let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = lease_custody;
-    // RW 4.57 (D-V2-157): the root this run issues for itself is held for exactly as long as the run — revoked when this
-    // drops (after `close_devices`, declared before the devices so it drops after them), and reaped by the daemon's
-    // dead-man if the run never gets here. A lease run's node is the delegator's, and is not held.
-    let mut _run_node: Option<crate::broker_client::RunNode> = None;
-    if daemon_mode && daemon_custody.is_none() {
-        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
-            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
-            return 2;
+    // RW 4.57 (D-V2-157): `_run_node` is held for exactly as long as the run — declared before the devices so it drops
+    // after `close_devices`.
+    let RunCustody { daemon_mode, custody: mut daemon_custody, run_node: _run_node } =
+        match custody_for_run(&opts, &grants, &map, &file, lease_custody) {
+            Ok(c) => c,
+            Err(code) => return code,
         };
-        let mut spec = authority_spec_from_grants(&grants, &file);
-        // PS-B-05: the root records the budget this run is held to, so anything the program
-        // delegates from it inherits that budget or narrows it, and never outspends its own run.
-        spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
-        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms)
-            .and_then(|c| crate::broker_client::RunNode::hold(&c).map(|held| (c, held)))
-        {
-            Ok((c, held)) => {
-                daemon_custody = Some(c);
-                _run_node = Some(held);
-            }
-            Err(d) => {
-                let diag = Diagnostic::error(d.code, d.message);
-                print_diagnostics("run", &[diag], &map, None, opts.json);
-                return 1;
-            }
-        }
-    } else if let Some(c) = daemon_custody.as_mut() {
-        // A lease run: what it mints under the delegator's node is dead-manned as it is minted (RW 4.57).
-        match crate::broker_client::RunNode::for_lease(c) {
-            Ok(held) => _run_node = Some(held),
-            Err(d) => {
-                let diag = Diagnostic::error(d.code, d.message);
-                print_diagnostics("run", &[diag], &map, None, opts.json);
-                return 1;
-            }
-        }
-    }
 
     // D-V2-21 / PS-0-02, the second time: the grants are final now (a lease's or a manifest's
     // scopes included), and neither runtime-written file may lie in a scope the program can write.

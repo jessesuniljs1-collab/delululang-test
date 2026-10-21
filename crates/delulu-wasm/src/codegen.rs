@@ -1110,7 +1110,7 @@ fn compile_module_typed(
     }
     // By the mint alone: a `Cap[Http]` comes from nowhere else, and `get` is also a list's method, so a module whose
     // only `get` is on a list imports no network interface.
-    let needs_http = module_calls_method(&env, module, &["http_never"]);
+    let needs_http = module_calls_method(&env, module, &["http"]);
     if needs_http {
         imp.root_http = n_imports;
         imp.http_get = n_imports + 1;
