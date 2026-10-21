@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an actor program's `.dwx` runs, 2026-10-21
+
+- **New: a `.dwx` of an actor program runs** (RW 3.21). It supersedes the refusal of the section below, made the same day.
+  - The module now carries its actor table: each actor's field count is an exported global.
+  - `delulu run FILE.dwx` reads the table from the module alone and runs the artifact under the cooperative scheduler,
+    with the same quiescence report as its source. `--on-quiesce report` is applied too.
+  - An actor artifact built before this change carries no field counts and is refused before it runs (DL1202). Rebuild
+    it from its source.
+
 ## Unreleased — an actor program has no `.dwx` yet, and says so, 2026-10-21
 
 - **Fixed: `delulu build --target wasm` wrote a `.dwx` of an actor program that could not run** (RW 3.21). Running it

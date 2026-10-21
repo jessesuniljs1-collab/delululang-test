@@ -3503,6 +3503,11 @@ fn source_authority_report(
     stamp_native_emission(&mut report, &checked.module);
     stamp_grants(&mut report, &[&checked.module]);
     stamp_secret_destinations(&mut report, &[&checked.module], map);
+    // P9-05 (c): the requests, by the checker's type at each call — only when the program makes one (criterion 11).
+    let requests = crate::within::request_destinations(&checked.module, &checked.result.node_types, map);
+    if let (false, Some(obj)) = (requests.is_empty(), report.as_object_mut()) {
+        obj.insert("requests".into(), json!(requests));
+    }
     report
 }
 

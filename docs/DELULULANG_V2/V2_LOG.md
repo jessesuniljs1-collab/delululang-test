@@ -8107,3 +8107,49 @@ guess; here the shape was readable and the sleep is the starvation).
 - M688 (the error ignored alone) survives by design: `refresh_cache` drops the stale cache first, and the next guard answers
   DL1401 for an empty one — two walls, read before recording the survivor.
 - `delulu`'s whole unit binary: 188 passed. clippy with rustfmt's check clean.
+
+## 2026-10-21 (evening) — the laptop: an actor program's `.dwx` runs — the module carries its own actor table (RW 3.21 closed)
+
+**From the refusal to the run.** DWX-ACTORS-1 was refused in words this afternoon (`a2fb0cd`): the `.dwx` route had no actor
+table, and the module did not carry each actor's field count.
+
+**The module now carries its table, as code.** The codegen exports, beside each actor's members, an immutable `i32` global
+`actor$A$#fields` holding its field count; `#` spells no identifier, so no behaviour's export can collide with it. The host
+reads the table from the module alone, which its code hash covers — never from a custom section, ARTIFACT-CLAIM-1's lesson
+the same day (`actors::table_from_module`):
+- the members are the `actor$A$new` and `actor$A$beh` exports, in the export section's order. The codegen writes each
+  actor's constructor and then its behaviours, actors in declaration order, which is how `actor_table` numbers them, so
+  actor and behaviour indices agree.
+- each arity is the function type's, less the self slot.
+- a field-count export must be an immutable `i32` global, or the module is refused.
+- the counts are read once the module is instantiated, before `main` runs, so before any spawn sizes a slot
+  (`field_counts`, bounded at 65,536).
+
+`run_artifact` compiles the module once: with no actor member it runs `main` as before; with members, under the cooperative
+scheduler (`run_actors_in`, shared with `run_main_actors`). The `.dwx` route uses it, prints the engine's actor label and a
+death count as the source route does, and applies `--on-quiesce report` (`APPLIED_TO_A_DWX`; DWX-FLAGS-1's test now names
+`--actors-threads` among the flags still refused). `build --target wasm` builds actor programs again. An actor artifact built
+before carries no counts and is refused before it runs: DL1202, "rebuild it from its source".
+
+**Evidence.**
+- `wasm_cli.rs` `an_actor_programs_dwx_runs_as_its_source_does`: two actor types, self-sends, a send through a field, and a
+  behaviour dying on a division by zero. The artifact's quiescence report — "2 surviving actor(s)" and "1 died" — equals the
+  source's on `--engine wasm` and on the interpreter. An artifact with its count exports renamed is `error[DL1202]` and never
+  "out of range".
+- `actors_parity.rs`: `assert_actor_parity` also runs every parity program as an artifact and holds its report to the
+  source's: the counter and ping-pong programs, the poisoning bomb, the fifteen-name program. 8 passed.
+- By hand: `examples/guide/06_actors.delulu` built and run as a `.dwx` — 5 surviving actors, 13 turns, as its source on both
+  engines.
+- Mutants:
+  - M690 every count zero → red (six parity tests);
+  - M691 behaviours read in reverse → red;
+  - M693 the counts not set → red;
+  - M694 the count exports one global off (the heap pointer) → red: not immutable;
+  - M695 a missing count read as zero → red;
+  - M692 (the self slot not subtracted) survives as equivalent: arities are read only by the codegen, from the AST, at
+    compile time, and Wasmtime type-checks every call itself.
+- `delulu-wasm` whole: 174 passed. Six artifact CLI targets (`wasm_cli`, `release` — byte-identical builds among them —
+  `examples_run`, `artifact_review`, `json_contract`, `plugin_cli`): 57 passed. clippy with rustfmt's check clean.
+
+**For `launch/2.0.0`'s next merge:** its Breaking paragraph says `build --target wasm` refuses a program with actors — no
+longer true once this lands; that clause is to go.
