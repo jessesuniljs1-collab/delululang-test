@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `match` covers every case at every depth, 2026-10-22
+
+- **Changed: the checker refuses a `match` that leaves a case uncovered below its top level** (DL0407, D-V2-172).
+  Before, only the top-level constructors were checked. So `Some(Red) => …, None => …` on an `Option[Color]` checked
+  clean, and so did literal arms on an `Int`, `Str` or `Bool` with no `_` arm. Each then faulted at run time with
+  DL0907 when it met the case it missed. The message names the first missing case: `missing Some(Blue)`, `missing _`
+  for any other `Int`, `missing false`. A match whose proof outruns the checker's search limit is refused too; a `_`
+  arm satisfies it.
+- **Fixed: the WASM engine ran the wrong arm of a `match` whose patterns test inside a constructor** (MATCH-NEST-1).
+  `Some(Red) => 1, Some(Blue) => 2` returned `1` for `Some(Blue)`, and `Some(0) => …` matched `Some(7)`. This affected
+  `delulu run --engine wasm`, `delulu build --target wasm` and Contained plugins. Arms are now tried in order, as on
+  the interpreter.
+- **Fixed: a WebAssembly module whose only host imports were a `Map`'s could not be loaded** (WASM-IMPORTS-1). It
+  failed with `failed to parse WebAssembly module`.
+
 ## Unreleased — `contains` on records and sums on the WASM engine, 2026-10-22
 
 - **New: `contains` on a list of records or sums compiles to WebAssembly** (RW 3.4, D-V2-171 amended). It compares as

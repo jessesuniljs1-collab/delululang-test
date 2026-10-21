@@ -5112,3 +5112,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — a `match` tested inside each constructor, and proved to cover every case (D-V2-172) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/match-nested` (on `master` `30885b1`, where #33 landed on its green run `39647664706`; `master`'s push
+  run for `30885b1`, `39651010312`, **success**)   Pull request: #34
+- **The CI `jobs=everything` run on `launch/2.0.0` `81f34d1`, `39646720253`: success** (read 2026-10-22; its last job,
+  miri-slow on `delulu-broker`, finished green).
+- **What:** MATCH-NEST-1 (the WASM engine ran the wrong arm of a match testing inside a constructor), MATCH-EXHAUST-1
+  (the checker proved only the top level exhaustive) and WASM-IMPORTS-1 (a map-only module could not be loaded), each
+  witnessed on `30885b1` and fixed. Tests, mutants M756–M776, the bound on the search and local results are in
+  `V2_LOG.md`.
+- Files and folders: M `crates/delulu-check/src/{check,lib}.rs`, `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `crates/delulu-wasm/tests/map_parity.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `crates/delulu-diag/src/codes.rs`
+  (DL0407's explanation), `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (2.20, 3.22,
+  3.23), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/match_parity.rs`,
+  `tests/conformance/reject/DL0407_{nested,literal}_non_exhaustive.delulu`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

@@ -8364,3 +8364,37 @@ the interface when a list's `contains` takes such a value. Test: `list_methods_p
 `contains_on_records_and_sums_compares_as_equality_does`, both engines `true false false` / `true false true false`.
 Mutants M753–M755 red. M753 removes the new arm, which is exactly the pre-change refusal. Local: `delulu-wasm` whole, 185
 passed; clippy clean and stamped.
+
+## 2026-10-22 (night) — the laptop: a `match` tested inside each constructor, and proved to cover every case (D-V2-172)
+
+Found while reading the WASM `match` to widen RW 3.4. Three defects, each witnessed on `master` `30885b1`:
+
+- **MATCH-NEST-1 (RW 3.22), the WASM engine, silent wrong answers.** `compile_match` sent each constructor to the first
+  arm naming it, and `compile_arm` bound a field only when its pattern was a name, ignoring a constructor or a literal
+  there. `Some(Blue)` took `Some(Red) => …`; `Some(7)` took `Some(0) => …`. The interpreter printed `2` and `7`, WASM
+  `1` and `10`. It reached `run --engine wasm`, `build --target wasm` and every Contained plugin (`cli.rs:4913`). Such a
+  match now compiles arm by arm, in order, as `eval_match` tries them; when no arm matches, `delulu:match.no_arm`
+  records the interpreter's DL0907 word for word. A match testing nothing inside a constructor compiles as before.
+- **MATCH-EXHAUST-1 (RW 2.20), the checker.** `check_exhaustive` asked only which constructors the arms named at the
+  top. `Some(Red), None` on an `Option[Color]` checked clean, and so did literal arms on an `Int`, `Str` or `Bool` with
+  no catch-all; each faulted at run time with *"no match arm applied (checker guarantees exhaustiveness)"*. The
+  reference says *"A `match` must cover every case … Enforced by: DL0407 … Coverage: covered"*. A search over the
+  arms (Maranget's) now names the first missing case: `missing Some(Blue)`, `missing _`, `missing false`.
+  - It is bounded by the cells it reads (10,000,000 for one match). A first version counted calls and **passed** a
+    match whose search ran out: a random 400-arm match over 40 `Bool`s was accepted, and it is not exhaustive. So a
+    search that runs out now refuses, in words. The pigeonhole principle with 8 pigeons in 7 holes is exhaustive but
+    needs an exponential search: refused in 0.37 s. With 7 pigeons in 6 holes it is proved in 0.25 s (debug build).
+  - A row of wildcards ends the search at once; without that, single-column `Bool` arms cost 2ⁿ steps.
+  - 252 programs in the repository were checked before and after: no verdict and no message changed.
+- **WASM-IMPORTS-1 (RW 3.23).** The import section was written only when one of a hand-kept list of flags was set, and
+  the list left `delulu:map` out. A pure function whose only imports were a map's compiled to bytes the engine refused
+  (`failed to parse WebAssembly module`). The section is now written whenever it holds an import.
+
+Tests: `match_parity.rs` (4), red on the old code (`red,red,red,none` for `red,other Green,blue,none`;
+`Y,Y,Y,Y,zero,zero` for `Y,M,empty,ok no,zero,err 3`); `map_parity.rs`
+`a_module_whose_only_imports_are_a_maps_loads`; three `delulu-check` tests (missing cases named, every-depth clean
+cases, the pigeonhole bound); two conformance reject cases (`DL0407_nested_non_exhaustive`,
+`DL0407_literal_non_exhaustive`). Mutants M756–M767 (WASM) and M768–M776 (checker) red. M774 survived first: swapping
+which `Bool` literal a branch keeps is invisible when the arms are symmetric in `true` and `false`. A case that is not
+symmetric was added (`P(true, true), P(false, _)` leaves `P(true, false)`). Local: `delulu-check` and `delulu-wasm`
+whole, `conformance`, `message_spacing`, `wasm_cli` green; clippy clean and stamped. Commit `823673e`, PR #34.

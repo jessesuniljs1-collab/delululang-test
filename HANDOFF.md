@@ -1191,6 +1191,18 @@ spells the same thing?**
   `map`, `filter`, `fold` and `find` diverged likewise. Fixed by giving each walk that runs code a private copy of the
   slots in a module that pops. Never answer a red pin by deleting the case: replace it with what still stays outside, and
   build what it warned of first. Search key: before widening anything a test refuses, read the refusal's comment.
+- **MATCH-NEST-1 / MATCH-EXHAUST-1 — a structural walk's `_ => {}` swallows the forms it never names, and a guarantee's
+  words must be backed at every depth** (the laptop, 2026-10-22, RW 3.22 and 2.20, D-V2-172).
+  - The WASM `compile_arm` bound a constructor's field only when its pattern was a name. `_ => {}` passed over a
+    constructor or a literal there, so `Some(Blue)` took `Some(Red) => …`, silently. Nothing refused it, because
+    nothing looked.
+  - The checker had the same blind spot one layer up: it named the top-level constructors and stopped. The interpreter
+    nevertheless says *"checker guarantees exhaustiveness"* when no arm applies.
+  - Ask of every recursive walk: which forms does its catch-all arm drop, and is dropping them the meaning or an
+    accident? Before trusting a guarantee a message states, find the code that makes it and check every depth.
+  - A bounded search that runs out must refuse, never pass. The first version passed a 400-arm match it could not
+    finish, and that match was not exhaustive.
+  - Search key: `_ => {}` in a walk over patterns, types or expressions.
 
 ### 11.5 Operational traps, recorded because each one cost time
 
