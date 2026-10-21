@@ -758,6 +758,19 @@ exit 0
         "example.com"
       ]
     },
+    "requests": [
+      {
+        "at": {
+          "column": 5,
+          "file": "examples/guide/05_capabilities.delulu",
+          "line": 30
+        },
+        "host": null,
+        "method": "get",
+        "path": null,
+        "url": null
+      }
+    ],
     "required_grants": [
       "fs.read=./config",
       "fs.write=./out",

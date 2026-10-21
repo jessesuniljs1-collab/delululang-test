@@ -8153,3 +8153,51 @@ before carries no counts and is refused before it runs: DL1202, "rebuild it from
 
 **For `launch/2.0.0`'s next merge:** its Breaking paragraph says `build --target wasm` refuses a program with actors — no
 longer true once this lands; that clause is to go.
+
+## 2026-10-21 (evening) — the laptop: P9-05 (c)'s static half — `authority --json` names each request by the checker's type (D-V2-168, RW 2.12)
+
+**Why now.** D-V2-140 §2 kept `authority`'s static path report open for one reason: the AST walk could not tell an `Http`
+capability's `get` from a `Map`'s without types, and guessing which call is a request is not a claim this project makes.
+The checker's per-node types, which the WASM backend has used since RW 3.4, answer exactly that.
+
+**What.** `within::request_destinations` is `secret_destinations`' walk (`SendWalk`), given the checker's `node_types`. At
+each `get`, `get_with` and `get_with_secret` whose receiver's type is `Cap[Http]` it records:
+- the method;
+- the URL literal;
+- its host and path by the egress client's own `parse_target`;
+- the call's position.
+
+A computed URL is `null`, and so are the host and path of a URL that client refuses (not `https://`). The report gains
+`requests` only when the program makes one, and the closed schema admits it. Built for a program checked as one file: a
+package's check keeps no per-node types, and node ids are per module — recorded open.
+
+**The core's answers moved by one case** (`tests/core-invariance/SNAPSHOT.txt`, re-recorded with `DELULU_BLESS=1` as a
+reviewed act, D-NE-3) — `examples/guide/05_capabilities.delulu :: authority --json`, which gains exactly:
+
+```
+    "requests": [
+      {
+        "at": { "column": 5, "file": "examples/guide/05_capabilities.delulu", "line": 30 },
+        "host": null,
+        "method": "get",
+        "path": null,
+        "url": null
+      }
+    ],
+```
+
+— the chapter's `client.get(url)` inside `fetch`, whose URL is a parameter. Intended: nothing else in any recorded case
+moved. The file stays LF (`git ls-files --eol`: `i/lf w/lf`).
+
+**Evidence.**
+- `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name`: the parameter's URL
+  (all null), a literal (`example.com`, `/v1/health`) and an `http://` literal (host and path null) are named, and the
+  `List`'s `get` on line 8 is not. The report validates against the schema; a program with no request has no key.
+- Mutants, each red, the control green:
+  - M696 decided by the method's name;
+  - M697 the key never stamped;
+  - M698 the path taken from the host;
+  - M699 the schema without the key.
+- `delulu` and `delulu-conform` whole, before the snapshot was re-recorded: 1,029 passed, 4 failed in 103 targets. The
+  failures were the three `doctor_cli` map tests (stale before the Survey's rebuild) and this snapshot case. Both are
+  answered above; after them, see the commit message.

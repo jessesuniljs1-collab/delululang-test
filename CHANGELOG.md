@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `authority` names each request a program makes, 2026-10-21
+
+- **New: `delulu authority FILE --json` lists the program's requests** (P9-05 (c), D-V2-168). Under `requests`, each
+  `get`, `get_with` and `get_with_secret` on a `Cap[Http]` is listed with its URL, and that URL's host and path where the
+  source shows a literal. The checker's types decide which calls are requests, so a list's or a map's `get` is not one.
+  The key appears only when the program makes a request; every other report is unchanged. For a package's report it is
+  not built yet.
+
 ## Unreleased — an actor program's `.dwx` runs, 2026-10-21
 
 - **New: a `.dwx` of an actor program runs** (RW 3.21). It supersedes the refusal of the section below, made the same day.

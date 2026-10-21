@@ -30,6 +30,9 @@ pub struct Program {
     /// Names for the `TypeDefId`s appearing in `fn_types`, so a consumer can print `Sample`
     /// instead of `T9` (C12). Indexed by id; the registry is global across the program.
     pub type_names: crate::ty::TypeNameList,
+    /// Per module, the type the checker settled for each node (`CheckResult::node_types`) — node ids are per module, so
+    /// one map each. What a package's `authority` report names its requests by (P9-05 (c), D-V2-168).
+    pub node_types: HashMap<String, HashMap<delulu_syntax::ast::NodeId, Type>>,
 }
 
 impl Program {
@@ -132,6 +135,7 @@ pub fn check_program(pkg: &Package) -> Program {
     let mut facts: HashMap<String, FnFacts> = HashMap::new();
     let mut fn_types: HashMap<String, Type> = HashMap::new();
     let mut call_owner: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut node_types: HashMap<String, HashMap<delulu_syntax::ast::NodeId, Type>> = HashMap::new();
 
     for unit in &pkg.modules {
         let m = &unit.name;
@@ -232,12 +236,13 @@ pub fn check_program(pkg: &Package) -> Program {
         for (name, t) in result.fn_types {
             fn_types.insert(format!("{m}::{name}"), t);
         }
+        node_types.insert(m.clone(), result.node_types);
         call_owner.insert(m.clone(), owner);
     }
 
     let entry_module = pkg.entry_module().map(|u| u.name.clone());
     let type_names = crate::ty::TypeNameList(gtypes.iter().map(|d| d.name.clone()).collect());
-    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names }
+    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names, node_types }
 }
 
 /// The whole-program authority report (§10.5), computed across the module graph from `main`.
