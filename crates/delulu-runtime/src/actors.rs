@@ -65,18 +65,18 @@ pub enum MsgValue {
     Bool(bool),
     Str(String),
     Unit,
-    List(Vec<MsgValue>),
+    List(MsgParts<MsgValue>),
     /// A `Map` crossing the boundary (P3). Carried as an ORDERED vector of pairs rather than a map,
     /// because the wire form should not depend on the receiver rebuilding the same ordering — it
     /// arrives in the order the sender iterated, which is ascending by key.
-    Map(Vec<(crate::value::MapKey, MsgValue)>),
+    Map(MsgParts<(crate::value::MapKey, MsgValue)>),
     Record {
         name: String,
-        fields: Vec<(String, MsgValue)>,
+        fields: MsgParts<(String, MsgValue)>,
     },
     Variant {
         name: String,
-        fields: Vec<MsgValue>,
+        fields: MsgParts<MsgValue>,
     },
     /// A sendable (`val`-inferred) closure: body AST plus the converted capture scopes,
     /// outermost first (the module-global scope is NOT carried — the receiver reattaches
@@ -84,7 +84,7 @@ pub enum MsgValue {
     Closure {
         params: Vec<String>,
         body: Block,
-        scopes: Vec<Vec<(String, MsgValue)>>,
+        scopes: MsgParts<Vec<(String, MsgValue)>>,
     },
     Cap {
         kind: ResourceKind,
@@ -94,7 +94,9 @@ pub enum MsgValue {
     SecretLocal(String, Option<(String, Vec<crate::egress::Audience>)>),
     /// A broker-held secret's name and, P9-04 (d), its audience — a handle sent to another actor goes where it may go.
     SecretHandle(String, Option<(String, Vec<crate::egress::Audience>)>),
-    Root(RootMsg),
+    /// Boxed: a root slice is many times the size of every other message value, and every part of a message would pay
+    /// for it.
+    Root(Box<RootMsg>),
     Actor {
         id: ActorId,
         actor: String,
@@ -103,6 +105,68 @@ pub enum MsgValue {
     /// met, before what it holds (MSG-CYCLE-1). A moved graph that holds itself, or holds one cell twice, arrives as the
     /// same graph — not as a walk that never ends, and not as copies.
     Back(u32),
+}
+
+/// The parts a message value holds — a list's items, a map's pairs, a record's fields, a variant's payload, a closure's
+/// captured scopes — dismantled without recursion when a message is dropped unread (DATA-DEPTH-2), as `VariantFields`
+/// dismantles a `Value`: the derived drop of a chain of 300,000 links recursed once per link and overflowed the stack.
+/// The wrapper, not `MsgValue`, holds the `Drop`, so a message can still be taken apart by value.
+pub struct MsgParts<T: HoldsMsgs>(pub Vec<T>);
+
+/// A part of a message value, and the message values it holds.
+pub trait HoldsMsgs {
+    fn into_msgs(self, out: &mut Vec<MsgValue>);
+}
+
+impl HoldsMsgs for MsgValue {
+    fn into_msgs(self, out: &mut Vec<MsgValue>) {
+        out.push(self);
+    }
+}
+
+impl<K> HoldsMsgs for (K, MsgValue) {
+    fn into_msgs(self, out: &mut Vec<MsgValue>) {
+        out.push(self.1);
+    }
+}
+
+impl HoldsMsgs for Vec<(String, MsgValue)> {
+    fn into_msgs(self, out: &mut Vec<MsgValue>) {
+        out.extend(self.into_iter().map(|(_, m)| m));
+    }
+}
+
+impl<T: HoldsMsgs> MsgParts<T> {
+    /// The parts, leaving none behind.
+    pub fn take(&mut self) -> Vec<T> {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl<T: HoldsMsgs> Drop for MsgParts<T> {
+    fn drop(&mut self) {
+        let mut work: Vec<MsgValue> = Vec::new();
+        for part in self.take() {
+            part.into_msgs(&mut work);
+        }
+        // Depth becomes breadth: each value's parts are moved onto the worklist before it drops, so its own drop finds
+        // none and this recursion is one level deep.
+        while let Some(m) = work.pop() {
+            match m {
+                MsgValue::List(mut p) | MsgValue::Variant { fields: mut p, .. } => work.append(&mut p.0),
+                MsgValue::Map(mut p) => p.take().into_iter().for_each(|x| x.into_msgs(&mut work)),
+                MsgValue::Record { fields: mut p, .. } => p.take().into_iter().for_each(|x| x.into_msgs(&mut work)),
+                MsgValue::Closure { scopes: mut p, .. } => p.take().into_iter().for_each(|x| x.into_msgs(&mut work)),
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<T: HoldsMsgs + std::fmt::Debug> std::fmt::Debug for MsgParts<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 /// A root slice crossing an actor boundary (value-level authority passing, spec §7).
@@ -795,7 +859,108 @@ impl Drop for MailboxSlot<'_> {
 /// CHECKED program (the rcap pass fails closed on everything unconvertible), so the code is
 /// the checker-bug class.
 pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> Result<MsgValue, Fault> {
-    value_to_msg_in(v, self_state, &mut HashMap::new())
+    // DATA-DEPTH-2: depth becomes breadth. Converted by recursion, a value nested past the native stack — a chain of
+    // 300,000 links built in a loop and sent to an actor — overflowed it and killed the process. The values still to
+    // convert wait on a worklist, each converted value on `done` until the cell holding it is finished.
+    let mut cells: HashMap<usize, u32> = HashMap::new();
+    let mut work: Vec<ToMsg> = Vec::new();
+    let mut done: Vec<MsgValue> = Vec::new();
+    to_msg_step(v, self_state, &mut cells, &mut work, &mut done)?;
+    while let Some(step) = work.pop() {
+        match step {
+            ToMsg::Part(cell, i) => {
+                if i + 1 < cell.len() {
+                    work.push(ToMsg::Part(cell.clone(), i + 1));
+                }
+                cell.with_part(i, |part| to_msg_step(part, self_state, &mut cells, &mut work, &mut done))?;
+            }
+            ToMsg::List(n) => {
+                let items = take_last(&mut done, n);
+                done.push(MsgValue::List(MsgParts(items)));
+            }
+            ToMsg::Map(keys) => {
+                let held = take_last(&mut done, keys.len());
+                done.push(MsgValue::Map(MsgParts(keys.into_iter().zip(held).collect())));
+            }
+            ToMsg::Record(name, names) => {
+                let held = take_last(&mut done, names.len());
+                done.push(MsgValue::Record { name, fields: MsgParts(names.into_iter().zip(held).collect()) });
+            }
+            ToMsg::Variant(name, n) => {
+                let fields = take_last(&mut done, n);
+                done.push(MsgValue::Variant { name, fields: MsgParts(fields) });
+            }
+            ToMsg::Closure(params, body, shapes) => {
+                let total = shapes.iter().map(Vec::len).sum();
+                let mut held = take_last(&mut done, total).into_iter();
+                let scopes = shapes.into_iter().map(|names| names.into_iter().zip(held.by_ref()).collect()).collect();
+                done.push(MsgValue::Closure { params, body, scopes: MsgParts(scopes) });
+            }
+        }
+    }
+    Ok(done.pop().expect("the value converted is the one left"))
+}
+
+/// A step of `value_to_msg`: the `i`th part of a cell to convert, or a cell to finish from the values its parts left on
+/// `done`.
+enum ToMsg {
+    Part(Holder, usize),
+    List(usize),
+    Map(Vec<crate::value::MapKey>),
+    Record(String, Vec<String>),
+    Variant(String, usize),
+    /// A closure's parameters, body and each captured scope's names, outermost first.
+    Closure(Vec<String>, Block, Vec<Vec<String>>),
+}
+
+/// A cell whose parts `value_to_msg` is converting. A part is read through the cell that holds it, never cloned onto the
+/// worklist, so the debug lane's reference counts see what the recursive walk saw.
+#[derive(Clone)]
+enum Holder {
+    List(Rc<std::cell::RefCell<Vec<Value>>>),
+    /// A map, and its keys in order: its `i`th part is the value under the `i`th key.
+    Map(Rc<std::cell::RefCell<std::collections::BTreeMap<crate::value::MapKey, Value>>>, Rc<[crate::value::MapKey]>),
+    Record(Rc<std::cell::RefCell<Vec<(String, Value)>>>),
+    Variant(crate::value::VariantFields),
+    /// A closure's captured values, every scope's in order, outermost first.
+    Captured(Rc<Vec<Value>>),
+}
+
+impl Holder {
+    fn len(&self) -> usize {
+        match self {
+            Holder::List(c) => c.borrow().len(),
+            Holder::Map(_, keys) => keys.len(),
+            Holder::Record(c) => c.borrow().len(),
+            Holder::Variant(f) => f.len(),
+            Holder::Captured(v) => v.len(),
+        }
+    }
+
+    /// Run `f` on the `i`th part, where it lies.
+    fn with_part<R>(&self, i: usize, f: impl FnOnce(&Value) -> R) -> R {
+        match self {
+            Holder::List(c) => f(&c.borrow()[i]),
+            Holder::Map(c, keys) => f(c.borrow().get(&keys[i]).expect("a map is not changed while it is sent")),
+            Holder::Record(c) => f(&c.borrow()[i].1),
+            Holder::Variant(fields) => f(&fields[i]),
+            Holder::Captured(v) => f(&v[i]),
+        }
+    }
+}
+
+/// Put the step that finishes a cell on `work`, and then the first of its parts, if it has any.
+fn open_cell(work: &mut Vec<ToMsg>, finish: ToMsg, parts: Holder) {
+    work.push(finish);
+    if parts.len() > 0 {
+        work.push(ToMsg::Part(parts, 0));
+    }
+}
+
+/// The last `n` of `done`, in order.
+fn take_last<T>(done: &mut Vec<T>, n: usize) -> Vec<T> {
+    let at = done.len().checked_sub(n).expect("a cell's parts are converted before it is finished");
+    done.split_off(at)
 }
 
 /// The address of a mutable cell (`List`, `Map`, `Record`) — what tells one cell from another in a moved graph.
@@ -803,15 +968,16 @@ fn cell_addr<T>(cell: &Rc<std::cell::RefCell<T>>) -> usize {
     Rc::as_ptr(cell) as *const () as usize
 }
 
-/// `value_to_msg`, with the cells already carried numbered in `cells` (MSG-CYCLE-1: the walk was a tree's, so a moved
-/// graph that held itself recursed until the stack overflowed and the process died).
-fn value_to_msg_in(
+/// Convert `v`: a value holding no other, onto `done`; a value that holds others, the step that finishes it onto `work`
+/// under its parts, so they convert first and in order. MSG-CYCLE-1: a cell met again is a reference back to where it was
+/// first carried; a cell met first is numbered before what it holds, as `msg_to_value` rebuilds it before what it holds.
+fn to_msg_step(
     v: &Value,
     self_state: Option<(&Value, ActorId, &str)>,
     cells: &mut HashMap<usize, u32>,
-) -> Result<MsgValue, Fault> {
-    // A cell met again is a reference back to where it was first carried; a cell met first is numbered before what it holds,
-    // as `msg_to_value` rebuilds it before what it holds.
+    work: &mut Vec<ToMsg>,
+    done: &mut Vec<MsgValue>,
+) -> Result<(), Fault> {
     let first = |addr: usize, cells: &mut HashMap<usize, u32>| -> Option<MsgValue> {
         if let Some(n) = cells.get(&addr) {
             return Some(MsgValue::Back(*n));
@@ -824,10 +990,11 @@ fn value_to_msg_in(
     // the classic reply-to pattern. Detected by heap identity with the current turn's state.
     if let (Value::Record { fields, .. }, Some((Value::Record { fields: sf, .. }, id, name))) = (v, self_state) {
         if Rc::ptr_eq(fields, sf) {
-            return Ok(MsgValue::Actor { id, actor: name.to_string() });
+            done.push(MsgValue::Actor { id, actor: name.to_string() });
+            return Ok(());
         }
     }
-    Ok(match v {
+    let leaf = match v {
         Value::Int(i) => MsgValue::Int(*i),
         Value::Float(f) => MsgValue::Float(*f),
         Value::Bool(b) => MsgValue::Bool(*b),
@@ -835,7 +1002,8 @@ fn value_to_msg_in(
         Value::Unit => MsgValue::Unit,
         Value::List(items) => {
             if let Some(back) = first(cell_addr(items), cells) {
-                return Ok(back);
+                done.push(back);
+                return Ok(());
             }
             // Debug lane (§7.4 / deviation 7): an iso move's graph must be unaliased. At
             // this layer we can only see the spine; `--debug-rcaps` (7i) deepens this.
@@ -844,54 +1012,53 @@ fn value_to_msg_in(
                 "actor-boundary list with {} strong refs — the static uniqueness proof failed",
                 Rc::strong_count(items)
             );
-            MsgValue::List(items.borrow().iter().map(|x| value_to_msg_in(x, self_state, cells)).collect::<Result<_, _>>()?)
+            let n = items.borrow().len();
+            open_cell(work, ToMsg::List(n), Holder::List(items.clone()));
+            return Ok(());
         }
         // A `Map` is sendable exactly when its values are, which is the `List` rule; the keys are
         // `Str`/`Int`/`Bool` by construction, so they always are. The same debug-lane aliasing check
         // applies for the same reason.
         Value::Map(m) => {
             if let Some(back) = first(cell_addr(m), cells) {
-                return Ok(back);
+                done.push(back);
+                return Ok(());
             }
             debug_assert!(
                 Rc::strong_count(m) <= 2,
                 "actor-boundary map with {} strong refs — the static uniqueness proof failed",
                 Rc::strong_count(m)
             );
-            MsgValue::Map(
-                m.borrow()
-                    .iter()
-                    .map(|(k, v)| Ok((k.clone(), value_to_msg_in(v, self_state, cells)?)))
-                    .collect::<Result<_, Fault>>()?,
-            )
+            let keys: Vec<crate::value::MapKey> = m.borrow().keys().cloned().collect();
+            open_cell(work, ToMsg::Map(keys.clone()), Holder::Map(m.clone(), keys.into()));
+            return Ok(());
         }
         Value::Record { name, fields } => {
             if let Some(back) = first(cell_addr(fields), cells) {
-                return Ok(back);
+                done.push(back);
+                return Ok(());
             }
-            MsgValue::Record {
-                name: name.to_string(),
-                fields: fields
-                    .borrow()
-                    .iter()
-                    .map(|(n, x)| Ok((n.clone(), value_to_msg_in(x, self_state, cells)?)))
-                    .collect::<Result<_, Fault>>()?,
-            }
+            let names = fields.borrow().iter().map(|(n, _)| n.clone()).collect();
+            open_cell(work, ToMsg::Record(name.to_string(), names), Holder::Record(fields.clone()));
+            return Ok(());
         }
-        Value::Variant { name, fields } => MsgValue::Variant {
-            name: name.to_string(),
-            fields: fields.iter().map(|x| value_to_msg_in(x, self_state, cells)).collect::<Result<_, _>>()?,
-        },
+        Value::Variant { name, fields } => {
+            open_cell(work, ToMsg::Variant(name.to_string(), fields.len()), Holder::Variant(fields.clone()));
+            return Ok(());
+        }
         Value::Closure(c) => {
-            let scopes = flatten_env(&c.env, self_state, cells)?;
-            MsgValue::Closure { params: c.params.clone(), body: c.body.clone(), scopes }
+            let scopes = captured_scopes(c);
+            let shapes = scopes.iter().map(|vars| vars.iter().map(|(n, _)| n.clone()).collect()).collect();
+            let values: Vec<Value> = scopes.into_iter().flatten().map(|(_, x)| x).collect();
+            open_cell(work, ToMsg::Closure(c.params.clone(), c.body.clone(), shapes), Holder::Captured(Rc::new(values)));
+            return Ok(());
         }
         Value::Cap(c) => MsgValue::Cap { kind: c.kind, scope: c.scope.clone() },
         Value::Secret(s) => match s.handle_name() {
             Some(h) => MsgValue::SecretHandle(h.to_string(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
             None => MsgValue::SecretLocal(s.reveal(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
         },
-        Value::Root(r) => MsgValue::Root(RootMsg {
+        Value::Root(r) => MsgValue::Root(Box::new(RootMsg {
             console: r.console,
             fs_read: r.fs_read.clone(),
             fs_write: r.fs_write.clone(),
@@ -911,7 +1078,7 @@ fn value_to_msg_in(
             plugins_allow: r.plugins_allow.clone(),
             computes: r.computes.clone(),
             lease: r.lease.clone(),
-        }),
+        })),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // P2: a plugin handle does NOT cross an actor boundary. The grant that loaded it does
         // (see `MsgRoot::plugins`), so an actor may load its OWN plugin and get its own custody
@@ -939,89 +1106,149 @@ fn value_to_msg_in(
         Value::PyObj(_) => {
             return Err(Fault::new("DL0907", "a PyObj reached an actor boundary (checker bug — PyObj is statically pinned)"))
         }
-    })
+    };
+    done.push(leaf);
+    Ok(())
 }
 
-/// Flatten a closure's capture environment into per-scope name/value lists, outermost
-/// first, EXCLUDING the root (module globals — the receiver reattaches its own).
-fn flatten_env(
-    env: &Env,
-    self_state: Option<(&Value, ActorId, &str)>,
-    cells: &mut HashMap<usize, u32>,
-) -> Result<Vec<Vec<(String, MsgValue)>>, Fault> {
+/// What a closure carries across an actor boundary: each name its body reads from where it was made
+/// (`delulu_check::rcap_check::closure_captures`, the set the checker judged sendable), with the value the innermost
+/// scope below the module's globals binds to it — the receiver reattaches its own globals — as one scope.
+///
+/// CLOSURE-SEND-1: every binding of every enclosing scope crossed. A closure bound by `let` is one of those bindings, so
+/// sending it walked into itself without end — a stack overflow before DATA-DEPTH-2, the memory budget after — and a
+/// closure carried values it never reads, an `iso` value held beside it included.
+fn captured_scopes(c: &Closure) -> Vec<Vec<(String, Value)>> {
     let mut chain = Vec::new();
-    let mut cur = Some(env.clone());
+    let mut cur = Some(c.env.clone());
     while let Some(s) = cur {
         chain.push(s.clone());
         cur = s.parent().cloned();
     }
-    chain.pop(); // drop the root globals
-    chain.reverse(); // outermost first
-    let mut out = Vec::new();
-    for scope in chain {
-        let mut vars = Vec::new();
-        for (n, v) in scope.vars_snapshot() {
-            vars.push((n, value_to_msg_in(&v, self_state, cells)?));
-        }
-        out.push(vars);
-    }
-    Ok(out)
+    chain.pop(); // the root globals
+    let vars = delulu_check::rcap_check::closure_captures(&c.params, &c.body)
+        .into_iter()
+        .filter_map(|n| chain.iter().find_map(|scope| scope.get_here(&n)).map(|v| (n, v)))
+        .collect();
+    vec![vars]
 }
 
 /// Rebuild a message value into the RECEIVING actor's heap. `globals` is the receiving
 /// interpreter's module-global scope (closures reattach to it).
+///
+/// Each `List`, `Map` and `Record` cell is made empty and recorded in `cells` before what it holds is rebuilt into it, in
+/// the order `value_to_msg` numbered them, so a `Back` inside it finds it. As `value_to_msg` does, the walk keeps a
+/// worklist (DATA-DEPTH-2): a cell's step that fills it waits under the rebuilding of its parts.
 pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
-    msg_to_value_in(m, globals, &mut Vec::new())
+    let mut cells: Vec<Value> = Vec::new();
+    let mut work: Vec<FromMsg> = vec![FromMsg::Msg(m)];
+    let mut done: Vec<Value> = Vec::new();
+    while let Some(step) = work.pop() {
+        match step {
+            FromMsg::Msg(m) => from_msg_step(m, &mut cells, &mut work, &mut done),
+            FromMsg::List(cell, n) => {
+                let held = take_last(&mut done, n);
+                *cell.borrow_mut() = held;
+                done.push(Value::List(cell));
+            }
+            FromMsg::Map(cell, keys) => {
+                let held = take_last(&mut done, keys.len());
+                *cell.borrow_mut() = keys.into_iter().zip(held).collect();
+                done.push(Value::Map(cell));
+            }
+            FromMsg::Record(cell, name, names) => {
+                let held = take_last(&mut done, names.len());
+                *cell.borrow_mut() = names.into_iter().zip(held).collect();
+                done.push(Value::Record { name, fields: cell });
+            }
+            FromMsg::Variant(name, n) => {
+                let fields = take_last(&mut done, n);
+                done.push(Value::Variant { name: Rc::from(name.as_str()), fields: crate::value::VariantFields::new(fields) });
+            }
+            FromMsg::Closure(params, body, shapes) => {
+                let total = shapes.iter().map(Vec::len).sum();
+                let mut held = take_last(&mut done, total).into_iter();
+                let mut env = globals.clone();
+                for names in shapes {
+                    let child = Scope::child(&env);
+                    for (n, v) in names.into_iter().zip(held.by_ref()) {
+                        child.define(&n, v);
+                    }
+                    env = child;
+                }
+                done.push(Value::Closure(Rc::new(Closure { params, body, env, home: None })));
+            }
+        }
+    }
+    done.pop().expect("the value rebuilt is the one left")
 }
 
-/// `msg_to_value`, with each `List`, `Map` and `Record` cell rebuilt so far in `cells`, in the order `value_to_msg`
-/// numbered them: a cell is made empty and recorded before what it holds is rebuilt into it, so a `Back` inside it finds it.
-fn msg_to_value_in(m: MsgValue, globals: &Env, cells: &mut Vec<Value>) -> Value {
-    match m {
+/// A step of `msg_to_value`: a message value to rebuild, or a cell to fill from the values its parts left on `done`.
+enum FromMsg {
+    Msg(MsgValue),
+    /// A list's cell and the number of its items.
+    List(Rc<std::cell::RefCell<Vec<Value>>>, usize),
+    Map(Rc<std::cell::RefCell<std::collections::BTreeMap<crate::value::MapKey, Value>>>, Vec<crate::value::MapKey>),
+    Record(Rc<std::cell::RefCell<Vec<(String, Value)>>>, Rc<str>, Vec<String>),
+    Variant(String, usize),
+    Closure(Vec<String>, Block, Vec<Vec<String>>),
+}
+
+/// Rebuild `m`: a value holding no other, onto `done`; one that holds others, its cell made and recorded now, the step
+/// that fills it onto `work` under its parts, so they are rebuilt first and in order.
+fn from_msg_step(m: MsgValue, cells: &mut Vec<Value>, work: &mut Vec<FromMsg>, done: &mut Vec<Value>) {
+    let leaf = match m {
         MsgValue::Int(i) => Value::Int(i),
         MsgValue::Float(f) => Value::Float(f),
         MsgValue::Bool(b) => Value::Bool(b),
         MsgValue::Str(s) => Value::str(s),
         MsgValue::Unit => Value::Unit,
-        MsgValue::Map(pairs) => {
+        MsgValue::Map(mut pairs) => {
             let cell = Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()));
             cells.push(Value::Map(cell.clone()));
-            let held = pairs.into_iter().map(|(k, v)| (k, msg_to_value_in(v, globals, cells))).collect();
-            *cell.borrow_mut() = held;
-            Value::Map(cell)
+            let (keys, held): (Vec<_>, Vec<_>) = pairs.take().into_iter().unzip();
+            work.push(FromMsg::Map(cell, keys));
+            work.extend(held.into_iter().rev().map(FromMsg::Msg));
+            return;
         }
-        MsgValue::List(items) => {
-            let cell = Rc::new(std::cell::RefCell::new(Vec::new()));
+        MsgValue::List(mut items) => {
+            let items = items.take();
+            let cell = Rc::new(std::cell::RefCell::new(Vec::with_capacity(items.len())));
             cells.push(Value::List(cell.clone()));
-            let held = items.into_iter().map(|x| msg_to_value_in(x, globals, cells)).collect();
-            *cell.borrow_mut() = held;
-            Value::List(cell)
+            work.push(FromMsg::List(cell, items.len()));
+            work.extend(items.into_iter().rev().map(FromMsg::Msg));
+            return;
         }
-        MsgValue::Record { name, fields } => {
+        MsgValue::Record { name, mut fields } => {
             let cell = Rc::new(std::cell::RefCell::new(Vec::new()));
             let name: Rc<str> = Rc::from(name.as_str());
             cells.push(Value::Record { name: name.clone(), fields: cell.clone() });
-            let held = fields.into_iter().map(|(n, x)| (n, msg_to_value_in(x, globals, cells))).collect();
-            *cell.borrow_mut() = held;
-            Value::Record { name, fields: cell }
+            let (names, held): (Vec<_>, Vec<_>) = fields.take().into_iter().unzip();
+            work.push(FromMsg::Record(cell, name, names));
+            work.extend(held.into_iter().rev().map(FromMsg::Msg));
+            return;
         }
         MsgValue::Back(n) => cells.get(n as usize).cloned().expect(
             "a back-reference names a cell rebuilt before it (`value_to_msg` numbers cells in the order they are rebuilt)",
         ),
-        MsgValue::Variant { name, fields } => Value::Variant {
-            name: Rc::from(name.as_str()),
-            fields: crate::value::VariantFields::new(fields.into_iter().map(|x| msg_to_value_in(x, globals, cells)).collect()),
-        },
-        MsgValue::Closure { params, body, scopes } => {
-            let mut env = globals.clone();
+        MsgValue::Variant { name, mut fields } => {
+            let fields = fields.take();
+            work.push(FromMsg::Variant(name, fields.len()));
+            work.extend(fields.into_iter().rev().map(FromMsg::Msg));
+            return;
+        }
+        MsgValue::Closure { params, body, mut scopes } => {
+            let scopes = scopes.take();
+            let mut names = Vec::with_capacity(scopes.len());
+            let mut held = Vec::new();
             for scope in scopes {
-                let child = Scope::child(&env);
-                for (n, v) in scope {
-                    child.define(&n, msg_to_value_in(v, globals, cells));
-                }
-                env = child;
+                let (n, h): (Vec<_>, Vec<_>) = scope.into_iter().unzip();
+                names.push(n);
+                held.extend(h);
             }
-            Value::Closure(Rc::new(Closure { params, body, env, home: None }))
+            work.push(FromMsg::Closure(params, body, names));
+            work.extend(held.into_iter().rev().map(FromMsg::Msg));
+            return;
         }
         MsgValue::Cap { kind, scope } => Value::Cap(Rc::new(CapVal { kind, scope })),
         MsgValue::SecretLocal(s, aud) => {
@@ -1032,6 +1259,7 @@ fn msg_to_value_in(m: MsgValue, globals: &Env, cells: &mut Vec<Value>) -> Value 
             aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
         ))),
         MsgValue::Root(r) => {
+            let r = *r;
             let root = crate::value::RootVal {
                 // Carried, like the actuator list beside it (D46): the envelope is what bounds the
                 // holder, and the broker still re-checks every dispatch against the grant.
@@ -1058,7 +1286,8 @@ fn msg_to_value_in(m: MsgValue, globals: &Env, cells: &mut Vec<Value>) -> Value 
             Value::Root(Rc::new(root))
         }
         MsgValue::Actor { id, actor } => Value::ActorRef { id, actor: Rc::from(actor.as_str()) },
-    }
+    };
+    done.push(leaf);
 }
 
 /// The `--debug-rcaps` uniqueness walk (spec §6.2/§6.4, phase 7i): an iso MOVE's graph must have no alias OUTSIDE it.
@@ -1454,5 +1683,30 @@ mod move_graph_tests {
         assert!(Rc::ptr_eq(got, inner), "it holds itself");
         fields.borrow_mut().clear(); // break the sender's cycle, so the test does not leak it
         got.borrow_mut().clear();
+    }
+
+    /// DATA-DEPTH-2: a value nested past the native stack — 200,000 levels through a variant, a list, a record and a map in
+    /// turn, what a loop builds — crosses and arrives whole, and a message of it dropped unread is taken apart without
+    /// recursion. Each walk recursed once per level, and a chain of 300,000 links sent to an actor killed the process. As
+    /// with the teardown locks in `value.rs`, the falsification signal is the test binary dying.
+    #[test]
+    fn a_value_nested_past_the_stack_crosses_whole() {
+        let deep = |leaf: i64| {
+            let mut v = Value::Int(leaf);
+            for i in 0..200_000 {
+                v = match i % 4 {
+                    0 => Value::variant("Link", vec![v]),
+                    1 => Value::List(Rc::new(RefCell::new(vec![v]))),
+                    2 => Value::Record { name: Rc::from("Box"), fields: Rc::new(RefCell::new(vec![("f".to_string(), v)])) },
+                    _ => Value::Map(Rc::new(RefCell::new(std::collections::BTreeMap::from([(crate::value::MapKey::Int(1), v)])))),
+                };
+            }
+            v
+        };
+        let sent = deep(7);
+        let back = msg_to_value(value_to_msg(&sent, None).expect("sendable"), &Scope::root());
+        assert!(back.eq(&sent), "it arrives as it was sent");
+        assert!(!back.eq(&deep(8)), "down to its deepest value");
+        drop(value_to_msg(&sent, None).expect("sendable")); // a message dropped unread
     }
 }

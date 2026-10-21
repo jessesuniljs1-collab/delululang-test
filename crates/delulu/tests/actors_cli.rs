@@ -131,6 +131,86 @@ fn a_graph_that_holds_itself_moves_to_an_actor_whole() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Every part of a moved value lands where it was: a closure's captured values each under its own name, a map's values
+/// each under its own key. DATA-DEPTH-2 made both walks iterative, a part at a time through the cell that holds it; no
+/// test had sent a closure capturing more than one value or a map of more than one key, so a part misplaced was unseen.
+#[test]
+fn a_closure_and_a_map_cross_to_an_actor_with_every_part_in_place() {
+    let dir = scratch("parts");
+    let file = dir.join("app.delulu");
+    let src = "module app\n\
+        actor Calc {\n\
+        var n: Int\n\
+        new() { self.n = 0 }\n\
+        be apply(f: val fn(Int) -> Int, out: Cap[Console]) ! {Write} { out.println(str(f(0))) }\n\
+        be keep(m: iso Map[Str, Int], out: Cap[Console]) ! {Write} { out.println(str(m)) }\n\
+        }\n\
+        fn main(root: Root) ! {Async, Write} {\n\
+        let a = 10\n\
+        let b = 3\n\
+        let c = spawn Calc()\n\
+        c.apply(fn(x: Int) -> Int { x + a - b * 2 }, root.console())\n\
+        let m: iso Map[Str, Int] = recover {\n\
+        let w: ref Map[Str, Int] = Map()\n\
+        w.insert(\"one\", 1)\n\
+        w.insert(\"two\", 2)\n\
+        w.insert(\"three\", 3)\n\
+        w\n\
+        }\n\
+        c.keep(consume m, root.console())\n\
+        }\n";
+    std::fs::write(&file, src).unwrap();
+    let o = delulu_in(&dir, &["run", file.to_str().unwrap(), "--grant", "console", "--no-prompt"]);
+    let out = combined(&o);
+    assert!(o.status.success(), "must exit 0: {out}");
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "4\n{one: 1, three: 3, two: 2}\n", "{out}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// CLOSURE-SEND-1: a closure bound by `let` crosses to an actor carrying what its body reads — through a closure inside it
+/// too, each name as the innermost scope binds it — and nothing else. Every binding of its scopes crossed, itself among
+/// them, so the walk never ended: a stack overflow, then (once the walk was iterative) the memory budget; and an `iso` map
+/// beside it crossed with it.
+#[test]
+fn a_let_bound_closure_crosses_to_an_actor_carrying_only_what_it_reads() {
+    let dir = scratch("letfn");
+    let file = dir.join("app.delulu");
+    let src = "module app\n\
+        actor Calc {\n\
+        var n: Int\n\
+        new() { self.n = 0 }\n\
+        be apply(f: val fn(Int) -> Int, out: Cap[Console]) ! {Write} { out.println(str(f(1))) }\n\
+        be keep(m: iso Map[Str, Int], out: Cap[Console]) ! {Write} { out.println(str(m)) }\n\
+        }\n\
+        fn main(root: Root) ! {Async, Write} {\n\
+        let a = 10\n\
+        let k = 100\n\
+        let f: val fn(Int) -> Int = if a > 0 {\n\
+        let k = 5\n\
+        fn(x: Int) -> Int {\n\
+        let g = fn(y: Int) -> Int { y + k }\n\
+        g(x) + a\n\
+        }\n\
+        } else {\n\
+        fn(x: Int) -> Int { x }\n\
+        }\n\
+        let m: iso Map[Str, Int] = recover {\n\
+        let w: ref Map[Str, Int] = Map()\n\
+        w.insert(\"one\", 1)\n\
+        w\n\
+        }\n\
+        let c = spawn Calc()\n\
+        c.apply(f, root.console())\n\
+        c.keep(consume m, root.console())\n\
+        }\n";
+    std::fs::write(&file, src).unwrap();
+    let o = delulu_in(&dir, &["run", file.to_str().unwrap(), "--grant", "console", "--no-prompt"]);
+    let out = combined(&o);
+    assert!(o.status.success(), "must exit 0: {out}");
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "16\n{one: 1}\n", "{out}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_non_actor_program_run_is_untouched_by_stage7_flags_absence() {
     // House rule: a module with no actors takes the identical v0.6 path — smoke it.

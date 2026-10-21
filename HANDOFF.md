@@ -1214,6 +1214,14 @@ spells the same thing?**
   - Also: a pair of tests can lock a cycle and never lock sharing. A cell held twice side by side, as opposed to inside
     itself, was untested under the old recursion too (M777, M785).
   - Search key: `fn …(&self` on `Value` calling itself, `Value` walks in `reify.rs`, `actors.rs`, `channel.rs`.
+- **CLOSURE-SEND-1 — what the checker judges and what the runtime does must be computed from one set** (the laptop,
+  2026-10-22, RW 4.76).
+  - The checker judged a closure sendable by its free variables. The runtime sent every binding of every scope it was
+    made in: the closure itself when it was bound by `let`, so the walk never ended, and values it never reads.
+  - Now both use `rcap_check::closure_captures`. When a static judgement licenses a runtime act, make the act read the
+    judgement's own set, never a wider one computed separately.
+  - Also, once more: a mutant run's control must rebuild every artifact the mutants rebuilt. A stale `delulu.exe` holding
+    mutant M791 made a correct change look broken.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

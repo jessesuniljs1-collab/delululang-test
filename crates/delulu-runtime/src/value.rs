@@ -1054,6 +1054,10 @@ impl Scope {
     pub fn clear_for_collector(&self) {
         self.vars.borrow_mut().clear();
     }
+    /// This scope's own binding of `name`, not a parent's.
+    pub fn get_here(&self, name: &str) -> Option<Value> {
+        self.vars.borrow().get(name).cloned()
+    }
     pub fn get(&self, name: &str) -> Option<Value> {
         if let Some(v) = self.vars.borrow().get(name) {
             return Some(v.clone());

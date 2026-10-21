@@ -5141,3 +5141,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.74, 4.75), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`; A `crates/delulu-wasm/tests/deep_value_parity.rs`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — deep values and closures cross to actors (RW 4.75, 4.76) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deep-messages` (on `laptop/deep-values` `f791ded`, PR #35)   Pull request: the one this entry rides in
+- **What:** DATA-DEPTH-2's actor path (a 300,000-link chain sent to an actor killed the process) and CLOSURE-SEND-1 (a
+  `let`-bound closure sent to an actor walked into itself) — each witnessed on the old binary and fixed; the root slice
+  in a message boxed. Tests and mutants M786–M793 in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/{actors,value}.rs`, `crates/delulu-check/src/rcap_check.rs`,
+  `crates/delulu/tests/actors_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (4.75, 4.76), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu/tests/deep_values_cli.rs`.
+  Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

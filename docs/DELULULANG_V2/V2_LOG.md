@@ -8429,3 +8429,34 @@ Tests:
 
 Mutants M777–M785 red. M777 (`display` never leaves a cell) and M785 (the rebuild never leaves a variant) survived
 first: no test held one cell twice side by side, under the old recursion either.
+
+## 2026-10-22 (night) — the laptop: deep values and closures cross to actors (RW 4.75, 4.76)
+
+- **DATA-DEPTH-2, the actor path (RW 4.75).** A chain of 300,000 links built in a loop and sent to an actor killed the
+  process (exit 127). `value_to_msg`, `msg_to_value` and a message's derived teardown each recursed once per level.
+  - Now each walks a worklist.
+  - A part is read through the cell that holds it, never cloned onto the list. So the debug lane's
+    `strong_count <= 2` check sees what the recursion saw: a first version that cloned each part would have flagged a
+    list holding one cell twice.
+  - `MsgParts` holds a message's parts and takes them apart iteratively when dropped. It, not `MsgValue`, carries the
+    `Drop`, so a message can still be taken apart by value.
+  - The root slice is boxed: `clippy` found `MsgValue` at 344 bytes, paid by every part of every message.
+- **CLOSURE-SEND-1 (RW 4.76), found while writing 4.75's test.** A `let`-bound closure sent to an actor overflowed the
+  old binary's stack, and after the worklist ran to the 1 GiB budget.
+  - `flatten_env` carried every binding of every scope the closure was made in, and the closure is one of them.
+  - It also carried values the closure never reads: an `iso` map beside it tripped the alias check.
+  - Now a closure carries exactly `rcap_check::closure_captures`, the free variables the checker judges sendability by,
+    each from the innermost scope below the globals. The judgement and the act are one set.
+- A false alarm, recorded because it cost time. After a mutant run, `delulu.exe` still held mutant M791: the control run
+  rebuilt only the library. A program then "failed" on my change. A clean build answered correctly. The fix: give the
+  control run a command that rebuilds the binary.
+
+Tests:
+- `actors::move_graph_tests::a_value_nested_past_the_stack_crosses_whole`: on the old code the binary dies.
+- `deep_values_cli.rs` (2, end to end: `str` of a 300,000-link list, and a 300,000-link chain to an actor).
+- `actors_cli.rs`: a closure and a map cross with every part in place; a `let`-bound closure, with a closure inside it
+  and a shadowed name, carries only what it reads.
+
+Mutants M786–M793 red. M789–M791 went red only after the parts test: no test had sent a map of more than one key or a
+closure capturing more than one value. Still recursive (4.75): the sandbox channel's `WireValue` and `--debug-rcaps`'
+uniqueness walk.
