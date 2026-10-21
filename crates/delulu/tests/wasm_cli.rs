@@ -89,11 +89,11 @@ fn run_engine_wasm_ungranted_console_is_refused() {
 
 #[test]
 fn run_engine_wasm_on_unsupported_program_is_dl1201() {
-    // A list of lists is outside the WASM fragment, so `--engine wasm` reports DL1201 and the program stays on the
+    // A list of functions is outside the WASM fragment, so `--engine wasm` reports DL1201 and the program stays on the
     // interpreter rather than being misrun. (A `while` loop was the example until RW 3.4 compiled it, then a `for` over
-    // a list until the WASM `List` compiled that.)
+    // a list until the WASM `List` compiled that, then a list of lists until D-V2-173 nested them.)
     let path = std::env::temp_dir().join(format!("delulu_for_{}.delulu", std::process::id()));
-    std::fs::write(&path, "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n var t = 0\n for x in [[1], [2]] { t = t + x.len() }\n out.println(\"done\") }\n").expect("write");
+    std::fs::write(&path, "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n var t = 0\n for g in [fn(x: Int) -> Int { x }] { t = t + g(1) }\n out.println(\"done\") }\n").expect("write");
     let p = path.to_string_lossy().to_string();
     let o = delulu(&["run", &p, "--engine", "wasm", "--grant", "console", "--json"]);
     assert!(stdout(&o).contains("DL1201"), "expected DL1201: {}", stdout(&o));

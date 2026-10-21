@@ -1798,6 +1798,16 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // A `match` testing inside a constructor that no arm matched (`codegen.rs`'s `compile_match_ordered`): the guest calls
+    // this and then traps, and the run reports the interpreter's own fault (`interp.rs`'s `eval_match`), word for word.
+    linker
+        .func_wrap("delulu:match", "no_arm", |mut caller: Caller<'_, HostState>| {
+            caller
+                .data_mut()
+                .refused
+                .get_or_insert_with(|| "DL0907: no match arm applied (checker guarantees exhaustiveness)".to_string());
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     link_maps(&mut linker)?;
     link_list_host(&mut linker)?;
 

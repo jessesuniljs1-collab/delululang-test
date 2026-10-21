@@ -4228,7 +4228,11 @@ answered DL1201 (witnessed on the pre-change build: "the List method `.pop`", "`
    - `reverse`, `concat` and `slice` make a new list of the same slots, so a record in two lists is one record. `slice`
      clamps as the interpreter does: below 0 is 0, past the end is the end, `hi < lo` is empty.
    - `contains` compares as `==` does: an `Int`, a `Bool` or a `Float` by its instruction (a `NaN` never equal), a `Str`
-     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`.
+     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`. **Amended 2026-10-22:** it
+     compiles through the host's `eq` (`reify.rs`), with the element's descriptor, as `==` of two of them does. A module
+     whose list `contains` takes a record or a sum carries the value interface. `contains_on_records_and_sums_compares_as_
+     equality_does` covers it: a record equal by its contents, another record. M753 (the arm missing, the pre-change
+     refusal), M754 (the interface never carried) and M755 (compared by address) are red.
    - `filter`, `find` and `fold` inline their function value as `map` does. `find` stops at its first match. `fold`
      computes its initial value after the snapshot, as the interpreter does.
 2. **Two host-side** (`delulu:list.sort`, `delulu:list.join`), each run over the guest's slots:
@@ -4277,6 +4281,60 @@ outside drops `pop`, and `conformance_parity.rs`'s drops `fold`, each replaced b
   - `sort` orders strings by address (M744) and `Bool`s inverted (M745). `join` writes no separators (M746).
   - A length past its capacity is trusted (M747).
   - The module is read for three names only (M749), and a list's `contains` brings no string equality (M750).
+
+## D-V2-172 — A `match` must cover every case at every depth; the WASM engine tests inside each constructor — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**Found:** MATCH-NEST-1, MATCH-EXHAUST-1 and WASM-IMPORTS-1 (RW 3.22, 2.20, 3.23; `V2_LOG.md`, 2026-10-22). The checker
+proved only that the arms named every constructor at the top. The interpreter's DL0907 text, the reference
+(`ref.rule.errors.match-is-exhaustive`, "covered") and `GETTING_STARTED.md` all promise more. The WASM backend relied on
+the same top level and ignored what a pattern held inside a constructor.
+
+**Decided:**
+1. **DL0407 covers every depth.** A match is refused when some value of the scrutinee's type matches no arm. That
+   includes a constructor or a literal inside a constructor, and literal arms on an `Int`, `Str` or `Bool` with no
+   catch-all. The message names the first such value (`missing Some(Blue)`; `_` stands for any value of a type with no
+   finite set of constructors). It is the existing code, so no new DL code. A program refused now would have faulted
+   at run time on that value; none in the repository is.
+2. **The search is bounded, and a match it cannot finish is refused, not passed.** The bound is 10,000,000 cells read
+   per match (`EXHAUSTIVE_BUDGET`). The refusal says the checker could not prove the match within its limit; one `_` arm
+   satisfies it. Passing an unproved match would return the runtime to a fault the checker's text says cannot happen.
+   The first version did exactly that, on a match that was not exhaustive.
+3. **The WASM engine tests inside constructors as the interpreter does.** Arms are tried in order, each pattern tested
+   and bound. A module that holds such a match imports `delulu:match.no_arm`, which records the interpreter's DL0907
+   and is unreachable for a checked program. A `.dwx` built with it needs a host that provides `delulu:match`, so an
+   older host refuses it at instantiation, never running it wrongly. Every other module's bytes are unchanged.
+4. **The import section is written whenever it holds an import**, not when a hand-kept list of interfaces says so.
+
+**Evidence:**
+- Red on `30885b1`, green after: `match_parity.rs` (4); `map_parity.rs`
+  `a_module_whose_only_imports_are_a_maps_loads`; the three `delulu-check` tests `a_match_*`; the two DL0407
+  conformance reject cases.
+- Mutants M756–M776 red.
+- 252 repository programs re-checked with identical output.
+
+**Residual:** the bound is per match. A file built to hold many matches that each spend it costs roughly a third of a
+second per match in a debug build, the same denial-of-service class as RW 2.3. A literal arm on a `Float` cannot be
+written (the parser has no `Float` pattern).
+
+## D-V2-173 — RW 3.4: a slot holds a pointer to any list, map, option or result, so they nest on the WASM engine — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**Decided:**
+1. A `List`, `Map`, `Option` or `Result` may sit wherever a value goes on the WASM engine: a list's element, a map's
+   value, a variant's payload, a record's field. Its 8-byte slot holds a pointer to its cell, as it already held a
+   record's.
+2. Lists, maps and records are shared as the interpreter shares them. Options and results stay immutable cells.
+3. The codegen's `Scalar` names such a type through `Scalar::Boxed(&'static Ty)`, so that `Scalar` and `Ty` stay `Copy`
+   (every function of the backend passes them by value). Each distinct type is interned once for the process (`boxed`):
+   a leak of a few bytes per type any compile has met, and none per value.
+4. What stays outside, refused with DL1201: a list or a record field holding a function or a capability. Neither has a
+   cell the host's value interface can rebuild.
+
+**Evidence:**
+- `nested_parity.rs` (3): lists of lists, options, maps and records nested, shared, compared, matched, and faulted;
+  refused by the old codegen.
+- The five pins that had listed these shapes as refused now list what stays outside. None recorded a hazard (read
+  first, per POP-WALK-1).
+- The whole `delulu-wasm` suite passes.
 
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 

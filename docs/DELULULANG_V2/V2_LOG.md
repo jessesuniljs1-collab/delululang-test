@@ -8386,3 +8386,124 @@ cell whose length runs past the memory) was added.
 
 **Local results:** `delulu-wasm` whole, 184 passed. `wasm_cli`, `budget_cli`, `artifact_review` and `core_invariance`, 31
 passed. `scripts/clippy.sh -j 4` clean and stamped.
+
+## 2026-10-22 (night) — the laptop: `contains` on records and sums on the WASM engine (RW 3.4, D-V2-171 amended)
+
+The last `List` method shape the WASM engine refused: `contains` on a list of records or sums answered DL1201. It now
+compares through the host's value interface, as `==` of two records or sums already did (`reify.rs`). The module carries
+the interface when a list's `contains` takes such a value. Test: `list_methods_parity.rs`
+`contains_on_records_and_sums_compares_as_equality_does`, both engines `true false false` / `true false true false`.
+Mutants M753–M755 red. M753 removes the new arm, which is exactly the pre-change refusal. Local: `delulu-wasm` whole, 185
+passed; clippy clean and stamped.
+
+## 2026-10-22 (night) — the laptop: a `match` tested inside each constructor, and proved to cover every case (D-V2-172)
+
+Found while reading the WASM `match` to widen RW 3.4. Three defects, each witnessed on `master` `30885b1`:
+
+- **MATCH-NEST-1 (RW 3.22), the WASM engine, silent wrong answers.** `compile_match` sent each constructor to the first
+  arm naming it, and `compile_arm` bound a field only when its pattern was a name, ignoring a constructor or a literal
+  there. `Some(Blue)` took `Some(Red) => …`; `Some(7)` took `Some(0) => …`. The interpreter printed `2` and `7`, WASM
+  `1` and `10`. It reached `run --engine wasm`, `build --target wasm` and every Contained plugin (`cli.rs:4913`). Such a
+  match now compiles arm by arm, in order, as `eval_match` tries them; when no arm matches, `delulu:match.no_arm`
+  records the interpreter's DL0907 word for word. A match testing nothing inside a constructor compiles as before.
+- **MATCH-EXHAUST-1 (RW 2.20), the checker.** `check_exhaustive` asked only which constructors the arms named at the
+  top. `Some(Red), None` on an `Option[Color]` checked clean, and so did literal arms on an `Int`, `Str` or `Bool` with
+  no catch-all; each faulted at run time with *"no match arm applied (checker guarantees exhaustiveness)"*. The
+  reference says *"A `match` must cover every case … Enforced by: DL0407 … Coverage: covered"*. A search over the
+  arms (Maranget's) now names the first missing case: `missing Some(Blue)`, `missing _`, `missing false`.
+  - It is bounded by the cells it reads (10,000,000 for one match). A first version counted calls and **passed** a
+    match whose search ran out: a random 400-arm match over 40 `Bool`s was accepted, and it is not exhaustive. So a
+    search that runs out now refuses, in words. The pigeonhole principle with 8 pigeons in 7 holes is exhaustive but
+    needs an exponential search: refused in 0.37 s. With 7 pigeons in 6 holes it is proved in 0.25 s (debug build).
+  - A row of wildcards ends the search at once; without that, single-column `Bool` arms cost 2ⁿ steps.
+  - 252 programs in the repository were checked before and after: no verdict and no message changed.
+- **WASM-IMPORTS-1 (RW 3.23).** The import section was written only when one of a hand-kept list of flags was set, and
+  the list left `delulu:map` out. A pure function whose only imports were a map's compiled to bytes the engine refused
+  (`failed to parse WebAssembly module`). The section is now written whenever it holds an import.
+
+Tests: `match_parity.rs` (4), red on the old code (`red,red,red,none` for `red,other Green,blue,none`;
+`Y,Y,Y,Y,zero,zero` for `Y,M,empty,ok no,zero,err 3`); `map_parity.rs`
+`a_module_whose_only_imports_are_a_maps_loads`; three `delulu-check` tests (missing cases named, every-depth clean
+cases, the pigeonhole bound); two conformance reject cases (`DL0407_nested_non_exhaustive`,
+`DL0407_literal_non_exhaustive`). Mutants M756–M767 (WASM) and M768–M776 (checker) red. M774 survived first: swapping
+which `Bool` literal a branch keeps is invisible when the arms are symmetric in `true` and `false`. A case that is not
+symmetric was added (`P(true, true), P(false, _)` leaves `P(true, false)`). Local: `delulu-check` and `delulu-wasm`
+whole, `conformance`, `message_spacing`, `wasm_cli` green; clippy clean and stamped. Commit `823673e`, PR #34.
+
+## 2026-10-22 (night) — the laptop: deep values print and compare on both engines (RW 4.74)
+
+Found while checking whether the WASM host's rebuild of a guest's value (`reify.rs`) bounded its depth before widening
+what a list may hold (RW 3.4). It did not, and neither did the interpreter's own `display` and `eq`. INTERP-DROP-1 had
+made teardown iterative and left them recursive.
+
+- **DATA-DEPTH-1 (RW 4.74).** A linked list of records built in a `while` loop, then `str` of its head:
+  - the interpreter prints it at 100,000 links and dies at 300,000 (`thread 'delulu-main' has overflowed its stack`,
+    exit 127), inside the default 1 GiB budget;
+  - the WASM engine dies at 100,000, so the guest's data killed its host. That covers `run --engine wasm`, a `.dwx` and
+    every Contained plugin.
+  - A hand-written module did the same through the descriptor parser, with a million `l`s.
+- **Fixed.** `Value::display` and `Value::eq` walk explicit worklists. `display` keeps the cells it is inside, and
+  leaves each when its rendering ends. `eq` keeps the pairs it has assumed equal, and compares every reachable pair once,
+  so the order cannot change the answer. `reify.rs` builds post-order from a worklist with a stack of finished values:
+  - a list's elements are read one per step from a single `Run`, so a long list never queues a step per element;
+  - its descriptor parser refuses nesting past 256 (a written type stops at 128).
+  - Both engines now print the 300,000-link list as `9488888` characters.
+- **Not yet covered (RW 4.75, DATA-DEPTH-2).** Two more walks recurse: the copy into an actor message and the
+  sandbox channel's serializing. Read, not run: whether a well-typed program can reach either with a deep value is open.
+
+Tests:
+- `delulu-runtime` `value::depth_tests`: a 200,000-level value through a variant, a list, a record and a map in turn,
+  displayed and compared; and a cell held twice side by side.
+- `delulu-wasm/tests/deep_value_parity.rs`: a 100,000-link list on both engines, a cell held twice side by side, and the
+  deep descriptor.
+- On the old code each kills its test binary with a stack overflow; each was witnessed separately.
+
+Mutants M777–M785 red. M777 (`display` never leaves a cell) and M785 (the rebuild never leaves a variant) survived
+first: no test held one cell twice side by side, under the old recursion either.
+
+## 2026-10-22 (night) — the laptop: deep values and closures cross to actors (RW 4.75, 4.76)
+
+- **DATA-DEPTH-2, the actor path (RW 4.75).** A chain of 300,000 links built in a loop and sent to an actor killed the
+  process (exit 127). `value_to_msg`, `msg_to_value` and a message's derived teardown each recursed once per level.
+  - Now each walks a worklist.
+  - A part is read through the cell that holds it, never cloned onto the list. So the debug lane's
+    `strong_count <= 2` check sees what the recursion saw: a first version that cloned each part would have flagged a
+    list holding one cell twice.
+  - `MsgParts` holds a message's parts and takes them apart iteratively when dropped. It, not `MsgValue`, carries the
+    `Drop`, so a message can still be taken apart by value.
+  - The root slice is boxed: `clippy` found `MsgValue` at 344 bytes, paid by every part of every message.
+- **CLOSURE-SEND-1 (RW 4.76), found while writing 4.75's test.** A `let`-bound closure sent to an actor overflowed the
+  old binary's stack, and after the worklist ran to the 1 GiB budget.
+  - `flatten_env` carried every binding of every scope the closure was made in, and the closure is one of them.
+  - It also carried values the closure never reads: an `iso` map beside it tripped the alias check.
+  - Now a closure carries exactly `rcap_check::closure_captures`, the free variables the checker judges sendability by,
+    each from the innermost scope below the globals. The judgement and the act are one set.
+- A false alarm, recorded because it cost time. After a mutant run, `delulu.exe` still held mutant M791: the control run
+  rebuilt only the library. A program then "failed" on my change. A clean build answered correctly. The fix: give the
+  control run a command that rebuilds the binary.
+
+Tests:
+- `actors::move_graph_tests::a_value_nested_past_the_stack_crosses_whole`: on the old code the binary dies.
+- `deep_values_cli.rs` (2, end to end: `str` of a 300,000-link list, and a 300,000-link chain to an actor).
+- `actors_cli.rs`: a closure and a map cross with every part in place; a `let`-bound closure, with a closure inside it
+  and a shadowed name, carries only what it reads.
+
+Mutants M786–M793 red. M789–M791 went red only after the parts test: no test had sent a map of more than one key or a
+closure capturing more than one value. Still recursive (4.75): the sandbox channel's `WireValue` and `--debug-rcaps`'
+uniqueness walk.
+
+## 2026-10-22 (night) — the laptop: lists, maps and options nest on the WASM engine (RW 3.4, D-V2-173)
+
+The widening this night's work began with, reached once the defects it surfaced were fixed: MATCH-NEST-1,
+MATCH-EXHAUST-1, WASM-IMPORTS-1, DATA-DEPTH-1 and -2, CLOSURE-SEND-1.
+- A slot holds a pointer to any list, map, option or result (`Scalar::Boxed`, interned so `Scalar` stays `Copy`). So a
+  list of lists, a list of options, a map of lists, an option of an option, a map in a record field compile.
+- The host's value rebuild (`reify.rs`) and descriptors were already recursive in structure, and since DATA-DEPTH-1 they
+  are iterative in walk. `match` tests inside each constructor since MATCH-NEST-1.
+- The five pins that listed these shapes as refused were read first (POP-WALK-1). None named a hazard. Each now lists
+  what stays outside: a list or a record field holding a function or a capability.
+
+Tests: `nested_parity.rs` (3), refused by the old codegen with DL1201 (`a list of List(I64)`). It checks sharing (one
+list held twice and in a record, pushed to after), `contains` and `==` by contents, a nested option matched, a result of
+lists, a sum holding a list, `find` and `fold`, three levels of lists, and an inner index's fault in the interpreter's
+words. The whole `delulu-wasm` suite passes. Mutants M794–M797 red: the type made a slot type for only lists and maps, `contains` of nested values by address, a record field refusing a map, a list element refusing a pointer.

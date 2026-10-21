@@ -1192,6 +1192,37 @@ spells the same thing?**
   `map`, `filter`, `fold` and `find` diverged likewise. Fixed by giving each walk that runs code a private copy of the
   slots in a module that pops. Never answer a red pin by deleting the case: replace it with what still stays outside, and
   build what it warned of first. Search key: before widening anything a test refuses, read the refusal's comment.
+- **MATCH-NEST-1 / MATCH-EXHAUST-1 — a structural walk's `_ => {}` swallows the forms it never names, and a guarantee's
+  words must be backed at every depth** (the laptop, 2026-10-22, RW 3.22 and 2.20, D-V2-172).
+  - The WASM `compile_arm` bound a constructor's field only when its pattern was a name. `_ => {}` passed over a
+    constructor or a literal there, so `Some(Blue)` took `Some(Red) => …`, silently. Nothing refused it, because
+    nothing looked.
+  - The checker had the same blind spot one layer up: it named the top-level constructors and stopped. The interpreter
+    nevertheless says *"checker guarantees exhaustiveness"* when no arm applies.
+  - Ask of every recursive walk: which forms does its catch-all arm drop, and is dropping them the meaning or an
+    accident? Before trusting a guarantee a message states, find the code that makes it and check every depth.
+  - A bounded search that runs out must refuse, never pass. The first version passed a 400-arm match it could not
+    finish, and that match was not exhaustive.
+  - Search key: `_ => {}` in a walk over patterns, types or expressions.
+- **DATA-DEPTH-1 — a bound on call depth is not a bound on data depth: every walk over a value a loop can build must be
+  iterative** (the laptop, 2026-10-22, RW 4.74).
+  - `MAX_DEPTH` and the 512 MiB `delulu-main` stack bound recursion in the program. A `while` loop builds a value as
+    deep as memory allows.
+  - INTERP-DROP-1 made teardown iterative and stopped there, so `display`, `eq`, the WASM host's rebuild and its
+    descriptor parser still recursed. `str` of a 300,000-link list killed the interpreter; 100,000 killed the WASM host.
+  - When one walk over a value is fixed for depth, list every other walk over the same value (`actors.rs` and
+    `channel.rs` remain, RW 4.75).
+  - Also: a pair of tests can lock a cycle and never lock sharing. A cell held twice side by side, as opposed to inside
+    itself, was untested under the old recursion too (M777, M785).
+  - Search key: `fn …(&self` on `Value` calling itself, `Value` walks in `reify.rs`, `actors.rs`, `channel.rs`.
+- **CLOSURE-SEND-1 — what the checker judges and what the runtime does must be computed from one set** (the laptop,
+  2026-10-22, RW 4.76).
+  - The checker judged a closure sendable by its free variables. The runtime sent every binding of every scope it was
+    made in: the closure itself when it was bound by `let`, so the walk never ended, and values it never reads.
+  - Now both use `rcap_check::closure_captures`. When a static judgement licenses a runtime act, make the act read the
+    judgement's own set, never a wider one computed separately.
+  - Also, once more: a mutant run's control must rebuild every artifact the mutants rebuilt. A stale `delulu.exe` holding
+    mutant M791 made a correct change look broken.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

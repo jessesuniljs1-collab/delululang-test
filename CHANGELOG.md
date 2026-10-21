@@ -19,13 +19,58 @@ its first command (RW 4.19); an ordinary `run` is held to 1 GiB of memory and fi
 the WebAssembly 3.0 features the engine enabled by default; on Windows a foreign library no longer falls back to the
 application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value; `run FILE.dwx`
 refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; since 2026-10-21 it applies `--lease`,
-`--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73).
+`--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73);
+a `match` that leaves a case uncovered below its top level, or literal arms with no catch-all, is refused (DL0407,
+D-V2-172).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### lists, maps and options nest on the WASM engine, 2026-10-22
+
+- **New: lists, maps, options and results nest on the WebAssembly engine** (RW 3.4, D-V2-173). A list of lists, a list
+  of options, a map of lists, an option of an option, and a map in a record field now compile with `--target wasm` and
+  `--engine wasm`. Before, each was refused with DL1201. They are shared as on the interpreter, so a list pushed to is
+  seen through every list holding it. A list or a record field holding a function or a capability still runs only on
+  the interpreter.
+
+### deep values print and compare, 2026-10-22
+
+- **Fixed: `str` or `==` of a deeply nested value crashed the process** (DATA-DEPTH-1, RW 4.74). A linked list of records
+  built in a loop crashed the interpreter at 300,000 links with a stack overflow, inside the default memory budget. On
+  the WASM engine it crashed at 100,000, and that includes `.dwx` files and Contained plugins. Both engines now print and
+  compare such a value whole, with the same text as before.
+- **Fixed: a hand-written WebAssembly module could crash its host with a deeply nested type descriptor.** One deeper
+  than any the compiler writes is now refused with DL0903.
+- **Fixed: a deeply nested value sent to an actor crashed the process** (DATA-DEPTH-2, RW 4.75). A chain of 300,000
+  links built in a loop now arrives whole, and a message dropped unread is taken apart without crashing either.
+- **Fixed: sending a closure bound by `let` to an actor never finished** (CLOSURE-SEND-1, RW 4.76). It crashed with a
+  stack overflow. A closure now carries exactly the values its body reads, which is the set the checker judges
+  sendable. Before, it carried every value in scope where it was made, including itself.
+
+### a `match` covers every case at every depth, 2026-10-22
+
+- **Changed: the checker refuses a `match` that leaves a case uncovered below its top level** (DL0407, D-V2-172).
+  Before, only the top-level constructors were checked. So `Some(Red) => …, None => …` on an `Option[Color]` checked
+  clean, and so did literal arms on an `Int`, `Str` or `Bool` with no `_` arm. Each then faulted at run time with
+  DL0907 when it met the case it missed. The message names the first missing case: `missing Some(Blue)`, `missing _`
+  for any other `Int`, `missing false`. A match whose proof outruns the checker's search limit is refused too; a `_`
+  arm satisfies it.
+- **Fixed: the WASM engine ran the wrong arm of a `match` whose patterns test inside a constructor** (MATCH-NEST-1).
+  `Some(Red) => 1, Some(Blue) => 2` returned `1` for `Some(Blue)`, and `Some(0) => …` matched `Some(7)`. This affected
+  `delulu run --engine wasm`, `delulu build --target wasm` and Contained plugins. Arms are now tried in order, as on
+  the interpreter.
+- **Fixed: a WebAssembly module whose only host imports were a `Map`'s could not be loaded** (WASM-IMPORTS-1). It
+  failed with `failed to parse WebAssembly module`.
+
+### `contains` on records and sums on the WASM engine, 2026-10-22
+
+- **New: `contains` on a list of records or sums compiles to WebAssembly** (RW 3.4, D-V2-171 amended). It compares as
+  `==` does, by the interpreter's own equality, so a record with equal contents counts as contained even when it is
+  another record. Before, `delulu build --target wasm` refused it with DL1201.
 
 ### every `List` method on the WASM engine, 2026-10-21
 

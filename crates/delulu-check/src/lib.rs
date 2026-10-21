@@ -1879,6 +1879,113 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             "existing facts must be untouched"
         );
     }
+
+    // ----- MATCH-EXHAUST-1: a match covers every case at every depth -------------------------
+
+    /// The types the exhaustiveness cases below match on.
+    const MATCH_TYPES: &str = "module m\n\
+        type Color = Red | Green | Blue\n\
+        type Shape = Circle(Color) | Square(Int)\n\
+        type P = P(Bool, Bool)\n\
+        type Tree = Leaf | Node(Tree, Int, Tree)\n";
+
+    /// `fn f(x: <ty>) -> Int { match x { <arms> } }` after the types.
+    fn match_on(ty: &str, arms: &str) -> String {
+        format!("{MATCH_TYPES}fn f(x: {ty}) -> Int {{\n  match x {{\n    {arms}\n  }}\n}}\n")
+    }
+
+    /// Each match leaves a case uncovered below its top level — or, for a literal, beside it — and is refused with the
+    /// first such case named. Before, `check_exhaustive` asked only which constructors the arms named at the top, so
+    /// each of these checked clean and then faulted at run time (DL0907, "checker guarantees exhaustiveness").
+    #[test]
+    fn a_match_leaving_a_case_inside_a_constructor_is_refused_naming_it() {
+        let cases = [
+            ("Option[Color]", "Some(Red) => 0,\n    Some(Blue) => 1,\n    None => 2,", "Some(Green)"),
+            ("Shape", "Circle(Red) => 0,\n    Circle(Green) => 1,\n    Square(n) => n,", "Circle(Blue)"),
+            ("Result[Option[Int], Str]", "Ok(Some(n)) => n,\n    Err(e) => 0,", "Ok(None)"),
+            ("P", "P(true, _) => 0,\n    P(_, true) => 1,", "P(false, false)"),
+            ("P", "P(true, true) => 0,\n    P(false, _) => 1,", "P(true, false)"),
+            ("Option[Str]", "Some(\"a\") => 0,\n    None => 1,", "Some(_)"),
+            ("Tree", "Leaf => 0,\n    Node(Leaf, n, Leaf) => n,", "Node(Node(_, _, _), _, _)"),
+            ("Int", "0 => 0,\n    1 => 1,", "_"),
+            ("Bool", "true => 1,", "false"),
+            ("Str", "\"a\" => 0,", "_"),
+        ];
+        for (ty, arms, missing) in cases {
+            let src = match_on(ty, arms);
+            let c = check(&src);
+            let errs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).collect();
+            assert_eq!(errs.len(), 1, "one error for:\n{src}\n{errs:?}");
+            assert_eq!(errs[0].code, "DL0407", "{src}");
+            assert_eq!(errs[0].message, format!("non-exhaustive match: missing {missing}"), "{src}");
+        }
+    }
+
+    /// Matches that cover every case — by naming each, by a field's `_` or name, by a later catch-all, through a recursive
+    /// type — check clean, and a top-level miss is still named as it was (`missing None`).
+    #[test]
+    fn a_match_covering_every_case_at_every_depth_checks_clean() {
+        let clean = [
+            ("Option[Color]", "Some(Red) => 0,\n    Some(Green) => 1,\n    Some(Blue) => 2,\n    None => 3,"),
+            ("Option[Color]", "Some(Red) => 0,\n    Some(_) => 1,\n    None => 2,"),
+            ("Option[Int]", "Some(0) => 0,\n    Some(n) => n,\n    None => 1,"),
+            ("Result[Option[Int], Str]", "Ok(Some(n)) => n,\n    Ok(None) => 0,\n    Err(_) => 1,"),
+            ("P", "P(true, _) => 0,\n    P(_, true) => 1,\n    P(false, false) => 2,"),
+            ("Tree", "Leaf => 0,\n    Node(Leaf, n, _) => n,\n    Node(Node(_, _, _), n, _) => n,"),
+            ("Bool", "true => 1,\n    false => 0,"),
+            ("Int", "0 => 0,\n    n => n,"),
+            ("Shape", "Circle(Red) => 0,\n    other => 1,"),
+        ];
+        for (ty, arms) in clean {
+            let src = match_on(ty, arms);
+            assert_eq!(errors(&src), Vec::<String>::new(), "should check clean:\n{src}");
+        }
+        let c = check(&match_on("Option[Color]", "Some(Red) => 0,"));
+        let msgs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.message.clone()).collect();
+        assert_eq!(msgs, ["non-exhaustive match: missing None"], "a top-level miss is named as before");
+        // A pattern already refused is not searched: its match carries the one error that names it.
+        let bad = match_on("Option[Color]", "Some(Purple) => 0,\n    None => 1,");
+        assert_eq!(errors(&bad), ["DL0405"], "{bad}");
+    }
+
+    /// A match whose search outruns its limit is refused in words, never passed unproved: the pigeonhole principle for
+    /// eight pigeons and seven holes — each arm one clause ruled out — covers every case, but proving it needs an
+    /// exponential search; seven pigeons and six holes are proved within the limit.
+    #[test]
+    fn a_match_the_search_cannot_finish_is_refused_not_passed() {
+        let php = |holes: usize| {
+            let pigeons = holes + 1;
+            let n = pigeons * holes;
+            let mut rows: Vec<Vec<&str>> = Vec::new();
+            for i in 0..pigeons {
+                let mut r = vec!["_"; n];
+                for h in 0..holes {
+                    r[i * holes + h] = "false";
+                }
+                rows.push(r);
+            }
+            for h in 0..holes {
+                for i in 0..pigeons {
+                    for j in i + 1..pigeons {
+                        let mut r = vec!["_"; n];
+                        r[i * holes + h] = "true";
+                        r[j * holes + h] = "true";
+                        rows.push(r);
+                    }
+                }
+            }
+            let arms: Vec<String> = rows.iter().enumerate().map(|(k, r)| format!("    P({}) => {k},", r.join(", "))).collect();
+            let fields = vec!["Bool"; n].join(", ");
+            format!("module m\ntype P = P({fields})\nfn f(p: P) -> Int {{\n  match p {{\n{}\n  }}\n}}\n", arms.join("\n"))
+        };
+        assert_eq!(errors(&php(6)), Vec::<String>::new(), "six holes are proved");
+        let c = check(&php(7));
+        let msgs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| (d.code, d.message.as_str())).collect();
+        assert_eq!(
+            msgs,
+            [("DL0407", "non-exhaustive match: the checker's search could not prove it covers every case within its limit")]
+        );
+    }
 }
 
 // ----- type-alias declarations are validated where they are written (C53/C54, ruling D47) ------

@@ -1,0 +1,10 @@
+// anchors: ref.grammar.match ref.grammar.pattern
+// MATCH-EXHAUST-1: literal arms on an `Int` leave every other `Int` uncovered.
+module conf
+
+fn f(n: Int) -> Int {
+  match n {
+    0 => 1,
+    1 => 2
+  }
+}

@@ -254,13 +254,14 @@ fn random_loop_programs_agree_with_the_interpreter() {
     );
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a `for` over a list of lists (a `for` over a list
-/// compiles since the WASM `List`, `list_parity.rs`), and an assignment from inside an inlined function value to a
-/// variable of the frame that defined it — the same lambda reading the variable compiles.
+/// What stays outside the fragment is refused, never miscompiled: a `for` over a list of functions (a `for` over a list
+/// compiles since the WASM `List`, `list_parity.rs`, and over a list of lists since `nested_parity.rs`), and an
+/// assignment from inside an inlined function value to a variable of the frame that defined it — the same lambda reading
+/// the variable compiles.
 #[test]
 fn what_the_loop_fragment_leaves_out_is_refused() {
     let outside = [
-        "module m\nfn f() -> Int {\n  var t = 0\n  for x in [[1], [2, 3]] { t = t + x.len() }\n  t\n}\n",
+        "module m\nfn f() -> Int {\n  var t = 0\n  for g in [fn(x: Int) -> Int { x }] { t = t + g(1) }\n  t\n}\n",
         "module m\nfn apply[T](g: fn(T) -> T, x: T) -> T { g(x) }\nfn f() -> Int {\n  var n = 0\n  let h = fn(v: Int) -> Int {\n    n = v\n    v + 1\n  }\n  apply(h, 3)\n}\n",
     ];
     for src in outside {

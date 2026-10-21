@@ -954,7 +954,11 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0407" => "This `match` does not cover every case. Exhaustiveness is what makes adding a \
              variant a COMPILE error at every place that handles it, instead of a silent \
              fallthrough discovered in production. Add the missing arms, or `_` if you genuinely \
-             mean everything else.",
+             mean everything else. Every depth counts: `Some(Red)` and `None` leave `Some(Blue)` \
+             uncovered, and literal arms on an `Int`, `Str` or `Bool` leave every value they do not \
+             name. The message names the first missing case (`_` for any other value of a type with \
+             no finite set of constructors). A match whose proof outruns the checker's search limit \
+             is refused too; a `_` arm satisfies it.",
         "DL0408" => "The condition of an `if` or `while` must be `Bool`. There is no truthiness: a \
              non-empty string, a non-zero number, and a present value are not `true`. Write the \
              comparison you mean.",

@@ -5140,3 +5140,69 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/list_methods_parity.rs`. Deleted, renamed:
   nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — `contains` on records and sums on the WASM engine (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-contains-compound` (on `master` `d42d216`, where #32 landed on its green run `39642920850`)   Pull request: the one this entry rides in
+- **`launch/2.0.0` = `81f34d1`** (two merges of `master`: `8ff2b17` takes #29–#31, `81f34d1` takes #32; three
+  `Unreleased` sections moved under `## [2.0.0]`; the Survey rebuilt; doctor ok; clippy stamped; the ten gates, 75
+  passed). Dispatched: the release dry run `39646725256` (**success**, read) and CI `jobs=everything` `39646720253` (running at
+  this commit; its result is recorded by the next master commit).
+- **What:** `contains` on a list of records or sums compiles, through the host's `eq` (V2_LOG). Files: M
+  `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/list_methods_parity.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — a `match` tested inside each constructor, and proved to cover every case (D-V2-172) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/match-nested` (on `master` `30885b1`, where #33 landed on its green run `39647664706`; `master`'s push
+  run for `30885b1`, `39651010312`, **success**)   Pull request: #34
+- **The CI `jobs=everything` run on `launch/2.0.0` `81f34d1`, `39646720253`: success** (read 2026-10-22; its last job,
+  miri-slow on `delulu-broker`, finished green).
+- **What:** MATCH-NEST-1 (the WASM engine ran the wrong arm of a match testing inside a constructor), MATCH-EXHAUST-1
+  (the checker proved only the top level exhaustive) and WASM-IMPORTS-1 (a map-only module could not be loaded), each
+  witnessed on `30885b1` and fixed. Tests, mutants M756–M776, the bound on the search and local results are in
+  `V2_LOG.md`.
+- Files and folders: M `crates/delulu-check/src/{check,lib}.rs`, `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `crates/delulu-wasm/tests/map_parity.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `crates/delulu-diag/src/codes.rs`
+  (DL0407's explanation), `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (2.20, 3.22,
+  3.23), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/match_parity.rs`,
+  `tests/conformance/reject/DL0407_{nested,literal}_non_exhaustive.delulu`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — deep values print and compare on both engines (RW 4.74) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deep-values` (on `master` `0061ca1`, where #34 landed on its green run `39662388275`)   Pull request: the one this entry rides in
+- **What:** DATA-DEPTH-1 — `str` or `==` of a value nested past the native stack killed the process on both engines,
+  and a hand-written module's deep descriptor killed the WASM host; `display`, `eq` and `reify.rs` now walk worklists,
+  and the descriptor parser is bounded. DATA-DEPTH-2 (RW 4.75) opened: the actor-message copy and the channel's
+  serializing, not yet witnessed. Tests, mutants M777–M785 and the witnesses are in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/value.rs`, `crates/delulu-wasm/src/reify.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.74, 4.75), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `crates/delulu-wasm/tests/deep_value_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — deep values and closures cross to actors (RW 4.75, 4.76) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deep-messages` (on `laptop/deep-values` `f791ded`, PR #35)   Pull request: the one this entry rides in
+- **What:** DATA-DEPTH-2's actor path (a 300,000-link chain sent to an actor killed the process) and CLOSURE-SEND-1 (a
+  `let`-bound closure sent to an actor walked into itself) — each witnessed on the old binary and fixed; the root slice
+  in a message boxed. Tests and mutants M786–M793 in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/{actors,value}.rs`, `crates/delulu-check/src/rcap_check.rs`,
+  `crates/delulu/tests/actors_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (4.75, 4.76), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu/tests/deep_values_cli.rs`.
+  Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — lists, maps and options nest on the WASM engine (RW 3.4, D-V2-173) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-nested-values` (on `laptop/deep-messages` `ec333c4`, PR #36)   Pull request: the one this entry rides in
+- **What:** a slot holds a pointer to any list, map, option or result, so they nest on the WASM engine; five pins now
+  list what stays outside. Also recorded here: RW 4.75's channel half is established unreachable — every capability
+  method's argument is a fixed shallow type, and the host decodes each frame with `ciborium`'s recursion limit of 256.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/tests/{conformance_parity,list_parity,loop_parity,record_parity,value_parity}.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4, 4.75),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/nested_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

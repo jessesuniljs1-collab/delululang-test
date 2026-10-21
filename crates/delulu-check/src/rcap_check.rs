@@ -1518,6 +1518,18 @@ fn lower_shallow(te: &TypeExpr, table: &DeclTable) -> Option<Type> {
     }
 }
 
+/// The names a closure's body reads from where it was made — its free variables, its parameters bound — each once, in the
+/// order first read. The checker judges a closure sendable by these (`Expr::Lambda` above), and the runtime carries exactly
+/// these across an actor boundary (CLOSURE-SEND-1), so what is judged and what is sent are one set.
+pub fn closure_captures(params: &[String], body: &Block) -> Vec<String> {
+    let mut bound: HashSet<String> = params.iter().cloned().collect();
+    let mut out = Vec::new();
+    free_vars_block(body, &mut bound, &mut out);
+    let mut seen = HashSet::new();
+    out.retain(|n| seen.insert(n.clone()));
+    out
+}
+
 /// Free variables of a block: single-segment `Var`/`Consume` names not bound within.
 fn free_vars_block(b: &Block, bound: &mut HashSet<String>, out: &mut Vec<String>) {
     let added: Vec<String> = Vec::new();
