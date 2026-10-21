@@ -300,6 +300,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         stream_console: true,
         trace: sink.clone(),
         custody: custody.map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>))),
+        // ARTIFACT-CLAIM-1: what the artifact declares is all it may do — its code hash binds only its code.
+        declared_effects: Some(effects.iter().cloned().collect()),
         ..delulu_wasm::HostConfig::default()
     };
     note_program_started();
@@ -1389,6 +1391,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             lease: root.lease.clone(), // RW 6.15: the remedy a refusal names
             net: root.net.clone(),
             net_special: root.net_special.clone(),
+            declared_effects: None, // the checker computed this program's row; ARTIFACT-CLAIM-1 is a `.dwx`'s
+
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
             stream_console: true, // WASM-OUTPUT-1: printed as printed, so a fault or a budget's stop loses none of it

@@ -242,6 +242,8 @@ struct HostState {
     /// The granted network entries and their `net.special=` subset (`HostConfig::net`, `net_special`).
     net: Vec<String>,
     net_special: Vec<String>,
+    /// ARTIFACT-CLAIM-1: a `.dwx`'s declared effects, the ceiling `custody_allows` enforces (`HostConfig::declared_effects`).
+    declared_effects: Option<std::collections::BTreeSet<String>>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
     /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
@@ -299,6 +301,24 @@ impl HostState {
     /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
     /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
+        // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
+        // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
+        // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
+        if let (Some(declared), Some(effect)) = (&self.declared_effects, op.required_effect()) {
+            if !declared.contains(effect.name()) {
+                self.refused = Some(format!(
+                    "DL1202: the artifact performed `{}`, an effect its `delulu:authority` manifest does not declare (it \
+                     declares {}) — its manifest is not this code's, so nothing it did not declare runs",
+                    effect.name(),
+                    if declared.is_empty() {
+                        "none".to_string()
+                    } else {
+                        declared.iter().cloned().collect::<Vec<_>>().join(", ")
+                    }
+                ));
+                return false;
+            }
+        }
         let Some(custody) = &self.custody else { return true };
         match custody.borrow_mut().check(op, arg) {
             CustodyDecision::Allow => true,
@@ -1716,6 +1736,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         lease: None,
         net: Vec::new(),
         net_special: Vec::new(),
+        declared_effects: None,
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
@@ -1757,6 +1778,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         lease: cfg.lease.clone(),
         net: cfg.net.clone(),
         net_special: cfg.net_special.clone(),
+        declared_effects: cfg.declared_effects.clone(),
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
@@ -1793,6 +1815,9 @@ pub struct HostConfig {
     /// — `Grants::net` and `net_special`. `root.http(hosts)` mints by the interpreter's rule against them.
     pub net: Vec<String>,
     pub net_special: Vec<String>,
+    /// ARTIFACT-CLAIM-1: for a `.dwx` run, the effects its manifest declares — a ceiling: an effect outside it is refused
+    /// (DL1202) before the custody is asked. `None` for a program compiled here, whose row the checker computed.
+    pub declared_effects: Option<std::collections::BTreeSet<String>>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.

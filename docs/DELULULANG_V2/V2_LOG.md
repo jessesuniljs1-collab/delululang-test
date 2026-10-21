@@ -7964,3 +7964,61 @@ witness).
   - M676 the write-scope refusal skipped.
 
 **Found while making the last witness: ARTIFACT-CLAIM-1** — next entry.
+
+## 2026-10-21 — the laptop: ARTIFACT-CLAIM-1 — a `.dwx`'s declared effects were its builder's word; now they are a ceiling `run` enforces (RW 4.73)
+
+**Found** while writing the `--assert-trace` witness of the previous entry: to make an artifact whose trace leaves its
+declared effects, the laptop changed `"Write"` to `"Clock"` in a built `.dwx`'s `delulu:authority` section — five bytes for
+five, no hash recomputed. It verified, and it ran. The run said:
+
+> running `lie.dwx` — authority verified; declared effects: Read, Clock
+
+and it read, printed and wrote. `code_blake3` hashes the bare module with the authority section excluded (`embed_authority`,
+`read_and_verify`), so it binds the code to the manifest's own `code_blake3` field and to nothing else in the manifest.
+
+Three claims were wrong:
+- the book's "the authority claim and the code it describes cannot drift apart" (Chapter 9);
+- the run banner's "authority verified";
+- `delulu authority x.dwx`'s "effects: (none — provably pure)" for an artifact that only says so.
+
+**Severity: LOW — words, not authority.** Every effect was still refused unless its grant covered it: the host mints and
+performs everything under the run's grants, and the custody. So nothing escaped. But an operator chooses those grants from
+this report, and a review surface that a builder can edit with a hex editor is the C65 class of failure (the review surface
+vouching for what it never checked).
+
+**The fix: enforce the claim, don't sign it.** A signature would say *who* built the artifact, not that its claim is true.
+The run-time ceiling makes the claim true of what can run:
+- `HostConfig::declared_effects` — the `.dwx` route passes the manifest's effects; the source route passes `None`, since
+  there the checker computed the row.
+- `HostState::custody_allows` — every effect the WASM host performs passes it, after its dispatch record. It now refuses an
+  effect whose required effect (`Op::required_effect`, the grant tree's own rule) the manifest does not declare: DL1202,
+  "the artifact performed `Write`, an effect its `delulu:authority` manifest does not declare (it declares Clock, Read)",
+  before the custody is asked and before the effect happens. The trace shows the dispatch, then its refusal.
+- Over-declaring stays harmless.
+- No new code: DL1202 is the artifact refusal, and its explanation now says this half too.
+- `delulu authority x.dwx` gains an `enforced:` line saying the effects are the builder's claim and that `run` holds the
+  artifact to them.
+- The book's sentence is corrected in place, the false version quoted.
+
+**And a mislabel it exposed: WASM-CODE-1.** `wasm_fault_code` labelled a WASM refusal by a list of nine codes, so DL1202
+printed as `error[DL0904]` — and so would a custody's guard refusal (DL1410) or seal (DL1413), whose messages carry their
+codes. It now returns the message's first registered code (`delulu_diag::static_code`), or DL0904 when there is none.
+
+**Evidence.**
+- Witnesses, red on the old code:
+  - `lib.rs` `an_artifact_runs_nothing_its_manifest_does_not_declare`: no ceiling and `{Write}` run; `{Read, Clock}` and `{}`
+    are refused DL1202;
+  - `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply`, the doctored artifact: `error[DL1202]`, exit 1, nothing
+    written, nothing printed; under `--assert-trace`, exit 3 with DL1101 as well;
+  - `cli.rs` `a_wasm_refusal_is_labelled_with_the_code_it_carries`: nine messages, DL1410, DL1413 and DL1202 among them.
+- Mutants, each red, the control green:
+  - M677 the ceiling never consulted;
+  - M678 the `.dwx` route passes none;
+  - M679 the host state drops it;
+  - M680 and M681 the label back to a short list (the unit test and the CLI witness).
+- By hand: the honest `r.dwx` runs as before; the doctored one stops at its first `Write`, after a declared `Read`.
+- The whole of `delulu`, `delulu-wasm` and `delulu-diag` on this tree: 1,231 passed, 13 ignored, 3 failed in 120 targets
+  — the three `doctor_cli` tests that read the Survey's freshness, red because the map was built before the edits (as
+  they must be). After the rebuild: see the commit message.
+- `scripts/clippy.sh -j 4` first refused to stamp: rustfmt's check, added this morning, caught the slice's unformatted code
+  before any commit could carry it.

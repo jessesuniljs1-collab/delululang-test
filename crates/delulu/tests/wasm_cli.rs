@@ -174,16 +174,25 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
     assert_eq!(std::fs::read_to_string(dir.join("out").join("log.txt")).unwrap(), "started");
     let traced = std::fs::read_to_string(dir.join("t.jsonl")).expect("the trace was written");
     assert!(traced.contains("\"op\":\"write_text\"") && traced.contains("\"op\":\"println\""), "{traced}");
-    // `--assert-trace` judges the trace against the effects the artifact DECLARES: one whose manifest says `Clock` where it
-    // performs `Write` (the same length, so the section stays well-formed) is DL1101.
+    // ARTIFACT-CLAIM-1: an artifact whose manifest says `Clock` where its code performs `Write` (the same length, so the
+    // section stays well-formed — its code hash binds only its code, so it still verifies) is refused at its first
+    // undeclared effect, DL1202, and nothing is written; under `--assert-trace` the trace's dispatch record is DL1101 too.
     let dwx = std::fs::read(dir.join("w.dwx")).unwrap();
     let at = dwx.windows(7).position(|w| w == b"\"Write\"").expect("the manifest names Write");
     let mut lie = dwx.clone();
     lie[at..at + 7].copy_from_slice(b"\"Clock\"");
     std::fs::write(dir.join("lie.dwx"), &lie).unwrap();
-    let o = delulu_in(&dir, &["run", "lie.dwx", "--grant", "console", "--grant", "fs.write=./out", "--assert-trace"]);
-    assert_eq!(o.status.code(), Some(3), "{}", String::from_utf8_lossy(&o.stderr));
-    assert!(String::from_utf8_lossy(&o.stderr).contains("DL1101"), "{}", String::from_utf8_lossy(&o.stderr));
+    for (extra, exit) in [(None, 1), (Some("--assert-trace"), 3)] {
+        let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
+        let mut args = vec!["run", "lie.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+        args.extend(extra);
+        let o = delulu_in(&dir, &args);
+        let e = String::from_utf8_lossy(&o.stderr).to_string();
+        assert_eq!(o.status.code(), Some(exit), "{extra:?}: {e}");
+        assert!(e.contains("error[DL1202]") && e.contains("performed `Write`"), "{extra:?}: {e}");
+        assert!(extra.is_none() || e.contains("DL1101"), "{e}");
+        assert!(!dir.join("out").join("log.txt").exists() && stdout(&o).is_empty(), "{extra:?}: nothing it did not declare ran");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

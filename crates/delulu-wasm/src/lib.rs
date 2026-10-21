@@ -748,6 +748,31 @@ mod tests {
         assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
     }
 
+    /// ARTIFACT-CLAIM-1: a `.dwx`'s declared effects are a ceiling — an effect outside them is refused (DL1202) before the
+    /// custody is asked, by the grant tree's own `Op::required_effect`; one inside them runs; a program compiled here
+    /// (`None`) has its row from the checker and no ceiling.
+    #[test]
+    fn an_artifact_runs_nothing_its_manifest_does_not_declare() {
+        let src = "module m\nfn main(root: Root) ! {Write} {\n  root.console().println(\"wrote\")\n}\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let run = |declared: Option<&[&str]>| {
+            let cfg = HostConfig {
+                console: true,
+                declared_effects: declared.map(|d| d.iter().map(|e| e.to_string()).collect()),
+                ..HostConfig::default()
+            };
+            run_main(&wasm, &cfg).map_err(|e| e.message())
+        };
+        assert_eq!(run(None).as_deref(), Ok("wrote\n"));
+        assert_eq!(run(Some(&["Write"])).as_deref(), Ok("wrote\n"));
+        for declared in [&["Read", "Clock"][..], &[][..]] {
+            let msg = run(Some(declared)).expect_err("an undeclared effect is refused");
+            assert!(msg.contains("DL1202") && msg.contains("performed `Write`"), "{declared:?}: {msg}");
+        }
+    }
+
     /// RW 3.4: `http.get` on the WASM engine asks the custody for `Net` on the URL's host before anything is sent, as the
     /// interpreter asks — and not at all for a URL that is not `https://`, which the effect answers `Refused` first
     /// (HTTP-SCHEME-1). A denial is the run's refusal, in the custody's words; and what the egress client refuses after
