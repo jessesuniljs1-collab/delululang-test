@@ -7803,3 +7803,31 @@ M651 `grant_remedy` ignores the lease → the unit test red; M652 `grants_from_l
 M654 the WASM host state drops it, M657 the WASM console refusal back to its old words, M658 `build_root` drops it → the
 parity test red; M655 and M656 either direction of the actor crossing drops it → the actor test red; the control green.
 `scripts/clippy.sh -j 4` clean and stamped. `delulu-runtime` and `delulu-wasm` whole: 492 passed, 0 failed (27 targets); the 26 `delulu` CLI targets that assert a refusal's words (`cli`, `grants_cli`, `wasm_cli`, the sandbox, broker, budget, device and plugin files among them): 286 passed, 0 failed. The rest runs on GitHub (the pull request's CI).
+
+## 2026-10-21 — the laptop: a behaviour named like a capability method is a send on WASM (RW 3.20, WASM-SEND-NAME-1)
+
+**Found** probing the red-team pass's last untried family, "a user method named `narrow`/`read_text`" (`V2_LOG.md`,
+2026-10-20). The language has no user methods on records; the only method a program names is an actor's behaviour, sent as
+`w.job(n)`. So: an actor with one behaviour per capability-method name, sent from `main`. On the interpreter each ran. On
+`--engine wasm` every name the codegen matched ahead of the receiver with the same argument count was refused — `w.narrow(5)`
+DL1201 "narrow() on a receiver that is not a Cap[FsRead]", `w.int(2, 3)` "int(lo, hi) on a non-Rand receiver", `w.console()`
+"console() on a non-Root receiver"; a behaviour named like one with another count (`w.len(5)`, `w.now_ms(5)`) ran. The
+codegen's method arm tried fifteen names (`console`, `clock`, `now_ms`, `rand`, `println`, `int`, `fs_read`, `read_text`,
+`narrow`, `fs_write`, `write_text`, `append_text`, `foreign_load`, `foreign`, `expose` — `expose` refused as "secret
+contents cannot enter WASM guest memory") before it compiled the receiver and found an actor. It failed closed: nothing ran
+as a capability, and an arm that found the wrong receiver refused. But a valid program was refused, for a reason it does
+not have. `secret`, the sixteenth name, is a reserved word (DL0106), so no behaviour can carry it.
+
+**The fix.** The receiver decides first: `recv_actor` reads from the scopes, without compiling anything, whether the
+receiver is a local or parameter of actor-reference type, `self` in an actor member, or a `self.field` holding a reference —
+the forms `compile_expr` compiles to `Ty::ActorRef`; such a method is a send whatever its name. Any other receiver is
+compiled and dispatched as before (a `spawn W()` receiver still reaches the send by its compiled type). Peeking by compiling
+the receiver and rolling back was rejected: each level of a method chain would compile its receiver twice.
+
+**Evidence.** Witness `actors_parity.rs` `a_behaviour_named_like_a_capability_method_is_a_send_on_both_engines`: the
+fifteen names as behaviours (none, one or two `Int` arguments), each sent from `main`; the one- and two-argument ones count
+down by sending to `self` under their own name; and a second actor sends `narrow` through a `tag W` field. The two engines'
+quiescence reports agree, and the WASM turn count is the arithmetic's, 55. Red on the old code (`Unsupported("console() on a
+non-Root receiver")`). Mutants: M659 no receiver read → red; M660 `self` not read → red (the self-sends); M661 the field not
+read → red (the relay); M662 a local not read → red; the control green. By hand on the fixed binary: every probe program
+runs on `--engine wasm`. `scripts/clippy.sh -j 4` clean and stamped; `delulu-wasm` whole: 172 passed, 0 failed (17 targets).

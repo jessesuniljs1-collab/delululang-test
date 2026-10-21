@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a behaviour may share a capability method's name on the WASM engine, 2026-10-21
+
+- **Fixed: on `--engine wasm`, an actor whose behaviour shared a capability method's name was refused** (RW 3.20). A
+  behaviour called `narrow`, `read_text`, `println`, `int`, `write_text`, `expose` or one of nine other such names was
+  refused as that method on the wrong receiver (DL1201), for example "narrow() on a receiver that is not a
+  Cap[FsRead]". The interpreter ran it. A method on an actor reference is now a send, whatever it is called.
+
 ## Unreleased — a lease run's refusal names its lease, not a `--grant`, 2026-10-21
 
 - **Fixed: under `--lease`, DL0703 told you to pass a `--grant` the run refuses** (RW 6.15). A lease run takes its

@@ -4805,3 +4805,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) this branch's CI, landing on green; (2) the next commit on this branch — a behaviour named like a
   capability method on WASM; (3) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67,
   6.1, 6.2; a `.dwx` run with a trace and custody, if wanted; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — a behaviour named like a capability method is a send on WASM (RW 3.20) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy` (its second commit, on `89aeefc`)   Pull request: see the branch   Merged: not yet
+- What: `V2_LOG.md` (2026-10-21, the second entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`recv_actor`; the method arm sends first),
+  `crates/delulu-wasm/tests/actors_parity.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.20),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) this branch's CI, landing on green; then `launch/2.0.0`: merge `master`, dispatch `everything` and the
+  release dry run; (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2;
+  a `.dwx` run with a trace and custody, if wanted; (3) *[laptop]* the launch, only on the owner's word.
