@@ -1045,7 +1045,7 @@ fn to_msg_step(
             return Ok(());
         }
         Value::Closure(c) => {
-            let scopes = captured_scopes(&c.env);
+            let scopes = captured_scopes(c);
             let shapes = scopes.iter().map(|vars| vars.iter().map(|(n, _)| n.clone()).collect()).collect();
             let values: Vec<Value> = scopes.into_iter().flatten().map(|(_, x)| x).collect();
             open_cell(work, ToMsg::Closure(c.params.clone(), c.body.clone(), shapes), Holder::Captured(Rc::new(values)));
@@ -1109,18 +1109,26 @@ fn to_msg_step(
     Ok(())
 }
 
-/// A closure's capture environment as per-scope name/value lists, outermost first, EXCLUDING the root (module globals —
-/// the receiver reattaches its own).
-fn captured_scopes(env: &Env) -> Vec<Vec<(String, Value)>> {
+/// What a closure carries across an actor boundary: each name its body reads from where it was made
+/// (`delulu_check::rcap_check::closure_captures`, the set the checker judged sendable), with the value the innermost
+/// scope below the module's globals binds to it — the receiver reattaches its own globals — as one scope.
+///
+/// CLOSURE-SEND-1: every binding of every enclosing scope crossed. A closure bound by `let` is one of those bindings, so
+/// sending it walked into itself without end — a stack overflow before DATA-DEPTH-2, the memory budget after — and a
+/// closure carried values it never reads, an `iso` value held beside it included.
+fn captured_scopes(c: &Closure) -> Vec<Vec<(String, Value)>> {
     let mut chain = Vec::new();
-    let mut cur = Some(env.clone());
+    let mut cur = Some(c.env.clone());
     while let Some(s) = cur {
         chain.push(s.clone());
         cur = s.parent().cloned();
     }
-    chain.pop(); // drop the root globals
-    chain.reverse(); // outermost first
-    chain.iter().map(|scope| scope.vars_snapshot()).collect()
+    chain.pop(); // the root globals
+    let vars = delulu_check::rcap_check::closure_captures(&c.params, &c.body)
+        .into_iter()
+        .filter_map(|n| chain.iter().find_map(|scope| scope.get_here(&n)).map(|v| (n, v)))
+        .collect();
+    vec![vars]
 }
 
 /// Rebuild a message value into the RECEIVING actor's heap. `globals` is the receiving
@@ -1672,5 +1680,30 @@ mod move_graph_tests {
         assert!(Rc::ptr_eq(got, inner), "it holds itself");
         fields.borrow_mut().clear(); // break the sender's cycle, so the test does not leak it
         got.borrow_mut().clear();
+    }
+
+    /// DATA-DEPTH-2: a value nested past the native stack — 200,000 levels through a variant, a list, a record and a map in
+    /// turn, what a loop builds — crosses and arrives whole, and a message of it dropped unread is taken apart without
+    /// recursion. Each walk recursed once per level, and a chain of 300,000 links sent to an actor killed the process. As
+    /// with the teardown locks in `value.rs`, the falsification signal is the test binary dying.
+    #[test]
+    fn a_value_nested_past_the_stack_crosses_whole() {
+        let deep = |leaf: i64| {
+            let mut v = Value::Int(leaf);
+            for i in 0..200_000 {
+                v = match i % 4 {
+                    0 => Value::variant("Link", vec![v]),
+                    1 => Value::List(Rc::new(RefCell::new(vec![v]))),
+                    2 => Value::Record { name: Rc::from("Box"), fields: Rc::new(RefCell::new(vec![("f".to_string(), v)])) },
+                    _ => Value::Map(Rc::new(RefCell::new(std::collections::BTreeMap::from([(crate::value::MapKey::Int(1), v)])))),
+                };
+            }
+            v
+        };
+        let sent = deep(7);
+        let back = msg_to_value(value_to_msg(&sent, None).expect("sendable"), &Scope::root());
+        assert!(back.eq(&sent), "it arrives as it was sent");
+        assert!(!back.eq(&deep(8)), "down to its deepest value");
+        drop(value_to_msg(&sent, None).expect("sendable")); // a message dropped unread
     }
 }
