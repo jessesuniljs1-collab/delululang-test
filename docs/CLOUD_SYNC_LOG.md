@@ -5196,3 +5196,6 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.77), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+- Also in this branch: RW 7.17 records the next red's own words — `estop_cli`'s actor control on `windows-latest` (PR #38's
+  run `39672085470`) lost its arm because the daemon accepted a liveness probe and did not answer within DEADMAN-1's 1 s;
+  RW 4.53's measured 1.077 s maximum beside busy writers is past that deadline. The fix direction is recorded, not taken.
