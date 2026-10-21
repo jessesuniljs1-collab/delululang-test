@@ -5072,3 +5072,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/REMAINING_WORK.md` (2.12), `HANDOFF.md` (§11.4 NET-PATH-RECORD), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-21 (night) — `Map` on the WASM engine (RW 3.4, D-V2-170) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-maps` (stacked on `laptop/net-path-record`, which landed on `master` as `a01a27a` on its green run
+  `39635716984`)   Pull request: the one this entry rides in
+- **What:** a `Map` compiles to WebAssembly. It lives in the guest's memory, with its keys placed by the host in the
+  interpreter's own `MapKey` order. It has all eight methods, and `str` and `==` of a map. The tests, M718–M733 (M725
+  survives, recorded) and the local results are in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-wasm/src/{codegen,host,reify}.rs`, `crates/delulu-wasm/tests/value_parity.rs`,
+  `CHANGELOG.md`, `docs/for-agents.md` (its stale "none of them compile to WebAssembly"),
+  `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `crates/delulu-wasm/tests/map_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

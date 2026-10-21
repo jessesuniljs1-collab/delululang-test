@@ -8289,3 +8289,40 @@ passed. `scripts/clippy.sh -j 4` (rustfmt's check, then clippy) clean and stampe
 request's CI).
 
 **Left in P9-05:** methods (d), with the first non-GET primitive (RW 2.11).
+
+## 2026-10-21 (night) — the laptop: `Map` on the WASM engine (RW 3.4, D-V2-170)
+
+**Before:** the WASM backend had no `Map`. `delulu build --target wasm` of a program calling `Map()` answered "DL1201: WASM
+codegen does not support a call to `Map`" (witnessed on this tree with the change stashed). `str` of a map was pinned as
+refused by `value_parity.rs`.
+
+**Built** (D-V2-170):
+- `Ty::Map(K, V)`: a header like a list's, its data 16-byte pairs, ascending by key.
+- `Map()`, typed by the checker's type for the call or by a declared type.
+- The eight methods: `len` and `is_empty` read the header. `get`, `contains_key` and `remove` ask the host for the key's
+  index. `insert` asks the host to place the key and fills the value slot it answers. `keys` and `values` are new lists
+  the host copies out of one column.
+- `str`, `==` and `!=` go through the host's value interface, with the descriptor `m<K><V>` that `reify.rs` rebuilds as the
+  interpreter's `Value::Map`.
+- The host's `delulu:map` (`new`, `find`, `put`, `remove_at`, `keys`, `values`) orders by the interpreter's own `MapKey`.
+  It reads the guest's memory as untrusted, and on any failure it records DL0903 in words and traps.
+
+**One flaw found and fixed before landing:** `keys`/`values` reserved the new list's slots before reading the pairs, so a
+hand-written header claiming 2^32 − 1 pairs made the host reserve 32 GiB first. The pairs are now read first. The mutant
+that reverses this (M725) **survives**: the operating system granted the untouched reservation, and the read then refused
+as before. No test can see the order, which is recorded rather than claimed.
+
+**Tests:** `delulu-wasm/tests/map_parity.rs`, four, each run on both engines (the outputs equal) where a program runs:
+- every method, on each key kind and three value kinds, with sharing, `str` and `==`;
+- 300 keys inserted out of order, half removed; `Str` keys by their bytes, a key built at run time replacing a literal's;
+- a map of records holding the records themselves, and a map of sums;
+- four hand-written modules, each refused DL0903.
+
+`value_parity.rs`'s list of what stays outside now holds a list holding a map in place of `str` of a map (`str` of a map
+compiles; its parity is `map_parity.rs`'s).
+
+**Mutants** M718–M733: fifteen red, M725 surviving (above), the restored tree green.
+
+**Local results:** `delulu-wasm` whole, 178 passed. `artifact_review`, `budget_cli` and `wasm_cli`, 30 passed.
+`core_invariance` green. `scripts/clippy.sh -j 4` clean and stamped. By hand: a map program built to a `.dwx` and run
+prints the interpreter's output.

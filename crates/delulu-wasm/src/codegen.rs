@@ -677,6 +677,10 @@ struct Imports {
     map_remove_at: u32,
     map_keys: u32,
     map_values: u32,
+    /// `delulu:list.sort` and `delulu:list.join` — `List.sort` (stable, by the interpreter's order) and `List[Str].join`,
+    /// run host-side over the guest's slots (RW 3.4). `u32::MAX` when the module calls neither.
+    list_sort: u32,
+    list_join: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -906,13 +910,31 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
 /// Does any compilable function make or index a `List`, walk one with `for`, or call `split`, `push` or `map`? Then the
 /// module carries the list helpers (`__list_new`, `__list_slot`, after the user functions) and the `delulu:list` imports,
 /// and every other module is byte-identical to before (the WASM `List`, RW 3.4).
-fn module_uses_lists(env: &EnumEnv, module: &Module) -> bool {
+fn module_uses_lists(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
     let hit = |e: &Expr| match e {
         Expr::List { .. } | Expr::Index { .. } => true,
-        Expr::Method { name, .. } => matches!(name.name.as_str(), "split" | "push" | "map"),
+        Expr::Method { name, .. } if matches!(name.name.as_str(), "split" | "push" | "map") => true,
+        // A list method that makes a list or walks one, on a receiver the checker typed a `List` (`contains` and `slice`
+        // are `Str` methods too, so the name alone does not say).
+        Expr::Method { recv, .. } => is_list_typed(recv, node_types),
         _ => false,
     };
     module_any(env, module, &hit, true)
+}
+
+/// Does any compiled body call the list method `name` on a receiver the checker typed a `List`?
+fn module_calls_list_method(
+    env: &EnumEnv,
+    module: &Module,
+    node_types: &HashMap<NodeId, delulu_check::Type>,
+    name: &str,
+) -> bool {
+    module_any(env, module, &|e| matches!(e, Expr::Method { recv, name: n, .. } if n.name == name && is_list_typed(recv, node_types)), false)
+}
+
+/// Did the checker type `e` a `List`?
+fn is_list_typed(e: &Expr, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
+    matches!(node_types.get(&e.id()), Some(delulu_check::Type::List(_)))
 }
 
 /// Does any compiled body make a `Map` (the builtin `Map()`) or hold a value the checker typed as one? Then the module
@@ -997,8 +1019,14 @@ pub(crate) fn str_method_arity(id: i32) -> Option<(&'static str, usize, usize)> 
 
 /// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
 /// which a comparison of two `Str`s calls.
-fn module_compares(env: &EnumEnv, module: &Module) -> bool {
-    module_any(env, module, &|e| matches!(e, Expr::Binary { op: BinOp::Eq | BinOp::Ne, .. }), false)
+fn module_compares(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
+    // `contains` on a list compares as `==` does.
+    let hit = |e: &Expr| match e {
+        Expr::Binary { op: BinOp::Eq | BinOp::Ne, .. } => true,
+        Expr::Method { recv, name, .. } => name.name == "contains" && is_list_typed(recv, node_types),
+        _ => false,
+    };
+    module_any(env, module, &hit, false)
 }
 
 /// Does any compilable function hold an expression for which `hit` holds — or, with `fors`, a `for`? Every expression
@@ -1154,6 +1182,8 @@ fn compile_module_typed(
         map_remove_at: u32::MAX,
         map_keys: u32::MAX,
         map_values: u32::MAX,
+        list_sort: u32::MAX,
+        list_join: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -1208,8 +1238,8 @@ fn compile_module_typed(
         n_imports += 4;
     }
     // RW 3.4: the `delulu:list` imports follow the actors' (so a program without a list is unchanged).
-    let needs_lists = module_uses_lists(&env, module);
-    let needs_str_eq = module_compares(&env, module);
+    let needs_lists = module_uses_lists(&env, module, node_types);
+    let needs_str_eq = module_compares(&env, module, node_types);
     if needs_lists {
         imp.str_split = n_imports;
         imp.index_fault = n_imports + 1;
@@ -1258,6 +1288,16 @@ fn compile_module_typed(
         imp.map_keys = n_imports + 4;
         imp.map_values = n_imports + 5;
         n_imports += 6;
+    }
+    let needs_list_sort = module_calls_list_method(&env, module, node_types, "sort");
+    if needs_list_sort {
+        imp.list_sort = n_imports;
+        n_imports += 1;
+    }
+    let needs_list_join = module_calls_list_method(&env, module, node_types, "join");
+    if needs_list_join {
+        imp.list_join = n_imports;
+        n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
                                 // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
@@ -1462,6 +1502,17 @@ fn compile_module_typed(
         types.ty().function([ValType::I32], [ValType::I32]); // keys/values(map) -> list
         next_type += 4;
     }
+    let (mut list_sort_ty, mut list_join_ty) = (0, 0);
+    if needs_list_sort {
+        list_sort_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // sort(list, kind) -> list
+        next_type += 1;
+    }
+    if needs_list_join {
+        list_join_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // join(list, sep) -> str
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1585,6 +1636,12 @@ fn compile_module_typed(
         imports.import("delulu:map", "remove_at", EntityType::Function(map_remove_ty));
         imports.import("delulu:map", "keys", EntityType::Function(map_list_ty));
         imports.import("delulu:map", "values", EntityType::Function(map_list_ty));
+    }
+    if needs_list_sort {
+        imports.import("delulu:list", "sort", EntityType::Function(list_sort_ty));
+    }
+    if needs_list_join {
+        imports.import("delulu:list", "join", EntityType::Function(list_join_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -3109,6 +3166,21 @@ fn inline_apply(c: &Callable, local: u32, ty: Ty, cx: &mut Cx) -> Result<Ty, Com
     inline_body(&c.body, vec![(p.name.name.clone(), local, ty)], Vec::new(), cx, Lexical::Value(c))
 }
 
+/// [`inline_apply`] of a two-parameter function value — `fold`'s step, `f(acc, x)`.
+fn inline_apply2(c: &Callable, a: (u32, Ty), b: (u32, Ty), cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.inline_depth >= 64 {
+        return Err(CompileError::Unsupported("inlining too deep (recursive generic or lambda?)".into()));
+    }
+    let [p, q] = c.params.as_slice() else {
+        return Err(CompileError::Unsupported("a function value of other than two parameters where two are applied".into()));
+    };
+    if is_fn_type(&p.ty) || is_fn_type(&q.ty) {
+        return Err(CompileError::Unsupported("a function value applied to a function".into()));
+    }
+    let binds = vec![(p.name.name.clone(), a.0, a.1), (q.name.name.clone(), b.0, b.1)];
+    inline_body(&c.body, binds, Vec::new(), cx, Lexical::Value(c))
+}
+
 /// Compile an inlined body with its parameters bound (`inline_call`, `inline_apply`).
 fn inline_body(
     body: &Block,
@@ -4051,8 +4123,402 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             cx.emit(Instruction::LocalGet(out));
             Ok(Ty::List(es))
         }
+        // `Some(the last element)`, taken out, or `None` for an empty list (`Vec::pop`).
+        ("pop", []) => {
+            let (list, n, data) = list_snapshot(cx)?;
+            let (has, last) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::I32GtU);
+            cx.emit(Instruction::LocalSet(has));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I32Const(1));
+            cx.emit(Instruction::I32Sub);
+            cx.emit(Instruction::LocalSet(last));
+            emit_option_cell(
+                cx,
+                s,
+                has,
+                &|cx: &mut Cx| {
+                    emit_slot_addr(cx, data, last);
+                    load_scalar(cx, s);
+                },
+                &|cx: &mut Cx| {
+                    cx.emit(Instruction::LocalGet(list));
+                    cx.emit(Instruction::LocalGet(last));
+                    cx.emit(Instruction::I32Store(list_mem(LIST_LEN)));
+                },
+            )
+        }
+        // A new list, the elements last to first.
+        ("reverse", []) => {
+            list_helpers(cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            let (out, out_data) = emit_new_list(cx, n)?;
+            let (i, j) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+            emit_count_loop(cx, i, n, &mut |cx: &mut Cx| {
+                cx.emit(Instruction::LocalGet(n));
+                cx.emit(Instruction::I32Const(1));
+                cx.emit(Instruction::I32Sub);
+                cx.emit(Instruction::LocalGet(i));
+                cx.emit(Instruction::I32Sub);
+                cx.emit(Instruction::LocalSet(j));
+                emit_slot_addr(cx, out_data, i);
+                emit_slot_addr(cx, data, j);
+                load_scalar(cx, s);
+                store_scalar(cx, s);
+                Ok(())
+            })?;
+            cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(s))
+        }
+        // A new list: this one's elements, then the other's.
+        ("concat", [other]) => {
+            list_helpers(cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            if compile_expr(other, cx)? != Ty::List(s) {
+                return Err(CompileError::Unsupported("`concat` of a list of another element type".into()));
+            }
+            let (_, m, odata) = list_snapshot(cx)?;
+            let total = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::LocalGet(m));
+            cx.emit(Instruction::I32Add);
+            cx.emit(Instruction::LocalSet(total));
+            let (out, out_data) = emit_new_list(cx, total)?;
+            emit_copy_slots(cx, out_data, None, data, None, n);
+            emit_copy_slots(cx, out_data, Some(n), odata, None, m);
+            cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(s))
+        }
+        // A new list of the elements from `lo` up to `hi`, clamped as the interpreter clamps: a bound below 0 is 0, one
+        // past the end is the end, and `hi < lo` is empty.
+        ("slice", [lo, hi]) => {
+            list_helpers(cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            let n64 = cx.alloc_local(Ty::I64)?;
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I64ExtendI32U);
+            cx.emit(Instruction::LocalSet(n64));
+            let bound = |e: &Expr, cx: &mut Cx| -> Result<u32, CompileError> {
+                if compile_expr(e, cx)? != Ty::I64 {
+                    return Err(CompileError::Unsupported("`slice` with a bound that is not an Int".into()));
+                }
+                let b = cx.alloc_local(Ty::I64)?;
+                cx.emit(Instruction::LocalSet(b));
+                // max(b, 0), then min(that, len)
+                emit_select_i64(cx, b, Instruction::I64LtS, None);
+                emit_select_i64(cx, b, Instruction::I64GtS, Some(n64));
+                Ok(b)
+            };
+            let lo = bound(lo, cx)?;
+            let hi = bound(hi, cx)?;
+            // hi = max(hi, lo)
+            emit_select_i64(cx, hi, Instruction::I64LtS, Some(lo));
+            let (lo32, len) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+            cx.emit(Instruction::LocalGet(lo));
+            cx.emit(Instruction::I32WrapI64);
+            cx.emit(Instruction::LocalSet(lo32));
+            cx.emit(Instruction::LocalGet(hi));
+            cx.emit(Instruction::LocalGet(lo));
+            cx.emit(Instruction::I64Sub);
+            cx.emit(Instruction::I32WrapI64);
+            cx.emit(Instruction::LocalSet(len));
+            let (out, out_data) = emit_new_list(cx, len)?;
+            emit_copy_slots(cx, out_data, None, data, Some(lo32), len);
+            cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(s))
+        }
+        // Whether any element is `==` the argument — the comparison `==` makes. An element type `==` answers host-side (a
+        // sum, a record) stays outside.
+        ("contains", [needle]) => {
+            let (_, n, data) = list_snapshot(cx)?;
+            compile_expr_as(needle, cx, s.to_ty())?;
+            let x = cx.alloc_local(s.to_ty())?;
+            cx.emit(Instruction::LocalSet(x));
+            let eq = match s {
+                Scalar::I64 => Instruction::I64Eq,
+                Scalar::I32 => Instruction::I32Eq,
+                Scalar::F64 => Instruction::F64Eq,
+                Scalar::Str if cx.imp.str_eq != u32::MAX => Instruction::Call(cx.imp.str_eq),
+                _ => return Err(CompileError::Unsupported(format!("`contains` on a list of {s:?}"))),
+            };
+            let (found, i) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::LocalSet(found));
+            emit_count_loop(cx, i, n, &mut |cx: &mut Cx| {
+                emit_slot_addr(cx, data, i);
+                load_scalar(cx, s);
+                cx.emit(Instruction::LocalGet(x));
+                cx.emit(eq.clone());
+                cx.emit(Instruction::LocalGet(found));
+                cx.emit(Instruction::I32Or);
+                cx.emit(Instruction::LocalSet(found));
+                Ok(())
+            })?;
+            cx.emit(Instruction::LocalGet(found));
+            Ok(Ty::I32)
+        }
+        // A new list of the elements the predicate keeps, over the list as it was when the call began.
+        ("filter", [f]) => {
+            list_helpers(cx)?;
+            let c = resolve_callable(f, cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            let zero = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::LocalSet(zero));
+            let (out, _) = emit_new_list(cx, zero)?;
+            let (i, x) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(s.to_ty())?);
+            emit_count_loop(cx, i, n, &mut |cx: &mut Cx| {
+                emit_slot_addr(cx, data, i);
+                load_scalar(cx, s);
+                cx.emit(Instruction::LocalSet(x));
+                if inline_apply(&c, x, s.to_ty(), cx)? != Ty::I32 {
+                    return Err(CompileError::Unsupported("a `filter` predicate that is not a Bool".into()));
+                }
+                cx.emit(Instruction::If(BlockType::Empty));
+                cx.emit(Instruction::LocalGet(out));
+                cx.emit(Instruction::Call(cx.imp.list_slot));
+                cx.emit(Instruction::LocalGet(x));
+                store_scalar(cx, s);
+                cx.emit(Instruction::End);
+                Ok(())
+            })?;
+            cx.emit(Instruction::LocalGet(out));
+            Ok(Ty::List(s))
+        }
+        // `Some` of the first element the predicate holds for, or `None` — the walk stops at it, so a predicate with an
+        // effect runs once per element examined, as the interpreter's does.
+        ("find", [f]) => {
+            let c = resolve_callable(f, cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            let (hit, at, i, x) =
+                (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(s.to_ty())?);
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::LocalSet(hit));
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::LocalSet(i));
+            cx.emit(Instruction::Block(BlockType::Empty));
+            let brk = cx.depth;
+            cx.emit(Instruction::Loop(BlockType::Empty));
+            let top = cx.depth;
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::LocalGet(n));
+            cx.emit(Instruction::I32GeU);
+            cx.emit(Instruction::BrIf(cx.depth - brk));
+            emit_slot_addr(cx, data, i);
+            load_scalar(cx, s);
+            cx.emit(Instruction::LocalSet(x));
+            if inline_apply(&c, x, s.to_ty(), cx)? != Ty::I32 {
+                return Err(CompileError::Unsupported("a `find` predicate that is not a Bool".into()));
+            }
+            cx.emit(Instruction::If(BlockType::Empty));
+            cx.emit(Instruction::I32Const(1));
+            cx.emit(Instruction::LocalSet(hit));
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::LocalSet(at));
+            cx.emit(Instruction::Br(cx.depth - brk));
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::I32Const(1));
+            cx.emit(Instruction::I32Add);
+            cx.emit(Instruction::LocalSet(i));
+            cx.emit(Instruction::Br(cx.depth - top));
+            cx.emit(Instruction::End);
+            cx.emit(Instruction::End);
+            emit_option_cell(
+                cx,
+                s,
+                hit,
+                &|cx: &mut Cx| {
+                    emit_slot_addr(cx, data, at);
+                    load_scalar(cx, s);
+                },
+                &|_| {},
+            )
+        }
+        // A left fold, `f(acc, x)` for each element of the list as it was when the call began; the initial value is
+        // computed after that snapshot, as the interpreter computes it.
+        ("fold", [init, f]) => {
+            let c = resolve_callable(f, cx)?;
+            let (_, n, data) = list_snapshot(cx)?;
+            let t = compile_expr(init, cx)?;
+            let acc = cx.alloc_local(t)?;
+            cx.emit(Instruction::LocalSet(acc));
+            let (i, x) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(s.to_ty())?);
+            emit_count_loop(cx, i, n, &mut |cx: &mut Cx| {
+                emit_slot_addr(cx, data, i);
+                load_scalar(cx, s);
+                cx.emit(Instruction::LocalSet(x));
+                if inline_apply2(&c, (acc, t), (x, s.to_ty()), cx)? != t {
+                    return Err(CompileError::Unsupported("a `fold` step of another type than its initial value".into()));
+                }
+                cx.emit(Instruction::LocalSet(acc));
+                Ok(())
+            })?;
+            cx.emit(Instruction::LocalGet(acc));
+            Ok(t)
+        }
+        // A new list, sorted stably host-side by the interpreter's order (an `Int` or a `Bool` by its number, a `Str` by
+        // its bytes); the checker refuses every other element type.
+        ("sort", []) => {
+            if cx.imp.list_sort == u32::MAX {
+                return Err(CompileError::Unsupported("`sort` without its host import".into()));
+            }
+            let kind = match s {
+                Scalar::I64 => 0,
+                Scalar::I32 => 1,
+                Scalar::Str => 2,
+                _ => return Err(CompileError::Unsupported(format!("`sort` of a list of {s:?}"))),
+            };
+            cx.emit(Instruction::I32Const(kind));
+            cx.emit(Instruction::Call(cx.imp.list_sort));
+            Ok(Ty::List(s))
+        }
+        // The strings joined by the separator, host-side in one allocation.
+        ("join", [sep]) => {
+            if s != Scalar::Str || cx.imp.list_join == u32::MAX {
+                return Err(CompileError::Unsupported("`join` of a list that is not a List[Str]".into()));
+            }
+            let list = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(list));
+            if compile_expr(sep, cx)? != Ty::Str {
+                return Err(CompileError::Unsupported("`join` by a separator that is not a Str".into()));
+            }
+            let sp = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(sp));
+            cx.emit(Instruction::LocalGet(list));
+            cx.emit(Instruction::LocalGet(sp));
+            cx.emit(Instruction::Call(cx.imp.list_join));
+            Ok(Ty::Str)
+        }
         _ => Err(CompileError::Unsupported(format!("the List method `.{method}`"))),
     }
+}
+
+/// Take the list pointer on the stack into a local and read its length and slots once — the snapshot the interpreter's
+/// methods walk. Returns `(list, len, data)`, each an i32 local.
+fn list_snapshot(cx: &mut Cx) -> Result<(u32, u32, u32), CompileError> {
+    let (list, n, data) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+    cx.emit(Instruction::LocalSet(list));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+    cx.emit(Instruction::LocalSet(n));
+    cx.emit(Instruction::LocalGet(list));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalSet(data));
+    Ok((list, n, data))
+}
+
+/// A new list of `len` (an i32 local) slots in use (`__list_new`); returns `(list, data)`, each an i32 local.
+fn emit_new_list(cx: &mut Cx, len: u32) -> Result<(u32, u32), CompileError> {
+    let (out, out_data) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
+    cx.emit(Instruction::LocalGet(len));
+    cx.emit(Instruction::Call(cx.imp.list_new));
+    cx.emit(Instruction::LocalTee(out));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalSet(out_data));
+    Ok((out, out_data))
+}
+
+/// Copy `count` slots from `src` (from slot `src_at`, or 0) to `dst` (from slot `dst_at`, or 0), each an i32 local.
+fn emit_copy_slots(cx: &mut Cx, dst: u32, dst_at: Option<u32>, src: u32, src_at: Option<u32>, count: u32) {
+    let at = |cx: &mut Cx, base: u32, index: Option<u32>| {
+        cx.emit(Instruction::LocalGet(base));
+        if let Some(i) = index {
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::I32Const(8));
+            cx.emit(Instruction::I32Mul);
+            cx.emit(Instruction::I32Add);
+        }
+    };
+    at(cx, dst, dst_at);
+    at(cx, src, src_at);
+    cx.emit(Instruction::LocalGet(count));
+    cx.emit(Instruction::I32Const(8));
+    cx.emit(Instruction::I32Mul);
+    cx.emit(Instruction::MemoryCopy { src_mem: 0, dst_mem: 0 });
+}
+
+/// `for i in 0..n { body }`, `i` and `n` i32 locals.
+fn emit_count_loop(
+    cx: &mut Cx,
+    i: u32,
+    n: u32,
+    body: &mut dyn FnMut(&mut Cx) -> Result<(), CompileError>,
+) -> Result<(), CompileError> {
+    cx.emit(Instruction::I32Const(0));
+    cx.emit(Instruction::LocalSet(i));
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let brk = cx.depth;
+    cx.emit(Instruction::Loop(BlockType::Empty));
+    let top = cx.depth;
+    cx.emit(Instruction::LocalGet(i));
+    cx.emit(Instruction::LocalGet(n));
+    cx.emit(Instruction::I32GeU);
+    cx.emit(Instruction::BrIf(cx.depth - brk));
+    body(cx)?;
+    cx.emit(Instruction::LocalGet(i));
+    cx.emit(Instruction::I32Const(1));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::LocalSet(i));
+    cx.emit(Instruction::Br(cx.depth - top));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::End);
+    Ok(())
+}
+
+/// `x = if x <cmp> other { other } else { x }` for the i64 local `x`, where `other` is a local, or 0 when `None`:
+/// `I64LtS` against 0 is `max(x, 0)`, `I64GtS` against `len` is `min(x, len)`.
+fn emit_select_i64(cx: &mut Cx, x: u32, cmp: Instruction<'static>, other_local: Option<u32>) {
+    let other = |cx: &mut Cx| match other_local {
+        Some(l) => cx.emit(Instruction::LocalGet(l)),
+        None => cx.emit(Instruction::I64Const(0)),
+    };
+    other(cx);
+    cx.emit(Instruction::LocalGet(x));
+    cx.emit(Instruction::LocalGet(x));
+    other(cx);
+    cx.emit(cmp);
+    cx.emit(Instruction::Select);
+    cx.emit(Instruction::LocalSet(x));
+}
+
+/// An `Option` cell of element type `s`: `Some(value)` when the i32 local `cond` is nonzero — `value` pushes it, and
+/// `then` runs after the cell is filled — else `None`. Leaves the cell's pointer.
+fn emit_option_cell(
+    cx: &mut Cx,
+    s: Scalar,
+    cond: u32,
+    value: &dyn Fn(&mut Cx),
+    then: &dyn Fn(&mut Cx),
+) -> Result<Ty, CompileError> {
+    let opt = Ty::Option(s);
+    let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+    let tag = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+    let (some, none) = (tag("Some"), tag("None"));
+    let cell = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(cell));
+    cx.emit(Instruction::LocalGet(cond));
+    cx.emit(Instruction::If(BlockType::Empty));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(some));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(field_offset(0)));
+    cx.emit(Instruction::I32Add);
+    value(cx);
+    store_scalar(cx, s);
+    then(cx);
+    cx.emit(Instruction::Else);
+    cx.emit(Instruction::LocalGet(cell));
+    cx.emit(Instruction::I32Const(none));
+    cx.emit(Instruction::I32Store(u32_at()));
+    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalGet(cell));
+    Ok(opt)
 }
 
 /// Compile `key` as a map's key and leave it as the `i64` the `delulu:map` imports read: an `Int` itself, a `Bool` or a
