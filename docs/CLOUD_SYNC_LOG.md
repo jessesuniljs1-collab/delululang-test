@@ -4963,3 +4963,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - Redo on the laptop: nothing. For the laptop's memory: nothing new (the timing rule held: the runner, not the custody).
 - Open / next: this branch's CI; then RW 3.21's rest (the actor table in the code), P9-05's open steps, maps on WASM.
+
+### 2026-10-21 (evening) — an actor program's `.dwx` runs: the module carries its own actor table (RW 3.21 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-actors-run` (on `laptop/epoch-window`, #25)   Pull request: see the branch   Merged: not yet (after #25)
+- What: `V2_LOG.md` (2026-10-21, the second evening entry).
+- Files and folders: M `crates/delulu-wasm/src/actors.rs` (`fields_export_name`, `table_from_module`, `field_counts`,
+  `set_field_counts`), `crates/delulu-wasm/src/codegen.rs` (the count globals and their exports),
+  `crates/delulu-wasm/src/host.rs` (`run_artifact`, `run_actors_in`), `crates/delulu-wasm/src/lib.rs` (the re-export),
+  `crates/delulu-wasm/tests/actors_parity.rs`, `crates/delulu/src/run_cmd.rs` (the `.dwx` route runs actors; `--on-quiesce`),
+  `crates/delulu/src/cli.rs` (the build's refusal removed), `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (3.21), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #25 and this branch landing on green; (2) `launch/2.0.0`: merge, the Breaking paragraph's actor clause
+  removed; (3) P9-05's open steps, maps on WASM, RW 4.67, 6.1, 6.2.

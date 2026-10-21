@@ -25,7 +25,9 @@ pub use dpx::{
     augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,
     LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
-pub use host::{run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, WasmError};
+pub use host::{
+    run_artifact, run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, WasmError,
+};
 
 use std::collections::HashMap;
 

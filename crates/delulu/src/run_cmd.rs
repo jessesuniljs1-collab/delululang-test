@@ -218,6 +218,8 @@ const APPLIED_TO_A_DWX: &[&str] = &[
     "--trace-effects",
     "--trace-out",
     "--assert-trace",
+    // RW 3.21: the quiescence report of an actor program, as the source route prints it.
+    "--on-quiesce",
 ];
 
 fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
@@ -248,13 +250,6 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
             return 1;
         }
     };
-    // DWX-ACTORS-1: an artifact of an actor program (one built before `build` refused it) is refused in words, before
-    // anything runs — not as the "actor index out of range" its first spawn met.
-    if delulu_wasm::exports_actor_members(&artifact.wasm) {
-        let d = Diagnostic::error("DL1201", crate::cli::dwx_actors_refusal(file));
-        print_diagnostics("run", &[d], &map, None, opts.json);
-        return 1;
-    }
 
     let mut grants = Grants::default();
     for g in &opts.grants {
@@ -312,10 +307,22 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         ..delulu_wasm::HostConfig::default()
     };
     note_program_started();
-    let ran = delulu_wasm::run_main(&artifact.wasm, &cfg);
+    // RW 3.21: an actor program runs under the cooperative scheduler, by the actor table its module carries.
+    if delulu_wasm::exports_actor_members(&artifact.wasm) {
+        eprintln!("engine: wasm (actors: cooperative single-threaded — semantics identical, parallelism absent)");
+    }
+    let ran = delulu_wasm::run_artifact(&artifact.wasm, &cfg);
     emit_wasm_trace(&sink, opts);
     let code = match ran {
-        Ok(output) => {
+        Ok((output, report)) => {
+            if let Some(report) = report {
+                if report.dead_actors > 0 || report.dropped_sends > 0 {
+                    eprintln!("actors: {} died; {} message(s) to dead actors dropped", report.dead_actors, report.dropped_sends);
+                }
+                if opts.on_quiesce_report {
+                    eprintln!("quiesce: {} surviving actor(s), {} turn(s) run", report.surviving_actors, report.total_turns);
+                }
+            }
             print!("{output}");
             0
         }
