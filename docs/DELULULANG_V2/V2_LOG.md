@@ -7920,3 +7920,47 @@ the effect where a second implementation would cost most: the allowlist's path s
 - `scripts/clippy.sh -j 4` (rustfmt's check included) clean and stamped.
 - `delulu-wasm` whole: 173 passed, 0 failed.
 - `wasm_cli`, `examples_run`, `egress_cli`, `cli_contract`, `cli`, `corpus_cli`, `budget_cli`: 113 passed, 0 failed.
+
+## 2026-10-21 — the laptop: a sealed artifact runs under a lease, the broker daemon and a trace (RW 3.19's rest)
+
+**Why.** DWX-FLAGS-1 (RW 3.19, run 5) made `run FILE.dwx` refuse `--lease`, `--broker` and the trace flags it had ignored,
+and left "giving the path a trace and custody" open. But running code someone else built, under a delegation, is what a
+sealed artifact is for — and the dangerous way to give it custody is a second copy of the source route's.
+
+**The change.** The source route's custody and trace code became functions, and both routes call them:
+- `lease_for_run`: the redemption with its budget hold (PS-B-05) and break-glass binding (D-V2-116).
+- `custody_for_run` and `RunCustody`:
+  - the custody label;
+  - a `--broker daemon` root issued and held (RW 4.57), or the lease's mints dead-manned;
+  - `_run_node` still bound in the source route where the local was, so it drops after the devices.
+- `wasm_trace_sink`, `emit_wasm_trace`, and `assert_wasm_trace`, against a row or a set.
+
+The `.dwx` route then does what the source route does, in its order: redeem, choose the custody, refuse a runtime file in
+a scope the program can write (D-V2-21 — a lease's scopes are known only after redemption), and run with the custody and
+the sink. Its `--assert-trace` judges the trace against the effects the artifact's manifest declares.
+`APPLIED_TO_A_DWX` gains `--broker`, `--epoch-ms`, `--lease`, `--trace-effects`, `--trace-out` and `--assert-trace`.
+Every other flag is still refused (`--debug-rcaps`, `--foreign-isolation`, `--on-quiesce` and `--engine interp` in the
+witness).
+
+**Evidence.**
+- The extraction first, before the `.dwx` route used it: 13 lease and daemon CLI targets, 144 passed, 0 failed (`grants_cli`,
+  `broker_cli`, `budget_cli`, `guard_e2e`, `device_delegation_cli`, `plugin_load_cli`, `sandbox_guard_e2e`, `monitor_cli`,
+  `federation_cli`, `cli_contract`, `wasm_cli`, `dead_man_cli`, `estop_cli`).
+- `grants_cli.rs` `a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace`, a live broker:
+  - Under a single-use lease of `./data`, the artifact reads both files with daemon custody and writes its four-record
+    trace. A second use of the token is DL1407, and runs nothing.
+  - A lease of `./data/pub` refuses the artifact's mint of `./data` in the lease's words (RW 6.15).
+  - An artifact reading `../priv/f.txt` through a `./data/pub` handle is refused by the lease's custody ("lease `g_…` does
+    not grant"), which the host asks before its own scope check — so the words say the custody decided.
+  - A lease whose write scope holds `--trace-out` is refused (exit 2, nothing run).
+  - Under `--broker daemon` the run's root is issued, armed and revoked (the audit chain's last records).
+- `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply`: the four flags still refused, and the applied run writes its
+  trace and passes `--assert-trace`. An artifact whose manifest says `Clock` where it performs `Write` is DL1101 under it.
+- Mutants, each red, the control green:
+  - M672 the lease skipped;
+  - M673 the custody not handed to the host — the escape refused in the scope's words instead;
+  - M674 the trace not handed to it;
+  - M675 the assertion skipped;
+  - M676 the write-scope refusal skipped.
+
+**Found while making the last witness: ARTIFACT-CLAIM-1** — next entry.

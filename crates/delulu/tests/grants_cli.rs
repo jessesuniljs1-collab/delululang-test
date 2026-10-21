@@ -251,6 +251,121 @@ fn a_lease_runs_refusal_names_its_delegation_on_both_engines() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A sealed artifact runs under a lease and under the broker daemon, with its trace (2026-10-21). DWX-FLAGS-1 (RW 3.19) had
+/// `run FILE.dwx` refuse `--lease`, `--broker` and the trace flags, which it then ignored; it now applies them by the source
+/// route's own functions. Under a lease the artifact reads what the delegation covers, with daemon custody; a spent
+/// single-use token is refused before it runs; a narrower lease refuses its mint in the lease's words; under `--broker
+/// daemon` its run issues, holds and revokes a root of its own, as a source run does.
+#[test]
+fn a_sealed_artifact_runs_under_a_lease_and_the_daemon_with_its_trace() {
+    let base = std::env::temp_dir().join(format!("delulu_grants_dwx_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(cwd.join("data/pub")).unwrap();
+    std::fs::create_dir_all(cwd.join("data/priv")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(cwd.join("data/pub/f.txt"), "hello").unwrap();
+    std::fs::write(cwd.join("data/priv/f.txt"), "secret").unwrap();
+    let program = "module r\nfn main(root: Root) ! {Read, Write} {\n  let out = root.console()\n  let fr = root.fs_read(\"./data\")\n  \
+                   match fr.read_text(\"pub/f.txt\") { Ok(v) => out.println(\"pub: \" + v), Err(e) => out.println(\"pub: no\") }\n  \
+                   match fr.read_text(\"priv/f.txt\") { Ok(v) => out.println(\"priv: \" + v), Err(e) => out.println(\"priv: no\") }\n}\n";
+    std::fs::write(cwd.join("r.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["build", "r.delulu", "--target", "wasm", "-o", "r.dwx"]);
+    assert!(o.status.success(), "build: {}", stderr(&o));
+
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let delegate = |scope: &str, multi: bool| {
+        let mut args = vec!["grants", "delegate", "--effects", "Read,Write", "--fs-read", scope, "--ttl", "1h", "--json"];
+        if multi {
+            args.push("--multi");
+        }
+        let o = delulu_in(&cwd, &state, &args);
+        assert!(o.status.success(), "delegate: {}", stderr(&o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+        (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string())
+    };
+
+    // Under a single-use lease of `./data`: the artifact reads both files, its custody the daemon, its trace written.
+    let (node, token) = delegate("./data", false);
+    let o =
+        delulu_in(&cwd, &state, &["run", "r.dwx", "--lease", &token, "--no-prompt", "--trace-effects", "--trace-out", "t.jsonl"]);
+    assert!(o.status.success(), "the artifact under its lease: {}", stderr(&o));
+    assert_eq!(stdout(&o), "pub: hello\npriv: secret\n");
+    assert!(stderr(&o).contains("custody: daemon") && stderr(&o).contains(&node), "{}", stderr(&o));
+    let traced = std::fs::read_to_string(cwd.join("t.jsonl")).expect("the trace was written");
+    assert_eq!(traced.lines().count(), 4, "two reads and two lines printed: {traced}");
+    assert!(traced.contains("\"cap_kind\":\"FsRead\"") && traced.contains("\"cap_kind\":\"Console\""), "{traced}");
+    // The token was redeemed by the broker: a second use is refused before the artifact runs.
+    let o = delulu_in(&cwd, &state, &["run", "r.dwx", "--lease", &token, "--no-prompt"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(stderr(&o).contains("DL1407") && stdout(&o).is_empty(), "a spent token runs nothing: {}", stderr(&o));
+
+    // A lease of `./data/pub` does not cover the artifact's mint of `./data`: refused, in the lease's words.
+    let (narrow, token) = delegate("./data/pub", true);
+    let o = delulu_in(&cwd, &state, &["run", "r.dwx", "--lease", &token, "--no-prompt"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("DL0703") && stderr(&o).contains(&format!("node `{narrow}`")) && stdout(&o).is_empty(),
+        "{}",
+        stderr(&o)
+    );
+    // The lease's custody decides the artifact's effects: a read that leaves its scope is refused by the custody, which
+    // the host asks first, in the lease's words — not by the scope's own check (DL0904, "escapes").
+    let escape = "module e\nfn main(root: Root) ! {Read, Write} {\n  let fr = root.fs_read(\"./data/pub\")\n  \
+                  match fr.read_text(\"../priv/f.txt\") { Ok(v) => root.console().println(v), Err(e) => root.console().println(\"no\") }\n}\n";
+    std::fs::write(cwd.join("e.delulu"), escape).unwrap();
+    let o = delulu_in(&cwd, &state, &["build", "e.delulu", "--target", "wasm", "-o", "e.dwx"]);
+    assert!(o.status.success(), "build: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["run", "e.dwx", "--lease", &token, "--no-prompt"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(stderr(&o).contains(&format!("lease `{narrow}` does not grant")) && stdout(&o).is_empty(), "{}", stderr(&o));
+    // A lease's write scope is known only once it is redeemed: a trace written into it is refused then, nothing run.
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &[
+            "grants",
+            "delegate",
+            "--effects",
+            "Read,Write",
+            "--fs-read",
+            "./data",
+            "--fs-write",
+            "./data",
+            "--ttl",
+            "1h",
+            "--json",
+        ],
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let writable = v["token"].as_str().unwrap().to_string();
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["run", "r.dwx", "--lease", &writable, "--no-prompt", "--trace-effects", "--trace-out", "data/t.jsonl"],
+    );
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stdout(&o).is_empty() && !cwd.join("data/t.jsonl").exists(), "{}", stderr(&o));
+
+    // Under `--broker daemon`, the run issues a root of its own, holds it and revokes it when it ends, as a source run does.
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["run", "r.dwx", "--broker", "daemon", "--grant", "console", "--grant", "fs.read=./data", "--no-prompt"],
+    );
+    assert!(o.status.success() && stderr(&o).contains("custody: daemon"), "{}", stderr(&o));
+    assert_eq!(stdout(&o), "pub: hello\npriv: secret\n");
+    let o = delulu_in(&cwd, &state, &["audit", "tail", "4"]);
+    let tail = stdout(&o);
+    let last: Vec<&str> = tail.lines().filter_map(|l| l.split_whitespace().nth(3)).collect();
+    assert_eq!(last.iter().filter(|a| ["issue", "deadman-arm", "revoke"].contains(a)).count(), 3, "{tail}");
+    drop(_guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// RW 4.42 (routine run 7, AUDIT-TEXT-1's next surface): a delegation's scopes are the delegating party's
 /// strings, and `grants tree`, `grants list` and `grants inspect` printed them raw on the owner's terminal —
 /// witnessed on `634e9f0`: an escape set the title and cleared the screen, and a line break in a path began
