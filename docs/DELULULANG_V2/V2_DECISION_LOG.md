@@ -4211,7 +4211,11 @@ answered DL1201 (witnessed on the pre-change build: "the List method `.pop`", "`
    - `reverse`, `concat` and `slice` make a new list of the same slots, so a record in two lists is one record. `slice`
      clamps as the interpreter does: below 0 is 0, past the end is the end, `hi < lo` is empty.
    - `contains` compares as `==` does: an `Int`, a `Bool` or a `Float` by its instruction (a `NaN` never equal), a `Str`
-     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`.
+     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`. **Amended 2026-10-22:** it
+     compiles through the host's `eq` (`reify.rs`), with the element's descriptor, as `==` of two of them does. A module
+     whose list `contains` takes a record or a sum carries the value interface. `contains_on_records_and_sums_compares_as_
+     equality_does` covers it: a record equal by its contents, another record. M753 (the arm missing, the pre-change
+     refusal), M754 (the interface never carried) and M755 (compared by address) are red.
    - `filter`, `find` and `fold` inline their function value as `map` does. `find` stops at its first match. `fold`
      computes its initial value after the snapshot, as the interpreter does.
 2. **Two host-side** (`delulu:list.sort`, `delulu:list.join`), each run over the guest's slots:

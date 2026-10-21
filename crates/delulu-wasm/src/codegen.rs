@@ -906,6 +906,10 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
         Expr::Call { callee, args, .. } => matches!((&**callee, &args[..]),
             (Expr::Var { path, .. }, [a]) if path.segs.len() == 1 && path.segs[0].name == "str" && compound(a)),
         Expr::Binary { op: BinOp::Eq | BinOp::Ne, lhs, .. } => compound(lhs),
+        // A list's `contains` compares as `==` does: an element the host's `eq` answers needs the interface too.
+        Expr::Method { recv, name, args, .. } if name.name == "contains" && is_list_typed(recv, node_types) => {
+            args.first().is_some_and(compound)
+        }
         _ => false,
     };
     module_any(env, module, &hit, false)
@@ -4248,11 +4252,17 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             compile_expr_as(needle, cx, s.to_ty())?;
             let x = cx.alloc_local(s.to_ty())?;
             cx.emit(Instruction::LocalSet(x));
+            // A record or a sum compares host-side, by the interpreter's own `eq` over the two values rebuilt by the
+            // element's descriptor — the comparison `==` of two of them makes (`reify.rs`).
+            let by_value = matches!(s, Scalar::Record(_) | Scalar::Enum(_)) && cx.imp.value_eq != u32::MAX;
             let eq = match s {
-                Scalar::I64 => Instruction::I64Eq,
-                Scalar::I32 => Instruction::I32Eq,
-                Scalar::F64 => Instruction::F64Eq,
-                Scalar::Str if cx.imp.str_eq != u32::MAX => Instruction::Call(cx.imp.str_eq),
+                Scalar::I64 => vec![Instruction::I64Eq],
+                Scalar::I32 => vec![Instruction::I32Eq],
+                Scalar::F64 => vec![Instruction::F64Eq],
+                Scalar::Str if cx.imp.str_eq != u32::MAX => vec![Instruction::Call(cx.imp.str_eq)],
+                _ if by_value => {
+                    vec![Instruction::I32Const(desc_ptr(cx, s.to_ty())?), Instruction::Call(cx.imp.value_eq)]
+                }
                 _ => return Err(CompileError::Unsupported(format!("`contains` on a list of {s:?}"))),
             };
             let (found, i) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
@@ -4262,7 +4272,9 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
                 emit_slot_addr(cx, data, i);
                 load_scalar(cx, s);
                 cx.emit(Instruction::LocalGet(x));
-                cx.emit(eq.clone());
+                for ins in &eq {
+                    cx.emit(ins.clone());
+                }
                 cx.emit(Instruction::LocalGet(found));
                 cx.emit(Instruction::I32Or);
                 cx.emit(Instruction::LocalSet(found));

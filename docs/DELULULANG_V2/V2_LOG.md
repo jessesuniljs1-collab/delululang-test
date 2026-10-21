@@ -8355,3 +8355,12 @@ cell whose length runs past the memory) was added.
 
 **Local results:** `delulu-wasm` whole, 184 passed. `wasm_cli`, `budget_cli`, `artifact_review` and `core_invariance`, 31
 passed. `scripts/clippy.sh -j 4` clean and stamped.
+
+## 2026-10-22 (night) — the laptop: `contains` on records and sums on the WASM engine (RW 3.4, D-V2-171 amended)
+
+The last `List` method shape the WASM engine refused: `contains` on a list of records or sums answered DL1201. It now
+compares through the host's value interface, as `==` of two records or sums already did (`reify.rs`). The module carries
+the interface when a list's `contains` takes such a value. Test: `list_methods_parity.rs`
+`contains_on_records_and_sums_compares_as_equality_does`, both engines `true false false` / `true false true false`.
+Mutants M753–M755 red. M753 removes the new arm, which is exactly the pre-change refusal. Local: `delulu-wasm` whole, 185
+passed; clippy clean and stamped.

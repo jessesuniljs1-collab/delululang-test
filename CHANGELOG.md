@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `contains` on records and sums on the WASM engine, 2026-10-22
+
+- **New: `contains` on a list of records or sums compiles to WebAssembly** (RW 3.4, D-V2-171 amended). It compares as
+  `==` does, by the interpreter's own equality, so a record with equal contents counts as contained even when it is
+  another record. Before, `delulu build --target wasm` refused it with DL1201.
+
 ## Unreleased — every `List` method on the WASM engine, 2026-10-21
 
 - **New: the other ten `List` methods compile to WebAssembly** (RW 3.4, D-V2-171): `pop`, `reverse`, `concat`, `slice`,
