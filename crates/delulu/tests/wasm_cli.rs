@@ -469,3 +469,32 @@ fn http_on_the_wasm_engine_matches_the_interpreter() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// DWX-ACTORS-1 (2026-10-21): `build --target wasm` wrote a `.dwx` of an actor program, and `run` of it failed "actor index
+/// 1 out of range" — the `.dwx` route has no actor table (the source route builds it from the AST, and each actor's field
+/// count is not in its exports). Both now refuse in words: the build writes nothing, and an artifact built before the
+/// refusal (assembled here as the old build wrote it) is refused before it runs.
+#[test]
+fn an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run() {
+    let dir = std::env::temp_dir().join(format!("delulu_dwx_actors_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = "module a\nactor W {\n  var n: Int\n  new() { self.n = 0 }\n  be bump(k: Int) { self.n = self.n + k }\n}\n\
+               fn main(root: Root) ! {Async} {\n  let w = spawn W()\n  w.bump(1)\n}\n";
+    std::fs::write(dir.join("a.delulu"), src).unwrap();
+    let o = delulu_in(&dir, &["build", "a.delulu", "--target", "wasm", "-o", "a.dwx"]);
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{e}");
+    assert!(e.contains("DL1201") && e.contains("declares actors"), "{e}");
+    assert!(!dir.join("a.dwx").exists(), "nothing written");
+
+    let checked = delulu_check::check_source(0, src);
+    let wasm = delulu_wasm::compile_checked(&checked.module, &checked.result).expect("the actor program compiles");
+    let old = delulu_wasm::embed_authority(&wasm, &serde_json::json!({ "effects": ["Async"] }));
+    std::fs::write(dir.join("old.dwx"), old).unwrap();
+    let o = delulu_in(&dir, &["run", "old.dwx"]);
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{e}");
+    assert!(e.contains("DL1201") && e.contains("declares actors") && !e.contains("out of range"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

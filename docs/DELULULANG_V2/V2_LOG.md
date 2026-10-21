@@ -8022,3 +8022,33 @@ codes. It now returns the message's first registered code (`delulu_diag::static_
   they must be). After the rebuild: see the commit message.
 - `scripts/clippy.sh -j 4` first refused to stamp: rustfmt's check, added this morning, caught the slice's unformatted code
   before any commit could carry it.
+
+## 2026-10-21 — the laptop: DWX-ACTORS-1 — an actor program's `.dwx` was written and could not run; refused in words (RW 3.21)
+
+**Found** probing the `.dwx` route after giving it custody (the entry before last). `delulu build
+examples/guide/06_actors.delulu --target wasm` wrote a 1,523-byte artifact. `delulu run` of it failed: "WASM trap: actor
+index 1 out of range", labelled DL0904. The source of the same chapter runs on `--engine wasm` (5 actors, 13 turns).
+
+The `.dwx` route calls `run_main` with no actor table. The source route builds the table from the AST (`actor_table`):
+each actor's behaviours, their arities, and its field count. The exports name the members (`actor$W$new`, `actor$W$job`)
+but carry no field count.
+
+**Refused, not made to run — this slice.** Making it run means the code carrying its own table: each field count as an
+exported global, read from the module. It must never come from an unhashed custom section; that is ARTIFACT-CLAIM-1's
+lesson, the entry before. That is a format change, a slice of its own (RW 3.21's "What closing it takes"). Until then:
+- `build --target wasm` refuses a program that declares actors (DL1201, `dwx_actors_refusal`), and writes nothing;
+- `run` refuses an artifact whose exports name an actor member (`delulu_wasm::exports_actor_members`, a read of the
+  export section), in the same words, before anything runs.
+
+**Evidence.**
+- `wasm_cli.rs` `an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run`: the build refused, with no file
+  written; an artifact assembled through the library, as the old build wrote it, refused at run with no "out of range".
+  Red on the old code.
+- Mutants, each red, the control green:
+  - M682 the build's refusal removed;
+  - M683 the run's;
+  - M684 the scan's prefix;
+  - M685 the scan reading the wrong section.
+- The five CLI targets that build artifacts (`wasm_cli`, `release`, `plugin_cli`, `artifact_review`, `json_contract`):
+  51 passed.
+- Chapter five and the other non-actor programs still build.
