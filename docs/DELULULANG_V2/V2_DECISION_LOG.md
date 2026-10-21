@@ -4200,6 +4200,49 @@ need a second string order kept beside the interpreter's (the two-matchers lesso
   `contains_key` missing the first pair (M731); `reify` reading values from the keys (M732); the module never carrying
   `delulu:map` (M733).
 
+## D-V2-171 — RW 3.4: the ten `List` methods the WASM engine lacked — eight in the guest, `sort` and `join` host-side — TAKEN (head chef, 2026-10-21, under the owner's delegation)
+
+**Context.** The WASM `List` compiled five of its fifteen methods (`len`, `is_empty`, `get`, `push`, `map`). The other ten
+answered DL1201 (witnessed on the pre-change build: "the List method `.pop`", "`.filter`", "`.reverse`").
+
+**Decision.**
+1. **Eight in the guest**, each over a snapshot of the list's length and slots, as the interpreter's methods walk one:
+   - `pop` takes the last slot into a `Some` and shortens the list.
+   - `reverse`, `concat` and `slice` make a new list of the same slots, so a record in two lists is one record. `slice`
+     clamps as the interpreter does: below 0 is 0, past the end is the end, `hi < lo` is empty.
+   - `contains` compares as `==` does: an `Int`, a `Bool` or a `Float` by its instruction (a `NaN` never equal), a `Str`
+     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`.
+   - `filter`, `find` and `fold` inline their function value as `map` does. `find` stops at its first match. `fold`
+     computes its initial value after the snapshot, as the interpreter does.
+2. **Two host-side** (`delulu:list.sort`, `delulu:list.join`), each run over the guest's slots:
+   - `sort` is stable, by the interpreter's order (an `Int` or a `Bool` by its number, a `Str` by its bytes), and moves
+     the slots whole. Its strings are compared in the guest's memory where they lie, never copied.
+   - `join` checks every length and bounds the total before allocating, then copies each piece straight into one string
+     cell. Built in the guest by `+`, it would copy the growing string once per piece, and the bump heap never frees.
+3. **A module carries the list helpers** for a method on any receiver the checker typed a `List`, not only for `split`,
+   `push` and `map` by name (`contains` and `slice` are `Str` methods too). A list's `contains` brings string equality as
+   `==` does.
+4. **The host reads the memory as untrusted**, as for maps (D-V2-170 item 4): a length past its capacity, slots outside
+   the memory and a string outside it are refused DL0903 in words, then a trap.
+
+**Evidence.** `delulu-wasm/tests/list_methods_parity.rs`, five tests:
+- the seven first-order methods on `Int`, `Str`, `Bool` and `Float` lists, every clamp included;
+- `filter`, `find` (its printing predicate examines four elements and stops) and `fold`, with `Int`, `Str` accumulators;
+  a predicate that pushes onto the list it filters walks the list as it began (6 kept, 12 after);
+- records shared through `reverse`, `concat`, `slice`, `filter` and `pop`;
+- five hand-written modules refused DL0903, a string cell whose length runs past the memory among them;
+- a module whose only lists are a map's `keys()` and `values()`.
+Each program also built to a `.dwx` and run by hand with the interpreter's output.
+- Mutants M734–M750, each red, the restored tree green. M748 (a string cell's end unchecked) first survived. The test's
+  string cell lay outside the memory, so its length read failed first. A cell inside the memory whose length runs past
+  the end was added; under the mutant, `sort` slices past the memory and panics the host. The others:
+  - `pop` (M734), `reverse` (M735), `concat` (M736), `slice`'s three clamps (M737–M739) and `contains` (M740) each lose
+    their meaning.
+  - `filter` keeps everything (M741), `find` walks past its match (M742), and `fold` forgets each step (M743).
+  - `sort` orders strings by address (M744) and `Bool`s inverted (M745). `join` writes no separators (M746).
+  - A length past its capacity is trusted (M747).
+  - The module is read for three names only (M749), and a list's `contains` brings no string equality (M750).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

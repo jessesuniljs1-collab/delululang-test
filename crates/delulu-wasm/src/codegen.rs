@@ -681,6 +681,10 @@ struct Imports {
     /// run host-side over the guest's slots (RW 3.4). `u32::MAX` when the module calls neither.
     list_sort: u32,
     list_join: u32,
+    /// Does the module `pop` a list? Then every walk that runs code per element (`for`, `map`, `filter`, `find`, `fold`)
+    /// walks a private copy of the slots, taken when it begins: a `pop` and then a `push` reuse the popped slot, which a
+    /// walk of the list's own slots could still reach, where the interpreter's walk — a copy — never sees the change.
+    pops_lists: bool,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -929,7 +933,12 @@ fn module_calls_list_method(
     node_types: &HashMap<NodeId, delulu_check::Type>,
     name: &str,
 ) -> bool {
-    module_any(env, module, &|e| matches!(e, Expr::Method { recv, name: n, .. } if n.name == name && is_list_typed(recv, node_types)), false)
+    module_any(
+        env,
+        module,
+        &|e| matches!(e, Expr::Method { recv, name: n, .. } if n.name == name && is_list_typed(recv, node_types)),
+        false,
+    )
 }
 
 /// Did the checker type `e` a `List`?
@@ -1184,6 +1193,7 @@ fn compile_module_typed(
         map_values: u32::MAX,
         list_sort: u32::MAX,
         list_join: u32::MAX,
+        pops_lists: false,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -1294,6 +1304,7 @@ fn compile_module_typed(
         imp.list_sort = n_imports;
         n_imports += 1;
     }
+    imp.pops_lists = module_calls_list_method(&env, module, node_types, "pop");
     let needs_list_join = module_calls_list_method(&env, module, node_types, "join");
     if needs_list_join {
         imp.list_join = n_imports;
@@ -4087,6 +4098,7 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             cx.emit(Instruction::LocalGet(list));
             cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
             cx.emit(Instruction::LocalSet(data));
+            emit_walked_slots(cx, n, data)?;
             cx.emit(Instruction::LocalGet(n));
             cx.emit(Instruction::Call(cx.imp.list_new));
             cx.emit(Instruction::LocalTee(out));
@@ -4264,6 +4276,7 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             list_helpers(cx)?;
             let c = resolve_callable(f, cx)?;
             let (_, n, data) = list_snapshot(cx)?;
+            emit_walked_slots(cx, n, data)?;
             let zero = cx.alloc_local(Ty::I32)?;
             cx.emit(Instruction::I32Const(0));
             cx.emit(Instruction::LocalSet(zero));
@@ -4292,6 +4305,7 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
         ("find", [f]) => {
             let c = resolve_callable(f, cx)?;
             let (_, n, data) = list_snapshot(cx)?;
+            emit_walked_slots(cx, n, data)?;
             let (hit, at, i, x) =
                 (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?, cx.alloc_local(s.to_ty())?);
             cx.emit(Instruction::I32Const(0));
@@ -4342,6 +4356,7 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
         ("fold", [init, f]) => {
             let c = resolve_callable(f, cx)?;
             let (_, n, data) = list_snapshot(cx)?;
+            emit_walked_slots(cx, n, data)?;
             let t = compile_expr(init, cx)?;
             let acc = cx.alloc_local(t)?;
             cx.emit(Instruction::LocalSet(acc));
@@ -4408,6 +4423,25 @@ fn list_snapshot(cx: &mut Cx) -> Result<(u32, u32, u32), CompileError> {
     cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
     cx.emit(Instruction::LocalSet(data));
     Ok((list, n, data))
+}
+
+/// The slots a walk that runs code per element reads (`for`, `map`, `filter`, `find`, `fold`): the list's own, or — in a
+/// module that pops a list (`Imports::pops_lists`) — a private copy of its `n` slots at `data` (i32 locals), taken now,
+/// so no `pop` and `push` in the walk's code can change what it walks.
+fn emit_walked_slots(cx: &mut Cx, n: u32, data: u32) -> Result<(), CompileError> {
+    if !cx.imp.pops_lists {
+        return Ok(());
+    }
+    let copy = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalGet(n));
+    cx.emit(Instruction::I32Const(8));
+    cx.emit(Instruction::I32Mul);
+    cx.emit(Instruction::Call(cx.alloc_fn));
+    cx.emit(Instruction::LocalSet(copy));
+    emit_copy_slots(cx, copy, None, data, None, n);
+    cx.emit(Instruction::LocalGet(copy));
+    cx.emit(Instruction::LocalSet(data));
+    Ok(())
 }
 
 /// A new list of `len` (an i32 local) slots in use (`__list_new`); returns `(list, data)`, each an i32 local.
@@ -4680,6 +4714,7 @@ fn compile_for(var: &Ident, iter: &Expr, body: &Block, cx: &mut Cx) -> Result<Ty
     cx.emit(Instruction::LocalGet(list));
     cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
     cx.emit(Instruction::LocalSet(data));
+    emit_walked_slots(cx, n, data)?;
     cx.emit(Instruction::I32Const(0));
     cx.emit(Instruction::LocalSet(i));
     let x = cx.alloc_local(s.to_ty())?;

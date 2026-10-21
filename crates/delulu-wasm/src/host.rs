@@ -705,8 +705,7 @@ fn map_fault(caller: &mut Caller<'_, HostState>) -> wasmtime::Error {
 
 /// What a list whose header, slots or strings lie outside the guest's memory, or a result that could not be allocated,
 /// is reported as (`delulu:list.sort`, `delulu:list.join`).
-const LIST_CORRUPT: &str =
-    "DL0903: a list's elements lie outside the guest's memory — or the WASM engine's memory exhausted";
+const LIST_CORRUPT: &str = "DL0903: a list's elements lie outside the guest's memory — or the WASM engine's memory exhausted";
 
 /// A list's length and slots pointer (`[len][cap][data]`, as `codegen.rs` lays it out), its length within its capacity.
 fn list_header(caller: &mut Caller<'_, HostState>, list: i32) -> Option<(u32, u32)> {
@@ -809,14 +808,22 @@ fn link_list_host(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
         wasmtime::Error::msg(LIST_CORRUPT)
     };
     linker
-        .func_wrap("delulu:list", "sort", move |mut caller: Caller<'_, HostState>, list: i32, kind: i32| -> wasmtime::Result<i32> {
-            sort_list(&mut caller, list, kind).ok_or_else(|| fault(&mut caller))
-        })
+        .func_wrap(
+            "delulu:list",
+            "sort",
+            move |mut caller: Caller<'_, HostState>, list: i32, kind: i32| -> wasmtime::Result<i32> {
+                sort_list(&mut caller, list, kind).ok_or_else(|| fault(&mut caller))
+            },
+        )
         .map_err(instantiate)?;
     linker
-        .func_wrap("delulu:list", "join", move |mut caller: Caller<'_, HostState>, list: i32, sep: i32| -> wasmtime::Result<i32> {
-            join_list(&mut caller, list, sep).ok_or_else(|| fault(&mut caller))
-        })
+        .func_wrap(
+            "delulu:list",
+            "join",
+            move |mut caller: Caller<'_, HostState>, list: i32, sep: i32| -> wasmtime::Result<i32> {
+                join_list(&mut caller, list, sep).ok_or_else(|| fault(&mut caller))
+            },
+        )
         .map_err(instantiate)?;
     Ok(())
 }

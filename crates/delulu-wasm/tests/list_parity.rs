@@ -272,14 +272,11 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "b left a value and a literal\n");
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a list of lists, and the list methods not yet compiled
-/// (`pop`, whose reuse of a slot a `for`'s snapshot could see) — by `compile_checked` too, which knows every node's type.
+/// What stays outside the fragment is refused, never miscompiled: a list of lists — by `compile_checked` too, which knows
+/// every node's type. (`pop` compiles since D-V2-171, its reuse of a slot kept from every walk: `list_methods_parity.rs`.)
 #[test]
 fn what_the_list_fragment_leaves_out_is_refused() {
-    for src in [
-        "module m\nfn f() -> Int {\n  let xs = [[1], [2]]\n  xs.len()\n}\n",
-        "module m\nfn f() -> Int {\n  let xs = [1, 2]\n  match xs.pop() {\n    Some(v) => v,\n    None => 0,\n  }\n}\n",
-    ] {
+    for src in ["module m\nfn f() -> Int {\n  let xs = [[1], [2]]\n  xs.len()\n}\n"] {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);
         assert!(compile_module(&checked.module).is_err(), "stays on the interpreter:\n{src}");

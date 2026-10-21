@@ -58,8 +58,8 @@ fn main(root: Root) ! {Write} {
 }
 
 /// The three that take a function: `filter` keeping what its predicate holds for, `find` stopping at its first match —
-/// its printing predicate prints once per element examined, the same on both engines — and `fold` with an `Int`, a `Str`
-/// and a `List` accumulator; each over the list as it was when the call began, a predicate that pushes onto it included.
+/// its printing predicate prints once per element examined, the same on both engines — and `fold` with an `Int` and a `Str`
+/// accumulator; each over the list as it was when the call began, a predicate that pushes onto it included.
 #[test]
 fn filter_find_and_fold_match_the_interpreter() {
     let src = r#"module m
@@ -135,17 +135,118 @@ fn a_hand_written_list_outside_the_memory_is_refused_in_words() {
     };
     let cases = [
         // len 2, cap 1.
-        ("a length past its capacity", module("(drop (call $sort (i32.const 0) (i32.const 0)))", "\\02\\00\\00\\00\\01\\00\\00\\00\\40\\00\\00\\00")),
+        (
+            "a length past its capacity",
+            module("(drop (call $sort (i32.const 0) (i32.const 0)))", "\\02\\00\\00\\00\\01\\00\\00\\00\\40\\00\\00\\00"),
+        ),
         // One slot, its data at 0xFFFF0000.
-        ("slots past the memory", module("(drop (call $sort (i32.const 0) (i32.const 0)))", "\\01\\00\\00\\00\\01\\00\\00\\00\\00\\00\\ff\\ff")),
+        (
+            "slots past the memory",
+            module("(drop (call $sort (i32.const 0) (i32.const 0)))", "\\01\\00\\00\\00\\01\\00\\00\\00\\00\\00\\ff\\ff"),
+        ),
         // One `Str` slot at 12, naming a string at 0xFFFFFFF0.
-        ("a string past the memory", module("(drop (call $sort (i32.const 0) (i32.const 2)))", "\\01\\00\\00\\00\\01\\00\\00\\00\\0c\\00\\00\\00\\f0\\ff\\ff\\ff\\00\\00\\00\\00")),
+        (
+            "a string past the memory",
+            module(
+                "(drop (call $sort (i32.const 0) (i32.const 2)))",
+                "\\01\\00\\00\\00\\01\\00\\00\\00\\0c\\00\\00\\00\\f0\\ff\\ff\\ff\\00\\00\\00\\00",
+            ),
+        ),
+        // One `Str` slot naming a cell inside the memory whose length runs past its end.
+        (
+            "a string running past the memory",
+            module(
+                "(drop (call $sort (i32.const 0) (i32.const 2)))",
+                "\\01\\00\\00\\00\\01\\00\\00\\00\\0c\\00\\00\\00\\14\\00\\00\\00\\00\\00\\00\\00\\00\\ff\\ff\\ff",
+            ),
+        ),
         // The same list joined, by a separator at 0 (its length the header's first word).
-        ("a joined string past the memory", module("(drop (call $join (i32.const 0) (i32.const 0)))", "\\01\\00\\00\\00\\01\\00\\00\\00\\0c\\00\\00\\00\\f0\\ff\\ff\\ff\\00\\00\\00\\00")),
+        (
+            "a joined string past the memory",
+            module(
+                "(drop (call $join (i32.const 0) (i32.const 0)))",
+                "\\01\\00\\00\\00\\01\\00\\00\\00\\0c\\00\\00\\00\\f0\\ff\\ff\\ff\\00\\00\\00\\00",
+            ),
+        ),
     ];
     for (what, wat) in cases {
         let got = run_main(wat.as_bytes(), &HostConfig { console: true, ..HostConfig::default() });
         let err = got.expect_err(what).message();
         assert!(err.contains("DL0903") && err.contains("a list's elements lie outside the guest's memory"), "{what}: {err}");
     }
+}
+
+/// A module whose only list is one a map made (`keys()`) — no literal, no `push`, no index — still carries the list
+/// helpers its methods need: the module is read for a method on a receiver the checker typed a `List`, not only for the
+/// three names it was read for before.
+#[test]
+fn a_list_no_literal_made_still_has_its_methods() {
+    let src = r#"module m
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let m: ref Map[Str, Int] = Map()
+  m.insert("b", 2)
+  m.insert("a", 1)
+  m.insert("c", 3)
+  out.println(str(m.keys().reverse()) + " " + m.keys().join("+") + " " + str(m.values().fold(0, fn(t: Int, v: Int) -> Int { t + v })))
+}
+"#;
+    assert_eq!(assert_parity(src), "[c, b, a] a+b+c 6\n");
+}
+
+/// A `pop` and then a `push` reuse the popped slot. Every walk that runs code per element — `for`, `map`, `filter`,
+/// `find`, `fold` — walks the list as it was when it began, as the interpreter's walk of a copy does, so the code it runs
+/// popping and pushing changes the list and not the walk. (This is why `pop` waited: a walk of the list's own slots read
+/// the pushed value where the interpreter read the popped one.)
+#[test]
+fn a_walk_is_not_moved_by_a_pop_and_a_push_in_its_own_code() {
+    let src = r#"module m
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let xs: ref List[Int] = [1, 2, 3, 4]
+  var seen = ""
+  for x in xs {
+    if x == 1 {
+      let p = xs.pop()
+      xs.push(9)
+    }
+    seen = seen + str(x)
+  }
+  out.println(seen + " " + str(xs))
+  let ys: ref List[Int] = [1, 2, 3, 4]
+  let doubled = ys.map(fn(y: Int) -> Int {
+    if y == 1 {
+      let p = ys.pop()
+      ys.push(50)
+    }
+    y * 2
+  })
+  let kept = ys.filter(fn(y: Int) -> Bool {
+    if y == 1 {
+      let p = ys.pop()
+      ys.push(70)
+    }
+    y > 2
+  })
+  let total = ys.fold(0, fn(t: Int, y: Int) -> Int {
+    if y == 1 {
+      let p = ys.pop()
+      ys.push(1000)
+    }
+    t + y
+  })
+  let found = ys.find(fn(y: Int) -> Bool {
+    if y == 1 {
+      let p = ys.pop()
+      ys.push(3)
+    }
+    y > 999
+  })
+  out.println(str(doubled) + " " + str(kept) + " " + str(total) + " " + str(found) + " " + str(ys))
+}
+"#;
+    let out = assert_parity(src);
+    assert!(out.starts_with("1234 [1, 2, 3, 9]\n"), "the walk is the list as it began: {out}");
 }
