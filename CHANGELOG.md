@@ -27,6 +27,18 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### every `List` method on the WASM engine, 2026-10-21
+
+- **New: the other ten `List` methods compile to WebAssembly** (RW 3.4, D-V2-171): `pop`, `reverse`, `concat`, `slice`,
+  `contains`, `join`, `sort`, and the three that take a function, `filter`, `find` and `fold`. All fifteen now compile;
+  before, `delulu build --target wasm` refused each of these ten with DL1201.
+  - Each walks the list as it was when the call began, as on the interpreter.
+  - `slice` clamps its bounds as the interpreter does.
+  - `sort` is stable and orders as the interpreter does: numbers by value, strings by their bytes.
+  - `find` stops at its first match, so a predicate that prints prints once per element it examines.
+  - A list these methods make holds the same elements, so a record in two lists is one record.
+  - `contains` on a list of records or sums, and a list of lists, still answer DL1201.
+
 ### maps on the WASM engine, 2026-10-21
 
 - **New: a program that uses `Map` compiles to WebAssembly** (RW 3.4, D-V2-170). `Map()` and all eight methods
