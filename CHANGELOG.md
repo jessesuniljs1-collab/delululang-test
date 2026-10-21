@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — Wasmtime 48.0.7 and rustls-webpki 0.103.16, 2026-10-21
+
+- **Security: three advisories published on 2026-10-20 and 2026-10-21 are fixed by patch updates.**
+  - `wasmtime` 48.0.6 → 48.0.7, with its Cranelift and Pulley crates:
+    - RUSTSEC-2026-0378, a panic lowering a component-model stream into a guest.
+    - RUSTSEC-2026-0379, a wrong jump on aarch64 for a large `br_table`.
+  - `rustls-webpki` 0.103.15 → 0.103.16: RUSTSEC-2026-0382, which could accept a certificate path through the
+    distrusted emSign intermediates. This affects the network client's certificate checks.
+  - Nothing else in the lockfile moved.
+
 ## Unreleased — a behaviour may share a capability method's name on the WASM engine, 2026-10-21
 
 - **Fixed: on `--engine wasm`, an actor whose behaviour shared a capability method's name was refused** (RW 3.20). A

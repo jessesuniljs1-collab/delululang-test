@@ -219,7 +219,11 @@ fn a_lease_runs_refusal_names_its_delegation_on_both_engines() {
     let o = delulu_in(&cwd, &state, &["broker", "start"]);
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let _guard = DaemonGuard { state: state.clone() };
-    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Read", "--fs-read", "./data/pub", "--ttl", "1h", "--multi", "--json"]);
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Read", "--fs-read", "./data/pub", "--ttl", "1h", "--multi", "--json"],
+    );
     assert!(o.status.success(), "delegate: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
     let (node, token) = (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string());
@@ -238,7 +242,11 @@ fn a_lease_runs_refusal_names_its_delegation_on_both_engines() {
         assert!(!err.contains("pass `--grant"), "{engine:?}: a lease run is never told to pass a `--grant` it refuses: {err}");
     }
     let o = delulu_in(&cwd, &state, &["run", "agent.delulu", "--no-prompt", "--grant", "fs.read=./data/pub"]);
-    assert!(stderr(&o).contains("pass `--grant fs.read=./data/priv`"), "an ordinary run is still told what to grant: {}", stderr(&o));
+    assert!(
+        stderr(&o).contains("pass `--grant fs.read=./data/priv`"),
+        "an ordinary run is still told what to grant: {}",
+        stderr(&o)
+    );
     drop(_guard);
     let _ = std::fs::remove_dir_all(&base);
 }
