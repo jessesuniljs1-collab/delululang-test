@@ -2893,36 +2893,77 @@ mod tests {
 
     /// The epoch snapshot path over the wire: NodeState reconstructs a snapshot the client checks
     /// locally (spec §4.1); `for_node` binds custody to an existing node.
+    ///
+    /// Within the window the cached snapshot answers with no round trip — a revocation made after the refresh is not seen
+    /// yet (the honest ≤ one-interval bound, spec §4.2) — and once the window lapses the refresh sees it; a stale cache with
+    /// a dead broker is DL1401 (fail closed). The window is a wall clock, so the "not seen yet" half counts only where the
+    /// test reached it inside the window, measured from before the refresh (the cache is stamped after it); an attempt that
+    /// did not is retried with a fresh node. Until 2026-10-21 the daemon's whole SHUTDOWN stood inside the window, and a
+    /// Windows runner outlasted it (push run `39569868995`): the stale cache failed closed, as designed, and the test called
+    /// that a failure.
     #[test]
     fn epoch_class_over_the_wire_uses_the_cached_snapshot() {
+        use std::time::{Duration, Instant};
+        const WINDOW_MS: u64 = 250; // the longest window `clamp_epoch_ms` allows
         let state = temp_state("epoch");
         let handle = start_daemon(&state);
+        let authority = || {
+            Authority::new(
+                ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()),
+                delulu_broker::Scopes { fs_read: ["./data".to_string()].into_iter().collect(), ..Default::default() },
+            )
+        };
+        let bind = |node: &str| {
+            BrokerClientCustody::for_node(
+                state.clone(),
+                delulu_broker::GrantId::from_trusted(node.to_string()),
+                authority(),
+                Some(WINDOW_MS),
+            )
+        };
+        let issue = || match request(&state, ReqBody::Issue(spec(&["Read"]))).unwrap() {
+            Response::Issued { node } => node,
+            other => panic!("expected Issued, got {other:?}"),
+        };
 
-        let resp = request(&state, ReqBody::Issue(spec(&["Read"]))).unwrap();
-        let Response::Issued { node } = resp else { panic!("expected Issued") };
-        let authority = Authority::new(
-            ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()),
-            delulu_broker::Scopes { fs_read: ["./data".to_string()].into_iter().collect(), ..Default::default() },
-        );
-
-        let mut custody = BrokerClientCustody::for_node(
-            state.clone(),
-            delulu_broker::GrantId::from_trusted(node),
-            authority,
-            Some(250), // a LONG window: after the first refresh, checks are local (no round-trip)
-        );
-        assert!(matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow));
-        // Out-of-scope epoch arg denied LOCALLY by the same Snapshot::check the broker uses.
-        assert!(matches!(custody.check(Op::FsRead, Some("./elsewhere")), CustodyDecision::Deny(_)));
-
-        stop_daemon(&state, handle);
-        // Within the still-fresh window the cached snapshot answers (the honest ≤ one-interval
-        // bound, spec §4.2) — then a stale cache + dead broker is DL1401 (fail closed).
+        let (mut witnessed, mut slowest) = (false, Duration::ZERO);
+        for _ in 0..5 {
+            let node = issue();
+            let mut custody = bind(&node);
+            let before_refresh = Instant::now();
+            assert!(matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow));
+            // Out-of-scope epoch arg denied LOCALLY by the same Snapshot::check the broker uses.
+            assert!(matches!(custody.check(Op::FsRead, Some("./elsewhere")), CustodyDecision::Deny(_)));
+            let resp = request(&state, ReqBody::Revoke { caller: node.clone(), target: node.clone() }).unwrap();
+            assert!(matches!(resp, Response::Revoked { .. }), "{resp:?}");
+            let took = before_refresh.elapsed();
+            if took >= Duration::from_millis(WINDOW_MS - 50) {
+                slowest = slowest.max(took);
+                continue; // the window had (nearly) lapsed: this attempt proves nothing either way
+            }
+            assert!(
+                matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow),
+                "within the window the cached snapshot answers — a round trip would have seen the revocation"
+            );
+            std::thread::sleep(Duration::from_millis(WINDOW_MS + 50)); // let the window lapse
+            match custody.check(Op::FsRead, Some("./data/x")) {
+                CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1403", "{}", d.message),
+                CustodyDecision::Allow => panic!("once the window lapsed, the refresh must see the revocation"),
+            }
+            witnessed = true;
+            break;
+        }
         assert!(
-            matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow),
-            "fresh cache answers within the epoch window"
+            witnessed,
+            "no attempt reached its cached check within the {WINDOW_MS} ms window (the slowest took {slowest:?}): the \
+             runner was too slow to witness the cache, which says nothing about the custody"
         );
-        std::thread::sleep(std::time::Duration::from_millis(300)); // let the 250 ms window lapse
+
+        // A stale cache with a dead broker fails closed.
+        let mut custody = bind(&issue());
+        assert!(matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow));
+        stop_daemon(&state, handle);
+        std::thread::sleep(Duration::from_millis(WINDOW_MS + 50)); // let the window lapse
         match custody.check(Op::FsRead, Some("./data/x")) {
             CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1401"),
             CustodyDecision::Allow => panic!("a stale cache with a dead broker must fail closed"),

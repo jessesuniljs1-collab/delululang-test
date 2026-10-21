@@ -3503,6 +3503,11 @@ fn source_authority_report(
     stamp_native_emission(&mut report, &checked.module);
     stamp_grants(&mut report, &[&checked.module]);
     stamp_secret_destinations(&mut report, &[&checked.module], map);
+    // P9-05 (c): the requests, by the checker's type at each call — only when the program makes one (criterion 11).
+    let requests = crate::within::request_destinations(&checked.module, &checked.result.node_types, map);
+    if let (false, Some(obj)) = (requests.is_empty(), report.as_object_mut()) {
+        obj.insert("requests".into(), json!(requests));
+    }
     report
 }
 
@@ -4678,16 +4683,6 @@ fn cmd_build(rest: &[String]) -> i32 {
 /// a `.dwx` artifact with the compiler-computed authority embedded as a `delulu:authority` custom
 /// section (hash-bound to the code). This is the single, self-describing, authority-carrying
 /// artifact: `delulu run <file>.dwx` re-verifies it before running.
-/// DWX-ACTORS-1: why a program with actors has no `.dwx` yet — said at the build, and at a run of an artifact that exports
-/// actor members (one built before the build refused it).
-pub(crate) fn dwx_actors_refusal(file: &str) -> String {
-    format!(
-        "`{file}` declares actors, and a `.dwx` of an actor program does not run yet: its actor table (each actor's \
-         behaviours and fields) is built from the source, which the artifact does not carry — run the source with \
-         `--engine wasm`, or on the interpreter"
-    )
-}
-
 fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     let (map, id, src) = match load(file) {
         Ok(x) => x,
@@ -4703,14 +4698,6 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
             "DL1201",
             format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"),
         );
-        print_diagnostics("build", &[d], &map, None, opts.json);
-        return 1;
-    }
-    // DWX-ACTORS-1 (2026-10-21): an actor program's `.dwx` was written and then could not run — `run FILE.dwx` has no actor
-    // table (the source route builds it from the AST, and each actor's field count is not in its exports), and it failed
-    // "actor index 1 out of range". Refused here, in words, until the table travels with the artifact.
-    if checked.module.items.iter().any(|it| matches!(it, Item::Actor(_))) {
-        let d = Diagnostic::error("DL1201", dwx_actors_refusal(file));
         print_diagnostics("build", &[d], &map, None, opts.json);
         return 1;
     }
@@ -5574,7 +5561,8 @@ fn authority_workspace(dir: &str, opts: &Opts) -> i32 {
     let name =
         program.entry_module.clone().or_else(|| ws.root_pkg().map(|p| p.name.clone())).unwrap_or_else(|| "package".to_string());
     let modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
-    emit_authority(&program, &name, dir, &ws.source_map, &modules, opts)
+    let units: Vec<&str> = ws.modules.iter().map(|m| m.unit.name.as_str()).collect();
+    emit_authority(&program, &name, dir, &ws.source_map, (&modules, &units), opts)
 }
 
 /// The loose-directory path: no manifest, so no dependency graph and nothing to resolve.
@@ -5589,7 +5577,8 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
     }
     let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
     let modules: Vec<&delulu_syntax::ast::Module> = pkg.modules.iter().map(|m| &m.module).collect();
-    emit_authority(&program, &name, dir, &pkg.source_map, &modules, opts)
+    let units: Vec<&str> = pkg.modules.iter().map(|m| m.name.as_str()).collect();
+    emit_authority(&program, &name, dir, &pkg.source_map, (&modules, &units), opts)
 }
 
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
@@ -5599,7 +5588,7 @@ fn emit_authority(
     name: &str,
     dir: &str,
     map: &SourceMap,
-    modules: &[&delulu_syntax::ast::Module],
+    (modules, units): (&[&delulu_syntax::ast::Module], &[&str]),
     opts: &Opts,
 ) -> i32 {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
@@ -5609,6 +5598,19 @@ fn emit_authority(
     stamp_isolation(&mut report, opts);
     stamp_grants(&mut report, modules);
     stamp_secret_destinations(&mut report, modules, map);
+    // P9-05 (c) for a package: each module's requests by its own node types — keyed by its unit, as the check keyed them
+    // (node ids are per module, and a declared name need not be unique across a workspace).
+    let requests: Vec<Json> = modules
+        .iter()
+        .zip(units)
+        .flat_map(|(m, unit)| match program.node_types.get(*unit) {
+            Some(types) => crate::within::request_destinations(m, types, map),
+            None => Vec::new(),
+        })
+        .collect();
+    if let (false, Some(obj)) = (requests.is_empty(), report.as_object_mut()) {
+        obj.insert("requests".into(), json!(requests));
+    }
     // P9-01 for a package (routine run 21): the same verdict over every module, each call named in its own file.
     if !opts.within.is_empty() || opts.within_file.is_some() {
         return authority_within(map, modules, report, opts);
@@ -6148,6 +6150,7 @@ fn synth_single_program(checked: &Checked) -> Program {
     }
     let mut call_owner = HashMap::new();
     call_owner.insert(mod_name.clone(), owner);
+    let node_types = HashMap::from([(mod_name.clone(), checked.result.node_types.clone())]);
     let entry_module = if checked.result.main_present { Some(mod_name) } else { None };
     Program {
         diagnostics: checked.diagnostics.clone(),
@@ -6156,6 +6159,7 @@ fn synth_single_program(checked: &Checked) -> Program {
         call_owner,
         entry_module,
         type_names: checked.table.type_names(),
+        node_types,
     }
 }
 

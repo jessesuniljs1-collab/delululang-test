@@ -71,6 +71,94 @@ pub(crate) fn behavior_export_name(actor: &str, beh: &str) -> String {
     format!("actor${actor}${beh}")
 }
 
+/// RW 3.21: the immutable `i32` global holding actor `actor`'s field count, exported beside its members — so a module
+/// carries its own actor table, and a `.dwx` of an actor program runs (`table_from_module`). `#` spells no identifier, so no
+/// behaviour's export can collide with it.
+pub(crate) fn fields_export_name(actor: &str) -> String {
+    format!("actor${actor}$#fields")
+}
+
+/// The most fields an actor read from a module may claim — far past any program's, and a bound on what a crafted one can
+/// make the host allocate per spawn.
+const MAX_ACTOR_FIELDS: i32 = 1 << 16;
+
+/// RW 3.21: the actor table of a compiled module, read from the module alone, which its code hash covers — never from a
+/// custom section (ARTIFACT-CLAIM-1). The members are its `actor$A$new` and `actor$A$beh` exports, in the export section's
+/// order: the codegen writes each actor's constructor and then its behaviours, actors in declaration order, which is the
+/// order `actor_table` numbers them by — so the indices agree. Each arity is its function type's, less the self slot.
+/// The field counts are the `fields_export_name` globals' values, known only once instantiated: `field_counts` reads them.
+/// `Ok(None)`: the module has no actor member.
+pub(crate) fn table_from_module(module: &wasmtime::Module) -> Result<Option<ActorTable>, String> {
+    let mut actors: Vec<ActorInfo> = Vec::new();
+    let mut by_name = HashMap::new();
+    for export in module.exports() {
+        let Some(rest) = export.name().strip_prefix("actor$") else { continue };
+        let Some((actor, member)) = rest.split_once('$') else {
+            return Err(format!("an export `{}` names no actor member", export.name()));
+        };
+        if member.starts_with('#') {
+            // `#` spells no identifier: not a member. A field count must be what the codegen writes — an immutable `i32`.
+            if member == "#fields" {
+                let wrote = export.ty().global().is_some_and(|g| {
+                    matches!(g.content(), wasmtime::ValType::I32) && g.mutability() == wasmtime::Mutability::Const
+                });
+                if !wrote {
+                    return Err(format!("`{}` is not an immutable i32 global", export.name()));
+                }
+            }
+            continue;
+        }
+        let Some(func) = export.ty().func().cloned() else {
+            return Err(format!("the actor member `{}` is not a function", export.name()));
+        };
+        let arity = func.params().len().checked_sub(1).ok_or_else(|| format!("`{}` takes no self slot", export.name()))?;
+        if member == "new" {
+            if by_name.contains_key(actor) {
+                return Err(format!("actor `{actor}` has two constructors"));
+            }
+            by_name.insert(actor.to_string(), actors.len() as u32);
+            actors.push(ActorInfo {
+                name: actor.to_string(),
+                field_count: 0,
+                ctor_arity: arity,
+                ctor_export: export.name().to_string(),
+                behaviors: Vec::new(),
+            });
+        } else {
+            let Some(&idx) = by_name.get(actor) else {
+                return Err(format!("the behaviour `{}` precedes its actor's constructor", export.name()));
+            };
+            actors[idx as usize].behaviors.push(BehaviorInfo {
+                name: member.to_string(),
+                arity,
+                export: export.name().to_string(),
+            });
+        }
+    }
+    Ok((!actors.is_empty()).then_some(ActorTable { actors, by_name }))
+}
+
+/// RW 3.21: each actor's field count, from the `fields_export_name` global of the instantiated module — an immutable `i32`
+/// within `MAX_ACTOR_FIELDS`, or the module is refused.
+pub(crate) fn field_counts(
+    table: &ActorTable,
+    mut global: impl FnMut(&str) -> Option<wasmtime::Val>,
+) -> Result<Vec<usize>, String> {
+    table
+        .actors
+        .iter()
+        .map(|a| match global(&fields_export_name(&a.name)) {
+            Some(wasmtime::Val::I32(n)) if (0..=MAX_ACTOR_FIELDS).contains(&n) => Ok(n as usize),
+            Some(other) => Err(format!("actor `{}`'s field count is not one this engine wrote ({other:?})", a.name)),
+            None => Err(format!(
+                "DL1202: actor `{}` carries no field count — the artifact was built before RW 3.21 and cannot run; rebuild it \
+                 from its source",
+                a.name
+            )),
+        })
+        .collect()
+}
+
 /// Build the actor table from a checked module, in declaration order (spec §2 — the same order
 /// codegen and the host both use, so their `actor_idx`/`behavior_idx` agree).
 pub fn actor_table(module: &Module) -> ActorTable {
@@ -140,6 +228,14 @@ pub(crate) struct ActorRuntime {
 impl ActorRuntime {
     pub fn new(table: ActorTable) -> ActorRuntime {
         ActorRuntime { table, slots: Vec::new(), queue: VecDeque::new(), total_turns: 0, dead_actors: 0, dropped_sends: 0 }
+    }
+
+    /// RW 3.21: each actor's field count, read from the module once it is instantiated (`field_counts`) — before `main`
+    /// runs, so before any spawn sizes a slot by it.
+    pub(crate) fn set_field_counts(&mut self, counts: &[usize]) {
+        for (a, &n) in self.table.actors.iter_mut().zip(counts) {
+            a.field_count = n;
+        }
     }
 
     /// Allocate a fresh slot (fields zero-seeded; the ctor turn assigns them — the checker's

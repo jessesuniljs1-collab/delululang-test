@@ -1390,3 +1390,122 @@ fn auto_approval_approves_under_the_standing_node_what_it_bounds_and_never_guard
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// P9-05 (c), D-V2-140's static half: `authority --json` names every request a program makes — each `get`, `get_with` and
+/// `get_with_secret` whose receiver the checker typed `Cap[Http]` — with its URL as far as the source shows: a literal's
+/// host and path by the egress client's own parse; a computed URL, or one that client refuses (`http://`), `null` beside
+/// the literal it may have. Decided by the checker's type at each call, never by a method's name: a `List`'s `get` is no
+/// request — what D-V2-140 kept this open for. A program that makes none has no such key.
+#[test]
+fn authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name() {
+    let dir = std::env::temp_dir().join(format!("delulu-requests-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = "module r\nfn fetch(c: Cap[Http], u: Str) -> Result[Str, NetErr] ! {Net} {\n  c.get(u)\n}\n\
+                   fn main(root: Root) ! {Net, Write} {\n  let h = root.http([\"example.com\"])\n  let xs = [1, 2, 3]\n  \
+                   let a = xs.get(0)\n  let r1 = h.get(\"https://example.com/v1/health\")\n  let r2 = fetch(h, \"https://example.com/x\")\n  \
+                   let r3 = h.get(\"http://example.com/plain\")\n  root.console().println(\"done\")\n}\n";
+    let file = dir.join("r.delulu");
+    std::fs::write(&file, program).unwrap();
+    let o = delulu(&["authority", &file.to_string_lossy(), "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let requests: Vec<(Value, Value, Value, u64)> = v["authority"]["requests"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no requests: {v:#}"))
+        .iter()
+        .map(|r| (r["url"].clone(), r["host"].clone(), r["path"].clone(), r["at"]["line"].as_u64().unwrap_or(0)))
+        .collect();
+    let j = |s: &str| serde_json::json!(s);
+    assert_eq!(
+        requests,
+        vec![
+            // The parameter's URL: computed, as far as this call shows.
+            (Value::Null, Value::Null, Value::Null, 3),
+            (j("https://example.com/v1/health"), j("example.com"), j("/v1/health"), 9),
+            // Not `https://`: the effect refuses it, and the egress client's parse names no host.
+            (j("http://example.com/plain"), Value::Null, Value::Null, 11),
+        ],
+        "the list's `get` on line 8 is no request: {v:#}"
+    );
+    let report = dir.join("report.json");
+    std::fs::write(&report, serde_json::to_string_pretty(&v["authority"]).unwrap()).unwrap();
+    let r = json_of(&delulu(&["schema", "validate", "authority", report.to_str().unwrap(), "--json"]));
+    assert_eq!(r["validate"]["valid"], true, "{}", r["validate"]["errors"]);
+    let plain = dir.join("plain.delulu");
+    std::fs::write(&plain, "module plain\n\nfn main(root: Root) ! {Write} {\n    let xs = [1]\n    let a = xs.get(0)\n    root.console().println(\"hi\")\n}\n").unwrap();
+    let v = json_of(&delulu(&["authority", &plain.to_string_lossy(), "--json"]));
+    assert!(v["authority"].is_object() && v["authority"].get("requests").is_none(), "{v:#}");
+
+    // A package: each module's requests by that module's own node types (node ids are per module), in its own file.
+    let pkg = dir.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nnet = [\"example.com\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/main.delulu"),
+        "module pkg\n\nimport pkg.net\n\nfn main(root: Root) ! {Net, Write} {\n    let xs = [1]\n    let a = xs.get(0)\n    \
+         let r = ping(root.http([\"example.com\"]))\n    root.console().println(\"done\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src/net.delulu"),
+        "module pkg.net\n\npub fn ping(c: Cap[Http]) -> Result[Str, NetErr] ! {Net} {\n    c.get(\"https://example.com/ping\")\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&["authority", &pkg.to_string_lossy(), "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let requests = v["authority"]["requests"].as_array().unwrap_or_else(|| panic!("no requests: {v:#}"));
+    assert_eq!(requests.len(), 1, "the package's one request — the list's `get` in main is none: {v:#}");
+    assert_eq!((&requests[0]["host"], &requests[0]["path"]), (&serde_json::json!("example.com"), &serde_json::json!("/ping")));
+    assert!(requests[0]["at"]["file"].as_str().is_some_and(|f| f.ends_with("net.delulu")), "{v:#}");
+
+    // And through a dependency: the program checked with its dependencies (`deps.rs`) keeps each module's types too.
+    let (app, lib) = (dir.join("app"), dir.join("netlib"));
+    std::fs::create_dir_all(app.join("src")).unwrap();
+    std::fs::create_dir_all(lib.join("src")).unwrap();
+    std::fs::write(
+        lib.join("delulu.toml"),
+        "[package]\nname = \"netlib\"\nversion = \"0.1.0\"\nkind = \"lib\"\n\n[authority]\neffects = [\"Net\"]\nnet = [\"example.com\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        lib.join("src/netlib.delulu"),
+        "module netlib\n\npub fn ping(c: Cap[Http]) -> Result[Str, NetErr] ! {Net} {\n    c.get(\"https://example.com/dep\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("delulu.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = [\"Net\", \"Write\"]\nnet = [\"example.com\"]\n\n\
+         [dependencies]\nnetlib = { path = \"../netlib\", authority = { effects = [\"Net\"], net = [\"example.com\"] } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("src/app.delulu"),
+        "module app\n\nimport netlib\n\nfn main(root: Root) ! {Net, Write} {\n    let r = ping(root.http([\"example.com\"]))\n    \
+         root.console().println(\"done\")\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&["authority", &app.to_string_lossy(), "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let requests = v["authority"]["requests"].as_array().unwrap_or_else(|| panic!("no requests through the dependency: {v:#}"));
+    assert_eq!(requests.len(), 1, "{v:#}");
+    assert_eq!(requests[0]["path"], serde_json::json!("/dep"), "{v:#}");
+
+    // And a loose directory — modules with no manifest, checked by `check_program`.
+    let loose = dir.join("loose");
+    std::fs::create_dir_all(loose.join("src")).unwrap();
+    std::fs::copy(pkg.join("src/main.delulu"), loose.join("src/main.delulu")).unwrap();
+    std::fs::copy(pkg.join("src/net.delulu"), loose.join("src/net.delulu")).unwrap();
+    let o = delulu(&["authority", &loose.to_string_lossy(), "--json"]);
+    assert!(o.status.success(), "{}", out(&o));
+    let v = json_of(&o);
+    let requests = v["authority"]["requests"].as_array().unwrap_or_else(|| panic!("no requests in the loose directory: {v:#}"));
+    assert_eq!((requests.len(), &requests[0]["path"]), (1, &serde_json::json!("/ping")), "{v:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

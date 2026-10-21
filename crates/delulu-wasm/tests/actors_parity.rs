@@ -46,7 +46,22 @@ fn assert_actor_parity(src: &str) -> String {
     assert_eq!(w.surviving_actors, n.surviving_actors, "surviving-actor count differs");
     assert_eq!(w.dead_actors, n.dead_actors, "dead-actor count differs");
     assert_eq!(w.dropped_sends, n.dropped_sends, "dropped-send count differs");
+    // RW 3.21: the same module run as a sealed artifact runs — by the actor table it carries, not the source's.
+    let a = artifact_report(src);
+    assert_eq!(
+        (a.total_turns, a.surviving_actors, a.dead_actors, a.dropped_sends),
+        (w.total_turns, w.surviving_actors, w.dead_actors, w.dropped_sends),
+        "the artifact's report differs from the source's"
+    );
     out
+}
+
+/// RW 3.21: run the module as `run FILE.dwx` runs it — `run_artifact`, whose actor table is read from the module itself.
+fn artifact_report(src: &str) -> ActorReport {
+    let checked = check_source(0, src);
+    let wasm = compile_module(&checked.module).expect("the actor witness compiles to WASM");
+    let (_, report) = delulu_wasm::run_artifact(&wasm, &HostConfig::default()).expect("the artifact reaches quiescence");
+    report.expect("an actor program's artifact runs under the scheduler")
 }
 
 /// A self-sending counter: `spawn` + one send, then N self-sends decrementing to 0. Exercises Int

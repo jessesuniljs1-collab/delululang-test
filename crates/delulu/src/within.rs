@@ -579,37 +579,62 @@ pub(crate) fn diff_nodes(old: &delulu_broker::Authority, new: &delulu_broker::Au
 /// collection's element — and is never guessed: a name a later `let`, assignment, `for`, lambda parameter or match
 /// binding rebinds is forgotten from there on, so a stale binding cannot attribute a different value.
 pub(crate) fn secret_destinations(modules: &[&delulu_syntax::ast::Module], map: &SourceMap) -> Vec<Json> {
-    use delulu_syntax::ast::Item;
-    let mut w = SendWalk { map, vars: BTreeMap::new(), out: Vec::new() };
-    for m in modules {
-        for item in &m.items {
-            match item {
-                // Each body is a block, and a block's names end with it: a parameter, which no `let` in the body
-                // bound, is never attributed.
-                Item::Fn(f) => w.block(&f.body),
-                Item::Test(t) => w.block(&t.body),
-                Item::Actor(a) => {
-                    w.block(&a.ctor.body);
-                    for b in &a.behaviors {
-                        w.block(&b.body);
-                    }
-                    for f in &a.fns {
-                        w.block(&f.body);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
+    let mut w = SendWalk { map, vars: BTreeMap::new(), out: Vec::new(), types: None, requests: Vec::new() };
+    w.modules(modules);
     w.out
 }
 
+/// P9-05 (c), D-V2-140's static half: every request the program makes — each `get`, `get_with` and `get_with_secret` whose
+/// receiver the checker typed `Cap[Http]` — with its URL as far as the source shows it: the literal, and its host and path
+/// by the egress client's own parse (`null` for a computed URL, or one that client would not parse, which the effect
+/// refuses). Decided by the checker's type at each call, never by a method's name, so a `Map`'s or a `List`'s `get` is not
+/// a request — what D-V2-140 kept this open for. Single-file programs: a package's check keeps no per-node types.
+pub(crate) fn request_destinations(
+    module: &delulu_syntax::ast::Module,
+    types: &std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>,
+    map: &SourceMap,
+) -> Vec<Json> {
+    let mut w = SendWalk { map, vars: BTreeMap::new(), out: Vec::new(), types: Some(types), requests: Vec::new() };
+    w.modules(&[module]);
+    w.requests
+}
+
+impl SendWalk<'_> {
+    fn modules(&mut self, modules: &[&delulu_syntax::ast::Module]) {
+        use delulu_syntax::ast::Item;
+        let w = self;
+        for m in modules {
+            for item in &m.items {
+                match item {
+                    // Each body is a block, and a block's names end with it: a parameter, which no `let` in the body
+                    // bound, is never attributed.
+                    Item::Fn(f) => w.block(&f.body),
+                    Item::Test(t) => w.block(&t.body),
+                    Item::Actor(a) => {
+                        w.block(&a.ctor.body);
+                        for b in &a.behaviors {
+                            w.block(&b.body);
+                        }
+                        for f in &a.fns {
+                            w.block(&f.body);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
 /// The walk behind [`secret_destinations`]: `vars` maps a name in scope to the secret it is known to hold (`None`: a
-/// name known NOT to be one the source shows), restored at each block's end.
+/// name known NOT to be one the source shows), restored at each block's end. With the checker's `types`, it also records
+/// each request ([`request_destinations`]).
 struct SendWalk<'a> {
     map: &'a SourceMap,
     vars: BTreeMap<String, Option<String>>,
     out: Vec<Json>,
+    types: Option<&'a std::collections::HashMap<delulu_syntax::ast::NodeId, delulu_check::Type>>,
+    requests: Vec<Json>,
 }
 
 impl SendWalk<'_> {
@@ -676,6 +701,23 @@ impl SendWalk<'_> {
                 self.expr(recv);
                 for a in args {
                     self.expr(a);
+                }
+                let is_http = |t: &delulu_check::Type| matches!(t, delulu_check::Type::Cap(delulu_check::ResourceKind::Http));
+                let request = matches!(name.name.as_str(), "get" | "get_with" | "get_with_secret")
+                    && self.types.and_then(|t| t.get(&recv.id())).is_some_and(is_http);
+                if request {
+                    let url = match args.first() {
+                        Some(Expr::Lit { kind: delulu_syntax::ast::LitKind::Str(u), .. }) => Some(u.clone()),
+                        _ => None,
+                    };
+                    let target = url.as_deref().and_then(|u| delulu_runtime::egress::parse_target(u).ok());
+                    self.requests.push(json!({
+                        "method": name.name,
+                        "url": url,
+                        "host": target.as_ref().map(|t| t.host.clone()),
+                        "path": target.as_ref().map(|t| t.path().to_string()),
+                        "at": at_json(self.map, Some(*span)),
+                    }));
                 }
                 if name.name == "get_with_secret" && args.len() == 4 {
                     let to = match &args[0] {

@@ -19,14 +19,30 @@ its first command (RW 4.19); an ordinary `run` is held to 1 GiB of memory and fi
 the WebAssembly 3.0 features the engine enabled by default; on Windows a foreign library no longer falls back to the
 application's or the system's directories; the broker daemon's wire refuses bytes after a frame's value; `run FILE.dwx`
 refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; since 2026-10-21 it applies `--lease`,
-`--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73),
-and `build --target wasm` refuses a program with actors (RW 3.21).
+`--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### `authority` names each request a program makes, 2026-10-21
+
+- **New: `delulu authority FILE --json` lists the program's requests** (P9-05 (c), D-V2-168). Under `requests`, each
+  `get`, `get_with` and `get_with_secret` on a `Cap[Http]` is listed with its URL, and that URL's host and path where the
+  source shows a literal. The checker's types decide which calls are requests, so a list's or a map's `get` is not one.
+  This works for a single file, a package, its dependencies and a loose directory. The key appears only when the
+  program makes a request; every other report is unchanged.
+
+### an actor program's `.dwx` runs, 2026-10-21
+
+- **New: a `.dwx` of an actor program runs** (RW 3.21). It supersedes the refusal of the section below, made the same day.
+  - The module now carries its actor table: each actor's field count is an exported global.
+  - `delulu run FILE.dwx` reads the table from the module alone and runs the artifact under the cooperative scheduler,
+    with the same quiescence report as its source. `--on-quiesce report` is applied too.
+  - An actor artifact built before this change carries no field counts and is refused before it runs (DL1202). Rebuild
+    it from its source.
 
 ### an actor program has no `.dwx` yet, and says so, 2026-10-21
 

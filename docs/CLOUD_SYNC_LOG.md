@@ -4958,3 +4958,99 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   ARTIFACT-CLAIM-1's refusal and its `.dwx` clause saying the custody and trace flags are applied; (3) RW 3.21's rest (the
   actor table in the code), P9-05's open steps (the path in the chain's record, `authority`'s path walk, methods), RW 4.67,
   6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the laptop's close: #22 and #23 landed; `launch/2.0.0` at `6863bf7`, then `5d5ba5a` (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/records-1021` (records only)   Base: `a2fb0cd`
+- **Landed, each on its own green CI read to the end, by fast-forward:** #22 (`eb2372c`, `0439453`) on `39562082756`; #23
+  (`a2fb0cd`) on `39563303281` — success on every job (`miri-slow` and `heavy-gates` skipped, as on every pull request).
+  `master`: `9c1d30b..5470b53..4729747..0439453..a2fb0cd` today. Push runs read: `39561045205` (`5470b53`) and
+  `39561096457` (`4729747`) success on every job; `39565269313` (`0439453`) and `39566586112` (`a2fb0cd`) running at this
+  entry, their `openshell` runs success.
+- **`launch/2.0.0`:**
+  - `6863bf7` merged `9c1d30b..4729747` (#20, #21). Its release dry run `39562463148`: **success**. Its `everything`
+    `39562457688`: every job success, `supply-chain` included, except the two `miri-slow` jobs (check, broker), running.
+  - `5d5ba5a` merged `4729747..a2fb0cd` (#22, #23):
+    - the CHANGELOG's three sections under `## [2.0.0]`;
+    - the Breaking paragraph's `.dwx` clause brought up to date, with ARTIFACT-CLAIM-1's refusal and DWX-ACTORS-1's;
+    - `CHECKLIST-2.0.md` criterion 4 re-cited: the advisory database moved, the gate red before `5470b53` and green on
+      `39562457688`, the tagged tree's own run read before the tag.
+  - Gates on `5d5ba5a`: survey 1545 nodes, 0 errors; `doctor --check` 29 ok; clippy stamped; eight doc gates, 57 passed.
+    Dispatched: `everything` `39566831246`, release dry run `39566838279`.
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, for whoever comes next (laptop or routine):
+  1. Read `39562457688`'s two `miri-slow` jobs, `39566831246` and `39566838279` (`launch/2.0.0` `5d5ba5a`), and the push
+     runs `39565269313`, `39566586112`.
+  2. RW 3.21's rest — the actor table carried by the code.
+  3. P9-05's open steps (the path in the chain's record, `authority`'s path walk, methods).
+  4. On WASM: maps (then `get_with`, `str` of a map), a list of options.
+  5. RW 4.66 (open by reason: a same-uid process reads the secret store anyway), 4.67, 6.1, 6.2.
+  6. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 (evening) — EPOCH-WINDOW-1: a broker test timed the daemon's shutdown inside its window (RW 7.21) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/epoch-window`   Pull request: see the branch   Base: `3af2b2a`
+- **Synced first:** `origin/master` = `3af2b2a`, nothing new from a routine. CI read: `launch/2.0.0` `5d5ba5a` — `everything`
+  `39566831246` **success on every job** (`miri-slow` included) and the release dry run `39566838279` **success**; `6863bf7`'s
+  `everything` `39562457688` success on every job (its `miri-slow` finished); the push runs `39565269313` (`0439453`) and
+  `39566586112` (`a2fb0cd`) and the nightly `39567648331` (`a2fb0cd`) success; **`39569868995` (`3af2b2a`, push) failure** —
+  this entry.
+- What: `V2_LOG.md` (2026-10-21, the evening entry).
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the test), `docs/REMAINING_WORK.md` (7.21),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new (the timing rule held: the runner, not the custody).
+- Open / next: this branch's CI; then RW 3.21's rest (the actor table in the code), P9-05's open steps, maps on WASM.
+
+### 2026-10-21 (evening) — an actor program's `.dwx` runs: the module carries its own actor table (RW 3.21 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-actors-run` (on `laptop/epoch-window`, #25)   Pull request: see the branch   Merged: not yet (after #25)
+- What: `V2_LOG.md` (2026-10-21, the second evening entry).
+- Files and folders: M `crates/delulu-wasm/src/actors.rs` (`fields_export_name`, `table_from_module`, `field_counts`,
+  `set_field_counts`), `crates/delulu-wasm/src/codegen.rs` (the count globals and their exports),
+  `crates/delulu-wasm/src/host.rs` (`run_artifact`, `run_actors_in`), `crates/delulu-wasm/src/lib.rs` (the re-export),
+  `crates/delulu-wasm/tests/actors_parity.rs`, `crates/delulu/src/run_cmd.rs` (the `.dwx` route runs actors; `--on-quiesce`),
+  `crates/delulu/src/cli.rs` (the build's refusal removed), `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`,
+  `docs/REMAINING_WORK.md` (3.21), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted,
+  renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #25 and this branch landing on green; (2) `launch/2.0.0`: merge, the Breaking paragraph's actor clause
+  removed; (3) P9-05's open steps, maps on WASM, RW 4.67, 6.1, 6.2.
+
+### 2026-10-21 (evening) — P9-05 (c)'s static half: `authority --json` names each request (D-V2-168) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/p9-05-requests` (on `laptop/dwx-actors-run`, #26)   Pull request: see the branch   Merged: not yet
+- **Landed:** #25 (`f05c329`, EPOCH-WINDOW-1) on its CI `39592905415`, success on every job — `master` `3af2b2a..f05c329`.
+- What: `V2_LOG.md` (2026-10-21, the third evening entry); `V2_DECISION_LOG.md` D-V2-168.
+- Files and folders: M `crates/delulu/src/within.rs` (`request_destinations`; `SendWalk` carries the types),
+  `crates/delulu/src/cli.rs` (the report's `requests`), `crates/delulu/src/schema.rs` (the key in the closed schema),
+  `crates/delulu/tests/within_cli.rs`, `tests/core-invariance/SNAPSHOT.txt` (one case, re-recorded — its diff in
+  `V2_LOG.md`), `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12), `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #26 and this branch landing on green; (2) `launch/2.0.0`: merge `f05c329` onward (the Breaking
+  paragraph's actor clause to go); (3) a package's `requests`, the path in the chain's record, methods; maps on WASM.
+
+### 2026-10-21 (evening) — a package's `requests`: each module by its own node types (D-V2-168 item 2) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/p9-05-packages` (on `laptop/p9-05-requests`, #27)   Pull request: see the branch   Merged: not yet
+- **Landed:** #26 (`12d5fa2`) on its CI `39594329482`, success on every job — `master` `f05c329..12d5fa2`.
+- What: `V2_LOG.md` (2026-10-21, the fourth evening entry); D-V2-168 item 2 amended.
+- Files and folders: M `crates/delulu-check/src/program.rs` (`Program::node_types`; `check_program` keeps them),
+  `crates/delulu-check/src/deps.rs` (`check_workspace` keeps them), `crates/delulu/src/cli.rs` (the units beside the
+  modules; a package's `requests`; the single-file `Program`), `crates/delulu-atlas/src/lib.rs` (the test helper's
+  `Program`), `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #27 and this branch landing on green; (2) `launch/2.0.0`: merge `master` (the Breaking paragraph's
+  actor clause to go); (3) the path in the chain's record; methods with the first non-GET primitive; maps on WASM.

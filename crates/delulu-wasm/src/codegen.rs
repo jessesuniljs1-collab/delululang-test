@@ -1520,6 +1520,11 @@ fn compile_module_typed(
     for (j, (_, _, _, _, export)) in member_plans.iter().enumerate() {
         exports.export(export, ExportKind::Func, actor_base + j as u32);
     }
+    // RW 3.21: each actor's field count, an immutable global after the heap pointer, so the module carries its own actor
+    // table — what a `.dwx` of an actor program is run by (`actors::table_from_module`).
+    for (i, a) in table.actors.iter().enumerate() {
+        exports.export(&crate::actors::fields_export_name(&a.name), ExportKind::Global, HEAP_GLOBAL + 1 + i as u32);
+    }
     // The late helpers follow the actor members, each only where the module uses it.
     let mut late = actor_base + member_plans.len() as u32;
     if needs_lists {
@@ -1599,6 +1604,11 @@ fn compile_module_typed(
     let heap_start = data.len() as i32;
     let mut globals = GlobalSection::new();
     globals.global(GlobalType { val_type: ValType::I32, mutable: true, shared: false }, &ConstExpr::i32_const(heap_start));
+    for a in &table.actors {
+        let fields =
+            i32::try_from(a.field_count).map_err(|_| CompileError::Unsupported("an actor with too many fields".into()))?;
+        globals.global(GlobalType { val_type: ValType::I32, mutable: false, shared: false }, &ConstExpr::i32_const(fields));
+    }
 
     let mut datas = DataSection::new();
     if !data.is_empty() {

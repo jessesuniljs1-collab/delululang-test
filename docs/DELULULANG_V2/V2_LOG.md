@@ -8083,3 +8083,175 @@ lesson, the entry before. That is a format change, a slice of its own (RW 3.21's
 - The five CLI targets that build artifacts (`wasm_cli`, `release`, `plugin_cli`, `artifact_review`, `json_contract`):
   51 passed.
 - Chapter five and the other non-actor programs still build.
+
+## 2026-10-21 — the laptop's close: four pull requests landed; `launch/2.0.0` merged twice
+
+Landed today by fast-forward, each on its own CI read green to the end:
+- #20: RW 6.15, RW 3.20, the three advisories, rustfmt and `scripts/clippy.sh`'s format check;
+- #21: the network on WASM;
+- #22: a `.dwx` under custody and a trace; ARTIFACT-CLAIM-1; WASM-CODE-1;
+- #23: DWX-ACTORS-1.
+
+`launch/2.0.0` took them in two merges:
+- `6863bf7`: release dry run `39562463148` success; `everything` `39562457688` success on every job but two `miri-slow`
+  jobs still running.
+- `5d5ba5a`: its CHANGELOG's Breaking paragraph says what an artifact is now refused (DL1202 at an undeclared effect; an
+  actor program at the build). The checklist's supply-chain criterion is re-cited, since the advisory database moved
+  under a fixed tree this morning. `everything` `39566831246` and the release dry run `39566838279` dispatched.
+
+Nothing is tagged; the launch waits for the owner's word. `docs/CLOUD_SYNC_LOG.md`'s closing entry lists the runs to read
+and the open items, in order.
+
+## 2026-10-21 (evening) — the laptop: EPOCH-WINDOW-1 — a broker test timed the daemon's shutdown inside a 250 ms window (RW 7.21)
+
+**The red.** `master`'s push run `39569868995` on `3af2b2a` (a records-only commit; its pull request's run `39567010105`
+green on every job) failed one test on `test (windows-latest)`: `brokerd::tests::epoch_class_over_the_wire_uses_the_cached_snapshot`
+— "fresh cache answers within the epoch window" (`brokerd.rs:2921`), 187 of 188 passing. Every other job of the run
+succeeded. Never seen before.
+
+**The mechanism, read before reproducing.** The test refreshed a client's epoch cache (250 ms, the longest window
+`clamp_epoch_ms` allows), then `stop_daemon` (the `Shutdown` round trip, the handler loop ending, a connection to wake the
+accept thread, the thread's join), then expected the still-fresh cache to answer. The whole shutdown stood inside the window.
+On a 4-vCPU runner under the suite it can outlast 250 ms; the cache was then stale, the refresh met a dead broker, and the
+custody failed closed — DL1401, exactly the behaviour the rest of the test asserts.
+
+**Reproduced deterministically.** A 300 ms sleep added to `stop_daemon` turns the old test red with CI's message at CI's line.
+Statistically it did not show: 48 runs at four at a time and 48 more beside six CPU-bound loops, the frozen pre-fix test
+binary, 0 red — the laptop has 16 cores; the runner has 4 (`docs/assistant-memory/delulu-timing-tests.md`: starve, don't
+guess; here the shape was readable and the sleep is the starvation).
+
+**The fix: nothing slow inside the window.** The window now holds one revoke request:
+- After the refresh, the node is revoked. A check inside the window still answers Allow: a round trip would have seen the
+  revocation, so this witnesses the cache better than a dead broker did.
+- Once the window lapses, the refresh sees the revocation (DL1403).
+- The "inside the window" half counts only when the test reached it in time, measured from before the refresh (the cache is
+  stamped after it, so the measure is conservative). An attempt that did not is retried with a fresh node, up to five. If none
+  does, the test says the runner was too slow, with the slowest time.
+- The dead-broker DL1401 stays, after the window, where no timing decides it.
+
+**Evidence.**
+- The new test is green under the 300 ms shutdown.
+- Mutants on the client's cache, each red, the control green:
+  - M686 never fresh — the inside-window Allow became DL1403;
+  - M687 never stale;
+  - M689 the double: the refresh error ignored and the stale cache kept.
+- M688 (the error ignored alone) survives by design: `refresh_cache` drops the stale cache first, and the next guard answers
+  DL1401 for an empty one — two walls, read before recording the survivor.
+- `delulu`'s whole unit binary: 188 passed. clippy with rustfmt's check clean.
+
+## 2026-10-21 (evening) — the laptop: an actor program's `.dwx` runs — the module carries its own actor table (RW 3.21 closed)
+
+**From the refusal to the run.** DWX-ACTORS-1 was refused in words this afternoon (`a2fb0cd`): the `.dwx` route had no actor
+table, and the module did not carry each actor's field count.
+
+**The module now carries its table, as code.** The codegen exports, beside each actor's members, an immutable `i32` global
+`actor$A$#fields` holding its field count; `#` spells no identifier, so no behaviour's export can collide with it. The host
+reads the table from the module alone, which its code hash covers — never from a custom section, ARTIFACT-CLAIM-1's lesson
+the same day (`actors::table_from_module`):
+- the members are the `actor$A$new` and `actor$A$beh` exports, in the export section's order. The codegen writes each
+  actor's constructor and then its behaviours, actors in declaration order, which is how `actor_table` numbers them, so
+  actor and behaviour indices agree.
+- each arity is the function type's, less the self slot.
+- a field-count export must be an immutable `i32` global, or the module is refused.
+- the counts are read once the module is instantiated, before `main` runs, so before any spawn sizes a slot
+  (`field_counts`, bounded at 65,536).
+
+`run_artifact` compiles the module once: with no actor member it runs `main` as before; with members, under the cooperative
+scheduler (`run_actors_in`, shared with `run_main_actors`). The `.dwx` route uses it, prints the engine's actor label and a
+death count as the source route does, and applies `--on-quiesce report` (`APPLIED_TO_A_DWX`; DWX-FLAGS-1's test now names
+`--actors-threads` among the flags still refused). `build --target wasm` builds actor programs again. An actor artifact built
+before carries no counts and is refused before it runs: DL1202, "rebuild it from its source".
+
+**Evidence.**
+- `wasm_cli.rs` `an_actor_programs_dwx_runs_as_its_source_does`: two actor types, self-sends, a send through a field, and a
+  behaviour dying on a division by zero. The artifact's quiescence report — "2 surviving actor(s)" and "1 died" — equals the
+  source's on `--engine wasm` and on the interpreter. An artifact with its count exports renamed is `error[DL1202]` and never
+  "out of range".
+- `actors_parity.rs`: `assert_actor_parity` also runs every parity program as an artifact and holds its report to the
+  source's: the counter and ping-pong programs, the poisoning bomb, the fifteen-name program. 8 passed.
+- By hand: `examples/guide/06_actors.delulu` built and run as a `.dwx` — 5 surviving actors, 13 turns, as its source on both
+  engines.
+- Mutants:
+  - M690 every count zero → red (six parity tests);
+  - M691 behaviours read in reverse → red;
+  - M693 the counts not set → red;
+  - M694 the count exports one global off (the heap pointer) → red: not immutable;
+  - M695 a missing count read as zero → red;
+  - M692 (the self slot not subtracted) survives as equivalent: arities are read only by the codegen, from the AST, at
+    compile time, and Wasmtime type-checks every call itself.
+- `delulu-wasm` whole: 174 passed. Six artifact CLI targets (`wasm_cli`, `release` — byte-identical builds among them —
+  `examples_run`, `artifact_review`, `json_contract`, `plugin_cli`): 57 passed. clippy with rustfmt's check clean.
+
+**For `launch/2.0.0`'s next merge:** its Breaking paragraph says `build --target wasm` refuses a program with actors — no
+longer true once this lands; that clause is to go.
+
+## 2026-10-21 (evening) — the laptop: P9-05 (c)'s static half — `authority --json` names each request by the checker's type (D-V2-168, RW 2.12)
+
+**Why now.** D-V2-140 §2 kept `authority`'s static path report open for one reason: the AST walk could not tell an `Http`
+capability's `get` from a `Map`'s without types, and guessing which call is a request is not a claim this project makes.
+The checker's per-node types, which the WASM backend has used since RW 3.4, answer exactly that.
+
+**What.** `within::request_destinations` is `secret_destinations`' walk (`SendWalk`), given the checker's `node_types`. At
+each `get`, `get_with` and `get_with_secret` whose receiver's type is `Cap[Http]` it records:
+- the method;
+- the URL literal;
+- its host and path by the egress client's own `parse_target`;
+- the call's position.
+
+A computed URL is `null`, and so are the host and path of a URL that client refuses (not `https://`). The report gains
+`requests` only when the program makes one, and the closed schema admits it. Built for a program checked as one file: a
+package's check keeps no per-node types, and node ids are per module — recorded open.
+
+**The core's answers moved by one case** (`tests/core-invariance/SNAPSHOT.txt`, re-recorded with `DELULU_BLESS=1` as a
+reviewed act, D-NE-3) — `examples/guide/05_capabilities.delulu :: authority --json`, which gains exactly:
+
+```
+    "requests": [
+      {
+        "at": { "column": 5, "file": "examples/guide/05_capabilities.delulu", "line": 30 },
+        "host": null,
+        "method": "get",
+        "path": null,
+        "url": null
+      }
+    ],
+```
+
+— the chapter's `client.get(url)` inside `fetch`, whose URL is a parameter. Intended: nothing else in any recorded case
+moved. The file stays LF (`git ls-files --eol`: `i/lf w/lf`).
+
+**Evidence.**
+- `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name`: the parameter's URL
+  (all null), a literal (`example.com`, `/v1/health`) and an `http://` literal (host and path null) are named, and the
+  `List`'s `get` on line 8 is not. The report validates against the schema; a program with no request has no key.
+- Mutants, each red, the control green:
+  - M696 decided by the method's name;
+  - M697 the key never stamped;
+  - M698 the path taken from the host;
+  - M699 the schema without the key.
+- `delulu` and `delulu-conform` whole, before the snapshot was re-recorded: 1,029 passed, 4 failed in 103 targets. The
+  failures were the three `doctor_cli` map tests (stale before the Survey's rebuild) and this snapshot case. Both are
+  answered above; after them, see the commit message.
+
+## 2026-10-21 (evening) — the laptop: a package's `requests` — each module by its own node types (D-V2-168 item 2)
+
+The entry before left a package's report open: `check_program` kept no per-node types, and node ids are per module.
+`Program` now has `node_types`, one map per module, keyed by its **unit name** — the key both package checks
+(`check_program` for a loose directory, `check_workspace` for a manifest and its dependencies) already use for everything
+else. `emit_authority` takes the unit names beside the modules and pairs them directly. It never recomputes a key from a
+module's declared name: a workspace need not keep that unique, and the wrong map would put one module's types on
+another's nodes. The single-file `Program` the CLI builds and the atlas's test helper carry theirs too.
+
+**Evidence.** `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name` gains three
+cases:
+- a two-module package whose second module requests `/ping` (named in `src/net.delulu`; the `List` `get` in `main` is not);
+- an app whose dependency `netlib` requests `/dep`;
+- a loose directory (`src/` and no manifest) — which first read empty because the test had put its files beside `src/`
+  instead of in it (the loader reads `src/`), a test mistake read before blaming the code.
+
+Mutants, each red, the control green:
+- M700 `check_program` drops the types;
+- M701 `check_workspace` drops them;
+- M702 the report pairs by a wrong key.
+
+`delulu-check` whole: 275 passed. `delulu-atlas`: 18 passed. `within_cli`: 17 passed. clippy with rustfmt's check clean.

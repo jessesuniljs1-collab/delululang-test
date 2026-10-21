@@ -1871,6 +1871,32 @@ pub fn run_main_actors(wasm: &[u8], cfg: &HostConfig, table: &ActorTable) -> Res
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
     let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    run_actors_in(store, instance)
+}
+
+/// Run a `.dwx` (RW 3.21): its `main` — under the cooperative scheduler when the module exports actor members, by the actor
+/// table the module itself carries (`actors::table_from_module`, then each actor's field count from its global once
+/// instantiated, before `main` runs). Compiled once. The output, and an actor program's quiescence report.
+pub fn run_artifact(wasm: &[u8], cfg: &HostConfig) -> Result<(String, Option<ActorReport>), WasmError> {
+    let engine = optimizing_engine();
+    let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
+    let table = crate::actors::table_from_module(&module).map_err(WasmError::Module)?;
+    let state = main_host_state(cfg, ActorRuntime::new(table.clone().unwrap_or_else(empty_actor_table)));
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let Some(table) = table else {
+        let func = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
+        return finish(store, func, &[Val::I32(0)]).map(|out| (out, None));
+    };
+    let counts = crate::actors::field_counts(&table, |name| instance.get_global(&mut store, name).map(|g| g.get(&mut store)))
+        .map_err(WasmError::Module)?;
+    store.data_mut().actor_rt.set_field_counts(&counts);
+    run_actors_in(store, instance).map(|(out, report)| (out, Some(report)))
+}
+
+/// `main`'s turn, then the cooperative drain to quiescence (Stage 7 phase 7h) — for a module instantiated with its actor table.
+fn run_actors_in(mut store: Store<HostState>, instance: Instance) -> Result<(String, ActorReport), WasmError> {
     let main = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
     // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
     let mut results: [Val; 0] = [];
