@@ -5053,3 +5053,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (7.22), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`. Deleted, renamed:
   nothing tracked.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-21 (night) — the path in the chain's record (P9-05, D-V2-169) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/net-path-record`   Pull request: the one this entry rides in
+- **Session start:** `git fetch`; `master` at `7431dbf` (#29 landed by fast-forward on its green run `39603294484`; its push
+  run `39606506663` success). `launch/2.0.0`'s `everything` `39601103948` and release dry run `39601108596`: **success**,
+  both read. `origin/claude/*`: only the two superseded witness branches (`7d6a22b`, `d3f0d52`). `autosave/laptop` older
+  than `master`. The Survey `ok` (1545 nodes); `doctor --check` 29 checks passed. Autosave task Ready, result 0.
+- **What:** a daemon or leased run's `net` use carries its request path. The broker judges it against the node's grant and
+  names it in the use's payload as `url_path`, while `target` stays the host. `audit query` prints `path=`, and OCSF exports
+  `http_request.url`. This fixes the chain's `use allow` for a request the call then refused (witnessed on `678dee6`'s
+  binary). The tests, M703–M717 and the local results are in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-broker/src/{diag,ocsf,validate}.rs`,
+  `crates/delulu-runtime/src/{channel,custody,interp,lib,prim}.rs`, `crates/delulu-wasm/src/host.rs`,
+  `crates/delulu/src/{broker_client,broker_ipc,brokerd,cli}.rs`, `crates/delulu/tests/{audit_ocsf_cli,broker_cli}.rs`,
+  `CHANGELOG.md`, `docs/DEPLOYMENT.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG,V2_P9_DESIGN,V2_PHASE_STATUS}.md`,
+  `docs/REMAINING_WORK.md` (2.12), `HANDOFF.md` (§11.4 NET-PATH-RECORD), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

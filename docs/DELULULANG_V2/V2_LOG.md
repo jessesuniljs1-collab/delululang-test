@@ -8245,3 +8245,47 @@ guess is not a root cause.
 Falsified: a launcher that does not exist fails in 0.06 s, quoting the host's "the external launcher `no-such-launcher-exe`
 could not be started: there is no such program". Locally (Windows 11) the test is green. Three `witness.yml` runs of the test
 on `windows-latest` at `fa4021c` were dispatched to reproduce it: `39602082207`, `39602087235`, `39602091804`.
+
+## 2026-10-21 (night) — the laptop: the path in the chain's record (P9-05, D-V2-169, RW 2.12)
+
+P9-05's open slice since D-V2-139 §6: the broker's `Net` op carried the host, and a use's record named the host alone.
+Reading the code for it found what that cost. Under the daemon, the custody gate runs before the effect's own first check,
+and the broker compared the host alone. So a request to a granted host, for a path outside every pattern the grant names
+for it, was recorded `use allow` and then refused at the call.
+
+**Witnessed** with the pre-change build (`launch/2.0.0` `678dee6`'s binary, Windows, a daemon, granted
+`net.special=*.example.invalid/v1/**`). `GET /v2/items?q=1` was refused DL0904 at the call ("outside every path the grant
+names for its host"), and the chain's seq 9 reads `use allow … target=api.example.invalid`. No record anywhere named a path.
+
+**Built** (D-V2-169):
+- `prim::request_path` is the URL's path without its query or fragment, `/` when it names none.
+- `Custody::check_at` carries the path, defaulting to `check` for a custody that records nothing (embedded).
+- The interpreter's gate (`custody_path_for`), a sandboxed guest's host (`channel.rs`) and the WASM host
+  (`custody_allows_at`) send it. The plugin wrapper forwards it.
+- The daemon client sends it in `Check` as `url_path`, a key absent from the frame when there is none.
+- The broker (`check_use_at`) judges it by `netscope::judge_all`, refusing as `Denial::NetPath` (DL0904, worded as the
+  call words it). It names the path in the use's payload as `url_path`, beside `op`; `target` stays the host.
+- `audit query` prints `path=`. The OCSF export maps the path to `http_request.url` (`hostname`, `path`).
+- Records before this verify unchanged: the payload is hashed as a value, whatever its keys.
+
+**After** (this branch's binary, the same scenario): `/v1/items` is recorded `allow … path=/v1/items`, and `/v2/items`
+is recorded `deny … path=/v2/items`, refused by the broker in the call's words. The same holds for the WASM engine and for
+a sandboxed guest, both read by hand on Windows and then in `broker_cli.rs`.
+
+**Tests:**
+- `validate.rs` `a_net_use_naming_its_path_is_judged_on_it_and_recorded_with_it`.
+- `broker_cli.rs` `a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded`, extended: seven runs (the
+  interpreter's three, the WASM engine's two, a sandboxed guest's two), each use's path and decision. The query is never
+  recorded, and the text form prints `path=`.
+- `audit_ocsf_cli.rs`: `http_request.url` for a use naming its path, none for one that names none.
+- `delulu-runtime`: `a_network_use_carries_its_request_path_and_never_its_query` and
+  `a_plugin_exports_custody_forwards_the_request_path`.
+
+**Mutants** M703–M717, each red, the restored tree green (the list is in D-V2-169's evidence).
+
+**Local results:** `delulu-broker`, `delulu-runtime` and `delulu-wasm` whole, 746 passed. The `delulu` binary's unit tests
+with `broker_cli`, `audit_ocsf_cli`, `message_spacing`, `monitor_cli`, `plugin_load_cli` and `sandbox_guard_e2e`, 255
+passed. `scripts/clippy.sh -j 4` (rustfmt's check, then clippy) clean and stamped. The whole suite runs on GitHub (the pull
+request's CI).
+
+**Left in P9-05:** methods (d), with the first non-GET primitive (RW 2.11).
