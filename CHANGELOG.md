@@ -11,6 +11,12 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `--debug-rcaps` on a deep graph, 2026-10-22
+
+- **Fixed: `--debug-rcaps` ran out of memory on a deeply nested graph moved to an actor** (RW 4.75). A 100,000-deep
+  `iso` graph moves without the flag, but under it the run stopped at the 1 GiB budget. The flag's uniqueness check now
+  walks the graph without recursion, builds paths only for what it reports, and names the same path as before.
+
 ## Unreleased — lists, maps and options nest on the WASM engine, 2026-10-22
 
 - **New: lists, maps, options and results nest on the WebAssembly engine** (RW 3.4, D-V2-173). A list of lists, a list

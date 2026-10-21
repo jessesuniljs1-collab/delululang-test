@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 326 |
-| Rust lines | 185391 |
+| Rust lines | 185453 |
 | Rust files outside `src/` (test/bench targets) | 156 |
 | Markdown documents | 270 |
-| Markdown lines | 84172 |
+| Markdown lines | 84203 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1553 / 16028 |
+| Nodes / edges in this map | 1553 / 16033 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -304,11 +304,11 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23206 lines
+- **Modules:** 24 files, 23236 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/actors.rs` | 1712 | The native actor runtime (Stage 7 phase 7g, spec §6). |
+| `src/actors.rs` | 1742 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 767 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/beneath.rs` | 776 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 845 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |

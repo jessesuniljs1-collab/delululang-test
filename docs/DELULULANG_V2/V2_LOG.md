@@ -8476,3 +8476,18 @@ Tests: `nested_parity.rs` (3), refused by the old codegen with DL1201 (`a list o
 list held twice and in a record, pushed to after), `contains` and `==` by contents, a nested option matched, a result of
 lists, a sum holding a list, `find` and `fold`, three levels of lists, and an inner index's fault in the interpreter's
 words. The whole `delulu-wasm` suite passes. Mutants M794–M797 red: the type made a slot type for only lists and maps, `contains` of nested values by address, a record field refusing a map, a list element refusing a pointer.
+
+## 2026-10-22 (night) — the laptop: `--debug-rcaps` walks a deep graph (RW 4.75 closed)
+
+Witnessed: a 100,000-deep `iso` graph (records in options) moved to an actor runs without the flag. Under
+`--debug-rcaps` it stopped at the 1 GiB budget. `assert_unique_graph` recursed once per level and built each node's
+whole path as it went, quadratic in memory. It now walks the same worklist as `value_to_msg`: a part is read through the
+cell holding it, and each node's strong count is read before the walk holds any reference to it. A path is kept as its
+parent and its last step (`Holder::step`), spelled out only for a node reported, in the same words: the existing tests
+(`arg[0].0`, `arg[0][k]`) pass unchanged.
+
+Test: `actors_trace.rs` `a_graph_nested_past_the_stack_passes_the_uniqueness_walk_and_its_deepest_alias_is_named`. A
+100,000-level graph passes, and an alias at its bottom is named by its whole 33,334-step path, exactly. On the old walk
+the binary dies of a stack overflow. Mutants M798 (the path spelled backwards) and M800 (every step hung from the root)
+are red. With this, RW 4.75 is closed. The channel's walk still recurses, but no well-typed program can reach it, and
+the host's decoder stops at 256 levels.

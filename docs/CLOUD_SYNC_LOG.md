@@ -5165,3 +5165,13 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4, 4.75),
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/nested_parity.rs`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — `--debug-rcaps` walks a deep graph (RW 4.75 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/rcaps-depth` (on `laptop/wasm-nested-values` `8fb2867`, PR #37)   Pull request: the one this entry rides in
+- **What:** the debug lane's uniqueness walk made iterative with paths kept as parent and step; witnessed (a 100,000-deep
+  `iso` move spent the budget under the flag) and tested (the old walk overflows the stack). M798, M800 red.
+- Files and folders: M `crates/delulu-runtime/src/actors.rs`, `crates/delulu-runtime/tests/actors_trace.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.75), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
