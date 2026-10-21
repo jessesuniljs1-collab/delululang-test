@@ -110,22 +110,20 @@ false false [NaN]
 }
 
 /// Without the checker's types (`compile_module`) the backend cannot know a `str` or `==` needs the host's value
-/// interface, and refuses rather than guess; and what stays outside — a list holding a map, a list of options — is refused
-/// with the types too. (`str` of a map itself compiles since D-V2-170: `map_parity.rs`.)
+/// interface, and refuses rather than guess — a list holding a map, a list of options among them, which compile with the
+/// types since a slot holds a pointer to any list, map, option or result (`nested_parity.rs` holds them to the
+/// interpreter). (`str` of a map itself compiles since D-V2-170: `map_parity.rs`.)
 #[test]
 fn what_the_value_interface_leaves_out_is_refused() {
-    let src = "module m\nfn f() -> Str {\n  str([1, 2])\n}\n";
-    let checked = check_source(0, src);
-    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
-    assert!(compile_module(&checked.module).is_err(), "no types, no `delulu:value`: refused");
-    assert!(compile_checked(&checked.module, &checked.result).is_ok(), "with the checker's types it compiles");
     for src in [
+        "module m\nfn f() -> Str {\n  str([1, 2])\n}\n",
         "module m\nfn f() -> Str {\n  let m: Map[Str, Int] = Map()\n  str([m])\n}\n",
         "module m\nfn f() -> Str {\n  str([Some(1)])\n}\n",
     ] {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);
-        assert!(compile_checked(&checked.module, &checked.result).is_err(), "stays on the interpreter:\n{src}");
+        assert!(compile_module(&checked.module).is_err(), "no types, no `delulu:value`: refused:\n{src}");
+        assert!(compile_checked(&checked.module, &checked.result).is_ok(), "with the checker's types it compiles:\n{src}");
     }
 }
 

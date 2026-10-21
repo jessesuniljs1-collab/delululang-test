@@ -11,6 +11,27 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the cycle collector keeps what a map holds, 2026-10-22
+
+- **Fixed: a list held in an actor's map could be emptied by the cycle collector** (GC-MAP-1, RW 4.77). The collector
+  didn't look inside maps. So a list or record that an actor could reach only through a map looked like garbage, and a
+  sweep emptied it in place. A map holding `[1, 2, 3]` read back as `[]`, and the only sign was a "collected" count
+  under `--trace-memory`. This affected actor programs since maps were added (2026-09-20).
+
+## Unreleased — `--debug-rcaps` on a deep graph, 2026-10-22
+
+- **Fixed: `--debug-rcaps` ran out of memory on a deeply nested graph moved to an actor** (RW 4.75). A 100,000-deep
+  `iso` graph moves without the flag, but under it the run stopped at the 1 GiB budget. The flag's uniqueness check now
+  walks the graph without recursion, builds paths only for what it reports, and names the same path as before.
+
+## Unreleased — lists, maps and options nest on the WASM engine, 2026-10-22
+
+- **New: lists, maps, options and results nest on the WebAssembly engine** (RW 3.4, D-V2-173). A list of lists, a list
+  of options, a map of lists, an option of an option, and a map in a record field now compile with `--target wasm` and
+  `--engine wasm`. Before, each was refused with DL1201. They are shared as on the interpreter, so a list pushed to is
+  seen through every list holding it. A list or a record field holding a function or a capability still runs only on
+  the interpreter.
+
 ## Unreleased — deep values print and compare, 2026-10-22
 
 - **Fixed: `str` or `==` of a deeply nested value crashed the process** (DATA-DEPTH-1, RW 4.74). A linked list of records

@@ -734,8 +734,10 @@ overstate it downstream:
     or sums compiles with all fifteen methods, indexing and `for`, as does `Str.split`. A `Map`
     compiles with all eight methods, any of the three key types, and any value a list may hold. The
     host orders a map's keys and a `sort` by the interpreter's own rule, so both engines iterate and
-    sort identically. `str` and `==` of either compile too. Still `DL1201` on `--target wasm`: a list
-    of lists, and a map inside a list, an option or a record field. Run those on the interpreter.
+    sort identically. `str` and `==` of either compile too. Since 2026-10-22 they nest: a list of
+    lists, a list of options, a map of lists, and a map inside a list, an option or a record field.
+    Still `DL1201` on `--target wasm`: a list or a record field holding a function or a capability.
+    Run those on the interpreter.
 - **Soundness is design-level plus audit-rule plus test-enforced.** The Delulu Core mechanization is
   open work.
 - **Not everything is covered yet.** `docs/reference/coverage.md` reports per-item conformance

@@ -8460,3 +8460,48 @@ Tests:
 Mutants M786–M793 red. M789–M791 went red only after the parts test: no test had sent a map of more than one key or a
 closure capturing more than one value. Still recursive (4.75): the sandbox channel's `WireValue` and `--debug-rcaps`'
 uniqueness walk.
+
+## 2026-10-22 (night) — the laptop: lists, maps and options nest on the WASM engine (RW 3.4, D-V2-173)
+
+The widening this night's work began with, reached once the defects it surfaced were fixed: MATCH-NEST-1,
+MATCH-EXHAUST-1, WASM-IMPORTS-1, DATA-DEPTH-1 and -2, CLOSURE-SEND-1.
+- A slot holds a pointer to any list, map, option or result (`Scalar::Boxed`, interned so `Scalar` stays `Copy`). So a
+  list of lists, a list of options, a map of lists, an option of an option, a map in a record field compile.
+- The host's value rebuild (`reify.rs`) and descriptors were already recursive in structure, and since DATA-DEPTH-1 they
+  are iterative in walk. `match` tests inside each constructor since MATCH-NEST-1.
+- The five pins that listed these shapes as refused were read first (POP-WALK-1). None named a hazard. Each now lists
+  what stays outside: a list or a record field holding a function or a capability.
+
+Tests: `nested_parity.rs` (3), refused by the old codegen with DL1201 (`a list of List(I64)`). It checks sharing (one
+list held twice and in a record, pushed to after), `contains` and `==` by contents, a nested option matched, a result of
+lists, a sum holding a list, `find` and `fold`, three levels of lists, and an inner index's fault in the interpreter's
+words. The whole `delulu-wasm` suite passes. Mutants M794–M797 red: the type made a slot type for only lists and maps, `contains` of nested values by address, a record field refusing a map, a list element refusing a pointer.
+
+## 2026-10-22 (night) — the laptop: `--debug-rcaps` walks a deep graph (RW 4.75 closed)
+
+Witnessed: a 100,000-deep `iso` graph (records in options) moved to an actor runs without the flag. Under
+`--debug-rcaps` it stopped at the 1 GiB budget. `assert_unique_graph` recursed once per level and built each node's
+whole path as it went, quadratic in memory. It now walks the same worklist as `value_to_msg`: a part is read through the
+cell holding it, and each node's strong count is read before the walk holds any reference to it. A path is kept as its
+parent and its last step (`Holder::step`), spelled out only for a node reported, in the same words: the existing tests
+(`arg[0].0`, `arg[0][k]`) pass unchanged.
+
+Test: `actors_trace.rs` `a_graph_nested_past_the_stack_passes_the_uniqueness_walk_and_its_deepest_alias_is_named`. A
+100,000-level graph passes, and an alias at its bottom is named by its whole 33,334-step path, exactly. On the old walk
+the binary dies of a stack overflow. Mutants M798 (the path spelled backwards) and M800 (every step hung from the root)
+are red. With this, RW 4.75 is closed. The channel's walk still recurses, but no well-typed program can reach it, and
+the host's decoder stops at 256 levels.
+
+## 2026-10-22 (night) — the laptop: the cycle collector keeps what a map holds (GC-MAP-1, RW 4.77)
+
+Found by reading `cycles.rs` for the depth class while closing RW 4.75. The collector already used a worklist, but its
+marking `match` ended in `_ => {}`, and `Map` fell there: the collector dates from 2026-07-20 and `Map` from 2026-09-20.
+- **Witnessed on the old binary.** An actor fills `self.m` with `"k" → [1, 2, 3]`, churns 600 short-lived lists to force
+  two sweeps, then prints `{k: []}`. The live list was alive and unmarked, so the sweep broke it in place, and the only
+  trace was `1 garbage-cycle cell(s) collected`. Silent data corruption.
+- **Fixed.** A map's values are marked. The `match` now names every `Value` kind, so a kind added later does not compile
+  until the collector places it. Built with and without the `python` feature.
+- **Test.** `actors_cycles_cli.rs` `a_list_held_in_an_actors_map_survives_the_sweep` asserts the two sweeps, so the
+  witness is exercised. It is red on the old collector (`{k: []}`), and that mutant is exactly the old code.
+- **Residual.** A cycle through a map is not collected, because a map cell is not registered. That is a leak, the safe
+  direction.

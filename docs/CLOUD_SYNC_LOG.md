@@ -5153,3 +5153,35 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/REMAINING_WORK.md` (4.75, 4.76), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu/tests/deep_values_cli.rs`.
   Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — lists, maps and options nest on the WASM engine (RW 3.4, D-V2-173) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-nested-values` (on `laptop/deep-messages` `ec333c4`, PR #36)   Pull request: the one this entry rides in
+- **What:** a slot holds a pointer to any list, map, option or result, so they nest on the WASM engine; five pins now
+  list what stays outside. Also recorded here: RW 4.75's channel half is established unreachable — every capability
+  method's argument is a fixed shallow type, and the host decodes each frame with `ciborium`'s recursion limit of 256.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/tests/{conformance_parity,list_parity,loop_parity,record_parity,value_parity}.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4, 4.75),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/nested_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — `--debug-rcaps` walks a deep graph (RW 4.75 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/rcaps-depth` (on `laptop/wasm-nested-values` `8fb2867`, PR #37)   Pull request: the one this entry rides in
+- **What:** the debug lane's uniqueness walk made iterative with paths kept as parent and step; witnessed (a 100,000-deep
+  `iso` move spent the budget under the flag) and tested (the old walk overflows the stack). M798, M800 red.
+- Files and folders: M `crates/delulu-runtime/src/actors.rs`, `crates/delulu-runtime/tests/actors_trace.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.75), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — the cycle collector keeps what a map holds (GC-MAP-1, RW 4.77) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/gc-map` (on `laptop/rcaps-depth` `671677d`, PR #38; `master` `ec333c4` since #36 landed on its green run `39669053973`)   Pull request: the one this entry rides in
+- **What:** GC-MAP-1 — the cycle collector's marking walk passed over maps, so a sweep emptied a live list held in an
+  actor's map; witnessed on the old binary, fixed, its `match` made exhaustive over `Value`. Test in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/cycles.rs`, `crates/delulu/tests/actors_cycles_cli.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.77), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

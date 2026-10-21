@@ -272,14 +272,15 @@ fn main(root: Root) ! {Write} {
     assert_eq!(assert_parity(src), "b left a value and a literal\n");
 }
 
-/// What stays outside the fragment is refused, never miscompiled: a list of lists, and a list holding a map — by
+/// What stays outside the fragment is refused, never miscompiled: a list of functions, and a list of capabilities — by
 /// `compile_checked` too, which knows every node's type. (`pop` compiles since D-V2-171, its reuse of a slot kept from
-/// every walk: `list_methods_parity.rs`.)
+/// every walk: `list_methods_parity.rs`; a list of lists and a list holding a map since a slot holds a pointer to any
+/// list, map, option or result: `nested_parity.rs`.)
 #[test]
 fn what_the_list_fragment_leaves_out_is_refused() {
     for src in [
-        "module m\nfn f() -> Int {\n  let xs = [[1], [2]]\n  xs.len()\n}\n",
-        "module m\nfn f() -> Int {\n  let m: Map[Str, Int] = Map()\n  let xs = [m]\n  xs.len()\n}\n",
+        "module m\nfn f() -> Int {\n  let fs = [fn(x: Int) -> Int { x }]\n  fs.len()\n}\n",
+        "module m\nfn f(c: Cap[Console]) -> Int {\n  let xs = [c]\n  xs.len()\n}\n",
     ] {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);

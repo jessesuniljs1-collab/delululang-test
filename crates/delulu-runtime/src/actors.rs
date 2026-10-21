@@ -937,6 +937,17 @@ impl Holder {
         }
     }
 
+    /// The step from this cell to its `i`th part in a path the debug lane reports: `[i]` into a list, `[key]` into a map,
+    /// `.field` into a record, `.i` into a variant's payload.
+    fn step(&self, i: usize) -> String {
+        match self {
+            Holder::List(_) => format!("[{i}]"),
+            Holder::Map(_, keys) => format!("[{}]", keys[i].to_value().display()),
+            Holder::Record(c) => format!(".{}", c.borrow()[i].0),
+            Holder::Variant(_) | Holder::Captured(_) => format!(".{i}"),
+        }
+    }
+
     /// Run `f` on the `i`th part, where it lies.
     fn with_part<R>(&self, i: usize, f: impl FnOnce(&Value) -> R) -> R {
         match self {
@@ -1300,23 +1311,36 @@ fn from_msg_step(m: MsgValue, cells: &mut Vec<Value>, work: &mut Vec<FromMsg>, d
 /// legally — one that holds itself (`k.next = Some(k)`) or holds one list twice (`[a, a]`) — was reported as a compiler
 /// bug, while an alias reached through a variant or a map was never looked at. It now counts the graph's own references.
 pub fn assert_unique_graph(v: &Value) -> Result<(), String> {
-    /// Each mutable node met, in the order first met: its kind and path, its strong count, and how many references to it
-    /// the graph holds.
+    /// Each mutable node met, in the order first met: its kind and the path it was met at, its strong count, and how many
+    /// references to it the graph holds.
     struct Node {
-        what: String,
+        kind: &'static str,
+        path: usize,
         strong: usize,
         inside: usize,
     }
-    fn walk(v: &Value, path: &str, nodes: &mut Vec<Node>, index: &mut HashMap<usize, usize>, payloads: &mut HashSet<usize>) {
-        let (addr, kind, strong) = match v {
-            Value::List(rc) => (cell_addr(rc), "list", Rc::strong_count(rc)),
-            Value::Map(rc) => (cell_addr(rc), "map", Rc::strong_count(rc)),
-            Value::Record { fields, .. } => (cell_addr(fields), "record", Rc::strong_count(fields)),
+    /// Meet `v` at path `at`: a mutable node is counted, or numbered and its parts queued; a variant's payload is walked
+    /// through, each payload once. A node's strong count is read before anything of this walk holds a reference to it.
+    fn meet(
+        v: &Value,
+        at: usize,
+        nodes: &mut Vec<Node>,
+        index: &mut HashMap<usize, usize>,
+        payloads: &mut HashSet<usize>,
+        work: &mut Vec<(Holder, usize, usize)>,
+    ) {
+        let (addr, kind, strong, parts) = match v {
+            Value::List(rc) => (cell_addr(rc), "list", Rc::strong_count(rc), Holder::List(rc.clone())),
+            Value::Map(rc) => {
+                let keys: Vec<crate::value::MapKey> = rc.borrow().keys().cloned().collect();
+                (cell_addr(rc), "map", Rc::strong_count(rc), Holder::Map(rc.clone(), keys.into()))
+            }
+            Value::Record { fields, .. } => {
+                (cell_addr(fields), "record", Rc::strong_count(fields), Holder::Record(fields.clone()))
+            }
             Value::Variant { fields, .. } => {
-                if payloads.insert(fields.ptr_id()) {
-                    for (i, x) in fields.iter().enumerate() {
-                        walk(x, &format!("{path}.{i}"), nodes, index, payloads);
-                    }
+                if payloads.insert(fields.ptr_id()) && !fields.is_empty() {
+                    work.push((Holder::Variant(fields.clone()), 0, at));
                 }
                 return;
             }
@@ -1327,34 +1351,40 @@ pub fn assert_unique_graph(v: &Value) -> Result<(), String> {
             return;
         }
         index.insert(addr, nodes.len());
-        nodes.push(Node { what: format!("{kind} at {path}"), strong, inside: 1 });
-        match v {
-            Value::List(rc) => {
-                for (i, x) in rc.borrow().iter().enumerate() {
-                    walk(x, &format!("{path}[{i}]"), nodes, index, payloads);
-                }
-            }
-            Value::Map(rc) => {
-                for (k, x) in rc.borrow().iter() {
-                    walk(x, &format!("{path}[{}]", k.to_value().display()), nodes, index, payloads);
-                }
-            }
-            Value::Record { fields, .. } => {
-                for (fname, x) in fields.borrow().iter() {
-                    walk(x, &format!("{path}.{fname}"), nodes, index, payloads);
-                }
-            }
-            _ => {}
+        nodes.push(Node { kind, path: at, strong, inside: 1 });
+        if parts.len() > 0 {
+            work.push((parts, 0, at));
         }
     }
-    let (mut nodes, mut index, mut payloads) = (Vec::new(), HashMap::new(), HashSet::new());
-    walk(v, "arg", &mut nodes, &mut index, &mut payloads);
+    // DATA-DEPTH-2: the walk recursed once per level and built each node's whole path as it went, so a moved graph
+    // 100,000 deep spent the memory budget under `--debug-rcaps` where the move itself ran. The parts still to meet wait on
+    // a worklist, a part read through the cell holding it; a path is kept as its parent and its last step, and spelled out
+    // only for a node reported.
+    let mut paths: Vec<(usize, String)> = vec![(usize::MAX, "arg".to_string())];
+    let (mut nodes, mut index, mut payloads, mut work) = (Vec::new(), HashMap::new(), HashSet::new(), Vec::new());
+    meet(v, 0, &mut nodes, &mut index, &mut payloads, &mut work);
+    while let Some((cell, i, at)) = work.pop() {
+        if i + 1 < cell.len() {
+            work.push((cell.clone(), i + 1, at));
+        }
+        paths.push((at, cell.step(i)));
+        let here = paths.len() - 1;
+        cell.with_part(i, |part| meet(part, here, &mut nodes, &mut index, &mut payloads, &mut work));
+    }
+    let spell = |mut p: usize| {
+        let mut steps = Vec::new();
+        while p != usize::MAX {
+            steps.push(paths[p].1.as_str());
+            p = paths[p].0;
+        }
+        steps.iter().rev().copied().collect::<String>()
+    };
     for (i, n) in nodes.iter().enumerate() {
         // The walk's first step into the top node is the one reference from outside it may have, held twice (the binding
         // and the evaluator's clone); every other node's references must all be the graph's own.
         let max = if i == 0 { n.inside + 1 } else { n.inside };
         if n.strong > max {
-            return Err(format!("{} has {} strong refs (max {max})", n.what, n.strong));
+            return Err(format!("{} at {} has {} strong refs (max {max})", n.kind, spell(n.path), n.strong));
         }
     }
     Ok(())
