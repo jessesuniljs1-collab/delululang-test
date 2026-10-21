@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an actor program has no `.dwx` yet, and says so, 2026-10-21
+
+- **Fixed: `delulu build --target wasm` wrote a `.dwx` of an actor program that could not run** (RW 3.21). Running it
+  failed with "actor index 1 out of range". The build now refuses such a program with DL1201, saying why: the actor
+  table comes from the source, which the artifact does not carry. `delulu run` refuses an artifact like it, built
+  before this change, in the same words. Run an actor program's source with `--engine wasm`, or on the interpreter.
+
 ## Unreleased — an artifact runs only what it declares, 2026-10-21
 
 - **Fixed (security, review surface): a `.dwx` could claim fewer effects than its code performs** (RW 4.73,

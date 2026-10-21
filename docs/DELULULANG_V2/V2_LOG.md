@@ -8022,3 +8022,88 @@ codes. It now returns the message's first registered code (`delulu_diag::static_
   they must be). After the rebuild: see the commit message.
 - `scripts/clippy.sh -j 4` first refused to stamp: rustfmt's check, added this morning, caught the slice's unformatted code
   before any commit could carry it.
+
+## 2026-10-21 — the laptop: DWX-ACTORS-1 — an actor program's `.dwx` was written and could not run; refused in words (RW 3.21)
+
+**Found** probing the `.dwx` route after giving it custody (the entry before last). `delulu build
+examples/guide/06_actors.delulu --target wasm` wrote a 1,523-byte artifact. `delulu run` of it failed: "WASM trap: actor
+index 1 out of range", labelled DL0904. The source of the same chapter runs on `--engine wasm` (5 actors, 13 turns).
+
+The `.dwx` route calls `run_main` with no actor table. The source route builds the table from the AST (`actor_table`):
+each actor's behaviours, their arities, and its field count. The exports name the members (`actor$W$new`, `actor$W$job`)
+but carry no field count.
+
+**Refused, not made to run — this slice.** Making it run means the code carrying its own table: each field count as an
+exported global, read from the module. It must never come from an unhashed custom section; that is ARTIFACT-CLAIM-1's
+lesson, the entry before. That is a format change, a slice of its own (RW 3.21's "What closing it takes"). Until then:
+- `build --target wasm` refuses a program that declares actors (DL1201, `dwx_actors_refusal`), and writes nothing;
+- `run` refuses an artifact whose exports name an actor member (`delulu_wasm::exports_actor_members`, a read of the
+  export section), in the same words, before anything runs.
+
+**Evidence.**
+- `wasm_cli.rs` `an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run`: the build refused, with no file
+  written; an artifact assembled through the library, as the old build wrote it, refused at run with no "out of range".
+  Red on the old code.
+- Mutants, each red, the control green:
+  - M682 the build's refusal removed;
+  - M683 the run's;
+  - M684 the scan's prefix;
+  - M685 the scan reading the wrong section.
+- The five CLI targets that build artifacts (`wasm_cli`, `release`, `plugin_cli`, `artifact_review`, `json_contract`):
+  51 passed.
+- Chapter five and the other non-actor programs still build.
+
+## 2026-10-21 — the laptop's close: four pull requests landed; `launch/2.0.0` merged twice
+
+Landed today by fast-forward, each on its own CI read green to the end:
+- #20: RW 6.15, RW 3.20, the three advisories, rustfmt and `scripts/clippy.sh`'s format check;
+- #21: the network on WASM;
+- #22: a `.dwx` under custody and a trace; ARTIFACT-CLAIM-1; WASM-CODE-1;
+- #23: DWX-ACTORS-1.
+
+`launch/2.0.0` took them in two merges:
+- `6863bf7`: release dry run `39562463148` success; `everything` `39562457688` success on every job but two `miri-slow`
+  jobs still running.
+- `5d5ba5a`: its CHANGELOG's Breaking paragraph says what an artifact is now refused (DL1202 at an undeclared effect; an
+  actor program at the build). The checklist's supply-chain criterion is re-cited, since the advisory database moved
+  under a fixed tree this morning. `everything` `39566831246` and the release dry run `39566838279` dispatched.
+
+Nothing is tagged; the launch waits for the owner's word. `docs/CLOUD_SYNC_LOG.md`'s closing entry lists the runs to read
+and the open items, in order.
+
+## 2026-10-21 (evening) — the laptop: EPOCH-WINDOW-1 — a broker test timed the daemon's shutdown inside a 250 ms window (RW 7.21)
+
+**The red.** `master`'s push run `39569868995` on `3af2b2a` (a records-only commit; its pull request's run `39567010105`
+green on every job) failed one test on `test (windows-latest)`: `brokerd::tests::epoch_class_over_the_wire_uses_the_cached_snapshot`
+— "fresh cache answers within the epoch window" (`brokerd.rs:2921`), 187 of 188 passing. Every other job of the run
+succeeded. Never seen before.
+
+**The mechanism, read before reproducing.** The test refreshed a client's epoch cache (250 ms, the longest window
+`clamp_epoch_ms` allows), then `stop_daemon` (the `Shutdown` round trip, the handler loop ending, a connection to wake the
+accept thread, the thread's join), then expected the still-fresh cache to answer. The whole shutdown stood inside the window.
+On a 4-vCPU runner under the suite it can outlast 250 ms; the cache was then stale, the refresh met a dead broker, and the
+custody failed closed — DL1401, exactly the behaviour the rest of the test asserts.
+
+**Reproduced deterministically.** A 300 ms sleep added to `stop_daemon` turns the old test red with CI's message at CI's line.
+Statistically it did not show: 48 runs at four at a time and 48 more beside six CPU-bound loops, the frozen pre-fix test
+binary, 0 red — the laptop has 16 cores; the runner has 4 (`docs/assistant-memory/delulu-timing-tests.md`: starve, don't
+guess; here the shape was readable and the sleep is the starvation).
+
+**The fix: nothing slow inside the window.** The window now holds one revoke request:
+- After the refresh, the node is revoked. A check inside the window still answers Allow: a round trip would have seen the
+  revocation, so this witnesses the cache better than a dead broker did.
+- Once the window lapses, the refresh sees the revocation (DL1403).
+- The "inside the window" half counts only when the test reached it in time, measured from before the refresh (the cache is
+  stamped after it, so the measure is conservative). An attempt that did not is retried with a fresh node, up to five. If none
+  does, the test says the runner was too slow, with the slowest time.
+- The dead-broker DL1401 stays, after the window, where no timing decides it.
+
+**Evidence.**
+- The new test is green under the 300 ms shutdown.
+- Mutants on the client's cache, each red, the control green:
+  - M686 never fresh — the inside-window Allow became DL1403;
+  - M687 never stale;
+  - M689 the double: the refresh error ignored and the stale cache kept.
+- M688 (the error ignored alone) survives by design: `refresh_cache` drops the stale cache first, and the next guard answers
+  DL1401 for an empty one — two walls, read before recording the survivor.
+- `delulu`'s whole unit binary: 188 passed. clippy with rustfmt's check clean.

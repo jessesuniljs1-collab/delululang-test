@@ -248,6 +248,13 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
             return 1;
         }
     };
+    // DWX-ACTORS-1: an artifact of an actor program (one built before `build` refused it) is refused in words, before
+    // anything runs — not as the "actor index out of range" its first spawn met.
+    if delulu_wasm::exports_actor_members(&artifact.wasm) {
+        let d = Diagnostic::error("DL1201", crate::cli::dwx_actors_refusal(file));
+        print_diagnostics("run", &[d], &map, None, opts.json);
+        return 1;
+    }
 
     let mut grants = Grants::default();
     for g in &opts.grants {
