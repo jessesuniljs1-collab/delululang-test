@@ -459,7 +459,8 @@ Each line is an [OCSF](https://schema.ocsf.io) 1.8.0 event: a refusal, a break-g
 Guard is a Detection Finding (2004); a grant, delegation or revocation is User Access Management (3005);
 a sandboxed guest's launch and end are Process Activity (1007), paired by the run's generation; an allowed
 file use is File System Activity (1001) and an allowed network use HTTP Activity (4002), by the effect the
-use's record names; an allowed `send` — the broker handing a secret's bytes to a run's network client — is
+use's record names — its `dst_endpoint` the host, and, when the use named the path it asked (a daemon or leased
+run's, since D-V2-169), `http_request.url` its host and that path, never the query; an allowed `send` — the broker handing a secret's bytes to a run's network client — is
 HTTP Activity (4002) too, its destination the event's `dst_endpoint` (host and port) and the secret named
 only in the message; anything else is a Base Event (0) naming the record's action — including a use
 recorded before uses named their effect, since the export never guesses one from an argument's spelling.

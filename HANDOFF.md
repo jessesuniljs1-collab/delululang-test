@@ -1177,6 +1177,13 @@ spells the same thing?**
   `run` now refuses the first effect the manifest does not declare (DL1202), at the host's custody gate. Never soften it
   back to "the hash binds the manifest". Search key: for every integrity check, list what the hashed bytes exclude, and ask
   of each excluded field whether anything downstream trusts it.
+- **NET-PATH-RECORD — a gate that records before the check it trusts attests what that check refuses** (the laptop,
+  2026-10-21, P9-05, D-V2-169): under the daemon the custody gate runs before the effect's own first check, and the broker
+  judged a `net` use by its host alone. So a request for a path outside the grant's patterns was recorded `use allow` and
+  then refused at the call (DL0904). The chain said "allowed" for a use that never happened, with no path to tell which.
+  Fixed by sending the path with the use, having the broker judge it, and naming it in the record (`url_path`). Never move
+  the path judgment back to the effect alone while the gate records. Search key: for every record a gate writes, list the
+  refusals a LATER check can make, and ask what the record says for each.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

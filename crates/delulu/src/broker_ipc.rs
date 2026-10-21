@@ -240,8 +240,16 @@ pub enum ReqBody {
     Beat { node: String, key: String },
     /// Disarm the dead-man on `node` (its holder ending cleanly), with its key. Answered `Recorded`.
     DisarmDeadman { node: String, key: String },
-    /// Per-use validation of a synchronous-class op (spec §4.4).
-    Check { node: String, op: String, arg: Option<String> },
+    /// Per-use validation of a synchronous-class op (spec §4.4). `url_path` is a network use's request path, judged and
+    /// named in the use's record (P9-05, D-V2-169); absent from the frame when there is none, so every other `Check` is
+    /// the frame it was.
+    Check {
+        node: String,
+        op: String,
+        arg: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url_path: Option<String>,
+    },
     /// P8-04 (routine run 15): a device command the run's ENVELOPE refused after `Check` allowed the
     /// use — recorded as a `use` `deny` citing `overrides_seq`, the `allow` it overrides. Records,
     /// never decides (the command is already refused). Answered `Recorded`.
@@ -555,7 +563,12 @@ mod tests {
 
     #[test]
     fn frame_roundtrips_a_request() {
-        let req = Request::new(ReqBody::Check { node: "g_abc".into(), op: "FsWrite".into(), arg: Some("/tmp/x".into()) });
+        let req = Request::new(ReqBody::Check {
+            node: "g_abc".into(),
+            op: "FsWrite".into(),
+            arg: Some("/tmp/x".into()),
+            url_path: None,
+        });
         let mut buf = Vec::new();
         write_frame(&mut buf, &req).unwrap();
         // The first four bytes are the LE length of the remainder.

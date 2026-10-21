@@ -1333,7 +1333,8 @@ impl Interp {
         let fs_pin = fs_pin_for(&recvv, &name.name, &argvals);
         let mut fetch_allowed: Option<String> = None;
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
-            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
+            let url_path = custody_path_for(op, &argvals);
+            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check_at(op, arg.as_deref(), url_path) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
                 // means the program asked for something it never held; this one can also mean an
@@ -2475,6 +2476,15 @@ pub(crate) fn custody_op_for(
         // round-trip an operator e-stop arrives through. Sensor `read` is NOT routed: it is a
         // `Read` with a sensor scope, and the sensor scope lives in the device broker.
         (ResourceKind::Actuator, "command") => Some((CustodyOp::Actuate, actuator_device(&c.scope))),
+        _ => None,
+    }
+}
+
+/// The request path a network use names, for its custody to judge and record (P9-05, D-V2-169): `prim::request_path` of
+/// the URL [`custody_op_for`] took the host from. `None` for every other op.
+pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {
+    match (op, argvals.first()) {
+        (CustodyOp::Net, Some(Value::Str(url))) => Some(prim::request_path(url)),
         _ => None,
     }
 }

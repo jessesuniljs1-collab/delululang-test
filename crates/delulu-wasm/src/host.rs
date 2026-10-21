@@ -301,6 +301,12 @@ impl HostState {
     /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
     /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
+        self.custody_allows_at(op, arg, None)
+    }
+
+    /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
+    /// and names it in the use's record, as the interpreter's gate does.
+    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
@@ -320,7 +326,7 @@ impl HostState {
             }
         }
         let Some(custody) = &self.custody else { return true };
-        match custody.borrow_mut().check(op, arg) {
+        match custody.borrow_mut().check_at(op, arg, url_path) {
             CustodyDecision::Allow => true,
             CustodyDecision::Deny(d) => {
                 self.refused = Some(format!("{}: {}", d.code, d.message));
@@ -1096,7 +1102,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().push_trace("Net", "get", "Http", Some(url.clone()), file, start, end);
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
-                    if !caller.data_mut().custody_allows(CustodyOp::Net, Some(h)) {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    if !caller.data_mut().custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
                         caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
                         return 0;
                     }
