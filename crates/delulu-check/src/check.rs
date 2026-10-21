@@ -2930,17 +2930,24 @@ impl<'a> Checker<'a> {
         let result_ty = self.cx.fresh_type();
         let mut covered: HashSet<String> = HashSet::new();
         let mut has_wildcard = false;
+        let mut pattern_errors = false;
 
         for arm in arms {
             ctx.push_scope();
+            let at = self.diags.len();
             self.check_pattern(&arm.pattern, &st, ctx, &mut covered, &mut has_wildcard);
+            pattern_errors |= false && self.diags[at..].iter().any(Diagnostic::is_error);
             let (bt, br) = self.check_expr(&arm.body, ctx);
             acc.add_row_acc(&br);
             self.expect_type(&result_ty, &bt, arm.body.span(), "match arms must have the same type");
             ctx.pop_scope();
         }
 
+        let at = self.diags.len();
         self.check_exhaustive(&st, &covered, has_wildcard, span);
+        if !pattern_errors && self.diags.len() == at {
+            self.check_nested_exhaustive(&st, arms, span);
+        }
         (result_ty, acc)
     }
 
@@ -3059,6 +3066,122 @@ impl<'a> Checker<'a> {
                     .with_span(span, "add the missing arms or a `_` wildcard"),
             );
         }
+    }
+
+    /// MATCH-EXHAUST-1: the arms cover every value of the scrutinee's type, at every depth — `Some(Red)` and `None` leave
+    /// `Some(Blue)`; `0 => …` on an `Int` leaves every other `Int`; `true => …` leaves `false`. `check_exhaustive` asks
+    /// only which constructors the arms name at the top, so these checked and then faulted at run time with DL0907
+    /// ("checker guarantees exhaustiveness"), or, on the WASM engine, took another arm. Asked when the top-level check and
+    /// every pattern passed, so each match carries at most one DL0407. The search is Maranget's: a value no arm matches,
+    /// built constructor by constructor, its first missing case named. A match whose search outruns its limit
+    /// (`EXHAUSTIVE_BUDGET`) is refused too, in words, since the guarantee is what the engines rely on.
+    fn check_nested_exhaustive(&mut self, scrut: &Type, arms: &[Arm], span: Span) {
+        let rows: Vec<Vec<Option<&Pattern>>> = arms.iter().map(|a| vec![refutable(&a.pattern)]).collect();
+        let mut search = Search { left: EXHAUSTIVE_BUDGET, spent: false };
+        let missing = self.uncovered(&rows, std::slice::from_ref(scrut), &mut search);
+        let message = match missing {
+            Some(w) => format!("non-exhaustive match: missing {}", w.into_iter().next().unwrap_or_else(|| "_".into())),
+            None if search.spent => {
+                "non-exhaustive match: the checker's search could not prove it covers every case within its limit".to_string()
+            }
+            None => return,
+        };
+        self.diags.push(Diagnostic::error("DL0407", message).with_span(span, "add the missing arms or a `_` wildcard"));
+    }
+
+    /// A value of the types `tys` that no row of `rows` matches, as one pattern per column (`_` for any value of a type
+    /// with no finite set of constructors), or `None` when the rows cover every value — or when the search has spent its
+    /// limit, which it records (`Search::spent`).
+    fn uncovered(&mut self, rows: &[Vec<Option<&Pattern>>], tys: &[Type], search: &mut Search) -> Option<Vec<String>> {
+        // A row that holds any value in every column matches everything that is left.
+        if rows.iter().any(|r| r.iter().all(Option::is_none)) {
+            return None;
+        }
+        let Some((t0, rest)) = tys.split_first() else {
+            return Some(Vec::new());
+        };
+        // A step costs the cells it reads, so a wide match spends its steps as fast as a deep search does.
+        let cost = u32::try_from(rows.len().saturating_mul(tys.len())).unwrap_or(u32::MAX).max(1);
+        if search.left < cost {
+            search.spent = true;
+            return None;
+        }
+        search.left -= cost;
+        let t0 = self.cx.apply_type(t0);
+        let heads: BTreeSet<String> = rows.iter().filter_map(|r| head_name(r[0])).collect();
+        let sig = self.ctor_sig(&t0).filter(|s| !s.is_empty());
+        if let Some(sig) = &sig {
+            if sig.iter().all(|(n, _)| heads.contains(n)) {
+                for (name, fts) in sig {
+                    let k = fts.len();
+                    let spec: Vec<Vec<Option<&Pattern>>> = rows
+                        .iter()
+                        .filter_map(|r| {
+                            let fields: Vec<Option<&Pattern>> = match r[0] {
+                                None => vec![None; k],
+                                Some(Pattern::Variant { path, fields, .. })
+                                    if path.segs.last().is_some_and(|s| s.name == *name) && fields.len() == k =>
+                                {
+                                    fields.iter().map(refutable).collect()
+                                }
+                                Some(Pattern::Lit(LitKind::Bool(b), _)) if b.to_string() == *name => Vec::new(),
+                                _ => return None,
+                            };
+                            Some(fields.into_iter().chain(r[1..].iter().copied()).collect())
+                        })
+                        .collect();
+                    let tys2: Vec<Type> = fts.iter().cloned().chain(rest.iter().cloned()).collect();
+                    if let Some(mut w) = self.uncovered(&spec, &tys2, search) {
+                        let tail = w.split_off(k);
+                        let c = if k == 0 { name.clone() } else { format!("{name}({})", w.join(", ")) };
+                        return Some(std::iter::once(c).chain(tail).collect());
+                    }
+                }
+                return None;
+            }
+        }
+        // The arms name only some constructors, or the type has none to name (an `Int`, a `Str`, a record): the values no
+        // arm names are matched only by the rows that hold any value here.
+        let default: Vec<Vec<Option<&Pattern>>> = rows.iter().filter(|r| r[0].is_none()).map(|r| r[1..].to_vec()).collect();
+        let w = self.uncovered(&default, rest, search)?;
+        let c = match sig.as_ref().and_then(|s| s.iter().find(|(n, _)| !heads.contains(n))) {
+            Some((n, fts)) if !heads.is_empty() => {
+                if fts.is_empty() {
+                    n.clone()
+                } else {
+                    format!("{n}({})", vec!["_"; fts.len()].join(", "))
+                }
+            }
+            _ => "_".into(),
+        };
+        Some(std::iter::once(c).chain(w).collect())
+    }
+
+    /// The constructors of `t` and each one's field types — `true` and `false` for a `Bool` — or `None` for a type whose
+    /// values no finite set of patterns names.
+    fn ctor_sig(&mut self, t: &Type) -> Option<Vec<(String, Vec<Type>)>> {
+        Some(match t {
+            Type::Bool => vec![("true".into(), vec![]), ("false".into(), vec![])],
+            Type::Option(inner) => vec![("Some".into(), vec![(**inner).clone()]), ("None".into(), vec![])],
+            Type::Result(ok, err) => vec![("Ok".into(), vec![(**ok).clone()]), ("Err".into(), vec![(**err).clone()])],
+            Type::Sum(id, args) => {
+                let def = self.table.type_def(*id).clone();
+                let TypeDefKind::Sum(variants) = &def.kind else { return None };
+                let mut genv = Genv::default();
+                for (g, a) in def.generics.iter().zip(args) {
+                    genv.types.insert(g.clone(), a.clone());
+                }
+                // Lowered as `variant_field_types` lowers them; anything wrong in them was reported where it is written.
+                let at = self.diags.len();
+                let sig = variants
+                    .iter()
+                    .map(|(n, tys)| (n.clone(), tys.iter().map(|t| self.lower_type(t, &genv, &mut FnFacts::default())).collect()))
+                    .collect();
+                self.diags.truncate(at);
+                sig
+            }
+            _ => return None,
+        })
     }
 
     fn check_lambda(
@@ -3794,6 +3917,36 @@ fn collect_self_field_assigns(b: &Block, out: &mut HashSet<String>) {
 
 /// Render a `TypeExpr` compactly for a diagnostic message, without lowering it (lowering an
 /// unmarshallable type could emit unrelated diagnostics).
+/// The cells the exhaustiveness search may read for one `match` (MATCH-EXHAUST-1) — a step reads its rows' cells — far
+/// past any match a person writes, whose search reads a few cells per arm. A match whose search spends them is refused
+/// (DL0407), never passed unproved.
+const EXHAUSTIVE_BUDGET: u32 = 10_000_000;
+
+/// The exhaustiveness search's cells left, and whether it wanted more.
+struct Search {
+    left: u32,
+    spent: bool,
+}
+
+/// A pattern as a cell of the exhaustiveness search: `None` for one that matches any value (`_`, a name).
+fn refutable(p: &Pattern) -> Option<&Pattern> {
+    match p {
+        Pattern::Wildcard(_) | Pattern::Bind(_) => None,
+        p => Some(p),
+    }
+}
+
+/// The constructor a cell names — a variant's name, `true` or `false` — or, for another literal, a name no type's
+/// constructors hold.
+fn head_name(p: Option<&Pattern>) -> Option<String> {
+    match p? {
+        Pattern::Variant { path, .. } => path.segs.last().map(|s| s.name.clone()),
+        Pattern::Lit(LitKind::Bool(b), _) => Some(b.to_string()),
+        Pattern::Lit(..) => Some("<literal>".into()),
+        Pattern::Wildcard(_) | Pattern::Bind(_) => None,
+    }
+}
+
 fn render_type_expr(t: &TypeExpr) -> String {
     match t {
         TypeExpr::Named { path, args, .. } => {

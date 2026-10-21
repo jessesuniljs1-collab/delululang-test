@@ -1,0 +1,13 @@
+// anchors: ref.grammar.match ref.grammar.pattern
+// MATCH-EXHAUST-1: every top-level constructor is named, but `Some(Blue)` is not covered.
+module conf
+
+type Color = Red | Green | Blue
+
+fn f(o: Option[Color]) -> Int {
+  match o {
+    Some(Red) => 0,
+    Some(Green) => 1,
+    None => 2
+  }
+}

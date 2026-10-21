@@ -3198,7 +3198,7 @@ fn compile_pattern_test(pat: &Pattern, v: u32, t: Ty, fail: u32, cx: &mut Cx) ->
             cx.emit(Instruction::LocalGet(v));
             cx.emit(Instruction::I32Load(u32_at()));
             cx.emit(Instruction::I32Const(tag as i32));
-            cx.emit(Instruction::I32Eq);
+            cx.emit(Instruction::I32Ne);
             cx.emit(Instruction::BrIf(cx.depth - fail));
             for (i, (fp, ps)) in fields.iter().zip(payloads).enumerate() {
                 // A `Unit` field has no slot, and only `_` or a name can stand for it.
