@@ -234,6 +234,8 @@ struct HostState {
     fs_read_roots: Vec<PathBuf>,
     /// Granted filesystem-write subtrees, the same way: `root.fs_write(p)` succeeds iff `p` resolves within one.
     fs_write_roots: Vec<PathBuf>,
+    /// RW 6.15: the delegated node a `--lease` run's grants came from — which remedy a DL0703 names (`HostConfig::lease`).
+    lease: Option<String>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
     /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
@@ -688,7 +690,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().console_granted {
-                caller.data_mut().refused = Some("DL0703: console was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "console");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `console` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -771,7 +775,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().clock_granted {
-                caller.data_mut().refused = Some("DL0703: clock was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "clock");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `clock` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -816,7 +822,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().rand_granted {
-                caller.data_mut().refused = Some("DL0703: rand was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "rand");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `rand` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -888,8 +896,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // On disk only, as the interpreter's mint (a resolved lease scope against a path spelled from the working
             // directory) — and by its own `mint_anchor` (RW 4.72): the decision and the anchor are one resolution.
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_read_roots, &want) else {
-                caller.data_mut().refused =
-                    Some(format!("DL0703: filesystem read of `{path}` was not granted — pass `--grant fs.read={path}`"));
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.read={path}"));
+                caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -1036,8 +1044,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_write_roots, &want) else {
-                caller.data_mut().refused =
-                    Some(format!("DL0703: filesystem write of `{path}` was not granted — pass `--grant fs.write={path}`"));
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.write={path}"));
+                caller.data_mut().refused = Some(format!("DL0703: filesystem write of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -1579,6 +1587,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         rand_granted: false,
         fs_read_roots: Vec::new(),
         fs_write_roots: Vec::new(),
+        lease: None,
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
@@ -1617,6 +1626,7 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         rand_granted: cfg.rand,
         fs_read_roots: cfg.fs_read_roots.clone(),
         fs_write_roots: cfg.fs_write_roots.clone(),
+        lease: cfg.lease.clone(),
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
@@ -1646,6 +1656,9 @@ pub struct HostConfig {
     pub fs_read_roots: Vec<PathBuf>,
     /// Granted filesystem-write subtrees, the same way (`root.fs_write(p)`).
     pub fs_write_roots: Vec<PathBuf>,
+    /// RW 6.15: the delegated node a `--lease` run's grants came from (`Grants::lease`), so a refusal names the remedy the
+    /// interpreter's would. Not authority.
+    pub lease: Option<String>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.

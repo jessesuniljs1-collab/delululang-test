@@ -7761,3 +7761,45 @@ The owner asked at 09:50 UTC for a safe stop. Nothing was half-done: every slice
 F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`) was already verified, recorded and on `master`. At the stop
 no job had failed; four runs were still going (`6a03165`'s push run, and `miri-slow` jobs on `launch/2.0.0` and the nightly) —
 named in `docs/CLOUD_SYNC_LOG.md` for the next session to read.
+
+## 2026-10-21 — the laptop: a lease run's DL0703 names its delegation, not a `--grant` it refuses (RW 6.15)
+
+**Synced first.** `git fetch origin`: `master` `a7b6476..9c1d30b` (on-demand routine run 5 — the laptop's #17–#19, RW 7.20,
+F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`), fast-forwarded. The four runs run 5 left going, read
+to their end: `6a03165`'s push run `39403469304`, `launch/2.0.0`'s `everything` `39398467836` (`20666c5`) and `39392798450`
+(`3ee1370`), and the nightly `39391181701` (`7355808`) — success on every job, `miri-slow` included; so are `e32b3c7`'s
+`everything` `39364184892` and `9c1d30b`'s push run `39403663796`. The autosave branch's newest snapshot (`6d7557c`, 04:23
+UTC on 2026-10-20) is older than `275af08`, which carries it — nothing to recover. On `9c1d30b`: `survey check` ok (1544
+nodes, 15586 edges), `doctor --check` ok (29 checks on this machine).
+
+**The defect** (run 5's oddity, reproduced on `9c1d30b`'s binary with a live broker and a `--multi` lease of
+`--effects Read --fs-read ./data/pub`): a program minting `root.fs_read("./data/priv")` was refused DL0703 "filesystem read
+of `./data/priv` was not granted — pass `--grant fs.read=./data/priv`" on both engines, and `root.console()` "pass `--grant
+console`" — while the same run refuses every local `--grant` but a foreign library's path ("a `--lease` run derives its
+authority from the delegated node"). The refusal sent the lease's holder outside its delegation. Under `--sandbox --lease`
+the guest's refusal said the same. Beside it, the WASM engine's ungranted `console`, `clock` and `rand` named no remedy at
+all ("DL0703: console was not granted to this program"), where the interpreter's say `pass --grant console`.
+
+**The fix.** A run's grants say where they came from: `Grants::lease` (set by `grants_from_lease` to the redeemed node),
+carried into `RootVal::lease` by `build_root`, across an actor boundary in `RootMsg`, and into the WASM host as
+`HostConfig::lease`. Not authority — nothing decides a use by it. One function, `prim::grant_remedy`, words the remedy for
+every mint on both engines: `pass --grant G` on an ordinary run; under a lease, "the lease this run redeemed (node `g_…`)
+does not carry `G`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)". The
+twelve interpreter mints that answer DL0703 (console, fs_read, fs_write, http, clock, rand, declassify, secret, actuator,
+sensor, compute, plugin_host) use it; an ordinary run's words are unchanged, each one. The WASM host's console, clock, rand,
+fs_read and fs_write refusals now carry the interpreter's words exactly. The sandbox host serves its guest's mints from the
+same root, so `--sandbox --lease` is covered without a change of its own (checked by hand: the guest's refusal names the
+node).
+
+**Evidence.** By hand on the fixed binary, a live broker: under `--lease` the interpreter, `--engine wasm` and `--sandbox`
+each name the node and `does not carry fs.read=./data/priv` / `console`; without a lease each still says `pass --grant …`.
+Witnesses: `prim.rs` `a_lease_runs_refusal_names_its_delegation_and_never_a_grant_it_refuses` (the twelve mints, both kinds
+of root); `fault_parity.rs` `an_ungranted_mint_names_the_same_remedy_on_both_engines` (five mints × with and without a
+lease, the WASM refusal ending in the interpreter's exact message); `grants_cli.rs`
+`a_lease_runs_refusal_names_its_delegation_on_both_engines` (a live broker, both engines, and an ordinary run beside them);
+`actors.rs` `a_roots_lease_survives_the_crossing_into_an_actor_and_back`. Mutants (`scripts/mutants.py`, one target each):
+M651 `grant_remedy` ignores the lease → the unit test red; M652 `grants_from_lease` sets no lease → the end-to-end test red
+(the old code's words on both engines); M653 the CLI's `HostConfig` drops it → the end-to-end test red (the WASM half);
+M654 the WASM host state drops it, M657 the WASM console refusal back to its old words, M658 `build_root` drops it → the
+parity test red; M655 and M656 either direction of the actor crossing drops it → the actor test red; the control green.
+`scripts/clippy.sh -j 4` clean and stamped. `delulu-runtime` and `delulu-wasm` whole: 492 passed, 0 failed (27 targets); the 26 `delulu` CLI targets that assert a refusal's words (`cli`, `grants_cli`, `wasm_cli`, the sandbox, broker, budget, device and plugin files among them): 286 passed, 0 failed. The rest runs on GitHub (the pull request's CI).

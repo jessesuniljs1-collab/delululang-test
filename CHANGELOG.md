@@ -11,6 +11,17 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a lease run's refusal names its lease, not a `--grant`, 2026-10-21
+
+- **Fixed: under `--lease`, DL0703 told you to pass a `--grant` the run refuses** (RW 6.15). A lease run takes its
+  authority from its delegation alone, and refuses every local `--grant` except a foreign library's path. Yet a program
+  that reached past its lease was told `pass --grant fs.read=./data/priv` (or `--grant console`, and so on), on both
+  engines and under `--sandbox`. The refusal now names the delegated node that does not carry the grant. An ordinary
+  run's DL0703 is unchanged.
+- **Changed: on `--engine wasm`, an ungranted `root.console()`, `root.clock()` or `root.rand()` is refused in the
+  interpreter's words, with its remedy** (`pass --grant console`). Before, the WASM engine said only that it was not
+  granted. The code, DL0703, is unchanged.
+
 ## Unreleased — a `.dwx` run refuses the flags it cannot apply, 2026-10-20
 
 - **Fixed: `delulu run FILE.dwx` ignored `--broker daemon`, `--lease`, `--trace-effects`, `--trace-out` and

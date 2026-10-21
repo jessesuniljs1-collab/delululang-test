@@ -409,15 +409,29 @@ pub fn host_matches(host: &str, pat: &str) -> bool {
 
 // ----- Root: mint capabilities (attenuation — no effect) -------------------
 
+/// RW 6.15: what a DL0703 tells its reader to do about the missing `grant`. An ordinary run is told the `--grant` that
+/// covers the use. A `--lease` run (`lease` is its delegated node) refuses every local `--grant` but a foreign library's
+/// path — its authority is its delegation's alone — so it is told which delegation lacks the grant instead; before, both
+/// engines told it to pass the flag the run refuses (found by on-demand routine run 5). Both engines word it here.
+pub fn grant_remedy(lease: Option<&str>, grant: &str) -> String {
+    match lease {
+        None => format!("pass `--grant {grant}`"),
+        Some(node) => format!(
+            "the lease this run redeemed (node `{node}`) does not carry `{grant}`, and a `--lease` run takes its authority \
+             from its delegation alone (a local `--grant` is refused)"
+        ),
+    }
+}
+
 pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
     // DL0703 is the first error nearly every newcomer meets: zero ambient authority means the
     // very first program that prints anything fails until a human grants the console. The
     // refusal is correct and is the point of the language — but a refusal that does not say
     // what to type teaches nothing, so every message below names the exact grant. (Prose only:
     // the code, the span, and the `--json` envelope are unchanged, per `for-agents.md`.)
-    let refused = |what: &str, grant: &str| {
-        Fault::at("DL0703", format!("`{what}` was not granted to this program — pass `--grant {grant}`"), span)
-    };
+    let remedy = |grant: &str| grant_remedy(root.lease.as_deref(), grant);
+    let refused =
+        |what: &str, grant: &str| Fault::at("DL0703", format!("`{what}` was not granted to this program — {}", remedy(grant)), span);
     match method {
         "console" => {
             if root.console {
@@ -446,7 +460,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(anchor) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false, anchor })),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"),
+                    format!("filesystem read of `{p}` was not granted — {}", remedy(&format!("fs.read={p}"))),
                     span,
                 )),
             }
@@ -462,7 +476,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(anchor) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true, anchor })),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"),
+                    format!("filesystem write of `{p}` was not granted — {}", remedy(&format!("fs.write={p}"))),
                     span,
                 )),
             }
@@ -528,7 +542,12 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(v) => Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience(&name))))),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"),
+                    match root.lease {
+                        None => format!(
+                            "secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"
+                        ),
+                        Some(_) => format!("secret `{name}` was not granted — {}", remedy(&format!("secret:{name}"))),
+                    },
                     span,
                 )),
             }
@@ -561,7 +580,14 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let d = str_arg(args, 0, span)?;
             match root.actuators.iter().find(|e| e.device == d) {
                 Some(e) => Ok(cap(ResourceKind::Actuator, CapScope::Actuator(e.clone()))),
-                None => Err(Fault::at("DL0703", format!("actuator `{d}` was not granted — pass `--grant \"actuator={d}:DIM=LO..HI\"` with the envelope this machine may move in"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    match root.lease {
+                        None => format!("actuator `{d}` was not granted — pass `--grant \"actuator={d}:DIM=LO..HI\"` with the envelope this machine may move in"),
+                        Some(_) => format!("actuator `{d}` was not granted — {}", remedy(&format!("actuator={d}"))),
+                    },
+                    span,
+                )),
             }
         }
         "sensor" => {
@@ -569,7 +595,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             if root.sensors.iter().any(|s| s == &d) {
                 Ok(cap(ResourceKind::Sensor, CapScope::Sensor { device: d }))
             } else {
-                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted — pass `--grant sensor={d}`"), span))
+                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted — {}", remedy(&format!("sensor={d}"))), span))
             }
         }
         // Stage 10 (10h): the same shape for an accelerator. Deriving the handle is pure; the
@@ -580,7 +606,10 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(e) => Ok(cap(ResourceKind::Compute, CapScope::Compute(e.clone()))),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                    match root.lease {
+                        None => format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                        Some(_) => format!("compute device `{d}` was not granted — {}", remedy(&format!("compute={d}"))),
+                    },
                     span,
                 )),
             }
@@ -1787,5 +1816,51 @@ mod hostile_path_tests {
     fn an_embedded_nul_is_refused_everywhere() {
         assert!(hostile_path("a\0b", false).is_some());
         assert!(hostile_path("a\0b", true).is_some());
+    }
+}
+
+#[cfg(test)]
+mod remedy_tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// Every mint that can answer DL0703, with an argument it refuses on an empty root.
+    fn refused_mints() -> Vec<(&'static str, Vec<Value>)> {
+        let s = |v: &str| vec![Value::str(v)];
+        vec![
+            ("console", vec![]),
+            ("fs_read", s("./nowhere")),
+            ("fs_write", s("./nowhere")),
+            ("http", vec![Value::List(Rc::new(RefCell::new(vec![Value::str("api.example.com")])))]),
+            ("clock", vec![]),
+            ("rand", vec![]),
+            ("declassify", vec![]),
+            ("secret", s("K")),
+            ("actuator", s("arm0/elbow")),
+            ("sensor", s("arm0/angle")),
+            ("compute", s("gpu0")),
+            ("plugin_host", vec![]),
+        ]
+    }
+
+    /// RW 6.15: an ordinary run's DL0703 names the `--grant` that covers the use; a `--lease` run's names its delegation,
+    /// never a `--grant` — a lease run refuses every local one but a foreign library's path, and every mint below told its
+    /// holder to pass one before.
+    #[test]
+    fn a_lease_runs_refusal_names_its_delegation_and_never_a_grant_it_refuses() {
+        for (method, args) in refused_mints() {
+            let refusal = |root: RootVal| match call_root_method(&root, method, &args, Span::new(0, 0, 0)) {
+                Err(f) if f.code == "DL0703" => f.message,
+                other => panic!("`root.{method}` on an empty root must be DL0703, was {:?}", other.map(|_| ()).map_err(|f| f.code)),
+            };
+            let plain = refusal(RootVal::default());
+            assert!(plain.contains("pass `--grant"), "an ordinary run is told what to grant (`{method}`): {plain}");
+            let leased = refusal(RootVal { lease: Some("g_feed".to_string()), ..Default::default() });
+            assert!(
+                leased.contains("node `g_feed`") && leased.contains("a local `--grant` is refused"),
+                "a lease run is told which delegation lacks it (`{method}`): {leased}"
+            );
+            assert!(!leased.contains("pass `--grant"), "a lease run is never told to pass a `--grant` (`{method}`): {leased}");
+        }
     }
 }

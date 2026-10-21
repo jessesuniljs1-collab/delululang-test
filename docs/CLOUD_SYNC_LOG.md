@@ -4780,3 +4780,28 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next, for whoever comes next (laptop or routine): (1) read the four runs above to their end; (2) DL0703's hint under
   `--lease`; a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted; (4) on
   WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the laptop synced after on-demand routine run 5; a lease run's DL0703 names its delegation (RW 6.15) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy`   Pull request: see the branch   Merged: not yet (on green CI, by fast-forward)
+- Base: `9c1d30b`. **Synced first:** `master` fast-forwarded `a7b6476..9c1d30b` (run 5); the four runs run 5 left going read
+  to their end — `39403469304`, `39398467836` (`launch/2.0.0` `20666c5`, `miri-slow` included), `39392798450`, `39391181701`:
+  success on every job; `9c1d30b`'s push run `39403663796` success. `survey check` ok (1544 nodes), `doctor --check` ok (29
+  on this machine). The worktree `D:\nelan\dl-launch` fast-forwarded to `launch/2.0.0` `20666c5`. Run 5's
+  `docs/assistant-memory/` files and `HANDOFF.md` §11.4–§11.5 copied into the laptop's memory.
+- What: `V2_LOG.md` (2026-10-21, the first entry).
+- Files and folders: M `crates/delulu-runtime/src/prim.rs` (`grant_remedy`; every mint's DL0703; the unit test),
+  `crates/delulu-runtime/src/broker.rs` (`Grants::lease`, `build_root`), `crates/delulu-runtime/src/value.rs`
+  (`RootVal::lease`), `crates/delulu-runtime/src/actors.rs` (`RootMsg::lease`, both conversions, the round-trip test),
+  `crates/delulu-wasm/src/host.rs` (`HostConfig::lease`, `HostState::lease`, five refusals in the interpreter's words),
+  `crates/delulu-wasm/tests/fault_parity.rs`, `crates/delulu/src/cli.rs` (`grants_from_lease` sets it),
+  `crates/delulu/src/run_cmd.rs` (the WASM `HostConfig`), `crates/delulu/src/repl.rs`,
+  `crates/delulu/tests/grants_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (6.15), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new beyond run 5's, copied.
+- Open / next: (1) this branch's CI, landing on green; (2) the next commit on this branch — a behaviour named like a
+  capability method on WASM; (3) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67,
+  6.1, 6.2; a `.dwx` run with a trace and custody, if wanted; (4) *[laptop]* the launch, only on the owner's word.

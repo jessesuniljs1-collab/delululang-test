@@ -155,6 +155,9 @@ pub struct RootMsg {
     /// one, and every load still runs the whole sequence including the holder check.
     pub plugins: Vec<std::path::PathBuf>,
     pub plugins_allow: Vec<String>,
+    /// RW 6.15: the lease the root's authority came from, carried so an actor's refusal names the same remedy `main`'s
+    /// would. Not authority.
+    pub lease: Option<String>,
 }
 
 enum Job {
@@ -907,6 +910,7 @@ fn value_to_msg_in(
             plugins: r.plugins.clone(),
             plugins_allow: r.plugins_allow.clone(),
             computes: r.computes.clone(),
+            lease: r.lease.clone(),
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // P2: a plugin handle does NOT cross an actor boundary. The grant that loaded it does
@@ -1049,6 +1053,7 @@ fn msg_to_value_in(m: MsgValue, globals: &Env, cells: &mut Vec<Value>) -> Value 
                 sensors: r.sensors,
                 plugins: r.plugins,
                 plugins_allow: r.plugins_allow,
+                lease: r.lease,
             };
             Value::Root(Rc::new(root))
         }
@@ -1368,6 +1373,18 @@ mod boundary_authority_tests {
         assert_eq!(r.computes[0].memory_bytes, 1 << 20, "and arrive with its BOUNDS intact — the");
         assert_eq!(r.computes[0].kernel_ms, (0.0, 50.0), "envelope is what limits the holder");
         assert_eq!(r.computes[0].kernels.len(), 1, "including the enumerated kernel list");
+    }
+
+    /// RW 6.15: the lease a root's authority came from crosses with it, so an actor's DL0703 names the delegation as
+    /// `main`'s does — not a `--grant` the lease run refuses.
+    #[test]
+    fn a_roots_lease_survives_the_crossing_into_an_actor_and_back() {
+        use super::{msg_to_value, value_to_msg};
+        use crate::value::{RootVal, Value};
+        let root = RootVal { lease: Some("g_feed".to_string()), ..Default::default() };
+        let back = msg_to_value(value_to_msg(&Value::Root(std::rc::Rc::new(root)), None).unwrap(), &crate::value::Scope::root());
+        let Value::Root(r) = back else { panic!("a Root must come back as a Root") };
+        assert_eq!(r.lease.as_deref(), Some("g_feed"));
     }
 
     /// P9-04 (c), D-V2-131: a secret's audience crosses an actor boundary with it — on a `Root` (the audience of each

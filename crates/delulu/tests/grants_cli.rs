@@ -201,6 +201,48 @@ fn delegate_lease_run_revoke_orchestration_end_to_end() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// RW 6.15 (found by on-demand routine run 5): a lease run's DL0703 told its holder to `pass --grant fs.read=…` — a flag
+/// the same run refuses ("a `--lease` run derives its authority from the delegated node"), on both engines. It now names
+/// the delegation that lacks the grant; an ordinary run beside it still names the `--grant`.
+#[test]
+fn a_lease_runs_refusal_names_its_delegation_on_both_engines() {
+    let base = std::env::temp_dir().join(format!("delulu_grants_remedy_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(cwd.join("data/pub")).unwrap();
+    std::fs::create_dir_all(cwd.join("data/priv")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let agent = "module agent\nfn main(root: Root) ! {Read} {\n  let fr = root.fs_read(\"./data/priv\")\n  match fr.read_text(\"f.txt\") { Ok(_) => {}, Err(_) => {} }\n}\n";
+    std::fs::write(cwd.join("agent.delulu"), agent).unwrap();
+
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Read", "--fs-read", "./data/pub", "--ttl", "1h", "--multi", "--json"]);
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let (node, token) = (v["node"].as_str().unwrap().to_string(), v["token"].as_str().unwrap().to_string());
+
+    for engine in [&[][..], &["--engine", "wasm"][..]] {
+        let mut args = vec!["run", "agent.delulu", "--lease", &token, "--no-prompt"];
+        args.extend_from_slice(engine);
+        let o = delulu_in(&cwd, &state, &args);
+        let err = stderr(&o);
+        assert_eq!(o.status.code(), Some(1), "{engine:?}: {err}");
+        assert!(err.contains("DL0703"), "{engine:?}: {err}");
+        assert!(
+            err.contains(&format!("node `{node}`")) && err.contains("does not carry `fs.read=./data/priv`"),
+            "{engine:?}: the refusal names the delegation that lacks the grant: {err}"
+        );
+        assert!(!err.contains("pass `--grant"), "{engine:?}: a lease run is never told to pass a `--grant` it refuses: {err}");
+    }
+    let o = delulu_in(&cwd, &state, &["run", "agent.delulu", "--no-prompt", "--grant", "fs.read=./data/pub"]);
+    assert!(stderr(&o).contains("pass `--grant fs.read=./data/priv`"), "an ordinary run is still told what to grant: {}", stderr(&o));
+    drop(_guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// RW 4.42 (routine run 7, AUDIT-TEXT-1's next surface): a delegation's scopes are the delegating party's
 /// strings, and `grants tree`, `grants list` and `grants inspect` printed them raw on the owner's terminal —
 /// witnessed on `634e9f0`: an escape set the title and cleared the screen, and a line break in a path began
