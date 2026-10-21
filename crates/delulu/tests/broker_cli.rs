@@ -516,6 +516,8 @@ fn a_pattern_net_grant_is_honored_under_the_daemon_as_embedded() {
 /// asked of a path. Granted `net.special=*.example.invalid/v1/**` (`.invalid` never resolves, so nothing leaves the
 /// machine), a request under `/v1` reaches the egress client under both custodies, and the daemon's chain holds the host's
 /// `use allow`; a request for another path, or for a path spelled two ways, is refused DL0904 at the call under both.
+/// D-V2-169: under the daemon each use names its path (never its query), judged by the broker — from both engines and a
+/// sandboxed guest.
 #[test]
 fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
     let base = std::env::temp_dir().join(format!("delulu_bpath_{}", std::process::id()));
@@ -558,12 +560,52 @@ fn a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded() {
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     check(true);
+    // The WASM host's gate asks its custody with the path as the interpreter's does (`custody_allows_at`), and so does a
+    // sandboxed guest's host answering its request (`channel.rs`).
+    for (route, flag) in [("wasm", ["--engine", "wasm"].as_slice()), ("sandbox", ["--sandbox"].as_slice())] {
+        for (file, refused) in [("in.delulu", false), ("out.delulu", true)] {
+            let mut args =
+                vec!["run", file, "--grant", "console", "--grant", grant.as_str(), "--no-prompt", "--broker", "daemon"];
+            args.extend_from_slice(flag);
+            let o = delulu_in(&cwd, &state, &args);
+            assert_eq!(stderr(&o).contains("DL0904"), refused, "{route}, {file}: {}", stderr(&o));
+            if refused {
+                assert!(!stdout(&o).contains("fetched"), "{route}, {file}: the program never got an answer: {}", stdout(&o));
+            } else {
+                assert_eq!(stdout(&o), "not fetched\n", "{route}, {file}: reached the egress client: {}", stderr(&o));
+            }
+        }
+    }
     let audit_dir = state.join("audit").to_string_lossy().to_string();
     let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir, "--json"]);
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
     let allowed =
         v["records"].as_array().unwrap().iter().any(|r| r["target"] == "api.example.invalid" && r["decision"] == "allow");
     assert!(allowed, "the host's use is allowed and recorded under the daemon: {v:#}");
+    // P9-05, D-V2-169: each use names the path it asked of the host — never its query — and the broker judges it, so the
+    // chain records `deny` for the two requests the call refused, where it had recorded the host's `allow` for each.
+    let uses: Vec<(String, String)> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["target"] == "api.example.invalid" && r["authority"].get("url_path").is_some())
+        .map(|r| (r["authority"]["url_path"].as_str().unwrap().to_string(), r["decision"].as_str().unwrap().to_string()))
+        .collect();
+    // The interpreter's three runs, then the WASM engine's two and the sandboxed guest's two.
+    let expected = [
+        ("/v1/items", "allow"),
+        ("/v2/items", "deny"),
+        ("/v1/../v2/items", "deny"),
+        ("/v1/items", "allow"),
+        ("/v2/items", "deny"),
+        ("/v1/items", "allow"),
+        ("/v2/items", "deny"),
+    ];
+    assert_eq!(uses, expected.map(|(p, d)| (p.to_string(), d.to_string())), "{v:#}");
+    let o = delulu_in(&cwd, &state, &["audit", "query", "--action", "use", "--dir", &audit_dir]);
+    let text = stdout(&o);
+    assert!(text.contains("target=api.example.invalid  path=/v2/items"), "the text form names the path too: {text}");
+    assert!(!text.contains("page="), "never the query: {text}");
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

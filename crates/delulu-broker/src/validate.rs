@@ -588,6 +588,63 @@ mod tests {
         }
     }
 
+    /// P9-05, D-V2-169: a network use that names its request path is judged on it, by the reading the runtime shares, and
+    /// its record names it as `url_path` beside `op` — allowed or refused — while `target` stays the host. Before, the
+    /// broker compared the host alone, so the chain recorded `allow` for a request whose path the grant does not reach, and
+    /// no record said which path a run asked of a host. A use that names no path is judged on its host, as before; any other
+    /// op's path is ignored.
+    #[test]
+    fn a_net_use_naming_its_path_is_judged_on_it_and_recorded_with_it() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = broker_with_clock(Rc::new(ManualClock::new(1000))).with_sink(Box::new(sink.clone()));
+        let node = b.issue(
+            holder(),
+            Authority::new(
+                eff(&["Net", "Write"]),
+                Scopes {
+                    net: names(&["api.example.com/v1/**", "open.example.org"]),
+                    fs_write: names(&["./out"]),
+                    ..Default::default()
+                },
+            ),
+            None,
+        );
+        for (host, path, allowed) in [
+            ("api.example.com", "/v1/items", true),
+            ("api.example.com", "/v1", true),
+            ("api.example.com", "/v10/items", false),
+            ("api.example.com", "/v2/items", false),
+            ("api.example.com", "/v1/../v2/items", false),
+            ("open.example.org", "/anything/at/all", true),
+            ("evil.example.net", "/v1/items", false),
+        ] {
+            let d = b.check_use_at(&node, Op::Net, Some(host), Some(path)).decision;
+            assert_eq!(d.is_allow(), allowed, "{host}{path}: {d:?}");
+            let r = sink.records().pop().unwrap();
+            assert_eq!(r.target.as_deref(), Some(host), "the target is the host, never the path");
+            let payload = r.authority.as_ref().unwrap();
+            assert_eq!((payload["op"].as_str(), payload["url_path"].as_str()), (Some("Net"), Some(path)), "{host}{path}");
+            assert_eq!(r.decision, if allowed { "allow" } else { "deny" }, "{host}{path}");
+        }
+        let mut denial = |path| match b.check_use_at(&node, Op::Net, Some("api.example.com"), Some(path)).decision {
+            Decision::Deny(d) => (d.code(), d.to_diagnostic().message),
+            other => panic!("{path}: {other:?}"),
+        };
+        let (code, words) = denial("/v2/items");
+        assert_eq!(code, "DL0904");
+        assert!(words.contains("outside every path the grant names for its host"), "{words}");
+        let (code, words) = denial("/v1/../v2");
+        assert_eq!(code, "DL0904");
+        assert!(words.contains("refused under a path scope"), "{words}");
+
+        // Named no path: judged on the host, as every use was before.
+        assert!(b.check_use(&node, Op::Net, Some("api.example.com")).decision.is_allow());
+        assert!(sink.records().pop().unwrap().authority.unwrap().get("url_path").is_none());
+        // Another op's path is not a request path.
+        assert!(b.check_use_at(&node, Op::FsWrite, Some("./out/a"), Some("/v2")).decision.is_allow());
+        assert!(sink.records().pop().unwrap().authority.unwrap().get("url_path").is_none());
+    }
+
     /// P8-04: a device refusal is recorded only for a node the tree holds, and its reason is bounded
     /// on a character boundary — it is a store a person reads later, and a guest chose part of it.
     #[test]

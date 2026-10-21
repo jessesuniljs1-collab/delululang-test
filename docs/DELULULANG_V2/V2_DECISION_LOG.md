@@ -4104,6 +4104,58 @@ they answer exactly that question.
 - Mutants M696 (decided by the name), M697 (never stamped), M698 (the path from the host) and M699 (the schema without the
   key), each red.
 
+## D-V2-169 — P9-05: the path in the chain's record — a network use carries its request path to its custody, the broker judges it against the node's grant, and the use's record names it in its payload (`url_path`), `target` staying the host — TAKEN (head chef, 2026-10-21, under the owner's delegation)
+
+**Context.** D-V2-139 §6 left the path out of the broker's `Net` op and record: every reader of a `use` record reads
+`target` as the host (the OCSF export's `dst_endpoint.hostname`, an egress refusal's record, `audit query`), and a separate
+field would change the record's canonical shape. Reading the code for this slice found what the omission cost. Under the
+daemon, the custody gate runs before the effect's first check, and the broker compared the host alone. So a request to a
+granted host, for a path outside every pattern the grant names for it, was recorded as the host's `use allow` and then
+refused at the call (DL0904). Witnessed with the pre-change build (`launch/2.0.0` `678dee6`, Windows), under a daemon,
+granted `net.special=*.example.invalid/v1/**`: a request for `/v2/items` was refused DL0904 at the call, and the chain's
+seq 9 says `use allow` for its host. With no path in the record, nothing showed which path that `allow` was for.
+
+**Decision.**
+1. **The path rides the payload, not a new record field.** A use's payload already holds self-describing keys (`op` since
+   PS-E-06, D-V2-80; a refusal's `refused_by` and `reason`). `url_path` joins `op` there, so the record's canonical shape is
+   unchanged. A record written before this verifies as it did; `target` stays the host for every reader; and an older
+   build verifies a newer chain, since the payload is hashed as a value whatever its keys.
+2. **The path is the request's, read once.** `prim::request_path`: the URL's path as the first check reads it
+   (`prim::path_of`), `/` when it names none (the two match alike: no segments). The query and the fragment are never
+   carried, because either may hold a token. Both engines and a sandboxed guest's host send it (`custody_path_for`,
+   `custody_allows_at`), through a defaulted `Custody::check_at`. Embedded custody records nothing and its `prim` check
+   judges the path, so the default's `check` is right there. The plugin wrapper and the daemon client override it. The
+   wire's `Check` gains `url_path`, absent from the frame when there is none, so every other `Check` is the frame it was.
+3. **The broker judges the path it is told** (`validate`), by the reading the runtime's first check and the egress client
+   share (`netscope::judge_all`). A path outside every pattern is `Denial::NetPath` and an ambiguous spelling is refused,
+   both DL0904, the code the call already gave, worded as the runtime words them, so a daemon run is told what an embedded
+   run is. No new code. This hardens the check and redefines nothing: it is D-V2-138's grant, enforced in one more place,
+   so the chain never records `allow` for a path the grant does not reach. A use that names no path (an older client) is
+   judged on its host, as before. The path is the client's word, as the host always was; the broker bounds the client's
+   own record, and the egress client still judges every hop.
+4. **Readers.** `audit query` shows `path=` after `target=`, escaped as the target is; its JSON carries the payload whole.
+   The OCSF export maps the path to `http_request.url` (`hostname` and `path`); `dst_endpoint` stays the host. An egress
+   refusal's record names no path of its own: it overrides the `use allow` that named it (`overrides_seq`).
+5. **Left open:** methods (d), with the first non-GET primitive (RW 2.11). A `send`'s record (P9-04 (d)) names its origin
+   only: the broker hands a secret per origin, not per path.
+
+**Evidence.**
+- `validate.rs` `a_net_use_naming_its_path_is_judged_on_it_and_recorded_with_it` covers these cases. `/v1/items` and `/v1`
+  under `api.example.com/v1/**` are allowed. `/v10/items`, `/v2/items` and `/v1/../v2/items` are refused. Any path on a
+  host-only entry is allowed. Each record has `target` the host and `url_path` the path. A use naming no path is judged on
+  its host, and an FsWrite's path is ignored.
+- `broker_cli.rs` `a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded`: under the daemon the interpreter's
+  three runs, the WASM engine's two and a sandboxed guest's two record `url_path` with their decision. The query
+  `?page=/v2` is never recorded, and `audit query` prints `path=`.
+- `audit_ocsf_cli.rs`: the path is exported as `http_request.url`; a use naming none claims none.
+- `delulu-runtime` `a_network_use_carries_its_request_path_and_never_its_query`,
+  `a_plugin_exports_custody_forwards_the_request_path`.
+- Mutants M703–M717, each red, the restored tree green. The broker judges no path (M703), records none (M704), records one
+  for another op (M705). The client (M706), the interpreter (M707), the WASM host's call (M708) and its gate (M710), the
+  sandbox channel (M709) and the daemon (M716) each drop it. The path keeps its query (M711) or names no `/` (M712). The
+  plugin wrapper drops it (M713). The export (M714) and `audit query` (M715) omit it. The broker's words differ from the
+  call's (M717).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

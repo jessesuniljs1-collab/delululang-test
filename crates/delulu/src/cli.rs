@@ -9489,6 +9489,10 @@ fn render_audit_record(r: &delulu_broker::AuditRecord) -> String {
     if let Some(t) = &r.target {
         s.push_str(&format!("  target={}", terminal_line(t)));
     }
+    // P9-05, D-V2-169: the path a network use asked of its host — the program chose it, so it is escaped as the target is.
+    if let Some(p) = r.authority.as_ref().and_then(|a| a.get("url_path")).and_then(|p| p.as_str()) {
+        s.push_str(&format!("  path={}", terminal_line(p)));
+    }
     s
 }
 

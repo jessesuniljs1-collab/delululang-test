@@ -563,7 +563,12 @@ mod tests {
 
     #[test]
     fn frame_roundtrips_a_request() {
-        let req = Request::new(ReqBody::Check { node: "g_abc".into(), op: "FsWrite".into(), arg: Some("/tmp/x".into()) });
+        let req = Request::new(ReqBody::Check {
+            node: "g_abc".into(),
+            op: "FsWrite".into(),
+            arg: Some("/tmp/x".into()),
+            url_path: None,
+        });
         let mut buf = Vec::new();
         write_frame(&mut buf, &req).unwrap();
         // The first four bytes are the LE length of the remainder.

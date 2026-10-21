@@ -11,6 +11,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the audit chain names each request's path, 2026-10-21
+
+- **New: under the broker, a network use's record names the path it asked** (P9-05, D-V2-169). A daemon or leased run
+  sends the request's path with each `net` use, without its query or fragment, and `/` when the URL names none. The
+  broker judges that path against the node's grant, as the run's own first check does. It records the path as
+  `url_path` in the use's record, beside `op`, so `target` stays the host. `audit query` shows it as `path=`, and the
+  OCSF export maps it to `http_request.url`. This covers both engines and a sandboxed guest.
+- **Fixed: the chain recorded `allow` for a request the run then refused.** A request to a granted host, for a path
+  outside every pattern the grant names for it, was recorded as the host's `use allow` and then refused at the call
+  (DL0904). The broker now refuses it (DL0904, in the same words), and its record says `deny` and names the path.
+- Records written before this change carry no path and verify unchanged; a use that names no path is judged on its
+  host, as before.
+
 ## Unreleased — `authority` names each request a program makes, 2026-10-21
 
 - **New: `delulu authority FILE --json` lists the program's requests** (P9-05 (c), D-V2-168). Under `requests`, each

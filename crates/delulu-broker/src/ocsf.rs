@@ -269,10 +269,16 @@ pub fn event(rec: &AuditRecord, labels: &Labels) -> Value {
             obj.insert("actor".into(), actor);
         }
         Class::Http(_) => {
-            // A network use's argument is the host (`custody_op_for`): never a path, never a query string.
+            // A network use's argument is the host (`custody_op_for`): never a path, never a query string. Its request path,
+            // when the use named one (P9-05, D-V2-169), is the payload's `url_path` — OCSF's `http_request.url.path`, beside
+            // the host it was asked of; never the query.
             let host = rec.target.clone().unwrap_or_default();
+            let mut request = json!({ "http_method": "GET" });
+            if let Some(path) = rec.authority.as_ref().and_then(|a| a.get("url_path")).and_then(|p| p.as_str()) {
+                request["url"] = json!({ "hostname": host, "path": path });
+            }
             obj.insert("dst_endpoint".into(), json!({ "hostname": host }));
-            obj.insert("http_request".into(), json!({ "http_method": "GET" }));
+            obj.insert("http_request".into(), request);
             obj.insert("actor".into(), actor);
         }
         Class::Base => {

@@ -82,6 +82,8 @@ fn seeded(tag: &str) -> PathBuf {
         assert!(b.check(&child, Op::FsWrite, Some("./out/a.txt")).is_allow());
         assert!(!b.check(&child, Op::FsWrite, Some("./elsewhere")).is_allow());
         assert!(b.check(&root, Op::Net, Some("example.com")).is_allow());
+        // P9-05, D-V2-169: a use naming its request path.
+        assert!(b.check_use_at(&root, Op::Net, Some("example.com"), Some("/v1/items")).decision.is_allow());
         let store = SecretStore::in_memory();
         store.set("API_KEY", CANARY).unwrap();
         assert_eq!(b.expose(&root, "API_KEY", &store, Some("app.delulu:3:9".into())).unwrap(), CANARY);
@@ -235,6 +237,14 @@ fn every_record_becomes_one_event_of_its_class_and_the_export_verifies_to_the_ch
     let net = events.iter().find(|e| e["class_uid"] == 4002 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
     assert_eq!(net["dst_endpoint"]["hostname"], "example.com", "a network use names its host");
     assert_eq!(net["http_request"]["http_method"], "GET");
+    assert!(net["http_request"].get("url").is_none(), "a use that named no path claims none: {net}");
+    // P9-05, D-V2-169: a use that named its path carries it as OCSF's `http_request.url.path`; the endpoint stays the host.
+    let at_path = events
+        .iter()
+        .find(|e| e["class_uid"] == 4002 && e["unmapped"]["delulu"]["action"] == "use" && e["http_request"].get("url").is_some())
+        .expect("the use that named its path");
+    assert_eq!(at_path["http_request"]["url"], serde_json::json!({ "hostname": "example.com", "path": "/v1/items" }));
+    assert_eq!(at_path["dst_endpoint"], serde_json::json!({ "hostname": "example.com" }), "never a path in the hostname");
     let refused = events.iter().find(|e| e["class_uid"] == 2004 && e["unmapped"]["delulu"]["action"] == "use").unwrap();
     assert_eq!(
         refused["finding_info"]["types"],
