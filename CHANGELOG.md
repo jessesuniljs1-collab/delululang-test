@@ -29,6 +29,21 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### the cycle collector keeps what a map holds, 2026-10-22
+
+- **Fixed: a list held in an actor's map could be emptied by the cycle collector** (GC-MAP-1, RW 4.77). The collector
+  didn't look inside maps. So a list or record that an actor could reach only through a map looked like garbage, and a
+  sweep emptied it in place. A map holding `[1, 2, 3]` read back as `[]`, and the only sign was a "collected" count
+  under `--trace-memory`. This affected actor programs since maps were added (2026-09-20).
+- **Fixed: a garbage cycle through a map in an actor was never collected.** The collector didn't track maps, so
+  cycles through them leaked. Maps are now tracked and collected the same way lists are.
+
+### `--debug-rcaps` on a deep graph, 2026-10-22
+
+- **Fixed: `--debug-rcaps` ran out of memory on a deeply nested graph moved to an actor** (RW 4.75). A 100,000-deep
+  `iso` graph moves without the flag, but under it the run stopped at the 1 GiB budget. The flag's uniqueness check now
+  walks the graph without recursion, builds paths only for what it reports, and names the same path as before.
+
 ### lists, maps and options nest on the WASM engine, 2026-10-22
 
 - **New: lists, maps, options and results nest on the WebAssembly engine** (RW 3.4, D-V2-173). A list of lists, a list

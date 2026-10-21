@@ -160,6 +160,38 @@ fn an_alias_reached_through_a_variant_or_a_map_is_a_dl1610_class_violation() {
     drop(outside);
 }
 
+/// DATA-DEPTH-2: a graph 100,000 levels deep — a list in a record in a variant, in turn — passes the walk, and an alias
+/// from outside held at its bottom is found and named by its whole path. The walk recursed once per level and built each
+/// node's path as it went, so such a move spent the memory budget under `--debug-rcaps` (or killed the binary with a
+/// stack overflow, here) where the move itself ran.
+#[test]
+fn a_graph_nested_past_the_stack_passes_the_uniqueness_walk_and_its_deepest_alias_is_named() {
+    let deep = |bottom: Value| {
+        let mut v = bottom;
+        for _ in 0..100_000 / 3 {
+            v = list(vec![v]);
+            v = Value::Record {
+                name: std::rc::Rc::from("Box"),
+                fields: std::rc::Rc::new(std::cell::RefCell::new(vec![("f".to_string(), v)])),
+            };
+            v = Value::variant("Some", vec![v]);
+        }
+        list(vec![v])
+    };
+    let clean = deep(list(vec![Value::Int(1)]));
+    assert!(assert_unique_graph(&clean).is_ok(), "{:?}", assert_unique_graph(&clean).err().map(|e| e.len()));
+    let held = list(vec![Value::Int(1)]);
+    let outside = held.clone();
+    let aliased = deep(held);
+    let err = assert_unique_graph(&aliased).expect_err("the alias at the bottom must be detected");
+    assert_eq!(
+        err,
+        format!("list at arg[0]{} has 2 strong refs (max 1)", ".0.f[0]".repeat(100_000 / 3)),
+        "the whole path, every step"
+    );
+    drop(outside);
+}
+
 #[test]
 fn a_checked_iso_send_under_debug_rcaps_runs_clean() {
     let src = "module d\n\

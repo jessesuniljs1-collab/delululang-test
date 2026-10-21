@@ -68,6 +68,35 @@ fn a_state_reachable_cycle_survives_the_sweep() {
     );
 }
 
+/// GC-MAP-1: a list reachable only through a map in an actor's state is live data too. The marking walk passed over a
+/// `Map`, so the list was alive and unmarked, and the sweep broke it — emptied it in place — while the actor still held
+/// it: `{k: []}` for `{k: [1, 2, 3]}`, silently, with "1 garbage-cycle cell(s) collected" the only trace.
+#[test]
+fn a_list_held_in_an_actors_map_survives_the_sweep() {
+    let dir = scratch("map");
+    let src = "module m\n\nactor Keeper {\n  var m: ref Map[Str, ref List[Int]]\n  new() {\n    self.m = Map()\n  }\n  be fill() {\n    let xs: ref List[Int] = [1, 2, 3]\n    self.m.insert(\"k\", xs)\n  }\n  be churn() {\n    var i = 0\n    while i < 300 {\n      let l: ref List[Int] = []\n      l.push(i)\n      i = i + 1\n    }\n  }\n  be report(out: Cap[Console]) ! {Write} { out.println(str(self.m)) }\n}\n\nfn main(root: Root) ! {Async, Write} {\n  let k = spawn Keeper()\n  k.fill()\n  k.churn()\n  k.churn()\n  k.report(root.console())\n}\n";
+    std::fs::write(dir.join("map.delulu"), src).unwrap();
+    let o = delulu(&["run", "map.delulu", "--grant", "console", "--trace-memory"], &dir);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(o.status.success(), "stderr: {err}");
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "{k: [1, 2, 3]}", "the map's list is live data");
+    assert!(err.contains("cycle collector: 2 sweep(s)"), "the sweep ran, so the witness was exercised: {err}");
+}
+
+/// GC-MAP-1's residual: a cycle through a map (`g.insert("self", Link(g))`) is garbage like one through a list, and is
+/// collected. A map was never registered, so 200 of them made in a turn reached no sweep at all and all leaked.
+#[test]
+fn a_turn_full_of_cycles_through_maps_is_collected() {
+    let dir = scratch("mapcycle");
+    let src = "module m\n\ntype Chain = Link(ref Map[Str, Chain]) | Nil\n\nactor Churner {\n  var n: Int\n  new() { self.n = 0 }\n  be churn() {\n    var i = 0\n    while i < 200 {\n      let g: ref Map[Str, Chain] = Map()\n      g.insert(\"self\", Link(g))\n      i = i + 1\n    }\n    self.n = self.n + 200\n  }\n  be report(out: Cap[Console]) ! {Write} { out.println(str(self.n)) }\n}\n\nfn main(root: Root) ! {Async, Write} {\n  let c = spawn Churner()\n  c.churn()\n  c.report(root.console())\n}\n";
+    std::fs::write(dir.join("mapcycle.delulu"), src).unwrap();
+    let o = delulu(&["run", "mapcycle.delulu", "--grant", "console", "--trace-memory"], &dir);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(o.status.success(), "stderr: {err}");
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "200", "the program's answer is untouched");
+    assert!(err.contains("cycle collector: 1 sweep(s), 200 garbage-cycle cell(s) collected"), "every map cycle collected: {err}");
+}
+
 /// Non-actor programs never register, never sweep: the collector line reads zero even under
 /// `--trace-memory`... and for a program with no actors the actor system never starts, so the
 /// honest assertion is subtractive — no collector output at all, and identical behavior.

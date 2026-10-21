@@ -17,10 +17,10 @@
 //! sweep. Collections are counted and reported (`--trace-memory`), never silent.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::rc::{Rc, Weak};
 
-use crate::value::{Scope, Value};
+use crate::value::{MapKey, Scope, Value};
 
 /// Sweep when this many registered cells have accumulated on a worker — the amortizer: sweep
 /// cost is O(reachable + registered), paid once per that many allocations at worst.
@@ -29,6 +29,9 @@ pub const COLLECT_THRESHOLD: usize = 64;
 pub enum RegCell {
     List(Weak<RefCell<Vec<Value>>>),
     Rec(Weak<RefCell<Vec<(String, Value)>>>),
+    /// A `Map` cell: a cycle passes through one as through a list (`m.insert("self", Link(m))`). Unregistered, such a
+    /// cycle was never swept — 200 of them in one turn, 0 sweeps, all leaked (GC-MAP-1's residual).
+    Map(Weak<RefCell<BTreeMap<MapKey, Value>>>),
     Env(Weak<Scope>),
 }
 
@@ -50,6 +53,9 @@ impl Registry {
     pub fn note_record(&mut self, c: &Rc<RefCell<Vec<(String, Value)>>>) {
         self.cells.push(RegCell::Rec(Rc::downgrade(c)));
     }
+    pub fn note_map(&mut self, c: &Rc<RefCell<BTreeMap<MapKey, Value>>>) {
+        self.cells.push(RegCell::Map(Rc::downgrade(c)));
+    }
     pub fn note_env(&mut self, s: &Rc<Scope>) {
         self.cells.push(RegCell::Env(Rc::downgrade(s)));
     }
@@ -59,8 +65,26 @@ impl Registry {
         match v {
             Value::List(c) => self.note_list(c),
             Value::Record { fields, .. } => self.note_record(fields),
+            Value::Map(c) => self.note_map(c),
             Value::Closure(c) => self.note_env(&c.env),
-            _ => {}
+            // Every other kind, named, as the marking walk names them: none is a mutable cell a cycle can pass through
+            // (a variant's payload is immutable; its cells were registered where they were made).
+            Value::Int(_)
+            | Value::Float(_)
+            | Value::Bool(_)
+            | Value::Str(_)
+            | Value::Unit
+            | Value::Variant { .. }
+            | Value::Cap(_)
+            | Value::Secret(_)
+            | Value::Root(_)
+            | Value::Foreign(_)
+            | Value::ForeignPtr(_)
+            | Value::ActorRef { .. }
+            | Value::Plugin(_)
+            | Value::PluginFn(_) => {}
+            #[cfg(feature = "python")]
+            Value::PyObj(_) => {}
         }
     }
 
@@ -84,6 +108,14 @@ impl Registry {
                             values.extend(fields.borrow().iter().map(|(_, v)| v.clone()));
                         }
                     }
+                    // GC-MAP-1: a map was walked past, so a list or record reachable only through one — `self.m` holding
+                    // `[1, 2, 3]` — was alive and unmarked, and broken: the sweep emptied it while the actor still held it.
+                    // A map holds values as a list does; its keys are `Str`, `Int` or `Bool`, which hold none.
+                    Value::Map(c) => {
+                        if seen.insert(Rc::as_ptr(c) as *const () as usize) {
+                            values.extend(c.borrow().values().cloned());
+                        }
+                    }
                     Value::Variant { fields, .. } => {
                         // Immutable and never registered, but its children may be.
                         if seen.insert(fields.ptr_id()) {
@@ -91,7 +123,23 @@ impl Registry {
                         }
                     }
                     Value::Closure(c) => scopes.push(c.env.clone()),
-                    _ => {}
+                    // Every other kind, named, so a kind added to `Value` does not compile until it is placed here — the
+                    // catch-all this replaced is where `Map` went unwalked (GC-MAP-1). None of these holds a `Value`.
+                    Value::Int(_)
+                    | Value::Float(_)
+                    | Value::Bool(_)
+                    | Value::Str(_)
+                    | Value::Unit
+                    | Value::Cap(_)
+                    | Value::Secret(_)
+                    | Value::Root(_)
+                    | Value::Foreign(_)
+                    | Value::ForeignPtr(_)
+                    | Value::ActorRef { .. }
+                    | Value::Plugin(_)
+                    | Value::PluginFn(_) => {}
+                    #[cfg(feature = "python")]
+                    Value::PyObj(_) => {}
                 }
                 continue;
             }
@@ -119,6 +167,15 @@ impl Registry {
             RegCell::Rec(w) => match w.upgrade() {
                 None => false,
                 Some(c) if seen.contains(&(Rc::as_ptr(&c) as usize)) => true,
+                Some(c) => {
+                    c.borrow_mut().clear();
+                    broken += 1;
+                    false
+                }
+            },
+            RegCell::Map(w) => match w.upgrade() {
+                None => false,
+                Some(c) if seen.contains(&(Rc::as_ptr(&c) as *const () as usize)) => true,
                 Some(c) => {
                     c.borrow_mut().clear();
                     broken += 1;
