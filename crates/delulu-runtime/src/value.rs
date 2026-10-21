@@ -974,6 +974,9 @@ pub struct RootVal {
     /// P2 (D-V2-27): the package manifest's `[plugins] allow` hash ceiling, carried into the
     /// capability. A ceiling, never a source of authority.
     pub plugins_allow: Vec<String>,
+    /// RW 6.15: the delegated node a `--lease` run's authority came from (`Grants::lease`), so a refusal names the remedy
+    /// that applies to this run. Never authority, and never consulted to decide a use.
+    pub lease: Option<String>,
 }
 
 // ----- environments --------------------------------------------------------

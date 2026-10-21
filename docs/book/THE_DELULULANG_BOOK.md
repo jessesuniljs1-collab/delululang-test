@@ -549,7 +549,9 @@ option, a sum or a record, which the WASM engine hands to the interpreter's own 
 cannot disagree about a value that holds itself or a `NaN`; narrowing a file capability (`fs.narrow("public")`),
 by the interpreter's own rule; and writing a file (`root.fs_write`, `write_text`, `append_text`), its trace the
 interpreter's byte for byte. Measured again that day, 11 of the 17 entry points compile, five of the six guide
-chapters among them.
+chapters among them. Since 2026-10-21 so does the network: `root.http([…])` and `client.get(url)`, minted and performed
+by the interpreter's own code on the host — its allowlist, its egress client, its custody check and its trace — so
+chapter five runs too: 12 of the 17 entry points, all six chapters.
 
 So: if you are writing ordinary DeluluLang — anything with a map, a list of lists, an `Option` of a list, or a list of
 options — **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code

@@ -7751,3 +7751,203 @@ read with the directory swapped at 0.25, 0.3 and 0.4 s, the write minted on a su
 granted directory itself swapped (three runs) — on both engines, every run refused with DL0904 (exit 1), nothing read from
 or written outside. Before the fix the same scripts read 25,707–33,114 of 40,000 reads from outside and wrote outside on
 both engines.
+
+## 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`; the run's CI
+
+**`launch/2.0.0`** merged `master` twice this run: `3ee1370` (`d259cf2..7355808` — the laptop's #16–#19 and RW 7.20) and
+`20666c5` (`7355808..ec4bc87` — F1, RW 4.72 with D-V2-167, RW 3.19). Each time `master`'s `## Unreleased` CHANGELOG sections moved
+under `## [2.0.0]` as `###` entries (five, then three), and the second time the `Breaking` paragraph gained `run FILE.dwx`'s
+refusal of the flags it does not apply (a command line that ran under 1.x is refused now). On `20666c5`'s tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green.
+`3ee1370`'s release dry run `39392801546` success; its `everything` run `39392798450` success on every job but the two
+`miri-slow` jobs, still running at this entry. `20666c5`'s `everything` and release dry run are dispatched.
+
+## 2026-10-20 — on-demand routine run 5 (postscript): two of the pass's untried families, probed; the run's CI
+
+**Under a live broker daemon** (`delulu broker start` with its state in `/tmp`, stopped with `broker stop`): a handle
+narrowed to `sub` reads its file on both engines (`--broker daemon`, `--engine wasm` or not). The swap race of RW 4.72 — `sub`
+replaced by a link to outside 0.2 s and 0.4 s into a 200,000-read loop — refused at the swap on both engines (DL0904; the
+interpreter in `resolve_in_scope`'s words, WASM at the open's walk, "a component became a symbolic link … after the scope
+check"), nothing read from outside. By hand, against the binary built from `318b210`; not a committed test.
+
+**A capability held in a closure** carries its narrowed scope on both engines (the file inside read, `../f.txt` refused
+DL0904 on both). **A capability held in a record field** runs on the interpreter (inside read, `../../outside/f.txt`
+refused DL0904) and is DL1201 on WASM ("a record with a field of a type outside the WASM fragment") — RW 3.4's subset,
+refused rather than run. Still untried: a user method named `narrow` or `read_text`, and `--lease` on the WASM file path.
+
+**CI read.** push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
+
+**`--lease` on the WASM file path** (the last of the pass's untried families but one; by hand, a live broker, a fresh
+single-use token per run from `grants delegate --effects Read --fs-read ./data/pub`): a read inside the lease ran on both
+engines; a read through a narrowed handle reaching `../priv/f.txt` was refused at the lease's own custody gate on both, in
+the same words ("lease `g_…` does not grant `…/data/priv/f.txt` in scope `fs.read`") — the WASM read asks the custody
+before its scope since `92d9119`, so before F1's fix WASM would have answered with the scope's DL0904 instead; a mint of
+`./data/priv` was DL0703 on both. **An oddity, both engines:** that DL0703 still says "pass `--grant fs.read=./data/priv`",
+which a `--lease` run refuses ("a `--lease` run derives its authority from the delegated node") — the hint points a lease
+holder outside its delegation, as PS-B-05 found under `--sandbox`. Untried still: a user method named `narrow`/`read_text`.
+**CI read, last:** `318b210`'s push run `39398823386` and `8ac7ee5`'s `39400706197` success on every job.
+
+## 2026-10-20 — on-demand routine run 5: stopped on the owner's word
+
+The owner asked at 09:50 UTC for a safe stop. Nothing was half-done: every slice of the run (the laptop's #17–#19, RW 7.20,
+F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`) was already verified, recorded and on `master`. At the stop
+no job had failed; four runs were still going (`6a03165`'s push run, and `miri-slow` jobs on `launch/2.0.0` and the nightly) —
+named in `docs/CLOUD_SYNC_LOG.md` for the next session to read.
+
+## 2026-10-21 — the laptop: a lease run's DL0703 names its delegation, not a `--grant` it refuses (RW 6.15)
+
+**Synced first.** `git fetch origin`: `master` `a7b6476..9c1d30b` (on-demand routine run 5 — the laptop's #17–#19, RW 7.20,
+F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`), fast-forwarded. The four runs run 5 left going, read
+to their end: `6a03165`'s push run `39403469304`, `launch/2.0.0`'s `everything` `39398467836` (`20666c5`) and `39392798450`
+(`3ee1370`), and the nightly `39391181701` (`7355808`) — success on every job, `miri-slow` included; so are `e32b3c7`'s
+`everything` `39364184892` and `9c1d30b`'s push run `39403663796`. The autosave branch's newest snapshot (`6d7557c`, 04:23
+UTC on 2026-10-20) is older than `275af08`, which carries it — nothing to recover. On `9c1d30b`: `survey check` ok (1544
+nodes, 15586 edges), `doctor --check` ok (29 checks on this machine).
+
+**The defect** (run 5's oddity, reproduced on `9c1d30b`'s binary with a live broker and a `--multi` lease of
+`--effects Read --fs-read ./data/pub`): a program minting `root.fs_read("./data/priv")` was refused DL0703 "filesystem read
+of `./data/priv` was not granted — pass `--grant fs.read=./data/priv`" on both engines, and `root.console()` "pass `--grant
+console`" — while the same run refuses every local `--grant` but a foreign library's path ("a `--lease` run derives its
+authority from the delegated node"). The refusal sent the lease's holder outside its delegation. Under `--sandbox --lease`
+the guest's refusal said the same. Beside it, the WASM engine's ungranted `console`, `clock` and `rand` named no remedy at
+all ("DL0703: console was not granted to this program"), where the interpreter's say `pass --grant console`.
+
+**The fix.** A run's grants say where they came from: `Grants::lease` (set by `grants_from_lease` to the redeemed node),
+carried into `RootVal::lease` by `build_root`, across an actor boundary in `RootMsg`, and into the WASM host as
+`HostConfig::lease`. Not authority — nothing decides a use by it. One function, `prim::grant_remedy`, words the remedy for
+every mint on both engines: `pass --grant G` on an ordinary run; under a lease, "the lease this run redeemed (node `g_…`)
+does not carry `G`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)". The
+twelve interpreter mints that answer DL0703 (console, fs_read, fs_write, http, clock, rand, declassify, secret, actuator,
+sensor, compute, plugin_host) use it; an ordinary run's words are unchanged, each one. The WASM host's console, clock, rand,
+fs_read and fs_write refusals now carry the interpreter's words exactly. The sandbox host serves its guest's mints from the
+same root, so `--sandbox --lease` is covered without a change of its own (checked by hand: the guest's refusal names the
+node).
+
+**Evidence.** By hand on the fixed binary, a live broker: under `--lease` the interpreter, `--engine wasm` and `--sandbox`
+each name the node and `does not carry fs.read=./data/priv` / `console`; without a lease each still says `pass --grant …`.
+Witnesses: `prim.rs` `a_lease_runs_refusal_names_its_delegation_and_never_a_grant_it_refuses` (the twelve mints, both kinds
+of root); `fault_parity.rs` `an_ungranted_mint_names_the_same_remedy_on_both_engines` (five mints × with and without a
+lease, the WASM refusal ending in the interpreter's exact message); `grants_cli.rs`
+`a_lease_runs_refusal_names_its_delegation_on_both_engines` (a live broker, both engines, and an ordinary run beside them);
+`actors.rs` `a_roots_lease_survives_the_crossing_into_an_actor_and_back`. Mutants (`scripts/mutants.py`, one target each):
+M651 `grant_remedy` ignores the lease → the unit test red; M652 `grants_from_lease` sets no lease → the end-to-end test red
+(the old code's words on both engines); M653 the CLI's `HostConfig` drops it → the end-to-end test red (the WASM half);
+M654 the WASM host state drops it, M657 the WASM console refusal back to its old words, M658 `build_root` drops it → the
+parity test red; M655 and M656 either direction of the actor crossing drops it → the actor test red; the control green.
+`scripts/clippy.sh -j 4` clean and stamped. `delulu-runtime` and `delulu-wasm` whole: 492 passed, 0 failed (27 targets); the 26 `delulu` CLI targets that assert a refusal's words (`cli`, `grants_cli`, `wasm_cli`, the sandbox, broker, budget, device and plugin files among them): 286 passed, 0 failed. The rest runs on GitHub (the pull request's CI).
+
+## 2026-10-21 — the laptop: a behaviour named like a capability method is a send on WASM (RW 3.20, WASM-SEND-NAME-1)
+
+**Found** probing the red-team pass's last untried family, "a user method named `narrow`/`read_text`" (`V2_LOG.md`,
+2026-10-20). The language has no user methods on records; the only method a program names is an actor's behaviour, sent as
+`w.job(n)`. So: an actor with one behaviour per capability-method name, sent from `main`. On the interpreter each ran. On
+`--engine wasm` every name the codegen matched ahead of the receiver with the same argument count was refused — `w.narrow(5)`
+DL1201 "narrow() on a receiver that is not a Cap[FsRead]", `w.int(2, 3)` "int(lo, hi) on a non-Rand receiver", `w.console()`
+"console() on a non-Root receiver"; a behaviour named like one with another count (`w.len(5)`, `w.now_ms(5)`) ran. The
+codegen's method arm tried fifteen names (`console`, `clock`, `now_ms`, `rand`, `println`, `int`, `fs_read`, `read_text`,
+`narrow`, `fs_write`, `write_text`, `append_text`, `foreign_load`, `foreign`, `expose` — `expose` refused as "secret
+contents cannot enter WASM guest memory") before it compiled the receiver and found an actor. It failed closed: nothing ran
+as a capability, and an arm that found the wrong receiver refused. But a valid program was refused, for a reason it does
+not have. `secret`, the sixteenth name, is a reserved word (DL0106), so no behaviour can carry it.
+
+**The fix.** The receiver decides first: `recv_actor` reads from the scopes, without compiling anything, whether the
+receiver is a local or parameter of actor-reference type, `self` in an actor member, or a `self.field` holding a reference —
+the forms `compile_expr` compiles to `Ty::ActorRef`; such a method is a send whatever its name. Any other receiver is
+compiled and dispatched as before (a `spawn W()` receiver still reaches the send by its compiled type). Peeking by compiling
+the receiver and rolling back was rejected: each level of a method chain would compile its receiver twice.
+
+**Evidence.** Witness `actors_parity.rs` `a_behaviour_named_like_a_capability_method_is_a_send_on_both_engines`: the
+fifteen names as behaviours (none, one or two `Int` arguments), each sent from `main`; the one- and two-argument ones count
+down by sending to `self` under their own name; and a second actor sends `narrow` through a `tag W` field. The two engines'
+quiescence reports agree, and the WASM turn count is the arithmetic's, 55. Red on the old code (`Unsupported("console() on a
+non-Root receiver")`). Mutants: M659 no receiver read → red; M660 `self` not read → red (the self-sends); M661 the field not
+read → red (the relay); M662 a local not read → red; the control green. By hand on the fixed binary: every probe program
+runs on `--engine wasm`. `scripts/clippy.sh -j 4` clean and stamped; `delulu-wasm` whole: 172 passed, 0 failed (17 targets).
+
+## 2026-10-21 — the laptop: three new advisories, fixed by patch updates (Wasmtime 48.0.7, rustls-webpki 0.103.16); rustfmt
+
+**Found by** pull request #20's CI `39555991114`: `supply-chain` red on three advisories that did not exist at `9c1d30b`'s
+green push run the day before (cargo-deny's database moved, not the code), and `lints` red on `cargo fmt --check` for
+`prim.rs` and `grants_cli.rs` (the laptop ran clippy and not rustfmt on the slice's new code — `scripts/clippy.sh` does not
+format; run `cargo fmt --all` with it).
+
+**What each reaches, read before updating.**
+- RUSTSEC-2026-0379 (Cranelift on aarch64 can jump to the wrong target on a large `br_table`): the codegen emits no
+  `br_table`, but Wasmtime compiles whatever module it is handed. `delulu run FILE.dwx` and a `.dpx` plugin hand it a
+  module someone else built, and its code hash binds only to a manifest its builder wrote. So on the two aarch64 release
+  targets (`aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`) a crafted artifact could reach the miscompile.
+  **The one that matters.**
+- RUSTSEC-2026-0382 (rustls-webpki may accept a path through the distrusted emSign intermediates): the egress client's
+  certificate verification (`rustls` under `reqwest` and `delulu-runtime`).
+- RUSTSEC-2026-0378 (a panic lowering a host-created component-model stream): the WASM engine runs core modules only — no
+  `wasmtime::component` anywhere in `delulu-wasm`. Not reached; fixed by the same update anyway.
+
+**The update.** `cargo update -p rustls-webpki` (0.103.15 → 0.103.16) and `cargo update -p wasmtime` (48.0.6 → 48.0.7, and
+the packages released with it, twenty-seven: `cranelift-*` 0.135.7, `pulley-*` and `wasmtime-internal-*` 48.0.7). No other crate moved,
+none added or removed. 49.x was not taken: a major version is its own slice.
+
+**Evidence.** Locally `cargo deny check advisories`: `advisories ok`, and `check bans licenses sources`: all three ok
+(cargo-deny 0.20.2). On the updated lock: `delulu-wasm` whole, 172 passed, 0 failed; `egress_cli` 8, `wasm_cli` 14,
+`examples_run` 6 — all passed; `delulu-runtime --lib egress` 41 passed.
+`cargo fmt --all` changed exactly the two files CI named. clippy clean and stamped. The pull request's CI is the rest.
+
+## 2026-10-21 — the laptop: the network on the WASM engine — `root.http` and `Cap[Http].get` (RW 3.4); chapter five runs
+
+**Why this, now.** `http` was chapter five's last blocker on WASM: with its two network lines removed, the chapter compiled
+already (checked first, against `9c1d30b`'s binary — the uncalled `Secret` function does not stop it). And the network is
+the effect where a second implementation would cost most: the allowlist's path scopes (D-V2-139), the special-use rule
+(PS-B-02), redirects, the custody's chain (RW 4.46) — each written once, in the interpreter's code.
+
+**So the WASM host calls that code, and copies none of it.**
+- `root.http(hosts)`: the guest passes the list and its type descriptor (`desc_ptr`, #17's), and the host rebuilds the
+  `List[Str]` by the reifier.
+- It mints by `prim::call_root_method` over a root holding only the grants' `net`, `net_special` and `lease`. So each
+  requested entry must lie within a granted one, the `net.special=` subset is carried, and a refusal is the interpreter's
+  DL0703, remedy included (RW 6.15).
+- `Cap[Http].get(url)` follows the interpreter's order (`Interp::call_method`):
+  1. the dispatch record (the URL only, D-V2-128);
+  2. the custody on the URL's host — except for a URL that is not `https://`, which the effect answers `Refused` before
+     anything is reached (HTTP-SCHEME-1), so nothing is asked;
+  3. `egress::begin_fetch`, then `prim::call_cap_method`, the allowlist and the egress client entire;
+  4. an egress refusal after the custody allowed the host is said to the custody (`note_egress_refusal`);
+  5. a fault's refusal record follows its dispatch (RW 4.62).
+- The answer is built as `Result[Str, NetErr]` in the guest — `NetErr`'s cells are `IoErr`'s shape.
+- The codegen:
+  - `Ty::Http` (a `Cap[Http]` parameter lowers to it).
+  - The two imports, gated on the mint alone: a `Cap[Http]` comes from nowhere else, and `get` is also a list's method,
+    so a module whose only `get` is on a list imports no network interface.
+  - `get` is dispatched on the receiver's type, after it is compiled.
+  - `get_with` and `get_with_secret` stay DL1201.
+- The CLI hands the grants' `net` and `net_special` to both WASM paths (the `.dwx` one included).
+
+**Evidence.**
+- Chapter five on both engines, by hand, with its grants and `--trace-effects`: the same output, and the same trace byte
+  for byte, the real request to `https://example.com/health` included (answered 404 → "fetch failed" on both).
+- `wasm_cli.rs` `http_on_the_wasm_engine_matches_the_interpreter`, on loopback only:
+  - a scheme refusal (`Refused`, report reason `scheme`);
+  - a request under `net.special=127.0.0.1` that leaves as TLS — the listener, shared by both engines' runs, sees a
+    handshake record from each — to a server that hangs up (`Other`);
+  - a host outside the allowlist (DL0904, its `get.refused` record);
+  - an ungranted mint (DL0703 in the interpreter's words);
+  - checked engine against engine: output, outcome, trace, and the report's egress reasons.
+- `examples_run.rs`'s chapter-five test runs on both engines (the network line may be either answer, as before).
+- `fault_parity.rs`'s remedy test gains the `http` mint.
+- `lib.rs` `a_fetch_asks_the_custody_for_its_host_first_and_tells_it_of_a_refusal`, with a recording custody:
+  - `Console`, then `Net 127.0.0.1` — nothing for the `http://` URL;
+  - a denial is the run's refusal in the custody's words;
+  - allowed, the egress client's refusal reaches the custody. This crate builds the runtime without its client, so the
+    reason here is `no-client`; in the command line's build it is `special-use`.
+- The corpus counter: **12 of 17** entry points compile, all six guide chapters (`05` the twelfth). The rest stop at:
+  `demo` (DL1205, a secret in the guest), Python, a plugin, and two packages' other modules.
+- Mutants (`scripts/mutants.py`, one target each), each red, and the control green:
+  - M663 no import gate → the CLI test (DL1201);
+  - M664 no dispatch record → the CLI test (the traces);
+  - M665 the custody never asked → the unit test;
+  - M666 asked for every URL → the unit test (an `http://` URL asked);
+  - M667 no refusal record after the effect's fault → the CLI test;
+  - M668 the mint over a root that grants every host → the CLI test (the DL0703);
+  - M669 `Refused` built as `Timeout` → the CLI test;
+  - M670 the egress refusal not told → the unit test;
+  - M671 the mint's root without the lease → the remedy test.
+- `scripts/clippy.sh -j 4` (rustfmt's check included) clean and stamped.
+- `delulu-wasm` whole: 173 passed, 0 failed.
+- `wasm_cli`, `examples_run`, `egress_cli`, `cli_contract`, `cli`, `corpus_cli`, `budget_cli`: 113 passed, 0 failed.

@@ -213,6 +213,9 @@ pub enum CapKind {
     FsRead(PathBuf, PathBuf),
     /// A filesystem-write capability, scoped and anchored the same way (`root.fs_write(p)`).
     FsWrite(PathBuf, PathBuf),
+    /// A network capability (`root.http(hosts)`): the entries it may reach and the subset of them a `net.special=` grant
+    /// covers — the interpreter's `CapScope::Net`, minted by its own rule.
+    Http(Vec<String>, Vec<String>),
     /// `Cap[ForeignLoad]` — the loader capability minted by `root.foreign_load()` (Stage 4 phase 4g).
     ForeignLoad,
     /// A bound `foreign` lib handle (Stage 4 phase 4g): the loaded library + resolved symbols, held
@@ -234,6 +237,11 @@ struct HostState {
     fs_read_roots: Vec<PathBuf>,
     /// Granted filesystem-write subtrees, the same way: `root.fs_write(p)` succeeds iff `p` resolves within one.
     fs_write_roots: Vec<PathBuf>,
+    /// RW 6.15: the delegated node a `--lease` run's grants came from — which remedy a DL0703 names (`HostConfig::lease`).
+    lease: Option<String>,
+    /// The granted network entries and their `net.special=` subset (`HostConfig::net`, `net_special`).
+    net: Vec<String>,
+    net_special: Vec<String>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
     /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
@@ -604,6 +612,22 @@ fn build_err_ioerr(caller: &mut Caller<'_, HostState>, io_tag: i32, other_msg: O
     write_variant_cell(caller, 1, Some(io)) // Err(io)
 }
 
+/// The guest's `Result[Str, NetErr]` for the interpreter's answer to `http.get` — `Ok(body)`, or `Err` of `Refused` (0),
+/// `Timeout` (1) or `Other(message)` (2), the cells `IoErr`'s are. `None` for an answer of another shape.
+fn build_net_answer(caller: &mut Caller<'_, HostState>, answer: &Value) -> Option<Result<i32, ()>> {
+    let Value::Variant { name, fields } = answer else { return None };
+    match (&**name, fields.as_slice()) {
+        ("Ok", [Value::Str(body)]) => Some(build_ok_str(caller, body)),
+        ("Err", [Value::Variant { name: e, fields: ef }]) => match (&**e, ef.as_slice()) {
+            ("Refused", []) => Some(build_err_ioerr(caller, 0, None)),
+            ("Timeout", []) => Some(build_err_ioerr(caller, 1, None)),
+            ("Other", [Value::Str(m)]) => Some(build_err_ioerr(caller, 2, Some(&**m))),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Build a `ForeignErr` cell (Stage 4 phase 4g). The tag order MUST match the codegen enum env AND
 /// the interpreter's sum: `NotGranted=0 | SymbolMissing=1 | BadReturn=2 | Unavailable=3` (spec §8).
 fn build_foreign_err_cell(caller: &mut Caller<'_, HostState>, e: &ForeignErr) -> Result<i32, ()> {
@@ -688,7 +712,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().console_granted {
-                caller.data_mut().refused = Some("DL0703: console was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "console");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `console` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -771,7 +797,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().clock_granted {
-                caller.data_mut().refused = Some("DL0703: clock was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "clock");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `clock` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -816,7 +844,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return -1;
             }
             if !caller.data().rand_granted {
-                caller.data_mut().refused = Some("DL0703: rand was not granted to this program".into());
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), "rand");
+                // RW 6.15: the interpreter's words, remedy included.
+                caller.data_mut().refused = Some(format!("DL0703: `rand` was not granted to this program — {remedy}"));
                 return -1;
             }
             let st = caller.data_mut();
@@ -888,8 +918,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // On disk only, as the interpreter's mint (a resolved lease scope against a path spelled from the working
             // directory) — and by its own `mint_anchor` (RW 4.72): the decision and the anchor are one resolution.
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_read_roots, &want) else {
-                caller.data_mut().refused =
-                    Some(format!("DL0703: filesystem read of `{path}` was not granted — pass `--grant fs.read={path}`"));
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.read={path}"));
+                caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -981,6 +1011,110 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
 
+    // `root.http(hosts)`: minted by the interpreter's own `call_root_method` over the list rebuilt from its descriptor — each
+    // requested entry within a granted one (D-V2-139), the `net.special=` subset carried, and its DL0703 in its words.
+    // Pure, as on the interpreter: no trace, no custody round-trip.
+    linker
+        .func_wrap("delulu:cap", "root_http", |mut caller: Caller<'_, HostState>, root: i32, hosts: i32, desc: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            let Some(hosts) = reify_values(&mut caller, desc, &[hosts]) else { return -1 };
+            let st = caller.data();
+            let root = delulu_runtime::RootVal {
+                net: st.net.clone(),
+                net_special: st.net_special.clone(),
+                lease: st.lease.clone(),
+                ..Default::default()
+            };
+            match delulu_runtime::prim::call_root_method(&root, "http", &hosts, delulu_diag::Span::new(0, 0, 0)) {
+                Ok(Value::Cap(c)) => match &c.scope {
+                    delulu_runtime::value::CapScope::Net { allow, special } => {
+                        let st = caller.data_mut();
+                        st.caps.push(CapKind::Http(allow.clone(), special.clone()));
+                        (st.caps.len() - 1) as i32
+                    }
+                    _ => unheld(&mut caller, "root.http", &Value::Cap(c.clone()), -1),
+                },
+                Ok(other) => unheld(&mut caller, "root.http", &other, -1),
+                Err(fault) => {
+                    caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                    -1
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `Cap[Http].get(url)`: the interpreter's order (`Interp::call_method`) — the record at dispatch, the URL only
+    // (D-V2-128); the custody, on the URL's host, unless the URL is not `https://`, which the effect itself answers
+    // `Refused` before anything is reached (HTTP-SCHEME-1), so there is no use to authorize; then the interpreter's own
+    // `get` — the allowlist, its egress client (PS-B-02) and all. An egress refusal after the custody allowed the host is
+    // said to the custody (RW 4.46).
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "http_get",
+            |mut caller: Caller<'_, HostState>, cap: i32, url_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let (allow, special) = match caller.data().caps.get(cap as usize) {
+                    Some(CapKind::Http(allow, special)) => (allow.clone(), special.clone()),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Http capability"));
+                        return 0;
+                    }
+                };
+                let Some(url) = read_guest_str(&mut caller, url_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: http get URL pointer is out of bounds".into());
+                    return 0;
+                };
+                caller.data_mut().push_trace("Net", "get", "Http", Some(url.clone()), file, start, end);
+                let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
+                if let Some(h) = &host {
+                    if !caller.data_mut().custody_allows(CustodyOp::Net, Some(h)) {
+                        caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
+                        return 0;
+                    }
+                    delulu_runtime::egress::begin_fetch();
+                }
+                let capv = delulu_runtime::value::CapVal {
+                    kind: delulu_check::ResourceKind::Http,
+                    scope: delulu_runtime::value::CapScope::Net { allow, special },
+                };
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let answer = delulu_runtime::prim::call_cap_method(&capv, "get", &[Value::str(url.clone())], span);
+                if let Some(h) = &host {
+                    if let Some(reason) = delulu_runtime::egress::fetch_refusal() {
+                        if let Some(custody) = &caller.data().custody {
+                            custody.borrow_mut().note_egress_refusal(h, reason);
+                        }
+                    }
+                }
+                let answer = match answer {
+                    Ok(v) => v,
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
+                        return 0;
+                    }
+                };
+                match build_net_answer(&mut caller, &answer) {
+                    Some(Ok(ptr)) => ptr,
+                    Some(Err(())) => {
+                        caller.data_mut().refused = Some("guest heap exhausted building the http result".into());
+                        0
+                    }
+                    None => unheld(&mut caller, "http.get", &answer, 0),
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
     // `Cap[FsRead].narrow(sub)`: a new handle for the subtree `sub` names inside the handle's scope, by the interpreter's own
     // `resolve_in_scope` — a hostile spelling, a `..` or a link out of the scope is refused (DL0904) as it is there, and no
     // narrowing reaches past the scope it starts from. Pure, as on the interpreter: no trace, no custody round-trip.
@@ -1036,8 +1170,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
             let Some(anchor) = delulu_runtime::prim::mint_anchor(&caller.data().fs_write_roots, &want) else {
-                caller.data_mut().refused =
-                    Some(format!("DL0703: filesystem write of `{path}` was not granted — pass `--grant fs.write={path}`"));
+                let remedy = delulu_runtime::prim::grant_remedy(caller.data().lease.as_deref(), &format!("fs.write={path}"));
+                caller.data_mut().refused = Some(format!("DL0703: filesystem write of `{path}` was not granted — {remedy}"));
                 return -1;
             };
             let st = caller.data_mut();
@@ -1579,6 +1713,9 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         rand_granted: false,
         fs_read_roots: Vec::new(),
         fs_write_roots: Vec::new(),
+        lease: None,
+        net: Vec::new(),
+        net_special: Vec::new(),
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
@@ -1617,6 +1754,9 @@ fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
         rand_granted: cfg.rand,
         fs_read_roots: cfg.fs_read_roots.clone(),
         fs_write_roots: cfg.fs_write_roots.clone(),
+        lease: cfg.lease.clone(),
+        net: cfg.net.clone(),
+        net_special: cfg.net_special.clone(),
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
@@ -1646,6 +1786,13 @@ pub struct HostConfig {
     pub fs_read_roots: Vec<PathBuf>,
     /// Granted filesystem-write subtrees, the same way (`root.fs_write(p)`).
     pub fs_write_roots: Vec<PathBuf>,
+    /// RW 6.15: the delegated node a `--lease` run's grants came from (`Grants::lease`), so a refusal names the remedy the
+    /// interpreter's would. Not authority.
+    pub lease: Option<String>,
+    /// The granted network entries (`--grant net=…`, `net.special=…` included) and the subset granted as `net.special=`
+    /// — `Grants::net` and `net_special`. `root.http(hosts)` mints by the interpreter's rule against them.
+    pub net: Vec<String>,
+    pub net_special: Vec<String>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.

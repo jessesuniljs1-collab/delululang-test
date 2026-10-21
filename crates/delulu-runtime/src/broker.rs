@@ -173,6 +173,11 @@ pub struct Grants {
     /// a path spelling too — that is C-11/D-NE-29, and it applies to this dimension for the same
     /// reason it applies to `fs.read`.
     pub plugins: Vec<String>,
+    /// RW 6.15: the delegated node these grants were read from when a `--lease` run redeemed one; `None` for grants given
+    /// by `--grant` flags or an accepted manifest. Not authority: it decides which remedy a DL0703 names, because a lease
+    /// run refuses every local `--grant` but a foreign library's path, and "pass `--grant fs.read=…`" sent its holder to a
+    /// flag the run refuses.
+    pub lease: Option<String>,
 }
 
 /// One spelling `--grant` accepts: the key [`Grants::add`] matches on, the form an operator types, an
@@ -478,6 +483,7 @@ impl Grants {
             // the package's.
             plugins: self.plugins.iter().map(|p| granted_root(p)).collect(),
             plugins_allow: Vec::new(),
+            lease: self.lease.clone(),
         }
     }
 

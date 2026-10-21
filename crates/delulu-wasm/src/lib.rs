@@ -748,6 +748,72 @@ mod tests {
         assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
     }
 
+    /// RW 3.4: `http.get` on the WASM engine asks the custody for `Net` on the URL's host before anything is sent, as the
+    /// interpreter asks — and not at all for a URL that is not `https://`, which the effect answers `Refused` first
+    /// (HTTP-SCHEME-1). A denial is the run's refusal, in the custody's words; and what the egress client refuses after
+    /// the custody allowed the host is said to the custody (RW 4.46). On loopback, nothing sent: the configuration grants
+    /// `127.0.0.1` without `net.special`, which the command line would refuse, so the egress client refuses it.
+    #[test]
+    fn a_fetch_asks_the_custody_for_its_host_first_and_tells_it_of_a_refusal() {
+        type Asked = std::rc::Rc<std::cell::RefCell<Vec<(String, Option<String>)>>>;
+        struct Recording(Asked, bool);
+        impl delulu_runtime::Custody for Recording {
+            fn check(&mut self, op: delulu_runtime::Op, arg: Option<&str>) -> delulu_runtime::CustodyDecision {
+                self.0.borrow_mut().push((format!("{op:?}"), arg.map(str::to_string)));
+                if self.1 || !matches!(op, delulu_runtime::Op::Net) {
+                    delulu_runtime::CustodyDecision::Allow
+                } else {
+                    delulu_runtime::CustodyDecision::Deny(delulu_runtime::CustodyDenial::new("DL1403", "the lease was revoked"))
+                }
+            }
+            fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
+                Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
+            }
+            fn refresh_epoch(&mut self) {}
+            fn mode(&self) -> &'static str {
+                "daemon"
+            }
+            fn note_egress_refusal(&mut self, host: &str, reason: &str) {
+                self.0.borrow_mut().push((format!("refused:{reason}"), Some(host.to_string())));
+            }
+        }
+        let src = "module m\nfn main(root: Root) ! {Net, Write} {\n  let out = root.console()\n  let h = root.http([\"127.0.0.1\"])\n  \
+                   match h.get(\"http://127.0.0.1/plain\") {\n    Ok(b) => out.println(\"delivered\"),\n    Err(e) => out.println(\"refused\"),\n  }\n  \
+                   match h.get(\"https://127.0.0.1:9/x\") {\n    Ok(b) => out.println(\"delivered\"),\n    Err(e) => out.println(\"refused\"),\n  }\n}\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let ask = |allow: bool| {
+            let asked: Asked = Default::default();
+            let cfg = HostConfig {
+                console: true,
+                net: vec!["127.0.0.1".to_string()],
+                custody: Some(custody_handle(Recording(asked.clone(), allow))),
+                ..HostConfig::default()
+            };
+            let ran = run_main(&wasm, &cfg).map_err(|e| e.message());
+            let asked = asked.borrow().clone();
+            (ran, asked)
+        };
+        let s = |a: &str, b: Option<&str>| (a.to_string(), b.map(str::to_string));
+
+        let (ran, asked) = ask(false);
+        let msg = ran.expect_err("the custody's denial is the run's refusal");
+        assert!(msg.contains("DL1403") && msg.contains("the lease was revoked"), "{msg}");
+        assert_eq!(asked, [s("Console", None), s("Net", Some("127.0.0.1"))], "the `http://` URL asked nothing");
+
+        // This crate builds the runtime without its network client, so the egress client refuses `no-client` here; with
+        // the client (the command line's build) it refuses `special-use`. Either is a refusal the custody is told of.
+        let (ran, asked) = ask(true);
+        assert_eq!(ran.as_deref(), Ok("refused\nrefused\n"), "the program is told `Refused`, nothing more");
+        assert_eq!(asked.len(), 4, "{asked:?}");
+        assert_eq!((&asked[..2], &asked[3]), (&[s("Console", None), s("Net", Some("127.0.0.1"))][..], &s("Console", None)));
+        assert!(
+            asked[2].0.starts_with("refused:") && asked[2].1.as_deref() == Some("127.0.0.1"),
+            "the custody allowed the host and was then told the egress client refused it: {asked:?}"
+        );
+    }
+
     /// RW 3.4: a write on the WASM engine asks the custody for `FsWrite` on the path it will open (GUARD-ALIAS-1: the
     /// pinned path, spelled as on disk), as the interpreter asks — and a denial there writes nothing and is the run's
     /// refusal, in the custody's words.

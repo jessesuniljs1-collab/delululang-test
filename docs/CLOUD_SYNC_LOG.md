@@ -4785,3 +4785,117 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   or closures, `--broker daemon` and `--lease` on the WASM file path end to end; (3) a `.dwx` run with a trace and custody, if
   wanted, instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5)
   *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `launch/2.0.0` (`20666c5`, merging `master` `7355808..ec4bc87`); `master` (this entry's commit)
+- Gates on the launch tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green. Dispatched at `20666c5`: `ci.yml` `everything` and the release dry run.
+- Files and folders (`master`): M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_ROUTINE.md` (step 4.3: free `master`'s `target/debug` before a launch build under ~15 GB), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. (`launch/2.0.0`: `CHANGELOG.md`, `docs/survey/*` and everything the merge brought.)
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing beyond the entries above.
+- **Postscript:** RW 4.72's race under a live broker daemon refused on both engines; a capability in a closure keeps its scope on both, one in a record field is DL1201 on WASM (`V2_LOG.md`). CI: push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
+- **`--lease` on the WASM file path:** parity with the interpreter, the lease's custody refusing an escape in the same words on both (`V2_LOG.md`). Oddity for the next run: under `--lease`, DL0703's hint tells the holder to pass `--grant`, which a lease run refuses.
+- **This run, in one line:** the laptop's #17–#19 landed; RW 7.20's flake reproduced and fixed; a red-team pass on the WASM
+  file capabilities found F1–F4, of which F2/F3 (RW 4.72) was a HIGH escape in BOTH engines — fixed, D-V2-167 — and F4 led to
+  DWX-FLAGS-1 (RW 3.19) — fixed; `launch/2.0.0` merged twice.
+- Open / next, in order: (1) the push run of this run's last commit (`669664c`, `ec4bc87`, `318b210` and `8ac7ee5` read green);
+  `launch/2.0.0`'s `everything` runs `39392798450` (its two `miri-slow` jobs) and `20666c5`'s, and `20666c5`'s release dry run; (2) DL0703's
+  hint under `--lease` (it names a `--grant` a lease run refuses); a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted,
+  instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the
+  launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5: stopped on the owner's word (09:50 UTC)
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef running)
+- **The owner, 09:50 UTC:** *"Head Chef Claude Opus 5.5, Stop safely and record and push everything to GitHub test repo"*.
+  Stopped with nothing half-done: every slice of this run is on `master` (`6a03165` before this entry), the tree was clean
+  and in step with `origin`, no worktree, no suite, no broker daemon and no sous-chef left running. The three working
+  branches (`claude/rw-7-20-egress-window`, `claude/wasm-read-scope`, `claude/dwx-flags`) are 0 commits ahead of `master`.
+- **CI at the stop** (no job failed anywhere): `6a03165`'s push run `39403469304` running (records only); `launch/2.0.0`'s
+  `everything` `39398467836` (`20666c5`) 16 jobs success, its two `miri-slow` jobs running, its release dry run `39398473807`
+  success; `3ee1370`'s `everything` `39392798450` and the nightly `39391181701` (`7355808`) 17 jobs success each, one
+  `miri-slow` job running in each. `8ac7ee5`, `318b210`, `ec4bc87`, `669664c`, `7355808` and `275af08` push runs success on every job.
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, for whoever comes next (laptop or routine): (1) read the four runs above to their end; (2) DL0703's hint under
+  `--lease`; a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted; (4) on
+  WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the laptop synced after on-demand routine run 5; a lease run's DL0703 names its delegation (RW 6.15) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy`   Pull request: see the branch   Merged: not yet (on green CI, by fast-forward)
+- Base: `9c1d30b`. **Synced first:** `master` fast-forwarded `a7b6476..9c1d30b` (run 5); the four runs run 5 left going read
+  to their end — `39403469304`, `39398467836` (`launch/2.0.0` `20666c5`, `miri-slow` included), `39392798450`, `39391181701`:
+  success on every job; `9c1d30b`'s push run `39403663796` success. `survey check` ok (1544 nodes), `doctor --check` ok (29
+  on this machine). The worktree `D:\nelan\dl-launch` fast-forwarded to `launch/2.0.0` `20666c5`. Run 5's
+  `docs/assistant-memory/` files and `HANDOFF.md` §11.4–§11.5 copied into the laptop's memory.
+- What: `V2_LOG.md` (2026-10-21, the first entry).
+- Files and folders: M `crates/delulu-runtime/src/prim.rs` (`grant_remedy`; every mint's DL0703; the unit test),
+  `crates/delulu-runtime/src/broker.rs` (`Grants::lease`, `build_root`), `crates/delulu-runtime/src/value.rs`
+  (`RootVal::lease`), `crates/delulu-runtime/src/actors.rs` (`RootMsg::lease`, both conversions, the round-trip test),
+  `crates/delulu-wasm/src/host.rs` (`HostConfig::lease`, `HostState::lease`, five refusals in the interpreter's words),
+  `crates/delulu-wasm/tests/fault_parity.rs`, `crates/delulu/src/cli.rs` (`grants_from_lease` sets it),
+  `crates/delulu/src/run_cmd.rs` (the WASM `HostConfig`), `crates/delulu/src/repl.rs`,
+  `crates/delulu/tests/grants_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (6.15), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: nothing new beyond run 5's, copied.
+- Open / next: (1) this branch's CI, landing on green; (2) the next commit on this branch — a behaviour named like a
+  capability method on WASM; (3) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67,
+  6.1, 6.2; a `.dwx` run with a trace and custody, if wanted; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — a behaviour named like a capability method is a send on WASM (RW 3.20) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy` (its second commit, on `89aeefc`)   Pull request: see the branch   Merged: not yet
+- What: `V2_LOG.md` (2026-10-21, the second entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`recv_actor`; the method arm sends first),
+  `crates/delulu-wasm/tests/actors_parity.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.20),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) this branch's CI, landing on green; then `launch/2.0.0`: merge `master`, dispatch `everything` and the
+  release dry run; (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2;
+  a `.dwx` run with a trace and custody, if wanted; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — three new advisories fixed by patch updates; rustfmt; `scripts/clippy.sh` checks the format (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy` (its third commit, on `aff6dc9`)   Pull request: #20   Merged: not yet
+- Why: #20's CI `39555991114` — `supply-chain` red on RUSTSEC-2026-0378, 0379 (`wasmtime` 48.0.6) and 0382 (`rustls-webpki`
+  0.103.15), published after `9c1d30b`'s green push run; `lints` red on rustfmt in two of the branch's files.
+- What: `V2_LOG.md` (2026-10-21, the third entry): which advisory reaches what (0379, aarch64, through a `.dwx` or `.dpx`
+  someone else built, is the one that matters), the update, the evidence.
+- Files and folders: M `Cargo.lock` (`rustls-webpki` 0.103.16; `wasmtime` 48.0.7 and the twenty-seven packages released with it — nothing else),
+  `crates/delulu-runtime/src/prim.rs` and `crates/delulu/tests/grants_cli.rs` (rustfmt only), `scripts/clippy.sh` (refuses
+  to stamp a tree `cargo fmt --check` would change), `AGENTS.md` (step 3 says so), `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`; the new refusal witnessed by hand (a misformatted line in a test file → "no stamp written";
+  restored byte for byte → stamped with the same hash as before).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. Loop engineering: `scripts/clippy.sh` now runs rustfmt's check first, so the pre-commit
+  hook refuses an unformatted commit as it refuses an unlinted one.
+- Open / next: (1) #20's CI again, landing on green; then `launch/2.0.0`: merge `master` (these advisories gate its
+  `supply-chain` job too), dispatch `everything` and the release dry run; (2) `http` on the WASM engine (the next branch,
+  in progress); (3) RW 4.66, 4.67, 6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the network on the WASM engine: `root.http` and `Cap[Http].get`; chapter five runs (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-http` (on `laptop/lease-remedy`, #20)   Pull request: see the branch   Merged: not yet (after #20, on green CI)
+- What: `V2_LOG.md` (2026-10-21, the fourth entry).
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs` (`Ty::Http`, the `root_http`/`http_get` imports gated on the
+  mint, the two arms), `crates/delulu-wasm/src/host.rs` (`CapKind::Http`, `HostConfig::net`/`net_special`, the two
+  imports — the interpreter's mint and `get`, in its order; `build_net_answer`), `crates/delulu-wasm/src/lib.rs` (the
+  custody test), `crates/delulu-wasm/tests/fault_parity.rs` (the `http` mint's remedy), `crates/delulu/src/run_cmd.rs`
+  (the grants' `net` on both WASM paths), `crates/delulu/tests/wasm_cli.rs` (`listen`; the parity test),
+  `crates/delulu/tests/examples_run.rs` (chapter five on both engines), `CHANGELOG.md`, `docs/REMAINING_WORK.md` (3.4: 12
+  of 17), `docs/book/THE_DELULULANG_BOOK.md` (the WASM paragraph), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #20's CI, then this branch's, landing in order; then `launch/2.0.0`: merge `master`, dispatch
+  `everything` and the release dry run; (2) on WASM: `get_with`, a list of options, `str` of a map; RW 4.66 (a bearer key
+  bound at redeem — a wire change, its own D-V2), 4.67, 6.1, 6.2; (3) *[laptop]* the launch, only on the owner's word.

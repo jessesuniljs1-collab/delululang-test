@@ -6414,6 +6414,8 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         // Fail closed, and `--lease` refuses a local compute grant by name rather than dropping it (since RW 4.68 —
         // this line claimed it from 10h on, and `redeem_lease` dropped the grant in silence until 2026-10-19).
         computes: Vec::new(),
+        // RW 6.15: so a refusal names the delegation, not a `--grant` this run refuses.
+        lease: Some(info.id.clone()),
     }
 }
 

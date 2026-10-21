@@ -109,39 +109,45 @@ fn the_capabilities_guide_actually_reads_and_writes() {
     let src = root().join("examples").join("guide").join("05_capabilities.delulu");
     std::fs::copy(&src, w.join("05_capabilities.delulu")).expect("copy the guide example");
 
-    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
-        .current_dir(&w)
-        .env("DELULU_NO_FIRST_RUN", "1")
-        .env("DELULU_NO_COLOR", "1")
-        .args([
-            "run",
-            "05_capabilities.delulu",
-            "--no-prompt",
-            "--grant",
-            "console",
-            "--grant",
-            "fs.read=./config",
-            "--grant",
-            "fs.write=./out",
-            "--grant",
-            "net=example.com",
-        ])
-        .output()
-        .expect("run delulu");
-    let out = text(&o);
-    assert_eq!(o.status.code(), Some(0), "the example must run:\n{out}");
-    assert!(out.contains("config: hello-from-config"), "the guide's READ must succeed and show the file's contents:\n{out}");
-    assert!(out.contains("wrote log"), "and its WRITE must succeed:\n{out}");
-    assert!(
-        w.join("out").join("log.txt").is_file(),
-        "the file must be where the capability's scope puts it, not where the literal reads"
-    );
-    // The network branch is allowed to fail: a test must not depend on reaching a host. What it must
-    // not do is fail for the same reason the read used to.
-    assert!(
-        !out.contains("no config") && !out.contains("could not write"),
-        "neither filesystem branch may take its Err path:\n{out}"
-    );
+    // On both engines: the WASM engine runs the whole chapter since 2026-10-21 (RW 3.4, `http`).
+    for engine in [&[][..], &["--engine", "wasm"][..]] {
+        let _ = std::fs::remove_file(w.join("out").join("log.txt"));
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&w)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .args([
+                "run",
+                "05_capabilities.delulu",
+                "--no-prompt",
+                "--grant",
+                "console",
+                "--grant",
+                "fs.read=./config",
+                "--grant",
+                "fs.write=./out",
+                "--grant",
+                "net=example.com",
+            ])
+            .args(engine)
+            .output()
+            .expect("run delulu");
+        let out = text(&o);
+        assert_eq!(o.status.code(), Some(0), "the example must run ({engine:?}):\n{out}");
+        assert!(out.contains("config: hello-from-config"), "the guide's READ must succeed and show the file's contents:\n{out}");
+        assert!(out.contains("wrote log"), "and its WRITE must succeed:\n{out}");
+        assert!(
+            w.join("out").join("log.txt").is_file(),
+            "the file must be where the capability's scope puts it, not where the literal reads ({engine:?})"
+        );
+        // The network branch is allowed to fail: a test must not depend on reaching a host. What it must
+        // not do is fail for the same reason the read used to.
+        assert!(
+            !out.contains("no config") && !out.contains("could not write"),
+            "neither filesystem branch may take its Err path:\n{out}"
+        );
+        assert!(out.contains("fetched ") || out.contains("fetch failed"), "the network branch answers ({engine:?}):\n{out}");
+    }
     let _ = std::fs::remove_dir_all(&w);
 }
 

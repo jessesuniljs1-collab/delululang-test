@@ -26,6 +26,42 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### the network on the WASM engine, 2026-10-21
+
+- **New: `root.http(hosts)` and `Cap[Http].get(url)` run on `--engine wasm`** (RW 3.4). The host mints the capability
+  and performs the request with the interpreter's own code. The allowlist and its words, the egress client (TLS,
+  special-use addresses, redirects), the custody check on the URL's host and the effect trace are all the
+  interpreter's. Chapter five of the guide now runs on the WASM engine, as all six do, and 12 of the 17 programs in the
+  corpus and examples compile. `get_with` and `get_with_secret` stay on the interpreter.
+
+### Wasmtime 48.0.7 and rustls-webpki 0.103.16, 2026-10-21
+
+- **Security: three advisories published on 2026-10-20 and 2026-10-21 are fixed by patch updates.**
+  - `wasmtime` 48.0.6 → 48.0.7, with its Cranelift and Pulley crates:
+    - RUSTSEC-2026-0378, a panic lowering a component-model stream into a guest.
+    - RUSTSEC-2026-0379, a wrong jump on aarch64 for a large `br_table`.
+  - `rustls-webpki` 0.103.15 → 0.103.16: RUSTSEC-2026-0382, which could accept a certificate path through the
+    distrusted emSign intermediates. This affects the network client's certificate checks.
+  - Nothing else in the lockfile moved.
+
+### a behaviour may share a capability method's name on the WASM engine, 2026-10-21
+
+- **Fixed: on `--engine wasm`, an actor whose behaviour shared a capability method's name was refused** (RW 3.20). A
+  behaviour called `narrow`, `read_text`, `println`, `int`, `write_text`, `expose` or one of nine other such names was
+  refused as that method on the wrong receiver (DL1201), for example "narrow() on a receiver that is not a
+  Cap[FsRead]". The interpreter ran it. A method on an actor reference is now a send, whatever it is called.
+
+### a lease run's refusal names its lease, not a `--grant`, 2026-10-21
+
+- **Fixed: under `--lease`, DL0703 told you to pass a `--grant` the run refuses** (RW 6.15). A lease run takes its
+  authority from its delegation alone, and refuses every local `--grant` except a foreign library's path. Yet a program
+  that reached past its lease was told `pass --grant fs.read=./data/priv` (or `--grant console`, and so on), on both
+  engines and under `--sandbox`. The refusal now names the delegated node that does not carry the grant. An ordinary
+  run's DL0703 is unchanged.
+- **Changed: on `--engine wasm`, an ungranted `root.console()`, `root.clock()` or `root.rand()` is refused in the
+  interpreter's words, with its remedy** (`pass --grant console`). Before, the WASM engine said only that it was not
+  granted. The code, DL0703, is unchanged.
+
 ### a `.dwx` run refuses the flags it cannot apply, 2026-10-20
 
 - **Fixed: `delulu run FILE.dwx` ignored `--broker daemon`, `--lease`, `--trace-effects`, `--trace-out` and
