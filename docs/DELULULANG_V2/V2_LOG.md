@@ -8326,3 +8326,41 @@ compiles; its parity is `map_parity.rs`'s).
 **Local results:** `delulu-wasm` whole, 178 passed. `artifact_review`, `budget_cli` and `wasm_cli`, 30 passed.
 `core_invariance` green. `scripts/clippy.sh -j 4` clean and stamped. By hand: a map program built to a `.dwx` and run
 prints the interpreter's output.
+
+## 2026-10-21 (night) — the laptop: every `List` method on the WASM engine (RW 3.4, D-V2-171)
+
+**Before:** five of the fifteen `List` methods compiled. The pre-change build refused the others: "DL1201: WASM codegen
+does not support the List method `.pop`" (and `.filter`, `.reverse`, each program of the new test built by hand).
+
+**Built** (D-V2-171):
+- **In the guest:** `pop`, `reverse`, `concat`, `slice` (clamped as the interpreter clamps), `contains` (as `==` compares),
+  and `filter`, `find` and `fold`, their function values inlined as `map`'s is.
+- **Host-side:** `sort`, stable by the interpreter's order, its strings compared where they lie, and `join`, its total
+  bounded before one allocation.
+- **Detection:** a module carries the list helpers for any method on a receiver the checker typed a `List`.
+
+**Found while building it, by an existing test:** `list_parity.rs` pinned `pop` as refused, with its reason written beside
+it: a `pop` and then a `push` reuse the popped slot, which a walk of the list's own slots could see. Making `pop` compile
+turned that pin red. Read rather than deleted, it named a real divergence. With every walk reading the list's own slots, a
+program popping and pushing inside each walk printed `1239` from its `for` (the interpreter `1234`), and `map`, `filter`,
+`fold` and `find` diverged likewise (D-V2-171 item 5 has all five). The fix: in a module that pops a list, each walk that
+runs code per element walks a private copy of the slots taken when it begins, which is what the interpreter's copy means.
+A module that never pops is unchanged.
+
+**Tests:** `delulu-wasm/tests/list_methods_parity.rs`, six (D-V2-171's evidence). `list_parity.rs` now lists a list of
+lists and a list holding a map as outside, and `conformance_parity.rs` a list of lists in place of `fold`.
+
+**Mutants** M734–M752, each red, the restored tree green. M748 first survived, and the test it showed missing (a string
+cell whose length runs past the memory) was added.
+
+**Local results:** `delulu-wasm` whole, 184 passed. `wasm_cli`, `budget_cli`, `artifact_review` and `core_invariance`, 31
+passed. `scripts/clippy.sh -j 4` clean and stamped.
+
+## 2026-10-22 (night) — the laptop: `contains` on records and sums on the WASM engine (RW 3.4, D-V2-171 amended)
+
+The last `List` method shape the WASM engine refused: `contains` on a list of records or sums answered DL1201. It now
+compares through the host's value interface, as `==` of two records or sums already did (`reify.rs`). The module carries
+the interface when a list's `contains` takes such a value. Test: `list_methods_parity.rs`
+`contains_on_records_and_sums_compares_as_equality_does`, both engines `true false false` / `true false true false`.
+Mutants M753–M755 red. M753 removes the new arm, which is exactly the pre-change refusal. Local: `delulu-wasm` whole, 185
+passed; clippy clean and stamped.

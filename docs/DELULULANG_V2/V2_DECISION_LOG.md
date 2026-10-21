@@ -4211,7 +4211,11 @@ answered DL1201 (witnessed on the pre-change build: "the List method `.pop`", "`
    - `reverse`, `concat` and `slice` make a new list of the same slots, so a record in two lists is one record. `slice`
      clamps as the interpreter does: below 0 is 0, past the end is the end, `hi < lo` is empty.
    - `contains` compares as `==` does: an `Int`, a `Bool` or a `Float` by its instruction (a `NaN` never equal), a `Str`
-     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`.
+     by `__str_eq`. A record or sum element stays DL1201, as it would need the host's `eq`. **Amended 2026-10-22:** it
+     compiles through the host's `eq` (`reify.rs`), with the element's descriptor, as `==` of two of them does. A module
+     whose list `contains` takes a record or a sum carries the value interface. `contains_on_records_and_sums_compares_as_
+     equality_does` covers it: a record equal by its contents, another record. M753 (the arm missing, the pre-change
+     refusal), M754 (the interface never carried) and M755 (compared by address) are red.
    - `filter`, `find` and `fold` inline their function value as `map` does. `find` stops at its first match. `fold`
      computes its initial value after the snapshot, as the interpreter does.
 2. **Two host-side** (`delulu:list.sort`, `delulu:list.join`), each run over the guest's slots:
@@ -4224,16 +4228,34 @@ answered DL1201 (witnessed on the pre-change build: "the List method `.pop`", "`
    `==` does.
 4. **The host reads the memory as untrusted**, as for maps (D-V2-170 item 4): a length past its capacity, slots outside
    the memory and a string outside it are refused DL0903 in words, then a trap.
+5. **A walk that runs code is not moved by `pop`.** `pop` had waited for exactly this (`list_parity.rs` said so): a `pop`
+   and then a `push` reuse the popped slot. A walk of the list's own slots then reads the pushed value where the
+   interpreter, walking a copy, reads the popped one. The existing test caught it when `pop` first compiled here. In a
+   module that pops a list anywhere (`Imports::pops_lists`), every walk that runs code per element (`for`, `map`,
+   `filter`, `find`, `fold`) walks a private copy of the slots taken when it begins. A module that never pops pays
+   nothing, and the walks without code (`reverse`, `concat`, `slice`, `contains`, `join`, `sort`) cannot be interleaved
+   with a `pop`. Witnessed with the copy off, one program popping and pushing inside each walk:
 
-**Evidence.** `delulu-wasm/tests/list_methods_parity.rs`, five tests:
+   | Walk | Interpreter | WASM, no copy |
+   |---|---|---|
+   | `for` | `1234` | `1239` |
+   | `map` | `[2, 4, 6, 8]` | `[2, 4, 6, 100]` |
+   | `filter` | `[3, 50]` | `[3, 70]` |
+   | `fold` | `76` | `1006` |
+   | `find` | `Some(1000)` | `None` |
+
+**Evidence.** `delulu-wasm/tests/list_methods_parity.rs`, six tests:
 - the seven first-order methods on `Int`, `Str`, `Bool` and `Float` lists, every clamp included;
 - `filter`, `find` (its printing predicate examines four elements and stops) and `fold`, with `Int`, `Str` accumulators;
   a predicate that pushes onto the list it filters walks the list as it began (6 kept, 12 after);
 - records shared through `reverse`, `concat`, `slice`, `filter` and `pop`;
 - five hand-written modules refused DL0903, a string cell whose length runs past the memory among them;
-- a module whose only lists are a map's `keys()` and `values()`.
-Each program also built to a `.dwx` and run by hand with the interpreter's output.
-- Mutants M734–M750, each red, the restored tree green. M748 (a string cell's end unchecked) first survived. The test's
+- a module whose only lists are a map's `keys()` and `values()`;
+- `a_walk_is_not_moved_by_a_pop_and_a_push_in_its_own_code` (item 5), red under M751 (no copy) and M752 (the module never
+  read for `pop`).
+Each program also built to a `.dwx` and run by hand with the interpreter's output. `list_parity.rs`'s list of what stays
+outside drops `pop`, and `conformance_parity.rs`'s drops `fold`, each replaced by a list of lists.
+- Mutants M734–M752, each red, the restored tree green. M748 (a string cell's end unchecked) first survived. The test's
   string cell lay outside the memory, so its length read failed first. A cell inside the memory whose length runs past
   the end was added; under the mutant, `sort` slices past the memory and panics the host. The others:
   - `pop` (M734), `reverse` (M735), `concat` (M736), `slice`'s three clamps (M737–M739) and `contains` (M740) each lose

@@ -1184,6 +1184,13 @@ spells the same thing?**
   Fixed by sending the path with the use, having the broker judge it, and naming it in the record (`url_path`). Never move
   the path judgment back to the effect alone while the gate records. Search key: for every record a gate writes, list the
   refusals a LATER check can make, and ask what the record says for each.
+- **POP-WALK-1 — a pinned refusal names its reason; read it before you lift the pin** (the laptop, 2026-10-21, RW 3.4,
+  D-V2-171): `list_parity.rs` pinned `pop` as refused on WASM, with its reason beside it: a `pop` and then a `push` reuse a
+  slot a walk could still read. Making `pop` compile turned the pin red. Read rather than deleted, it named a real
+  divergence: a program popping and pushing inside a `for` printed `1239` on WASM and `1234` on the interpreter, and
+  `map`, `filter`, `fold` and `find` diverged likewise. Fixed by giving each walk that runs code a private copy of the
+  slots in a module that pops. Never answer a red pin by deleting the case: replace it with what still stays outside, and
+  build what it warned of first. Search key: before widening anything a test refuses, read the refusal's comment.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

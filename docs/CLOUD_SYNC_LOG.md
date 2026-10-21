@@ -5085,3 +5085,30 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`; A `crates/delulu-wasm/tests/map_parity.rs`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-21 (night) — every `List` method on the WASM engine (RW 3.4, D-V2-171) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-list-methods` (on `master` `8cfbc01`, where #31 landed on its green run `39639331172`; `master`'s
+  push run for `a01a27a`, `39638797705`, success)   Pull request: the one this entry rides in
+- **What:** the ten `List` methods the WASM engine lacked now compile. A walk that runs code reads a private copy of the
+  slots in a module that pops, the divergence an existing pin named. The tests, M734–M752 and the local results are in
+  `V2_LOG.md`.
+- Files and folders: M `crates/delulu-wasm/src/{codegen,host}.rs`,
+  `crates/delulu-wasm/tests/{list_parity,conformance_parity}.rs`, `CHANGELOG.md`, `docs/for-agents.md`, `HANDOFF.md`
+  (§11.4 POP-WALK-1), `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/list_methods_parity.rs`. Deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — `contains` on records and sums on the WASM engine (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-contains-compound` (on `master` `d42d216`, where #32 landed on its green run `39642920850`)   Pull request: the one this entry rides in
+- **`launch/2.0.0` = `81f34d1`** (two merges of `master`: `8ff2b17` takes #29–#31, `81f34d1` takes #32; three
+  `Unreleased` sections moved under `## [2.0.0]`; the Survey rebuilt; doctor ok; clippy stamped; the ten gates, 75
+  passed). Dispatched: the release dry run `39646725256` (**success**, read) and CI `jobs=everything` `39646720253` (running at
+  this commit; its result is recorded by the next master commit).
+- **What:** `contains` on a list of records or sums compiles, through the host's `eq` (V2_LOG). Files: M
+  `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/list_methods_parity.rs`, `CHANGELOG.md`,
+  `docs/for-agents.md`, `docs/DELULULANG_V2/{V2_DECISION_LOG,V2_LOG}.md`, `docs/REMAINING_WORK.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

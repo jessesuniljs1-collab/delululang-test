@@ -250,3 +250,28 @@ fn main(root: Root) ! {Write} {
     let out = assert_parity(src);
     assert!(out.starts_with("1234 [1, 2, 3, 9]\n"), "the walk is the list as it began: {out}");
 }
+
+/// `contains` on a list of records or sums compares as `==` of two of them does — by the interpreter's own `eq`, host-side
+/// (`reify.rs`): a record equal by its contents is contained though it is another record, and a sum by its constructor and
+/// payload.
+#[test]
+fn contains_on_records_and_sums_compares_as_equality_does() {
+    let src = r#"module m
+
+type P {
+  x: Int,
+  name: Str,
+}
+
+type T = A | B(Int)
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let ps = [P { x: 1, name: "a" }, P { x: 2, name: "b" }]
+  out.println(str(ps.contains(P { x: 2, name: "b" })) + " " + str(ps.contains(P { x: 2, name: "c" })) + " " + str(ps.slice(0, 0).contains(P { x: 1, name: "a" })))
+  let ts = [A, B(3)]
+  out.println(str(ts.contains(B(3))) + " " + str(ts.contains(B(4))) + " " + str(ts.contains(A)) + " " + str([B(1)].contains(A)))
+}
+"#;
+    assert_eq!(assert_parity(src), "true false false\ntrue false true false\n");
+}

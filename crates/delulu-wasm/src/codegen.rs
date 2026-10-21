@@ -681,6 +681,9 @@ struct Imports {
     /// run host-side over the guest's slots (RW 3.4). `u32::MAX` when the module calls neither.
     list_sort: u32,
     list_join: u32,
+    /// `delulu:match.no_arm` — a `match` testing inside a constructor that no arm matched records the interpreter's fault
+    /// here, then the guest traps. `u32::MAX` when no `match` of the module tests inside a constructor.
+    match_no_arm: u32,
     /// Does the module `pop` a list? Then every walk that runs code per element (`for`, `map`, `filter`, `find`, `fold`)
     /// walks a private copy of the slots, taken when it begins: a `pop` and then a `push` reuse the popped slot, which a
     /// walk of the list's own slots could still reach, where the interpreter's walk — a copy — never sees the change.
@@ -906,6 +909,10 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
         Expr::Call { callee, args, .. } => matches!((&**callee, &args[..]),
             (Expr::Var { path, .. }, [a]) if path.segs.len() == 1 && path.segs[0].name == "str" && compound(a)),
         Expr::Binary { op: BinOp::Eq | BinOp::Ne, lhs, .. } => compound(lhs),
+        // A list's `contains` compares as `==` does: an element the host's `eq` answers needs the interface too.
+        Expr::Method { recv, name, args, .. } if name.name == "contains" && is_list_typed(recv, node_types) => {
+            args.first().is_some_and(compound)
+        }
         _ => false,
     };
     module_any(env, module, &hit, false)
@@ -1029,12 +1036,20 @@ pub(crate) fn str_method_arity(id: i32) -> Option<(&'static str, usize, usize)> 
 /// Does any compilable function compare with `==` or `!=`? Then the module carries `__str_eq` (after the list helpers),
 /// which a comparison of two `Str`s calls.
 fn module_compares(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
-    // `contains` on a list compares as `==` does.
+    // `contains` on a list compares as `==` does, and so does a `Str` literal in a pattern.
     let hit = |e: &Expr| match e {
         Expr::Binary { op: BinOp::Eq | BinOp::Ne, .. } => true,
         Expr::Method { recv, name, .. } => name.name == "contains" && is_list_typed(recv, node_types),
+        Expr::Match { arms, .. } => arms.iter().any(|a| pattern_has_str(&a.pattern)),
         _ => false,
     };
+    module_any(env, module, &hit, false)
+}
+
+/// Does a `match` of the module test inside a constructor (`tests_inside`)? It compiles arm by arm, and carries
+/// `delulu:match.no_arm` for the case no arm matches.
+fn module_matches_inside(env: &EnumEnv, module: &Module) -> bool {
+    let hit = |e: &Expr| matches!(e, Expr::Match { arms, .. } if arms.iter().any(|a| tests_inside(&a.pattern)));
     module_any(env, module, &hit, false)
 }
 
@@ -1193,6 +1208,7 @@ fn compile_module_typed(
         map_values: u32::MAX,
         list_sort: u32::MAX,
         list_join: u32::MAX,
+        match_no_arm: u32::MAX,
         pops_lists: false,
     };
     if needs_console {
@@ -1308,6 +1324,12 @@ fn compile_module_typed(
     let needs_list_join = module_calls_list_method(&env, module, node_types, "join");
     if needs_list_join {
         imp.list_join = n_imports;
+        n_imports += 1;
+    }
+    // After every other import, so a module whose matches test no constructor's fields is unchanged.
+    let needs_no_arm = module_matches_inside(&env, module);
+    if needs_no_arm {
+        imp.match_no_arm = n_imports;
         n_imports += 1;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -1524,6 +1546,12 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // join(list, sep) -> str
         next_type += 1;
     }
+    let mut no_arm_ty = 0;
+    if needs_no_arm {
+        no_arm_ty = next_type;
+        types.ty().function([], []); // no_arm(): records DL0907, then the guest traps
+        next_type += 1;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1653,6 +1681,9 @@ fn compile_module_typed(
     }
     if needs_list_join {
         imports.import("delulu:list", "join", EntityType::Function(list_join_ty));
+    }
+    if needs_no_arm {
+        imports.import("delulu:match", "no_arm", EntityType::Function(no_arm_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -1845,6 +1876,19 @@ fn collect_strings_block(b: &Block, off: &mut HashMap<String, u32>, data: &mut V
     }
 }
 
+/// A pattern's `Str` literals (`Ok("a")`), which its test compares against.
+fn collect_strings_pattern(p: &Pattern, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
+    match p {
+        Pattern::Lit(LitKind::Str(s), _) => intern_string(s, off, data),
+        Pattern::Variant { fields, .. } => {
+            for f in fields {
+                collect_strings_pattern(f, off, data);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
     match e {
         Expr::Lit { kind: LitKind::Str(s), .. } => intern_string(s, off, data),
@@ -1875,6 +1919,7 @@ fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec
         Expr::Match { scrutinee, arms, .. } => {
             collect_strings_expr(scrutinee, off, data);
             for arm in arms {
+                collect_strings_pattern(&arm.pattern, off, data);
                 collect_strings_expr(&arm.body, off, data);
             }
         }
@@ -3004,6 +3049,9 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
     let ntags = ctors.len();
     let sp = cx.alloc_local(Ty::I32)?;
     cx.emit(Instruction::LocalSet(sp));
+    if arms.iter().any(|a| tests_inside(&a.pattern)) {
+        return compile_match_ordered(arms, sp, sty, cx, expected);
+    }
 
     // Map each tag to the arm handling it (a variant pattern by name, else a wildcard/bind catch-all).
     let mut arm_for_tag: Vec<Option<usize>> = vec![None; ntags];
@@ -3058,6 +3106,133 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
         cx.emit(Instruction::End);
     }
     Ok(result_ty)
+}
+
+/// Does `p` test something inside a constructor — a constructor or a literal among its fields (`Some(Red)`, `Ok(0)`)?
+fn tests_inside(p: &Pattern) -> bool {
+    matches!(p, Pattern::Variant { fields, .. } if fields.iter().any(|f| matches!(f, Pattern::Lit(..) | Pattern::Variant { .. })))
+}
+
+/// Does `p` hold a `Str` literal at any depth (`Ok("a")`)? Its test calls `__str_eq`.
+fn pattern_has_str(p: &Pattern) -> bool {
+    match p {
+        Pattern::Lit(LitKind::Str(_), _) => true,
+        Pattern::Variant { fields, .. } => fields.iter().any(pattern_has_str),
+        _ => false,
+    }
+}
+
+/// A `match` an arm of which tests inside a constructor (`tests_inside`): each arm in order, as the interpreter's
+/// `eval_match` tries them — its pattern tested and bound, its body run if the whole test held — so the first arm that
+/// matches gives the value, and no arm the interpreter skips is run. MATCH-NEST-1: the tag chain sent each constructor to
+/// the first arm naming it and read nothing inside, so `Some(Blue)` took `Some(Red) => …` and `Some(7)` took
+/// `Some(0) => …`. When no arm matches — the checker proves one does (DL0407) — the run ends in the interpreter's fault.
+fn compile_match_ordered(arms: &[Arm], sp: u32, sty: Ty, cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    if cx.imp.match_no_arm == u32::MAX {
+        return Err(CompileError::Unsupported("a `match` testing inside a constructor without the match interface".into()));
+    }
+    let mut result_ty = expected;
+    // `block (result T) { block { test arm 0, else br 0; body; br 1 } block { … } no_arm; unreachable }`, the outer
+    // block's type given once an arm says it.
+    let outer = cx.instrs.len();
+    cx.emit(Instruction::Block(BlockType::Empty));
+    let done = cx.depth;
+    for arm in arms {
+        cx.emit(Instruction::Block(BlockType::Empty));
+        let next = cx.depth;
+        cx.scopes.push(HashMap::new());
+        let r = compile_pattern_test(&arm.pattern, sp, sty, next, cx).and_then(|()| match result_ty {
+            Some(t) => compile_expr_as(&arm.body, cx, t).map(|()| t),
+            None => compile_expr(&arm.body, cx),
+        });
+        cx.scopes.pop();
+        result_ty.get_or_insert(r?);
+        cx.emit(Instruction::Br(cx.depth - done));
+        cx.emit(Instruction::End);
+    }
+    cx.emit(Instruction::Call(cx.imp.match_no_arm));
+    cx.emit(Instruction::Unreachable);
+    cx.emit(Instruction::End);
+    let t = result_ty.ok_or_else(|| CompileError::Unsupported("a `match` with no arms".into()))?;
+    cx.instrs[outer] = Instruction::Block(block_type(t));
+    Ok(t)
+}
+
+/// Test the value in local `v`, of type `t`, against `pat` as the interpreter's `match_pattern` does — a constructor by
+/// its tag and then each field, a literal by `==` — binding each name the pattern binds in the innermost scope; where the
+/// value does not match, branch out of the block at depth `fail`.
+fn compile_pattern_test(pat: &Pattern, v: u32, t: Ty, fail: u32, cx: &mut Cx) -> Result<(), CompileError> {
+    match pat {
+        Pattern::Wildcard(_) => {}
+        Pattern::Bind(name) => {
+            cx.scopes.last_mut().unwrap().insert(name.name.clone(), (v, t));
+        }
+        Pattern::Lit(kind, _) => {
+            cx.emit(Instruction::LocalGet(v));
+            match (kind, t) {
+                (LitKind::Int(n), Ty::I64) => {
+                    cx.emit(Instruction::I64Const(*n));
+                    cx.emit(Instruction::I64Ne);
+                }
+                (LitKind::Bool(b), Ty::I32) => {
+                    cx.emit(Instruction::I32Const(i32::from(*b)));
+                    cx.emit(Instruction::I32Ne);
+                }
+                // `==` of two floats, as the interpreter's `Value::eq` is: a NaN matches nothing, `-0.0` matches `0.0`.
+                (LitKind::Float(x), Ty::F64) => {
+                    cx.emit(Instruction::F64Const(*x));
+                    cx.emit(Instruction::F64Ne);
+                }
+                (LitKind::Str(s), Ty::Str) if cx.imp.str_eq != u32::MAX => {
+                    let ptr = *cx
+                        .str_off
+                        .get(s)
+                        .ok_or_else(|| CompileError::Unsupported("a string literal where the backend collected none".into()))?;
+                    cx.emit(Instruction::I32Const(ptr as i32));
+                    cx.emit(Instruction::Call(cx.imp.str_eq));
+                    cx.emit(Instruction::I32Eqz);
+                }
+                _ => return Err(CompileError::Unsupported(format!("a literal pattern on a {t:?}"))),
+            }
+            cx.emit(Instruction::BrIf(cx.depth - fail));
+        }
+        Pattern::Variant { path, fields, .. } => {
+            let ctors = cx
+                .env
+                .ctors_of(t)
+                .filter(|c| !c.is_empty())
+                .ok_or_else(|| CompileError::Unsupported(format!("a constructor pattern on the non-variant type {t:?}")))?;
+            let name = &path.segs.last().expect("a path has a segment").name;
+            let tag = ctors
+                .iter()
+                .position(|(n, _)| n == name)
+                .ok_or_else(|| CompileError::Unsupported(format!("a pattern naming no constructor of {t:?}")))?;
+            let payloads = ctors[tag].1.clone();
+            if payloads.len() != fields.len() {
+                return Err(CompileError::Unsupported("a constructor pattern with the wrong number of fields".into()));
+            }
+            cx.emit(Instruction::LocalGet(v));
+            cx.emit(Instruction::I32Load(u32_at()));
+            cx.emit(Instruction::I32Const(tag as i32));
+            cx.emit(Instruction::I32Ne);
+            cx.emit(Instruction::BrIf(cx.depth - fail));
+            for (i, (fp, ps)) in fields.iter().zip(payloads).enumerate() {
+                // A `Unit` field has no slot, and only `_` or a name can stand for it.
+                if matches!(fp, Pattern::Wildcard(_)) || ps == Scalar::Unit {
+                    continue;
+                }
+                let fty = ps.to_ty();
+                let fl = cx.alloc_local(fty)?;
+                cx.emit(Instruction::LocalGet(v));
+                cx.emit(Instruction::I32Const(field_offset(i)));
+                cx.emit(Instruction::I32Add);
+                load_scalar(cx, ps);
+                cx.emit(Instruction::LocalSet(fl));
+                compile_pattern_test(fp, fl, fty, fail, cx)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn compile_arm(
@@ -4248,11 +4423,17 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             compile_expr_as(needle, cx, s.to_ty())?;
             let x = cx.alloc_local(s.to_ty())?;
             cx.emit(Instruction::LocalSet(x));
+            // A record or a sum compares host-side, by the interpreter's own `eq` over the two values rebuilt by the
+            // element's descriptor — the comparison `==` of two of them makes (`reify.rs`).
+            let by_value = matches!(s, Scalar::Record(_) | Scalar::Enum(_)) && cx.imp.value_eq != u32::MAX;
             let eq = match s {
-                Scalar::I64 => Instruction::I64Eq,
-                Scalar::I32 => Instruction::I32Eq,
-                Scalar::F64 => Instruction::F64Eq,
-                Scalar::Str if cx.imp.str_eq != u32::MAX => Instruction::Call(cx.imp.str_eq),
+                Scalar::I64 => vec![Instruction::I64Eq],
+                Scalar::I32 => vec![Instruction::I32Eq],
+                Scalar::F64 => vec![Instruction::F64Eq],
+                Scalar::Str if cx.imp.str_eq != u32::MAX => vec![Instruction::Call(cx.imp.str_eq)],
+                _ if by_value => {
+                    vec![Instruction::I32Const(desc_ptr(cx, s.to_ty())?), Instruction::Call(cx.imp.value_eq)]
+                }
                 _ => return Err(CompileError::Unsupported(format!("`contains` on a list of {s:?}"))),
             };
             let (found, i) = (cx.alloc_local(Ty::I32)?, cx.alloc_local(Ty::I32)?);
@@ -4262,7 +4443,9 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
                 emit_slot_addr(cx, data, i);
                 load_scalar(cx, s);
                 cx.emit(Instruction::LocalGet(x));
-                cx.emit(eq.clone());
+                for ins in &eq {
+                    cx.emit(ins.clone());
+                }
                 cx.emit(Instruction::LocalGet(found));
                 cx.emit(Instruction::I32Or);
                 cx.emit(Instruction::LocalSet(found));
