@@ -7831,3 +7831,30 @@ quiescence reports agree, and the WASM turn count is the arithmetic's, 55. Red o
 non-Root receiver")`). Mutants: M659 no receiver read → red; M660 `self` not read → red (the self-sends); M661 the field not
 read → red (the relay); M662 a local not read → red; the control green. By hand on the fixed binary: every probe program
 runs on `--engine wasm`. `scripts/clippy.sh -j 4` clean and stamped; `delulu-wasm` whole: 172 passed, 0 failed (17 targets).
+
+## 2026-10-21 — the laptop: three new advisories, fixed by patch updates (Wasmtime 48.0.7, rustls-webpki 0.103.16); rustfmt
+
+**Found by** pull request #20's CI `39555991114`: `supply-chain` red on three advisories that did not exist at `9c1d30b`'s
+green push run the day before (cargo-deny's database moved, not the code), and `lints` red on `cargo fmt --check` for
+`prim.rs` and `grants_cli.rs` (the laptop ran clippy and not rustfmt on the slice's new code — `scripts/clippy.sh` does not
+format; run `cargo fmt --all` with it).
+
+**What each reaches, read before updating.**
+- RUSTSEC-2026-0379 (Cranelift on aarch64 can jump to the wrong target on a large `br_table`): the codegen emits no
+  `br_table`, but Wasmtime compiles whatever module it is handed. `delulu run FILE.dwx` and a `.dpx` plugin hand it a
+  module someone else built, and its code hash binds only to a manifest its builder wrote. So on the two aarch64 release
+  targets (`aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`) a crafted artifact could reach the miscompile.
+  **The one that matters.**
+- RUSTSEC-2026-0382 (rustls-webpki may accept a path through the distrusted emSign intermediates): the egress client's
+  certificate verification (`rustls` under `reqwest` and `delulu-runtime`).
+- RUSTSEC-2026-0378 (a panic lowering a host-created component-model stream): the WASM engine runs core modules only — no
+  `wasmtime::component` anywhere in `delulu-wasm`. Not reached; fixed by the same update anyway.
+
+**The update.** `cargo update -p rustls-webpki` (0.103.15 → 0.103.16) and `cargo update -p wasmtime` (48.0.6 → 48.0.7, and
+the packages released with it, twenty-seven: `cranelift-*` 0.135.7, `pulley-*` and `wasmtime-internal-*` 48.0.7). No other crate moved,
+none added or removed. 49.x was not taken: a major version is its own slice.
+
+**Evidence.** Locally `cargo deny check advisories`: `advisories ok`, and `check bans licenses sources`: all three ok
+(cargo-deny 0.20.2). On the updated lock: `delulu-wasm` whole, 172 passed, 0 failed; `egress_cli` 8, `wasm_cli` 14,
+`examples_run` 6 — all passed; `delulu-runtime --lib egress` 41 passed.
+`cargo fmt --all` changed exactly the two files CI named. clippy clean and stamped. The pull request's CI is the rest.

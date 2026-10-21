@@ -265,6 +265,7 @@ fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
             ("root.rand()", "rand"),
             ("root.fs_read(\"./nowhere\")", "fs.read=./nowhere"),
             ("root.fs_write(\"./nowhere\")", "fs.write=./nowhere"),
+            ("root.http([\"example.com\"])", "net=HOST"),
         ] {
             let src = format!("module m\nfn main(root: Root) {{\n  let c = {mint}\n}}\n");
             let checked = check_source(0, &src);

@@ -100,6 +100,7 @@ enum Ty {
     Rand,    // i32 host handle (Rand, Phase 3l)
     FsRead,  // i32 host handle (Cap[FsRead], Phase 3p)
     FsWrite, // i32 host handle (Cap[FsWrite], RW 3.4)
+    Http,    // i32 host handle (Cap[Http], RW 3.4)
     Root,    // i32 host handle to the root authority (Phase 3e)
     // Stage 4 phase 4g: `Cap[ForeignLoad]` (i32 host handle) and a bound `foreign` lib handle
     // `Foreign(lib_id)` (i32 host handle; `lib_id` indexes the module's foreign blocks so a method
@@ -622,6 +623,10 @@ struct Imports {
     /// host-side in the interpreter's order (RW 3.4).
     root_fs_write: u32,
     fs_write_text: u32,
+    /// `delulu:cap.root_http` and `http_get` — `root.http(hosts)`, minted host-side by the interpreter's own rule, and
+    /// `Cap[Http].get(url)`, performed host-side in the interpreter's order by its own egress client (RW 3.4).
+    root_http: u32,
+    http_get: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
     foreign_load: u32,
     foreign_bind: u32,
@@ -692,6 +697,7 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::Rand
         | Ty::FsRead
         | Ty::FsWrite
+        | Ty::Http
         | Ty::Root
         | Ty::ForeignLoad
         | Ty::Foreign(_)
@@ -739,6 +745,7 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                             "Rand" => Some(Ty::Rand),
                             "FsRead" => Some(Ty::FsRead),
                             "FsWrite" => Some(Ty::FsWrite),
+                            "Http" => Some(Ty::Http),
                             "ForeignLoad" => Some(Ty::ForeignLoad),
                             _ => None,
                         };
@@ -1056,6 +1063,8 @@ fn compile_module_typed(
         fs_narrow: u32::MAX,
         root_fs_write: u32::MAX,
         fs_write_text: u32::MAX,
+        root_http: u32::MAX,
+        http_get: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
@@ -1097,6 +1106,14 @@ fn compile_module_typed(
     if needs_fs_write {
         imp.root_fs_write = n_imports;
         imp.fs_write_text = n_imports + 1;
+        n_imports += 2;
+    }
+    // By the mint alone: a `Cap[Http]` comes from nowhere else, and `get` is also a list's method, so a module whose
+    // only `get` is on a list imports no network interface.
+    let needs_http = module_calls_method(&env, module, &["http_never"]);
+    if needs_http {
+        imp.root_http = n_imports;
+        imp.http_get = n_imports + 1;
         n_imports += 2;
     }
     if needs_foreign {
@@ -1253,6 +1270,14 @@ fn compile_module_typed(
         fs_write_ty = next_type + 1;
         // fs_write_text(cap, path, body, append, file, start, end) -> result_ptr
         types.ty().function([ValType::I32; 7], [ValType::I32]);
+        next_type += 2;
+    }
+    let (mut http_root_ty, mut http_get_ty) = (0, 0);
+    if needs_http {
+        http_root_ty = next_type;
+        types.ty().function([ValType::I32; 3], [ValType::I32]); // root_http(root, hosts, desc) -> cap
+        http_get_ty = next_type + 1;
+        types.ty().function([ValType::I32; 5], [ValType::I32]); // http_get(cap, url, file, start, end) -> result_ptr
         next_type += 2;
     }
     let mut foreign_load_ty = 0;
@@ -1416,6 +1441,10 @@ fn compile_module_typed(
     if needs_fs_write {
         imports.import("delulu:cap", "root_fs_write", EntityType::Function(fs_write_root_ty));
         imports.import("delulu:cap", "fs_write_text", EntityType::Function(fs_write_ty));
+    }
+    if needs_http {
+        imports.import("delulu:cap", "root_http", EntityType::Function(http_root_ty));
+        imports.import("delulu:cap", "http_get", EntityType::Function(http_get_ty));
     }
     if needs_foreign {
         imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
@@ -1585,6 +1614,7 @@ fn compile_module_typed(
         || needs_rand
         || needs_fs
         || needs_fs_write
+        || needs_http
         || needs_foreign
         || needs_actors
         || needs_lists
@@ -3247,6 +3277,23 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.fs_write_text));
                 return Ok(Ty::Result(Scalar::Unit, Scalar::Enum(io_err)));
             }
+            // `root.http(hosts)` -> a `Cap[Http]`, minted host-side by the interpreter's own rule over the list the host
+            // rebuilds from its descriptor (each entry within a granted one, the `net.special=` subset carried).
+            if name.name == "http" && args.len() == 1 {
+                if cx.imp.root_http == u32::MAX {
+                    return Err(CompileError::Unsupported("http() without the http host interface".into()));
+                }
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("http() on a non-Root receiver".into()));
+                }
+                let hosts = compile_expr(&args[0], cx)?;
+                if hosts != Ty::List(Scalar::Str) {
+                    return Err(CompileError::Unsupported("http() of a host list that is not a List[Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, hosts)?));
+                cx.emit(Instruction::Call(cx.imp.root_http));
+                return Ok(Ty::Http);
+            }
             // Stage 4 phase 4g: root.foreign_load() -> Cap[ForeignLoad]. Minted host-side (grant check),
             // pure like the other root derivations — not traced.
             if name.name == "foreign_load" && args.is_empty() {
@@ -3313,6 +3360,22 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             // receiver slot is already on the stack). Self-sends reach here too (recv = `self`).
             if let Ty::ActorRef(aidx) = recv_ty {
                 return compile_send(aidx, &name.name, args, cx);
+            }
+            // `Cap[Http].get(url)` -> `Result[Str, NetErr]`, performed host-side by the interpreter's own `get`.
+            if recv_ty == Ty::Http && name.name == "get" && args.len() == 1 {
+                if cx.imp.http_get == u32::MAX {
+                    return Err(CompileError::Unsupported("`get` on a Cap[Http] in a module that mints none".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http get of a URL that is not a Str".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http get without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_get));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
             }
             // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).
             if recv_ty == Ty::Str && name.name == "len" && args.is_empty() {

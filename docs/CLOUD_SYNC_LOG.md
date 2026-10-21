@@ -4819,3 +4819,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) this branch's CI, landing on green; then `launch/2.0.0`: merge `master`, dispatch `everything` and the
   release dry run; (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2;
   a `.dwx` run with a trace and custody, if wanted; (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — three new advisories fixed by patch updates; rustfmt; `scripts/clippy.sh` checks the format (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/lease-remedy` (its third commit, on `aff6dc9`)   Pull request: #20   Merged: not yet
+- Why: #20's CI `39555991114` — `supply-chain` red on RUSTSEC-2026-0378, 0379 (`wasmtime` 48.0.6) and 0382 (`rustls-webpki`
+  0.103.15), published after `9c1d30b`'s green push run; `lints` red on rustfmt in two of the branch's files.
+- What: `V2_LOG.md` (2026-10-21, the third entry): which advisory reaches what (0379, aarch64, through a `.dwx` or `.dpx`
+  someone else built, is the one that matters), the update, the evidence.
+- Files and folders: M `Cargo.lock` (`rustls-webpki` 0.103.16; `wasmtime` 48.0.7 and the twenty-seven packages released with it — nothing else),
+  `crates/delulu-runtime/src/prim.rs` and `crates/delulu/tests/grants_cli.rs` (rustfmt only), `scripts/clippy.sh` (refuses
+  to stamp a tree `cargo fmt --check` would change), `AGENTS.md` (step 3 says so), `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`; the new refusal witnessed by hand (a misformatted line in a test file → "no stamp written";
+  restored byte for byte → stamped with the same hash as before).
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. Loop engineering: `scripts/clippy.sh` now runs rustfmt's check first, so the pre-commit
+  hook refuses an unformatted commit as it refuses an unlinted one.
+- Open / next: (1) #20's CI again, landing on green; then `launch/2.0.0`: merge `master` (these advisories gate its
+  `supply-chain` job too), dispatch `everything` and the release dry run; (2) `http` on the WASM engine (the next branch,
+  in progress); (3) RW 4.66, 4.67, 6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.

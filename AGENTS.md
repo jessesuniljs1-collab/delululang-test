@@ -112,7 +112,8 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
    then `survey impact <id>` for the blast radius of what you are about to change.
 2. **Witness a defect failing before you fix it**, and **falsify every new test** (reintroduce the
    defect, watch it go red). A gate that cannot fail is not a gate.
-3. `scripts/clippy.sh -j 4` — the workspace's `cargo clippy --workspace --all-targets -- -D warnings` (zero warnings),
+3. `scripts/clippy.sh -j 4` — `cargo fmt --all -- --check` (since 2026-10-21; run `cargo fmt --all` when it refuses), then
+   the workspace's `cargo clippy --workspace --all-targets -- -D warnings` (zero warnings),
    and a stamp of what it passed: the pre-commit hook refuses a commit that stages Rust inputs it has not passed, so run
    it after the LAST `.rs` edit, tests included (on-demand routine run 4) — and the tests —
    `cargo test --workspace --no-fail-fast -j 4`. **Freeze the tree while a suite runs.** Read cargo's
