@@ -130,6 +130,48 @@ fn build_dwx_then_run_matches_the_interpreter() {
     let _ = std::fs::remove_file(&dwx);
 }
 
+/// A `.dwx` run refuses, before anything runs, every `run` flag its path does not apply (the red-team pass of on-demand
+/// routine run 5, F4, RW 3.19): `--trace-effects`, `--trace-out` and `--assert-trace` wrote no trace, and `--broker daemon`
+/// and `--lease` ran the artifact under no custody — with no broker running, and a lease nobody redeemed — while it wrote
+/// under the grant. The flags it applies still run it.
+#[test]
+fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
+    let dir = std::env::temp_dir().join(format!("delulu_dwxflags_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Read, Write} {\n  let w = root.fs_write(\"./out\")\n  \
+                   match w.write_text(\"log.txt\", \"started\") {\n    Ok(u) => root.console().println(\"wrote\"),\n    \
+                   Err(e) => root.console().println(\"could not\"),\n  }\n}\n";
+    std::fs::write(dir.join("w.delulu"), program).unwrap();
+    let b = delulu_in(&dir, &["build", "w.delulu", "--target", "wasm", "-o", "w.dwx"]);
+    assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
+    let granted = ["run", "w.dwx", "--grant", "console", "--grant", "fs.write=./out"];
+    for (flags, named) in [
+        (&["--trace-effects"][..], "--trace-effects"),
+        (&["--trace-effects", "--trace-out", "t.jsonl"][..], "--trace-out"),
+        (&["--assert-trace"][..], "--assert-trace"),
+        (&["--broker", "daemon"][..], "--broker"),
+        (&["--lease", "not-a-token"][..], "--lease"),
+        (&["--engine", "interp"][..], "--engine"),
+    ] {
+        let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
+        let args: Vec<&str> = granted.iter().chain(flags).copied().collect();
+        let o = delulu_in(&dir, &args);
+        let e = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{flags:?}: {e}");
+        assert!(e.contains("a `.dwx` run does not apply") && e.contains(&format!("`{named}`")), "{flags:?}: {e}");
+        assert!(!dir.join("out").join("log.txt").exists(), "{flags:?}: nothing ran");
+        assert!(!dir.join("t.jsonl").exists());
+    }
+    // The flags it applies: the grants, the seed, the clock, `--engine wasm`.
+    let args: Vec<&str> = granted.iter().chain(&["--seed", "1", "--clock", "fixed:0", "--engine", "wasm"]).copied().collect();
+    let o = delulu_in(&dir, &args);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(stdout(&o), "wrote\n");
+    assert_eq!(std::fs::read_to_string(dir.join("out").join("log.txt")).unwrap(), "started");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn dwx_run_without_console_grant_is_refused() {
     let dwx = temp_dwx("nogrant");
@@ -222,7 +264,12 @@ fn file_writes_on_the_wasm_engine_match_the_interpreter() {
     };
     let (i, i_file, i_trace) = run("w.delulu", "interp", &["--grant", "fs.write=./out"]);
     let (w, w_file, w_trace) = run("w.delulu", "wasm", &["--grant", "fs.write=./out"]);
-    assert!(i.status.success() && w.status.success(), "{}\n{}", String::from_utf8_lossy(&i.stderr), String::from_utf8_lossy(&w.stderr));
+    assert!(
+        i.status.success() && w.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&i.stderr),
+        String::from_utf8_lossy(&w.stderr)
+    );
     assert_eq!(stdout(&w), stdout(&i));
     assert_eq!(stdout(&w), "wrote\nappended\nnot found\n");
     assert_eq!((w_file.as_deref(), i_file.as_deref()), (Some("started and more"), Some("started and more")));
@@ -242,5 +289,43 @@ fn file_writes_on_the_wasm_engine_match_the_interpreter() {
     let (ie, we) = (String::from_utf8_lossy(&i.stderr).to_string(), String::from_utf8_lossy(&w.stderr).to_string());
     let words = "filesystem write of `./out` was not granted — pass `--grant fs.write=./out`";
     assert!(ie.contains("DL0703") && ie.contains(words) && we.contains("DL0703") && we.contains(words), "{ie}\n{we}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A read through a link whose target does not exist is refused on both engines in the interpreter's words, with the
+/// same trace (the red-team pass of on-demand routine run 5, F1): the WASM read checked its scope with a copy of
+/// `resolve_in_scope`'s rule, which lost SYMLINK-DANGLE-1's explanation from the refusal and from its trace record.
+#[cfg(unix)]
+#[test]
+fn a_read_through_a_dangling_link_is_refused_in_the_interpreters_words_on_wasm() {
+    let dir = std::env::temp_dir().join(format!("delulu_fsdangle_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("scope")).unwrap();
+    std::fs::create_dir_all(dir.join("outside")).unwrap();
+    std::os::unix::fs::symlink("../outside/created.txt", dir.join("scope").join("dang")).unwrap();
+    let program = "module m\n\nfn main(root: Root) ! {Read, Write} {\n  let r = root.fs_read(\"./scope\")\n  \
+                   match r.read_text(\"dang\") {\n    Ok(s) => root.console().println(\"read\"),\n    \
+                   Err(e) => root.console().println(\"err\"),\n  }\n}\n";
+    std::fs::write(dir.join("r.delulu"), program).unwrap();
+    let run = |engine: &str| {
+        let trace = format!("trace_{engine}.jsonl");
+        let mut args =
+            vec!["run", "r.delulu", "--trace-effects", "--trace-out", &trace, "--grant", "console", "--grant", "fs.read=./scope"];
+        if engine == "wasm" {
+            args.extend_from_slice(&["--engine", "wasm"]);
+        }
+        let o = delulu_in(&dir, &args);
+        let traced = std::fs::read_to_string(dir.join(&trace)).unwrap_or_default();
+        (String::from_utf8_lossy(&o.stderr).to_string(), traced, o.status.code())
+    };
+    let (ie, i_trace, i_code) = run("interp");
+    let (we, w_trace, w_code) = run("wasm");
+    let words = "path `dang` escapes the granted scope — a component is a symbolic link whose target does not exist";
+    assert!(ie.contains("DL0904") && ie.contains(words), "{ie}");
+    assert!(we.contains("DL0904") && we.contains(words), "the interpreter's words on WASM:\n{we}");
+    assert_eq!(w_code, i_code);
+    assert_eq!(w_trace, i_trace, "the traces: the dispatch and its refusal");
+    assert!(w_trace.contains("read_text.refused"), "{w_trace}");
+    assert!(!dir.join("outside").join("created.txt").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

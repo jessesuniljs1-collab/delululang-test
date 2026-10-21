@@ -7563,3 +7563,201 @@ Mutants:
 - M637 — the custody asked about the path as written: survived while the test's directory had one spelling; red once
   the program named it by another.
 Control green after each spec.
+
+**Evidence.** `delulu-wasm` whole, green (168 tests); `delulu`'s `wasm_cli`, `corpus_cli`, `conformance`,
+`examples_run`, `cli`, `json_contract`, `budget_cli` and `core_invariance` green (102). By hand: the write program, the
+escape and the ungranted mint printed, wrote and refused alike on both engines, their traces byte-identical.
+
+## 2026-10-20 — on-demand routine run 5: the laptop's #17–#19 landed; a host's egress window is its own thread's (RW 7.20)
+
+**Landed from the laptop.** The laptop's session stopped at about 04:30 UTC with three pull requests open, each green:
+#17 (`cba20d4`, `str` and `==` of compound values on WASM, RECORD-ORDER-1), #18 (`ce5f6ab`, `narrow` on WASM) and #19
+(`275af08`, writing files on WASM). Their CI — `39367623331`, `39368481885` and `39369712525` — read success on every job
+(`miri-slow` and `heavy-gates` skipped, as on every pull request), and so did `a7b6476`'s push run `39368506567`. `master`
+was fast-forwarded `a7b6476..275af08` and pushed. On `275af08` in the VM: `survey check` ok (1543 nodes, 15500 edges);
+`doctor --check` ok (26 checks); the two-engine differential (`cargo test -p delulu-wasm --release --test differential --
+--ignored`, 50,000 programs — `heavy-gates`, which no pull request runs) passed in 151 s. **The autosave branch:** its eleven
+snapshots since `bbb8ea3` were each compared with the commit that followed their base: six landed exactly (`c94cbba`,
+`3174d05`, `fc0310c`, `301c018`, `ce67ca1`, `84eabf6`); five were mid-edit drafts that the next commit carries further
+(`902e45d` — the commit adds a §11.4 lesson; `0012e9f` and `e500da6` — `in_block`'s walk, replaced in `a7b6476` by
+`module_any`'s, WASM-SCAN-1; `3f5454e` — `compile_module` calls, replaced by `compile_checked`; `6d7557c` — `Ty`'s list
+re-laid out by `rustfmt` around `FsWrite`). Nothing to recover; no snapshot after `275af08`.
+
+**RW 7.20 — the confinement tests' flake, reproduced and explained.** The row said the two tests' count was a field of the
+`HostChannel` each test makes "and nothing global feeds it that a read found". Something does: `HostChannel::answer` takes
+`egress::mark()` on the way in and counts every refusal `egress::records_since` finds on the way out, and both read the
+PROCESS-WIDE egress log — the run report's evidence, process-wide on purpose, because an actor's `http.get` runs on a
+worker thread. Two tests in the same binary make refused requests (`a_guests_refused_network_request_is_in_the_hosts_denied_list_with_its_reason`,
+`a_guests_request_with_a_refused_header_is_refused_by_the_host_and_recorded`); when one landed between a confinement test's
+mark and its read, that test's host counted it as its guest's, and `denied().1` was 2. **Reproduced in the VM** with a frozen
+copy of the pre-fix test binary, its `channel::tests::a_` filter run at `--test-threads 16`: 11 of 500 runs red, then 13
+of 400 (6 at `channel.rs:1336`, 7 at `:1380` — the laptop's two lines — every one `left: 2`); the fixed binary, run side by
+side under the same load, 0 of 400.
+
+**The fix.** `egress::mark` and `records_since` read a thread-local tally of what THIS thread logged (`MINE`, bounded and
+counted as the process log is; `log` writes both). The sandbox host performs a guest's request on the thread that answers
+it — `LocalSink` calls the primitive table in place, and every `log` call is on the requesting thread — so the window holds
+that request's refusals and no other thread's. The process-wide log, which `take_log` and `snapshot` give the run report,
+is unchanged. The same rule already held for RW 4.46's `fetch_refusal`, read on the calling thread "never another
+thread's". In the `delulu` command line one process hosts one guest, so no shipped run reported another's refusal; a
+process hosting two guests (an embedder of `delulu-runtime`, or a test binary) could.
+
+Tests:
+- `channel.rs` `a_refusal_another_thread_logs_while_the_host_answers_is_not_the_guests`: a sink that, while performing the
+  guest's call, has ANOTHER thread make a refused request — `denied().1` is 0; the control, the same refusal made on the
+  answering thread — 1, naming the URL. Red on the old code (`left: 1`).
+- `egress/tests.rs` `records_logged_after_a_mark_are_found_by_it`, tightened: it accepted "ours is among what the mark
+  finds, or anything was refused" because other tests log concurrently; now exactly ours, with another thread's refusal
+  logged beside it.
+
+Mutants: M638 (the window read from the process log again) — red, both tests; M639 (`log` not writing the thread's tally)
+— red, four tests (the two network tests' records gone from `denied[]`). Control green.
+
+**Evidence.** `delulu-runtime`'s `channel` and `egress` tests green (70); on the runners at `18b0adf` (`witness.yml`,
+`delulu-runtime`'s whole library): macOS `39388976507` 284 passed, 0 failed, the new test and the tightened one named;
+Windows ``39388979829`` 283 passed, 0 failed, both tests named. The full suite alone at `18b0adf`: 2,431 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved (a red-team pass loaded the VM during part of it). `scripts/clippy.sh -j 4` clean and
+stamped; `cargo fmt --all` clean.
+
+## 2026-10-20 — on-demand routine run 5 (continued): a red-team pass on the WASM engine's file capabilities; RW 4.72 — a file capability is anchored at its mint (D-V2-167)
+
+**The pass.** The laptop's `narrow` and `fs_write` on the WASM engine (#18, #19) are security surfaces that had no
+adversarial pass. One Sonnet 5.5 sous-chef was briefed to break the claim that on WASM they behave exactly as on the
+interpreter and reach nothing outside the grant, against a frozen copy of the binary built from `18b0adf`'s tree in a
+scratch directory outside the repository (it wrote nothing in the repository; `git status` held only this run's own
+edits). About 250 cases on both engines, each compared by stdout, stderr, exit code, trace file and a dump of the disk. A
+usage limit stopped it once (08:10 UTC); it was resumed by message, and its findings were already in its `FINDINGS.md`,
+appended as found, as the brief asked. Each finding below was re-run by the head chef before use.
+
+**Nothing found** (one line each in the pass's list): about 60 spellings of a write path (`..`, absolute, empty, `.`,
+`//`, NUL, control and look-alike characters, names to 5,000 characters, 3,000-deep paths, `/proc/self/cwd`, `/dev/*`);
+links as the last or a middle component, dangling, chained, absolute, to `/dev/null` and `/etc/passwd`, a FIFO (refused,
+no hang); about 40 mint spellings and grant shapes; 18 `narrow` cases; file bodies to 200 MB and non-UTF-8; a race that
+swaps a directory BELOW a handle's root for a link, 300 runs on each engine for read and write — 0 escapes, each run
+ending in FS-RACE-1's refusal. `--sandbox --engine wasm` is refused in words. Not tried: a user method named `narrow` or
+`read_text`, capabilities inside records or closures, `--broker daemon` and `--lease` on the WASM file path.
+
+**F1 — fixed (`92d9119`, RW 3.18).** A read through a link whose target does not exist was refused on both engines, but on
+WASM without SYMLINK-DANGLE-1's explanation, in the refusal and in its trace record — `fs_read_text` checked the scope with
+a copy of `resolve_in_scope`'s rule. It also checked the scope BEFORE asking the custody, where the interpreter asks first.
+Now the read follows the interpreter's order, as the write does since `275af08`: the dispatch record, the custody's
+question about the path it would open, then the interpreter's own `resolve_in_scope`, in its words. Tests: `wasm_cli.rs`
+`a_read_through_a_dangling_link_is_refused_in_the_interpreters_words_on_wasm` (unix; words and traces across engines) and
+`delulu-wasm` `a_read_asks_the_custody_before_its_scope_as_the_interpreter_does` (a recording custody on both engines,
+roots as the command line resolves them) — each red on the old host (the second's first form was red for the wrong
+reason, the program's row missing `Write`; corrected and re-read red: WASM asked nothing, the interpreter once). Mutants
+M640 (the old words), M641 (no refusal record), M642 (no custody question) red; control green. Runners at `92d9119`:
+macOS `39393020777` and Windows `39393024452` (`delulu-wasm`'s custody tests, 3 passed each), macOS `39393029397`
+(`wasm_cli`, 14 passed).
+
+**F2 and F3 — fixed (`3cb335e`, RW 4.72, D-V2-167).** A capability's directory was resolved again at every use. With
+`--grant fs.read=./scope`, a handle narrowed to `sub` — or a capability minted on `./scope/sub`, or on `./scope` itself —
+followed `sub` once another process replaced it with a link to outside the grant: the pass read 31,552 of 40,000 reads
+from outside on WASM and 33,114 on the interpreter, exit 0, and created a file outside on both. Re-run by the head chef:
+the same in-process, deterministically (below). FS-RACE-1 refuses a link that appears BELOW a scope's root, but the root
+itself was canonicalized again by `pin_fs`, by `resolve_in_scope`'s on-disk gate and by `beneath`'s check, so a swapped
+root carried every check with it. F3, the granted directory itself swapped after the mint, was the documented residual
+"the grant's own path" in `beneath.rs`; the same fix closes it.
+
+The fix: `CapScope::Fs` carries `anchor`, where its root resolved when the capability was minted (`prim::mint_anchor`,
+whose resolution is both the grant decision and the anchor) or narrowed (the subtree's own resolution, inside its
+parent's anchor). Every use decides against the anchor and never resolves the root again — `resolve_in_anchor` (the scope,
+in `resolve_in_scope`'s words), `pin_fs_at` (the path the custody is asked about and the path opened) — and the open always
+goes through a path pinned inside the anchor (`pinned_in`), refusing one that no longer resolves there. The WASM host's
+`FsRead`/`FsWrite` handles carry the anchor, through the same functions. The trace and the custody still name the root as
+spelled; a grant that is a link when the capability is minted is followed then, as before.
+
+Tests:
+- `prim.rs` `a_capability_directory_swapped_for_a_link_after_its_mint_reaches_nothing_outside`: a narrowed read, a write
+  minted on a sub-directory and a write minted on the grant, each pinned (as the interpreter and the sandbox host pin)
+  and unpinned, after the swap — DL0904, nothing written outside; a narrowed handle whose directory became a link to its
+  SIBLING inside the grant — refused too. Red on the old code (it read `OUTSIDE`).
+- `delulu-wasm` `a_narrowed_directory_swapped_for_a_link_reads_nothing_outside`: a custody swaps the directory when asked
+  about the read before, so the narrowed read follows the swap deterministically — DL0904. Red on the old code (it
+  printed `OUTSIDE`).
+
+Mutants: M643 (the pin re-resolving the root) and M644 (the scope's gate re-resolving it) each survive alone — two walls,
+by design: the other refuses; M645 (both) red, and M647 (both, read by the WASM witness) red; M646 (a narrowing anchored at
+its parent's anchor rather than its own) red, by the sibling case. Control green. `scripts/clippy.sh -j 4` clean and
+stamped; `scripts/check-other-os.sh x86_64-pc-windows-msvc` clean. Runners at `3cb335e`: macOS `39394517196` (`delulu-runtime`'s library, 285 passed) and `39394523755` (`delulu-wasm`'s library, 98 passed), Windows `39394520536` (284), `39394527710` (93) and `39394530798` (`wasm_cli`, `corpus_cli`, `examples_run`, 22) — 0 failed, both new tests named and run on each OS. The full suite alone
+at `3cb335e`: 2,435 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved.
+
+**F4 — open (RW 3.19).** `delulu run FILE.dwx` accepts `--trace-effects`, `--trace-out` and `--assert-trace` and applies
+none: since `275af08` the `.dwx` path is given the grant's write roots, so a write-capable artifact writes with no effect
+trace and no word about it. Its scope refusals hold (DL0904, DL0703; nothing written outside).
+
+**Oddities, not defects:** every runtime refusal is framed three ways (the interpreter with a source snippet, `--engine
+wasm` as "WASM engine: WASM trap: …", a `.dwx` as "`FILE`: WASM trap: …") with the same code and words; `Cap[Console].print`
+is DL1201 on WASM (`println` compiles) — RW 3.4's subset.
+
+## 2026-10-20 — on-demand routine run 5 (continued): a `.dwx` run refuses every flag it does not apply — DWX-FLAGS-1 (RW 3.19)
+
+**Found.** The red-team pass's F4: `delulu run FILE.dwx` accepted `--trace-effects`, `--trace-out` and `--assert-trace` and
+applied none — no trace file, no record, no word. The head chef's probe of the same path, against the binary at `3cb335e`,
+found it worse: `--broker daemon` with no broker running, and `--lease not-a-token`, each ran the artifact and wrote its file
+under the command line's grants, with no custody at all. `cmd_run_inner` dispatches a `.dwx` to `run_dwx_artifact` before the
+broker, the lease and the trace are set up, and that function read the grants, `--json`, the seed and the clock — nothing
+else; since `275af08` it is given the grant's write roots too. The sandboxed path had the same shape once and was closed by
+an allowlist (`guest.rs`, `APPLIED_UNDER_SANDBOX`, PS-B-05); the `.dwx` path never got one.
+
+**Fixed (`a7e50d6`).** `run_dwx_artifact` refuses, before anything runs, every flag outside `APPLIED_TO_A_DWX` — the grants,
+`--json`, `--no-prompt`, `--seed`, `--clock`, and what `cmd_run` applies for every path (`--limits`, `--report-out`,
+`--break-glass`, `--isolation`, `--sandbox=off`) — and `--engine` unless it says `wasm`: exit 2, in the sandbox's words ("a
+flag that is silently ignored reads exactly like a flag that was applied"). An allowlist, so a flag added to `run` later is
+refused here until this path applies it. Giving the path a trace and custody is the alternative the row named; refusing is
+the honest state until then.
+
+Test: `wasm_cli.rs` `a_dwx_run_refuses_the_flags_it_does_not_apply` — each of `--trace-effects`, `--trace-out`,
+`--assert-trace`, `--broker daemon`, `--lease`, `--engine interp`: exit 2, the flag named, nothing written; the applied flags
+still run the artifact and write. Red on the old path (exit 0, the file written). Mutants M648 (`--broker` and `--lease`
+allowed), M649 (the trace flags allowed), M650 (`--engine` unchecked) red; control green.
+
+**Evidence.** `scripts/clippy.sh -j 4` clean and stamped; `artifact_review`, `json_contract`, `package_run`, `cli_contract`,
+`plugin_cli`, `signing_cli`, `pqc_cli`, `within_cli`, `unreadable_paths`, `completions_cli`, `wasm_cli` and `message_spacing`
+green. Runners at `a7e50d6`: Windows `39396317161` (`wasm_cli`, filter `dwx`: 5 passed, the new test among them) and macOS `39396321250` (the same filter, success). The full suite alone at `a7e50d6`: 2,436 passed, 0 failed, 16 ignored (173 binaries), cargo exit 0, the tree unmoved.
+
+**RW 4.72, end to end.** The red-team pass's own race scripts, re-run against the binary built from `a7e50d6`: the narrowed
+read with the directory swapped at 0.25, 0.3 and 0.4 s, the write minted on a sub-directory at 0.25 and 0.5 s, and the
+granted directory itself swapped (three runs) — on both engines, every run refused with DL0904 (exit 1), nothing read from
+or written outside. Before the fix the same scripts read 25,707–33,114 of 40,000 reads from outside and wrote outside on
+both engines.
+
+## 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`; the run's CI
+
+**`launch/2.0.0`** merged `master` twice this run: `3ee1370` (`d259cf2..7355808` — the laptop's #16–#19 and RW 7.20) and
+`20666c5` (`7355808..ec4bc87` — F1, RW 4.72 with D-V2-167, RW 3.19). Each time `master`'s `## Unreleased` CHANGELOG sections moved
+under `## [2.0.0]` as `###` entries (five, then three), and the second time the `Breaking` paragraph gained `run FILE.dwx`'s
+refusal of the flags it does not apply (a command line that ran under 1.x is refused now). On `20666c5`'s tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green.
+`3ee1370`'s release dry run `39392801546` success; its `everything` run `39392798450` success on every job but the two
+`miri-slow` jobs, still running at this entry. `20666c5`'s `everything` and release dry run are dispatched.
+
+## 2026-10-20 — on-demand routine run 5 (postscript): two of the pass's untried families, probed; the run's CI
+
+**Under a live broker daemon** (`delulu broker start` with its state in `/tmp`, stopped with `broker stop`): a handle
+narrowed to `sub` reads its file on both engines (`--broker daemon`, `--engine wasm` or not). The swap race of RW 4.72 — `sub`
+replaced by a link to outside 0.2 s and 0.4 s into a 200,000-read loop — refused at the swap on both engines (DL0904; the
+interpreter in `resolve_in_scope`'s words, WASM at the open's walk, "a component became a symbolic link … after the scope
+check"), nothing read from outside. By hand, against the binary built from `318b210`; not a committed test.
+
+**A capability held in a closure** carries its narrowed scope on both engines (the file inside read, `../f.txt` refused
+DL0904 on both). **A capability held in a record field** runs on the interpreter (inside read, `../../outside/f.txt`
+refused DL0904) and is DL1201 on WASM ("a record with a field of a type outside the WASM fragment") — RW 3.4's subset,
+refused rather than run. Still untried: a user method named `narrow` or `read_text`, and `--lease` on the WASM file path.
+
+**CI read.** push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
+
+**`--lease` on the WASM file path** (the last of the pass's untried families but one; by hand, a live broker, a fresh
+single-use token per run from `grants delegate --effects Read --fs-read ./data/pub`): a read inside the lease ran on both
+engines; a read through a narrowed handle reaching `../priv/f.txt` was refused at the lease's own custody gate on both, in
+the same words ("lease `g_…` does not grant `…/data/priv/f.txt` in scope `fs.read`") — the WASM read asks the custody
+before its scope since `92d9119`, so before F1's fix WASM would have answered with the scope's DL0904 instead; a mint of
+`./data/priv` was DL0703 on both. **An oddity, both engines:** that DL0703 still says "pass `--grant fs.read=./data/priv`",
+which a `--lease` run refuses ("a `--lease` run derives its authority from the delegated node") — the hint points a lease
+holder outside its delegation, as PS-B-05 found under `--sandbox`. Untried still: a user method named `narrow`/`read_text`.
+**CI read, last:** `318b210`'s push run `39398823386` and `8ac7ee5`'s `39400706197` success on every job.
+
+## 2026-10-20 — on-demand routine run 5: stopped on the owner's word
+
+The owner asked at 09:50 UTC for a safe stop. Nothing was half-done: every slice of the run (the laptop's #17–#19, RW 7.20,
+F1, RW 4.72 with D-V2-167, RW 3.19, two merges into `launch/2.0.0`) was already verified, recorded and on `master`. At the stop
+no job had failed; four runs were still going (`6a03165`'s push run, and `miri-slow` jobs on `launch/2.0.0` and the nightly) —
+named in `docs/CLOUD_SYNC_LOG.md` for the next session to read.

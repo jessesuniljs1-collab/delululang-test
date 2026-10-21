@@ -11,6 +11,35 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a `.dwx` run refuses the flags it cannot apply, 2026-10-20
+
+- **Fixed: `delulu run FILE.dwx` ignored `--broker daemon`, `--lease`, `--trace-effects`, `--trace-out` and
+  `--assert-trace` without a word** (RW 3.19). Under `--broker daemon` or `--lease` the artifact ran with no broker
+  custody at all, and no effect trace was written. These flags, and every other `run` flag a `.dwx` run does not apply,
+  are now refused before anything runs (exit 2), naming the flag. The grants, `--json`, `--seed`, `--clock`, `--limits`,
+  `--report-out`, `--break-glass`, `--isolation` and `--engine wasm` work as before. Run the program's source to use the
+  others.
+
+## Unreleased — a file capability stays where it was granted; a WASM read refuses in the interpreter's words, 2026-10-20
+
+- **Fixed (security): a file capability followed its directory if another process replaced the directory with a link
+  after the capability was made** (RW 4.72, D-V2-167). A capability narrowed with `narrow`, or minted on a sub-directory
+  of a grant or on the grant itself, read and wrote outside the grant once its directory became a symbolic link (on
+  Windows, a junction) to somewhere else — on both engines. A capability is now bound to where its directory was when it
+  was made, and a use through a directory that has since become a link is refused with DL0904. A grant that is a link
+  when the capability is made is followed then, as before.
+- **Fixed: on `--engine wasm`, a read through a symbolic link whose target does not exist is refused in the
+  interpreter's full words**, in the message and in the effect trace, and a read asks the broker before it checks its
+  scope, as on the interpreter (RW 3.18).
+
+## Unreleased — a sandbox host's refusals are its own guest's, 2026-10-20
+
+- **Fixed: a host serving a sandboxed guest could record a network refusal made by another thread of its process as its
+  guest's** (RW 7.20). The refusals in a run's `denied` list are now the ones made while answering that guest's own
+  requests. The `delulu` command line hosts one guest per process, so its reports were not affected; a process that
+  hosts more than one guest through `delulu-runtime` was, and so were two of the project's own tests, which failed now
+  and then for this reason.
+
 ## Unreleased — writing files on the WASM engine, 2026-10-20
 
 - **Added: `--engine wasm` compiles `root.fs_write`, `write_text` and `append_text`**, with the interpreter's

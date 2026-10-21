@@ -4641,3 +4641,142 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Open / next: (1) #17, #18 and this branch's CI, landing each on green in order; the launch run `39364184892` read;
   (2) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66; RW 7.20; RW 4.67, 6.1, 6.2;
   (3) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5: the laptop's #17–#19 landed; RW 7.20 reproduced and fixed — a host's egress window is its own thread's
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (the system prompt names
+  `claude-opus-5-5`; no fallback notice; `CLAUDE_CODE_EFFORT_LEVEL=xhigh` and `CLAUDE_EFFORT=xhigh` in the session's
+  environment — the effort pin of 2026-10-19 holds); a Sonnet 5.5 red-team sous-chef on the WASM engine's file capabilities
+  (its result in the next entry)
+- Branch: `master`; the code's runner reads on `claude/rw-7-20-egress-window`   Pull request: none (#17–#19 landed by
+  fast-forward)   Base: `a7b6476`
+- Commits: `cba20d4`, `ce5f6ab`, `275af08` (the laptop's, pull requests #17–#19 — `master` fast-forwarded to them); `18b0adf`
+  (RW 7.20); this entry's commit.
+- Start of session (on `a7b6476`, 07:33 UTC): `survey check` ok (1540 nodes, 15400 edges); `doctor --check` ok (26 checks in
+  this VM). `gh` is at `/usr/local/bin/gh` (not used; CI read through the REST API and the GitHub MCP tools).
+- **Landed (the laptop's session stopped at about 04:30 UTC with three green pull requests open):** #17's CI `39367623331`,
+  #18's `39368481885`, #19's `39369712525` and `a7b6476`'s push run `39368506567` — success on every job (`miri-slow` and
+  `heavy-gates` skipped, as on every pull request); `master` fast-forwarded `a7b6476..275af08`; its push run `39387600500`
+  success on every job. On `275af08`: `survey check` ok (1543 nodes, 15500 edges), `doctor --check` ok (26), the release
+  differential (50,000 programs) passed in 151 s. The autosave branch's eleven snapshots since `bbb8ea3`: six landed exactly in
+  the next commit, five were mid-edit drafts the next commit carries further (`V2_LOG.md` names each) — nothing to recover.
+- **Fixed (RW 7.20):** the laptop's once-seen red of two `channel.rs` confinement tests is another thread's refused request
+  counted in a host's `denied[]` — `HostChannel::answer` read a window on the process-wide egress log. Reproduced in the VM with
+  a frozen pre-fix test binary: 13 of 400 runs red at the laptop's two lines; the fixed binary beside it 0 of 400. The window
+  is now the answering thread's own tally; the run report's process-wide log is unchanged. Witness red on the old code; M638
+  and M639 red, control green; runners at `18b0adf`: macOS `39388976507` (284 passed), Windows `39388979829` (283 passed),
+  `delulu-runtime`'s whole library, 0 failed. The full suite alone at `18b0adf`: 2,431 passed, 0 failed, 16 ignored (173
+  binaries), cargo exit 0, the tree unmoved.
+- Files and folders: M `crates/delulu-runtime/src/egress.rs` (`MINE`, `log`, `mark`, `records_since`),
+  `crates/delulu-runtime/src/channel.rs` (the witness), `crates/delulu-runtime/src/egress/tests.rs` (tightened), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/CLOUD_ROUTINE.md` (step 5: a once-seen unit-test red is reproduced with its neighbours),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.20 closed), `docs/assistant-memory/MEMORY.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/assistant-memory/a-field-fed-by-a-global.md`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.5 (a count held in a field can still be fed by a global);
+  `docs/assistant-memory/a-field-fed-by-a-global.md`, copied both ways.
+- Loop engineering: `docs/CLOUD_ROUTINE.md` step 5 says how to reproduce a once-seen unit-test red (a frozen test binary, its
+  filter a few hundred times at `--test-threads 16`, the fixed binary beside it as the control).
+- Open / next, in order: (1) this commit's push run; (2) the red-team pass on the WASM engine's `fs_read`, `narrow` and
+  `fs_write` — its findings, each re-run before use; (3) `launch/2.0.0`: merge `master` (`a7b6476`…this commit), dispatch
+  `everything` and the release dry run; (4) on WASM: `http` (`05`'s last blocker), a list of options, `str` of a map; RW 4.66,
+  4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (continued): a red-team pass on the WASM engine's file capabilities; RW 4.72 — a file capability is anchored at its mint (D-V2-167); `launch/2.0.0` at `3ee1370`
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice); one Sonnet
+  5.5 sous-chef, the red-team pass (a usage limit stopped it at 08:10 UTC; resumed by message; its findings were on disk)
+- Branch: `master`, by fast-forward from `claude/wasm-read-scope` (the code's runner reads)   Pull request: none   Base: `7355808`
+- Commits: `92d9119` (F1), `3cb335e` (F2 and F3, RW 4.72), this entry's commit. `launch/2.0.0`: `3ee1370`.
+- **The pass** (about 250 cases, a frozen binary in `/tmp/rtw`, nothing written in the repository): F1 — a WASM read through a
+  dangling link refused without SYMLINK-DANGLE-1's words, and before asking the custody — fixed (RW 3.18); F2 and F3 — a
+  file capability followed its directory when the directory (or the grant itself) was swapped for a link after the mint or
+  narrowing, on BOTH engines, reads and writes outside the grant — fixed (RW 4.72, D-V2-167: the capability carries its
+  `anchor`, and no use resolves the root again); F4 — `delulu run FILE.dwx` ignores the trace flags — open (RW 3.19), and
+  the head chef's probe found the same path ignores `--broker daemon` and `--lease` (next entry). Every finding re-run first.
+- **Verified:** witnesses red on the old code; mutants M640–M647 (M643 and M644 survive alone by design — two walls; their
+  double M645/M647 red); runners at `92d9119` (macOS `39393020777`, Windows `39393024452`, macOS `wasm_cli` `39393029397`) and
+  at `3cb335e` (macOS `39394517196`, `39394523755`; Windows `39394520536`, `39394527710`, `39394530798`) — all success, the new
+  tests named on each; `scripts/check-other-os.sh x86_64-pc-windows-msvc` clean; the full suite at `3cb335e` 2,435 passed, 0
+  failed, 16 ignored (173 binaries), exit 0.
+- **`launch/2.0.0` at `3ee1370`** (`master` `d259cf2..7355808` merged; five Unreleased CHANGELOG sections moved under
+  `## [2.0.0]`; Survey rebuilt 1545 nodes, 0 errors; `doctor --check` 26 ok; clippy stamped; eight doc gates green). Its release
+  dry run `39392801546` success; its `everything` run `39392798450` dispatched (read at the run's close or by the next run).
+- Files and folders: M `crates/delulu-runtime/src/value.rs` (`CapScope::Fs.anchor`), `crates/delulu-runtime/src/prim.rs`
+  (`pin_fs_at`, `mint_anchor`, `resolve_in_anchor`, `pinned_in`; the mints, `narrow`, `read_text`, `list_dir`, the writes;
+  the witness), `crates/delulu-runtime/src/interp.rs` (`fs_pin_for`), `crates/delulu-runtime/src/sink.rs`,
+  `crates/delulu-runtime/src/beneath.rs` (the residual's note), `crates/delulu-wasm/src/host.rs` (`CapKind::FsRead`/`FsWrite`
+  carry the anchor; the read in the interpreter's order), `crates/delulu-wasm/src/lib.rs` (two witnesses),
+  `crates/delulu/tests/wasm_cli.rs` (F1's witness), `CHANGELOG.md`, `HANDOFF.md` (§11.4 ROOT-RESOLVE-1),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-167), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.18, 3.19,
+  4.72), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing (the junction case of the witnesses ran on the Windows runners).
+- For the laptop's memory: `HANDOFF.md` §11.4 (ROOT-RESOLVE-1: ask which side of a containment check is resolved when).
+- Open / next, in order: (1) this commit's push run; `launch/2.0.0`'s `everything` run `39392798450`; (2) RW 3.19 and the
+  `.dwx` path's unapplied `--broker`/`--lease` (the next slice of this run); (3) the pass's untried families — a user method
+  named `narrow`/`read_text`, capabilities in records or closures, `--broker daemon` and `--lease` on the WASM file path;
+  (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the
+  owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (continued): a `.dwx` run refuses every flag it does not apply — DWX-FLAGS-1 (RW 3.19)
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef)
+- Branch: `master`, by fast-forward from `claude/dwx-flags`   Pull request: none   Base: `669664c`
+- Commits: `a7e50d6` (the fix); this entry's commit.
+- **Fixed (RW 3.19):** `delulu run FILE.dwx` read only the grants, `--json`, the seed and the clock; `--broker daemon` (no broker
+  running) and `--lease` (a token no broker issued) ran the artifact with no custody, and the trace flags wrote nothing — in
+  silence. Now every flag outside `APPLIED_TO_A_DWX` is refused before anything runs (exit 2), as the sandbox refuses by
+  `APPLIED_UNDER_SANDBOX`. Witness red on the old path; M648–M650 red; runners Windows `39396317161` (5 passed, filter `dwx`)
+  and macOS `39396321250` (success); the full suite at `a7e50d6` 2,436 passed, 0 failed, 16 ignored (173 binaries), exit 0.
+- **RW 4.72 end to end:** the red-team pass's own race scripts re-run against the fixed binary — every run refused, nothing
+  read or written outside (`V2_LOG.md`).
+- Files and folders: M `crates/delulu/src/run_cmd.rs` (`APPLIED_TO_A_DWX`), `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4 DWX-FLAGS-1), `docs/CLOUD_ROUTINE.md` (a whole-library witness log: `tail_lines` about 130),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.19 closed), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing.
+- For the laptop's memory: `HANDOFF.md` §11.4 (DWX-FLAGS-1: an allowlist per route a command can take).
+- Loop engineering: `docs/CLOUD_ROUTINE.md` — ask a whole-library witness log for about 130 lines; 2,000 brought two whole
+  500-line logs into the context this run.
+- Open / next, in order: (1) this commit's push run and `669664c`'s (`39396073953`); `launch/2.0.0`'s `everything`
+  `39392798450` (all finished jobs success; two `miri-slow` jobs running at this entry); then merge `master` into
+  `launch/2.0.0` again; (2) the pass's untried families — a user method named `narrow`/`read_text`, capabilities in records
+  or closures, `--broker daemon` and `--lease` on the WASM file path end to end; (3) a `.dwx` run with a trace and custody, if
+  wanted, instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5)
+  *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5 (close): `launch/2.0.0` at `20666c5`
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice)
+- Branch: `launch/2.0.0` (`20666c5`, merging `master` `7355808..ec4bc87`); `master` (this entry's commit)
+- Gates on the launch tree: survey build 1545 nodes, 15597 edges, 0 errors, 14 warnings, check ok; `doctor --check` ok (26 checks); `scripts/clippy.sh -j 4` clean and stamped; doctor_cli, repository_structure, evidence_claims, governance, message_spacing, release, distribution and book green. Dispatched at `20666c5`: `ci.yml` `everything` and the release dry run.
+- Files and folders (`master`): M `docs/DELULULANG_V2/V2_PHASE_STATUS.md` (row 17), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_ROUTINE.md` (step 4.3: free `master`'s `target/debug` before a launch build under ~15 GB), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. (`launch/2.0.0`: `CHANGELOG.md`, `docs/survey/*` and everything the merge brought.)
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing beyond the entries above.
+- **Postscript:** RW 4.72's race under a live broker daemon refused on both engines; a capability in a closure keeps its scope on both, one in a record field is DL1201 on WASM (`V2_LOG.md`). CI: push runs `39387600500` (`275af08`), `39390507228` (`7355808`), `39396073953` (`669664c` — F1 and RW 4.72 on all three operating systems) and `39397818042` (`ec4bc87` — RW 3.19) success on every job; the nightly `39391181701` (`7355808`) and `launch/2.0.0`'s `everything` `39392798450` (`3ee1370`) success on every job but their two `miri-slow` jobs, running at this entry; `20666c5`'s release dry run `39398473807` success and its `everything` `39398467836` running; `318b210`'s push run `39398823386` running.
+- **`--lease` on the WASM file path:** parity with the interpreter, the lease's custody refusing an escape in the same words on both (`V2_LOG.md`). Oddity for the next run: under `--lease`, DL0703's hint tells the holder to pass `--grant`, which a lease run refuses.
+- **This run, in one line:** the laptop's #17–#19 landed; RW 7.20's flake reproduced and fixed; a red-team pass on the WASM
+  file capabilities found F1–F4, of which F2/F3 (RW 4.72) was a HIGH escape in BOTH engines — fixed, D-V2-167 — and F4 led to
+  DWX-FLAGS-1 (RW 3.19) — fixed; `launch/2.0.0` merged twice.
+- Open / next, in order: (1) the push run of this run's last commit (`669664c`, `ec4bc87`, `318b210` and `8ac7ee5` read green);
+  `launch/2.0.0`'s `everything` runs `39392798450` (its two `miri-slow` jobs) and `20666c5`'s, and `20666c5`'s release dry run; (2) DL0703's
+  hint under `--lease` (it names a `--grant` a lease run refuses); a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted,
+  instead of the refusal; (4) on WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the
+  launch, only on the owner's word.
+
+### 2026-10-20 — on-demand routine run 5: stopped on the owner's word (09:50 UTC)
+- Session: `https://claude.ai/code/session_018yMwiAJaxMeZ13R2HMTPTh`   Model: Claude Opus 5.5 (no fallback notice; no sous-chef running)
+- **The owner, 09:50 UTC:** *"Head Chef Claude Opus 5.5, Stop safely and record and push everything to GitHub test repo"*.
+  Stopped with nothing half-done: every slice of this run is on `master` (`6a03165` before this entry), the tree was clean
+  and in step with `origin`, no worktree, no suite, no broker daemon and no sous-chef left running. The three working
+  branches (`claude/rw-7-20-egress-window`, `claude/wasm-read-scope`, `claude/dwx-flags`) are 0 commits ahead of `master`.
+- **CI at the stop** (no job failed anywhere): `6a03165`'s push run `39403469304` running (records only); `launch/2.0.0`'s
+  `everything` `39398467836` (`20666c5`) 16 jobs success, its two `miri-slow` jobs running, its release dry run `39398473807`
+  success; `3ee1370`'s `everything` `39392798450` and the nightly `39391181701` (`7355808`) 17 jobs success each, one
+  `miri-slow` job running in each. `8ac7ee5`, `318b210`, `ec4bc87`, `669664c`, `7355808` and `275af08` push runs success on every job.
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md` (this entry), `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, for whoever comes next (laptop or routine): (1) read the four runs above to their end; (2) DL0703's hint under
+  `--lease`; a user method named `narrow`/`read_text` on WASM; (3) a `.dwx` run with a trace and custody, if wanted; (4) on
+  WASM: `http`, a list of options, `str` of a map; RW 4.66, 4.67, 6.1, 6.2; (5) *[laptop]* the launch, only on the owner's word.

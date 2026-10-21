@@ -214,7 +214,9 @@ another OS, and then takes about seven minutes itself (run 5).
    decision log (D-V2-155 lives only there, so a new decision on `master` skips it); take `master`'s `docs/survey/*` and
    rebuild; run `doctor --check`, `scripts/clippy.sh` (the hook asks for it on a merge that brings in Rust) and the document gates there; commit, push the branch, and dispatch `ci.yml`
    (`jobs=everything`) and `release.yml` at it. Never the reverse merge. Then `git worktree remove` it and delete its target
-   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free).
+   (on-demand run 3: about 3 GB, and the next `scripts/suite.sh` refused to start under 10 GB free). **Under about 15 GB free,
+   delete `master`'s `target/debug` before the launch build** (on-demand run 5: the launch build took 13 GB down to 3 GB
+   beside `master`'s 16 GB of test binaries; `master`'s work is committed by then, and a later suite rebuilds it).
 4. *(The cloud period's order, kept as its record.)* **Finish every phase, and verify each** — the owner's order. PS-D and P7 are complete (run 1).
    Next, one slice per run, in this order:
    **PS-E** — the boundary, confirmed (`V2_OPENSHELL_STUDY.md` §4.1–§4.6): **complete** (run 12, D-V2-93 — E-01's last
@@ -311,6 +313,9 @@ kept the last mutant's binary — run 15), and ends with a CONTROL run of the sa
 **A flake seen once is first a question about its window** (run 18): before sampling a stall's distribution on runners, ask what
 the window CONTAINS that one path counts and another does not, and grow that until it is red on every OS — a program's size turned
 run 17's once-seen 178 ms macOS stall into a deterministic parity red in one dispatch per OS (RW 4.59).
+**A once-seen unit-test red is reproduced with its neighbours** (on-demand run 5, RW 7.20): copy the test binary out of
+`target/debug/deps` (the next build replaces it), run its module's filter a few hundred times at `--test-threads 16`, count
+the reds, and run the fixed binary's copy beside it under the same load as the control — 13 of 400 against 0 of 400.
 **A patch script checks every anchor before it writes any file** (run 18: twice a scripted edit stopped at an anchor with the
 edits before it already written — a 12-space anchor that was a substring of a 16-space line, and one at the wrong indentation).
 Collect the edits, assert each anchor exactly once against the files as they are, then write. **Join a script's input step
@@ -335,7 +340,7 @@ the third was red at once). One dispatch per form, about three minutes each on a
 **Stop a background job by its PID, never `pkill -f PATTERN`** (run 24): the pattern was in the stopping command's own line, so
 `pkill -f check-other-os.sh` killed the shell that ran it (exit 144) — the edits queued behind it in that command never ran, and
 the lint's `cargo clippy` children lived on. `ps`, read the PIDs, `kill PID…`. **A witness log's last ~62 lines are the cache save and git's cleanup** (run 25: `tail_lines` 62 returned none of three runs'
-test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A one-test witness log: `tail_lines` 40** — its
+test lines, and a second round pulled about 90 lines of each in): ask 62 plus about 20 per target, once. **A whole-library witness log: `tail_lines` about 130** (on-demand run 5: 2,000 brought two 500-line logs into the context whole — a log under about 100 KB comes back inline, not as a file). **A one-test witness log: `tail_lines` 40** — its
 `test result` line is the last test output before the cache save; run 24 asked 3,000 of three such runs and pulled every line of
 three ~550-line logs into the context (run 13's mistake, repeated).
 **A check built as two walls is falsified as two** (run 24, M383/M383b): a mutant that removes one wall survives on the other by

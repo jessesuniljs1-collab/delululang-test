@@ -733,6 +733,11 @@ pub enum CapScope {
     Fs {
         root: PathBuf,
         write: bool,
+        /// RW 4.72: where `root` resolved on disk when this capability was minted or narrowed — every use is decided
+        /// against THIS, never against `root` resolved again at the use. A directory of the scope, or the granted one,
+        /// swapped for a link after the mint would otherwise carry the capability with it (the red-team pass of
+        /// on-demand routine run 5, F2 and F3). `root` stays the path as spelled, for the trace and the custody.
+        anchor: PathBuf,
     },
     /// `allow` is the program's host list, each entry granted exactly. `special` is the subset of it
     /// the operator granted with `net.special=` (PS-B-02) — the only hosts the egress client will
@@ -969,6 +974,9 @@ pub struct RootVal {
     /// P2 (D-V2-27): the package manifest's `[plugins] allow` hash ceiling, carried into the
     /// capability. A ceiling, never a source of authority.
     pub plugins_allow: Vec<String>,
+    /// RW 6.15: the delegated node a `--lease` run's authority came from (`Grants::lease`), so a refusal names the remedy
+    /// that applies to this run. Never authority, and never consulted to decide a use.
+    pub lease: Option<String>,
 }
 
 // ----- environments --------------------------------------------------------

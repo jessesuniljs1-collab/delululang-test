@@ -252,3 +252,44 @@ fn main(root: Root) ! {{Write, Read}} {{
     assert!(i.contains("DL0703"), "the interpreter: {i}");
     assert!(w.contains("DL0703"), "the WASM engine names the ungranted read: {w}");
 }
+
+/// RW 6.15: an ungranted mint is refused in the same words on both engines, its remedy included — the `--grant` that
+/// covers it on an ordinary run, the delegation under `--lease` (a lease run refuses a local `--grant`, and both engines
+/// named one). The WASM engine's console, clock and rand refusals named no remedy at all before.
+#[test]
+fn an_ungranted_mint_names_the_same_remedy_on_both_engines() {
+    for lease in [None, Some("g_feed")] {
+        for (mint, grant) in [
+            ("root.console()", "console"),
+            ("root.clock()", "clock"),
+            ("root.rand()", "rand"),
+            ("root.fs_read(\"./nowhere\")", "fs.read=./nowhere"),
+            ("root.fs_write(\"./nowhere\")", "fs.write=./nowhere"),
+        ] {
+            let src = format!("module m\nfn main(root: Root) {{\n  let c = {mint}\n}}\n");
+            let checked = check_source(0, &src);
+            assert!(!checked.has_errors(), "program should check clean:\n{src}\n{:?}", checked.diagnostics);
+            let wasm = compile_module(&checked.module).unwrap_or_else(|e| panic!("should compile to WASM: {e:?}\n{src}"));
+            let cfg = HostConfig { lease: lease.map(str::to_string), ..HostConfig::default() };
+            let w = run_main(&wasm, &cfg).expect_err("refused on WASM").message();
+            let g = Grants { lease: lease.map(str::to_string), ..Default::default() };
+            let i = Interp::new(&checked.module)
+                .run_main(Value::Root(Rc::new(g.build_root())))
+                .expect_err("refused on the interpreter");
+            assert_eq!(i.code, "DL0703", "`{mint}`: {}", i.message);
+            assert!(
+                w.ends_with(&format!("DL0703: {}", i.message)),
+                "the same words on both engines for `{mint}`:\n  wasm:   {w}\n  interp: {}",
+                i.message
+            );
+            match lease {
+                None => assert!(i.message.ends_with(&format!("pass `--grant {grant}`")), "{}", i.message),
+                Some(node) => assert!(
+                    i.message.contains(&format!("node `{node}`")) && i.message.contains(&format!("carry `{grant}`")),
+                    "{}",
+                    i.message
+                ),
+            }
+        }
+    }
+}

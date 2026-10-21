@@ -125,6 +125,13 @@ pub fn resolve_for_decision(p: &Path) -> Option<PathBuf> {
 /// the file cannot come apart. `None`: the path does not resolve inside the grant — the effect is then
 /// refused by the ordinary check, with its ordinary message.
 pub fn pin_fs(root: &Path, rel: &str) -> Option<PathBuf> {
+    pin_fs_at(root, &canonical_existing(root)?, rel)
+}
+
+/// [`pin_fs`] for a capability: `anchor` is where `root` resolved when the capability was minted or narrowed, and the
+/// use is pinned only inside THAT — `root` is never resolved again here, so a directory of the scope swapped for a link
+/// since the mint pins nothing (RW 4.72).
+pub fn pin_fs_at(root: &Path, anchor: &Path, rel: &str) -> Option<PathBuf> {
     if hostile_path(rel, false).is_some() {
         return None;
     }
@@ -133,8 +140,25 @@ pub fn pin_fs(root: &Path, rel: &str) -> Option<PathBuf> {
         return None;
     }
     let real = canonical_existing(&joined)?;
-    let r = canonical_existing(root)?;
-    real.starts_with(&r).then_some(real)
+    real.starts_with(anchor).then_some(real)
+}
+
+/// RW 4.72: the path a capability's file effect opens — the caller's pin (GUARD-ALIAS-1) when it lies inside the
+/// capability's anchor, else the pin made here against the anchor; `None` when the use does not resolve inside it, as
+/// when a directory of the scope became a link after the check.
+fn pinned_in(root: &Path, anchor: &Path, rel: &str, pin: Option<&Path>) -> Option<PathBuf> {
+    match pin {
+        Some(real) => real.starts_with(anchor).then(|| real.to_path_buf()),
+        None => pin_fs_at(root, anchor, rel),
+    }
+}
+
+/// RW 4.72: where `want` resolves on disk, if that lies inside one of `grants` — resolved ONCE, so the capability minted
+/// from it (its anchor) and the containment decision about it are the same resolution: a directory swapped for a link
+/// between a check and a second resolution could otherwise be decided on one and anchored on the other.
+pub fn mint_anchor(grants: &[PathBuf], want: &Path) -> Option<PathBuf> {
+    let anchor = canonical_existing(want)?;
+    grants.iter().any(|g| canonical_existing(g).is_some_and(|r| anchor.starts_with(&r))).then_some(anchor)
 }
 
 /// A resolved path as the broker, the Guard and the operator spell it: the canonical path without
@@ -289,12 +313,21 @@ fn windows_hostile_path(p: &str, allow_unc: bool) -> Option<String> {
 /// then [`contains_on_disk`] rejects anything that *resolves* outside the root (C84). Public so the WASM engine's
 /// `narrow` applies this rule itself rather than a copy of it.
 pub fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault> {
+    let anchor = canonical_existing(root).unwrap_or_else(|| root.to_path_buf());
+    resolve_in_anchor(root, &anchor, rel, span).map(|(joined, _)| joined)
+}
+
+/// [`resolve_in_scope`] for a capability (RW 4.72): the on-disk gate compares against `anchor`, where `root` resolved when
+/// the capability was minted or narrowed, and never resolves `root` again. Returns the path as joined (for the trace and
+/// the custody) and where it resolves (a narrowed capability's own anchor).
+pub fn resolve_in_anchor(root: &Path, anchor: &Path, rel: &str, span: Span) -> Result<(PathBuf, PathBuf), Fault> {
     if let Some(why) = hostile_path(rel, false) {
         return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", rel.escape_debug()), span));
     }
     let joined = normalize(&root.join(rel));
-    if joined.starts_with(root) && contains_on_disk(root, &joined) {
-        Ok(joined)
+    let resolved = canonical_existing(&joined).filter(|c| joined.starts_with(root) && c.starts_with(anchor));
+    if let Some(resolved) = resolved {
+        Ok((joined, resolved))
     } else {
         // SYMLINK-DANGLE-1: name the cause when it is a link that does not resolve, so the refusal
         // reads as the deliberate decision it is rather than a puzzling scope error on a path that
@@ -376,15 +409,29 @@ pub fn host_matches(host: &str, pat: &str) -> bool {
 
 // ----- Root: mint capabilities (attenuation — no effect) -------------------
 
+/// RW 6.15: what a DL0703 tells its reader to do about the missing `grant`. An ordinary run is told the `--grant` that
+/// covers the use. A `--lease` run (`lease` is its delegated node) refuses every local `--grant` but a foreign library's
+/// path — its authority is its delegation's alone — so it is told which delegation lacks the grant instead; before, both
+/// engines told it to pass the flag the run refuses (found by on-demand routine run 5). Both engines word it here.
+pub fn grant_remedy(lease: Option<&str>, grant: &str) -> String {
+    match lease {
+        None => format!("pass `--grant {grant}`"),
+        Some(node) => format!(
+            "the lease this run redeemed (node `{node}`) does not carry `{grant}`, and a `--lease` run takes its authority \
+             from its delegation alone (a local `--grant` is refused)"
+        ),
+    }
+}
+
 pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
     // DL0703 is the first error nearly every newcomer meets: zero ambient authority means the
     // very first program that prints anything fails until a human grants the console. The
     // refusal is correct and is the point of the language — but a refusal that does not say
     // what to type teaches nothing, so every message below names the exact grant. (Prose only:
     // the code, the span, and the `--json` envelope are unchanged, per `for-agents.md`.)
-    let refused = |what: &str, grant: &str| {
-        Fault::at("DL0703", format!("`{what}` was not granted to this program — pass `--grant {grant}`"), span)
-    };
+    let remedy = |grant: &str| grant_remedy(root.lease.as_deref(), grant);
+    let refused =
+        |what: &str, grant: &str| Fault::at("DL0703", format!("`{what}` was not granted to this program — {}", remedy(grant)), span);
     match method {
         "console" => {
             if root.console {
@@ -408,11 +455,12 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             // `C:\Users\runneradmin\…`, one directory, and a lexical prefix test refused the
             // program DL0703. `contains_on_disk` resolves both sides, which is the containment the
             // lexical test was only ever an approximation of.
-            match root.fs_read.iter().find(|g| contains_on_disk(g, &want)) {
-                Some(_) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false })),
+            // RW 4.72: decided on the resolution the capability is anchored at — one resolution, not two.
+            match mint_anchor(&root.fs_read, &want) {
+                Some(anchor) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false, anchor })),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"),
+                    format!("filesystem read of `{p}` was not granted — {}", remedy(&format!("fs.read={p}"))),
                     span,
                 )),
             }
@@ -424,11 +472,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // On disk only, as `fs_read` above.
-            match root.fs_write.iter().find(|g| contains_on_disk(g, &want)) {
-                Some(_) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true })),
+            match mint_anchor(&root.fs_write, &want) {
+                Some(anchor) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true, anchor })),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"),
+                    format!("filesystem write of `{p}` was not granted — {}", remedy(&format!("fs.write={p}"))),
                     span,
                 )),
             }
@@ -494,7 +542,12 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(v) => Ok(Value::Secret(Rc::new(SecretVal::bound(v.clone(), audience(&name))))),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"),
+                    match root.lease {
+                        None => format!(
+                            "secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"
+                        ),
+                        Some(_) => format!("secret `{name}` was not granted — {}", remedy(&format!("secret:{name}"))),
+                    },
                     span,
                 )),
             }
@@ -527,7 +580,14 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let d = str_arg(args, 0, span)?;
             match root.actuators.iter().find(|e| e.device == d) {
                 Some(e) => Ok(cap(ResourceKind::Actuator, CapScope::Actuator(e.clone()))),
-                None => Err(Fault::at("DL0703", format!("actuator `{d}` was not granted — pass `--grant \"actuator={d}:DIM=LO..HI\"` with the envelope this machine may move in"), span)),
+                None => Err(Fault::at(
+                    "DL0703",
+                    match root.lease {
+                        None => format!("actuator `{d}` was not granted — pass `--grant \"actuator={d}:DIM=LO..HI\"` with the envelope this machine may move in"),
+                        Some(_) => format!("actuator `{d}` was not granted — {}", remedy(&format!("actuator={d}"))),
+                    },
+                    span,
+                )),
             }
         }
         "sensor" => {
@@ -535,7 +595,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             if root.sensors.iter().any(|s| s == &d) {
                 Ok(cap(ResourceKind::Sensor, CapScope::Sensor { device: d }))
             } else {
-                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted — pass `--grant sensor={d}`"), span))
+                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted — {}", remedy(&format!("sensor={d}"))), span))
             }
         }
         // Stage 10 (10h): the same shape for an accelerator. Deriving the handle is pure; the
@@ -546,7 +606,10 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Some(e) => Ok(cap(ResourceKind::Compute, CapScope::Compute(e.clone()))),
                 None => Err(Fault::at(
                     "DL0703",
-                    format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                    match root.lease {
+                        None => format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                        Some(_) => format!("compute device `{d}` was not granted — {}", remedy(&format!("compute={d}"))),
+                    },
                     span,
                 )),
             }
@@ -618,12 +681,12 @@ pub fn call_cap_method_pinned(
         // FS-RACE-1: every file effect opens the path the check approved through `beneath`, which
         // follows no link that appeared after the check (and opens only regular files).
         (ResourceKind::FsRead, "read_text") => {
-            let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
+            let CapScope::Fs { root, anchor, .. } = &capv.scope else { return Err(scope_bug(span)) };
             let rel = str_arg(args, 0, span)?;
-            let p = resolve_in_scope(root, &rel, span)?;
-            let read = match pin {
-                Some(real) => crate::beneath::read_text_at(real),
-                None => crate::beneath::read_text(root, &p),
+            resolve_in_anchor(root, anchor, &rel, span)?;
+            let read = match pinned_in(root, anchor, &rel, pin) {
+                Some(real) => crate::beneath::read_text_at(&real),
+                None => crate::beneath::Outcome::Escaped(crate::beneath::OUTSIDE),
             };
             match read {
                 crate::beneath::Outcome::Done(s) => Ok(Value::ok(Value::str(s))),
@@ -632,12 +695,12 @@ pub fn call_cap_method_pinned(
             }
         }
         (ResourceKind::FsRead, "list_dir") => {
-            let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
+            let CapScope::Fs { root, anchor, .. } = &capv.scope else { return Err(scope_bug(span)) };
             let rel = str_arg(args, 0, span)?;
-            let p = resolve_in_scope(root, &rel, span)?;
-            let listed = match pin {
-                Some(real) => crate::beneath::list_dir_at(real),
-                None => crate::beneath::list_dir(root, &p),
+            resolve_in_anchor(root, anchor, &rel, span)?;
+            let listed = match pinned_in(root, anchor, &rel, pin) {
+                Some(real) => crate::beneath::list_dir_at(&real),
+                None => crate::beneath::Outcome::Escaped(crate::beneath::OUTSIDE),
             };
             match listed {
                 crate::beneath::Outcome::Done(names) => {
@@ -649,19 +712,20 @@ pub fn call_cap_method_pinned(
             }
         }
         (ResourceKind::FsRead, "narrow") => {
-            let CapScope::Fs { root, write } = &capv.scope else { return Err(scope_bug(span)) };
-            let sub = resolve_in_scope(root, &str_arg(args, 0, span)?, span)?;
-            Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: sub, write: *write }))
+            let CapScope::Fs { root, write, anchor } = &capv.scope else { return Err(scope_bug(span)) };
+            // RW 4.72: the narrower capability is anchored where its subtree resolves NOW, inside its parent's anchor.
+            let (sub, anchor) = resolve_in_anchor(root, anchor, &str_arg(args, 0, span)?, span)?;
+            Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: sub, write: *write, anchor }))
         }
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
-            let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
+            let CapScope::Fs { root, anchor, .. } = &capv.scope else { return Err(scope_bug(span)) };
             let rel = str_arg(args, 0, span)?;
-            let p = resolve_in_scope(root, &rel, span)?;
+            resolve_in_anchor(root, anchor, &rel, span)?;
             let body = str_arg(args, 1, span)?;
             let append = method == "append_text";
-            let wrote = match pin {
-                Some(real) => crate::beneath::write_text_at(real, &body, append),
-                None => crate::beneath::write_text(root, &p, &body, append),
+            let wrote = match pinned_in(root, anchor, &rel, pin) {
+                Some(real) => crate::beneath::write_text_at(&real, &body, append),
+                None => crate::beneath::Outcome::Escaped(crate::beneath::OUTSIDE),
             };
             match wrote {
                 crate::beneath::Outcome::Done(()) => Ok(Value::ok(Value::Unit)),
@@ -1589,6 +1653,95 @@ mod containment_tests {
         );
         let _ = fs::remove_dir_all(&base);
     }
+
+    /// RW 4.72 (the red-team pass of on-demand routine run 5, F2 and F3): a capability's directory is where it resolved
+    /// when the capability was minted or narrowed. Every use resolved it again, so a directory of the scope swapped for a
+    /// link to outside AFTER a narrowing, a mint of a sub-directory or a mint of the grant itself carried the handle with
+    /// it: reads and writes landed outside the grant, with no refusal, on both engines. Now each use is decided against
+    /// the resolution the mint made, and the swapped directory is refused (DL0904) — pinned, as the interpreter and the
+    /// sandbox host call it, or not.
+    #[test]
+    fn a_capability_directory_swapped_for_a_link_after_its_mint_reaches_nothing_outside() {
+        use crate::value::{CapVal, Value};
+        let base = unique_dir("anchor");
+        let grant = base.join("grant");
+        let outside = base.join("outside");
+        fs::create_dir_all(grant.join("sub")).unwrap();
+        fs::create_dir_all(grant.join("sub2")).unwrap();
+        fs::create_dir_all(grant.join("secret")).unwrap();
+        fs::write(grant.join("sub").join("f.txt"), "inside").unwrap();
+        fs::write(grant.join("secret").join("f.txt"), "SIBLING").unwrap();
+        fs::write(outside.join("f.txt"), "OUTSIDE").unwrap();
+        let dir_link = |target: &Path, link: &Path| -> bool {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(target, link).is_ok()
+            }
+            #[cfg(windows)]
+            {
+                std::process::Command::new("cmd")
+                    .args(["/C", "mklink", "/J"])
+                    .arg(link)
+                    .arg(target)
+                    .output()
+                    .is_ok_and(|o| o.status.success())
+            }
+        };
+        let at = |p: &Path| p.to_string_lossy().to_string();
+        let g = crate::Grants { fs_read: vec![at(&grant)], fs_write: vec![at(&grant)], ..Default::default() };
+        let root = g.build_root();
+        let span = delulu_diag::Span::new(0, 0, 0);
+        let s = |x: &str| Value::str(x.to_string());
+        let cap_of = |v: Result<Value, super::Fault>| match v {
+            Ok(Value::Cap(c)) => c,
+            other => panic!("a capability: {other:?}"),
+        };
+        let read = cap_of(super::call_root_method(&root, "fs_read", &[s(&at(&grant))], span));
+        let narrowed = cap_of(super::call_cap_method(&read, "narrow", &[s("sub")], span));
+        let narrowed2 = cap_of(super::call_cap_method(&read, "narrow", &[s("sub2")], span));
+        let sub_write = cap_of(super::call_root_method(&root, "fs_write", &[s(&at(&grant.join("sub")))], span));
+        let whole_write = cap_of(super::call_root_method(&root, "fs_write", &[s(&at(&grant))], span));
+        // Each use twice: unpinned, and pinned as the interpreter and the sandbox host pin it (GUARD-ALIAS-1).
+        let uses = |cap: &std::rc::Rc<CapVal>, method: &str, args: &[Value]| -> Vec<Result<Value, super::Fault>> {
+            let pin = crate::interp::fs_pin_for(&Value::Cap(cap.clone()), method, args);
+            vec![
+                super::call_cap_method(cap, method, args, span),
+                super::call_cap_method_pinned(cap, method, args, span, pin.as_deref()),
+            ]
+        };
+        // The control, before any swap: the narrowed handle reads its own file.
+        for r in uses(&narrowed, "read_text", &[s("f.txt")]) {
+            assert!(r.as_ref().is_ok_and(|v| v.display().contains("inside")), "{r:?}");
+        }
+        fs::rename(grant.join("sub"), grant.join("sub_real")).unwrap();
+        if !dir_link(&outside, &grant.join("sub")) {
+            eprintln!("skipped: no directory link could be made here");
+            let _ = fs::remove_dir_all(&base);
+            return;
+        }
+        let refused = |r: &Result<Value, super::Fault>| matches!(r, Err(f) if f.code == "DL0904");
+        for r in uses(&narrowed, "read_text", &[s("f.txt")]) {
+            assert!(refused(&r), "a narrowed handle whose directory became a link out of the grant: {r:?}");
+        }
+        // Nor past its own subtree inside the grant: `sub2` swapped for a link to its sibling `secret`.
+        fs::rename(grant.join("sub2"), grant.join("sub2_real")).unwrap();
+        assert!(dir_link(&grant.join("secret"), &grant.join("sub2")));
+        for r in uses(&narrowed2, "read_text", &[s("f.txt")]) {
+            assert!(refused(&r), "a narrowed handle whose directory became a link to its sibling: {r:?}");
+        }
+        for r in uses(&sub_write, "write_text", &[s("w.txt"), s("PWN")]) {
+            assert!(refused(&r), "a write capability minted on a sub-directory that became a link: {r:?}");
+        }
+        assert!(!outside.join("w.txt").exists(), "nothing was written outside the grant");
+        // F3: the granted directory itself, swapped after the mint.
+        fs::rename(&grant, base.join("grant_real")).unwrap();
+        assert!(dir_link(&outside, &grant));
+        for r in uses(&whole_write, "write_text", &[s("g.txt"), s("PWN")]) {
+            assert!(refused(&r), "a capability whose granted directory became a link after its mint: {r:?}");
+        }
+        assert!(!outside.join("g.txt").exists(), "nothing was written outside the grant");
+        let _ = fs::remove_dir_all(&base);
+    }
 }
 
 /// D-NE-29 (PS-0-06): the path spellings the primitive table refuses. The Windows rules are
@@ -1663,5 +1816,51 @@ mod hostile_path_tests {
     fn an_embedded_nul_is_refused_everywhere() {
         assert!(hostile_path("a\0b", false).is_some());
         assert!(hostile_path("a\0b", true).is_some());
+    }
+}
+
+#[cfg(test)]
+mod remedy_tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// Every mint that can answer DL0703, with an argument it refuses on an empty root.
+    fn refused_mints() -> Vec<(&'static str, Vec<Value>)> {
+        let s = |v: &str| vec![Value::str(v)];
+        vec![
+            ("console", vec![]),
+            ("fs_read", s("./nowhere")),
+            ("fs_write", s("./nowhere")),
+            ("http", vec![Value::List(Rc::new(RefCell::new(vec![Value::str("api.example.com")])))]),
+            ("clock", vec![]),
+            ("rand", vec![]),
+            ("declassify", vec![]),
+            ("secret", s("K")),
+            ("actuator", s("arm0/elbow")),
+            ("sensor", s("arm0/angle")),
+            ("compute", s("gpu0")),
+            ("plugin_host", vec![]),
+        ]
+    }
+
+    /// RW 6.15: an ordinary run's DL0703 names the `--grant` that covers the use; a `--lease` run's names its delegation,
+    /// never a `--grant` — a lease run refuses every local one but a foreign library's path, and every mint below told its
+    /// holder to pass one before.
+    #[test]
+    fn a_lease_runs_refusal_names_its_delegation_and_never_a_grant_it_refuses() {
+        for (method, args) in refused_mints() {
+            let refusal = |root: RootVal| match call_root_method(&root, method, &args, Span::new(0, 0, 0)) {
+                Err(f) if f.code == "DL0703" => f.message,
+                other => panic!("`root.{method}` on an empty root must be DL0703, was {:?}", other.map(|_| ()).map_err(|f| f.code)),
+            };
+            let plain = refusal(RootVal::default());
+            assert!(plain.contains("pass `--grant"), "an ordinary run is told what to grant (`{method}`): {plain}");
+            let leased = refusal(RootVal { lease: Some("g_feed".to_string()), ..Default::default() });
+            assert!(
+                leased.contains("node `g_feed`") && leased.contains("a local `--grant` is refused"),
+                "a lease run is told which delegation lacks it (`{method}`): {leased}"
+            );
+            assert!(!leased.contains("pass `--grant"), "a lease run is never told to pass a `--grant` (`{method}`): {leased}");
+        }
     }
 }

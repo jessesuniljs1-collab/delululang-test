@@ -91,16 +91,16 @@ impl CompileError {
 /// or arithmetic on a capability. `Unit` occupies zero stack slots.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
-    I64,    // Int
-    I32,    // Bool
-    F64,    // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
-    Str,    // i32 pointer into linear memory
-    Cap,    // i32 host handle (Console)
-    Clock,  // i32 host handle (Clock, Phase 3k)
-    Rand,   // i32 host handle (Rand, Phase 3l)
-    FsRead, // i32 host handle (Cap[FsRead], Phase 3p)
+    I64,     // Int
+    I32,     // Bool
+    F64,     // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
+    Str,     // i32 pointer into linear memory
+    Cap,     // i32 host handle (Console)
+    Clock,   // i32 host handle (Clock, Phase 3k)
+    Rand,    // i32 host handle (Rand, Phase 3l)
+    FsRead,  // i32 host handle (Cap[FsRead], Phase 3p)
     FsWrite, // i32 host handle (Cap[FsWrite], RW 3.4)
-    Root,   // i32 host handle to the root authority (Phase 3e)
+    Root,    // i32 host handle to the root authority (Phase 3e)
     // Stage 4 phase 4g: `Cap[ForeignLoad]` (i32 host handle) and a bound `foreign` lib handle
     // `Foreign(lib_id)` (i32 host handle; `lib_id` indexes the module's foreign blocks so a method
     // call knows its marshalling signature). `ForeignPtr` is the opaque `void*` handle (i32 index

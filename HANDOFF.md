@@ -1152,6 +1152,21 @@ spells the same thing?**
   uniqueness check) needs an answer for a cell it is already inside — the mutable cells (`List`, `Map`, `Record`) are
   where a cycle closes.
 
+- **ROOT-RESOLVE-1 — a capability's root was resolved again at every use** (on-demand routine run 5, RW 4.72,
+  D-V2-167): FS-RACE-1 made the walk below a scope's root refuse a link that appears after the check, and every check
+  still canonicalized the ROOT afresh — `pin_fs`, `resolve_in_scope`'s on-disk gate, `beneath`'s check. So a narrowed or
+  sub-minted handle whose directory was swapped for a link went where the link went, past every check, because each
+  compared the target against the root's NEW resolution. A file capability now carries its `anchor`, the resolution its
+  mint or narrowing made, and no use resolves the root again. Never soften it back to "re-resolve and compare": a check
+  that resolves both sides at use time decides on whatever the root became. Search key: for each containment check,
+  ask which side is resolved when — and whether the side treated as fixed is really fixed.
+
+- **DWX-FLAGS-1 — a second route through a command dropped its flags** (on-demand routine run 5, RW 3.19): `run` checks
+  and applies its custody, lease and trace flags on the source path, and dispatches a `.dwx` to its own function first,
+  which read four of them. `--broker daemon` and `--lease` ran an artifact under no custody, in silence. The sandboxed path
+  had been the same until PS-B-05 gave it an allowlist. Search key: for every command, list each route its dispatcher can
+  take, and ask of each route which flags it applies — an allowlist per route, never a list of refusals.
+
 ### 11.5 Operational traps, recorded because each one cost time
 
 Beyond those in §8: **WSL `nohup setsid` detached jobs do not survive** — use the harness's background
@@ -1689,6 +1704,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   tests included. **Now a hook** (run 15's lesson — a rule a run must remember is one it forgets): `scripts/clippy.sh` stamps
   a hash of the Rust inputs it passed, and `pre-commit` refuses a commit staging Rust inputs that hash otherwise — git only,
   so a commit made while a suite holds the build lock still goes through when the lint ran first.
+
+- **A count held in a field can still be fed by a global, through the function that raises it** (on-demand routine run
+  5, RW 7.20): the row for a once-seen red said the count was a field of the struct each test makes "and nothing global
+  feeds it that a read found" — the read stopped at the method that increments it and missed that its caller opens a
+  window on the PROCESS-WIDE egress log, which two tests beside it write. To clear a once-seen red of global state, read
+  every call the asserting path makes, transitively, for a `static`; and reproduce it with its neighbours: a frozen copy of
+  the test binary, its filter run a few hundred times at `--test-threads 16`, turned "once on the laptop" into 13 of 400
+  in the VM, and the fixed binary beside it, under the same load, into the control (0 of 400).
 
 ### 11.6 If you are an assistant with memory, keep it current
 

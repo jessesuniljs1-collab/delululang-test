@@ -130,6 +130,7 @@ fn full_root(grants: &Grants) -> RootVal {
         // wrote with a path in it.
         plugins: Vec::new(),
         plugins_allow: Vec::new(),
+        lease: None,
         console: true,
         fs_read: vec![std::env::current_dir().unwrap_or_default()],
         fs_write: vec![std::env::current_dir().unwrap_or_default()],
