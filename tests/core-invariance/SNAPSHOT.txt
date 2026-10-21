@@ -6489,6 +6489,110 @@ error[DL0406]: type `Box` expects 1 argument(s), found 2
 
 1 error(s)
 
+===== tests/conformance/reject/DL0407_literal_non_exhaustive.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0407",
+      "explanation_id": "E-DL0407",
+      "message": "non-exhaustive match: missing _",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 203,
+            "col": 4,
+            "line": 9
+          },
+          "file": "tests/conformance/reject/DL0407_literal_non_exhaustive.delulu",
+          "label": "add the missing arms or a `_` wildcard",
+          "start": {
+            "byte": 167,
+            "col": 3,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0407_literal_non_exhaustive.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0407]: non-exhaustive match: missing _
+  --> tests/conformance/reject/DL0407_literal_non_exhaustive.delulu:6:3
+   |
+ 6 |   match n {
+   |   ^^^^^^^^^ add the missing arms or a `_` wildcard
+  explain: delulu explain E-DL0407
+
+1 error(s)
+
+===== tests/conformance/reject/DL0407_nested_non_exhaustive.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0407",
+      "explanation_id": "E-DL0407",
+      "message": "non-exhaustive match: missing Some(Blue)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 290,
+            "col": 4,
+            "line": 12
+          },
+          "file": "tests/conformance/reject/DL0407_nested_non_exhaustive.delulu",
+          "label": "add the missing arms or a `_` wildcard",
+          "start": {
+            "byte": 221,
+            "col": 3,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0407_nested_non_exhaustive.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0407]: non-exhaustive match: missing Some(Blue)
+  --> tests/conformance/reject/DL0407_nested_non_exhaustive.delulu:8:3
+   |
+ 8 |   match o {
+   |   ^^^^^^^^^ add the missing arms or a `_` wildcard
+  explain: delulu explain E-DL0407
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0407_non_exhaustive.delulu :: check --json =====
 exit 1
 --- stdout ---

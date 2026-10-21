@@ -747,7 +747,7 @@
     {"id":"file:scripts/suite.sh","kind":"other","name":"suite.sh","path":"scripts/suite.sh","lines":59},
     {"id":"file:scripts/third-party-notices.py","kind":"other","name":"third-party-notices.py","path":"scripts/third-party-notices.py","lines":207},
     {"id":"file:tests/conformance/witnesses.toml","kind":"other","name":"witnesses.toml","path":"tests/conformance/witnesses.toml","lines":2916,"entrenched":{"owner":"@jessesuniljs1-collab","pattern":"/tests/conformance/witnesses.toml","file":".github/CODEOWNERS","line":33}},
-    {"id":"file:tests/core-invariance/SNAPSHOT.txt","kind":"other","name":"SNAPSHOT.txt","path":"tests/core-invariance/SNAPSHOT.txt","lines":11075},
+    {"id":"file:tests/core-invariance/SNAPSHOT.txt","kind":"other","name":"SNAPSHOT.txt","path":"tests/core-invariance/SNAPSHOT.txt","lines":11179},
     {"id":"file:tests/corpus/tier4-multimodule/archive/delulu.toml","kind":"other","name":"delulu.toml","path":"tests/corpus/tier4-multimodule/archive/delulu.toml","lines":14},
     {"id":"file:tests/corpus/tier4-multimodule/policy/delulu.toml","kind":"other","name":"delulu.toml","path":"tests/corpus/tier4-multimodule/policy/delulu.toml","lines":16},
     {"id":"file:tests/corpus/tier4-multimodule/reading/delulu.toml","kind":"other","name":"delulu.toml","path":"tests/corpus/tier4-multimodule/reading/delulu.toml","lines":10},
