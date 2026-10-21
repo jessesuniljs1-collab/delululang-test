@@ -4947,3 +4947,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   4. On WASM: maps (then `get_with`, `str` of a map), a list of options.
   5. RW 4.66 (open by reason: a same-uid process reads the secret store anyway), 4.67, 6.1, 6.2.
   6. *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 (evening) — EPOCH-WINDOW-1: a broker test timed the daemon's shutdown inside its window (RW 7.21) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/epoch-window`   Pull request: see the branch   Base: `3af2b2a`
+- **Synced first:** `origin/master` = `3af2b2a`, nothing new from a routine. CI read: `launch/2.0.0` `5d5ba5a` — `everything`
+  `39566831246` **success on every job** (`miri-slow` included) and the release dry run `39566838279` **success**; `6863bf7`'s
+  `everything` `39562457688` success on every job (its `miri-slow` finished); the push runs `39565269313` (`0439453`) and
+  `39566586112` (`a2fb0cd`) and the nightly `39567648331` (`a2fb0cd`) success; **`39569868995` (`3af2b2a`, push) failure** —
+  this entry.
+- What: `V2_LOG.md` (2026-10-21, the evening entry).
+- Files and folders: M `crates/delulu/src/brokerd.rs` (the test), `docs/REMAINING_WORK.md` (7.21),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new (the timing rule held: the runner, not the custody).
+- Open / next: this branch's CI; then RW 3.21's rest (the actor table in the code), P9-05's open steps, maps on WASM.
