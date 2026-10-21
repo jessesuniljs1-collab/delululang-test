@@ -128,7 +128,16 @@ enum Ty {
     // in declaration order (`RecordDesc`). Shared, as the interpreter's `Rc<RefCell<…>>` is: `let q = p` names one cell,
     // so `q.x = 1` is seen through `p`.
     Record(u32),
+    // RW 3.4: a `Map[K, V]` — a key of `Int`, `Bool` or `Str`, a value a list may hold — an i32 pointer to a header like a
+    // list's, `[len:i32][cap:i32][data:i32]`, whose `data` holds `cap` 16-byte pairs: the key's 8-byte slot, then the
+    // value's. The pairs are kept ascending by key, as the interpreter's `BTreeMap` iterates them; the host finds and
+    // places each key by the interpreter's own `MapKey` order (`delulu:map`), so the two engines cannot order keys two
+    // ways. Shared, as the interpreter's `Rc<RefCell<…>>` is: `let n = m` names one header.
+    Map(Scalar, Scalar),
 }
+
+/// The bytes of one key-and-value pair in a map's data (`Ty::Map`): the key's slot, then the value's.
+const MAP_PAIR_BYTES: i32 = 16;
 
 /// The list header's fields (`Ty::List`): its length, its capacity in slots, and a pointer to its slots.
 const LIST_LEN: u64 = 0;
@@ -298,7 +307,7 @@ fn desc_ptr(cx: &Cx, t: Ty) -> Result<i32, CompileError> {
 }
 
 /// The descriptor the host rebuilds a value of type `t` by (`reify.rs`): the type, then each record and sum it reaches,
-/// each after a `|`. A type is `i` `b` `f` `s` `u` (`Int`, `Bool`, `Float`, `Str`, `Unit`), `o`T, `r`TE, `l`T, `R`n`.` or
+/// each after a `|`. A type is `i` `b` `f` `s` `u` (`Int`, `Bool`, `Float`, `Str`, `Unit`), `o`T, `r`TE, `l`T, `m`KV, `R`n`.` or
 /// `E`n`.` (record or sum `n`); a record is `R`n`=`Name`{`field`:`T`,`…`}`, a sum `E`n`={`Ctor`(`T…`)`,`…`}`, its
 /// constructors in tag order. A type holding a foreign handle has none: it is opaque, and the checker refuses `str` and
 /// `==` of it.
@@ -322,6 +331,11 @@ fn type_desc(env: &EnumEnv, t: Ty) -> Result<String, CompileError> {
             Ty::List(s) => {
                 out.push('l');
                 ty(s.to_ty(), out, todo)?;
+            }
+            Ty::Map(k, v) => {
+                out.push('m');
+                ty(k.to_ty(), out, todo)?;
+                ty(v.to_ty(), out, todo)?;
             }
             Ty::Record(n) => {
                 out.push_str(&format!("R{n}."));
@@ -655,6 +669,14 @@ struct Imports {
     /// descriptor (`type_desc`, `reify.rs`).
     value_display: u32,
     value_eq: u32,
+    /// `delulu:map` — a `Map`'s header made, a key found, placed or removed by the interpreter's own `MapKey` order, and
+    /// its keys or values as a new list (RW 3.4). `u32::MAX` when the module uses no map.
+    map_new: u32,
+    map_find: u32,
+    map_put: u32,
+    map_remove_at: u32,
+    map_keys: u32,
+    map_values: u32,
 }
 
 /// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
@@ -706,7 +728,8 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::Option(..)
         | Ty::Enum(_)
         | Ty::List(_)
-        | Ty::Record(_) => Some(ValType::I32),
+        | Ty::Record(_)
+        | Ty::Map(..) => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -724,6 +747,25 @@ fn list_element(t: Ty) -> Option<Scalar> {
     match ty_to_scalar(t)? {
         s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_) | Scalar::Record(_)) => Some(s),
         _ => None,
+    }
+}
+
+/// The key of a `Map` (`Ty::Map`): an `Int`, a `Bool` or a `Str`, the three `MapKey` holds — the checker refuses any other.
+fn map_key(t: Ty) -> Option<Scalar> {
+    match t {
+        Ty::I64 => Some(Scalar::I64),
+        Ty::I32 => Some(Scalar::I32),
+        Ty::Str => Some(Scalar::Str),
+        _ => None,
+    }
+}
+
+/// The key's kind as the host's `delulu:map` imports read it: `0` an `Int`, `1` a `Bool`, `2` a `Str` (its pointer).
+fn map_key_tag(k: Scalar) -> i32 {
+    match k {
+        Scalar::I64 => 0,
+        Scalar::I32 => 1,
+        _ => 2,
     }
 }
 
@@ -771,6 +813,12 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
             if name == "List" {
                 if let [t] = &args[..] {
                     return Some(Ty::List(list_element(wasm_ty(env, t)?)?));
+                }
+                return None;
+            }
+            if name == "Map" {
+                if let [k, v] = &args[..] {
+                    return Some(Ty::Map(map_key(wasm_ty(env, k)?)?, list_element(wasm_ty(env, v)?)?));
                 }
                 return None;
             }
@@ -835,7 +883,15 @@ fn module_shows_values(env: &EnumEnv, module: &Module, node_types: &HashMap<Node
     let compound = |e: &Expr| {
         matches!(
             node_types.get(&e.id()),
-            Some(Type::List(_) | Type::Option(_) | Type::Result(..) | Type::Record(..) | Type::Sum(..) | Type::Var(_))
+            Some(
+                Type::List(_)
+                    | Type::Map(..)
+                    | Type::Option(_)
+                    | Type::Result(..)
+                    | Type::Record(..)
+                    | Type::Sum(..)
+                    | Type::Var(_)
+            )
         )
     };
     let hit = |e: &Expr| match e {
@@ -857,6 +913,18 @@ fn module_uses_lists(env: &EnumEnv, module: &Module) -> bool {
         _ => false,
     };
     module_any(env, module, &hit, true)
+}
+
+/// Does any compiled body make a `Map` (the builtin `Map()`) or hold a value the checker typed as one? Then the module
+/// carries `delulu:map`, and every other module is unchanged (RW 3.4). Without the checker's types (`compile_module`) only
+/// a `Map()` is seen, and a method of a map the module did not make is refused where it is compiled.
+fn module_uses_maps(env: &EnumEnv, module: &Module, node_types: &HashMap<NodeId, delulu_check::Type>) -> bool {
+    let hit = |e: &Expr| {
+        matches!(node_types.get(&e.id()), Some(delulu_check::Type::Map(..)))
+            || matches!(e, Expr::Call { callee, args, .. } if args.is_empty()
+                && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "Map"))
+    };
+    module_any(env, module, &hit, false)
 }
 
 /// Does any compilable function call one of the `Str` methods the host runs (`STR_METHODS`)?
@@ -1080,6 +1148,12 @@ fn compile_module_typed(
         float_rem: u32::MAX,
         value_display: u32::MAX,
         value_eq: u32::MAX,
+        map_new: u32::MAX,
+        map_find: u32::MAX,
+        map_put: u32::MAX,
+        map_remove_at: u32::MAX,
+        map_keys: u32::MAX,
+        map_values: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -1173,6 +1247,17 @@ fn compile_module_typed(
         imp.value_display = n_imports;
         imp.value_eq = n_imports + 1;
         n_imports += 2;
+    }
+    // RW 3.4: the `delulu:map` imports follow (so a program without a map is unchanged).
+    let needs_maps = module_uses_maps(&env, module, node_types);
+    if needs_maps {
+        imp.map_new = n_imports;
+        imp.map_find = n_imports + 1;
+        imp.map_put = n_imports + 2;
+        imp.map_remove_at = n_imports + 3;
+        imp.map_keys = n_imports + 4;
+        imp.map_values = n_imports + 5;
+        n_imports += 6;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
                                 // `__concat`, `__int_to_str`, `__alloc` and `__str_len` follow; user functions after them.
@@ -1365,6 +1450,18 @@ fn compile_module_typed(
         types.ty().function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // eq(a, b, desc) -> Bool
         next_type += 2;
     }
+    let (mut map_new_ty, mut map_key_ty, mut map_remove_ty, mut map_list_ty) = (0, 0, 0, 0);
+    if needs_maps {
+        map_new_ty = next_type;
+        types.ty().function([], [ValType::I32]); // new() -> map
+        map_key_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I64], [ValType::I32]); // find/put(map, kind, key) -> i32
+        map_remove_ty = next_type + 2;
+        types.ty().function([ValType::I32, ValType::I32], []); // remove_at(map, index)
+        map_list_ty = next_type + 3;
+        types.ty().function([ValType::I32], [ValType::I32]); // keys/values(map) -> list
+        next_type += 4;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -1480,6 +1577,14 @@ fn compile_module_typed(
     if needs_values {
         imports.import("delulu:value", "display", EntityType::Function(value_display_ty));
         imports.import("delulu:value", "eq", EntityType::Function(value_eq_ty));
+    }
+    if needs_maps {
+        imports.import("delulu:map", "new", EntityType::Function(map_new_ty));
+        imports.import("delulu:map", "find", EntityType::Function(map_key_ty));
+        imports.import("delulu:map", "put", EntityType::Function(map_key_ty));
+        imports.import("delulu:map", "remove_at", EntityType::Function(map_remove_ty));
+        imports.import("delulu:map", "keys", EntityType::Function(map_list_ty));
+        imports.import("delulu:map", "values", EntityType::Function(map_list_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, `__alloc`, `__str_len`, users,
@@ -2668,6 +2773,19 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
         }
     }
     match e {
+        // `Map()` where a map is expected: the expected type is its type — a record or a sum as its value included, which
+        // the checker's types alone do not name here (`checked_ty`).
+        Expr::Call { callee, args, .. }
+            if args.is_empty()
+                && matches!(expected, Ty::Map(..))
+                && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "Map") =>
+        {
+            if cx.imp.map_new == u32::MAX {
+                return Err(CompileError::Unsupported("`Map()` without the map interface".into()));
+            }
+            cx.emit(Instruction::Call(cx.imp.map_new));
+            Ok(())
+        }
         Expr::If { cond, then_, else_, .. } => {
             if compile_expr(cond, cx)? != Ty::I32 {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
@@ -2726,6 +2844,7 @@ fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
         Type::Option(p) => Ty::Option(ty_to_scalar(checked_ty(p)?)?),
         Type::Result(o, e) => Ty::Result(ty_to_scalar(checked_ty(o)?)?, ty_to_scalar(checked_ty(e)?)?),
         Type::List(e) => Ty::List(list_element(checked_ty(e)?)?),
+        Type::Map(k, v) => Ty::Map(map_key(checked_ty(k)?)?, list_element(checked_ty(v)?)?),
         _ => return None,
     })
 }
@@ -3412,6 +3531,9 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             if let Ty::List(s) = recv_ty {
                 return compile_list_method(s, &name.name, args, cx);
             }
+            if let Ty::Map(k, v) = recv_ty {
+                return compile_map_method(k, v, &name.name, args, cx);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -3423,6 +3545,17 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             // RW 3.4: `parse_int(s)`, parsed host-side by the interpreter's own rule into `Some(n)` or `None`.
             if name == "parse_int" && args.len() == 1 {
                 return compile_parse_int(&args[0], cx);
+            }
+            // RW 3.4: `Map()`, an empty map of the key and value types the checker gave the call.
+            if name == "Map" && args.is_empty() {
+                let Some(Ty::Map(k, v)) = cx.node_types.get(&e.id()).and_then(checked_ty) else {
+                    return Err(CompileError::Unsupported("`Map()` whose key and value types are not known here".into()));
+                };
+                if cx.imp.map_new == u32::MAX {
+                    return Err(CompileError::Unsupported("`Map()` without the map interface".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.map_new));
+                return Ok(Ty::Map(k, v));
             }
             if name == "parse_float" && args.len() == 1 {
                 return compile_parse_float(&args[0], cx);
@@ -3482,7 +3615,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     }
                     // A list, an option, a result, a sum or a record: rendered host-side by the interpreter's own
                     // `display`, over the value rebuilt by its type's descriptor.
-                    t @ (Ty::List(_) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
+                    t @ (Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
                         if cx.imp.value_display != u32::MAX =>
                     {
                         cx.emit(Instruction::I32Const(desc_ptr(cx, t)?));
@@ -3922,6 +4055,149 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
     }
 }
 
+/// Compile `key` as a map's key and leave it as the `i64` the `delulu:map` imports read: an `Int` itself, a `Bool` or a
+/// `Str`'s pointer widened.
+fn compile_map_key(key: &Expr, k: Scalar, cx: &mut Cx) -> Result<u32, CompileError> {
+    if compile_expr(key, cx)? != k.to_ty() {
+        return Err(CompileError::Unsupported("a `Map` key of another type than the map's".into()));
+    }
+    if k != Scalar::I64 {
+        cx.emit(Instruction::I64ExtendI32U);
+    }
+    let raw = cx.alloc_local(Ty::I64)?;
+    cx.emit(Instruction::LocalSet(raw));
+    Ok(raw)
+}
+
+/// Push the address of the value slot of pair `index` (an i32 local) of the map at `map` (an i32 local).
+fn emit_map_value_addr(cx: &mut Cx, map: u32, index: u32) {
+    cx.emit(Instruction::LocalGet(map));
+    cx.emit(Instruction::I32Load(list_mem(LIST_DATA)));
+    cx.emit(Instruction::LocalGet(index));
+    cx.emit(Instruction::I32Const(MAP_PAIR_BYTES));
+    cx.emit(Instruction::I32Mul);
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::I32Const(8));
+    cx.emit(Instruction::I32Add);
+}
+
+/// A `Map` method (RW 3.4; the eight of `prim::call_map_method`), the map's pointer on the stack. The host finds and
+/// places each key by the interpreter's own `MapKey` order (`delulu:map`); the guest reads and writes the value slots, so a
+/// value is the guest's own, shared as a list's elements are. Arguments are computed before the map is touched, in the
+/// order written, as the interpreter computes them.
+fn compile_map_method(k: Scalar, v: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.map_find == u32::MAX {
+        return Err(CompileError::Unsupported("a `Map` method without the map interface".into()));
+    }
+    let tag = map_key_tag(k);
+    // `Some(value of pair i)` when `i` (an i32 local) is a pair's index, else `None`; `then` runs after the cell is built,
+    // inside the `Some` arm (`remove` takes the pair out there).
+    let option_of_pair = |cx: &mut Cx, map: u32, i: u32, then: &dyn Fn(&mut Cx)| -> Result<Ty, CompileError> {
+        let opt = Ty::Option(v);
+        let ctors = cx.env.ctors_of(opt).expect("Option has constructors");
+        let tag_of = |n: &str| ctors.iter().position(|(c, _)| c == n).expect("Option's constructor") as i32;
+        let (some, none) = (tag_of("Some"), tag_of("None"));
+        let cell = cx.alloc_local(Ty::I32)?;
+        cx.emit(Instruction::I32Const(variant_cell_size(&ctors)));
+        cx.emit(Instruction::Call(cx.alloc_fn));
+        cx.emit(Instruction::LocalSet(cell));
+        cx.emit(Instruction::LocalGet(i));
+        cx.emit(Instruction::I32Const(0));
+        cx.emit(Instruction::I32GeS);
+        cx.emit(Instruction::If(BlockType::Empty));
+        cx.emit(Instruction::LocalGet(cell));
+        cx.emit(Instruction::I32Const(some));
+        cx.emit(Instruction::I32Store(u32_at()));
+        cx.emit(Instruction::LocalGet(cell));
+        cx.emit(Instruction::I32Const(field_offset(0)));
+        cx.emit(Instruction::I32Add);
+        emit_map_value_addr(cx, map, i);
+        load_scalar(cx, v);
+        store_scalar(cx, v);
+        then(cx);
+        cx.emit(Instruction::Else);
+        cx.emit(Instruction::LocalGet(cell));
+        cx.emit(Instruction::I32Const(none));
+        cx.emit(Instruction::I32Store(u32_at()));
+        cx.emit(Instruction::End);
+        cx.emit(Instruction::LocalGet(cell));
+        Ok(opt)
+    };
+    // The map's pointer, then the key's raw value, then the pair's index (or -1) from the host.
+    let find = |cx: &mut Cx, key: &Expr| -> Result<(u32, u32), CompileError> {
+        let map = cx.alloc_local(Ty::I32)?;
+        cx.emit(Instruction::LocalSet(map));
+        let raw = compile_map_key(key, k, cx)?;
+        cx.emit(Instruction::LocalGet(map));
+        cx.emit(Instruction::I32Const(tag));
+        cx.emit(Instruction::LocalGet(raw));
+        cx.emit(Instruction::Call(cx.imp.map_find));
+        let i = cx.alloc_local(Ty::I32)?;
+        cx.emit(Instruction::LocalSet(i));
+        Ok((map, i))
+    };
+    match (method, args) {
+        ("len", []) => {
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::I64ExtendI32U);
+            Ok(Ty::I64)
+        }
+        ("is_empty", []) => {
+            cx.emit(Instruction::I32Load(list_mem(LIST_LEN)));
+            cx.emit(Instruction::I32Eqz);
+            Ok(Ty::I32)
+        }
+        ("get", [key]) => {
+            let (map, i) = find(cx, key)?;
+            option_of_pair(cx, map, i, &|_| {})
+        }
+        ("contains_key", [key]) => {
+            let (_, i) = find(cx, key)?;
+            cx.emit(Instruction::LocalGet(i));
+            cx.emit(Instruction::I32Const(0));
+            cx.emit(Instruction::I32GeS);
+            Ok(Ty::I32)
+        }
+        // The key and the value are computed before the map is touched; the host then places the key (a new pair, the
+        // data grown when it must) and answers its value slot, which the guest fills — a key already held keeps its
+        // place, its value replaced, as `BTreeMap::insert` does.
+        ("insert", [key, value]) => {
+            let map = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(map));
+            let raw = compile_map_key(key, k, cx)?;
+            compile_expr_as(value, cx, v.to_ty())?;
+            let val = cx.alloc_local(v.to_ty())?;
+            cx.emit(Instruction::LocalSet(val));
+            cx.emit(Instruction::LocalGet(map));
+            cx.emit(Instruction::I32Const(tag));
+            cx.emit(Instruction::LocalGet(raw));
+            cx.emit(Instruction::Call(cx.imp.map_put));
+            cx.emit(Instruction::LocalGet(val));
+            store_scalar(cx, v);
+            Ok(Ty::Unit)
+        }
+        ("remove", [key]) => {
+            let (map, i) = find(cx, key)?;
+            let remove_at = cx.imp.map_remove_at;
+            option_of_pair(cx, map, i, &|cx: &mut Cx| {
+                cx.emit(Instruction::LocalGet(map));
+                cx.emit(Instruction::LocalGet(i));
+                cx.emit(Instruction::Call(remove_at));
+            })
+        }
+        // `keys` and `values` walk the same pairs in the same order, so a caller may zip them (the interpreter's promise).
+        ("keys", []) => {
+            cx.emit(Instruction::Call(cx.imp.map_keys));
+            Ok(Ty::List(k))
+        }
+        ("values", []) => {
+            cx.emit(Instruction::Call(cx.imp.map_values));
+            Ok(Ty::List(v))
+        }
+        _ => Err(CompileError::Unsupported(format!("the Map method `.{method}`"))),
+    }
+}
+
 /// `for x in xs { body }` over the list as it is when the loop begins — its length and its slots are read once, so a
 /// `push` in the body neither extends the walk nor moves it (the interpreter iterates a snapshot). `break` leaves the
 /// walk; `continue` goes on to the next element.
@@ -4078,7 +4354,7 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     // values rebuilt by their type's descriptor through one map of cells.
     if lt == rt
         && matches!(op, Eq | Ne)
-        && matches!(lt, Ty::List(_) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
+        && matches!(lt, Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::Record(_))
         && cx.imp.value_eq != u32::MAX
     {
         cx.emit(Instruction::I32Const(desc_ptr(cx, lt)?));

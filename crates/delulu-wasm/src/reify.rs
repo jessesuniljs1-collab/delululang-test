@@ -25,6 +25,8 @@ pub(crate) enum TyDesc {
     Option(Box<TyDesc>),
     Result(Box<TyDesc>, Box<TyDesc>),
     List(Box<TyDesc>),
+    /// A `Map[K, V]` (RW 3.4): its header as a list's, its pairs 16 bytes each — the key's slot, then the value's.
+    Map(Box<TyDesc>, Box<TyDesc>),
     Record(u32),
     Sum(u32),
 }
@@ -40,7 +42,7 @@ pub(crate) struct Desc {
 }
 
 /// Parse a descriptor — `T` then `|R<n>=<Name>{<field>:<T>,…}` and `|E<n>={<Ctor>(<T>…),…}` for each record and sum. A
-/// type is `i` `b` `f` `s` `u`, `o<T>`, `r<T><T>`, `l<T>`, `R<n>.` or `E<n>.`. `None` for anything else.
+/// type is `i` `b` `f` `s` `u`, `o<T>`, `r<T><T>`, `l<T>`, `m<K><V>`, `R<n>.` or `E<n>.`. `None` for anything else.
 pub(crate) fn parse(text: &str) -> Option<Desc> {
     let mut p = Parser { s: text.as_bytes(), at: 0 };
     let mut d = Desc { root: Some(p.ty()?), ..Desc::default() };
@@ -130,6 +132,10 @@ impl Parser<'_> {
             b'o' => TyDesc::Option(Box::new(self.ty()?)),
             b'r' => TyDesc::Result(Box::new(self.ty()?), Box::new(self.ty()?)),
             b'l' => TyDesc::List(Box::new(self.ty()?)),
+            b'm' => {
+                let k = self.ty()?;
+                TyDesc::Map(Box::new(k), Box::new(self.ty()?))
+            }
             b'R' => {
                 let n = self.num()?;
                 self.expect(b'.')?;
@@ -151,13 +157,14 @@ pub(crate) struct Reifier<'m> {
     desc: &'m Desc,
     records: HashMap<u32, Value>,
     lists: HashMap<u32, Value>,
+    maps: HashMap<u32, Value>,
     /// The variant cells being rebuilt, innermost last — one met again inside itself is refused.
     inside: HashSet<u32>,
 }
 
 impl<'m> Reifier<'m> {
     pub(crate) fn new(mem: &'m [u8], desc: &'m Desc) -> Self {
-        Reifier { mem, desc, records: HashMap::new(), lists: HashMap::new(), inside: HashSet::new() }
+        Reifier { mem, desc, records: HashMap::new(), lists: HashMap::new(), maps: HashMap::new(), inside: HashSet::new() }
     }
 
     /// The value of the descriptor's type whose cell is at `ptr`.
@@ -239,6 +246,31 @@ impl<'m> Reifier<'m> {
                 for i in 0..len {
                     let ev = self.slot(Self::offset(data, 8 * u64::from(i))?, elem)?;
                     cell.borrow_mut().push(ev);
+                }
+                Ok(v)
+            }
+            // A map's pairs, each key made the interpreter's `MapKey` — so `display` walks them in its own order and `eq`
+            // compares them as it compares its own, whatever order a hand-written module left them in.
+            TyDesc::Map(kt, vt) => {
+                if let Some(v) = self.maps.get(&ptr) {
+                    return Ok(v.clone());
+                }
+                let len = self.u32_at(ptr)?;
+                let data = self.u32_at(Self::offset(ptr, 8)?)?;
+                let end = u64::from(data) + 16 * u64::from(len);
+                if end > self.mem.len() as u64 {
+                    return Err(format!("a map at {ptr:#x} reaches past the guest's memory"));
+                }
+                let cell = Rc::new(RefCell::new(std::collections::BTreeMap::new()));
+                let v = Value::Map(cell.clone());
+                self.maps.insert(ptr, v.clone());
+                for i in 0..len {
+                    let pair = Self::offset(data, 16 * u64::from(i))?;
+                    let key = self.slot(pair, kt)?;
+                    let key = delulu_runtime::value::MapKey::of(&key)
+                        .ok_or_else(|| format!("a map at {ptr:#x} holds a key that cannot be one"))?;
+                    let value = self.slot(Self::offset(pair, 8)?, vt)?;
+                    cell.borrow_mut().insert(key, value);
                 }
                 Ok(v)
             }
