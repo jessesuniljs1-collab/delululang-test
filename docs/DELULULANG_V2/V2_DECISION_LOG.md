@@ -3631,6 +3631,9 @@ modified them.
    e-mail notifications on** and **`enabled: false`** (read back from the API at creation). Schedule `5 */5 * * *` UTC:
    cron cannot express a 5 h 5 min interval (the routines' minimum is one hour, the expression is cron), so it fires every
    five hours at five past — and the 20:05 → 00:05 gap is four hours. The first routine stays disabled.
+   **Amended 2026-10-21, the owner's choice:** he saw the four-hour gap (*"not following 5 hr and 5 min gap as I told"*) and
+   chose every six hours: `5 */6 * * *` UTC (05:35, 11:35, 17:35, 23:35 IST), every gap six hours, so never under 5 h 5 min.
+   Set through the routine API, read back: `cron_expression` `5 */6 * * *`, `enabled: false`.
 2. **Its prompt** keeps the owner's own lines from the first routine verbatim (CI first, finish what a limit cut off, read
    the last commits, record everything, the Survey and doctor, commit as `jessesuniljs1-collab`) and the hard limits
    (only `origin`; no tag or release; no licence change; no kernel image), adds the commission's (never invent a contact,

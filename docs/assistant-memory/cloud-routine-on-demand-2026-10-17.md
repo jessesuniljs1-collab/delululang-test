@@ -11,8 +11,9 @@ metadata:
 Created 2026-10-17 at Jesse's request: **`trig_01HFG6usfzmDAPQigiDu9DLq`**, "Head Chef — on demand (start by hand)" (renamed at Jesse's request 2026-10-17; first named "DeluluLang head chef — …") — https://claude.ai/code/routines/trig_01HFG6usfzmDAPQigiDu9DLq. **Created `enabled: false`**; Jesse starts it.
 Settings copied from the first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, still disabled): Opus 5.5, repo
 `delululang-test`, env `env_012Mxeiw6zvfyxPy9ZEEFf3p` (Default), tools Bash/Read/Write/Edit/Glob/Grep/Agent/WebFetch/
-WebSearch, Claude-Docs connector, autofix on PR. **Push + e-mail notifications ON.** Cron `5 */5 * * *` UTC — Jesse asked
-"every 5hr and 5 mins"; cron can't express that interval, so every 5 h at :05 (20:05→00:05 is 4 h).
+WebSearch, Claude-Docs connector, autofix on PR. **Push + e-mail notifications ON.** Cron **`5 */6 * * *` UTC since 2026-10-21** (05:35, 11:35, 17:35, 23:35 IST) — Jesse asked
+"every 5hr and 5 mins"; cron can't express that interval. The first cron, `5 */5`, left a 4 h gap nightly (20:05→00:05 UTC);
+on 2026-10-21 he saw it and chose every 6 hours (never under 5 h 05 min).
 
 Its prompt: follow `docs/CLOUD_ROUTINE.md` (the *Since 2026-10-17* paragraphs), mandate = the 2026-10-17 commission, inbox
 = newest `docs/CLOUD_SYNC_LOG.md` *Open / next*; keeps Jesse's own lines verbatim (check CI first; finish what a limit cut

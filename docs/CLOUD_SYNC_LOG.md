@@ -5033,3 +5033,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - Open / next: (1) the three witness runs and `39601103948`; (2) RW 7.22's root cause from the next red's words; (3) the path
   in the chain's record; methods; maps on WASM.
+
+### 2026-10-21 (evening) — the routine every six hours; the 2026-09-17 agent worktrees removed; RW 7.22's witnesses green (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launcher-witness` (its second commit)   Pull request: #29
+- **The routine's schedule (the owner):** *"Routine / Scheduled Task u created is not following 5 hr and 5 min gap as I
+  told"*. Read back from the API: `5 */5 * * *` UTC, `enabled: false` — every five hours, with a four-hour gap each night
+  (20:05 → 00:05 UTC, 01:35 → 05:35 IST); cron has no 5 h 5 min interval. Offered every six hours or the same; he chose
+  **every six hours**: set through the API to `5 */6 * * *` (05:35, 11:35, 17:35, 23:35 IST), read back `enabled: false` —
+  still paused, the owner's switch. `docs/CLOUD_ROUTINE.md`, `HANDOFF.md` §0, D-V2-146 (amended) and the memory copy say so.
+- **The two agent worktrees of 2026-09-17** removed on the owner's word, both checks first, their notes kept outside the
+  repository — `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`.
+- **RW 7.22's reproduction:** `witness.yml` on `windows-latest` at `fa4021c`, the test alone, three times — `39602082207`,
+  `39602087235`, `39602091804`: **success** each. Not reproduced; the witness now says why when it next fails.
+- **CI watched with a Monitor** for the rest of the session (the owner asked how CI is watched): each run's end reported
+  as it lands, a failed job named.
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md`
+  (7.22), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`. Deleted, renamed:
+  nothing tracked.
+- Survey and doctor (after the last edit): in the commit message.

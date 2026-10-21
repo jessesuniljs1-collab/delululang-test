@@ -5,8 +5,9 @@ time, I will be running it occasionally whenever I can't use my laptop. Let it b
 whenever I need … Enable Push and Email notifications for new routine. Let new routine run every 5hr and 5 mins."* The
 routine is **`trig_01HFG6usfzmDAPQigiDu9DLq`**, *DeluluLang head chef — on demand (start by hand)*: Opus 5.5, the
 `delululang-test` repository, the Default environment, the Claude-Docs connector, push and e-mail notifications,
-schedule `5 */5 * * *` (UTC: 00:05, 05:05, 10:05, 15:05, 20:05 — cron has no 5 h 5 min interval, so it is every five
-hours at five past, and the 20:05 → 00:05 gap is four hours). **Created paused**; the owner switches it on at
+schedule **`5 */6 * * *`** since 2026-10-21 (UTC 00:05, 06:05, 12:05, 18:05 — **05:35, 11:35, 17:35, 23:35 IST**, every gap
+six hours). Cron has no 5 h 5 min interval, and the first schedule, `5 */5 * * *`, left one four-hour gap each night (20:05 →
+00:05 UTC); the owner, 2026-10-21, chose every six hours — never under 5 h 5 min apart. **Created paused**; the owner switches it on at
 [claude.ai/code/routines](https://claude.ai/code/routines) and off when he is back. Its mandate is his commission of
 2026-10-17 (`docs/design/DeluluLang_Autonomous_Development_Prompt.md`), and step 4 below gives its work order. The
 first routine (`trig_01GG41tCGxZXyt7bZUid8Vuu`, the cloud period of 2026-09-28 → 2026-10-16) stays disabled. Everything
