@@ -329,3 +329,119 @@ fn a_read_through_a_dangling_link_is_refused_in_the_interpreters_words_on_wasm()
     assert!(!dir.join("outside").join("created.txt").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A loopback listener that keeps the first bytes of each of the first `n` connections, then hangs up on it. It gives
+/// up after `wait` with no connection, so a run that never connects cannot hang the test.
+fn listen(n: usize, wait: std::time::Duration) -> (u16, std::thread::JoinHandle<Vec<Vec<u8>>>) {
+    use std::io::Read;
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    let h = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        let mut start = std::time::Instant::now();
+        while seen.len() < n {
+            match l.accept() {
+                Ok((mut s, _)) => {
+                    s.set_nonblocking(false).unwrap();
+                    s.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+                    let mut buf = vec![0u8; 5];
+                    let mut got = 0;
+                    while got < buf.len() {
+                        match s.read(&mut buf[got..]) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => got += n,
+                        }
+                    }
+                    buf.truncate(got);
+                    seen.push(buf);
+                    start = std::time::Instant::now();
+                }
+                Err(_) if start.elapsed() < wait => std::thread::sleep(std::time::Duration::from_millis(5)),
+                Err(_) => break,
+            }
+        }
+        seen
+    });
+    (port, h)
+}
+
+/// RW 3.4: `root.http(hosts)` and `Cap[Http].get(url)` on the WASM engine, end to end on loopback — the interpreter's
+/// mint, order, egress client and words, since the host calls the interpreter's own. A URL that is not `https://` is
+/// answered `Refused` before anything is reached; a granted request (loopback, so `net.special=`) leaves as TLS to a
+/// listener that hangs up, the program told `Other`; a host outside the allowlist faults DL0904, its refusal recorded
+/// after its dispatch; a host the grant does not cover is DL0703 at the mint. Output, outcome, effect trace and the run
+/// report's egress reasons, engine against engine.
+#[test]
+fn http_on_the_wasm_engine_matches_the_interpreter() {
+    let dir = std::env::temp_dir().join(format!("delulu_wasm_http_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // One listener for both engines' runs, so the two read one program, its spans and its port alike.
+    let (port, seen) = listen(2, std::time::Duration::from_secs(20));
+    let program = format!(
+        "module fetch\n\nfn show(r: Result[Str, NetErr], out: Cap[Console]) ! {{Write}} {{\n  match r {{\n    \
+         Ok(body) => out.println(\"delivered \" + body),\n    \
+         Err(e) => out.println(match e {{ Refused => \"refused\", Timeout => \"timeout\", Other(m) => \"other\" }}),\n  }}\n}}\n\n\
+         fn main(root: Root) ! {{Net, Write}} {{\n  let out = root.console()\n  let h = root.http([\"127.0.0.1\"])\n  \
+         show(h.get(\"http://127.0.0.1/plain\"), out)\n  \
+         show(h.get(\"https://127.0.0.1:{port}/probe\"), out)\n  \
+         let r = h.get(\"https://elsewhere.example/\")\n  out.println(\"not reached\")\n}}\n"
+    );
+    std::fs::write(dir.join("fetch.delulu"), &program).unwrap();
+    std::fs::write(
+        dir.join("mint.delulu"),
+        "module mint\nfn main(root: Root) ! {Net} {\n  let h = root.http([\"evil.example\"])\n}\n",
+    )
+    .unwrap();
+    let run = |file: &str, engine: &str, grant: &str| {
+        let trace = format!("t_{engine}.jsonl");
+        let _ = std::fs::remove_file(dir.join("rep.json"));
+        let mut args = vec!["run", file, "--grant", "console", "--grant", grant, "--trace-effects", "--trace-out", &trace];
+        args.extend_from_slice(&["--report-out", "rep.json"]);
+        if engine == "wasm" {
+            args.extend_from_slice(&["--engine", "wasm"]);
+        }
+        let o = delulu_in(&dir, &args);
+        let traced = std::fs::read_to_string(dir.join(&trace)).unwrap_or_default();
+        let reasons: Vec<String> = std::fs::read_to_string(dir.join("rep.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(t.trim()).ok())
+            .and_then(|v| v["egress"]["records"].as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .map(|r| r["reason"].as_str().unwrap_or("").to_string())
+            .collect();
+        (o, traced, reasons)
+    };
+    let err = |o: &Output| String::from_utf8_lossy(&o.stderr).to_string();
+
+    let (i, i_trace, i_reasons) = run("fetch.delulu", "interp", "net.special=127.0.0.1");
+    let (w, w_trace, w_reasons) = run("fetch.delulu", "wasm", "net.special=127.0.0.1");
+    let first = seen.join().unwrap();
+    assert_eq!(stdout(&i), "refused\nother\n", "the interpreter: {}", err(&i));
+    assert_eq!(stdout(&w), stdout(&i), "the WASM engine's output: {}", err(&w));
+    assert_eq!((w.status.code(), i.status.code()), (Some(1), Some(1)));
+    for e in [err(&i), err(&w)] {
+        assert!(
+            e.contains("DL0904") && e.contains("host of `https://elsewhere.example/` is not in the granted allowlist"),
+            "{e}"
+        );
+    }
+    assert_eq!(first.len(), 2, "each engine's request reached the listener: {first:02x?}");
+    assert!(first.iter().all(|b| b.len() >= 3 && b[0] == 0x16 && b[1] == 0x03), "each left as TLS: {first:02x?}");
+    assert_eq!(w_trace, i_trace, "the effect traces");
+    assert_eq!(w_trace.matches("\"cap_kind\":\"Http\"").count(), 4, "three dispatches and one refusal: {w_trace}");
+    assert!(w_trace.contains("\"op\":\"get.refused\""), "{w_trace}");
+    assert_eq!(w_reasons, i_reasons, "the run report's egress reasons");
+    assert_eq!(i_reasons.first().map(String::as_str), Some("scheme"), "{i_reasons:?}");
+
+    // A host the grant does not cover is refused at the mint, in the interpreter's words.
+    let (i, _, _) = run("mint.delulu", "interp", "net=example.com");
+    let (w, _, _) = run("mint.delulu", "wasm", "net=example.com");
+    let words = "`network host` was not granted to this program — pass `--grant net=HOST`";
+    for e in [err(&i), err(&w)] {
+        assert!(e.contains("DL0703") && e.contains(words), "{e}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

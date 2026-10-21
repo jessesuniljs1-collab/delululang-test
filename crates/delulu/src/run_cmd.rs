@@ -266,6 +266,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         rand: grants.rand,
         fs_read_roots: grants.build_root().fs_read,
         fs_write_roots: grants.build_root().fs_write,
+        net: grants.net.clone(),
+        net_special: grants.net_special.clone(),
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
         stream_console: true,
@@ -1272,6 +1274,8 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             fs_read_roots: root.fs_read.clone(),
             fs_write_roots: root.fs_write.clone(),
             lease: root.lease.clone(), // RW 6.15: the remedy a refusal names
+            net: root.net.clone(),
+            net_special: root.net_special.clone(),
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
             stream_console: true, // WASM-OUTPUT-1: printed as printed, so a fault or a budget's stop loses none of it

@@ -7858,3 +7858,65 @@ none added or removed. 49.x was not taken: a major version is its own slice.
 (cargo-deny 0.20.2). On the updated lock: `delulu-wasm` whole, 172 passed, 0 failed; `egress_cli` 8, `wasm_cli` 14,
 `examples_run` 6 — all passed; `delulu-runtime --lib egress` 41 passed.
 `cargo fmt --all` changed exactly the two files CI named. clippy clean and stamped. The pull request's CI is the rest.
+
+## 2026-10-21 — the laptop: the network on the WASM engine — `root.http` and `Cap[Http].get` (RW 3.4); chapter five runs
+
+**Why this, now.** `http` was chapter five's last blocker on WASM: with its two network lines removed, the chapter compiled
+already (checked first, against `9c1d30b`'s binary — the uncalled `Secret` function does not stop it). And the network is
+the effect where a second implementation would cost most: the allowlist's path scopes (D-V2-139), the special-use rule
+(PS-B-02), redirects, the custody's chain (RW 4.46) — each written once, in the interpreter's code.
+
+**So the WASM host calls that code, and copies none of it.**
+- `root.http(hosts)`: the guest passes the list and its type descriptor (`desc_ptr`, #17's), and the host rebuilds the
+  `List[Str]` by the reifier.
+- It mints by `prim::call_root_method` over a root holding only the grants' `net`, `net_special` and `lease`. So each
+  requested entry must lie within a granted one, the `net.special=` subset is carried, and a refusal is the interpreter's
+  DL0703, remedy included (RW 6.15).
+- `Cap[Http].get(url)` follows the interpreter's order (`Interp::call_method`):
+  1. the dispatch record (the URL only, D-V2-128);
+  2. the custody on the URL's host — except for a URL that is not `https://`, which the effect answers `Refused` before
+     anything is reached (HTTP-SCHEME-1), so nothing is asked;
+  3. `egress::begin_fetch`, then `prim::call_cap_method`, the allowlist and the egress client entire;
+  4. an egress refusal after the custody allowed the host is said to the custody (`note_egress_refusal`);
+  5. a fault's refusal record follows its dispatch (RW 4.62).
+- The answer is built as `Result[Str, NetErr]` in the guest — `NetErr`'s cells are `IoErr`'s shape.
+- The codegen:
+  - `Ty::Http` (a `Cap[Http]` parameter lowers to it).
+  - The two imports, gated on the mint alone: a `Cap[Http]` comes from nowhere else, and `get` is also a list's method,
+    so a module whose only `get` is on a list imports no network interface.
+  - `get` is dispatched on the receiver's type, after it is compiled.
+  - `get_with` and `get_with_secret` stay DL1201.
+- The CLI hands the grants' `net` and `net_special` to both WASM paths (the `.dwx` one included).
+
+**Evidence.**
+- Chapter five on both engines, by hand, with its grants and `--trace-effects`: the same output, and the same trace byte
+  for byte, the real request to `https://example.com/health` included (answered 404 → "fetch failed" on both).
+- `wasm_cli.rs` `http_on_the_wasm_engine_matches_the_interpreter`, on loopback only:
+  - a scheme refusal (`Refused`, report reason `scheme`);
+  - a request under `net.special=127.0.0.1` that leaves as TLS — the listener, shared by both engines' runs, sees a
+    handshake record from each — to a server that hangs up (`Other`);
+  - a host outside the allowlist (DL0904, its `get.refused` record);
+  - an ungranted mint (DL0703 in the interpreter's words);
+  - checked engine against engine: output, outcome, trace, and the report's egress reasons.
+- `examples_run.rs`'s chapter-five test runs on both engines (the network line may be either answer, as before).
+- `fault_parity.rs`'s remedy test gains the `http` mint.
+- `lib.rs` `a_fetch_asks_the_custody_for_its_host_first_and_tells_it_of_a_refusal`, with a recording custody:
+  - `Console`, then `Net 127.0.0.1` — nothing for the `http://` URL;
+  - a denial is the run's refusal in the custody's words;
+  - allowed, the egress client's refusal reaches the custody. This crate builds the runtime without its client, so the
+    reason here is `no-client`; in the command line's build it is `special-use`.
+- The corpus counter: **12 of 17** entry points compile, all six guide chapters (`05` the twelfth). The rest stop at:
+  `demo` (DL1205, a secret in the guest), Python, a plugin, and two packages' other modules.
+- Mutants (`scripts/mutants.py`, one target each), each red, and the control green:
+  - M663 no import gate → the CLI test (DL1201);
+  - M664 no dispatch record → the CLI test (the traces);
+  - M665 the custody never asked → the unit test;
+  - M666 asked for every URL → the unit test (an `http://` URL asked);
+  - M667 no refusal record after the effect's fault → the CLI test;
+  - M668 the mint over a root that grants every host → the CLI test (the DL0703);
+  - M669 `Refused` built as `Timeout` → the CLI test;
+  - M670 the egress refusal not told → the unit test;
+  - M671 the mint's root without the lease → the remedy test.
+- `scripts/clippy.sh -j 4` (rustfmt's check included) clean and stamped.
+- `delulu-wasm` whole: 173 passed, 0 failed.
+- `wasm_cli`, `examples_run`, `egress_cli`, `cli_contract`, `cli`, `corpus_cli`, `budget_cli`: 113 passed, 0 failed.
