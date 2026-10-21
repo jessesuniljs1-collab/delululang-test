@@ -368,7 +368,7 @@ impl Value {
                 (Value::Unit, Value::Unit) => true,
                 (Value::Variant { name: n1, fields: f1 }, Value::Variant { name: n2, fields: f2 }) => {
                     let same = n1 == n2 && f1.len() == f2.len();
-                    if same && f1.is_empty() {
+                    if same {
                         work.extend(f1.iter().cloned().zip(f2.iter().cloned()));
                     }
                     same
@@ -445,7 +445,6 @@ fn push_parts(work: &mut Vec<Shown>, parts: impl DoubleEndedIterator<Item = (Opt
 fn cell_addr<T>(cell: &Rc<RefCell<T>>) -> usize {
     Rc::as_ptr(cell) as *const () as usize
 }
-
 
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1185,6 +1184,17 @@ mod depth_tests {
     fn values_nested_past_the_stack_compare_whole() {
         assert!(deep(7).eq(&deep(7)), "two such values, built apart, are equal");
         assert!(!deep(7).eq(&deep(8)), "and differ when their deepest values do");
+    }
+
+    /// A cell held twice side by side — not inside itself — renders whole each time: only a cell met again *inside*
+    /// itself renders as `...`, so a cell's rendering ends when its own does.
+    #[test]
+    fn a_cell_held_twice_side_by_side_renders_whole_each_time() {
+        let x = Value::List(Rc::new(RefCell::new(vec![Value::Int(1)])));
+        let r = Value::Record { name: Rc::from("R"), fields: Rc::new(RefCell::new(vec![("a".to_string(), x.clone())])) };
+        let m = Value::Map(Rc::new(RefCell::new(BTreeMap::from([(MapKey::Int(1), x.clone())]))));
+        let both = Value::List(Rc::new(RefCell::new(vec![x.clone(), x, r.clone(), r, m.clone(), m])));
+        assert_eq!(both.display(), "[[1], [1], R { a: [1] }, R { a: [1] }, {1: [1]}, {1: [1]}]");
     }
 }
 

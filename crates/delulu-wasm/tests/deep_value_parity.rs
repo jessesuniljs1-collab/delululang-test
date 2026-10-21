@@ -58,6 +58,44 @@ fn main(root: Root) ! {Write} {
     assert_eq!(w.expect("both engines answer"), "3088888\ntrue false\n");
 }
 
+/// One cell held twice side by side — an option, a list, a record, each in two fields of one record — shows whole each
+/// time: the host refuses only a variant cell met again *inside* itself, so its rebuilding of a cell ends when the cell's
+/// own does.
+#[test]
+fn a_cell_held_twice_side_by_side_shows_whole_each_time() {
+    let src = r#"module m
+
+type Leaf {
+  n: Int,
+}
+
+type Pair {
+  a: Option[Int],
+  b: Option[Int],
+  c: ref List[Int],
+  d: ref List[Int],
+  e: ref Leaf,
+  f: ref Leaf,
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  let o = Some(1)
+  let l: ref List[Int] = [2]
+  let leaf = Leaf { n: 3 }
+  let p = Pair { a: o, b: o, c: l, d: l, e: leaf, f: leaf }
+  out.println(str(p))
+  out.println(str(p == p))
+}
+"#;
+    let (w, i) = run_both(src);
+    assert_eq!(w, i, "two-engine parity broken");
+    assert_eq!(
+        w.expect("both engines answer"),
+        "Pair { a: Some(1), b: Some(1), c: [2], d: [2], e: Leaf { n: 3 }, f: Leaf { n: 3 } }\ntrue\n"
+    );
+}
+
 /// A hand-written module asks the host to show a value by a descriptor a million `List`s deep: refused in the words any
 /// descriptor the compiler did not write is, never a crash.
 #[test]
