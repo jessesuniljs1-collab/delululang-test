@@ -9,9 +9,10 @@
 //! build (a variant is never written after it is made), and which would otherwise recurse without end.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
+use delulu_runtime::value::MapKey;
 use delulu_runtime::Value;
 
 /// A type as its descriptor writes it.
@@ -44,7 +45,7 @@ pub(crate) struct Desc {
 /// Parse a descriptor — `T` then `|R<n>=<Name>{<field>:<T>,…}` and `|E<n>={<Ctor>(<T>…),…}` for each record and sum. A
 /// type is `i` `b` `f` `s` `u`, `o<T>`, `r<T><T>`, `l<T>`, `m<K><V>`, `R<n>.` or `E<n>.`. `None` for anything else.
 pub(crate) fn parse(text: &str) -> Option<Desc> {
-    let mut p = Parser { s: text.as_bytes(), at: 0 };
+    let mut p = Parser { s: text.as_bytes(), at: 0, depth: 0 };
     let mut d = Desc { root: Some(p.ty()?), ..Desc::default() };
     while p.eat(b'|') {
         match p.next()? {
@@ -89,9 +90,16 @@ pub(crate) fn parse(text: &str) -> Option<Desc> {
     (p.at == p.s.len()).then_some(d)
 }
 
+/// How deep a descriptor's types may nest. The descriptor is read from the guest's memory, so its nesting is the guest's
+/// to choose: a hand-written one a million levels deep recursed past the host's stack (DATA-DEPTH-1). No type the
+/// compiler describes nests past the parser's own bound on a written type (128 levels).
+const MAX_DESC_DEPTH: u32 = 256;
+
 struct Parser<'s> {
     s: &'s [u8],
     at: usize,
+    /// The types being parsed, around the next one.
+    depth: u32,
 }
 
 impl Parser<'_> {
@@ -123,6 +131,15 @@ impl Parser<'_> {
         (self.at > start).then(|| String::from_utf8_lossy(&self.s[start..self.at]).into_owned())
     }
     fn ty(&mut self) -> Option<TyDesc> {
+        if self.depth >= MAX_DESC_DEPTH {
+            return None;
+        }
+        self.depth += 1;
+        let t = self.ty_here();
+        self.depth -= 1;
+        t
+    }
+    fn ty_here(&mut self) -> Option<TyDesc> {
         Some(match self.next()? {
             b'i' => TyDesc::Int,
             b'b' => TyDesc::Bool,
@@ -169,8 +186,13 @@ impl<'m> Reifier<'m> {
 
     /// The value of the descriptor's type whose cell is at `ptr`.
     pub(crate) fn root(&mut self, ptr: i32) -> Result<Value, String> {
-        let t = self.desc.root.clone().ok_or("a descriptor with no type")?;
-        self.cell(ptr as u32, &t)
+        let desc: &'m Desc = self.desc;
+        let t = desc.root.as_ref().ok_or("a descriptor with no type")?;
+        let rebuilt = self.build(Step::Cell(ptr as u32, t));
+        if rebuilt.is_err() {
+            self.inside.clear();
+        }
+        rebuilt
     }
 
     fn bytes<const N: usize>(&self, at: u32) -> Result<[u8; N], String> {
@@ -187,51 +209,105 @@ impl<'m> Reifier<'m> {
         u32::try_from(u64::from(at) + by).map_err(|_| format!("a value past {at:#x} lies outside the guest's memory"))
     }
 
-    /// The value held in the 8-byte slot at `at`, as `store_ty` wrote it: an `Int` or `Float` in all eight bytes, a `Bool`
-    /// or a pointer in the first four, a `Unit` in none.
-    fn slot(&mut self, at: u32, t: &TyDesc) -> Result<Value, String> {
-        Ok(match t {
+    /// Rebuild the value `first` reads. DATA-DEPTH-1: rebuilt by recursion, a value nested past the host's native stack —
+    /// a linked list of 100,000 records built in a loop — overflowed it and killed the process. The reads and the cells
+    /// still to finish wait on a worklist instead, and each value read waits on `done` until the cell holding it is
+    /// finished, so depth costs heap, bounded by the guest's memory. A cell's parts are read in order, as before.
+    fn build(&mut self, first: Step<'m>) -> Result<Value, String> {
+        let mut steps = vec![first];
+        let mut done: Vec<Value> = Vec::new();
+        while let Some(step) = steps.pop() {
+            match step {
+                Step::Slot(base, by, t) => {
+                    let at = Self::offset(base, by)?;
+                    match self.scalar(at, t)? {
+                        Some(v) => done.push(v),
+                        None => steps.push(Step::Cell(self.u32_at(at)?, t)),
+                    }
+                }
+                Step::Run { base, stride, next, end, t } => {
+                    if next < end {
+                        steps.push(Step::Run { base, stride, next: next + 1, end, t });
+                        steps.push(Step::Slot(base, stride * u64::from(next), t));
+                    }
+                }
+                Step::Cell(ptr, t) => self.open(ptr, t, &mut steps, &mut done)?,
+                Step::List(cell, n, v) => {
+                    let parts = take_last(&mut done, n)?;
+                    cell.borrow_mut().extend(parts);
+                    done.push(v);
+                }
+                Step::Record(cell, names, v) => {
+                    let parts = take_last(&mut done, names.len())?;
+                    cell.borrow_mut().extend(names.into_iter().zip(parts));
+                    done.push(v);
+                }
+                Step::Map(cell, keys, v) => {
+                    let parts = take_last(&mut done, keys.len())?;
+                    cell.borrow_mut().extend(keys.into_iter().zip(parts));
+                    done.push(v);
+                }
+                Step::Variant(ptr, name, n) => {
+                    let fields = take_last(&mut done, n)?;
+                    self.inside.remove(&ptr);
+                    done.push(Value::variant(name, fields));
+                }
+            }
+        }
+        match (done.pop(), done.is_empty()) {
+            (Some(v), true) => Ok(v),
+            _ => Err("a value rebuilt from no parts, or from too many".into()),
+        }
+    }
+
+    /// The value held in the 8-byte slot at `at`, as `store_ty` wrote it, if its type holds it there: an `Int` or `Float`
+    /// in all eight bytes, a `Bool` in the first four, a `Unit` in none. `None` for a type whose slot holds a pointer.
+    fn scalar(&self, at: u32, t: &TyDesc) -> Result<Option<Value>, String> {
+        Ok(Some(match t {
             TyDesc::Int => Value::Int(i64::from_le_bytes(self.bytes::<8>(at)?)),
             TyDesc::Float => Value::Float(f64::from_le_bytes(self.bytes::<8>(at)?)),
             TyDesc::Bool => Value::Bool(self.u32_at(at)? != 0),
             TyDesc::Unit => Value::Unit,
-            _ => {
-                let ptr = self.u32_at(at)?;
-                self.cell(ptr, t)?
-            }
-        })
+            _ => return Ok(None),
+        }))
     }
 
-    /// The value whose cell (or string) is at `ptr`.
-    fn cell(&mut self, ptr: u32, t: &TyDesc) -> Result<Value, String> {
+    /// The string whose cell is at `ptr`: `[len:u32]` then its bytes.
+    fn string(&self, ptr: u32) -> Result<Value, String> {
+        let len = self.u32_at(ptr)?;
+        let start = Self::offset(ptr, 4)? as usize;
+        let bytes = start
+            .checked_add(len as usize)
+            .and_then(|end| self.mem.get(start..end))
+            .ok_or_else(|| format!("a string at {ptr:#x} lies outside the guest's memory"))?;
+        Ok(Value::str(String::from_utf8_lossy(bytes).into_owned()))
+    }
+
+    /// Open the cell at `ptr`, of type `t`: a string, or a cell met before, is done at once; any other cell is made
+    /// (and remembered, so a cell met again inside itself is this one), and the step that finishes it goes on `steps`
+    /// under the reads of its parts, so they run first and in order.
+    fn open(&mut self, ptr: u32, t: &'m TyDesc, steps: &mut Vec<Step<'m>>, done: &mut Vec<Value>) -> Result<(), String> {
         let desc = self.desc;
         match t {
-            TyDesc::Str => {
-                let len = self.u32_at(ptr)?;
-                let start = Self::offset(ptr, 4)? as usize;
-                let bytes = start
-                    .checked_add(len as usize)
-                    .and_then(|end| self.mem.get(start..end))
-                    .ok_or_else(|| format!("a string at {ptr:#x} lies outside the guest's memory"))?;
-                Ok(Value::str(String::from_utf8_lossy(bytes).into_owned()))
-            }
+            TyDesc::Str => done.push(self.string(ptr)?),
             TyDesc::Record(n) => {
                 if let Some(v) = self.records.get(&ptr) {
-                    return Ok(v.clone());
+                    done.push(v.clone());
+                    return Ok(());
                 }
                 let (name, fields) = desc.records.get(n).ok_or_else(|| format!("record {n} is not described"))?;
                 let cell = Rc::new(RefCell::new(Vec::with_capacity(fields.len())));
                 let v = Value::Record { name: Rc::from(name.as_str()), fields: cell.clone() };
                 self.records.insert(ptr, v.clone());
-                for (k, (f, ft)) in fields.iter().enumerate() {
-                    let fv = self.slot(Self::offset(ptr, 8 * k as u64)?, ft)?;
-                    cell.borrow_mut().push((f.clone(), fv));
+                steps.push(Step::Record(cell, fields.iter().map(|(f, _)| f.clone()).collect(), v));
+                for (k, (_, ft)) in fields.iter().enumerate().rev() {
+                    steps.push(Step::Slot(ptr, 8 * k as u64, ft));
                 }
-                Ok(v)
             }
             TyDesc::List(elem) => {
                 if let Some(v) = self.lists.get(&ptr) {
-                    return Ok(v.clone());
+                    done.push(v.clone());
+                    return Ok(());
                 }
                 let len = self.u32_at(ptr)?;
                 let data = self.u32_at(Self::offset(ptr, 8)?)?;
@@ -243,17 +319,15 @@ impl<'m> Reifier<'m> {
                 let cell = Rc::new(RefCell::new(Vec::with_capacity(len as usize)));
                 let v = Value::List(cell.clone());
                 self.lists.insert(ptr, v.clone());
-                for i in 0..len {
-                    let ev = self.slot(Self::offset(data, 8 * u64::from(i))?, elem)?;
-                    cell.borrow_mut().push(ev);
-                }
-                Ok(v)
+                steps.push(Step::List(cell, len as usize, v));
+                steps.push(Step::Run { base: data, stride: 8, next: 0, end: len, t: elem });
             }
             // A map's pairs, each key made the interpreter's `MapKey` — so `display` walks them in its own order and `eq`
             // compares them as it compares its own, whatever order a hand-written module left them in.
             TyDesc::Map(kt, vt) => {
                 if let Some(v) = self.maps.get(&ptr) {
-                    return Ok(v.clone());
+                    done.push(v.clone());
+                    return Ok(());
                 }
                 let len = self.u32_at(ptr)?;
                 let data = self.u32_at(Self::offset(ptr, 8)?)?;
@@ -261,51 +335,74 @@ impl<'m> Reifier<'m> {
                 if end > self.mem.len() as u64 {
                     return Err(format!("a map at {ptr:#x} reaches past the guest's memory"));
                 }
-                let cell = Rc::new(RefCell::new(std::collections::BTreeMap::new()));
+                let mut keys = Vec::with_capacity(len as usize);
+                for i in 0..len {
+                    let at = Self::offset(data, 16 * u64::from(i))?;
+                    let key = match &**kt {
+                        TyDesc::Str => Some(self.string(self.u32_at(at)?)?),
+                        other => self.scalar(at, other)?,
+                    };
+                    let key = key
+                        .as_ref()
+                        .and_then(delulu_runtime::value::MapKey::of)
+                        .ok_or_else(|| format!("a map at {ptr:#x} holds a key that cannot be one"))?;
+                    keys.push(key);
+                }
+                let cell = Rc::new(RefCell::new(BTreeMap::new()));
                 let v = Value::Map(cell.clone());
                 self.maps.insert(ptr, v.clone());
-                for i in 0..len {
-                    let pair = Self::offset(data, 16 * u64::from(i))?;
-                    let key = self.slot(pair, kt)?;
-                    let key = delulu_runtime::value::MapKey::of(&key)
-                        .ok_or_else(|| format!("a map at {ptr:#x} holds a key that cannot be one"))?;
-                    let value = self.slot(Self::offset(pair, 8)?, vt)?;
-                    cell.borrow_mut().insert(key, value);
-                }
-                Ok(v)
+                steps.push(Step::Map(cell, keys, v));
+                let values = Self::offset(data, 8)?;
+                steps.push(Step::Run { base: values, stride: 16, next: 0, end: len, t: vt });
             }
-            TyDesc::Option(p) => self.variant(ptr, &[("None", &[]), ("Some", std::slice::from_ref(&**p))]),
-            TyDesc::Result(o, e) => self.variant(ptr, &[("Ok", std::slice::from_ref(&**o)), ("Err", std::slice::from_ref(&**e))]),
+            TyDesc::Option(p) => {
+                self.variant(ptr, &[("None", &[]), ("Some", std::slice::from_ref(&**p))], steps)?;
+            }
+            TyDesc::Result(o, e) => {
+                self.variant(ptr, &[("Ok", std::slice::from_ref(&**o)), ("Err", std::slice::from_ref(&**e))], steps)?;
+            }
             TyDesc::Sum(n) => {
                 let ctors = desc.sums.get(n).ok_or_else(|| format!("sum {n} is not described"))?;
-                let named: Vec<(&str, &[TyDesc])> = ctors.iter().map(|(c, p)| (c.as_str(), p.as_slice())).collect();
-                self.variant(ptr, &named)
+                let named: Vec<(&'m str, &'m [TyDesc])> = ctors.iter().map(|(c, p)| (c.as_str(), p.as_slice())).collect();
+                self.variant(ptr, &named, steps)?;
             }
-            TyDesc::Int | TyDesc::Bool | TyDesc::Float | TyDesc::Unit => Err("a scalar where a cell was expected".into()),
+            TyDesc::Int | TyDesc::Bool | TyDesc::Float | TyDesc::Unit => return Err("a scalar where a cell was expected".into()),
         }
+        Ok(())
     }
 
-    /// A variant cell — `[tag:u32]` then each payload in an 8-byte slot from offset 4 — of a type with `ctors`.
-    fn variant(&mut self, ptr: u32, ctors: &[(&str, &[TyDesc])]) -> Result<Value, String> {
+    /// Open a variant cell — `[tag:u32]` then each payload in an 8-byte slot from offset 4 — of a type with `ctors`: the
+    /// step that makes it, under the reads of its payload.
+    fn variant(&mut self, ptr: u32, ctors: &[(&'m str, &'m [TyDesc])], steps: &mut Vec<Step<'m>>) -> Result<(), String> {
         let tag = self.u32_at(ptr)?;
         let (name, payload) = ctors.get(tag as usize).ok_or_else(|| format!("a variant at {ptr:#x} has no constructor {tag}"))?;
         if !self.inside.insert(ptr) {
             return Err(format!("a variant at {ptr:#x} holds itself"));
         }
-        let mut fields = Vec::with_capacity(payload.len());
-        for (i, pt) in payload.iter().enumerate() {
-            let at = Self::offset(ptr, 4 + 8 * i as u64);
-            match at.and_then(|at| self.slot(at, pt)) {
-                Ok(v) => fields.push(v),
-                Err(e) => {
-                    self.inside.remove(&ptr);
-                    return Err(e);
-                }
-            }
+        steps.push(Step::Variant(ptr, name, payload.len()));
+        for (i, pt) in payload.iter().enumerate().rev() {
+            steps.push(Step::Slot(ptr, 4 + 8 * i as u64, pt));
         }
-        self.inside.remove(&ptr);
-        Ok(Value::variant(name, fields))
+        Ok(())
     }
+}
+
+/// A step of `Reifier::build`: read the slot at a base and an offset, read a run of slots one by one, open the cell a
+/// pointer names, or finish a cell from the values its parts left on `done`.
+enum Step<'m> {
+    Slot(u32, u64, &'m TyDesc),
+    Run { base: u32, stride: u64, next: u32, end: u32, t: &'m TyDesc },
+    Cell(u32, &'m TyDesc),
+    List(Rc<RefCell<Vec<Value>>>, usize, Value),
+    Record(Rc<RefCell<Vec<(String, Value)>>>, Vec<String>, Value),
+    Map(Rc<RefCell<BTreeMap<MapKey, Value>>>, Vec<MapKey>, Value),
+    Variant(u32, &'m str, usize),
+}
+
+/// The last `n` values of `done`, in order.
+fn take_last(done: &mut Vec<Value>, n: usize) -> Result<Vec<Value>, String> {
+    let at = done.len().checked_sub(n).ok_or("a cell finished before its parts were read")?;
+    Ok(done.split_off(at))
 }
 
 #[cfg(test)]

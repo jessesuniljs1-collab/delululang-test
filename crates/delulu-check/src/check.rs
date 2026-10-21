@@ -2936,7 +2936,7 @@ impl<'a> Checker<'a> {
             ctx.push_scope();
             let at = self.diags.len();
             self.check_pattern(&arm.pattern, &st, ctx, &mut covered, &mut has_wildcard);
-            pattern_errors |= false && self.diags[at..].iter().any(Diagnostic::is_error);
+            pattern_errors |= self.diags[at..].iter().any(Diagnostic::is_error);
             let (bt, br) = self.check_expr(&arm.body, ctx);
             acc.add_row_acc(&br);
             self.expect_type(&result_ty, &bt, arm.body.span(), "match arms must have the same type");

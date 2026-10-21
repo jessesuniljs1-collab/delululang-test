@@ -1904,6 +1904,7 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             ("Shape", "Circle(Red) => 0,\n    Circle(Green) => 1,\n    Square(n) => n,", "Circle(Blue)"),
             ("Result[Option[Int], Str]", "Ok(Some(n)) => n,\n    Err(e) => 0,", "Ok(None)"),
             ("P", "P(true, _) => 0,\n    P(_, true) => 1,", "P(false, false)"),
+            ("P", "P(true, true) => 0,\n    P(false, _) => 1,", "P(true, false)"),
             ("Option[Str]", "Some(\"a\") => 0,\n    None => 1,", "Some(_)"),
             ("Tree", "Leaf => 0,\n    Node(Leaf, n, Leaf) => n,", "Node(Node(_, _, _), _, _)"),
             ("Int", "0 => 0,\n    1 => 1,", "_"),
@@ -1979,13 +1980,10 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
         };
         assert_eq!(errors(&php(6)), Vec::<String>::new(), "six holes are proved");
         let c = check(&php(7));
-        let msgs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| (d.code.clone(), d.message.clone())).collect();
+        let msgs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| (d.code, d.message.as_str())).collect();
         assert_eq!(
             msgs,
-            [(
-                "DL0407".into(),
-                "non-exhaustive match: the checker's search could not prove it covers every case within its limit".to_string()
-            )]
+            [("DL0407", "non-exhaustive match: the checker's search could not prove it covers every case within its limit")]
         );
     }
 }
