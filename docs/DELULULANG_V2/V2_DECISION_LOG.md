@@ -4299,6 +4299,26 @@ the same top level and ignored what a pattern held inside a constructor.
 second per match in a debug build, the same denial-of-service class as RW 2.3. A literal arm on a `Float` cannot be
 written (the parser has no `Float` pattern).
 
+## D-V2-173 — RW 3.4: a slot holds a pointer to any list, map, option or result, so they nest on the WASM engine — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**Decided:**
+1. A `List`, `Map`, `Option` or `Result` may sit wherever a value goes on the WASM engine: a list's element, a map's
+   value, a variant's payload, a record's field. Its 8-byte slot holds a pointer to its cell, as it already held a
+   record's.
+2. Lists, maps and records are shared as the interpreter shares them. Options and results stay immutable cells.
+3. The codegen's `Scalar` names such a type through `Scalar::Boxed(&'static Ty)`, so that `Scalar` and `Ty` stay `Copy`
+   (every function of the backend passes them by value). Each distinct type is interned once for the process (`boxed`):
+   a leak of a few bytes per type any compile has met, and none per value.
+4. What stays outside, refused with DL1201: a list or a record field holding a function or a capability. Neither has a
+   cell the host's value interface can rebuild.
+
+**Evidence:**
+- `nested_parity.rs` (3): lists of lists, options, maps and records nested, shared, compared, matched, and faulted;
+  refused by the old codegen.
+- The five pins that had listed these shapes as refused now list what stays outside. None recorded a hazard (read
+  first, per POP-WALK-1).
+- The whole `delulu-wasm` suite passes.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

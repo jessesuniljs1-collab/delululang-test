@@ -8460,3 +8460,19 @@ Tests:
 Mutants M786–M793 red. M789–M791 went red only after the parts test: no test had sent a map of more than one key or a
 closure capturing more than one value. Still recursive (4.75): the sandbox channel's `WireValue` and `--debug-rcaps`'
 uniqueness walk.
+
+## 2026-10-22 (night) — the laptop: lists, maps and options nest on the WASM engine (RW 3.4, D-V2-173)
+
+The widening this night's work began with, reached once the defects it surfaced were fixed: MATCH-NEST-1,
+MATCH-EXHAUST-1, WASM-IMPORTS-1, DATA-DEPTH-1 and -2, CLOSURE-SEND-1.
+- A slot holds a pointer to any list, map, option or result (`Scalar::Boxed`, interned so `Scalar` stays `Copy`). So a
+  list of lists, a list of options, a map of lists, an option of an option, a map in a record field compile.
+- The host's value rebuild (`reify.rs`) and descriptors were already recursive in structure, and since DATA-DEPTH-1 they
+  are iterative in walk. `match` tests inside each constructor since MATCH-NEST-1.
+- The five pins that listed these shapes as refused were read first (POP-WALK-1). None named a hazard. Each now lists
+  what stays outside: a list or a record field holding a function or a capability.
+
+Tests: `nested_parity.rs` (3), refused by the old codegen with DL1201 (`a list of List(I64)`). It checks sharing (one
+list held twice and in a record, pushed to after), `contains` and `==` by contents, a nested option matched, a result of
+lists, a sum holding a list, `find` and `fold`, three levels of lists, and an inner index's fault in the interpreter's
+words. The whole `delulu-wasm` suite passes. Mutants M794–M797 red: the type made a slot type for only lists and maps, `contains` of nested values by address, a record field refusing a map, a list element refusing a pointer.

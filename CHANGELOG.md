@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — lists, maps and options nest on the WASM engine, 2026-10-22
+
+- **New: lists, maps, options and results nest on the WebAssembly engine** (RW 3.4, D-V2-173). A list of lists, a list
+  of options, a map of lists, an option of an option, and a map in a record field now compile with `--target wasm` and
+  `--engine wasm`. Before, each was refused with DL1201. They are shared as on the interpreter, so a list pushed to is
+  seen through every list holding it. A list or a record field holding a function or a capability still runs only on
+  the interpreter.
+
 ## Unreleased — deep values print and compare, 2026-10-22
 
 - **Fixed: `str` or `==` of a deeply nested value crashed the process** (DATA-DEPTH-1, RW 4.74). A linked list of records

@@ -157,6 +157,24 @@ enum Scalar {
     Foreign(u32), // a bound `foreign` lib handle payload — e.g. the `Ok(m)` of `Result[M, ForeignErr]`
     ForeignPtr,
     Record(u32), // a record's cell pointer (RW 3.4)
+    /// A `List`, a `Map`, an `Option` or a `Result` held in a slot — a pointer to its cell, as a record's is — so a list of
+    /// lists, a map in a list, an option of a list compile (RW 3.4). The type it points to is interned (`boxed`), so a
+    /// `Scalar` stays `Copy`.
+    Boxed(&'static Ty),
+}
+
+/// The `Scalar` that holds `t`, a list, a map, an option or a result, in a slot. Each such type is made once for the
+/// process and kept: a `Scalar` names it by a reference that lives as long as the process, one per distinct type any
+/// compile has met — a handful of bytes each.
+fn boxed(t: Ty) -> Scalar {
+    static TYPES: std::sync::OnceLock<std::sync::Mutex<Vec<&'static Ty>>> = std::sync::OnceLock::new();
+    let mut held = TYPES.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(&known) = held.iter().find(|h| ***h == t) {
+        return Scalar::Boxed(known);
+    }
+    let made: &'static Ty = Box::leak(Box::new(t));
+    held.push(made);
+    Scalar::Boxed(made)
 }
 
 impl Scalar {
@@ -171,6 +189,7 @@ impl Scalar {
             Scalar::Foreign(i) => Ty::Foreign(i),
             Scalar::ForeignPtr => Ty::ForeignPtr,
             Scalar::Record(i) => Ty::Record(i),
+            Scalar::Boxed(t) => *t,
         }
     }
 }
@@ -187,6 +206,7 @@ fn ty_to_scalar(t: Ty) -> Option<Scalar> {
         Ty::Foreign(i) => Some(Scalar::Foreign(i)),
         Ty::ForeignPtr => Some(Scalar::ForeignPtr),
         Ty::Record(i) => Some(Scalar::Record(i)),
+        Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) => Some(boxed(t)),
         _ => None,
     }
 }
@@ -196,9 +216,13 @@ fn store_scalar(cx: &mut Cx, s: Scalar) {
     match s {
         Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
         Scalar::F64 => cx.emit(Instruction::F64Store(i64_at())),
-        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr | Scalar::Record(_) => {
-            cx.emit(Instruction::I32Store(u32_at()))
-        }
+        Scalar::I32
+        | Scalar::Str
+        | Scalar::Enum(_)
+        | Scalar::Foreign(_)
+        | Scalar::ForeignPtr
+        | Scalar::Record(_)
+        | Scalar::Boxed(_) => cx.emit(Instruction::I32Store(u32_at())),
         Scalar::Unit => {}
     }
 }
@@ -208,9 +232,13 @@ fn load_scalar(cx: &mut Cx, s: Scalar) {
     match s {
         Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
         Scalar::F64 => cx.emit(Instruction::F64Load(i64_at())),
-        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr | Scalar::Record(_) => {
-            cx.emit(Instruction::I32Load(u32_at()))
-        }
+        Scalar::I32
+        | Scalar::Str
+        | Scalar::Enum(_)
+        | Scalar::Foreign(_)
+        | Scalar::ForeignPtr
+        | Scalar::Record(_)
+        | Scalar::Boxed(_) => cx.emit(Instruction::I32Load(u32_at())),
         Scalar::Unit => {}
     }
 }
@@ -267,10 +295,10 @@ struct RecordDesc {
     fields: Option<Vec<(String, Ty)>>,
 }
 
-/// The types a record field may hold: a scalar, or an `Option`, `Result` or `List` of scalars — each one value in its
-/// 8-byte slot, the three compound ones a pointer to a cell shared as the interpreter shares it (`n.next`, `t.kids`).
+/// The types a record field may hold: what a slot holds (`ty_to_scalar`) — a scalar, or an `Option`, `Result`, `List` or
+/// `Map`, a pointer to a cell shared as the interpreter shares it (`n.next`, `t.kids`).
 fn field_ty(t: Ty) -> Option<Ty> {
-    (ty_to_scalar(t).is_some() || matches!(t, Ty::Option(_) | Ty::Result(..) | Ty::List(_))).then_some(t)
+    ty_to_scalar(t).map(|_| t)
 }
 
 /// Store the value on the stack into the slot whose address is under it, by the width of `t` (nothing for `Unit`).
@@ -756,7 +784,9 @@ fn block_type(t: Ty) -> BlockType {
 /// The element types a `List` may hold on the WASM engine: the scalars a slot can carry and a `match` can bind.
 fn list_element(t: Ty) -> Option<Scalar> {
     match ty_to_scalar(t)? {
-        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_) | Scalar::Record(_)) => Some(s),
+        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_) | Scalar::Record(_) | Scalar::Boxed(_)) => {
+            Some(s)
+        }
         _ => None,
     }
 }
@@ -4409,7 +4439,7 @@ fn compile_list_method(s: Scalar, method: &str, args: &[Expr], cx: &mut Cx) -> R
             cx.emit(Instruction::LocalSet(x));
             // A record or a sum compares host-side, by the interpreter's own `eq` over the two values rebuilt by the
             // element's descriptor — the comparison `==` of two of them makes (`reify.rs`).
-            let by_value = matches!(s, Scalar::Record(_) | Scalar::Enum(_)) && cx.imp.value_eq != u32::MAX;
+            let by_value = matches!(s, Scalar::Record(_) | Scalar::Enum(_) | Scalar::Boxed(_)) && cx.imp.value_eq != u32::MAX;
             let eq = match s {
                 Scalar::I64 => vec![Instruction::I64Eq],
                 Scalar::I32 => vec![Instruction::I32Eq],
