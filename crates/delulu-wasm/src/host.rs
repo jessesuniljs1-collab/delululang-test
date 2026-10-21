@@ -711,7 +711,9 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
     linker
         .func_wrap("delulu:map", "new", |mut caller: Caller<'_, HostState>| -> wasmtime::Result<i32> {
             let at = guest_alloc(&mut caller, 12).map_err(|()| map_fault(&mut caller))?;
-            GuestMap { at: at as u32, len: 0, cap: 0, data: 0 }.write_header(&mut caller).ok_or_else(|| map_fault(&mut caller))?;
+            GuestMap { at: at as u32, len: 0, cap: 0, data: 0 }
+                .write_header(&mut caller)
+                .ok_or_else(|| map_fault(&mut caller))?;
             Ok(at)
         })
         .map_err(instantiate)?;
@@ -751,12 +753,12 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
                                 let cap = m.cap.checked_mul(2)?.max(4);
                                 let data = guest_alloc(&mut caller, i32::try_from(cap.checked_mul(16)?).ok()?).ok()? as u32;
                                 if m.len > 0 {
-                                    let old = guest_read(&mut caller, m.data, 16 * m.len as usize)?;
+                                    let old = guest_read(&mut caller, m.data, (m.len as usize).checked_mul(16)?)?;
                                     guest_write(&mut caller, data as i32, &old).ok()?;
                                 }
                                 (m.cap, m.data) = (cap, data);
                             }
-                            let tail = guest_read(&mut caller, m.pair(i)?, 16 * (m.len - i) as usize)?;
+                            let tail = guest_read(&mut caller, m.pair(i)?, ((m.len - i) as usize).checked_mul(16)?)?;
                             guest_write(&mut caller, m.pair(i + 1)? as i32, &tail).ok()?;
                             let mut pair = raw.to_le_bytes().to_vec();
                             pair.extend_from_slice(&[0; 8]);
@@ -778,7 +780,7 @@ fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
             let done = (|| {
                 let mut m = GuestMap::read(&mut caller, map)?;
                 let i = u32::try_from(index).ok().filter(|i| *i < m.len)?;
-                let tail = guest_read(&mut caller, m.pair(i + 1)?, 16 * (m.len - i - 1) as usize)?;
+                let tail = guest_read(&mut caller, m.pair(i + 1)?, ((m.len - i - 1) as usize).checked_mul(16)?)?;
                 guest_write(&mut caller, m.pair(i)? as i32, &tail).ok()?;
                 m.len -= 1;
                 m.write_header(&mut caller)

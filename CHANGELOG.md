@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — maps on the WASM engine, 2026-10-21
+
+- **New: a program that uses `Map` compiles to WebAssembly** (RW 3.4, D-V2-170). `Map()` and all eight methods
+  compile: `len`, `is_empty`, `get`, `contains_key`, `insert`, `remove`, `keys` and `values`. The key may be an `Int`,
+  a `Bool` or a `Str`, and the value anything a list may hold, a record or a sum included. `str` and `==` of a map
+  compile too. Before, `delulu build --target wasm` refused such a program (DL1201, "a call to `Map`").
+  - Both engines order keys alike: on WASM, the host places each key by the interpreter's own ordering rule, so `keys()`,
+    `values()` and `str` of a map print the same on both.
+  - A map is shared as on the interpreter: a second name for it sees every insert, and the records it holds are the
+    records themselves.
+  - A map inside a list, an option or a record field still answers DL1201; run that program on the interpreter.
+
 ## Unreleased — the audit chain names each request's path, 2026-10-21
 
 - **New: under the broker, a network use's record names the path it asked** (P9-05, D-V2-169). A daemon or leased run

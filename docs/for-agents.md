@@ -730,9 +730,13 @@ overstate it downstream:
     round-trip (`ß` uppercases to `SS`). **Never case-fold to compare a path, a host name, or
     anything that decides an authority question** — four defects in this project's own P22 campaign
     were security decisions taken on a differently-spelled string.
-  - **None of them compile to WebAssembly.** `--target wasm` answers `DL1201` for any program using
-    one; run it on the interpreter. This is not new to P3 — the backend has never had a `List` in its
-    type lattice — but it is now written down.
+  - **Part of this compiles to WebAssembly** (RW 3.4). A `List` of scalars, records or sums compiles
+    with `len`, `is_empty`, `get`, `push`, indexing, `for` and `map`, as does `Str.split`. Since
+    2026-10-21 a `Map` compiles with all eight methods, with any of the three key types and any value
+    a list may hold; the host orders its keys by the interpreter's own rule, so both engines iterate
+    a map identically. `str` and `==` of either compile too. `pop`, `filter`, `fold`, `sort`, a list
+    of lists, and a map inside a list, an option or a record field still answer `DL1201` on
+    `--target wasm`; run those on the interpreter.
 - **Soundness is design-level plus audit-rule plus test-enforced.** The Delulu Core mechanization is
   open work.
 - **Not everything is covered yet.** `docs/reference/coverage.md` reports per-item conformance

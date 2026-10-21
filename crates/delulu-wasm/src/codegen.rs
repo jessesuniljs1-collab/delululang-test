@@ -2773,6 +2773,19 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
         }
     }
     match e {
+        // `Map()` where a map is expected: the expected type is its type — a record or a sum as its value included, which
+        // the checker's types alone do not name here (`checked_ty`).
+        Expr::Call { callee, args, .. }
+            if args.is_empty()
+                && matches!(expected, Ty::Map(..))
+                && matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "Map") =>
+        {
+            if cx.imp.map_new == u32::MAX {
+                return Err(CompileError::Unsupported("`Map()` without the map interface".into()));
+            }
+            cx.emit(Instruction::Call(cx.imp.map_new));
+            Ok(())
+        }
         Expr::If { cond, then_, else_, .. } => {
             if compile_expr(cond, cx)? != Ty::I32 {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));

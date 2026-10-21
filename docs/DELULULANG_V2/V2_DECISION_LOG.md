@@ -4156,6 +4156,50 @@ seq 9 says `use allow` for its host. With no path in the record, nothing showed 
   plugin wrapper drops it (M713). The export (M714) and `audit query` (M715) omit it. The broker's words differ from the
   call's (M717).
 
+## D-V2-170 — RW 3.4: a WASM `Map` lives in the guest's memory, and the host orders its keys by the interpreter's own `MapKey` — TAKEN (head chef, 2026-10-21, under the owner's delegation)
+
+**Context.** The WASM backend had no `Map`: `delulu build --target wasm` refused any program calling `Map()` (DL1201, "a
+call to `Map`", witnessed on the pre-change build). A map's semantics are the interpreter's `BTreeMap<MapKey, Value>`:
+iteration ascending by key, `keys()` and `values()` in one order, an inserted key that is already held keeping its place,
+values shared (`Rc`). Two ways were open. A host-side map, its values copied across, would break sharing: a record put in a
+map and written through its own name afterwards would not change the copy. A guest-side map ordered by guest code would
+need a second string order kept beside the interpreter's (the two-matchers lesson, NET-WILDCARD-1).
+
+**Decision.**
+1. **The map lives in the guest's memory**: a header like a list's (`[len][cap][data]`), its data 16-byte pairs (the key's
+   slot, then the value's), ascending by key. A value is the guest's own slot, so a record or a sum it holds is shared as a
+   list's elements are, and `let n = m` names one map.
+2. **The host finds and places keys by the interpreter's own `MapKey` order** (`delulu:map`: `new`, `find`, `put`,
+   `remove_at`, `keys`, `values`). The guest reads and writes the value slots itself. So the two engines cannot order keys
+   two ways: a key built at run time, a non-ASCII one and an upper-case one order as the interpreter orders them.
+3. **`str` and `==` of a map** go through the host's value interface (`reify.rs`, descriptor `m<K><V>`), rebuilt as the
+   interpreter's `Value::Map`, so `display` and `eq` are the interpreter's own.
+4. **The memory is read as untrusted** (a `.dwx` can be written by hand). Every read is bounds-checked. A header whose
+   length passes its capacity is refused, and the pairs are read before anything is reserved for them (by inspection: M725,
+   reserving first, survives — an operating system grants an untouched reservation, so the test cannot see the order). A
+   failure is DL0903
+   in words, and the import traps so the guest never runs past it. A map whose pairs are out of order is answered wrongly,
+   never unsafely.
+5. **`Map()`'s types** come from the checker's type for the call, or from a declared type where one is written
+   (`let book: ref Map[Str, ref Acct] = Map()`), since the checker's types alone do not name a record or a sum here.
+6. **Left DL1201:** a map inside a list, an option or a record field (`Scalar` holds no map).
+
+**Evidence.** `delulu-wasm/tests/map_parity.rs`, four tests:
+- every method on each key kind (`Str`, `Int`, `Bool`) and value kind (`Int`, `Bool`, `Float`), sharing, `str`, `==` and
+  `!=`;
+- a map grown to 300 keys inserted out of order, half removed, and `Str` keys by their bytes (`Zeta` before `ze`, `éclair`
+  after `zeta`, a built `"z" + "eta"` replacing the literal's pair);
+- a map of records sharing its values, and a map of sums;
+- four hand-written modules refused DL0903 (a header outside the memory, a length past its capacity, pairs past the memory,
+  2^32 − 1 pairs claimed).
+- Mutants M718–M733: fifteen red, the restored tree green. M725 survives, for the reason in item 4. The red ones: the host's
+  order reversed (M718); a new pair written over the next (M719); grown data without the old pairs (M720); a removal that
+  never closes its gap (M721); `keys` answering the values (M722); a `Bool` key read inverted (M723); a `Str` key compared by
+  its pointer (M724); a length past its capacity trusted (M726); a missing key answered as the first pair (M727); `Map()`
+  given no declared type (M728); the descriptor naming a map a list (M729); a value read from the key's slot (M730);
+  `contains_key` missing the first pair (M731); `reify` reading values from the keys (M732); the module never carrying
+  `delulu:map` (M733).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the
