@@ -8201,3 +8201,47 @@ moved. The file stays LF (`git ls-files --eol`: `i/lf w/lf`).
 - `delulu` and `delulu-conform` whole, before the snapshot was re-recorded: 1,029 passed, 4 failed in 103 targets. The
   failures were the three `doctor_cli` map tests (stale before the Survey's rebuild) and this snapshot case. Both are
   answered above; after them, see the commit message.
+
+## 2026-10-21 (evening) — the laptop: a package's `requests` — each module by its own node types (D-V2-168 item 2)
+
+The entry before left a package's report open: `check_program` kept no per-node types, and node ids are per module.
+`Program` now has `node_types`, one map per module, keyed by its **unit name** — the key both package checks
+(`check_program` for a loose directory, `check_workspace` for a manifest and its dependencies) already use for everything
+else. `emit_authority` takes the unit names beside the modules and pairs them directly. It never recomputes a key from a
+module's declared name: a workspace need not keep that unique, and the wrong map would put one module's types on
+another's nodes. The single-file `Program` the CLI builds and the atlas's test helper carry theirs too.
+
+**Evidence.** `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name` gains three
+cases:
+- a two-module package whose second module requests `/ping` (named in `src/net.delulu`; the `List` `get` in `main` is not);
+- an app whose dependency `netlib` requests `/dep`;
+- a loose directory (`src/` and no manifest) — which first read empty because the test had put its files beside `src/`
+  instead of in it (the loader reads `src/`), a test mistake read before blaming the code.
+
+Mutants, each red, the control green:
+- M700 `check_program` drops the types;
+- M701 `check_workspace` drops them;
+- M702 the report pairs by a wrong key.
+
+`delulu-check` whole: 275 passed. `delulu-atlas`: 18 passed. `within_cli`: 17 passed. clippy with rustfmt's check clean.
+
+## 2026-10-21 (evening) — the laptop: a once-seen Windows red, made to say why next time (RW 7.22)
+
+`master`'s push run `39599000467` on `eef9583` failed one test on `test (windows-latest)`:
+`sandbox_confirm_cli::an_external_launcher_ends_when_its_host_is_killed_on_windows` — "the launcher never started", after
+its 60 s wait (7 of 8 passing; every other job green). The same commit's pull-request run `39596126140` was green, and the
+test has passed on every run since PS-E-02.
+
+The test starts `delulu run --sandbox --sandbox-backend external:powershell …`, whose launcher writes its own pid. It had
+sent the host's stderr to nowhere, so the red cannot say which happened: the host ended early (a sandbox refusal, an
+AppContainer the runner would not make), PowerShell took over a minute to start, or the host waited on something else. A
+guess is not a root cause.
+
+**So the witness now speaks:**
+- the host's stderr is kept in the lab directory;
+- a host that ends before the pid appears is named at once — its exit status and its words — rather than after 60 s;
+- the 60 s bound says the host was still running, and quotes it.
+
+Falsified: a launcher that does not exist fails in 0.06 s, quoting the host's "the external launcher `no-such-launcher-exe`
+could not be started: there is no such program". Locally (Windows 11) the test is green. Three `witness.yml` runs of the test
+on `windows-latest` at `fa4021c` were dispatched to reproduce it: `39602082207`, `39602087235`, `39602091804`.

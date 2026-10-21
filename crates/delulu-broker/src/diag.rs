@@ -35,6 +35,10 @@ pub enum Denial {
     /// DL0904 — a use whose scope argument is outside the node's granted authority (defense in
     /// depth: the type checker already bounds *kind*; the broker bounds *scope* at runtime).
     OutOfScope { node: GrantId, dimension: &'static str, arg: String },
+    /// DL0904 — a request to a host the node's `net` grant names, for a path outside every pattern it names for that host
+    /// (`why` is `None`), or spelled so a server could read it two ways where a pattern decides (`why` says how) — P9-05,
+    /// D-V2-169: the use carries its path, so the broker judges it as the runtime's first check does.
+    NetPath { node: GrantId, host: String, path: String, why: Option<&'static str> },
     /// DL0904 — `revoke` refused because the target is neither the caller's node nor a descendant
     /// of it (spec §3.2). The caller's authority (its own subtree) does not reach the target.
     NotRevocable { caller: GrantId, target: GrantId },
@@ -110,6 +114,7 @@ impl Denial {
             Denial::Expired { .. } => "DL1402",
             Denial::Revoked { .. } => "DL1403",
             Denial::OutOfScope { .. }
+            | Denial::NetPath { .. }
             | Denial::NotRevocable { .. }
             | Denial::DeadGuardPattern { .. }
             | Denial::Proposal { .. }
@@ -235,6 +240,24 @@ impl Denial {
                 "DL0904",
                 format!(
                     "lease `{}` does not grant `{arg}` in scope `{dimension}` (capability scope violation)",
+                    node.as_str()
+                ),
+            ),
+            // The runtime's first check words these two the same (`prim`, P9-05 (a)), so a run refused under the daemon is
+            // told what an embedded run is.
+            Denial::NetPath { node, host, path, why: None } => Diagnostic::error(
+                "DL0904",
+                format!(
+                    "the path `{path}` is outside every path the grant names for its host `{host}` (lease `{}`; capability \
+                     scope violation)",
+                    node.as_str()
+                ),
+            ),
+            Denial::NetPath { node, host, path, why: Some(why) } => Diagnostic::error(
+                "DL0904",
+                format!(
+                    "the path `{path}` on `{host}` is refused under a path scope: {why} (lease `{}`; capability scope \
+                     violation)",
                     node.as_str()
                 ),
             ),

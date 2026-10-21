@@ -384,6 +384,16 @@ pub fn path_of(url: &str) -> &str {
     &rest[..rest.find(['?', '#']).unwrap_or(rest.len())]
 }
 
+/// The path a request asks of its server: [`path_of`], or `/` when the URL names none (the two read alike — no segments).
+/// What a network use carries to its custody, to be judged and named in the use's record (P9-05, D-V2-169); never the
+/// query, which may carry a token.
+pub fn request_path(url: &str) -> &str {
+    match path_of(url) {
+        "" => "/",
+        p => p,
+    }
+}
+
 /// P9-05 (a), D-V2-138: the capability's verdict on `url` — its host against each entry's host pattern, and where an entry
 /// names a path pattern, the path against it (`delulu_broker::netscope`, the reading the egress client and the broker
 /// share).

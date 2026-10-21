@@ -1499,9 +1499,9 @@ fn authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name
 
     // And a loose directory — modules with no manifest, checked by `check_program`.
     let loose = dir.join("loose");
-    std::fs::create_dir_all(&loose).unwrap();
-    std::fs::copy(pkg.join("src/main.delulu"), loose.join("main.delulu")).unwrap();
-    std::fs::copy(pkg.join("src/net.delulu"), loose.join("net.delulu")).unwrap();
+    std::fs::create_dir_all(loose.join("src")).unwrap();
+    std::fs::copy(pkg.join("src/main.delulu"), loose.join("src/main.delulu")).unwrap();
+    std::fs::copy(pkg.join("src/net.delulu"), loose.join("src/net.delulu")).unwrap();
     let o = delulu(&["authority", &loose.to_string_lossy(), "--json"]);
     assert!(o.status.success(), "{}", out(&o));
     let v = json_of(&o);

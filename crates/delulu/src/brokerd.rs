@@ -880,7 +880,7 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
-        ReqBody::Check { node, op, arg } => {
+        ReqBody::Check { node, op, arg, url_path } => {
             let Some(op) = Op::from_wire_name(&op) else {
                 return (
                     Response::Error {
@@ -895,7 +895,7 @@ fn handle(
             failed.set(false);
             // Guard-aware check (Stage 5 chunk 6): a guarded op validates synchronously and may carry
             // an agent-side `warn` note (warn-tier / bypassed-guarded).
-            let guarded = broker.check_use(&node, op, arg.as_deref());
+            let guarded = broker.check_use_at(&node, op, arg.as_deref(), url_path.as_deref());
             // Fail-stop on inability to record a synchronous-class use (invariant 26).
             if failed.get() {
                 return (

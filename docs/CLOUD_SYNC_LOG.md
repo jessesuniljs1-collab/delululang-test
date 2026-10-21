@@ -4996,3 +4996,60 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing. For the laptop's memory: nothing new.
 - Open / next: (1) #26 and this branch landing on green; (2) `launch/2.0.0`: merge `f05c329` onward (the Breaking
   paragraph's actor clause to go); (3) a package's `requests`, the path in the chain's record, methods; maps on WASM.
+
+### 2026-10-21 (evening) — a package's `requests`: each module by its own node types (D-V2-168 item 2) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/p9-05-packages` (on `laptop/p9-05-requests`, #27)   Pull request: see the branch   Merged: not yet
+- **Landed:** #26 (`12d5fa2`) on its CI `39594329482`, success on every job — `master` `f05c329..12d5fa2`.
+- What: `V2_LOG.md` (2026-10-21, the fourth evening entry); D-V2-168 item 2 amended.
+- Files and folders: M `crates/delulu-check/src/program.rs` (`Program::node_types`; `check_program` keeps them),
+  `crates/delulu-check/src/deps.rs` (`check_workspace` keeps them), `crates/delulu/src/cli.rs` (the units beside the
+  modules; a package's `requests`; the single-file `Program`), `crates/delulu-atlas/src/lib.rs` (the test helper's
+  `Program`), `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #27 and this branch landing on green; (2) `launch/2.0.0`: merge `master` (the Breaking paragraph's
+  actor clause to go); (3) the path in the chain's record; methods with the first non-GET primitive; maps on WASM.
+
+### 2026-10-21 (evening) — a once-seen Windows red made to say why (RW 7.22); `launch/2.0.0` at `678dee6` (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launcher-witness`   Pull request: see the branch   Base: `fa4021c`
+- **Landed earlier this evening:** #27 (`eef9583`) on `39596126140` and #28 (`fa4021c`) on `39598422553`, success on every
+  job. **Push runs:** `39595752855` (`f05c329`) and `39597236450` (`12d5fa2`) success; **`39599000467` (`eef9583`) failure** —
+  this entry; `39600787572` (`fa4021c`) running.
+- **`launch/2.0.0` at `678dee6`** (merging `a2fb0cd..fa4021c`, #24–#28; the CHANGELOG's two sections under `## [2.0.0]`; the
+  Breaking paragraph's clause that `build` refuses an actor program removed, no longer true; the Survey rebuilt, 1545 nodes,
+  0 errors; `doctor --check` 29 ok; clippy stamped; ten gates incl. `core_invariance`, 75 passed). Its release dry run
+  `39601108596`: **success**. Its `everything` `39601103948`: running.
+- **The autosave task** (the owner asked, 18:00 IST): Ready, every 10 minutes, last result 0, none missed. Its log shows
+  each snapshot pushed to `autosave/laptop`; every branch equals `origin`. Renewed with `scripts\autosave.ps1 -Install
+  -Hours 168`, to 2026-10-28 18:03 IST.
+- What: `V2_LOG.md` (2026-10-21, the fifth evening entry).
+- Files and folders: M `crates/delulu/tests/sandbox_confirm_cli.rs`, `docs/REMAINING_WORK.md` (7.22),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: (1) the three witness runs and `39601103948`; (2) RW 7.22's root cause from the next red's words; (3) the path
+  in the chain's record; methods; maps on WASM.
+
+### 2026-10-21 (evening) — the routine every six hours; the 2026-09-17 agent worktrees removed; RW 7.22's witnesses green (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launcher-witness` (its second commit)   Pull request: #29
+- **The routine's schedule (the owner):** *"Routine / Scheduled Task u created is not following 5 hr and 5 min gap as I
+  told"*. Read back from the API: `5 */5 * * *` UTC, `enabled: false` — every five hours, with a four-hour gap each night
+  (20:05 → 00:05 UTC, 01:35 → 05:35 IST); cron has no 5 h 5 min interval. Offered every six hours or the same; he chose
+  **every six hours**: set through the API to `5 */6 * * *` (05:35, 11:35, 17:35, 23:35 IST), read back `enabled: false` —
+  still paused, the owner's switch. `docs/CLOUD_ROUTINE.md`, `HANDOFF.md` §0, D-V2-146 (amended) and the memory copy say so.
+- **The two agent worktrees of 2026-09-17** removed on the owner's word, both checks first, their notes kept outside the
+  repository — `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`.
+- **RW 7.22's reproduction:** `witness.yml` on `windows-latest` at `fa4021c`, the test alone, three times — `39602082207`,
+  `39602087235`, `39602091804`: **success** each. Not reproduced; the witness now says why when it next fails.
+- **CI watched with a Monitor** for the rest of the session (the owner asked how CI is watched): each run's end reported
+  as it lands, a failed job named.
+- Files and folders: M `docs/CLOUD_ROUTINE.md`, `HANDOFF.md`, `docs/DELULULANG_V2/V2_DECISION_LOG.md`,
+  `docs/assistant-memory/cloud-routine-on-demand-2026-10-17.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md`
+  (7.22), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `docs/maintenance/WORKTREE-CLEANUP-2026-10-21.md`. Deleted, renamed:
+  nothing tracked.
+- Survey and doctor (after the last edit): in the commit message.

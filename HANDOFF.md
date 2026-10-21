@@ -46,7 +46,7 @@ and the VS Code end-to-end test → the scheduled task → the release → an ev
 `docs/CLOUD_SYNC_LOG.md`.
 
 **The on-demand routine (D-V2-146).** On 2026-10-17 the owner asked for a new cloud routine he runs *"occasionally
-whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */5 * * *` UTC, push
+whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */6 * * *` UTC since 2026-10-21 — 05:35, 11:35, 17:35, 23:35 IST — push
 and e-mail notifications, created disabled). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
 does what a Linux VM can verify; the launch, the WSL microVM images and the Windows VS Code test stay the laptop's. **So
 every session — laptop or cloud — starts by fetching `origin`** and reading what came in (`AGENTS.md`, *Read first* 0).

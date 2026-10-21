@@ -162,8 +162,16 @@ impl GuardedDecision {
 }
 
 /// Validate an op against a node's authority + effective state. Shared by the live path and the
-/// snapshot path; the caller decides the data source (live tree vs frozen snapshot).
-fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg: Option<&str>) -> Result<(), Denial> {
+/// snapshot path; the caller decides the data source (live tree vs frozen snapshot). `url_path` is a
+/// network use's request path, when its caller sends one (P9-05, D-V2-169).
+fn validate(
+    node_id: &GrantId,
+    eff: EffState,
+    authority: &Authority,
+    op: Op,
+    arg: Option<&str>,
+    url_path: Option<&str>,
+) -> Result<(), Denial> {
     // 1. Liveness (spec §4.3).
     match eff {
         EffState::Revoked { by_seq } => return Err(Denial::Revoked { node: node_id.clone(), by_seq }),
@@ -205,6 +213,18 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
         if !ok {
             return Err(Denial::OutOfScope { node: node_id.clone(), dimension: op.scope_dimension(), arg: arg.to_string() });
         }
+        // P9-05, D-V2-169: a use that names its request path is judged on it too, by the reading the runtime's first check
+        // and the egress client share (`netscope::judge_all`) — so the chain never records `allow` for a path the grant
+        // does not reach. The host is within some entry (above); an entry for this host that names no pattern reaches
+        // every path.
+        if let (Op::Net, Some(path)) = (op, url_path) {
+            let refused = |why| Denial::NetPath { node: node_id.clone(), host: arg.to_string(), path: path.to_string(), why };
+            match crate::netscope::judge_all(&authority.scopes.net, arg, path) {
+                crate::netscope::Verdict::Allow => {}
+                crate::netscope::Verdict::Ambiguous(why) => return Err(refused(Some(why))),
+                crate::netscope::Verdict::OutsidePath | crate::netscope::Verdict::OtherHost => return Err(refused(None)),
+            }
+        }
     }
     Ok(())
 }
@@ -216,12 +236,28 @@ impl Broker {
     /// §2.4.2 / criterion 11) — a cached snapshot cannot consult permits. Returns the [`Decision`]
     /// plus an optional agent-side `warn` note.
     pub fn check_use(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> GuardedDecision {
+        self.check_use_at(node_id, op, arg, None)
+    }
+
+    /// [`Broker::check_use`] for a use that names its request path (P9-05, D-V2-169): a network use's `url_path` — the
+    /// URL's path, without its query or fragment, `/` when it names none — is judged against the node's `net` entries for
+    /// the host and carried in the use's record (`url_path`, beside `op`). `target` stays the host: every reader of a
+    /// `use` record reads it so (the OCSF export's `dst_endpoint.hostname`, an egress refusal's record, `audit query`).
+    /// Ignored for any other op.
+    pub fn check_use_at(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>, url_path: Option<&str>) -> GuardedDecision {
+        let url_path = url_path.filter(|_| op == Op::Net);
         let now = self.effective_now();
         // PS-E-06 (D-V2-80): a use's record names its effect, in the payload slot under a self-describing
         // key — as a revocation's carries its bound (spec §11, chunk-5 deviation 3). Without it a record
         // said which node used which argument and not HOW: a path read, a path written and a host asked
         // were the same record, and an export could only guess one from the argument's spelling.
-        let payload = || Some(serde_json::json!({ "op": op.wire_name() }));
+        let payload = || {
+            let mut p = serde_json::json!({ "op": op.wire_name() });
+            if let Some(path) = url_path {
+                p["url_path"] = serde_json::json!(path);
+            }
+            Some(p)
+        };
         let (eff, authority) = match self.node_view(node_id, now) {
             Some(v) => v,
             None => {
@@ -243,7 +279,7 @@ impl Broker {
             }
         };
         // 1. Normal authorization: liveness + effect + scope (unchanged — the guard sits ON TOP).
-        if let Err(d) = validate(node_id, eff, &authority, op, arg) {
+        if let Err(d) = validate(node_id, eff, &authority, op, arg, url_path) {
             if op.class() == OpClass::Synchronous {
                 let seq = self.consume_seq();
                 self.record_op(
@@ -452,7 +488,7 @@ impl Snapshot {
         let Some(sn) = self.nodes.get(node_id) else {
             return Decision::Deny(Denial::UnknownNode { node: node_id.clone() });
         };
-        match validate(node_id, sn.eff, &sn.authority, op, arg) {
+        match validate(node_id, sn.eff, &sn.authority, op, arg, None) {
             Ok(()) => Decision::Allow { audit_seq: None },
             Err(d) => Decision::Deny(d),
         }
