@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use delulu_check::check_source;
 use delulu_runtime::{set_capture, take_capture, Grants, Interp, Value};
-use delulu_wasm::{compile_checked, run_main, HostConfig};
+use delulu_wasm::{compile_checked, run_int_fn, run_main, HostConfig};
 
 /// Run `main` on both engines with the console; both outputs, or each fault's text.
 fn run_both(src: &str) -> (Result<String, String>, Result<String, String>) {
@@ -211,4 +211,24 @@ fn a_hand_written_map_outside_the_memory_is_refused_in_words() {
         let err = got.expect_err(what).message();
         assert!(err.contains("DL0903") && err.contains("a map's pairs lie outside the guest's memory"), "{what}: {err}");
     }
+}
+
+/// WASM-IMPORTS-1: a module whose only imports are a map's — a pure function that makes and fills one, with no console
+/// and no list — is one the engine can load. The import section was written only for a list of interfaces that left
+/// `delulu:map` out, so this module was refused: `failed to parse WebAssembly module`.
+#[test]
+fn a_module_whose_only_imports_are_a_maps_loads() {
+    let src = "module m
+fn f() -> Int {
+  let m: ref Map[Int, Int] = Map()
+  m.insert(1, 2)
+  m.insert(3, 4)
+  m.insert(1, 5)
+  m.len()
+}
+";
+    let checked = check_source(0, src);
+    assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+    let wasm = compile_checked(&checked.module, &checked.result).expect("should compile to WASM");
+    assert_eq!(run_int_fn(&wasm, "f", &[]).expect("the module loads and runs"), 2);
 }

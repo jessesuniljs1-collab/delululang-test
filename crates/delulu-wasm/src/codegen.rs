@@ -1823,21 +1823,9 @@ fn compile_module_typed(
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console
-        || needs_clock
-        || needs_rand
-        || needs_fs
-        || needs_fs_write
-        || needs_http
-        || needs_foreign
-        || needs_actors
-        || needs_lists
-        || needs_str_methods
-        || needs_parse_int
-        || needs_parse_float
-        || needs_floats
-        || needs_values
-    {
+    // Whenever it holds one (WASM-IMPORTS-1: it was written for a list of the interfaces that left `delulu:map` out, so a
+    // module whose only imports were a map's was refused by the engine as one it could not parse).
+    if !imports.is_empty() {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -3178,11 +3166,7 @@ fn compile_pattern_test(pat: &Pattern, v: u32, t: Ty, fail: u32, cx: &mut Cx) ->
                     cx.emit(Instruction::I32Const(i32::from(*b)));
                     cx.emit(Instruction::I32Ne);
                 }
-                // `==` of two floats, as the interpreter's `Value::eq` is: a NaN matches nothing, `-0.0` matches `0.0`.
-                (LitKind::Float(x), Ty::F64) => {
-                    cx.emit(Instruction::F64Const(*x));
-                    cx.emit(Instruction::F64Ne);
-                }
+                // (The parser writes no `Float` literal pattern.)
                 (LitKind::Str(s), Ty::Str) if cx.imp.str_eq != u32::MAX => {
                     let ptr = *cx
                         .str_off
@@ -3214,7 +3198,7 @@ fn compile_pattern_test(pat: &Pattern, v: u32, t: Ty, fail: u32, cx: &mut Cx) ->
             cx.emit(Instruction::LocalGet(v));
             cx.emit(Instruction::I32Load(u32_at()));
             cx.emit(Instruction::I32Const(tag as i32));
-            cx.emit(Instruction::I32Ne);
+            cx.emit(Instruction::I32Eq);
             cx.emit(Instruction::BrIf(cx.depth - fail));
             for (i, (fp, ps)) in fields.iter().zip(payloads).enumerate() {
                 // A `Unit` field has no slot, and only `_` or a name can stand for it.
