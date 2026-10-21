@@ -1203,6 +1203,17 @@ spells the same thing?**
   - A bounded search that runs out must refuse, never pass. The first version passed a 400-arm match it could not
     finish, and that match was not exhaustive.
   - Search key: `_ => {}` in a walk over patterns, types or expressions.
+- **DATA-DEPTH-1 — a bound on call depth is not a bound on data depth: every walk over a value a loop can build must be
+  iterative** (the laptop, 2026-10-22, RW 4.74).
+  - `MAX_DEPTH` and the 512 MiB `delulu-main` stack bound recursion in the program. A `while` loop builds a value as
+    deep as memory allows.
+  - INTERP-DROP-1 made teardown iterative and stopped there, so `display`, `eq`, the WASM host's rebuild and its
+    descriptor parser still recursed. `str` of a 300,000-link list killed the interpreter; 100,000 killed the WASM host.
+  - When one walk over a value is fixed for depth, list every other walk over the same value (`actors.rs` and
+    `channel.rs` remain, RW 4.75).
+  - Also: a pair of tests can lock a cycle and never lock sharing. A cell held twice side by side, as opposed to inside
+    itself, was untested under the old recursion too (M777, M785).
+  - Search key: `fn …(&self` on `Value` calling itself, `Value` walks in `reify.rs`, `actors.rs`, `channel.rs`.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

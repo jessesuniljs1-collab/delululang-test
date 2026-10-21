@@ -8398,3 +8398,34 @@ cases, the pigeonhole bound); two conformance reject cases (`DL0407_nested_non_e
 which `Bool` literal a branch keeps is invisible when the arms are symmetric in `true` and `false`. A case that is not
 symmetric was added (`P(true, true), P(false, _)` leaves `P(true, false)`). Local: `delulu-check` and `delulu-wasm`
 whole, `conformance`, `message_spacing`, `wasm_cli` green; clippy clean and stamped. Commit `823673e`, PR #34.
+
+## 2026-10-22 (night) — the laptop: deep values print and compare on both engines (RW 4.74)
+
+Found while checking whether the WASM host's rebuild of a guest's value (`reify.rs`) bounded its depth before widening
+what a list may hold (RW 3.4). It did not, and neither did the interpreter's own `display` and `eq`. INTERP-DROP-1 had
+made teardown iterative and left them recursive.
+
+- **DATA-DEPTH-1 (RW 4.74).** A linked list of records built in a `while` loop, then `str` of its head:
+  - the interpreter prints it at 100,000 links and dies at 300,000 (`thread 'delulu-main' has overflowed its stack`,
+    exit 127), inside the default 1 GiB budget;
+  - the WASM engine dies at 100,000, so the guest's data killed its host. That covers `run --engine wasm`, a `.dwx` and
+    every Contained plugin.
+  - A hand-written module did the same through the descriptor parser, with a million `l`s.
+- **Fixed.** `Value::display` and `Value::eq` walk explicit worklists. `display` keeps the cells it is inside, and
+  leaves each when its rendering ends. `eq` keeps the pairs it has assumed equal, and compares every reachable pair once,
+  so the order cannot change the answer. `reify.rs` builds post-order from a worklist with a stack of finished values:
+  - a list's elements are read one per step from a single `Run`, so a long list never queues a step per element;
+  - its descriptor parser refuses nesting past 256 (a written type stops at 128).
+  - Both engines now print the 300,000-link list as `9488888` characters.
+- **Not yet covered (RW 4.75, DATA-DEPTH-2).** Two more walks recurse: the copy into an actor message and the
+  sandbox channel's serializing. Read, not run: whether a well-typed program can reach either with a deep value is open.
+
+Tests:
+- `delulu-runtime` `value::depth_tests`: a 200,000-level value through a variant, a list, a record and a map in turn,
+  displayed and compared; and a cell held twice side by side.
+- `delulu-wasm/tests/deep_value_parity.rs`: a 100,000-link list on both engines, a cell held twice side by side, and the
+  deep descriptor.
+- On the old code each kills its test binary with a stack overflow; each was witnessed separately.
+
+Mutants M777–M785 red. M777 (`display` never leaves a cell) and M785 (the rebuild never leaves a variant) survived
+first: no test held one cell twice side by side, under the old recursion either.

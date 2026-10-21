@@ -5129,3 +5129,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   3.23), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; A `crates/delulu-wasm/tests/match_parity.rs`,
   `tests/conformance/reject/DL0407_{nested,literal}_non_exhaustive.delulu`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — deep values print and compare on both engines (RW 4.74) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deep-values` (on `master` `0061ca1`, where #34 landed on its green run `39662388275`)   Pull request: the one this entry rides in
+- **What:** DATA-DEPTH-1 — `str` or `==` of a value nested past the native stack killed the process on both engines,
+  and a hand-written module's deep descriptor killed the WASM host; `display`, `eq` and `reify.rs` now walk worklists,
+  and the descriptor parser is bounded. DATA-DEPTH-2 (RW 4.75) opened: the actor-message copy and the channel's
+  serializing, not yet witnessed. Tests, mutants M777–M785 and the witnesses are in `V2_LOG.md`.
+- Files and folders: M `crates/delulu-runtime/src/value.rs`, `crates/delulu-wasm/src/reify.rs`, `CHANGELOG.md`,
+  `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.74, 4.75), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`; A `crates/delulu-wasm/tests/deep_value_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — deep values print and compare, 2026-10-22
+
+- **Fixed: `str` or `==` of a deeply nested value crashed the process** (DATA-DEPTH-1, RW 4.74). A linked list of records
+  built in a loop crashed the interpreter at 300,000 links with a stack overflow, inside the default memory budget. On
+  the WASM engine it crashed at 100,000, and that includes `.dwx` files and Contained plugins. Both engines now print and
+  compare such a value whole, with the same text as before.
+- **Fixed: a hand-written WebAssembly module could crash its host with a deeply nested type descriptor.** One deeper
+  than any the compiler writes is now refused with DL0903.
+
 ## Unreleased — a `match` covers every case at every depth, 2026-10-22
 
 - **Changed: the checker refuses a `match` that leaves a case uncovered below its top level** (DL0407, D-V2-172).

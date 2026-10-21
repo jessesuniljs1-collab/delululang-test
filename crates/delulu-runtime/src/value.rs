@@ -248,78 +248,95 @@ impl Value {
     /// renders a list that holds itself. Without that, `str` of such a value recursed until the stack overflowed and the
     /// process died (DISPLAY-CYCLE-1).
     pub fn display(&self) -> String {
-        self.display_in(&mut BTreeSet::new())
+        // DISPLAY-DEPTH-1: depth becomes breadth, as in `VariantFields`'s `Drop`. Rendered by recursion, a value nested
+        // past the native stack — a linked list of 300,000 records built in a loop — overflowed it and killed the
+        // process. The text is built from an explicit worklist instead, which costs heap, bounded by the value that
+        // already fit in memory.
+        let mut out = String::new();
+        let mut inside: BTreeSet<usize> = BTreeSet::new();
+        let mut work: Vec<Shown> = vec![Shown::Value(self.clone())];
+        while let Some(step) = work.pop() {
+            match step {
+                Shown::Text(s) => out.push_str(s),
+                Shown::Owned(s) => out.push_str(&s),
+                Shown::Leave(addr) => {
+                    inside.remove(&addr);
+                }
+                Shown::Value(v) => v.display_step(&mut out, &mut inside, &mut work),
+            }
+        }
+        out
     }
 
-    /// `display`, inside the cells in `inside` (each a `List`, `Map` or `Record` cell's address).
-    fn display_in(&self, inside: &mut BTreeSet<usize>) -> String {
+    /// One value of `display`: a scalar's text, written; a compound's opening, written, and its parts, its closing and
+    /// its leaving onto `work`, the last first. `inside` holds the cells being rendered (each a `List`, `Map` or `Record`
+    /// cell's address), so one met again inside itself renders as its own shape around `...`.
+    fn display_step(&self, out: &mut String, inside: &mut BTreeSet<usize>, work: &mut Vec<Shown>) {
         match self {
-            Value::Int(i) => i.to_string(),
+            Value::Int(i) => out.push_str(&i.to_string()),
             Value::Float(x) => {
                 if x.fract() == 0.0 && x.is_finite() {
-                    format!("{x:.1}")
+                    out.push_str(&format!("{x:.1}"))
                 } else {
-                    x.to_string()
+                    out.push_str(&x.to_string())
                 }
             }
-            Value::Bool(b) => b.to_string(),
-            Value::Str(s) => s.to_string(),
-            Value::Unit => "()".to_string(),
+            Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            Value::Str(s) => out.push_str(s),
+            Value::Unit => out.push_str("()"),
             // Ascending by key, which is the same order `keys()` and `values()` give — so what a
             // test compares and what a program iterates cannot disagree.
-            Value::Map(m) => within(
-                inside,
-                cell_addr(m),
-                || "{...}".to_string(),
-                |inside| {
-                    let inner: Vec<String> =
-                        m.borrow().iter().map(|(k, v)| format!("{}: {}", k.to_value().display(), v.display_in(inside))).collect();
-                    format!("{{{}}}", inner.join(", "))
-                },
-            ),
-            Value::List(items) => within(
-                inside,
-                cell_addr(items),
-                || "[...]".to_string(),
-                |inside| {
-                    let inner: Vec<String> = items.borrow().iter().map(|v| v.display_in(inside)).collect();
-                    format!("[{}]", inner.join(", "))
-                },
-            ),
-            Value::Record { name, fields } => within(
-                inside,
-                cell_addr(fields),
-                || format!("{name} {{ ... }}"),
-                |inside| {
-                    let inner: Vec<String> =
-                        fields.borrow().iter().map(|(n, v)| format!("{n}: {}", v.display_in(inside))).collect();
-                    format!("{name} {{ {} }}", inner.join(", "))
-                },
-            ),
+            Value::Map(m) => {
+                if !inside.insert(cell_addr(m)) {
+                    return out.push_str("{...}");
+                }
+                out.push('{');
+                work.push(Shown::Leave(cell_addr(m)));
+                work.push(Shown::Text("}"));
+                push_parts(work, m.borrow().iter().map(|(k, v)| (Some(format!("{}: ", k.to_value().display())), v.clone())));
+            }
+            Value::List(items) => {
+                if !inside.insert(cell_addr(items)) {
+                    return out.push_str("[...]");
+                }
+                out.push('[');
+                work.push(Shown::Leave(cell_addr(items)));
+                work.push(Shown::Text("]"));
+                push_parts(work, items.borrow().iter().map(|v| (None, v.clone())));
+            }
+            Value::Record { name, fields } => {
+                if !inside.insert(cell_addr(fields)) {
+                    return out.push_str(&format!("{name} {{ ... }}"));
+                }
+                out.push_str(&format!("{name} {{ "));
+                work.push(Shown::Leave(cell_addr(fields)));
+                work.push(Shown::Text(" }"));
+                push_parts(work, fields.borrow().iter().map(|(n, v)| (Some(format!("{n}: ")), v.clone())));
+            }
             Value::Variant { name, fields } => {
-                if fields.is_empty() {
-                    name.to_string()
-                } else {
-                    let inner: Vec<String> = fields.iter().map(|v| v.display_in(inside)).collect();
-                    format!("{name}({})", inner.join(", "))
+                out.push_str(name);
+                if !fields.is_empty() {
+                    out.push('(');
+                    work.push(Shown::Text(")"));
+                    push_parts(work, fields.iter().map(|v| (None, v.clone())));
                 }
             }
-            Value::Closure(_) => "<fn>".to_string(),
-            Value::Cap(c) => format!("<cap {}>", c.kind.name()),
-            Value::Secret(_) => "«secret»".to_string(),
-            Value::Root(_) => "<root>".to_string(),
+            Value::Closure(_) => out.push_str("<fn>"),
+            Value::Cap(c) => out.push_str(&format!("<cap {}>", c.kind.name())),
+            Value::Secret(_) => out.push_str("«secret»"),
+            Value::Root(_) => out.push_str("<root>"),
             // Opaque (R-5): the checker rejects `str`/`==`/serialize on these, so a well-typed
             // program never displays one; the runtime still refuses to reveal anything useful.
-            Value::Foreign(h) => format!("<foreign lib {}>", h.name),
-            Value::ForeignPtr(_) => "<foreign ptr>".to_string(),
+            Value::Foreign(h) => out.push_str(&format!("<foreign lib {}>", h.name)),
+            Value::ForeignPtr(_) => out.push_str("<foreign ptr>"),
             #[cfg(feature = "python")]
-            Value::PyObj(_) => "<py obj>".to_string(),
+            Value::PyObj(_) => out.push_str("<py obj>"),
             // Opaque (tag): identity never renders — the checker rejects `str`/`==` anyway.
-            Value::ActorRef { actor, .. } => format!("<actor {actor}>"),
+            Value::ActorRef { actor, .. } => out.push_str(&format!("<actor {actor}>")),
             // Opaque (R-5), like `Foreign` above: a plugin is code that arrived after compile time,
             // and neither its identity nor its exports reveal anything through `str`.
-            Value::Plugin(p) => format!("<plugin {}>", p.name),
-            Value::PluginFn(f) => format!("<plugin fn {}>", f.reference.export),
+            Value::Plugin(p) => out.push_str(&format!("<plugin {}>", p.name)),
+            Value::PluginFn(f) => out.push_str(&format!("<plugin fn {}>", f.reference.export)),
         }
     }
 
@@ -332,50 +349,94 @@ impl Value {
     /// (`Float` alone breaks reflexivity on NaN). Clippy's warning is that the name can be confused
     /// for the trait method; the answer is that the confusion runs the other way, and a trait impl
     /// would let Rust code call it in contexts the language's own rules never sanctioned.
+    ///
+    /// The pairs of cells already being compared are kept: a pair met again is taken as equal, since the two values then
+    /// differ only if something else they hold does, and the walk of two values that hold themselves ends. A cell is never
+    /// equal to itself just for being itself — `[nan] == [nan]` is `false`, as `nan == nan` is. The pairs still to compare
+    /// wait on an explicit worklist, as `display`'s parts do (DISPLAY-DEPTH-1): the answer is the same in any order, since
+    /// every reachable pair is compared once and any one that differs makes the whole differ.
     #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &Value) -> bool {
-        self.eq_in(other, &mut BTreeSet::new())
+        let mut assumed: BTreeSet<(usize, usize)> = BTreeSet::new();
+        let mut work: Vec<(Value, Value)> = vec![(self.clone(), other.clone())];
+        while let Some((a, b)) = work.pop() {
+            let same = match (&a, &b) {
+                (Value::Int(a), Value::Int(b)) => a == b,
+                (Value::Float(a), Value::Float(b)) => a == b,
+                (Value::Bool(a), Value::Bool(b)) => a == b,
+                (Value::Str(a), Value::Str(b)) => a == b,
+                (Value::Unit, Value::Unit) => true,
+                (Value::Variant { name: n1, fields: f1 }, Value::Variant { name: n2, fields: f2 }) => {
+                    let same = n1 == n2 && f1.len() == f2.len();
+                    if same {
+                        work.extend(f1.iter().cloned().zip(f2.iter().cloned()));
+                    }
+                    same
+                }
+                (Value::List(a), Value::List(b)) => {
+                    if !assumed.insert((cell_addr(a), cell_addr(b))) {
+                        continue;
+                    }
+                    let (a, b) = (a.borrow(), b.borrow());
+                    let same = a.len() == b.len();
+                    if same {
+                        work.extend(a.iter().cloned().zip(b.iter().cloned()));
+                    }
+                    same
+                }
+                // A record equals one of the same type whose fields are equal, field by field; a map, one with the same keys
+                // holding equal values (both walk ascending by key, so the walks pair each key with itself). EQ-RECORD-1:
+                // neither had an arm, so `p == p` was `false` and `p != p` `true` — for a record or a map whose contents the
+                // checker admits to `==` — and `List.contains` and `assert_eq` answered the same wrong way.
+                (Value::Record { name: n1, fields: f1 }, Value::Record { name: n2, fields: f2 }) => {
+                    if !assumed.insert((cell_addr(f1), cell_addr(f2))) {
+                        continue;
+                    }
+                    let (a, b) = (f1.borrow(), f2.borrow());
+                    let same = n1 == n2 && a.len() == b.len() && a.iter().zip(b.iter()).all(|((k1, _), (k2, _))| k1 == k2);
+                    if same {
+                        work.extend(a.iter().map(|(_, x)| x.clone()).zip(b.iter().map(|(_, y)| y.clone())));
+                    }
+                    same
+                }
+                (Value::Map(a), Value::Map(b)) => {
+                    if !assumed.insert((cell_addr(a), cell_addr(b))) {
+                        continue;
+                    }
+                    let (a, b) = (a.borrow(), b.borrow());
+                    let same = a.len() == b.len() && a.keys().zip(b.keys()).all(|(k1, k2)| k1 == k2);
+                    if same {
+                        work.extend(a.values().cloned().zip(b.values().cloned()));
+                    }
+                    same
+                }
+                _ => false,
+            };
+            if !same {
+                return false;
+            }
+        }
+        true
     }
+}
 
-    /// `eq`, with the pairs of cells already being compared in `assumed`. A pair met again is taken as equal: the two
-    /// values then differ only if something else they hold does, and the walk of two values that hold themselves ends. A
-    /// cell is never equal to itself just for being itself — `[nan] == [nan]` is `false`, as `nan == nan` is.
-    fn eq_in(&self, other: &Value, assumed: &mut BTreeSet<(usize, usize)>) -> bool {
-        match (self, other) {
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::Float(a), Value::Float(b)) => a == b,
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::Unit, Value::Unit) => true,
-            (Value::Variant { name: n1, fields: f1 }, Value::Variant { name: n2, fields: f2 }) => {
-                n1 == n2 && f1.len() == f2.len() && f1.iter().zip(f2.iter()).all(|(a, b)| a.eq_in(b, assumed))
-            }
-            (Value::List(a), Value::List(b)) => {
-                if !assumed.insert((cell_addr(a), cell_addr(b))) {
-                    return true;
-                }
-                let (a, b) = (a.borrow(), b.borrow());
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.eq_in(y, assumed))
-            }
-            // A record equals one of the same type whose fields are equal, field by field; a map, one with the same keys
-            // holding equal values (both walk ascending by key, so the walks pair each key with itself). EQ-RECORD-1:
-            // neither had an arm, so `p == p` was `false` and `p != p` `true` — for a record or a map whose contents the
-            // checker admits to `==` — and `List.contains` and `assert_eq` answered the same wrong way.
-            (Value::Record { name: n1, fields: f1 }, Value::Record { name: n2, fields: f2 }) => {
-                if !assumed.insert((cell_addr(f1), cell_addr(f2))) {
-                    return true;
-                }
-                let (a, b) = (f1.borrow(), f2.borrow());
-                n1 == n2 && a.len() == b.len() && a.iter().zip(b.iter()).all(|((k1, x), (k2, y))| k1 == k2 && x.eq_in(y, assumed))
-            }
-            (Value::Map(a), Value::Map(b)) => {
-                if !assumed.insert((cell_addr(a), cell_addr(b))) {
-                    return true;
-                }
-                let (a, b) = (a.borrow(), b.borrow());
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|((k1, x), (k2, y))| k1 == k2 && x.eq_in(y, assumed))
-            }
-            _ => false,
+/// A step of `Value::display`: text to write, a value to render, or a cell whose rendering has ended.
+enum Shown {
+    Text(&'static str),
+    Owned(String),
+    Value(Value),
+    Leave(usize),
+}
+
+/// Put `parts` on `work` so they render in order with `, ` between them — each its label (`name: `), then its value.
+fn push_parts(work: &mut Vec<Shown>, parts: impl DoubleEndedIterator<Item = (Option<String>, Value)> + ExactSizeIterator) {
+    for (i, (label, v)) in parts.enumerate().rev() {
+        work.push(Shown::Value(v));
+        if let Some(label) = label {
+            work.push(Shown::Owned(label));
+        }
+        if i > 0 {
+            work.push(Shown::Text(", "));
         }
     }
 }
@@ -383,22 +444,6 @@ impl Value {
 /// A mutable cell's address — what tells one `List`, `Map` or `Record` cell from another while a value is walked.
 fn cell_addr<T>(cell: &Rc<RefCell<T>>) -> usize {
     Rc::as_ptr(cell) as *const () as usize
-}
-
-/// Render the cell at `addr` with `render`, marked as being walked while it renders — or `again` if it already is, so a
-/// value that holds itself renders in finite text (`Value::display`, DISPLAY-CYCLE-1).
-fn within(
-    inside: &mut BTreeSet<usize>,
-    addr: usize,
-    again: impl FnOnce() -> String,
-    render: impl FnOnce(&mut BTreeSet<usize>) -> String,
-) -> String {
-    if !inside.insert(addr) {
-        return again();
-    }
-    let s = render(inside);
-    inside.remove(&addr);
-    s
 }
 
 impl fmt::Debug for Value {
@@ -1095,6 +1140,61 @@ mod teardown_tests {
             }
             _ => panic!("expected a variant"),
         }
+    }
+}
+
+/// **DISPLAY-DEPTH-1 regression lock.** `display` and `eq` of a value nested past the native stack — what `str`, `==`,
+/// `contains` and `assert_eq` of a linked list built in a loop reach — must answer, not overflow it. Before, both
+/// recursed once per level, and a 300,000-link list printed with `str` killed the process (`delulu-main`'s 512 MiB stack
+/// included). As with the teardown locks above, the falsification signal is the test binary dying: the depth is chosen
+/// to be decisive on a test thread's stack.
+#[cfg(test)]
+mod depth_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    const DEPTH: usize = 200_000;
+
+    /// A value `DEPTH` levels deep through each kind of cell in turn — a variant, a list, a record, a map — with `leaf` at
+    /// the bottom.
+    fn deep(leaf: i64) -> Value {
+        let mut v = Value::Int(leaf);
+        for i in 0..DEPTH {
+            v = match i % 4 {
+                0 => Value::variant("Link", vec![v]),
+                1 => Value::List(Rc::new(RefCell::new(vec![v]))),
+                2 => Value::Record { name: Rc::from("Box"), fields: Rc::new(RefCell::new(vec![("f".to_string(), v)])) },
+                _ => Value::Map(Rc::new(RefCell::new(BTreeMap::from([(MapKey::Int(1), v)])))),
+            };
+        }
+        v
+    }
+
+    #[test]
+    fn a_value_nested_past_the_stack_displays_whole() {
+        let shown = deep(7).display();
+        // Each four levels, outermost first: `{1: `, `Box { f: `, `[`, `Link(`; then each closes in reverse.
+        let open = "{1: Box { f: [Link(".repeat(DEPTH / 4);
+        let close = ")] }}".repeat(DEPTH / 4);
+        assert_eq!(shown.len(), open.len() + 1 + close.len());
+        assert!(shown.starts_with(&open) && shown.ends_with(&close) && shown[open.len()..].starts_with('7'));
+    }
+
+    #[test]
+    fn values_nested_past_the_stack_compare_whole() {
+        assert!(deep(7).eq(&deep(7)), "two such values, built apart, are equal");
+        assert!(!deep(7).eq(&deep(8)), "and differ when their deepest values do");
+    }
+
+    /// A cell held twice side by side — not inside itself — renders whole each time: only a cell met again *inside*
+    /// itself renders as `...`, so a cell's rendering ends when its own does.
+    #[test]
+    fn a_cell_held_twice_side_by_side_renders_whole_each_time() {
+        let x = Value::List(Rc::new(RefCell::new(vec![Value::Int(1)])));
+        let r = Value::Record { name: Rc::from("R"), fields: Rc::new(RefCell::new(vec![("a".to_string(), x.clone())])) };
+        let m = Value::Map(Rc::new(RefCell::new(BTreeMap::from([(MapKey::Int(1), x.clone())]))));
+        let both = Value::List(Rc::new(RefCell::new(vec![x.clone(), x, r.clone(), r, m.clone(), m])));
+        assert_eq!(both.display(), "[[1], [1], R { a: [1] }, R { a: [1] }, {1: [1]}, {1: [1]}]");
     }
 }
 
