@@ -48,6 +48,14 @@ pub trait Custody {
     /// broker round-trip and epoch-class ops to the cached snapshot; the caller does not care which.
     fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision;
 
+    /// [`Custody::check`] for a use that names its request path — a network use's URL path, without its query (P9-05,
+    /// D-V2-169): a custody that records uses judges it and carries it in the record; one that records nothing (embedded,
+    /// whose `prim` check judges the path) has nowhere to carry it, so the default asks `check`.
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+        let _ = url_path;
+        self.check(op, arg)
+    }
+
     /// Reveal a broker-held secret's bytes — a synchronous declassification (spec §4.4), audit-logged
     /// with the calling `span`. Embedded custody never routes here (local secrets reveal in-process);
     /// this is the daemon path where the bytes cross for the first time on `expose`.
@@ -204,6 +212,12 @@ impl Custody for PluginUseCustody {
             return CustodyDecision::Deny(d);
         }
         self.host.borrow_mut().check(op, arg)
+    }
+    fn check_at(&mut self, op: Op, arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+        if let Err(d) = self.gate() {
+            return CustodyDecision::Deny(d);
+        }
+        self.host.borrow_mut().check_at(op, arg, url_path)
     }
     fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
         self.gate()?;

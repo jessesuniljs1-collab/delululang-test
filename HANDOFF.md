@@ -46,7 +46,7 @@ and the VS Code end-to-end test → the scheduled task → the release → an ev
 `docs/CLOUD_SYNC_LOG.md`.
 
 **The on-demand routine (D-V2-146).** On 2026-10-17 the owner asked for a new cloud routine he runs *"occasionally
-whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */5 * * *` UTC, push
+whenever I can't use my laptop"*, paused at the start: `trig_01HFG6usfzmDAPQigiDu9DLq` (Opus 5.5, `5 */6 * * *` UTC since 2026-10-21 — 05:35, 11:35, 17:35, 23:35 IST — push
 and e-mail notifications, created disabled). It follows `docs/CLOUD_ROUTINE.md` (its *Since 2026-10-17* paragraphs) and
 does what a Linux VM can verify; the launch, the WSL microVM images and the Windows VS Code test stay the laptop's. **So
 every session — laptop or cloud — starts by fetching `origin`** and reading what came in (`AGENTS.md`, *Read first* 0).
@@ -1178,6 +1178,13 @@ spells the same thing?**
   `run` now refuses the first effect the manifest does not declare (DL1202), at the host's custody gate. Never soften it
   back to "the hash binds the manifest". Search key: for every integrity check, list what the hashed bytes exclude, and ask
   of each excluded field whether anything downstream trusts it.
+- **NET-PATH-RECORD — a gate that records before the check it trusts attests what that check refuses** (the laptop,
+  2026-10-21, P9-05, D-V2-169): under the daemon the custody gate runs before the effect's own first check, and the broker
+  judged a `net` use by its host alone. So a request for a path outside the grant's patterns was recorded `use allow` and
+  then refused at the call (DL0904). The chain said "allowed" for a use that never happened, with no path to tell which.
+  Fixed by sending the path with the use, having the broker judge it, and naming it in the record (`url_path`). Never move
+  the path judgment back to the effect alone while the gate records. Search key: for every record a gate writes, list the
+  refusals a LATER check can make, and ask what the record says for each.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

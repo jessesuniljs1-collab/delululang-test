@@ -266,7 +266,8 @@ skip branch, §11.2).
   3. **Where a path would be judged.** The egress client parses every hop's URL (`parse_target`: the path is the text after the
      authority) — the per-hop check a path scope needs is there already. The broker never sees a path: the custody's `Net` op
      carries the HOST only (`custody_op_for`), and its records name the host. A path scope enforced by the broker needs the op's
-     argument to carry the path (and the record to name it — the OCSF HTTP Activity then gains `http_request.url.path`).
+     argument to carry the path (and the record to name it — the OCSF HTTP Activity then gains `http_request.url.path`). **Built 2026-10-21 (D-V2-169):** the use carries its path beside the host (`Custody::check_at`), the broker judges it, and
+     the record names it in its payload as `url_path`; the OCSF export gains `http_request.url`.
   4. **The grammar.** `net=HOST` has no room for a path today, and a secret's audience REFUSES one (`parse_audience`: "a path in
      an audience waits for path scopes (P9-05)"). The study's shape — `HOST[:METHODS]/PREFIX/**`, `*` one segment, `**` only
      last, containment decided by the syntax — must refuse every spelling a URL parser would read another way (`%2F`, `..`,

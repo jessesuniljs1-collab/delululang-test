@@ -8255,3 +8255,105 @@ Mutants, each red, the control green:
 - M702 the report pairs by a wrong key.
 
 `delulu-check` whole: 275 passed. `delulu-atlas`: 18 passed. `within_cli`: 17 passed. clippy with rustfmt's check clean.
+
+## 2026-10-21 (evening) — the laptop: a once-seen Windows red, made to say why next time (RW 7.22)
+
+`master`'s push run `39599000467` on `eef9583` failed one test on `test (windows-latest)`:
+`sandbox_confirm_cli::an_external_launcher_ends_when_its_host_is_killed_on_windows` — "the launcher never started", after
+its 60 s wait (7 of 8 passing; every other job green). The same commit's pull-request run `39596126140` was green, and the
+test has passed on every run since PS-E-02.
+
+The test starts `delulu run --sandbox --sandbox-backend external:powershell …`, whose launcher writes its own pid. It had
+sent the host's stderr to nowhere, so the red cannot say which happened: the host ended early (a sandbox refusal, an
+AppContainer the runner would not make), PowerShell took over a minute to start, or the host waited on something else. A
+guess is not a root cause.
+
+**So the witness now speaks:**
+- the host's stderr is kept in the lab directory;
+- a host that ends before the pid appears is named at once — its exit status and its words — rather than after 60 s;
+- the 60 s bound says the host was still running, and quotes it.
+
+Falsified: a launcher that does not exist fails in 0.06 s, quoting the host's "the external launcher `no-such-launcher-exe`
+could not be started: there is no such program". Locally (Windows 11) the test is green. Three `witness.yml` runs of the test
+on `windows-latest` at `fa4021c` were dispatched to reproduce it: `39602082207`, `39602087235`, `39602091804`.
+
+## 2026-10-21 (night) — the laptop: the path in the chain's record (P9-05, D-V2-169, RW 2.12)
+
+P9-05's open slice since D-V2-139 §6: the broker's `Net` op carried the host, and a use's record named the host alone.
+Reading the code for it found what that cost. Under the daemon, the custody gate runs before the effect's own first check,
+and the broker compared the host alone. So a request to a granted host, for a path outside every pattern the grant names
+for it, was recorded `use allow` and then refused at the call.
+
+**Witnessed** with the pre-change build (`launch/2.0.0` `678dee6`'s binary, Windows, a daemon, granted
+`net.special=*.example.invalid/v1/**`). `GET /v2/items?q=1` was refused DL0904 at the call ("outside every path the grant
+names for its host"), and the chain's seq 9 reads `use allow … target=api.example.invalid`. No record anywhere named a path.
+
+**Built** (D-V2-169):
+- `prim::request_path` is the URL's path without its query or fragment, `/` when it names none.
+- `Custody::check_at` carries the path, defaulting to `check` for a custody that records nothing (embedded).
+- The interpreter's gate (`custody_path_for`), a sandboxed guest's host (`channel.rs`) and the WASM host
+  (`custody_allows_at`) send it. The plugin wrapper forwards it.
+- The daemon client sends it in `Check` as `url_path`, a key absent from the frame when there is none.
+- The broker (`check_use_at`) judges it by `netscope::judge_all`, refusing as `Denial::NetPath` (DL0904, worded as the
+  call words it). It names the path in the use's payload as `url_path`, beside `op`; `target` stays the host.
+- `audit query` prints `path=`. The OCSF export maps the path to `http_request.url` (`hostname`, `path`).
+- Records before this verify unchanged: the payload is hashed as a value, whatever its keys.
+
+**After** (this branch's binary, the same scenario): `/v1/items` is recorded `allow … path=/v1/items`, and `/v2/items`
+is recorded `deny … path=/v2/items`, refused by the broker in the call's words. The same holds for the WASM engine and for
+a sandboxed guest, both read by hand on Windows and then in `broker_cli.rs`.
+
+**Tests:**
+- `validate.rs` `a_net_use_naming_its_path_is_judged_on_it_and_recorded_with_it`.
+- `broker_cli.rs` `a_path_scoped_net_grant_is_honored_under_the_daemon_as_embedded`, extended: seven runs (the
+  interpreter's three, the WASM engine's two, a sandboxed guest's two), each use's path and decision. The query is never
+  recorded, and the text form prints `path=`.
+- `audit_ocsf_cli.rs`: `http_request.url` for a use naming its path, none for one that names none.
+- `delulu-runtime`: `a_network_use_carries_its_request_path_and_never_its_query` and
+  `a_plugin_exports_custody_forwards_the_request_path`.
+
+**Mutants** M703–M717, each red, the restored tree green (the list is in D-V2-169's evidence).
+
+**Local results:** `delulu-broker`, `delulu-runtime` and `delulu-wasm` whole, 746 passed. The `delulu` binary's unit tests
+with `broker_cli`, `audit_ocsf_cli`, `message_spacing`, `monitor_cli`, `plugin_load_cli` and `sandbox_guard_e2e`, 255
+passed. `scripts/clippy.sh -j 4` (rustfmt's check, then clippy) clean and stamped. The whole suite runs on GitHub (the pull
+request's CI).
+
+**Left in P9-05:** methods (d), with the first non-GET primitive (RW 2.11).
+
+## 2026-10-21 (night) — the laptop: `Map` on the WASM engine (RW 3.4, D-V2-170)
+
+**Before:** the WASM backend had no `Map`. `delulu build --target wasm` of a program calling `Map()` answered "DL1201: WASM
+codegen does not support a call to `Map`" (witnessed on this tree with the change stashed). `str` of a map was pinned as
+refused by `value_parity.rs`.
+
+**Built** (D-V2-170):
+- `Ty::Map(K, V)`: a header like a list's, its data 16-byte pairs, ascending by key.
+- `Map()`, typed by the checker's type for the call or by a declared type.
+- The eight methods: `len` and `is_empty` read the header. `get`, `contains_key` and `remove` ask the host for the key's
+  index. `insert` asks the host to place the key and fills the value slot it answers. `keys` and `values` are new lists
+  the host copies out of one column.
+- `str`, `==` and `!=` go through the host's value interface, with the descriptor `m<K><V>` that `reify.rs` rebuilds as the
+  interpreter's `Value::Map`.
+- The host's `delulu:map` (`new`, `find`, `put`, `remove_at`, `keys`, `values`) orders by the interpreter's own `MapKey`.
+  It reads the guest's memory as untrusted, and on any failure it records DL0903 in words and traps.
+
+**One flaw found and fixed before landing:** `keys`/`values` reserved the new list's slots before reading the pairs, so a
+hand-written header claiming 2^32 − 1 pairs made the host reserve 32 GiB first. The pairs are now read first. The mutant
+that reverses this (M725) **survives**: the operating system granted the untouched reservation, and the read then refused
+as before. No test can see the order, which is recorded rather than claimed.
+
+**Tests:** `delulu-wasm/tests/map_parity.rs`, four, each run on both engines (the outputs equal) where a program runs:
+- every method, on each key kind and three value kinds, with sharing, `str` and `==`;
+- 300 keys inserted out of order, half removed; `Str` keys by their bytes, a key built at run time replacing a literal's;
+- a map of records holding the records themselves, and a map of sums;
+- four hand-written modules, each refused DL0903.
+
+`value_parity.rs`'s list of what stays outside now holds a list holding a map in place of `str` of a map (`str` of a map
+compiles; its parity is `map_parity.rs`'s).
+
+**Mutants** M718–M733: fifteen red, M725 surviving (above), the restored tree green.
+
+**Local results:** `delulu-wasm` whole, 178 passed. `artifact_review`, `budget_cli` and `wasm_cli`, 30 passed.
+`core_invariance` green. `scripts/clippy.sh -j 4` clean and stamped. By hand: a map program built to a `.dwx` and run
+prints the interpreter's output.

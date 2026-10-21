@@ -27,6 +27,31 @@ and CI run ids cited below, and in every record dated before 2.0.0, refer to the
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
 
+### maps on the WASM engine, 2026-10-21
+
+- **New: a program that uses `Map` compiles to WebAssembly** (RW 3.4, D-V2-170). `Map()` and all eight methods
+  compile: `len`, `is_empty`, `get`, `contains_key`, `insert`, `remove`, `keys` and `values`. The key may be an `Int`,
+  a `Bool` or a `Str`, and the value anything a list may hold, a record or a sum included. `str` and `==` of a map
+  compile too. Before, `delulu build --target wasm` refused such a program (DL1201, "a call to `Map`").
+  - Both engines order keys alike: on WASM, the host places each key by the interpreter's own ordering rule, so `keys()`,
+    `values()` and `str` of a map print the same on both.
+  - A map is shared as on the interpreter: a second name for it sees every insert, and the records it holds are the
+    records themselves.
+  - A map inside a list, an option or a record field still answers DL1201; run that program on the interpreter.
+
+### the audit chain names each request's path, 2026-10-21
+
+- **New: under the broker, a network use's record names the path it asked** (P9-05, D-V2-169). A daemon or leased run
+  sends the request's path with each `net` use, without its query or fragment, and `/` when the URL names none. The
+  broker judges that path against the node's grant, as the run's own first check does. It records the path as
+  `url_path` in the use's record, beside `op`, so `target` stays the host. `audit query` shows it as `path=`, and the
+  OCSF export maps it to `http_request.url`. This covers both engines and a sandboxed guest.
+- **Fixed: the chain recorded `allow` for a request the run then refused.** A request to a granted host, for a path
+  outside every pattern the grant names for it, was recorded as the host's `use allow` and then refused at the call
+  (DL0904). The broker now refuses it (DL0904, in the same words), and its record says `deny` and names the path.
+- Records written before this change carry no path and verify unchanged; a use that names no path is judged on its
+  host, as before.
+
 ### `authority` names each request a program makes, 2026-10-21
 
 - **New: `delulu authority FILE --json` lists the program's requests** (P9-05 (c), D-V2-168). Under `requests`, each

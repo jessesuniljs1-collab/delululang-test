@@ -263,6 +263,55 @@ mod tests {
         }
     }
 
+    /// P9-05, D-V2-169: the path a network use carries to its custody is the path asked of the server — `/` when the URL
+    /// names none, never the query or the fragment, which may carry a token — and only a network use carries one.
+    #[test]
+    fn a_network_use_carries_its_request_path_and_never_its_query() {
+        for (url, path) in [
+            ("https://api.example.com/v1/items?page=/v2&key=s3cret#frag", "/v1/items"),
+            ("https://api.example.com", "/"),
+            ("https://api.example.com?x=/y", "/"),
+            ("https://api.example.com#/z", "/"),
+            ("https://user@api.example.com:8443/a/%2e%2e/b", "/a/%2e%2e/b"),
+        ] {
+            assert_eq!(prim::request_path(url), path, "{url}");
+            assert_eq!(interp::custody_path_for(Op::Net, &[Value::str(url)]), Some(path), "{url}");
+        }
+        assert_eq!(interp::custody_path_for(Op::FsRead, &[Value::str("https://h/x")]), None, "only a network use names one");
+    }
+
+    /// P9-05, D-V2-169: a plugin export's custody hands its host the path a network use names — a wrapper that asked the
+    /// host's `check` would drop it, and the run's node would record the use with no path and judge it on its host alone.
+    #[test]
+    fn a_plugin_exports_custody_forwards_the_request_path() {
+        type Seen = Rc<RefCell<Vec<Option<String>>>>;
+        struct Recording(Seen);
+        impl Custody for Recording {
+            fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
+                self.check_at(op, arg, None)
+            }
+            fn check_at(&mut self, _op: Op, _arg: Option<&str>, url_path: Option<&str>) -> CustodyDecision {
+                self.0.borrow_mut().push(url_path.map(str::to_string));
+                CustodyDecision::Allow
+            }
+            fn expose(&mut self, _name: &str, _span: Option<&str>) -> Result<String, CustodyDenial> {
+                Err(CustodyDenial::new("DL0904", "none"))
+            }
+            fn refresh_epoch(&mut self) {}
+            fn mode(&self) -> &'static str {
+                "daemon"
+            }
+            fn liveness(&self, _target: &delulu_broker::GrantId) -> Liveness {
+                Liveness::Live
+            }
+        }
+        let seen: Seen = Rc::default();
+        let host: Rc<RefCell<Box<dyn Custody>>> = Rc::new(RefCell::new(Box::new(Recording(seen.clone()))));
+        let mut plugin = custody::PluginUseCustody::new(host, delulu_broker::GrantId::from_trusted("g_plugin".to_string()));
+        assert!(matches!(plugin.check_at(Op::Net, Some("api.example.com"), Some("/v1/items")), CustodyDecision::Allow));
+        assert_eq!(seen.borrow().as_slice(), [Some("/v1/items".to_string())]);
+    }
+
     /// Criterion 6 (strengthened): a daemon-mode secret HANDLE carries no byte content at all —
     /// the program-process cap cache holds only the name; `reveal` yields nothing; two handles
     /// never verify equal (bytes are not here to compare).

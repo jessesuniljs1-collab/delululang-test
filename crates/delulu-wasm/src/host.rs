@@ -301,6 +301,12 @@ impl HostState {
     /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
     /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
     fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
+        self.custody_allows_at(op, arg, None)
+    }
+
+    /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
+    /// and names it in the use's record, as the interpreter's gate does.
+    fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
@@ -320,7 +326,7 @@ impl HostState {
             }
         }
         let Some(custody) = &self.custody else { return true };
-        match custody.borrow_mut().check(op, arg) {
+        match custody.borrow_mut().check_at(op, arg, url_path) {
             CustodyDecision::Allow => true,
             CustodyDecision::Deny(d) => {
                 self.refused = Some(format!("{}: {}", d.code, d.message));
@@ -590,6 +596,207 @@ fn write_str_list(caller: &mut Caller<'_, HostState>, parts: &[String]) -> Resul
     }
     guest_write(caller, base as i32, &bytes)?;
     Ok(base as i32)
+}
+
+/// `n` bytes of the guest's memory at `at`, or `None` when they lie outside it.
+fn guest_read(caller: &mut Caller<'_, HostState>, at: u32, n: usize) -> Option<Vec<u8>> {
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+    let a = at as usize;
+    mem.data(&*caller).get(a..a.checked_add(n)?).map(<[u8]>::to_vec)
+}
+
+/// A `Map` in the guest's memory (RW 3.4, `codegen.rs`'s `Ty::Map`): its header `[len][cap][data]`, as a list's, and
+/// `data` holding its pairs, 16 bytes each — the key's 8-byte slot, then the value's — ascending by key. The memory is read
+/// as untrusted (a `.dwx` can be written by hand): every read is bounds-checked, and a map whose pairs are out of order is
+/// answered wrongly, never unsafely.
+struct GuestMap {
+    at: u32,
+    len: u32,
+    cap: u32,
+    data: u32,
+}
+
+/// What a map whose header or pairs lie outside the guest's memory, or whose data could not grow, is reported as.
+const MAP_CORRUPT: &str = "DL0903: a map's pairs lie outside the guest's memory — or the WASM engine's memory exhausted";
+
+impl GuestMap {
+    fn read(caller: &mut Caller<'_, HostState>, at: i32) -> Option<GuestMap> {
+        let b = guest_read(caller, at as u32, 12)?;
+        let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+        let (len, cap, data) = (word(0), word(4), word(8));
+        (len <= cap).then_some(GuestMap { at: at as u32, len, cap, data })
+    }
+
+    fn pair(&self, i: u32) -> Option<u32> {
+        self.data.checked_add(i.checked_mul(16)?)
+    }
+
+    /// The key of pair `i`, read as `codegen.rs`'s `store_scalar` wrote it, by its kind (`map_key_tag`).
+    fn key(&self, caller: &mut Caller<'_, HostState>, kind: i32, i: u32) -> Option<delulu_runtime::value::MapKey> {
+        let slot = guest_read(caller, self.pair(i)?, 8)?;
+        let raw = i64::from_le_bytes(slot.try_into().ok()?);
+        map_key_of(caller, kind, if kind == 0 { raw } else { i64::from(raw as u32) })
+    }
+
+    /// Where `key` is — `Ok(i)` — or where it would go, `Err(i)`: the interpreter's `BTreeMap` order, by its own `MapKey`.
+    fn search(
+        &self,
+        caller: &mut Caller<'_, HostState>,
+        kind: i32,
+        key: &delulu_runtime::value::MapKey,
+    ) -> Option<Result<u32, u32>> {
+        let (mut lo, mut hi) = (0u32, self.len);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match self.key(caller, kind, mid)?.cmp(key) {
+                std::cmp::Ordering::Less => lo = mid + 1,
+                std::cmp::Ordering::Greater => hi = mid,
+                std::cmp::Ordering::Equal => return Some(Ok(mid)),
+            }
+        }
+        Some(Err(lo))
+    }
+
+    fn write_header(&self, caller: &mut Caller<'_, HostState>) -> Option<()> {
+        let mut b = Vec::with_capacity(12);
+        for w in [self.len, self.cap, self.data] {
+            b.extend_from_slice(&w.to_le_bytes());
+        }
+        guest_write(caller, self.at as i32, &b).ok()
+    }
+
+    /// A new list (`[len][cap][data]`, as `codegen.rs` reads one) of each pair's slot at `offset` — 0 its key, 8 its value.
+    fn column(&self, caller: &mut Caller<'_, HostState>, offset: u32) -> Option<i32> {
+        let n = self.len as usize;
+        // The pairs are read before anything is reserved, so a header claiming more pairs than the memory holds is refused
+        // with nothing allocated.
+        let pairs = guest_read(caller, self.data, n.checked_mul(16)?)?;
+        let mut slots = Vec::with_capacity(8 * n);
+        for p in pairs.chunks_exact(16) {
+            slots.extend_from_slice(&p[offset as usize..offset as usize + 8]);
+        }
+        let base = guest_alloc(caller, i32::try_from(12 + 8 * n).ok()?).ok()? as u32;
+        let mut bytes = Vec::with_capacity(12 + 8 * n);
+        for w in [self.len, self.len, base + 12] {
+            bytes.extend_from_slice(&w.to_le_bytes());
+        }
+        bytes.extend_from_slice(&slots);
+        guest_write(caller, base as i32, &bytes).ok()?;
+        Some(base as i32)
+    }
+}
+
+/// The key a guest passes a `delulu:map` import: an `Int` itself, a `Bool` as 0 or 1, a `Str` as its cell's pointer.
+fn map_key_of(caller: &mut Caller<'_, HostState>, kind: i32, raw: i64) -> Option<delulu_runtime::value::MapKey> {
+    use delulu_runtime::value::MapKey;
+    Some(match kind {
+        0 => MapKey::Int(raw),
+        1 => MapKey::Bool(raw != 0),
+        2 => MapKey::Str(read_guest_str(caller, raw as u32 as i32)?),
+        _ => return None,
+    })
+}
+
+/// A map import's failure: recorded in words (the first refusal stands), then a trap, so the guest never goes on past it.
+fn map_fault(caller: &mut Caller<'_, HostState>) -> wasmtime::Error {
+    caller.data_mut().refused.get_or_insert_with(|| MAP_CORRUPT.to_string());
+    wasmtime::Error::msg(MAP_CORRUPT)
+}
+
+/// The `delulu:map` interface (RW 3.4): a `Map` lives in the guest's memory, its values the guest's own, and the host
+/// finds and places each key by the interpreter's own `MapKey` order — so the two engines cannot order keys two ways.
+fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
+    let instantiate = |e: wasmtime::Error| WasmError::Instantiate(e.to_string());
+    // An empty map: a header with no pairs and no data.
+    linker
+        .func_wrap("delulu:map", "new", |mut caller: Caller<'_, HostState>| -> wasmtime::Result<i32> {
+            let at = guest_alloc(&mut caller, 12).map_err(|()| map_fault(&mut caller))?;
+            GuestMap { at: at as u32, len: 0, cap: 0, data: 0 }
+                .write_header(&mut caller)
+                .ok_or_else(|| map_fault(&mut caller))?;
+            Ok(at)
+        })
+        .map_err(instantiate)?;
+    // The index of `key`'s pair, or -1.
+    linker
+        .func_wrap(
+            "delulu:map",
+            "find",
+            |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
+                let found = (|| {
+                    let m = GuestMap::read(&mut caller, map)?;
+                    let key = map_key_of(&mut caller, kind, raw)?;
+                    m.search(&mut caller, kind, &key)
+                })();
+                match found {
+                    Some(Ok(i)) => Ok(i as i32),
+                    Some(Err(_)) => Ok(-1),
+                    None => Err(map_fault(&mut caller)),
+                }
+            },
+        )
+        .map_err(instantiate)?;
+    // The address of `key`'s value slot, its pair made first when the map holds no such key — in its place by the order,
+    // the data grown (doubled, at least four pairs) when it is full. The guest fills the slot.
+    linker
+        .func_wrap(
+            "delulu:map",
+            "put",
+            |mut caller: Caller<'_, HostState>, map: i32, kind: i32, raw: i64| -> wasmtime::Result<i32> {
+                let slot = (|| {
+                    let mut m = GuestMap::read(&mut caller, map)?;
+                    let key = map_key_of(&mut caller, kind, raw)?;
+                    let at = match m.search(&mut caller, kind, &key)? {
+                        Ok(i) => i,
+                        Err(i) => {
+                            if m.len == m.cap {
+                                let cap = m.cap.checked_mul(2)?.max(4);
+                                let data = guest_alloc(&mut caller, i32::try_from(cap.checked_mul(16)?).ok()?).ok()? as u32;
+                                if m.len > 0 {
+                                    let old = guest_read(&mut caller, m.data, (m.len as usize).checked_mul(16)?)?;
+                                    guest_write(&mut caller, data as i32, &old).ok()?;
+                                }
+                                (m.cap, m.data) = (cap, data);
+                            }
+                            let tail = guest_read(&mut caller, m.pair(i)?, ((m.len - i) as usize).checked_mul(16)?)?;
+                            guest_write(&mut caller, m.pair(i + 1)? as i32, &tail).ok()?;
+                            let mut pair = raw.to_le_bytes().to_vec();
+                            pair.extend_from_slice(&[0; 8]);
+                            guest_write(&mut caller, m.pair(i)? as i32, &pair).ok()?;
+                            m.len += 1;
+                            m.write_header(&mut caller)?;
+                            i
+                        }
+                    };
+                    i32::try_from(m.pair(at)?.checked_add(8)?).ok()
+                })();
+                slot.ok_or_else(|| map_fault(&mut caller))
+            },
+        )
+        .map_err(instantiate)?;
+    // Take pair `index` out (its value already read by the guest), the pairs after it moved down.
+    linker
+        .func_wrap("delulu:map", "remove_at", |mut caller: Caller<'_, HostState>, map: i32, index: i32| -> wasmtime::Result<()> {
+            let done = (|| {
+                let mut m = GuestMap::read(&mut caller, map)?;
+                let i = u32::try_from(index).ok().filter(|i| *i < m.len)?;
+                let tail = guest_read(&mut caller, m.pair(i + 1)?, ((m.len - i - 1) as usize).checked_mul(16)?)?;
+                guest_write(&mut caller, m.pair(i)? as i32, &tail).ok()?;
+                m.len -= 1;
+                m.write_header(&mut caller)
+            })();
+            done.ok_or_else(|| map_fault(&mut caller))
+        })
+        .map_err(instantiate)?;
+    for (name, offset) in [("keys", 0), ("values", 8)] {
+        linker
+            .func_wrap("delulu:map", name, move |mut caller: Caller<'_, HostState>, map: i32| -> wasmtime::Result<i32> {
+                let list = GuestMap::read(&mut caller, map).and_then(|m| m.column(&mut caller, offset));
+                list.ok_or_else(|| map_fault(&mut caller))
+            })
+            .map_err(instantiate)?;
+    }
+    Ok(())
 }
 
 fn guest_write(caller: &mut Caller<'_, HostState>, ptr: i32, bytes: &[u8]) -> Result<(), ()> {
@@ -1096,7 +1303,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().push_trace("Net", "get", "Http", Some(url.clone()), file, start, end);
                 let host = url.starts_with("https://").then(|| delulu_runtime::prim::host_of(&url).to_string());
                 if let Some(h) = &host {
-                    if !caller.data_mut().custody_allows(CustodyOp::Net, Some(h)) {
+                    let url_path = delulu_runtime::prim::request_path(&url);
+                    if !caller.data_mut().custody_allows_at(CustodyOp::Net, Some(h), Some(url_path)) {
                         caller.data_mut().push_refusal_trace("Net", "get", "Http", file, start, end);
                         return 0;
                     }
@@ -1465,6 +1673,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             caller.data_mut().refused.get_or_insert_with(|| format!("DL0903: index {index} out of bounds (len {len})"));
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    link_maps(&mut linker)?;
 
     // ----- RW 3.4: the `delulu:str` host interface (pure: neither traced nor gated) ----------------------------------
     // A `Str` method (`codegen.rs`'s `STR_METHODS`) run by the interpreter's own `call_str_method`, so the WASM engine
