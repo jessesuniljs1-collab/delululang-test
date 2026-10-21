@@ -8224,3 +8224,24 @@ Mutants, each red, the control green:
 - M702 the report pairs by a wrong key.
 
 `delulu-check` whole: 275 passed. `delulu-atlas`: 18 passed. `within_cli`: 17 passed. clippy with rustfmt's check clean.
+
+## 2026-10-21 (evening) — the laptop: a once-seen Windows red, made to say why next time (RW 7.22)
+
+`master`'s push run `39599000467` on `eef9583` failed one test on `test (windows-latest)`:
+`sandbox_confirm_cli::an_external_launcher_ends_when_its_host_is_killed_on_windows` — "the launcher never started", after
+its 60 s wait (7 of 8 passing; every other job green). The same commit's pull-request run `39596126140` was green, and the
+test has passed on every run since PS-E-02.
+
+The test starts `delulu run --sandbox --sandbox-backend external:powershell …`, whose launcher writes its own pid. It had
+sent the host's stderr to nowhere, so the red cannot say which happened: the host ended early (a sandbox refusal, an
+AppContainer the runner would not make), PowerShell took over a minute to start, or the host waited on something else. A
+guess is not a root cause.
+
+**So the witness now speaks:**
+- the host's stderr is kept in the lab directory;
+- a host that ends before the pid appears is named at once — its exit status and its words — rather than after 60 s;
+- the 60 s bound says the host was still running, and quotes it.
+
+Falsified: a launcher that does not exist fails in 0.06 s, quoting the host's "the external launcher `no-such-launcher-exe`
+could not be started: there is no such program". Locally (Windows 11) the test is green. Three `witness.yml` runs of the test
+on `windows-latest` at `fa4021c` were dispatched to reproduce it: `39602082207`, `39602087235`, `39602091804`.

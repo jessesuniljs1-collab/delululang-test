@@ -5013,3 +5013,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing. For the laptop's memory: nothing new.
 - Open / next: (1) #27 and this branch landing on green; (2) `launch/2.0.0`: merge `master` (the Breaking paragraph's
   actor clause to go); (3) the path in the chain's record; methods with the first non-GET primitive; maps on WASM.
+
+### 2026-10-21 (evening) — a once-seen Windows red made to say why (RW 7.22); `launch/2.0.0` at `678dee6` (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/launcher-witness`   Pull request: see the branch   Base: `fa4021c`
+- **Landed earlier this evening:** #27 (`eef9583`) on `39596126140` and #28 (`fa4021c`) on `39598422553`, success on every
+  job. **Push runs:** `39595752855` (`f05c329`) and `39597236450` (`12d5fa2`) success; **`39599000467` (`eef9583`) failure** —
+  this entry; `39600787572` (`fa4021c`) running.
+- **`launch/2.0.0` at `678dee6`** (merging `a2fb0cd..fa4021c`, #24–#28; the CHANGELOG's two sections under `## [2.0.0]`; the
+  Breaking paragraph's clause that `build` refuses an actor program removed, no longer true; the Survey rebuilt, 1545 nodes,
+  0 errors; `doctor --check` 29 ok; clippy stamped; ten gates incl. `core_invariance`, 75 passed). Its release dry run
+  `39601108596`: **success**. Its `everything` `39601103948`: running.
+- **The autosave task** (the owner asked, 18:00 IST): Ready, every 10 minutes, last result 0, none missed. Its log shows
+  each snapshot pushed to `autosave/laptop`; every branch equals `origin`. Renewed with `scripts\autosave.ps1 -Install
+  -Hours 168`, to 2026-10-28 18:03 IST.
+- What: `V2_LOG.md` (2026-10-21, the fifth evening entry).
+- Files and folders: M `crates/delulu/tests/sandbox_confirm_cli.rs`, `docs/REMAINING_WORK.md` (7.22),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next: (1) the three witness runs and `39601103948`; (2) RW 7.22's root cause from the next red's words; (3) the path
+  in the chain's record; methods; maps on WASM.

@@ -723,6 +723,9 @@ fn an_external_launcher_ends_when_its_host_is_killed_on_windows() {
     assert!(!p.contains(char::is_whitespace), "the launcher's words are split on whitespace: {p}");
     let launcher =
         format!("external:powershell -NoProfile -NonInteractive -Command $PID | Out-File -Encoding ascii {p}; Start-Sleep 60");
+    // The host's stderr is kept, so a launcher that never starts says why: push run `39599000467` (2026-10-21) failed
+    // "the launcher never started" after 60 s, its host's words thrown away.
+    let host_err = d.join("host.stderr");
     let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
         .current_dir(&d)
         .env("DELULU_STATE_DIR", d.join("s"))
@@ -730,18 +733,23 @@ fn an_external_launcher_ends_when_its_host_is_killed_on_windows() {
         .env("DELULU_NO_FIRST_RUN", "1")
         .args(["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console"])
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::fs::File::create(&host_err).expect("the host's stderr file"))
         .spawn()
         .expect("the host starts");
+    let said = || std::fs::read_to_string(&host_err).unwrap_or_default();
     let t = std::time::Instant::now();
     let pid: u32 = loop {
         if let Some(p) = std::fs::read_to_string(&pidfile).ok().and_then(|s| s.trim().parse().ok()) {
             break p;
         }
+        // A host that ended before its launcher wrote a pid never started one: say so at once, with its words.
+        if let Ok(Some(status)) = host.try_wait() {
+            panic!("the host ended ({status}) before the launcher wrote its pid; the host said:\n{}", said());
+        }
         if t.elapsed() > std::time::Duration::from_secs(60) {
             let _ = host.kill();
             let _ = host.wait();
-            panic!("the launcher never started");
+            panic!("the launcher wrote no pid within 60 s, its host still running; the host said:\n{}", said());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     };
