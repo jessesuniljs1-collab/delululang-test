@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — an artifact runs only what it declares, 2026-10-21
+
+- **Fixed (security, review surface): a `.dwx` could claim fewer effects than its code performs** (RW 4.73,
+  ARTIFACT-CLAIM-1). The artifact's code hash covers its code and not the `delulu:authority` section beside it. So the
+  declared effects could be edited in place, and the artifact still printed "authority verified" and ran. The grants
+  still bounded every effect, so no authority escaped. But `delulu authority x.dwx` and the run banner could describe
+  less than the code does.
+  - `delulu run` now refuses the first effect an artifact's manifest does not declare, before it happens (DL1202).
+  - The report says the effects are enforced.
+  - **Breaking** for an artifact whose manifest understates its effects. An artifact built by `delulu build` declares
+    what the checker computed, and is unaffected.
+- **Fixed: a refusal on the WASM engine was labelled DL0904 unless it carried one of nine codes.** A guard refusal
+  (DL1410), a seal (DL1413) and DL1202 now print under their own codes.
+
 ## Unreleased — a sealed artifact under a lease, the broker daemon and a trace, 2026-10-21
 
 - **New: `delulu run FILE.dwx` applies `--lease`, `--broker daemon`, `--epoch-ms`, `--trace-effects`, `--trace-out` and

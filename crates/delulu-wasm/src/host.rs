@@ -310,7 +310,11 @@ impl HostState {
                     "DL1202: the artifact performed `{}`, an effect its `delulu:authority` manifest does not declare (it \
                      declares {}) — its manifest is not this code's, so nothing it did not declare runs",
                     effect.name(),
-                    if declared.is_empty() { "none".to_string() } else { declared.iter().cloned().collect::<Vec<_>>().join(", ") }
+                    if declared.is_empty() {
+                        "none".to_string()
+                    } else {
+                        declared.iter().cloned().collect::<Vec<_>>().join(", ")
+                    }
                 ));
                 return false;
             }

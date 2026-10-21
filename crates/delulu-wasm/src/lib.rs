@@ -17,7 +17,7 @@ pub mod limits;
 mod reify;
 
 pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
-pub use artifact::{embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION};
+pub use artifact::{embed_authority, exports_actor_members, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION};
 pub use codegen::{compile_checked, compile_module, compile_module_with, uses_console, CompileError};
 pub use dpx::{
     augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,

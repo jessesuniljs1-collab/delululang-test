@@ -4871,3 +4871,28 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Survey and doctor (after the last edit): in the commit message.
 - Redo on the laptop: nothing. For the laptop's memory: nothing new.
 - Open / next: (1) ARTIFACT-CLAIM-1, this branch's next commit; (2) #20 and #21 landing on green; then `launch/2.0.0`.
+
+### 2026-10-21 — ARTIFACT-CLAIM-1: an artifact runs only what it declares (RW 4.73); WASM-CODE-1; #20 and #21 landed (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/dwx-custody` (its second commit, on `eb2372c`)   Pull request: see the branch   Merged: not yet
+- **Landed:** #20 (`89aeefc`, `aff6dc9`, `5470b53`) on its CI `39558166090`, success on every job; #21 (`4729747`) on
+  `39558913163`, success on every job — `master` fast-forwarded `9c1d30b..5470b53..4729747` (the push runs `39561045205`
+  and `39561096457` running at this entry). The entries above that said "Merged: not yet" are these.
+- What: `V2_LOG.md` (2026-10-21, the sixth entry).
+- Files and folders: M `crates/delulu-wasm/src/host.rs` (`HostConfig`/`HostState::declared_effects`; `custody_allows`
+  refuses an undeclared effect first), `crates/delulu-wasm/src/lib.rs` (the unit witness), `crates/delulu/src/run_cmd.rs`
+  (the `.dwx` route passes its manifest's effects), `crates/delulu/src/cli.rs` (`wasm_fault_code` by the first registered
+  code, its unit test; the artifact report's `enforced:` line), `crates/delulu-diag/src/codes.rs` (DL1202's explanation),
+  `crates/delulu/tests/wasm_cli.rs` (the doctored artifact), `CHANGELOG.md`, `HANDOFF.md` (§11.4: ARTIFACT-CLAIM-1;
+  DWX-FLAGS-1's sequel), `docs/book/THE_DELULULANG_BOOK.md` (the false sentence corrected in place),
+  `docs/REMAINING_WORK.md` (4.73), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: `HANDOFF.md` §11.4 ARTIFACT-CLAIM-1 (copied as
+  `artifact-claim-1.md`).
+- Open / next: (1) this branch's CI, landing on green; (2) `launch/2.0.0`: the merge of `4729747` is staged in
+  `D:\nelan\dl-launch`; after this branch lands, merge it too, rebuild the Survey there, run its gates, dispatch
+  `everything` and the release dry run, and re-cite checklist criterion 4 (supply chain) from that run — the advisory
+  database moved on 2026-10-21; (3) RW 4.66 (left open: a same-uid process reads the secret store anyway), 4.67, 6.1, 6.2;
+  on WASM `get_with` (needs maps), a list of options; (4) *[laptop]* the launch, only on the owner's word.
