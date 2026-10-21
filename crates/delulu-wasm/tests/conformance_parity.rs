@@ -200,7 +200,7 @@ fn fragment_external_programs_are_compile_errors() {
     let cases = [
         "module m\nfn f(n: Int) -> Int { match n { _ => n } }\n", // match
         "module m\nfn f() -> Int { len(range(0, 5)) }\n",         // list builtins (range/len)
-        "module m\nfn f(xs: List[Int]) -> Int { xs.fold(0, fn(a: Int, x: Int) -> Int { a + x }) }\n", // a list method not compiled
+        "module m\nfn f() -> Int {\n  let xs = [[1], [2]]\n  xs.len()\n}\n", // a list of lists
     ];
     for src in cases {
         let checked = check_source(0, src);

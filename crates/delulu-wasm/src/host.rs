@@ -703,6 +703,131 @@ fn map_fault(caller: &mut Caller<'_, HostState>) -> wasmtime::Error {
     wasmtime::Error::msg(MAP_CORRUPT)
 }
 
+/// What a list whose header, slots or strings lie outside the guest's memory, or a result that could not be allocated,
+/// is reported as (`delulu:list.sort`, `delulu:list.join`).
+const LIST_CORRUPT: &str = "DL0903: a list's elements lie outside the guest's memory — or the WASM engine's memory exhausted";
+
+/// A list's length and slots pointer (`[len][cap][data]`, as `codegen.rs` lays it out), its length within its capacity.
+fn list_header(caller: &mut Caller<'_, HostState>, list: i32) -> Option<(u32, u32)> {
+    let b = guest_read(caller, list as u32, 12)?;
+    let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+    (word(0) <= word(4)).then(|| (word(0), word(8)))
+}
+
+/// A string cell's length, the cell checked to lie inside the guest's memory.
+fn guest_str_len(caller: &mut Caller<'_, HostState>, ptr: u32) -> Option<u32> {
+    let len = u32::from_le_bytes(guest_read(caller, ptr, 4)?.try_into().ok()?);
+    let end = (ptr as usize).checked_add(4)?.checked_add(len as usize)?;
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+    (end <= mem.data_size(&*caller)).then_some(len)
+}
+
+/// A new list of `n` 8-byte `slots`, in one allocation: the header `codegen.rs` reads, then the slots.
+fn write_slot_list(caller: &mut Caller<'_, HostState>, n: u32, slots: &[u8]) -> Option<i32> {
+    let base = guest_alloc(caller, i32::try_from(12 + slots.len()).ok()?).ok()? as u32;
+    let mut bytes = Vec::with_capacity(12 + slots.len());
+    for w in [n, n, base + 12] {
+        bytes.extend_from_slice(&w.to_le_bytes());
+    }
+    bytes.extend_from_slice(slots);
+    guest_write(caller, base as i32, &bytes).ok()?;
+    Some(base as i32)
+}
+
+/// `List.sort` (RW 3.4): a new list, stably sorted by the interpreter's order — an `Int` (`kind` 0) or a `Bool` (1) by
+/// its number, a `Str` (2) by its bytes — its slots moved whole, so the strings it holds are the ones the list held.
+/// Strings are compared in the guest's memory where they lie, never copied, so slots naming one string many times cost
+/// nothing more.
+fn sort_list(caller: &mut Caller<'_, HostState>, list: i32, kind: i32) -> Option<i32> {
+    let (n, data) = list_header(caller, list)?;
+    let slots = guest_read(caller, data, (n as usize).checked_mul(8)?)?;
+    let slot = |i: usize| &slots[8 * i..8 * i + 8];
+    let mut order: Vec<usize> = (0..n as usize).collect();
+    match kind {
+        0 => order.sort_by_key(|&i| i64::from_le_bytes(slot(i).try_into().unwrap_or_default())),
+        1 => order.sort_by_key(|&i| u32::from_le_bytes(slot(i)[..4].try_into().unwrap_or_default()) != 0),
+        2 => {
+            let mut ranges = Vec::with_capacity(n as usize);
+            for i in 0..n as usize {
+                let p = u32::from_le_bytes(slot(i)[..4].try_into().ok()?);
+                let len = guest_str_len(caller, p)?;
+                let start = p as usize + 4;
+                ranges.push(start..start + len as usize);
+            }
+            let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+            let bytes = mem.data(&*caller);
+            order.sort_by(|&a, &b| bytes[ranges[a].clone()].cmp(&bytes[ranges[b].clone()]));
+        }
+        _ => return None,
+    }
+    let mut sorted = Vec::with_capacity(slots.len());
+    for i in order {
+        sorted.extend_from_slice(slot(i));
+    }
+    write_slot_list(caller, n, &sorted)
+}
+
+/// `List[Str].join(sep)` (RW 3.4): the strings and the separators between them, in one string cell. Every length is
+/// checked and the total bounded before anything is allocated, and each piece is copied straight into the result, so the
+/// host never holds more than one piece.
+fn join_list(caller: &mut Caller<'_, HostState>, list: i32, sep: i32) -> Option<i32> {
+    let (n, data) = list_header(caller, list)?;
+    let slots = guest_read(caller, data, (n as usize).checked_mul(8)?)?;
+    let sep = sep as u32;
+    let sep_len = guest_str_len(caller, sep)?;
+    let mut pieces = Vec::with_capacity(n as usize);
+    let mut total: u64 = 0;
+    for (k, s) in slots.chunks_exact(8).enumerate() {
+        let p = u32::from_le_bytes(s[..4].try_into().ok()?);
+        let len = guest_str_len(caller, p)?;
+        total += u64::from(len) + if k > 0 { u64::from(sep_len) } else { 0 };
+        pieces.push((p, len));
+    }
+    let total = u32::try_from(total).ok().filter(|t| *t <= i32::MAX as u32 - 4)?;
+    let base = guest_alloc(caller, (4 + total) as i32).ok()? as u32;
+    guest_write(caller, base as i32, &total.to_le_bytes()).ok()?;
+    let mut at = base + 4;
+    for (k, (p, len)) in pieces.into_iter().enumerate() {
+        if k > 0 {
+            let b = guest_read(caller, sep + 4, sep_len as usize)?;
+            guest_write(caller, at as i32, &b).ok()?;
+            at += sep_len;
+        }
+        let b = guest_read(caller, p + 4, len as usize)?;
+        guest_write(caller, at as i32, &b).ok()?;
+        at += len;
+    }
+    Some(base as i32)
+}
+
+/// `delulu:list.sort` and `delulu:list.join` (RW 3.4); a failure is recorded in words, then a trap.
+fn link_list_host(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
+    let instantiate = |e: wasmtime::Error| WasmError::Instantiate(e.to_string());
+    let fault = |caller: &mut Caller<'_, HostState>| {
+        caller.data_mut().refused.get_or_insert_with(|| LIST_CORRUPT.to_string());
+        wasmtime::Error::msg(LIST_CORRUPT)
+    };
+    linker
+        .func_wrap(
+            "delulu:list",
+            "sort",
+            move |mut caller: Caller<'_, HostState>, list: i32, kind: i32| -> wasmtime::Result<i32> {
+                sort_list(&mut caller, list, kind).ok_or_else(|| fault(&mut caller))
+            },
+        )
+        .map_err(instantiate)?;
+    linker
+        .func_wrap(
+            "delulu:list",
+            "join",
+            move |mut caller: Caller<'_, HostState>, list: i32, sep: i32| -> wasmtime::Result<i32> {
+                join_list(&mut caller, list, sep).ok_or_else(|| fault(&mut caller))
+            },
+        )
+        .map_err(instantiate)?;
+    Ok(())
+}
+
 /// The `delulu:map` interface (RW 3.4): a `Map` lives in the guest's memory, its values the guest's own, and the host
 /// finds and places each key by the interpreter's own `MapKey` order — so the two engines cannot order keys two ways.
 fn link_maps(linker: &mut Linker<HostState>) -> Result<(), WasmError> {
@@ -1674,6 +1799,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     link_maps(&mut linker)?;
+    link_list_host(&mut linker)?;
 
     // ----- RW 3.4: the `delulu:str` host interface (pure: neither traced nor gated) ----------------------------------
     // A `Str` method (`codegen.rs`'s `STR_METHODS`) run by the interpreter's own `call_str_method`, so the WASM engine
