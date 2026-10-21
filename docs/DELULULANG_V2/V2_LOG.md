@@ -8505,3 +8505,13 @@ marking `match` ended in `_ => {}`, and `Map` fell there: the collector dates fr
   witness is exercised. It is red on the old collector (`{k: []}`), and that mutant is exactly the old code.
 - **Residual.** A cycle through a map is not collected, because a map cell is not registered. That is a leak, the safe
   direction.
+
+## 2026-10-22 (night) — the laptop: a cycle through a map is collected (GC-MAP-1's residual)
+
+Witnessed: an actor turn that makes 200 cycles through maps (`g.insert("self", Link(g))`) reached **0 sweeps**, and all
+200 leaked. `note_value` registered lists, records and closures' scopes and passed every other kind to `_ => {}`, so a
+map was never registered, the pressure never reached the threshold, and no sweep ran. Now a map is registered
+(`RegCell::Map`, `note_map`) and broken like a list, and `note_value` names every `Value` kind, as the marking walk does.
+The same turn: 1 sweep, 200 collected. The live map of GC-MAP-1's witness is now registered as well, and stays whole
+through two sweeps. Test: `actors_cycles_cli.rs` `a_turn_full_of_cycles_through_maps_is_collected`, red on the old
+collector (no sweep).

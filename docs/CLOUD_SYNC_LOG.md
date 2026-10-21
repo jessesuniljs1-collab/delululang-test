@@ -5185,3 +5185,14 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `HANDOFF.md` (§11.4), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.77), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — a cycle through a map is collected (GC-MAP-1's residual) (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/gc-map-cycles` (on `laptop/gc-map` `8a88466`, PR #39)   Pull request: the one this entry rides in
+- **What:** maps registered with the cycle collector and broken like lists (200 map cycles in a turn: 0 sweeps before,
+  1 sweep and 200 collected after); `note_value` exhaustive over `Value`. Also: `launch/2.0.0` = `3d4c2c2` (a merge of
+  master ..`8fb2867`, the ten gates 75 passed; pushed, not yet dispatched — the merge after #38–#40 will be).
+- Files and folders: M `crates/delulu-runtime/src/cycles.rs`, `crates/delulu/tests/actors_cycles_cli.rs`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (4.77), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
