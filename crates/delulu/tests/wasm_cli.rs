@@ -151,7 +151,7 @@ fn a_dwx_run_refuses_the_flags_it_does_not_apply() {
     for (flags, named) in [
         (&["--debug-rcaps"][..], "--debug-rcaps"),
         (&["--foreign-isolation", "process"][..], "--foreign-isolation"),
-        (&["--on-quiesce", "report"][..], "--on-quiesce"),
+        (&["--actors-threads", "2"][..], "--actors-threads"),
         (&["--engine", "interp"][..], "--engine"),
     ] {
         let _ = std::fs::remove_file(dir.join("out").join("log.txt"));
@@ -470,31 +470,72 @@ fn http_on_the_wasm_engine_matches_the_interpreter() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// DWX-ACTORS-1 (2026-10-21): `build --target wasm` wrote a `.dwx` of an actor program, and `run` of it failed "actor index
-/// 1 out of range" — the `.dwx` route has no actor table (the source route builds it from the AST, and each actor's field
-/// count is not in its exports). Both now refuse in words: the build writes nothing, and an artifact built before the
-/// refusal (assembled here as the old build wrote it) is refused before it runs.
+/// RW 3.21 (DWX-ACTORS-1): `build --target wasm` wrote a `.dwx` of an actor program, and `run` of it failed "actor index 1
+/// out of range" — the `.dwx` route had no actor table. The module now carries its own (each actor's field count an exported
+/// global beside its members), and the artifact runs as its source does: the same quiescence report as the source on the
+/// WASM engine and on the interpreter, an actor dying in a turn included. One built before — no field counts, assembled here
+/// by renaming the export — is refused before it runs, DL1202, never out of range.
 #[test]
-fn an_actor_program_has_no_dwx_yet_and_says_so_at_build_and_at_run() {
+fn an_actor_programs_dwx_runs_as_its_source_does() {
     let dir = std::env::temp_dir().join(format!("delulu_dwx_actors_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let src = "module a\nactor W {\n  var n: Int\n  new() { self.n = 0 }\n  be bump(k: Int) { self.n = self.n + k }\n}\n\
-               fn main(root: Root) ! {Async} {\n  let w = spawn W()\n  w.bump(1)\n}\n";
+    let src = "module a
+actor W {
+  var n: Int
+  var m: Int
+  new() { self.n = 0
+ self.m = 0 }
+                 be bump(k: Int) ! {Async} { self.n = self.n + k
+ if k > 0 { self.bump(k - 1) } }
+                 be boom(d: Int) { self.m = 100 / d }
+}
+actor R {
+  var peer: tag W
+  new(p: tag W) { self.peer = p }
+                 be go() ! {Async} { self.peer.bump(2) }
+}
+               fn main(root: Root) ! {Async} {
+  let w = spawn W()
+  w.bump(3)
+  let r = spawn R(w)
+  r.go()
+                 let v = spawn W()
+  v.boom(0)
+  v.bump(1)
+}
+";
     std::fs::write(dir.join("a.delulu"), src).unwrap();
     let o = delulu_in(&dir, &["build", "a.delulu", "--target", "wasm", "-o", "a.dwx"]);
-    let e = String::from_utf8_lossy(&o.stderr).to_string();
-    assert_eq!(o.status.code(), Some(1), "{e}");
-    assert!(e.contains("DL1201") && e.contains("declares actors"), "{e}");
-    assert!(!dir.join("a.dwx").exists(), "nothing written");
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let report = |args: &[&str]| {
+        let mut all = vec!["run"];
+        all.extend_from_slice(args);
+        all.extend_from_slice(&["--on-quiesce", "report"]);
+        let o = delulu_in(&dir, &all);
+        let e = String::from_utf8_lossy(&o.stderr).to_string();
+        assert!(o.status.success(), "{args:?}: {e}");
+        e.lines().filter(|l| l.starts_with("quiesce:") || l.starts_with("actors:")).collect::<Vec<_>>().join(
+            "
+",
+        )
+    };
+    let artifact = report(&["a.dwx"]);
+    assert!(artifact.contains("quiesce: 2 surviving actor(s)") && artifact.contains("actors: 1 died"), "{artifact}");
+    assert_eq!(artifact, report(&["a.delulu", "--engine", "wasm"]), "the artifact and its source on the WASM engine");
+    assert_eq!(artifact, report(&["a.delulu"]), "and on the interpreter");
 
+    // One built before RW 3.21 carries no field counts (here: the export renamed, the artifact assembled as `build` would).
     let checked = delulu_check::check_source(0, src);
-    let wasm = delulu_wasm::compile_checked(&checked.module, &checked.result).expect("the actor program compiles");
-    let old = delulu_wasm::embed_authority(&wasm, &serde_json::json!({ "effects": ["Async"] }));
-    std::fs::write(dir.join("old.dwx"), old).unwrap();
+    let mut wasm = delulu_wasm::compile_checked(&checked.module, &checked.result).expect("the actor program compiles");
+    for at in (0..wasm.len().saturating_sub(7)).filter(|&i| &wasm[i..i + 7] == b"#fields").collect::<Vec<_>>() {
+        wasm[at..at + 7].copy_from_slice(b"#fieldz");
+    }
+    std::fs::write(dir.join("old.dwx"), delulu_wasm::embed_authority(&wasm, &serde_json::json!({ "effects": ["Async"] })))
+        .unwrap();
     let o = delulu_in(&dir, &["run", "old.dwx"]);
     let e = String::from_utf8_lossy(&o.stderr).to_string();
     assert_eq!(o.status.code(), Some(1), "{e}");
-    assert!(e.contains("DL1201") && e.contains("declares actors") && !e.contains("out of range"), "{e}");
+    assert!(e.contains("error[DL1202]") && e.contains("carries no field count") && !e.contains("out of range"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }

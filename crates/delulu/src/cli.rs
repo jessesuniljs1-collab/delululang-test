@@ -4678,16 +4678,6 @@ fn cmd_build(rest: &[String]) -> i32 {
 /// a `.dwx` artifact with the compiler-computed authority embedded as a `delulu:authority` custom
 /// section (hash-bound to the code). This is the single, self-describing, authority-carrying
 /// artifact: `delulu run <file>.dwx` re-verifies it before running.
-/// DWX-ACTORS-1: why a program with actors has no `.dwx` yet — said at the build, and at a run of an artifact that exports
-/// actor members (one built before the build refused it).
-pub(crate) fn dwx_actors_refusal(file: &str) -> String {
-    format!(
-        "`{file}` declares actors, and a `.dwx` of an actor program does not run yet: its actor table (each actor's \
-         behaviours and fields) is built from the source, which the artifact does not carry — run the source with \
-         `--engine wasm`, or on the interpreter"
-    )
-}
-
 fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     let (map, id, src) = match load(file) {
         Ok(x) => x,
@@ -4703,14 +4693,6 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
             "DL1201",
             format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"),
         );
-        print_diagnostics("build", &[d], &map, None, opts.json);
-        return 1;
-    }
-    // DWX-ACTORS-1 (2026-10-21): an actor program's `.dwx` was written and then could not run — `run FILE.dwx` has no actor
-    // table (the source route builds it from the AST, and each actor's field count is not in its exports), and it failed
-    // "actor index 1 out of range". Refused here, in words, until the table travels with the artifact.
-    if checked.module.items.iter().any(|it| matches!(it, Item::Actor(_))) {
-        let d = Diagnostic::error("DL1201", dwx_actors_refusal(file));
         print_diagnostics("build", &[d], &map, None, opts.json);
         return 1;
     }
