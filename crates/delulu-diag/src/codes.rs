@@ -1119,7 +1119,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              measured number and a guess.",
         "DL1202" => "The artifact's `delulu:authority` section is missing or invalid. An artifact \
              carries its own authority; one that cannot produce it is refused rather than run, \
-             because running it would mean running code whose authority nobody can state.",
+             because running it would mean running code whose authority nobody can state.\n\n\
+             It is also the refusal of an effect the section does not declare. The code hash binds \
+             only the code, so the declared effects are the word of whoever built the artifact; \
+             `delulu run` holds the artifact to them, refusing the first effect outside them before \
+             it happens. Rebuild the artifact from its source, or run the source.",
         "DL1204" => "The artifact declares a `delulu:cap` interface version this toolchain does not \
              support. Upgrade the toolchain. Refusing is the honest answer: interpreting an unknown \
              interface version by guessing would be a silent compatibility break.",

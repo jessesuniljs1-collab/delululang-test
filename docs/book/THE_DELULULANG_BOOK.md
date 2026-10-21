@@ -599,9 +599,15 @@ running `app.dwx` — authority verified; declared effects: Write
 
 The artifact contains a `delulu:authority` section (the same JSON `delulu authority` reports) and a
 blake3 hash of the code. At run time the hash is re-verified: alter one byte of the code and the
-artifact refuses to run (DL1202). The authority claim and the code it describes cannot drift apart.
-(Honesty: the hash is an *integrity* binding — it detects corruption and naive swaps — not a
-cryptographic signature proving *who* built it; signing is a separate, later mechanism.)
+artifact refuses to run (DL1202). (Honesty: the hash is an *integrity* binding — it detects corruption and naive
+swaps — not a cryptographic signature proving *who* built it; signing is a separate, later mechanism.)
+
+> **This paragraph used to say "the authority claim and the code it describes cannot drift apart", and that was
+> false** until 2026-10-21 (ARTIFACT-CLAIM-1). The hash covers the code and not the claim beside it. An artifact
+> whose section said `Read` while its code wrote still verified, and ran with its writes. It was still refused
+> anything its grants did not cover, so no authority escaped. But "authority verified; declared effects: Read" was
+> a description its own code contradicted. Now the claim is enforced: `delulu run` refuses the first effect the
+> section does not declare (DL1202), before it happens. So an artifact can run only what it says it may.
 
 Secrets get a special guarantee here: secret-handling code **does not compile to WASM at all**
 (DL1205), so secret bytes can never enter a guest's linear memory. The strongest hygiene is the byte

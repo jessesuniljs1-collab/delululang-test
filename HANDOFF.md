@@ -1166,6 +1166,17 @@ spells the same thing?**
   which read four of them. `--broker daemon` and `--lease` ran an artifact under no custody, in silence. The sandboxed path
   had been the same until PS-B-05 gave it an allowlist. Search key: for every command, list each route its dispatcher can
   take, and ask of each route which flags it applies — an allowlist per route, never a list of refusals.
+  **Since 2026-10-21 the `.dwx` route applies them** by the source route's own functions (`lease_for_run`,
+  `custody_for_run`, the trace helpers) — never a copy.
+
+- **ARTIFACT-CLAIM-1 — a hash that leaves out the section it describes binds nothing in it** (the laptop, 2026-10-21, RW
+  4.73): a `.dwx`'s `code_blake3` hashes the module with its `delulu:authority` section excluded, so the effects the
+  section declares could be edited in place — five bytes for five, nothing recomputed — and the artifact still said
+  "authority verified" and ran its undeclared writes (each still under its grants: no authority escaped, the words did).
+  Fixed by enforcing the claim, not by hashing it: a signature says who built an artifact, not that its claim is true.
+  `run` now refuses the first effect the manifest does not declare (DL1202), at the host's custody gate. Never soften it
+  back to "the hash binds the manifest". Search key: for every integrity check, list what the hashed bytes exclude, and ask
+  of each excluded field whether anything downstream trusts it.
 
 ### 11.5 Operational traps, recorded because each one cost time
 

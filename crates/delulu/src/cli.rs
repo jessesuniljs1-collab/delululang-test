@@ -3108,6 +3108,12 @@ fn authority_artifact(file: &str, opts: &Opts) -> i32 {
         "  note:         a `.dwx` carries no source, so there is no per-function purity and no \
          `why` chain — run those against the `.delulu` it was built from"
     );
+    // ARTIFACT-CLAIM-1: the code hash binds the code, not this claim, so the claim is the builder's word — true of what
+    // runs because `run` enforces it, and said so, since a reader trusts this report to bound the artifact.
+    println!(
+        "  enforced:     these effects are its builder's claim (the code hash binds only the code), and `delulu run` holds \
+         the artifact to them: an effect outside them is refused (DL1202)"
+    );
     0
 }
 
@@ -6144,25 +6150,15 @@ pub(crate) fn wasm_fault_code(msg: &str) -> &'static str {
     // The deterministic arithmetic/recursion traps (DL0901/0902/0903/0905) are mapped from the
     // structured wasmtime trap by `delulu_wasm::clean_trap` and embedded here, so the WASM engine
     // reports the SAME code as the interpreter for the same fault (parity, invariant 15; C20). The
-    // DL07xx/DL13xx/DL14xx entries are host-side capability/custody denials whose reason strings
-    // already carry the code.
-    for code in ["DL0703", "DL0901", "DL0902", "DL0903", "DL0905", "DL1306", "DL1401", "DL1402", "DL1403"] {
-        if msg.contains(code) {
-            // The registry stores codes as &'static str; return the matching literal.
-            return match code {
-                "DL0703" => "DL0703",
-                "DL0901" => "DL0901",
-                "DL0902" => "DL0902",
-                "DL0903" => "DL0903",
-                "DL0905" => "DL0905",
-                "DL1306" => "DL1306",
-                "DL1401" => "DL1401",
-                "DL1402" => "DL1402",
-                _ => "DL1403",
-            };
-        }
-    }
-    "DL0904"
+    // host-side capability and custody denials carry their code too: a refusal is `CODE: message`.
+    // The message's FIRST registered code is its own. A list of the codes it might carry (nine, until 2026-10-21) called
+    // every other one DL0904 — a custody's guard refusal (DL1410), a seal (DL1413), an artifact's undeclared effect
+    // (DL1202, ARTIFACT-CLAIM-1).
+    msg.match_indices("DL")
+        .filter_map(|(i, _)| msg.get(i..i + 6))
+        .filter(|t| t[2..].bytes().all(|b| b.is_ascii_digit()))
+        .find_map(delulu_diag::static_code)
+        .unwrap_or("DL0904")
 }
 
 /// Map this run's grants to the root-node authority the daemon issues (Stage 5 phase 5f: the
@@ -11134,6 +11130,32 @@ mod suggestion_tests {
     fn every_real_subcommand_suggests_itself() {
         for c in SUBCOMMANDS {
             assert_eq!(nearest_subcommand(c), Some(*c), "`{c}` is a real command");
+        }
+    }
+}
+
+#[cfg(test)]
+mod wasm_fault_code_tests {
+    use super::wasm_fault_code;
+
+    /// A WASM refusal is labelled with the code it carries, whichever registered one it is — the first in the message —
+    /// and DL0904 when it carries none. A list of nine called a guard's DL1410, a seal's DL1413 and an artifact's DL1202
+    /// (ARTIFACT-CLAIM-1) DL0904 (2026-10-21).
+    #[test]
+    fn a_wasm_refusal_is_labelled_with_the_code_it_carries() {
+        for (msg, code) in [
+            ("WASM trap: DL0703: `console` was not granted to this program — pass `--grant console`", "DL0703"),
+            ("WASM trap: DL0901: integer overflow", "DL0901"),
+            ("WASM trap: DL1403: lease `g_x` was revoked by audit seq 42", "DL1403"),
+            ("WASM trap: DL1410: `declassify:K` is guarded — request access with `delulu guard request`", "DL1410"),
+            ("WASM trap: DL1413: sealed by the owner", "DL1413"),
+            ("WASM trap: DL1202: the artifact performed `Write`, an effect its manifest does not declare", "DL1202"),
+            ("WASM trap: DL0904: path `../x` escapes the granted scope", "DL0904"),
+            ("root handle 3 is not the root capability", "DL0904"),
+            // Not a registered code, then a registered one: the registered one.
+            ("WASM trap: DL9999 is no code; DL0903: out of bounds", "DL0903"),
+        ] {
+            assert_eq!(wasm_fault_code(msg), code, "{msg}");
         }
     }
 }
