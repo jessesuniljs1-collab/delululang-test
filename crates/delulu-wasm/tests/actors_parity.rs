@@ -214,3 +214,45 @@ fn a_list_param_behavior_refuses_as_dl1201() {
         "an out-of-subset behaviour parameter must refuse as DL1201"
     );
 }
+
+/// A behaviour named like a capability method is the actor's: a send. The WASM codegen matched fifteen such names
+/// (`console`, `narrow`, `read_text`, `int`, `write_text`, `expose`, `foreign`…) before it looked at the receiver, and
+/// refused the program as that method on the wrong receiver (DL1201, "narrow() on a receiver that is not a Cap[FsRead]";
+/// `expose` as a secret entering the guest), where the interpreter ran it. Found 2026-10-21 by the laptop, probing the
+/// red-team pass's untried family "a user method named `narrow`/`read_text`": the refusal failed closed — nothing ran
+/// as a capability — but a valid program was refused, for a reason it does not have.
+#[test]
+fn a_behaviour_named_like_a_capability_method_is_a_send_on_both_engines() {
+    let none = ["console", "clock", "now_ms", "rand", "foreign_load"];
+    let one = ["println", "fs_read", "read_text", "narrow", "fs_write", "foreign", "expose"];
+    let two = ["int", "write_text", "append_text"];
+    let mut src = String::from("module named\nactor W {\n  var n: Int\n  new() { self.n = 0 }\n");
+    for b in none {
+        src += &format!("  be {b}() {{ self.n = self.n + 1 }}\n");
+    }
+    // Each counts down by sending to itself under its own name, so the turn count says how often each one ran — and
+    // `self.narrow(…)` is a send as well as `w.narrow(…)`.
+    for b in one {
+        src += &format!("  be {b}(k: Int) ! {{Async}} {{ if k > 0 {{ self.{b}(k - 1) }} }}\n");
+    }
+    for b in two {
+        src += &format!("  be {b}(k: Int, j: Int) ! {{Async}} {{ if k > 0 {{ self.{b}(k - 1, j) }} }}\n");
+    }
+    // And through an actor-typed field.
+    src += "}\nactor Relay {\n  var peer: tag W\n  new(p: tag W) { self.peer = p }\n  be go() ! {Async} { self.peer.narrow(2) }\n}\n";
+    src += "fn main(root: Root) ! {Async} {\n  let w = spawn W()\n";
+    for b in none {
+        src += &format!("  w.{b}()\n");
+    }
+    for (i, b) in one.iter().enumerate() {
+        src += &format!("  w.{b}({})\n", i + 1);
+    }
+    for (i, b) in two.iter().enumerate() {
+        src += &format!("  w.{b}({}, 7)\n", i + 1);
+    }
+    src += "  let r = spawn Relay(w)\n  r.go()\n}\n";
+    assert_actor_parity(&src);
+    let (_, w) = wasm_report(&src);
+    // 2 creates + 5 + (1+…+7 counting down from each, plus itself: 2+3+…+8 = 35) + (2+3+4 = 9) + `go` + its 3 `narrow`s.
+    assert_eq!(w.total_turns, 2 + 5 + 35 + 9 + 1 + 3, "every send ran as a turn: {w:?}");
+}

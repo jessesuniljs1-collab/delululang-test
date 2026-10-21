@@ -430,8 +430,9 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
     // what to type teaches nothing, so every message below names the exact grant. (Prose only:
     // the code, the span, and the `--json` envelope are unchanged, per `for-agents.md`.)
     let remedy = |grant: &str| grant_remedy(root.lease.as_deref(), grant);
-    let refused =
-        |what: &str, grant: &str| Fault::at("DL0703", format!("`{what}` was not granted to this program — {}", remedy(grant)), span);
+    let refused = |what: &str, grant: &str| {
+        Fault::at("DL0703", format!("`{what}` was not granted to this program — {}", remedy(grant)), span)
+    };
     match method {
         "console" => {
             if root.console {
@@ -607,7 +608,9 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 None => Err(Fault::at(
                     "DL0703",
                     match root.lease {
-                        None => format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"),
+                        None => {
+                            format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`")
+                        }
                         Some(_) => format!("compute device `{d}` was not granted — {}", remedy(&format!("compute={d}"))),
                     },
                     span,
@@ -1851,7 +1854,9 @@ mod remedy_tests {
         for (method, args) in refused_mints() {
             let refusal = |root: RootVal| match call_root_method(&root, method, &args, Span::new(0, 0, 0)) {
                 Err(f) if f.code == "DL0703" => f.message,
-                other => panic!("`root.{method}` on an empty root must be DL0703, was {:?}", other.map(|_| ()).map_err(|f| f.code)),
+                other => {
+                    panic!("`root.{method}` on an empty root must be DL0703, was {:?}", other.map(|_| ()).map_err(|f| f.code))
+                }
             };
             let plain = refusal(RootVal::default());
             assert!(plain.contains("pass `--grant"), "an ordinary run is told what to grant (`{method}`): {plain}");

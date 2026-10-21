@@ -2407,6 +2407,28 @@ fn compile_spawn(actor: &Path, args: &[Expr], cx: &mut Cx) -> Result<Ty, Compile
     Ok(Ty::ActorRef(aidx))
 }
 
+/// The actor a method's receiver refers to, read from the scopes without compiling it: a local or parameter of
+/// actor-reference type, `self` in an actor member, or a `self.field` holding a reference — each compiled to that type by
+/// `compile_expr`. `None` is "not known to be an actor": the receiver is then compiled and dispatched by its type.
+fn recv_actor(recv: &Expr, cx: &Cx) -> Option<u32> {
+    match recv {
+        Expr::Var { path, .. } if path.segs.len() == 1 => match cx.lookup(&path.segs[0].name) {
+            Some((_, Ty::ActorRef(a))) => Some(a),
+            Some(_) => None,
+            None if path.segs[0].name == "self" => cx.actor.as_ref().map(|c| c.actor_idx),
+            None => None,
+        },
+        Expr::Field { recv, name, .. } => match &**recv {
+            Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "self" => match self_field(cx, &name.name) {
+                Ok((_, Ty::ActorRef(a), _)) => Some(a),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// A behaviour send `recv.beh(args)` (Stage 7 phase 7h, T-Send). The receiver slot (i64) is
 /// already on the wasm stack; stash it, build the args vector, then call `actor_send`. Self-sends
 /// (`self.beh(…)`) reach here too — `self` compiled to the self-slot with type `ActorRef(self)`.
@@ -3086,6 +3108,13 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             Ok(tt)
         }
         Expr::Method { recv, name, args, span, id } => {
+            // The receiver decides before the name does: a method on an actor reference is a behaviour send, whatever it
+            // is called. The arms below match capability methods by NAME, so until 2026-10-21 a behaviour named
+            // `narrow`, `read_text`, `int` or `expose` was refused as that method on the wrong receiver (DL1201).
+            if let Some(aidx) = recv_actor(recv, cx) {
+                compile_expr(recv, cx)?; // the slot `compile_send` takes from the stack
+                return compile_send(aidx, &name.name, args, cx);
+            }
             // Phase 3e: Root.console() -> host import minting a Console handle.
             if name.name == "console" && args.is_empty() {
                 let rt = compile_expr(recv, cx)?;
