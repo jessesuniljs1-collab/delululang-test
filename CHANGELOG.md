@@ -19,6 +19,11 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   compare such a value whole, with the same text as before.
 - **Fixed: a hand-written WebAssembly module could crash its host with a deeply nested type descriptor.** One deeper
   than any the compiler writes is now refused with DL0903.
+- **Fixed: a deeply nested value sent to an actor crashed the process** (DATA-DEPTH-2, RW 4.75). A chain of 300,000
+  links built in a loop now arrives whole, and a message dropped unread is taken apart without crashing either.
+- **Fixed: sending a closure bound by `let` to an actor never finished** (CLOSURE-SEND-1, RW 4.76). It crashed with a
+  stack overflow. A closure now carries exactly the values its body reads, which is the set the checker judges
+  sendable. Before, it carried every value in scope where it was made, including itself.
 
 ## Unreleased — a `match` covers every case at every depth, 2026-10-22
 

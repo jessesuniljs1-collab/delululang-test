@@ -94,7 +94,9 @@ pub enum MsgValue {
     SecretLocal(String, Option<(String, Vec<crate::egress::Audience>)>),
     /// A broker-held secret's name and, P9-04 (d), its audience — a handle sent to another actor goes where it may go.
     SecretHandle(String, Option<(String, Vec<crate::egress::Audience>)>),
-    Root(RootMsg),
+    /// Boxed: a root slice is many times the size of every other message value, and every part of a message would pay
+    /// for it.
+    Root(Box<RootMsg>),
     Actor {
         id: ActorId,
         actor: String,
@@ -1056,7 +1058,7 @@ fn to_msg_step(
             Some(h) => MsgValue::SecretHandle(h.to_string(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
             None => MsgValue::SecretLocal(s.reveal(), s.audience().map(|a| (a.name.clone(), a.to.clone()))),
         },
-        Value::Root(r) => MsgValue::Root(RootMsg {
+        Value::Root(r) => MsgValue::Root(Box::new(RootMsg {
             console: r.console,
             fs_read: r.fs_read.clone(),
             fs_write: r.fs_write.clone(),
@@ -1076,7 +1078,7 @@ fn to_msg_step(
             plugins_allow: r.plugins_allow.clone(),
             computes: r.computes.clone(),
             lease: r.lease.clone(),
-        }),
+        })),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // P2: a plugin handle does NOT cross an actor boundary. The grant that loaded it does
         // (see `MsgRoot::plugins`), so an actor may load its OWN plugin and get its own custody
@@ -1257,6 +1259,7 @@ fn from_msg_step(m: MsgValue, cells: &mut Vec<Value>, work: &mut Vec<FromMsg>, d
             aud.map(|(name, to)| Rc::new(crate::value::SecretAudience { name, to })),
         ))),
         MsgValue::Root(r) => {
+            let r = *r;
             let root = crate::value::RootVal {
                 // Carried, like the actuator list beside it (D46): the envelope is what bounds the
                 // holder, and the broker still re-checks every dispatch against the grant.
