@@ -8201,3 +8201,26 @@ moved. The file stays LF (`git ls-files --eol`: `i/lf w/lf`).
 - `delulu` and `delulu-conform` whole, before the snapshot was re-recorded: 1,029 passed, 4 failed in 103 targets. The
   failures were the three `doctor_cli` map tests (stale before the Survey's rebuild) and this snapshot case. Both are
   answered above; after them, see the commit message.
+
+## 2026-10-21 (evening) — the laptop: a package's `requests` — each module by its own node types (D-V2-168 item 2)
+
+The entry before left a package's report open: `check_program` kept no per-node types, and node ids are per module.
+`Program` now has `node_types`, one map per module, keyed by its **unit name** — the key both package checks
+(`check_program` for a loose directory, `check_workspace` for a manifest and its dependencies) already use for everything
+else. `emit_authority` takes the unit names beside the modules and pairs them directly. It never recomputes a key from a
+module's declared name: a workspace need not keep that unique, and the wrong map would put one module's types on
+another's nodes. The single-file `Program` the CLI builds and the atlas's test helper carry theirs too.
+
+**Evidence.** `within_cli.rs` `authority_names_each_request_by_the_checkers_type_and_never_by_a_methods_name` gains three
+cases:
+- a two-module package whose second module requests `/ping` (named in `src/net.delulu`; the `List` `get` in `main` is not);
+- an app whose dependency `netlib` requests `/dep`;
+- a loose directory (`src/` and no manifest) — which first read empty because the test had put its files beside `src/`
+  instead of in it (the loader reads `src/`), a test mistake read before blaming the code.
+
+Mutants, each red, the control green:
+- M700 `check_program` drops the types;
+- M701 `check_workspace` drops them;
+- M702 the report pairs by a wrong key.
+
+`delulu-check` whole: 275 passed. `delulu-atlas`: 18 passed. `within_cli`: 17 passed. clippy with rustfmt's check clean.

@@ -4086,6 +4086,10 @@ they answer exactly that question.
    The walk is `secret_destinations`' own, given the types, so the two static halves cannot read the source two ways.
 2. **A package's report waits.** `check_program` keeps no per-node types, and node ids are per module, so a package's
    modules would need their own maps. That is a slice of its own (RW 2.12), not a guess in the meantime.
+   **Built the same evening:** `Program::node_types` keeps one map per module, keyed by its unit name as both package checks
+   (`check_program`, `check_workspace`) key everything else. The report pairs each module with its own map by that key,
+   never by a declared name a workspace need not keep unique. So a package's, a dependency's and a loose directory's
+   requests are named (`within_cli.rs`; M700–M702 red).
 3. **Methods (d) still wait for the first non-GET primitive; the path in the chain's record stays open** (D-V2-140 §3, §4).
 4. **The core-invariance snapshot moved by one case**, `examples/guide/05_capabilities.delulu :: authority --json`, which
    gains its one request (`client.get(url)` inside `fetch`, the URL a parameter: `null`). Re-recorded as a reviewed act

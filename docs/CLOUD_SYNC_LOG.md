@@ -4996,3 +4996,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Redo on the laptop: nothing. For the laptop's memory: nothing new.
 - Open / next: (1) #26 and this branch landing on green; (2) `launch/2.0.0`: merge `f05c329` onward (the Breaking
   paragraph's actor clause to go); (3) a package's `requests`, the path in the chain's record, methods; maps on WASM.
+
+### 2026-10-21 (evening) — a package's `requests`: each module by its own node types (D-V2-168 item 2) (made on the laptop)
+- Session: `https://claude.ai/code/session_01Jomeb6seaffGYMnXvPmvGw`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/p9-05-packages` (on `laptop/p9-05-requests`, #27)   Pull request: see the branch   Merged: not yet
+- **Landed:** #26 (`12d5fa2`) on its CI `39594329482`, success on every job — `master` `f05c329..12d5fa2`.
+- What: `V2_LOG.md` (2026-10-21, the fourth evening entry); D-V2-168 item 2 amended.
+- Files and folders: M `crates/delulu-check/src/program.rs` (`Program::node_types`; `check_program` keeps them),
+  `crates/delulu-check/src/deps.rs` (`check_workspace` keeps them), `crates/delulu/src/cli.rs` (the units beside the
+  modules; a package's `requests`; the single-file `Program`), `crates/delulu-atlas/src/lib.rs` (the test helper's
+  `Program`), `crates/delulu/tests/within_cli.rs`, `CHANGELOG.md`, `docs/REMAINING_WORK.md` (2.12),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Verified: in `V2_LOG.md`.
+- Survey and doctor (after the last edit): in the commit message.
+- Redo on the laptop: nothing. For the laptop's memory: nothing new.
+- Open / next: (1) #27 and this branch landing on green; (2) `launch/2.0.0`: merge `master` (the Breaking paragraph's
+  actor clause to go); (3) the path in the chain's record; methods with the first non-GET primitive; maps on WASM.

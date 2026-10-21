@@ -373,6 +373,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
     let mut facts = HashMap::new();
     let mut fn_types = HashMap::new();
     let mut call_owner: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut node_types: HashMap<String, HashMap<delulu_syntax::ast::NodeId, crate::Type>> = HashMap::new();
     // Modules that have already had a re-export cycle reported (DL1005), to avoid duplicates.
     let mut reported_cycles: HashSet<usize> = HashSet::new();
 
@@ -506,6 +507,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
         for (name, t) in result.fn_types {
             fn_types.insert(format!("{m}::{name}"), t);
         }
+        node_types.insert(m.clone(), result.node_types);
         call_owner.insert(m.clone(), owner);
     }
 
@@ -518,7 +520,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
 
     let entry_module = ws.root_entry_module();
     let type_names = crate::ty::TypeNameList(gtypes.iter().map(|d| d.name.clone()).collect());
-    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names }
+    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names, node_types }
 }
 
 /// Re-frame diagnostics that landed in **another module's file** (C58).
