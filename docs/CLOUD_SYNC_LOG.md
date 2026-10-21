@@ -4917,3 +4917,33 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   ARTIFACT-CLAIM-1's refusal and its `.dwx` clause saying the custody and trace flags are applied; (3) RW 3.21's rest (the
   actor table in the code), P9-05's open steps (the path in the chain's record, `authority`'s path walk, methods), RW 4.67,
   6.1, 6.2; (4) *[laptop]* the launch, only on the owner's word.
+
+### 2026-10-21 — the laptop's close: #22 and #23 landed; `launch/2.0.0` at `6863bf7`, then `5d5ba5a` (made on the laptop)
+- Session: `https://claude.ai/code/session_018FZ43XgcChWVwbhr89qngA`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/records-1021` (records only)   Base: `a2fb0cd`
+- **Landed, each on its own green CI read to the end, by fast-forward:** #22 (`eb2372c`, `0439453`) on `39562082756`; #23
+  (`a2fb0cd`) on `39563303281` — success on every job (`miri-slow` and `heavy-gates` skipped, as on every pull request).
+  `master`: `9c1d30b..5470b53..4729747..0439453..a2fb0cd` today. Push runs read: `39561045205` (`5470b53`) and
+  `39561096457` (`4729747`) success on every job; `39565269313` (`0439453`) and `39566586112` (`a2fb0cd`) running at this
+  entry, their `openshell` runs success.
+- **`launch/2.0.0`:**
+  - `6863bf7` merged `9c1d30b..4729747` (#20, #21). Its release dry run `39562463148`: **success**. Its `everything`
+    `39562457688`: every job success, `supply-chain` included, except the two `miri-slow` jobs (check, broker), running.
+  - `5d5ba5a` merged `4729747..a2fb0cd` (#22, #23):
+    - the CHANGELOG's three sections under `## [2.0.0]`;
+    - the Breaking paragraph's `.dwx` clause brought up to date, with ARTIFACT-CLAIM-1's refusal and DWX-ACTORS-1's;
+    - `CHECKLIST-2.0.md` criterion 4 re-cited: the advisory database moved, the gate red before `5470b53` and green on
+      `39562457688`, the tagged tree's own run read before the tag.
+  - Gates on `5d5ba5a`: survey 1545 nodes, 0 errors; `doctor --check` 29 ok; clippy stamped; eight doc gates, 57 passed.
+    Dispatched: `everything` `39566831246`, release dry run `39566838279`.
+- Files and folders: M `docs/CLOUD_SYNC_LOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Open / next, for whoever comes next (laptop or routine):
+  1. Read `39562457688`'s two `miri-slow` jobs, `39566831246` and `39566838279` (`launch/2.0.0` `5d5ba5a`), and the push
+     runs `39565269313`, `39566586112`.
+  2. RW 3.21's rest — the actor table carried by the code.
+  3. P9-05's open steps (the path in the chain's record, `authority`'s path walk, methods).
+  4. On WASM: maps (then `get_with`, `str` of a map), a list of options.
+  5. RW 4.66 (open by reason: a same-uid process reads the secret store anyway), 4.67, 6.1, 6.2.
+  6. *[laptop]* the launch, only on the owner's word.

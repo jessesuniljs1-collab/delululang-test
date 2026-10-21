@@ -8052,3 +8052,21 @@ lesson, the entry before. That is a format change, a slice of its own (RW 3.21's
 - The five CLI targets that build artifacts (`wasm_cli`, `release`, `plugin_cli`, `artifact_review`, `json_contract`):
   51 passed.
 - Chapter five and the other non-actor programs still build.
+
+## 2026-10-21 — the laptop's close: four pull requests landed; `launch/2.0.0` merged twice
+
+Landed today by fast-forward, each on its own CI read green to the end:
+- #20: RW 6.15, RW 3.20, the three advisories, rustfmt and `scripts/clippy.sh`'s format check;
+- #21: the network on WASM;
+- #22: a `.dwx` under custody and a trace; ARTIFACT-CLAIM-1; WASM-CODE-1;
+- #23: DWX-ACTORS-1.
+
+`launch/2.0.0` took them in two merges:
+- `6863bf7`: release dry run `39562463148` success; `everything` `39562457688` success on every job but two `miri-slow`
+  jobs still running.
+- `5d5ba5a`: its CHANGELOG's Breaking paragraph says what an artifact is now refused (DL1202 at an undeclared effect; an
+  actor program at the build). The checklist's supply-chain criterion is re-cited, since the advisory database moved
+  under a fixed tree this morning. `everything` `39566831246` and the release dry run `39566838279` dispatched.
+
+Nothing is tagged; the launch waits for the owner's word. `docs/CLOUD_SYNC_LOG.md`'s closing entry lists the runs to read
+and the open items, in order.
