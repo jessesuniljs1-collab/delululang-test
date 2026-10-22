@@ -367,3 +367,39 @@ a new primitive and the grant form it reads — is the language change, taken as
 git checkout 91a1eb7^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-131's code, or the release gate refuses the uncovered anchor.
+
+## 2026-10-22 — `tests/conformance/witnesses.toml`: `ref.diag.DL1205`'s rejecting witness
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: the `negative` `[[witness]]` row for `ref.diag.DL1205` names `a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205` in place of `minting_a_secret_alone_is_refused_dl1205`, in the same file (`crates/delulu-wasm/src/lib.rs`). No other row is touched. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | RW 3.4; decision D-V2-174 |
+| Approved by | **the head chef, 2026-10-22, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* — the entrenched files among them, each change with its `D-V2-nn` and this record. |
+
+**Why**
+
+D-V2-174 compiles `root.secret` to a handle the host keeps, so the test this row named, which pinned that minting a secret
+alone was DL1205, was replaced by one that pins what stays DL1205: `Secret.map` and `Secret.expose`, with `root.declassify()`.
+The row went on naming the removed test, and the coverage law refused the dangling witness: PR #48's run `39825874508`,
+`test (ubuntu-24.04)`, with `coverage_never_regresses`, `release_requires_full_coverage` and
+`the_generated_reference_is_not_stale` red. The laptop's run of the change had not included `delulu-conform`.
+
+**Why this is not an RFC**
+
+A witness row maps an existing test to an anchor; it changes no rule, no diagnostic and no behaviour. DL1205 still means
+that secret contents cannot enter the WASM guest, and the test the row now names produces it twice. The narrowing of what
+DL1205 refuses is the language change, taken as D-V2-174. `COVERED_FLOOR` in `crates/delulu-conform/` is untouched.
+
+**Verified before the change**
+
+1. The named test exists and passes (`cargo test -p delulu-wasm --lib a_secret_compiles_as_a_handle`).
+2. `delulu-conform --reference` regenerated `docs/reference/` with no difference from what is committed, and
+   `cargo test -p delulu-conform` is green.
+
+**How to revert**
+
+Together with D-V2-174's code. Reverting the row alone would name a test that no longer exists, which the coverage law
+refuses.

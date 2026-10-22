@@ -847,7 +847,9 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
             // D-V2-174: a `Secret[Str]` is a host handle, as a capability is.
             if name == "Secret" {
                 return match &args[..] {
-                    [TypeExpr::Named { path: sp, args: sa, .. }] if sa.is_empty() && sp.segs.len() == 1 && sp.segs[0].name == "Str" => {
+                    [TypeExpr::Named { path: sp, args: sa, .. }]
+                        if sa.is_empty() && sp.segs.len() == 1 && sp.segs[0].name == "Str" =>
+                    {
                         Some(Ty::Secret)
                     }
                     _ => None,

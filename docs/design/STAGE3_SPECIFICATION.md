@@ -451,6 +451,13 @@ reports DL1205 (verified end-to-end); DL1205's registry title was broadened to m
 (a mint+expose program → DL1205, a mint-only program → DL1205, a secret-free positive control, and a
 CLI `run --engine wasm` DL1205 case).
 
+**Since 2026-10-22 (D-V2-174) a secret in the guest is §4.4's host-table entry**, an index in place of
+an externref. `root.secret`, `get_with_secret` and `verify` compile; the secret stays in the host's
+table, and a request sends it from there. The mint-only refusal above is retired, and §9.8's memory
+scan now reads a memory for which the host has handled the secret (`host::secret_handle_tests`).
+`Secret.expose`, `root.declassify()` and `Secret.map` stay DL1205; §4.4's host-side whitelist for
+`map` is not built.
+
 **Phase 3o — sum types in the WASM backend (Checkpoint 1: `Result`/`Option` + `match`) — is
 implemented and green** (189 tests). The backend's thin `Ty` gained `Result(Scalar, Scalar)` and
 `Option(Scalar)` (payloads restricted to scalars — `Int`/`Bool`/`Str`/`Unit`, no nesting yet, keeping

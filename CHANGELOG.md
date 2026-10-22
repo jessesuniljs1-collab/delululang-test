@@ -11,6 +11,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a WASM program holds a secret and sends it, 2026-10-22
+
+- **New: `root.secret(name)`, `Cap[Http].get_with_secret` and `Secret.verify` run on `--engine wasm` and in a `.dwx`**
+  (RW 3.4, D-V2-174). The program holds the secret as a handle, an index into the host's table, and the host keeps the
+  secret: its value under embedded custody, the broker's handle under `--broker daemon`. A request sends it from the
+  host with the interpreter's own code: the audience check, the egress client, the custody check on the URL's host and,
+  under the daemon, the broker's `send` record. `verify` compares two secrets there. The traces are the interpreter's.
+  No byte of a secret is in the program's memory or in the artifact. Until now a program that so much as minted a
+  secret was refused (DL1205), so `examples/demo.delulu` could not build. It now runs on WASM and prints what the
+  interpreter prints, and 15 of the 17 programs in the corpus and examples build.
+- **Unchanged: what would put a secret's bytes in the program is still DL1205.** That is `Secret.expose`,
+  `root.declassify()` (whose one use is `expose`; it was refused as an unsupported method, DL1201) and `Secret.map`,
+  which runs the program's own function on the bytes. A program that uses them runs on the interpreter. An artifact
+  whose manifest does not declare `Declassify` is refused at its first `verify` (DL1202).
+
 ## Unreleased — a package builds to one `.dwx`, 2026-10-22
 
 - **Added: `delulu build <package-dir> --target wasm` builds a whole package into one `.dwx`** (RW 3.4). It compiles

@@ -131,7 +131,8 @@ fn demo_runs_on_wasm_as_on_the_interpreter_and_its_secret_stays_on_the_host() {
     }
     // Ungranted: refused on both engines, in the interpreter's words.
     for engine in [&[][..], &["--engine", "wasm"][..]] {
-        let o = delulu(&[&["run", "examples/demo.delulu", "--grant", "console", "--grant", "fs.read=./config"][..], engine].concat());
+        let o =
+            delulu(&[&["run", "examples/demo.delulu", "--grant", "console", "--grant", "fs.read=./config"][..], engine].concat());
         assert_eq!(o.status.code(), Some(1), "{engine:?}");
         let err = String::from_utf8_lossy(&o.stderr);
         assert!(err.contains("DL0703") && err.contains("secret `API_KEY` was not granted"), "{engine:?}: {err}");

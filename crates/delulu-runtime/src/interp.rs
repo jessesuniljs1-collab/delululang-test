@@ -2442,12 +2442,7 @@ pub(crate) fn custody_op_for(
 /// `Secret.verify`: two secrets this process holds are compared here (`prim`); two the broker holds, by the broker
 /// (VERIFY-FABRICATED-1); one of each cannot be, by either side. One function for both engines: the interpreter's
 /// `verify_secret` and the WASM host's, which holds each secret as a handle (D-V2-174).
-pub fn secret_verify(
-    custody: &mut dyn Custody,
-    s: &SecretVal,
-    args: &[Value],
-    span: delulu_diag::Span,
-) -> Result<Value, Fault> {
+pub fn secret_verify(custody: &mut dyn Custody, s: &SecretVal, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
     let Some(Value::Secret(other)) = args.first() else {
         return prim::call_secret_method(s, "verify", args, span);
     };

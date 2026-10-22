@@ -279,7 +279,7 @@ kind = "negative"
 [[witness]]
 anchor = "ref.diag.DL1205"
 file = "crates/delulu-wasm/src/lib.rs"
-test = "minting_a_secret_alone_is_refused_dl1205"
+test = "a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205"
 kind = "negative"
 
 [[witness]]

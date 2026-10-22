@@ -283,7 +283,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let RunCustody { daemon_mode, custody, run_node: _run_node } = match custody_for_run(opts, &grants, &map, file, lease_custody) {
+    let RunCustody { daemon_mode, custody, run_node: _run_node } = match custody_for_run(opts, &grants, &map, file, lease_custody)
+    {
         Ok(c) => c,
         Err(code) => return code,
     };

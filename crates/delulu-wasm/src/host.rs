@@ -2794,15 +2794,14 @@ mod secret_handle_tests {
         let engine = optimizing_engine();
         let module = Module::new(&engine, &wasm).expect("a valid module");
         let mut store = Store::new(&engine, main_host_state(cfg, ActorRuntime::new(empty_actor_table())));
-        let instance = build_linker(&engine).and_then(|l| {
-            l.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))
-        });
+        let instance = build_linker(&engine)
+            .and_then(|l| l.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string())));
         let instance = instance.unwrap_or_else(|e| panic!("instantiates: {}", e.message()));
         let main = instance.get_func(&mut store, "main").expect("a main");
         let called = main.call(&mut store, &[Val::I32(0)], &mut []).map_err(|e| trap_or_refusal(&store, &e));
         let memory = instance.get_memory(&mut store, "memory").expect("a memory").data(&store).to_vec();
         let state = store.into_data();
-        let out = called.and_then(|()| match state.refused {
+        let out = called.and(match state.refused {
             Some(why) => Err(WasmError::Trap(why)),
             None => Ok(state.output),
         });
@@ -2811,9 +2810,10 @@ mod secret_handle_tests {
 
     /// D-V2-174: a WASM program that mints a secret and sends it holds an index into the host's table and nothing of the
     /// secret — after the run, after the host has put its bytes in a request, no byte of it is in the guest's memory, which
-    /// is what DL1205 exists for. The request reached the egress client inside the secret's audience; this crate's own
-    /// tests build that client without a transport, so it ends there (`no-client`) — `egress_cli.rs` sees the same request
-    /// leave as TLS from the real binary, on both engines.
+    /// is what DL1205 exists for. The request got past the secret's audience and its headers to the egress client's
+    /// transport, and ends there: `no-client` when this crate is built alone (the runtime without `net`), `connect` in a
+    /// workspace build, where cargo turns `net` on for every crate and nothing listens on port 9. `egress_cli.rs` sees the
+    /// same request leave as TLS from the real binary, on both engines.
     #[test]
     fn a_minted_and_sent_secret_never_enters_the_guests_memory() {
         let url = "https://127.0.0.1:9/probe";
@@ -2839,7 +2839,8 @@ mod secret_handle_tests {
         assert_eq!(out.map_err(|e| e.message()), Ok("not delivered\n".to_string()));
         let log = delulu_runtime::egress::snapshot().to_json();
         let reached = log["records"].as_array().into_iter().flatten().find(|r| r["url"] == url).cloned();
-        assert_eq!(reached.map(|r| r["reason"].clone()), Some("no-client".into()), "past its audience, to the client: {log}");
+        let reason = reached.as_ref().and_then(|r| r["reason"].as_str());
+        assert!(matches!(reason, Some("no-client" | "connect")), "past its audience and headers, to the transport: {log}");
         assert!(!memory.is_empty() && !holds(&memory, CANARY), "no byte of the secret in the guest's memory");
         // The control: the search reads the guest's memory, which holds what the program put there.
         assert!(holds(&memory, "not delivered") && holds(&memory, "X-Api-Key"), "the search reads the guest's memory");

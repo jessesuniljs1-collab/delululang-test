@@ -8664,3 +8664,40 @@ the test was moved); the artifact written beside the directory. `artifact_review
 
 Also: three of this night's `CLOUD_SYNC_LOG.md` entries had been scrambled — each new one inserted after an anchor in
 the middle of the one before, ahead of its file list; the lists moved back, every line kept (checked).
+
+## 2026-10-22 (night) — the laptop: a WASM program holds a secret and sends it (RW 3.4, D-V2-174)
+
+Of the corpus's three entry points still off WASM, `demo` stopped at one line: `root.secret("API_KEY")`, a secret
+minted and never used, DL1205. Phase 3n refused the mint because the bytes "would still be placed in guest memory"; the
+Stage 3 spec's normative §4.4 had said a secret in WASM lives "only in the host secret table", the guest holding a
+reference. D-V2-174 builds that table. `root.secret` mints by the interpreter's own rule against the run's grants (the
+value under embedded custody, the broker's handle under the daemon) into the host's capability table, and the guest
+gets the index. `get_with_secret` runs host-side in the interpreter's order: trace record `«opaque»`, custody on the
+host, then `broker_secret_send`, now one function shared with the interpreter, then its egress client. `verify` is
+compared by `secret_verify`, also shared, under a `.dwx`'s declared-effects ceiling. `expose`, `root.declassify()` and
+`Secret.map` stay DL1205.
+
+Evidence: after a run that minted a secret and sent it to the egress client, the guest's memory holds no byte of it
+(`host::secret_handle_tests`, with a control that finds the program's own strings). On the interpreter, on
+`--engine wasm` and from a `.dwx`, the same request leaves as TLS to the audience only, with identical traces
+(`egress_cli`). Under the daemon the WASM run's audit chain is the interpreter's, record for record (`broker_cli`).
+`demo` prints what the interpreter prints, from source and artifact (`wasm_cli`). `verify` answers alike, and a
+manifest stripped of `Declassify` is DL1202 at it (`wasm_cli`). Eight mutants red, one per claim.
+
+Two things found on the way. The first version of the change broke Phase 3n's own `expose` test: its program
+declassifies before it exposes, and `root.declassify()` had only ever been unreachable, so it now meets DL1201 first.
+`declassify` is refused by name as DL1205, its one use being `expose`. And re-measuring the corpus found chapter five of
+the guide newly refused: its never-called `password_matches(held: Secret[Str], …)` used to be skipped because the
+backend had no type for the parameter, and now compiled up to its `verify`. Hence `verify`. A unit test that waited for
+a connection also hung: tested alone, `delulu-wasm` builds the egress client without a transport.
+
+PR #48's first run (`39825874508`) was red on `test (ubuntu-24.04)`, twice over. The memory test asserted `no-client`,
+which held on the laptop's `-p delulu-wasm` and not on CI's workspace build, where cargo turns `net` on and the same
+request tried to connect. It now accepts either; both builds were run on the laptop. And the conformance witness for
+`ref.diag.DL1205` still named the replaced pin, which the laptop's run, lacking `delulu-conform`, had not caught. It now
+names the replacement (an entrenched edit, recorded), and `delulu-conform` is green (28). Both lessons are in HANDOFF §11.5.
+
+Re-measured file by file: **15 of 17** build as programs; `numpy_mean` and the plugin host remain (DL1201). Green on the
+laptop, 640 tests, none failed: every `delulu-wasm` target, `delulu-runtime`'s unit tests, `delulu-diag`, and `wasm_cli`
+(17), `within_cli` (17), `json_contract` (13), `broker_cli` (12), `egress_cli` (9), `package_run` (6), `release` (6),
+`grants_cli` (5), `artifact_review` (4), `conformance` (4).
