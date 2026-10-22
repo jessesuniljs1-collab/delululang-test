@@ -2800,19 +2800,4 @@ mod secret_handle_tests {
         // The control: the guest's memory is searchable, and holds what the program put there.
         assert!(holds(&memory, "not delivered") && holds(&memory, "X-Api-Key"), "the search reads the guest's memory");
     }
-
-    /// D-V2-174: the guest holds a secret's index; `Secret.map(f)` would run the program's function on its bytes in the
-    /// guest, and `expose` would hand them to it — both stay on the interpreter (DL1205); minting alone compiles.
-    #[test]
-    fn a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205() {
-        let compile = |body: &str| {
-            let src = format!("module m\nfn f(root: Root) -> Bool ! {{Declassify}} {{ let key = root.secret(\"API_KEY\")\n {body}\n true }}\n");
-            let checked = delulu_check::check_source(0, &src);
-            assert!(!checked.has_errors(), "{body}: {:?}", checked.diagnostics);
-            crate::compile_checked(&checked.module, &checked.result).map(|_| ()).map_err(|e| e.code())
-        };
-        assert_eq!(compile(""), Ok(()), "minting is a handle");
-        assert_eq!(compile("let k = key.map(fn(s: Str) -> Str { s + \"!\" })"), Err("DL1205"), "map runs code on the bytes");
-        assert_eq!(compile("let d = root.declassify()\n let s = key.expose(d)"), Err("DL1205"), "expose reveals them");
-    }
 }

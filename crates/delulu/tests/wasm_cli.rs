@@ -100,14 +100,43 @@ fn run_engine_wasm_on_unsupported_program_is_dl1201() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// D-V2-174: `demo.delulu` mints a secret, which a WASM program holds as a handle — the host keeps the secret — so all of
+/// it runs on WASM, printing what the interpreter prints, from the source and from the `.dwx` built from it; the secret's
+/// value is in neither the artifact nor the output. (It stopped at its `root.secret` line, DL1205, until then; a program
+/// that `expose`s a secret still does, `run_engine_wasm_on_a_secret_program_is_dl1205`.) Ungranted, both engines refuse
+/// the secret in the interpreter's words.
 #[test]
-fn run_engine_wasm_on_demo_reports_dl1205_secret() {
-    // With generics/fs/Result/match all compiling now, demo.delulu gets all the way to its
-    // `root.secret("API_KEY")` line — which is DL1205 (secrets never enter a guest), keeping the
-    // program on the interpreter. (Progress marker: everything BEFORE the secret compiles.)
-    let o = delulu(&["run", "examples/demo.delulu", "--engine", "wasm", "--grant", "console", "--json"]);
-    assert!(stdout(&o).contains("DL1205"), "expected DL1205: {}", stdout(&o));
-    assert_eq!(o.status.code(), Some(1));
+fn demo_runs_on_wasm_as_on_the_interpreter_and_its_secret_stays_on_the_host() {
+    const VALUE: &str = "demo-qv5k-value";
+    let grant = format!("secret:API_KEY={VALUE}");
+    let grants = ["--grant", "console", "--grant", "fs.read=./config", "--grant", grant.as_str()];
+    let run = |target: &str, extra: &[&str]| delulu(&[&["run", target][..], &grants, extra].concat());
+    let interp = run("examples/demo.delulu", &[]);
+    assert_eq!(interp.status.code(), Some(0), "{}", String::from_utf8_lossy(&interp.stderr));
+    assert!(stdout(&interp).contains("fib(10) = 55"), "{}", stdout(&interp));
+    let wasm = run("examples/demo.delulu", &["--engine", "wasm"]);
+    assert_eq!(wasm.status.code(), Some(0), "{}", String::from_utf8_lossy(&wasm.stderr));
+    assert_eq!(stdout(&wasm), stdout(&interp), "the WASM engine prints what the interpreter prints");
+    let dwx = temp_dwx("demo-secret");
+    let dwx_path = dwx.to_string_lossy().to_string();
+    let o = delulu(&["build", "examples/demo.delulu", "--target", "wasm", "--out", &dwx_path]);
+    assert_eq!(o.status.code(), Some(0), "build: {}{}", stdout(&o), String::from_utf8_lossy(&o.stderr));
+    let built = run(&dwx_path, &[]);
+    assert_eq!(built.status.code(), Some(0), "{}", String::from_utf8_lossy(&built.stderr));
+    assert_eq!(stdout(&built), stdout(&interp), "the artifact prints what the interpreter prints");
+    let bytes = std::fs::read(&dwx).unwrap();
+    assert!(!bytes.windows(VALUE.len()).any(|w| w == VALUE.as_bytes()), "the secret is not in the artifact");
+    for o in [&interp, &wasm, &built] {
+        assert!(!format!("{}{}", stdout(o), String::from_utf8_lossy(&o.stderr)).contains(VALUE), "nor in what a run said");
+    }
+    // Ungranted: refused on both engines, in the interpreter's words.
+    for engine in [&[][..], &["--engine", "wasm"][..]] {
+        let o = delulu(&[&["run", "examples/demo.delulu", "--grant", "console", "--grant", "fs.read=./config"][..], engine].concat());
+        assert_eq!(o.status.code(), Some(1), "{engine:?}");
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert!(err.contains("DL0703") && err.contains("secret `API_KEY` was not granted"), "{engine:?}: {err}");
+    }
+    let _ = std::fs::remove_file(&dwx);
 }
 
 // ----- Phase 3g: the .dwx authority-carrying artifact ---------------------------------------
