@@ -1133,7 +1133,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              interface version by guessing would be a silent compatibility break.",
         "DL1205" => "Secret contents cannot enter the WASM guest. The guest's memory is a different \
              trust domain, and a secret that crosses into it is no longer protected by the rules \
-             that made it a secret.",
+             that made it a secret. A WASM program may hold a secret as a handle: the host keeps \
+             it, `get_with_secret` sends it from there and `verify` compares two there. What would \
+             hand its bytes to the program (`root.declassify()`, `Secret.expose`) or run the \
+             program's own code on them (`Secret.map`) is refused with this code, and such a \
+             program runs on the interpreter.",
         "DL1206" => "The two engines disagreed on the same program in a parity self-check. \
              Compiler-bug class: the interpreter and the WASM backend must produce the same \
              observable behavior for any program both support. Please report it.",

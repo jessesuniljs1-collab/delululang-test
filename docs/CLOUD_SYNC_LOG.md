@@ -5300,3 +5300,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — a WASM program holds a secret and sends it (RW 3.4, D-V2-174) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-secret-handle` (on `laptop/wasm-package-build` `0344884`, PR #47)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** `master`'s push run `39816526461` (`41e9724`) **success**; PR #47's run
+  `39818530211` **success** (14 jobs, 2 skipped), so #47 landed by fast-forward to `0344884`, and `master`'s push run
+  `39821304180` for it **success**.
+- **What:** in a WASM program a secret is a handle in the host's table (D-V2-174, the Stage 3 spec's §4.4 built).
+  `root.secret`, `get_with_secret` (sent from the host by the interpreter's own code: audience, custody, broker `send`)
+  and `verify` compile. `expose`, `root.declassify()` and `Secret.map` stay DL1205. `broker_secret_send` and
+  `secret_verify` are now shared by both engines. `demo` and chapter five build: the corpus counter is 15 of 17.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/src/lib.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL1205's explain), `crates/delulu/tests/broker_cli.rs`,
+  `crates/delulu/tests/egress_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.5),
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/STAGE3_SPECIFICATION.md` (a dated note under Phase 3n),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-174), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

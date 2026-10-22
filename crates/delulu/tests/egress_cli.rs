@@ -421,6 +421,107 @@ fn a_secret_is_sent_to_its_audience_and_nowhere_else() {
     assert!(seen.join().unwrap().is_none(), "a guest sent nothing");
 }
 
+/// D-V2-174: a WASM program holds a secret as a handle — the host minted it and keeps it — and `get_with_secret` sends it
+/// from the host by the interpreter's own code: the same request leaves (TLS, the secret's header named in the report),
+/// to the audience only, with the same trace, from the source on `--engine wasm` and from a built `.dwx` alike; and no
+/// byte of the secret is in the artifact, the trace, the report or anything the run said.
+#[test]
+fn a_wasm_program_sends_its_secret_from_the_host_as_the_interpreter_does() {
+    let program = |dir: &Path, url: &str| {
+        std::fs::write(
+            dir.join("send.delulu"),
+            format!(
+                "module fetch\n\nfn main(root: Root) ! {{Net, Write}} {{\n    \
+                 let out = root.console()\n    \
+                 let h = root.http([\"127.0.0.1\"])\n    \
+                 let tok = root.secret(\"API_TOKEN\")\n    \
+                 let hs = Map()\n    \
+                 hs.insert(\"Accept\", \"text/plain\")\n    \
+                 match h.get_with_secret(\"{url}\", hs, \"X-Api-Key\", tok) {{\n        \
+                 Ok(body) => out.println(\"delivered\")\n        \
+                 Err(e) => out.println(\"not delivered\")\n    \
+                 }}\n}}\n"
+            ),
+        )
+        .unwrap();
+    };
+    // The engines: the interpreter, the WASM engine from the source, and the artifact built from it.
+    let run = |dir: &Path, engine: &str, audience: &str| -> Output {
+        let target = if engine == "dwx" {
+            let o = delulu(dir, &["build", "send.delulu", "--target", "wasm", "--out", "send.dwx"]);
+            assert_eq!(o.status.code(), Some(0), "build: {}", out(&o));
+            let wasm = std::fs::read(dir.join("send.dwx")).unwrap();
+            assert!(!wasm.windows(SECRET_CANARY.len()).any(|w| w == SECRET_CANARY.as_bytes()), "no secret in the artifact");
+            "send.dwx"
+        } else {
+            "send.delulu"
+        };
+        let grant = format!("secret:API_TOKEN{audience}={SECRET_BYTES}");
+        let mut args = vec![
+            "run",
+            target,
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1",
+            "--grant",
+            &grant,
+            "--report-out",
+            "rep.json",
+            "--trace-effects",
+            "--trace-out",
+            "trace.txt",
+        ];
+        if engine == "wasm" {
+            args.extend(["--engine", "wasm"]);
+        }
+        delulu(dir, &args)
+    };
+    let said = |dir: &Path, o: &Output| {
+        let mut all = out(o);
+        for f in ["rep.json", "trace.txt"] {
+            all.push_str(&std::fs::read_to_string(dir.join(f)).unwrap_or_default());
+        }
+        all
+    };
+    let mut traces = Vec::new();
+    for engine in ["interp", "wasm", "dwx"] {
+        // Inside the audience: sent, from the host.
+        let dir = tmp(&format!("wasm-secret-in-{engine}"));
+        let (port, seen) = listen(Duration::from_secs(20));
+        program(&dir, &format!("https://127.0.0.1:{port}/probe"));
+        let o = run(&dir, engine, &format!("@127.0.0.1:{port}"));
+        let first = seen.join().unwrap().unwrap_or_else(|| panic!("{engine}: nothing connected:\n{}", out(&o)));
+        assert!(first.len() >= 3 && first[0] == 0x16 && first[1] == 0x03, "{engine}: TLS, got {first:02x?}:\n{}", out(&o));
+        assert_eq!(o.status.code(), Some(0), "{engine}:\n{}", out(&o));
+        assert_eq!(String::from_utf8_lossy(&o.stdout), "not delivered\n", "{engine}:\n{}", out(&o));
+        let v = report(&dir);
+        let hop = &v["egress"]["records"][0]["hops"][0];
+        assert_eq!(hop["secret"], "API_TOKEN", "{engine}: the hop names the secret it carried: {v}");
+        assert_eq!(hop["headers"], serde_json::json!(["accept", "x-api-key"]), "{engine}: {v}");
+        assert!(!said(&dir, &o).contains(SECRET_CANARY), "{engine}: the secret's bytes are nowhere:\n{}", said(&dir, &o));
+        let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
+        assert!(trace.contains("\"get_with_secret\"") && trace.contains("«opaque»"), "{engine}: {trace}");
+        traces.push((engine, trace));
+        // Outside it — the audience names another port: nothing connects, and the operator is told why.
+        let dir = tmp(&format!("wasm-secret-out-{engine}"));
+        let (port, seen) = listen(Duration::from_secs(3));
+        program(&dir, &format!("https://127.0.0.1:{port}/probe"));
+        let o = run(&dir, engine, &format!("@127.0.0.1:{}", port.wrapping_add(1).max(1)));
+        assert_eq!(o.status.code(), Some(0), "{engine}:\n{}", out(&o));
+        assert_eq!(String::from_utf8_lossy(&o.stdout), "not delivered\n", "{engine}:\n{}", out(&o));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("[egress: audience]"), "{engine}:\n{}", out(&o));
+        assert_eq!(report(&dir)["egress"]["records"][0]["reason"], "audience", "{engine}");
+        assert!(!said(&dir, &o).contains(SECRET_CANARY), "{engine}:\n{}", said(&dir, &o));
+        assert!(seen.join().unwrap().is_none(), "{engine}: nothing connected");
+    }
+    // One trace, whichever engine ran the program.
+    let (_, interp) = &traces[0];
+    for (engine, trace) in &traces[1..] {
+        assert_eq!(trace, interp, "{engine}'s trace is the interpreter's");
+    }
+}
+
 /// `--json` keeps the operator's prose off stderr — the same records are in the report.
 #[test]
 fn under_json_the_reason_is_in_the_report_and_not_in_prose() {

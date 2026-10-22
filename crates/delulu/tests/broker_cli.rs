@@ -375,6 +375,102 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// D-V2-174: on the WASM engine under the daemon, a run's secret is the broker's handle, as on the interpreter — the
+/// program holds an index to it, the host holds the handle — and `get_with_secret` asks the broker for the bytes for the
+/// one origin by the interpreter's own code. The same program run on each engine writes the same chain, record for
+/// record (the custody's `use` of the host, then the `send`), each request goes out, and no byte of the secret is in the
+/// chain or in anything a run said.
+#[test]
+fn a_wasm_runs_broker_held_secret_is_sent_through_the_broker_as_the_interpreters_is() {
+    let base = std::env::temp_dir().join(format!("delulu_bsec_wasm_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("work"), base.join("state"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    let program = format!(
+        "module m\n\nfn main(root: Root) ! {{Net, Write}} {{\n    let out = root.console()\n    let h = root.http([\"127.0.0.1\"])\n    \
+         let tok = root.secret(\"API_TOKEN\")\n    let hs = Map()\n    \
+         match h.get_with_secret(\"https://127.0.0.1:{port}/probe\", hs, \"Authorization\", tok) {{\n        \
+         Ok(b) => out.println(\"delivered\")\n        Err(e) => out.println(\"not delivered\")\n    }}\n}}\n"
+    );
+    std::fs::write(cwd.join("send.delulu"), program).unwrap();
+    let o = delulu_in(&cwd, &state, &["secrets", "set", "API_TOKEN", SECRET]);
+    assert!(o.status.success(), "secrets set: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let guard = DaemonGuard { state: state.clone() };
+    l.set_nonblocking(true).unwrap();
+    let l = std::sync::Arc::new(l);
+    let accepted = |l: std::sync::Arc<std::net::TcpListener>| {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            loop {
+                match l.accept() {
+                    Ok(_) => return true,
+                    Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10))
+                    }
+                    Err(_) => return false,
+                }
+            }
+        })
+    };
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
+    let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
+    // Each engine's run, and the records it added: its action, decision and — for a use and a send — its target (the
+    // others name the run's own node, which differs).
+    let mut chains = Vec::new();
+    for engine in ["interp", "wasm"] {
+        let before = records().len();
+        let went = accepted(l.clone());
+        let mut args = vec![
+            "run",
+            "send.delulu",
+            "--grant",
+            "console",
+            "--grant",
+            "net.special=127.0.0.1",
+            "--grant",
+            &grant,
+            "--no-prompt",
+            "--broker",
+            "daemon",
+        ];
+        if engine == "wasm" {
+            args.extend(["--engine", "wasm"]);
+        }
+        let o = delulu_in(&cwd, &state, &args);
+        assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{engine}: {}", stderr(&o));
+        assert!(went.join().unwrap(), "{engine}: the request went out: {}", stderr(&o));
+        assert!(!stdout(&o).contains(CANARY) && !stderr(&o).contains(CANARY), "{engine}: {}{}", stdout(&o), stderr(&o));
+        let added: Vec<String> = records()[before..]
+            .iter()
+            .map(|r| {
+                let target = if r["action"] == "use" || r["action"] == "send" { r["target"].to_string() } else { String::new() };
+                format!("{} {} {target}", r["action"], r["decision"])
+            })
+            .collect();
+        let sends = added.iter().filter(|a| a.starts_with("\"send\" \"allow\"")).count();
+        assert_eq!(sends, 1, "{engine}: the broker was asked once, and gave: {added:#?}");
+        assert!(added.iter().any(|a| a.contains(&format!("API_TOKEN@127.0.0.1:{port}"))), "{engine}: {added:#?}");
+        chains.push(added);
+    }
+    assert_eq!(chains[1], chains[0], "the WASM run's chain is the interpreter's");
+    for entry in std::fs::read_dir(state.join("audit")).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        assert!(!text.contains(CANARY), "the chain holds the bytes");
+    }
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// P9-04 (d), D-V2-134: a LEASED run's send is the Guard's, as a declassification is — the bytes leave the broker — and
 /// its permit names the destination: a delegated node's send is DL1410 until the owner approves `declassify:NAME@origin`
 /// (one for another origin does not buy it; one on the NAME would, D-V2-137); a child delegated a narrower audience cannot send to its parent's

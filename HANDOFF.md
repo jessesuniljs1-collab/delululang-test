@@ -1790,6 +1790,16 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the test binary, its filter run a few hundred times at `--test-threads 16`, turned "once on the laptop" into 13 of 400
   in the VM, and the fixed binary beside it, under the same load, into the control (0 of 400).
 
+- **A crate's tests can be built without a feature the binary turns on, and then a request never leaves** (the laptop,
+  2026-10-22, D-V2-174): `delulu-wasm` depends on `delulu-runtime` with `default-features = false`, so its own tests get
+  the egress client without a transport (`net` off: `NoTransport`, reason `no-client`). A unit test there that waited for
+  a listener to see a connection hung; one asserting "nothing connected" would pass for that reason alone. Prove that a
+  request leaves with the binary (`egress_cli.rs`); in a crate's test, read the egress record's `reason`.
+  **The same change's regression:** a type the WASM backend newly lowers (`Secret[Str]`) brings into the compile every
+  function that names it, called or not. Chapter five's never-called `password_matches` stopped the chapter at its
+  `verify`, and the corpus re-measure found that, not the targeted tests. After widening a type, re-measure the whole
+  corpus, not only the programs the widening was for.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
