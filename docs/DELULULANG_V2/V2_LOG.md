@@ -8818,3 +8818,21 @@ the interpreter, which stopped being true on 2026-10-21. It now says what compil
 method, nesting, a package's `.dwx`, a secret held on the host, handles in slots: 15 of 17 entry points) and what
 still runs on the interpreter: embedded Python, a plugin host, reading a secret's value, a function in a list or a
 record. `book`, `evidence_claims`: green.
+
+## 2026-10-23 (morning) — the laptop: a Windows-only `channel` failure root-caused — a zero sleep (RW 7.23 (b))
+
+Read since the last entry: PR #52's run `39867706347` **success**, every job; #52 landed by fast-forward, master
+`36740a4`. `launch/2.0.0`'s release dry run `39865371700`: **success**. Its everything run `39865367900` on `e51b4f3`:
+`test (windows-latest)` **failure**, one test, recorded as RW 7.23 (c): `plugin_load_cli`'s
+`under_a_lease_a_killed_runs_minted_node_is_revoked_by_its_dead_man_and_the_lease_lives`, whose run printed `refused`
+where it commands its device. The program prints no reason.
+
+RW 7.23 (b)'s `channel` `from_now_counts_the_wait_before_the_first_byte` failed once on a Windows runner, in its control:
+a frame already in memory, read at once, must be served within 100 ms. The project's rule is to starve a machine, not
+lengthen a bound. 32 busy loops on the laptop's 16 CPUs, above normal priority, turned the frozen test binary red 200
+times in 200; 0 in 100 unloaded. A first fix gave the control five attempts. Under 32 busy loops at normal priority,
+all five attempts took ~162 ms, every time. That is not a stall but a cost per byte. The test reader `Drip` called
+`thread::sleep` before every byte, even when its gap was zero, and on Windows a zero sleep is `Sleep(0)`, which yields
+the processor. With no zero sleep: 0 red in 100 at normal priority and 0 in 100 above normal. The five attempts were
+taken out again; the control is as strict as it was. Falsified: `from_now` counting from the first byte turns the test
+red. No production code calls `yield_now` or sleeps zero (`crates/*/src` searched).
