@@ -1295,7 +1295,8 @@ fn under_the_broker_daemon_revoking_a_plugins_node_stops_its_running_export_at_t
 /// A delegation carrying a device: the lease a run is given in the lease tests below (RW 4.57's lease half).
 const RUDDER: &str = "uav0/rudder:deflect_deg=-25..25,heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
 
-/// Commands the rudder once, says so, then spins until it is killed (`spin = false`: ends at once).
+/// Commands the rudder once, says so — or why it was refused, which a Windows runner once saw with no reason (RW 7.23
+/// (c)) — then spins until it is killed (`spin = false`: ends at once).
 fn rudder_host(spin: bool) -> String {
     format!(
         "module host\n\n\
@@ -1304,7 +1305,11 @@ fn rudder_host(spin: bool) -> String {
          \x20   let out = root.console()\n\
          \x20   match root.actuator(\"uav0/rudder\").command(Cmd {{ deflect_deg: 3.0 }}) {{\n\
          \x20       Ok(u) => out.println(\"COMMANDED\")\n\
-         \x20       Err(e) => out.println(\"refused\")\n\
+         \x20       Err(e) => out.println(match e {{\n\
+         \x20           Envelope(reason) => \"refused: envelope: \" + reason,\n\
+         \x20           LeaseRevoked(reason) => \"refused: lease revoked: \" + reason,\n\
+         \x20           NoDevice => \"refused: no device\"\n\
+         \x20       }})\n\
          \x20   }}\n\
          \x20   var i = 0\n\
          \x20   while {} {{\n\

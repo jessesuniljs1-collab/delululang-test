@@ -1815,6 +1815,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   all three refused every package with a dependency for months. When a fix replaces how one caller does a thing, list
   every caller of the old way (`grep` the function, not the command) and fix them together, or name why not.
 
+- **On Windows, `thread::sleep(Duration::ZERO)` is not free** (the laptop, 2026-10-23, RW 7.23 (b)): it is `Sleep(0)`,
+  which gives the processor to any ready thread, while on Unix a zero sleep returns at once. A test reader that "slept"
+  a zero gap before each byte took one time slice per byte on a busy runner, ~160 ms for a frame its control allowed
+  100 ms. CI saw it once; 32 busy loops on the laptop turned it red 98 times in 100. When a timing test fails only on
+  Windows, look for a zero or near-zero sleep, a `yield`, or a spin, before blaming the runner.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

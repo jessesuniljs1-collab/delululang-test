@@ -8799,3 +8799,75 @@ ignored, the profile's `fs.read` dropped, its secrets dropped. Five approving fi
 name the host their Net service calls, and the scope contract pins the new `compared` and `profile_cannot_grant`. A
 breaking change for a profile that named effects only, under 2.0.0. Green: `deploy_cli` 9, `deploy_plan_adversarial`
 15, `add_path_cli` 8, `signing_cli` 6, `cli` 53, `cli_contract` 19, `json_contract` 13, `delulu-diag`.
+
+## 2026-10-23 (early morning) — the laptop: CI read to its end; a Windows witness made to say why (RW 7.23)
+
+Read since the last entry:
+- PR #50's run `39833210704`: **success**, every job (14, with `miri-slow` and `heavy-gates` skipped as on any pull
+  request). #50 landed by fast-forward, master `05909ef`; its push runs `39836740749` and `39836740781`: **success**.
+- `master`'s push run for `4af166e` (#48), `39831374181`: **success**.
+- `launch/2.0.0`'s everything run `39816919025`: attempt 2 of `test (windows-latest)` **success**, so the run is green on
+  `7e7b2ed`. Attempt 1 had failed three wall-clock tests (RW 7.23 (b)).
+- PR #49's run `39830724209` had reported success while the jobs API still listed its `editor` job as in progress, with no
+  conclusion, when #49 landed. Read again at 03:55 IST: `completed`, `success`. GitHub's job record lagged the run's; the
+  run's result stands.
+- `master`'s push run for `b8c4fde` (#49), `39833849066`: **failure**, one test on `test (windows-latest)`:
+  `monitor_cli`'s `a_monitor_sees_nothing_outside_its_own_subtree`. The run's arm was revoked (`operator-revoke`) after
+  four of five refusals. The same commit's pull-request run and both of `05909ef`'s push runs were green.
+
+`operator-revoke` is the program's word for every dead probe (RW 7.17): a revoked node, which here would be the sibling's
+monitor reaching outside its subtree, or a broker that did not answer within 1 s. The test printed only the program's
+line. Its messages now carry the run's stderr, where the device journal's `lease.revoked` detail keeps the probe's own
+words, and the monitor's report. Falsified by forcing the baseline red: both appear in the message. The test passes
+otherwise, unchanged in what it asserts. RW 7.23 records all four Windows failures; none is root-caused.
+
+## 2026-10-23 (morning) — the laptop: a WASM slot holds a capability or a secret (RW 3.4, D-V2-177)
+
+The parked branch `laptop/wasm-handles-in-slots` (`5373158`) finished. `Scalar::Handle` stores and loads a capability's
+or a secret's index as one word, so a list, an option, a record field and a map's value can hold one. What it had left
+open: a `Map()` or a `None` whose type only the checker names stayed DL1201, because `checked_ty` did not map a handle
+type. It does now, for the same types `wasm_ty` reads from an annotation.
+
+Tests, `handle_parity.rs`, 2:
+- a list walked and indexed, an option, a record field, an annotated map and an inferred one, each printing through the
+  handle it holds, held to the interpreter;
+- a secret in a list or an option compiles, and `expose` from a list stays DL1205.
+
+Both are red on `master`'s code (DL1201). The `checked_ty` mutants, Console and Secret: red. The first form of the test
+used only annotated maps, and the `checked_ty` mutant survived it, so the inferred map and `None` were added.
+`list_parity.rs` and `record_parity.rs` had pinned a list, and a record field, of `Cap[Console]` as refused. Those pins
+were about the fragment's edge, not about safety, and the cases moved to the parity test. The pins now hold the root,
+which no slot holds: a list of it, a record field of it, both red when `Root` is let into a slot. A first attempt pinned
+`Cap[Python]` instead and passed for the wrong reason: a function whose signature the backend cannot map is left out of
+the module, so nothing about the list was compiled.
+
+Green: all 22 of `delulu-wasm`'s test targets; `wasm_cli` 9, `egress_cli` 17, `repository_structure` 6. Clippy stamped.
+Survey: ok, 1555 nodes, 16285 edges; findings 0 errors. doctor: ok, 29 checks.
+
+The book's chapter 9 still told a reader that any program with a map, a list of lists or a list of options runs on
+the interpreter, which stopped being true on 2026-10-21. It now says what compiles since then (maps, every `List`
+method, nesting, a package's `.dwx`, a secret held on the host, handles in slots: 15 of 17 entry points) and what
+still runs on the interpreter: embedded Python, a plugin host, reading a secret's value, a function in a list or a
+record. `book`, `evidence_claims`: green.
+
+## 2026-10-23 (morning) — the laptop: a Windows-only `channel` failure root-caused — a zero sleep (RW 7.23 (b))
+
+Read since the last entry: PR #52's run `39867706347` **success**, every job; #52 landed by fast-forward, master
+`36740a4`. `launch/2.0.0`'s release dry run `39865371700`: **success**. Its everything run `39865367900` on `e51b4f3`:
+`test (windows-latest)` **failure**, one test, recorded as RW 7.23 (c): `plugin_load_cli`'s
+`under_a_lease_a_killed_runs_minted_node_is_revoked_by_its_dead_man_and_the_lease_lives`, whose run printed `refused`
+where it commands its device. The program prints no reason.
+
+RW 7.23 (b)'s `channel` `from_now_counts_the_wait_before_the_first_byte` failed once on a Windows runner, in its control:
+a frame already in memory, read at once, must be served within 100 ms. The project's rule is to starve a machine, not
+lengthen a bound. 32 busy loops on the laptop's 16 CPUs, above normal priority, turned the frozen test binary red 200
+times in 200; 0 in 100 unloaded. A first fix gave the control five attempts. Under 32 busy loops at normal priority,
+all five attempts took ~162 ms, every time. That is not a stall but a cost per byte. The test reader `Drip` called
+`thread::sleep` before every byte, even when its gap was zero, and on Windows a zero sleep is `Sleep(0)`, which yields
+the processor. With no zero sleep: 0 red in 100 at normal priority and 0 in 100 above normal. The five attempts were
+taken out again; the control is as strict as it was. Falsified: `from_now` counting from the first byte turns the test
+red. No production code calls `yield_now` or sleeps zero (`crates/*/src` searched).
+
+RW 7.23 (c)'s program now prints which refusal it was given and its words; falsified by commanding 30 degrees
+against the rudder's 25: the message read ``refused: envelope: `deflect_deg` = 30 is outside the envelope [-25, 25]``.
+`plugin_load_cli`'s three lease tests: green.

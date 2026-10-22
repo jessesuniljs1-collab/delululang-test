@@ -553,8 +553,17 @@ chapters among them. Since 2026-10-21 so does the network: `root.http([…])` an
 by the interpreter's own code on the host — its allowlist, its egress client, its custody check and its trace — so
 chapter five runs too: 12 of the 17 entry points, all six chapters.
 
-So: if you are writing ordinary DeluluLang — anything with a map, a list of lists, an `Option` of a list, or a list of
-options — **you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
+Since 2026-10-21 a `Map` compiles as well: `Map()`, its eight methods, and `str` and `==` of a map. The host orders the
+keys by the interpreter's own rule, so both engines iterate a map identically. So does every `List` method, `pop`,
+`filter`, `fold` and `sort` among them. Since 2026-10-22 these nest: a list of lists, a list of options, a map of lists,
+and a map inside a list, an option or a record field. A whole package builds to one `.dwx`
+(`delulu build <dir> --target wasm`). A program may hold a secret, which stays on the host: the program can send it and
+compare it, never read it. Since 2026-10-23 a capability or a secret may also sit in a list, an option, a record field
+or a map's value. Measured on 2026-10-22, 15 of the 17 entry points compile; the two that do not embed Python or host a
+plugin.
+
+So: if your program embeds Python, hosts a plugin, reads a secret's value, or keeps a function in a list or a record,
+**it runs on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
 cases described below, and it is grown deliberately, one construct at a time, with the boundary
 refusing rather than guessing.
 
