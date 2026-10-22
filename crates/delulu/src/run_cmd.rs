@@ -40,6 +40,16 @@ use super::cli::*;
 /// The third value is the flattened text itself: a sandboxed run hands exactly that to its guest, so
 /// the program a guest runs is the program an ordinary run would have run (P5, D-V2-42).
 pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
+    load_package_flattened(dir, opts, "run")
+}
+
+/// [`load_package_for_run`] for `command` — `build --target wasm` compiles the same flattened program a run runs, and its
+/// diagnostics say `build`.
+pub(crate) fn load_package_flattened(
+    dir: &str,
+    opts: &Opts,
+    command: &str,
+) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
     // A directory that is not a package at all. Before D61 this said "is a directory — try `delulu
     // build`", which was right then and is wrong now: `run` DOES take a directory. What it must never
     // do is leak the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a directory` on
@@ -60,7 +70,7 @@ pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap,
     if ws.modules.is_empty() {
         let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
         if errors(&diags) > 0 {
-            print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+            print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         } else {
             diags.clear();
             eprintln!(
@@ -77,7 +87,7 @@ pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap,
     let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
     diags.extend(program.diagnostics.iter().cloned());
     if errors(&diags) > 0 {
-        print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+        print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         return Err(1);
     }
 

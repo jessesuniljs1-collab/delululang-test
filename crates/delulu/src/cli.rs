@@ -368,6 +368,31 @@ pub(crate) struct Opts {
     pub(crate) advisory_feed: Option<String>,
 }
 
+/// RW 4.17: an `fs.read`, `fs.write` or `plugin` grant may name `\\server\share` — it is the operator's to make, where a
+/// program's own path may not — but on Windows reaching it can send this user's credentials (NTLM) to `server`. Said when
+/// the grant is read, every command alike, once (a command may read its arguments more than once); not refused.
+fn warn_on_unc_grant(spec: &str) {
+    static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    if !cfg!(windows) {
+        return;
+    }
+    let Some((key, val)) = spec.split_once('=') else { return };
+    if !matches!(key.trim(), "fs.read" | "fs.write" | "plugin") {
+        return;
+    }
+    if let Some(server) = delulu_runtime::prim::unc_server(val.trim()) {
+        let mut said = SAID.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if said.iter().any(|s| s == spec) {
+            return;
+        }
+        said.push(spec.to_string());
+        eprintln!(
+            "warning: `--grant {spec}` names a network share on `{server}`: reaching it can send this Windows user's \
+             credentials (NTLM) to `{server}` — grant a local path unless `{server}` is trusted"
+        );
+    }
+}
+
 pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     let mut file = None;
     let mut opts = Opts {
@@ -824,13 +849,17 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--grants" => opts.show_grants = true,
             "--grant" => {
                 if i + 1 < rest.len() {
+                    warn_on_unc_grant(&rest[i + 1]);
                     opts.grants.push(rest[i + 1].clone());
                     i += 1;
                 } else {
                     opts.missing_values.push("--grant".to_string());
                 }
             }
-            s if s.starts_with("--grant=") => opts.grants.push(s["--grant=".len()..].to_string()),
+            s if s.starts_with("--grant=") => {
+                warn_on_unc_grant(&s["--grant=".len()..]);
+                opts.grants.push(s["--grant=".len()..].to_string())
+            }
             s if !s.starts_with('-') => {
                 if file.is_none() {
                     file = Some(s.to_string());
@@ -4643,7 +4672,10 @@ fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
 
 /// The manifest's declared `foreign.python` import allowlist next to `file` (empty when no manifest).
 fn manifest_python_allowlist(file: &str) -> Vec<String> {
-    let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    python_allowlist_in_dir(std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new(".")))
+}
+
+fn python_allowlist_in_dir(dir: &std::path::Path) -> Vec<String> {
     match std::fs::read_to_string(dir.join("delulu.toml")) {
         Ok(src) => parse_manifest(&src).foreign_python,
         Err(_) => Vec::new(),
@@ -4664,8 +4696,12 @@ fn cmd_build(rest: &[String]) -> i32 {
         eprintln!("error: `build` needs a source file (`--target wasm`) or a package directory");
         return 2;
     };
-    // `build --target wasm <file.delulu>` emits a `.dwx` artifact (Stage 3 §5).
+    // `build --target wasm <file.delulu>` emits a `.dwx` artifact (Stage 3 §5); so does a package directory, compiled as
+    // the program `run <dir>` runs.
     if opts.target.as_deref() == Some("wasm") {
+        if std::path::Path::new(&path).is_dir() {
+            return build_wasm_package(&path, &opts);
+        }
         return build_wasm_artifact(&path, &opts);
     }
     if let Some(t) = &opts.target {
@@ -4693,6 +4729,46 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         print_diagnostics("build", &checked.diagnostics, &map, None, opts.json);
         return 1;
     }
+    let out = std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string();
+    let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    emit_dwx(file, &map, &checked, dir, out, opts)
+}
+
+/// `build --target wasm <package-dir>`: the package resolved, checked as a workspace and flattened exactly as `run <dir>`
+/// does — the same program, so its `.dwx` runs what the run would — then compiled and written, by default, beside the
+/// package's `interface.json` (`target/<name>/<name>.dwx`). Its authority's scopes are the package's manifest's. Until
+/// 2026-10-22 a directory was refused with a note to try `delulu build .`, which was what had been typed.
+fn build_wasm_package(dir: &str, opts: &Opts) -> i32 {
+    let (map, checked, _) = match crate::run_cmd::load_package_flattened(dir, opts, "build") {
+        Ok(x) => x,
+        Err(c) => return c,
+    };
+    let name = std::fs::read_to_string(std::path::Path::new(dir).join("delulu.toml"))
+        .ok()
+        .map(|src| parse_manifest(&src).name)
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| checked.module.name.dotted());
+    let target = std::path::Path::new(dir).join("target").join(&name);
+    if opts.out.is_none() {
+        if let Err(e) = std::fs::create_dir_all(&target) {
+            eprintln!("error: could not create `{}`: {e}", target.display());
+            return 2;
+        }
+    }
+    let out = target.join(format!("{name}.dwx")).to_string_lossy().to_string();
+    emit_dwx(dir, &map, &checked, std::path::Path::new(dir), out, opts)
+}
+
+/// Compile a checked program's `main` and write its `.dwx` — to `--out`, or else `default_out` — with the authority
+/// embedded: the checker's answer, the scopes and Python allowlist of the manifest in `manifest_dir`.
+fn emit_dwx(
+    file: &str,
+    map: &SourceMap,
+    checked: &delulu_check::Checked,
+    manifest_dir: &std::path::Path,
+    default_out: String,
+    opts: &Opts,
+) -> i32 {
     if !checked.result.main_present {
         let d = Diagnostic::error(
             "DL1201",
@@ -4715,15 +4791,14 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     // Embed the same authority answer `delulu authority` reports (incl. the `foreign_calls` entries),
     // so the artifact carries its own truthful manifest of what it can do — a foreign-using program's
     // manifest lists its foreign entries under the "outside the proof" separator (Stage 4 phase 4g).
-    let mut scopes = manifest_scopes(file);
-    let python_allowlist = manifest_python_allowlist(file);
+    let mut scopes = scopes_in_dir(manifest_dir);
+    let python_allowlist = python_allowlist_in_dir(manifest_dir);
     scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
     let program = checked.module.name.dotted();
     let authority = authority_report(&program, &checked.result, &scopes);
     let dwx = delulu_wasm::embed_authority(&wasm, &authority);
 
-    let out_path =
-        opts.out.clone().unwrap_or_else(|| std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string());
+    let out_path = opts.out.clone().unwrap_or(default_out);
     if let Err(e) = std::fs::write(&out_path, &dwx) {
         eprintln!("error: could not write `{out_path}`: {e}");
         return 2;

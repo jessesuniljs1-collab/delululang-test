@@ -8572,3 +8572,69 @@ gone is logged and skipped. On a throwaway setup with a linked worktree holding 
 one: the snapshot carried both, named the worktree in its message, left the worktree's own index unstaged, was
 `unchanged` on the next run, and the removed worktree was logged; the repository's own checkout still snapshotted to
 `autosave/laptop`. A dry run on the real repository: `clean: launch-merge-1020 7b5aec3 in D:\nelan\dl-launch`.
+
+## 2026-10-22 (evening) — the laptop: the broker log names a late answer (RW 7.17's instrument)
+
+RW 7.17's next step was a measurement: how long the serial daemon takes to answer a device's 1 s authority probe beside a
+run's own appends. Nothing measured it — the daemon timed no request, and a run's line says `operator-revoke` for a probe
+that got no answer in time, as for a revoke (D-V2-99). Now the serve loop notes when it took each request off its queue,
+and an answer that leaves 500 ms or more after its request arrived (half the probe's deadline) is named in `broker.log`:
+the request's kind (`ReqBody::kind`, a name and none of its fields — a field can be a token or a beat's key), the time it
+waited for the requests ahead of it, and the time it took itself. An answer that could not be written has its own line
+already and is not named twice.
+
+Test: `broker_cli.rs` `an_answer_given_late_is_named_in_the_broker_log`, on every OS. The handler is held as RW 4.35's red
+team held it — twelve pending guard requests with long justifications, asked for on the daemon's own endpoint (the
+socket, or the Windows pipe named from the state directory's FNV-1a) by a client that reads 32 KiB a quarter second — and
+`broker status` behind it waits seconds. On this laptop: *"a Status request was answered 2499 ms after it arrived: 2495
+ms waiting for the requests ahead of it, 4 ms handling and answering it"*, the client 2509 ms; three runs green. Three
+mutants red: the line never written, the wait measured from arrival to arrival, the threshold at 50 s. Building it
+found two things a first try missed: identical guard requests are folded into one (`deduped`), so twelve copies asked
+for 30 kB, not 360 kB; and a Windows reply's flush must drain within 1 s, so a holder reading 8 KiB a quarter second was
+dropped after a second (`the reader did not take its answer`) instead of holding the handler.
+
+`estop_cli`'s two no-revoke controls — the arm64 red and the `windows-latest` red — now attach `broker.log` to their
+failure, and print each late answer on a green run too, where `witness.yml`'s `--nocapture` shows it: the measurement is
+`witness.yml -f os=windows-latest -f target=estop_cli`. On this laptop: eight green, no answer late.
+
+**Read on `windows-latest`** (`witness.yml` at `86b8df5`): runs `39810107555` (`estop_cli`, 8 green) and `39810113455`
+(`estop_cli` and `broker_cli`, 18 green, the new test among them) — in the four no-revoke control runs no answer was late
+(no `late answer:` line). The red stays a rare timing-class event; when it recurs, its failure carries `broker.log`.
+
+## 2026-10-22 (evening) — the laptop: a grant naming a network share is warned of on Windows (RW 4.17's UNC half)
+
+RW 4.17 left one question: an operator's `fs.read`, `fs.write` or `plugin` grant may name `\\server\share` (a program's own
+path may not, PS-0-06), and on Windows reaching that share can send the user's NTLM credentials to `server`. Decided as
+the row proposed: said, not refused — the grant is the operator's informed choice. `prim::unc_server` names the machine a
+UNC spelling reaches (either slash; none for a local path or the `\\?\` / `\\.\` prefixes the grant parser refuses), and
+the option parser warns as it reads each `--grant`, on Windows only — elsewhere `//server/share` is an ordinary path. The
+first try printed the warning three times: `run` reads its arguments three times, so it is said once per spelling.
+
+On this laptop: `fs.read=\\fileserver.invalid\share`, `fs.write=//fileserver.invalid/share` and
+`plugin=\\fileserver.invalid\p` each warn once, naming the server, and the program runs (16 ms — nothing touches the
+share until a program opens it); `fs.read=\\?\UNC\srv\share` is refused as before; local paths and `net=` are silent.
+Tests: `cli.rs` `a_grant_naming_a_network_share_is_warned_of_on_windows` (on every OS: warned on Windows, silent
+elsewhere), `prim.rs` `a_unc_spelling_names_the_machine_it_reaches`. Three mutants red: no warning, the warning every
+time the arguments are read, only `fs.read` warned. Also corrected: RW row 1.11 and its section still called the
+constitution's guarantee 5 unedited and the owner's — it was corrected on 2026-10-17 (7.10a, D-V2-141).
+
+Then, reading the open rows: two of this night's RW edits (4.17, 7.17) had wrapped a table row across lines, and five
+older rows were the same (4.58, 4.59, 4.53, 4.46, 5.6) — a Markdown row is one line, so each rendered as a stub and loose
+paragraphs, and nothing caught it. Joined (the file's words unchanged, 27,939 in the same order), and gated:
+`repository_structure.rs` `every_remaining_work_row_is_one_line`, red on the file before (all seven named), and
+`the_broken_row_rule_finds_a_wrapped_row_and_nothing_else` (a code span holding `|` is not a break).
+
+## 2026-10-22 (evening) — the laptop: `broker stop` waits for the daemon to exit (RW 7.19 closed)
+
+RW 7.19: on Windows `broker_cli`'s secret tests left their temp directories behind on most runs, the cause suspected
+(the daemon runs with its working directory in the state directory) and not confirmed. Confirmed: `broker stop` returned
+once the daemon ANSWERED `Shutdown`, and the daemon then still had to leave its loop, wake its accept thread, remove its
+pid file and exit — a directory removed in that window fails with OS error 32, *"The process cannot access the file
+because it is being used by another process"*. Witnessed on the old code: start, stop, remove at once — the first of five
+tries failed, both times it was run. Now `stop` asks `Status` for the daemon's pid first and returns once that process is
+gone (`process_gone`: `kill(pid, 0)` and `ESRCH` on Linux and macOS, `GetExitCodeProcess` on Windows — an exited process
+has closed every handle it held), waiting at most 5 s and saying so if that passes; it says `ok: broker stopped`. Five
+of five removed at once, three runs; the secret tests left no directory in three runs; `broker_cli` 11, `estop_cli` 8,
+`guard_cli` 2 green. Test: `broker_cli` `a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once`; a
+mutant whose exit check always says "gone" is red. An operator gains the same: `stop` then `start` no longer meets the
+old daemon still there.

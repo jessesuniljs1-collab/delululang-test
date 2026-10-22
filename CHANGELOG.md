@@ -11,6 +11,30 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `broker stop` waits for the daemon to exit, 2026-10-22
+
+- **Changed: `delulu broker stop` returns only after the daemon has exited, and says `ok: broker stopped`** (RW 7.19).
+  Before, it returned as soon as the daemon acknowledged the request, while the daemon was still shutting down. On
+  Windows a running daemon holds its state directory, so deleting the directory straight after `stop` failed with
+  "being used by another process", and `stop` followed by `start` could find the old daemon still there. `stop` waits
+  up to 5 s. If the daemon hasn't exited by then, it says so and names the pid.
+
+## Unreleased — a grant naming a network share is warned of on Windows, 2026-10-22
+
+- **Added: on Windows, an `fs.read`, `fs.write` or `plugin` grant that names a network share (`\\server\share`, either
+  slash) prints a warning** (RW 4.17). The warning names the server, because reaching the share can send this Windows
+  user's NTLM credentials to it. The grant still works: it's the operator's choice, while a program's own paths can't
+  name a share. The warning appears once per command. On other systems `//server/share` isn't a network path, so
+  nothing is printed.
+
+## Unreleased — the broker log names a late answer, 2026-10-22
+
+- **Added: `broker.log` names every answer the daemon gave more than 500 ms after the request arrived** (RW 7.17). The
+  line gives the request's kind, how long it waited for the requests ahead of it, and how long it took itself, for
+  example: *"a Status request was answered 2499 ms after it arrived: 2495 ms waiting for the requests ahead of it, 4 ms
+  handling and answering it"*. A device's authority probe waits 1 s, and a run reports a probe that got no answer in
+  time as `operator-revoke`, the same as a revoke. Now the log shows which it was.
+
 ## Unreleased — the cycle collector keeps what a map holds, 2026-10-22
 
 - **Fixed: a list held in an actor's map could be emptied by the cycle collector** (GC-MAP-1, RW 4.77). The collector

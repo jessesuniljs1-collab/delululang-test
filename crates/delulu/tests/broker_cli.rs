@@ -734,3 +734,142 @@ fn a_broker_held_secret_is_never_mapped_over_bytes_it_does_not_hold() {
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// The daemon's endpoint, opened as a client opens it: the socket in the state directory, or on Windows the pipe named
+/// from the canonical state directory (`broker_transport::state_hash`: FNV-1a over its lower-cased spelling).
+#[cfg(unix)]
+fn raw_connection(state: &Path) -> std::os::unix::net::UnixStream {
+    std::os::unix::net::UnixStream::connect(state.join("broker.sock")).expect("connect to the broker's socket")
+}
+#[cfg(windows)]
+fn raw_connection(state: &Path) -> std::fs::File {
+    let canon = std::fs::canonicalize(state).unwrap_or_else(|_| state.to_path_buf());
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in canon.to_string_lossy().to_lowercase().bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    let pipe = format!(r"\\.\pipe\delulu-broker-{h:016x}");
+    std::fs::OpenOptions::new().read(true).write(true).open(&pipe).unwrap_or_else(|e| panic!("open {pipe}: {e}"))
+}
+
+/// RW 7.17: an answer the daemon gives later than half a device probe's 1 s is named in `broker.log`, with how long it
+/// waited for the requests ahead of it and how long it took itself. A run's line says `operator-revoke` for a daemon too
+/// slow for its probe as for a revoke (D-V2-99); the log is where the operator, or the next red, finds which it was. The
+/// handler is held as RW 4.35's red team held it: a client asks for a large answer — the pending requests, each with a
+/// long justification — and reads it slowly, so the daemon's one handler writes that reply until its 5 s bound, and a
+/// `broker status` behind it is answered seconds late.
+#[test]
+fn an_answer_given_late_is_named_in_the_broker_log() {
+    use std::io::{Read as _, Write as _};
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    // Short: a broker's socket lives in the state directory (macOS allows 103 bytes).
+    let base = std::env::temp_dir().join(format!("dll-{}-{}", std::process::id(), t % 1_000_000_000));
+    let _ = std::fs::remove_dir_all(&base);
+    let (cwd, state) = (base.join("w"), base.join("s"));
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let s = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(s.status.success(), "broker start: {}", stderr(&s));
+    let guard = DaemonGuard { state: state.clone() };
+    let text = format!("{}{}", stdout(&s), stderr(&s));
+    let owner = {
+        let i = text.find("gow1_").expect("the owner code is printed once at start");
+        let tail = &text[i..];
+        tail[..tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len())].to_string()
+    };
+    let log = || std::fs::read_to_string(state.join("broker.log")).unwrap_or_default();
+    let o = delulu_in(&cwd, &state, &["broker", "status"]);
+    assert!(o.status.success(), "broker status: {}", stderr(&o));
+    assert!(!log().contains("a Status request was answered"), "a prompt answer is not named:\n{}", log());
+
+    let o = delulu_in(
+        &cwd,
+        &state,
+        &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"],
+    );
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let node = v["node"].as_str().expect("the node").to_string();
+    // Twelve long justifications: an answer several times past what the transport buffers (a Windows pipe 64 KiB, a Linux
+    // socket about 208 KiB), each argument inside its platform's command line (32,767 characters on Windows). Each asks
+    // for its own pattern: a request the same as one pending is folded into it (`deduped`), not queued.
+    let why = "w".repeat(if cfg!(windows) { 30_000 } else { 100_000 });
+    for i in 0..12 {
+        let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &format!("declassify:p{i}"), "--why", &why]);
+        assert!(o.status.success(), "guard request: {}", stderr(&o));
+    }
+
+    let mut holder = raw_connection(&state);
+    let mut frame = vec![0u8; 4];
+    let ask = ciborium::Value::Map(vec![
+        (ciborium::Value::Text("version".into()), ciborium::Value::Text("broker/1".into())),
+        (ciborium::Value::Text("body".into()), ciborium::Value::Text("GuardPending".into())),
+    ]);
+    ciborium::into_writer(&ask, &mut frame).unwrap();
+    let len = u32::try_from(frame.len() - 4).unwrap();
+    frame[..4].copy_from_slice(&len.to_le_bytes());
+    holder.write_all(&frame).expect("the holder asks");
+    let reading = std::thread::spawn(move || {
+        // 32 KiB every quarter second: each of the daemon's writes makes progress within its own bound, and a Windows
+        // pipe's 64 KiB drains inside the 1 s its flush is given — slower, and the daemon drops the holder after a second
+        // (`the reader did not take its answer`); the whole answer still takes seconds.
+        let mut chunk = vec![0u8; 32 * 1024];
+        let t = std::time::Instant::now();
+        while t.elapsed() < std::time::Duration::from_secs(8) {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            if !matches!(holder.read(&mut chunk), Ok(n) if n > 0) {
+                break;
+            }
+        }
+    });
+    // Let the handler take the holder's request and start writing before the operator asks.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let asked = std::time::Instant::now();
+    let o = delulu_in(&cwd, &state, &["broker", "status"]);
+    let waited = asked.elapsed().as_millis();
+    assert!(o.status.success(), "broker status behind the holder: {}", stderr(&o));
+    reading.join().unwrap();
+
+    let log = log();
+    let line = log
+        .lines()
+        .find(|l| l.contains("a Status request was answered"))
+        .unwrap_or_else(|| panic!("the late answer is named (the client waited {waited} ms):\n{log}"));
+    let ms = |after: &str| -> u128 {
+        let rest = &line[line.find(after).unwrap_or_else(|| panic!("`{after}` in {line}")) + after.len()..];
+        rest[..rest.find(' ').unwrap_or(rest.len())].parse().unwrap_or_else(|e| panic!("{e}: {line}"))
+    };
+    let (late, queued) = (ms("was answered "), ms("after it arrived: "));
+    assert!(line.contains("ms waiting for the requests ahead of it"), "{line}");
+    assert!(late >= 500 && late <= waited, "late by {late} ms, the client waited {waited} ms: {line}");
+    assert!(queued >= 500 && queued <= late, "the wait was behind the holder's answer, not the Status itself: {line}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// RW 7.19: `broker stop` returns once the daemon has exited, so what it held is free — on Windows a running daemon holds
+/// its working directory, the state directory, and `broker_cli`'s secret tests left theirs behind on most runs: `stop`
+/// returned when the daemon ANSWERED, and the directory was removed while it was still exiting. Five times over, the
+/// state directory is removed the moment `stop` returns.
+#[test]
+fn a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    for i in 0..5 {
+        // Short: a broker's socket lives in the state directory (macOS allows 103 bytes).
+        let base = std::env::temp_dir().join(format!("dlx-{}-{}-{i}", std::process::id(), t % 1_000_000_000));
+        let _ = std::fs::remove_dir_all(&base);
+        let (cwd, state) = (base.join("w"), base.join("s"));
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&state).unwrap();
+        let s = delulu_in(&cwd, &state, &["broker", "start"]);
+        assert!(s.status.success(), "broker start: {}", stderr(&s));
+        let guard = DaemonGuard { state: state.clone() };
+        let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "stop"]);
+        assert!(o.status.success(), "broker stop: {}", stderr(&o));
+        assert!(stderr(&o).contains("ok: broker stopped"), "stop waits for the daemon to be gone: {}", stderr(&o));
+        let removed = std::fs::remove_dir_all(&base);
+        assert!(removed.is_ok() && !base.exists(), "run {i}: the state directory is held after `stop`: {removed:?}");
+        std::mem::forget(guard);
+    }
+}

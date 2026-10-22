@@ -1536,6 +1536,44 @@ fn windows_hostile_names_are_refused_at_the_primitive_table() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// RW 4.17: an operator's grant may name a `\\server\share` (a program's own path may not), and on Windows reaching one
+/// can send the user's NTLM credentials to that server — so the grant is named, once, with the server, and the run goes
+/// on. Elsewhere `//server/share` is no network path and nothing is said. The server is `.invalid` (RFC 2606): nothing
+/// here can reach it, and the program never opens the grant.
+#[test]
+fn a_grant_naming_a_network_share_is_warned_of_on_windows() {
+    let dir = std::env::temp_dir().join(format!("delulu_cli_unc_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("w.delulu"), "module w\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"ran\")\n}\n")
+        .unwrap();
+    let run = |grant: &str| {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args(["run", "w.delulu", "--grant", "console", "--grant", grant])
+            .output()
+            .unwrap()
+    };
+    for grant in [r"fs.read=\\fileserver.invalid\share", "fs.write=//fileserver.invalid/share", r"plugin=\\fileserver.invalid\p"]
+    {
+        let o = run(grant);
+        assert_eq!((o.status.code(), stdout(&o).trim()), (Some(0), "ran"), "`{grant}` is the operator's to make: {}", stderr(&o));
+        let warned = stderr(&o).matches("names a network share on `fileserver.invalid`").count();
+        if cfg!(windows) {
+            assert_eq!(warned, 1, "`{grant}` is named once, with its server: {}", stderr(&o));
+            assert!(stderr(&o).contains("credentials (NTLM)"), "and what reaching it costs: {}", stderr(&o));
+        } else {
+            assert_eq!(warned, 0, "`{grant}` is no network path here: {}", stderr(&o));
+        }
+    }
+    for grant in [r"fs.read=.\data", "fs.write=./out", "net=fileserver.invalid"] {
+        let o = run(grant);
+        assert!(!stderr(&o).contains("network share"), "`{grant}` is not a share: {}", stderr(&o));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// PS-0-09 (NE-18, owner ruling D-NE-28; C-04 flipped): a special-use address is refused under a
 /// plain `--grant net=` in every spelling, with a refusal that names the explicit spelling, and is
 /// granted by `net.special=`. An ordinary host is unaffected.
