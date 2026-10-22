@@ -406,8 +406,9 @@ DeluluLang/
     │   │   │                        #   a program whose trace escapes its row — C88 mechanized.
     │   │   ├── lean/DeluluCoreSafety.lean # [RW 5.1, D-V2-175] MACHINE CHECKED (Lean 4.32.2, no sorry;
     │   │   │                        #   propext/choice/Quot.sound): Progress-or-fault, Preservation,
-    │   │   │                        #   Effect Soundness, safety, no-forgery — the monomorphic,
-    │   │   │                        #   closed-row fragment with capabilities, store and secrets.
+    │   │   │                        #   Effect Soundness, safety, attenuation monotone, no-forgery —
+    │   │   │                        #   the monomorphic, closed-row fragment with capabilities, the
+    │   │   │                        #   store, attenuation and secrets.
     │   │   ├── authority_algebra.py #   [P17-8] the NINE-DIMENSION order proved in Z3: 17
     │   │   │                        #   obligations — reflexive, transitive, meet-is-GLB and the
     │   │   │                        #   NO-WIDENING law across all dimensions at once. Localises
@@ -421,7 +422,7 @@ DeluluLang/
     │   │                                #   Theorems 1–3 machine-checked for the monomorphic, closed-
     │   │                                #   row fragment (models/lean/DeluluCoreSafety.lean) and the
     │   │                                #   higher-order fragment (models/lean/DeluluCore.lean); type
-    │   │                                #   variables and attenuation still OPEN (RW 5.1).
+    │   │                                #   variables still OPEN (RW 5.1).
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
     │   ├── STAGE10_AUTONOMY_ADDENDUM.md # [Stage 10] autonomy domains (spec Rev 2): vehicles/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs

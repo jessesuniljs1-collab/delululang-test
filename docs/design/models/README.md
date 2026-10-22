@@ -230,7 +230,7 @@ soundness hole — and nothing else. (The file below does the rest of §1–§4,
 
 ---
 
-## `lean/DeluluCoreSafety.lean` — Theorems 1–3, MACHINE CHECKED for the monomorphic fragment (RW 5.1)
+## `lean/DeluluCoreSafety.lean` — Theorems 1–3 and No-forgery, MACHINE CHECKED for the monomorphic fragment (RW 5.1)
 
 ```sh
 lean lean/DeluluCoreSafety.lean   # silence before the axioms block = every declaration type-checked
@@ -239,8 +239,10 @@ lean lean/DeluluCoreSafety.lean   # silence before the axioms block = every decl
 **Tool:** Lean **4.32.2**, core only (no Lake, no mathlib); CI checks it with the same pinned tarball as the file above.
 
 `DELULU_CORE.md` v0.4's §1–§4, for the monomorphic, closed-row fragment: functions carrying their rows, `let`,
-products, sums, the capability store and its tokens, `op` with `E-Op` and `E-Refuse` (the fault), `hop`, and the three
-secret forms. `verify`'s label is a parameter, so v0.3's rule (no label) and v0.4's (`Declassify`) are both covered.
+products, sums, the capability store and its tokens, `op` with `E-Op` and `E-Refuse` (the fault), attenuation (`narrow`:
+a fresh token at the end of the store, or a fault), `hop`, and the three secret forms. Scopes are abstract, with a
+preorder and the one law `narrow(s, v) ⊑ s`. `verify`'s label is a parameter, so v0.3's rule (no label) and v0.4's
+(`Declassify`) are both covered.
 
 | Theorem | Statement |
 |---|---|
@@ -248,18 +250,19 @@ secret forms. `verify`'s label is a parameter, so v0.3's rule (no label) and v0.
 | `preservation` | Theorem 2: a step emits only a label in the row and leaves the same type at a row inside the old one; a step to a fault emits only a label in the row. |
 | `effect_soundness` | Theorem 3: every label a run emits is in the row, for every finite prefix of the run. |
 | `safety` | Every configuration a run reaches is well typed, and is a value or steps. |
-| `no_forgery` | Every token in a reachable configuration is one the store holds. |
+| `attenuation_monotone` | Every token in any store a run builds descends from a root token: the same kind, a scope `⊑` its scope (audit R-7). |
+| `no_forgery` | The Corollary: every token in a reachable configuration is one the store holds, and descends from a root token. |
 
 **Axioms:** Lean's standard `propext`, `Classical.choice` and `Quot.sound`, as `#print axioms` lists at the bottom, and
 no `sorryAx`. **A `sorry` is only a warning to Lean**, so a `sorry` in a declaration that no printed theorem uses would
 pass a run that only reads the exit code. CI's `formal` job therefore fails on any `sorry` in the output (a planted
 `theorem planted : False := by sorry` checked "clean" on 2026-10-22, before the gate).
 
-**Teeth:** with `T-Op`'s label, or `T-HOp`'s latent row (C88's shape), taken out of the typing rules, the file fails
-to check. CI applies both mutants on every push and requires each to fail.
+**Teeth:** with `T-Op`'s label, or `T-HOp`'s latent row (C88's shape), taken out of the typing rules, or the law
+`narrow(s, v) ⊑ s` weakened to `s ⊑ s` (its arity kept, so the failure is the proof's and not a syntax error's), the file
+fails to check. CI applies the three mutants on every push and requires each to fail.
 
-**Scope.** Not here: type variables and open rows (§5), attenuation (the store never grows, so `no_forgery` says
-nothing about scopes), and `Σ`'s internals. Each primitive's result on a permitted argument is ASSUMED well typed
+**Scope.** Not here: type variables and open rows (§5), and `Σ`'s internals. Each primitive's result on a permitted argument is ASSUMED well typed
 with an empty row (`SigOk`). `hop` is its simplest instance, which applies the callback once.
 
 ---
@@ -272,8 +275,8 @@ Named so the `model-checked` category is not read wider than it is:
   hold over every reachable state *within that bound*, which is not a proof for all sizes.
 - **The full type system is NOT machine-checked.** `lean/DeluluCore.lean` covers the higher-order
   fragment, and `lean/DeluluCoreSafety.lean` Progress, Preservation and Effect Soundness for the
-  monomorphic, closed-row fragment with capabilities, the store and secrets. Type variables and open rows,
-  and attenuation, are outside both, and `Σ`'s results are assumed well typed.
+  monomorphic, closed-row fragment with capabilities, the store, attenuation and secrets. Type variables
+  and open rows are outside both, and `Σ`'s results are assumed well typed.
 - ~~Lease tokens, redemption, and certificate adoption are NOT modelled~~ — **now covered by
   `Custody.tla`.** Still absent from it: the MAC itself (key rotation is modelled as an epoch
   counter, not as blake3), audit-chain hashing, and contact receipts extending a deadline.

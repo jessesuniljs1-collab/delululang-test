@@ -653,11 +653,18 @@ jobs:
           done
 
       # The safety proofs have teeth: take `T-Op`'s label, or `T-HOp`'s latent row (C88's shape), out of the typing rules
-      # and the development must FAIL to check — Preservation can then not account for what a step emits.
-      - name: The Lean proofs have teeth (two rule mutants must each fail)
+      # and the development must FAIL to check — Preservation can then not account for what a step emits; and weaken the
+      # law that a narrowed scope is under its parent's to `le s s` (its arity kept, so the failure is the proof's, not a
+      # syntax error's) and attenuation can no longer be shown monotone.
+      - name: The Lean proofs have teeth (three mutants must each fail)
         run: |
           cd docs/design/models/lean
-          for m in 's/(S.label o :: (ρ₀ ++ ρ₁))/(ρ₀ ++ ρ₁)/' 's/(.hop e₀ e₁) τ₂ (ρf ++ ρ₀ ++ ρ₁)/(.hop e₀ e₁) τ₂ (ρ₀ ++ ρ₁)/'; do
+          mutants=(
+            's/(S.label o :: (ρ₀ ++ ρ₁))/(ρ₀ ++ ρ₁)/'
+            's/(.hop e₀ e₁) τ₂ (ρf ++ ρ₀ ++ ρ₁)/(.hop e₀ e₁) τ₂ (ρ₀ ++ ρ₁)/'
+            's/  narrow_le       : ∀ s v, le (narrowScope s v) s/  narrow_le       : ∀ s (_v : Tm), le s s/'
+          )
+          for m in "${mutants[@]}"; do
             sed "$m" DeluluCoreSafety.lean > "$RUNNER_TEMP/mutant.lean"
             if cmp -s DeluluCoreSafety.lean "$RUNNER_TEMP/mutant.lean"; then echo "::error::the mutant did not apply: $m"; exit 1; fi
             if "$RUNNER_TEMP/lean/bin/lean" "$RUNNER_TEMP/mutant.lean" > /dev/null 2>&1; then

@@ -410,20 +410,24 @@ refuses.
 
 | | |
 |---|---|
-| Path | `docs/design/DELULU_CORE.md` — the title (v0.3 → v0.4), the Status block's honesty clause, a v0.4 note, §3 (`T-Verify` carries `Declassify`; Facts A and B), §4 (`E-Expose` and `E-Verify` written), §7 (Theorem 3's capability-witness clause names `verify`'s label as the exception), §9 (a box for the new development; the P17-9 box's "what remains" marked as v0.3's; the closing paragraph's pointer to `CONTRIBUTING.md`, which never recorded the work, replaced by RW 5.1). |
+| Path | `docs/design/DELULU_CORE.md` — the title (v0.3 → v0.4), the Status block's honesty clause, a v0.4 note, §1 (`narrow`), §3 (`T-Verify` carries `Declassify`; `T-Narrow`; Facts A and B), §4 (`E-Expose`, `E-Verify`, `E-Narrow` and `E-NarrowRefuse` written), §7 (Theorem 3's capability-witness clause names `verify`'s label as the exception), §9 (a box for the new development; the P17-9 box's "what remains" marked as v0.3's; the closing paragraph's pointer to `CONTRIBUTING.md`, which never recorded the work, replaced by RW 5.1). |
 | Entrenched by | `.github/CODEOWNERS:13` → `@jessesuniljs1-collab` |
 | Campaign | RW 5.1; decision D-V2-175 |
 | Approved by | **the head chef, 2026-10-22, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, the entrenched files among them, each change with its `D-V2-nn` and this record. |
 
 **Why**
 
-`models/lean/DeluluCoreSafety.lean` machine-checks Theorems 1–3 for the monomorphic, closed-row fragment of §1–§4. The
+`models/lean/DeluluCoreSafety.lean` machine-checks Theorems 1–3 and the No-forgery corollary for the monomorphic,
+closed-row fragment of §1–§4, attenuation included. The
 Status block's "§1–§7 as a whole remain unmechanized — no capabilities, no store, no secrets, … no Progress and no
 Preservation" stopped being true, and the honesty clause binds in both directions. Mechanizing also found two places where
 the calculus did not state the implemented language, which §6 says it models faithfully:
 - **`T-Verify` gave `verify` no label.** Since campaign finding P17-IF1 the checker types `verify` as carrying `Declassify`,
   and the runtime traces it so.
 - **`E-Expose` was never written.** `T-Expose` emitted a label that no reduction rule produced.
+- **Attenuation was relied on and never stated.** §4 said tokens are created only by `narrow`, and the No-forgery
+  corollary rests on it, but `narrow` was not a term and had no rule. It has `T-Narrow`, `E-Narrow` and `E-NarrowRefuse`
+  now, with the one law the corollary needs: a narrowed scope is under its parent's.
 
 Stating `T-Verify` as implemented makes Fact B's "a label demands a capability" and Theorem 3's capability-witness clause
 false for that one label: `verify` declassifies without `Cap[Declassify]`, the R-5 residue already recorded as RW 2.6. v0.4
@@ -441,14 +445,14 @@ mechanization takes `verify`'s label as a parameter and proves the theorems for 
    ("function `same` performs effect `Declassify` not declared in its row").
 2. **`E-Verify` is what the runtime does:** `--trace-effects` records `verify` as `"effect":"Declassify"`, detail `«opaque»`.
 3. **The proofs:** `lean DeluluCoreSafety.lean` (Lean 4.32.2) checks, and `#print axioms` lists only `propext`,
-   `Classical.choice` and `Quot.sound`. A planted `sorry` is caught by the new CI gate, and the two rule mutants (`T-Op`'s
-   label, `T-HOp`'s latent row) each fail to check.
+   `Classical.choice` and `Quot.sound`. A planted `sorry` is caught by the new CI gate, and the three mutants (`T-Op`'s
+   label, `T-HOp`'s latent row, the narrowing law weakened) each fail to check.
 4. **The blast radius is zero:** `delulu-survey impact doc:docs/design/DELULU_CORE.md` reaches 0 nodes. No section is
    renumbered.
 
 **What did NOT change, and is the honest residue**
 
-Type variables and open rows (§5), attenuation, and `Σ`'s internals stay paper. RW 2.6 is stated, not closed.
+Type variables and open rows (§5), and `Σ`'s internals, stay paper. RW 2.6 is stated, not closed.
 `DeluluCore.lean` is unchanged.
 
 **How to revert**
