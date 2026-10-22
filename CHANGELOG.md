@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — the broker log names a late answer, 2026-10-22
+
+- **Added: `broker.log` names every answer the daemon gave more than 500 ms after the request arrived** (RW 7.17). The
+  line gives the request's kind, how long it waited for the requests ahead of it, and how long it took itself, for
+  example: *"a Status request was answered 2499 ms after it arrived: 2495 ms waiting for the requests ahead of it, 4 ms
+  handling and answering it"*. A device's authority probe waits 1 s, and a run reports a probe that got no answer in
+  time as `operator-revoke`, the same as a revoke. Now the log shows which it was.
+
 ## Unreleased — the cycle collector keeps what a map holds, 2026-10-22
 
 - **Fixed: a list held in an actor's map could be emptied by the cycle collector** (GC-MAP-1, RW 4.77). The collector

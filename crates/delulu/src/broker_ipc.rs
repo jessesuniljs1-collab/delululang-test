@@ -342,6 +342,57 @@ impl Request {
     }
 }
 
+impl ReqBody {
+    /// The request's name and nothing it carries, for the broker log: a request's fields can be a token or a beat's key.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ReqBody::Status => "Status",
+            ReqBody::Shutdown => "Shutdown",
+            ReqBody::RotateKey => "RotateKey",
+            ReqBody::Issue(..) => "Issue",
+            ReqBody::Attenuate { .. } => "Attenuate",
+            ReqBody::Delegate { .. } => "Delegate",
+            ReqBody::Redeem { .. } => "Redeem",
+            ReqBody::Adopt { .. } => "Adopt",
+            ReqBody::Renew { .. } => "Renew",
+            ReqBody::Revoke { .. } => "Revoke",
+            ReqBody::Quarantine { .. } => "Quarantine",
+            ReqBody::ArmDeadman { .. } => "ArmDeadman",
+            ReqBody::Beat { .. } => "Beat",
+            ReqBody::DisarmDeadman { .. } => "DisarmDeadman",
+            ReqBody::Check { .. } => "Check",
+            ReqBody::DeviceRefused { .. } => "DeviceRefused",
+            ReqBody::EgressRefused { .. } => "EgressRefused",
+            ReqBody::BreakGlassRun { .. } => "BreakGlassRun",
+            ReqBody::NodeState { .. } => "NodeState",
+            ReqBody::Expose { .. } => "Expose",
+            ReqBody::Verify { .. } => "Verify",
+            ReqBody::SendSecret { .. } => "SendSecret",
+            ReqBody::SecretMap { .. } => "SecretMap",
+            ReqBody::Tree => "Tree",
+            ReqBody::List => "List",
+            ReqBody::Inspect { .. } => "Inspect",
+            ReqBody::RunsUnder { .. } => "RunsUnder",
+            ReqBody::ListPage { .. } => "ListPage",
+            ReqBody::GuardStatus => "GuardStatus",
+            ReqBody::GuardPolicyShow => "GuardPolicyShow",
+            ReqBody::GuardPolicySet { .. } => "GuardPolicySet",
+            ReqBody::GuardPolicyUnset { .. } => "GuardPolicyUnset",
+            ReqBody::GuardBypass { .. } => "GuardBypass",
+            ReqBody::GuardRequest { .. } => "GuardRequest",
+            ReqBody::GuardPending => "GuardPending",
+            ReqBody::GuardApprove { .. } => "GuardApprove",
+            ReqBody::GuardDeny { .. } => "GuardDeny",
+            ReqBody::GuardPermits => "GuardPermits",
+            ReqBody::GuardPermitRevoke { .. } => "GuardPermitRevoke",
+            ReqBody::Propose { .. } => "Propose",
+            ReqBody::Proposals => "Proposals",
+            ReqBody::ProposalApprove { .. } => "ProposalApprove",
+            ReqBody::ProposalReject { .. } => "ProposalReject",
+        }
+    }
+}
+
 /// A response from the broker daemon.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Response {

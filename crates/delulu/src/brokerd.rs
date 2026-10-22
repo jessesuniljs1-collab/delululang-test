@@ -1507,6 +1507,11 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
     // (`broker_transport`: written only where the buffer has room, flushed only once it has drained).
     const SERVE_WRITE_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
     const SERVE_WRITE_EACH: std::time::Duration = std::time::Duration::from_secs(1);
+    // RW 7.17: an answer that leaves later than this after its request arrived is named in `broker.log` — half the 1 s a
+    // device's authority probe waits (DEADMAN-1) before it parks the device. The run's line says `operator-revoke` for a
+    // daemon too slow to answer as for a revoke; the log says which answers were late, and whether each waited behind
+    // the requests ahead of it or took that long itself.
+    const SLOW_ANSWER: std::time::Duration = std::time::Duration::from_millis(500);
     // RW 4.40: connections are accepted, and their requests read, on threads of their own; only WHOLE
     // requests reach the one handler below, which alone touches custody, in the order they arrive whole.
     // Until then the loop read one connection at a time, so N clients that connected and said nothing
@@ -1583,17 +1588,20 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             },
         };
         let Some(next) = next else { break };
+        let taken = std::time::Instant::now();
         // DEADMAN-BUSY-1 (D-V2-127): as of the request's ARRIVAL — a beat queued behind a request the daemon was held on
         // arrived in time, and is handled after this; on a wake with nothing waiting, as of now. An unbeaten dead-man still
         // fires at the first request that arrived after its deadline, so a stream of requests cannot hold one off.
         let as_of = next.as_ref().map_or_else(std::time::Instant::now, |(_, _, arrived)| *arrived);
         fire_deadmen(&mut broker, state_dir, &audit_lock, &failed, as_of);
         let Some((mut conn, req, arrived)) = next else { continue };
+        let kind = req.body.kind();
         let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req, arrived);
         // RW 4.48: the request's seqs are written; the chain is free BEFORE the reply goes out, so a client
         // that reads its answer slowly never holds another writer's record.
         release_audit_lock(&audit_lock);
-        if let Err(e) = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp) {
+        let written = write_frame(&mut delulu_runtime::channel::Within::from_now(&mut conn, SERVE_WRITE_WITHIN), &resp);
+        if let Err(e) = &written {
             match e.get_ref().and_then(|i| i.downcast_ref::<crate::broker_ipc::FrameTooLarge>()) {
                 // RW 4.69: nothing of the answer was written. Say so — a dropped connection reads as a broker that is not
                 // there, and a monitor that hears that stops watching and lets its dead-man revoke everything it watched.
@@ -1617,6 +1625,17 @@ pub(crate) fn serve_inner(state_dir: &Path, owner_code: String, print_owner: boo
             }
         }
         drop(conn);
+        // An answer that was not written already has its line above.
+        let late = arrived.elapsed();
+        if written.is_ok() && late >= SLOW_ANSWER {
+            eprintln!(
+                "delulu broker: a {kind} request was answered {} ms after it arrived: {} ms waiting for the requests ahead of \
+                 it, {} ms handling and answering it (a device's authority probe waits 1000 ms)",
+                late.as_millis(),
+                taken.saturating_duration_since(arrived).as_millis(),
+                taken.elapsed().as_millis()
+            );
+        }
         if stop {
             break;
         }

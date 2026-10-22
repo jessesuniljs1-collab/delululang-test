@@ -40,6 +40,11 @@ fn stdout(o: &Output) -> String {
 fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).to_string()
 }
+/// The daemon's own log, for a failure's message: it names each answer that left later than half a device probe's 1 s
+/// (RW 7.17), so a control that loses its arm says whether the daemon was slow or something revoked it.
+fn broker_log(state: &Path) -> String {
+    std::fs::read_to_string(state.join("broker.log")).unwrap_or_else(|e| format!("(no broker.log: {e})"))
+}
 
 /// Stops the daemon on drop so a failed assertion never strands a process holding the pipe.
 struct DaemonGuard {
@@ -277,10 +282,24 @@ fn with_nobody_revoking_anything_the_same_supervisor_keeps_its_arm() {
     // shows both (it failed once on an arm64 runner, `ec4d39d`, with only the program's line to read).
     assert!(
         !so.contains("REVOKED:") && !so.contains("REFUSED:"),
-        "an unrevoked, in-envelope run loses nothing:\n{so}\n--- the journal ---\n{se}"
+        "an unrevoked, in-envelope run loses nothing:\n{so}\n--- the journal ---\n{se}\n--- broker.log ---\n{}",
+        broker_log(&f.state)
     );
-    assert!(!se.contains("lease.revoked"), "no lease may be revoked when no operator revoked one:\n{se}");
+    assert!(
+        !se.contains("lease.revoked"),
+        "no lease may be revoked when no operator revoked one:\n{se}\n--- broker.log ---\n{}",
+        broker_log(&f.state)
+    );
     assert_eq!(so.matches("COMMANDED").count(), 14, "every one of the 14 commands must land:\n{so}");
+    print_late_answers(&f.state);
+}
+
+/// RW 7.17's measurement, on a green run too: each answer the daemon gave later than 500 ms, printed where a run with
+/// `--nocapture` (`witness.yml`) shows it, so a runner's daemon latency beside a run's own appends can be read.
+fn print_late_answers(state: &Path) {
+    for line in broker_log(state).lines().filter(|l| l.contains(" request was answered ")) {
+        eprintln!("late answer: {line}");
+    }
 }
 
 /// The other e-stop, one level up: revoking the RUN's node — the parent — must also stop the arm,
@@ -592,8 +611,10 @@ fn an_actors_commands_are_uses_of_the_runs_node_in_the_audit_chain() {
     assert_eq!(
         lines.iter().filter(|l| l.trim() == "COMMANDED").count(),
         14,
-        "every one of the actor's 14 commands lands when nobody revokes:\n{so}\n{se}"
+        "every one of the actor's 14 commands lands when nobody revokes:\n{so}\n{se}\n--- broker.log ---\n{}",
+        broker_log(&f.state)
     );
+    print_late_answers(&f.state);
 
     let o = delulu_in(&f.cwd, &f.state, &["audit", "query", "--action", "use", "--json"]);
     assert!(o.status.success(), "audit query: {}", stderr(&o));

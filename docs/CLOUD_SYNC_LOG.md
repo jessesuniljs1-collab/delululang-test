@@ -5242,6 +5242,17 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (`V2_LOG.md`). Then, at the owner's word, every linked worktree is snapshotted too — `D:\nelan\dl-launch` to
   `autosave/laptop-dl-launch`. The task was re-installed from this branch's script (the owner asked for it live), and
   `master` push run `39804641086` (`37b3e4c`, #41) read **success**.
+
+### 2026-10-22 (evening) — the broker log names a late answer (RW 7.17's instrument) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/broker-slow-answer` (on `laptop/autosave-push` `e8b3be4`, PR #43)   Pull request: the one this entry rides in
+- **What:** the daemon names in `broker.log` each answer given 500 ms or more after its request arrived (kind, queue
+  wait, own time); `ReqBody::kind`; `estop_cli`'s no-revoke controls attach `broker.log` to a failure and print late
+  answers on a green run (the measurement: `witness.yml` on `windows-latest` at `estop_cli`).
+- Files and folders: M `crates/delulu/src/broker_ipc.rs`, `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/estop_cli.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (7.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 - Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

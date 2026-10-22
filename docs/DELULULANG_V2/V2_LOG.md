@@ -8572,3 +8572,27 @@ gone is logged and skipped. On a throwaway setup with a linked worktree holding 
 one: the snapshot carried both, named the worktree in its message, left the worktree's own index unstaged, was
 `unchanged` on the next run, and the removed worktree was logged; the repository's own checkout still snapshotted to
 `autosave/laptop`. A dry run on the real repository: `clean: launch-merge-1020 7b5aec3 in D:\nelan\dl-launch`.
+
+## 2026-10-22 (evening) — the laptop: the broker log names a late answer (RW 7.17's instrument)
+
+RW 7.17's next step was a measurement: how long the serial daemon takes to answer a device's 1 s authority probe beside a
+run's own appends. Nothing measured it — the daemon timed no request, and a run's line says `operator-revoke` for a probe
+that got no answer in time, as for a revoke (D-V2-99). Now the serve loop notes when it took each request off its queue,
+and an answer that leaves 500 ms or more after its request arrived (half the probe's deadline) is named in `broker.log`:
+the request's kind (`ReqBody::kind`, a name and none of its fields — a field can be a token or a beat's key), the time it
+waited for the requests ahead of it, and the time it took itself. An answer that could not be written has its own line
+already and is not named twice.
+
+Test: `broker_cli.rs` `an_answer_given_late_is_named_in_the_broker_log`, on every OS. The handler is held as RW 4.35's red
+team held it — twelve pending guard requests with long justifications, asked for on the daemon's own endpoint (the
+socket, or the Windows pipe named from the state directory's FNV-1a) by a client that reads 32 KiB a quarter second — and
+`broker status` behind it waits seconds. On this laptop: *"a Status request was answered 2499 ms after it arrived: 2495
+ms waiting for the requests ahead of it, 4 ms handling and answering it"*, the client 2509 ms; three runs green. Three
+mutants red: the line never written, the wait measured from arrival to arrival, the threshold at 50 s. Building it
+found two things a first try missed: identical guard requests are folded into one (`deduped`), so twelve copies asked
+for 30 kB, not 360 kB; and a Windows reply's flush must drain within 1 s, so a holder reading 8 KiB a quarter second was
+dropped after a second (`the reader did not take its answer`) instead of holding the handler.
+
+`estop_cli`'s two no-revoke controls — the arm64 red and the `windows-latest` red — now attach `broker.log` to their
+failure, and print each late answer on a green run too, where `witness.yml`'s `--nocapture` shows it: the measurement is
+`witness.yml -f os=windows-latest -f target=estop_cli`. On this laptop: eight green, no answer late.
