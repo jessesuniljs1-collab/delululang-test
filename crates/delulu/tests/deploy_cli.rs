@@ -141,14 +141,17 @@ fn a_plan_within_the_ceiling_is_approved() {
     );
     assert!(h.status.success(), "{}", stderr(&h));
     let text = stdout(&h);
-    // "EFFECT ceiling", not "authority ceiling": this command compares one authority dimension of
-    // nine, and the verdict now says which (C45). The wording is pinned exactly because it is the
-    // line a reader uses to decide whether a deployment is safe to launch.
+    // "authority ceiling" since RW 6.6 (2026-10-22): the plan compares effects AND every request's scope against the
+    // profile. Until then it compared one dimension and said "EFFECT ceiling" (C45). The wording is pinned exactly because
+    // it is the line a reader uses to decide whether a deployment is safe to launch; the line above it names the scope.
     assert!(
-        text.contains(&format!("deploy plan: approved — 2 service(s) within {env_str}'s EFFECT ceiling")),
+        text.contains(&format!("deploy plan: approved — 2 service(s) within {env_str}'s authority ceiling")),
         "the exact approved summary line:\n{text}"
     );
-    assert!(text.contains("compared: effects; NOT compared:"), "and the approval carries its own scope:\n{text}");
+    assert!(
+        text.contains("compared: effects, capability scopes (fs.read, fs.write, net, secrets), foreign holes; a profile cannot grant:"),
+        "and the approval carries its own scope:\n{text}"
+    );
 }
 
 /// A service that performs `Net` when the environment profile's ceiling names only `Write` is

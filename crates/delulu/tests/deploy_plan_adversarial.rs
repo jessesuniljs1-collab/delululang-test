@@ -106,6 +106,9 @@ fn write_service(dir: &Path, module: &str, effects: &[&str]) {
     .unwrap();
 }
 
+/// An environment profile. Since RW 6.6 (2026-10-22) a profile bounds each request's scope as well as the effect row, so a
+/// profile that approves a service calling `root.http(["example.com"])` names that host (`net = ["example.com"]`);
+/// granting the `Net` effect alone grants no host.
 fn write_env(dir: &Path, filename: &str, contents: &str) -> PathBuf {
     let p = dir.join(filename);
     std::fs::write(&p, contents).unwrap();
@@ -171,7 +174,7 @@ fn a_service_whose_effects_exactly_equal_the_ceiling_is_approved() {
     let root = scratch("boundary");
     let svc = root.join("edge");
     write_service(&svc, "edge", &["Write", "Net"]);
-    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\n");
+    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\nnet = [\"example.com\"]\n");
 
     let o = plan(&[("edge", svc)], &env, false);
     let text = combined(&o);
@@ -366,7 +369,7 @@ fn a_service_that_fails_its_own_check_is_a_plain_error_not_dl1909() {
 #[test]
 fn multiple_clean_services_within_a_real_ceiling_all_approve_together() {
     let root = scratch("control");
-    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\n");
+    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\nnet = [\"example.com\"]\n");
 
     let a = root.join("alpha");
     write_service(&a, "alpha", &[]);
@@ -400,7 +403,7 @@ fn multiple_clean_services_within_a_real_ceiling_all_approve_together() {
 #[test]
 fn human_output_lists_services_and_effects_and_ends_with_an_approved_line() {
     let root = scratch("human-render");
-    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\n");
+    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\nnet = [\"example.com\"]\n");
     let a = root.join("frontdoor");
     write_service(&a, "frontdoor", &["Write"]);
     let b = root.join("backend");
@@ -429,7 +432,7 @@ fn human_output_lists_services_and_effects_and_ends_with_an_approved_line() {
 fn json_and_human_text_agree_on_a_refusal_and_a_success() {
     let root = scratch("json-agree");
     let narrow = write_env(&root, "narrow.toml", "[authority]\neffects = [\"Write\"]\n");
-    let wide = write_env(&root, "wide.toml", "[authority]\neffects = [\"Write\", \"Net\"]\n");
+    let wide = write_env(&root, "wide.toml", "[authority]\neffects = [\"Write\", \"Net\"]\nnet = [\"example.com\"]\n");
     let leaky = root.join("leaky");
     write_service(&leaky, "leaky", &["Net"]);
 
@@ -502,7 +505,7 @@ fn a_services_reported_effects_match_what_delulu_authority_reports_directly() {
     let root = scratch("cross-check");
     let svc = root.join("crosscheck");
     write_service(&svc, "crosscheck", &["Write", "Net"]);
-    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\n");
+    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\", \"Net\"]\nnet = [\"example.com\"]\n");
 
     let auth = delulu(&["authority", &svc.display().to_string(), "--json"]);
     assert!(auth.status.success(), "the fixture itself must check cleanly: {}", stderr(&auth));
@@ -548,10 +551,11 @@ fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
     let human = plan(&[("scoped", svc.clone())], &env, false);
     assert!(human.status.success(), "the fixture approves: {}", combined(&human));
     let text = String::from_utf8_lossy(&human.stdout);
-    assert!(text.contains("compared: effects") && text.contains("NOT compared"), "the human verdict names its own scope: {text}");
+    // RW 6.6 (2026-10-22): the plan compares every request's scope too, and names what a profile has no spelling for.
+    assert!(text.contains("compared: effects") && text.contains("a profile cannot grant"), "the human verdict names its own scope: {text}");
     assert!(
-        text.contains("capability scopes") && text.contains("foreign holes"),
-        "and names what it did NOT compare, specifically: {text}"
+        text.contains("capability scopes") && text.contains("foreign holes") && text.contains("net.special"),
+        "and names what it compared and what no profile can grant, specifically: {text}"
     );
 
     // The machine surface carries the SAME facts — Jesse's rule: no discrimination between surfaces,
@@ -559,6 +563,10 @@ fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
     let machine = plan(&[("scoped", svc)], &env, true);
     let v: Value = serde_json::from_slice(&machine.stdout).expect("deploy plan --json is valid JSON");
     assert_eq!(v["approved"], serde_json::json!(true), "{v}");
-    assert_eq!(v["compared"], serde_json::json!(["effects"]), "the scope is machine-readable: {v}");
-    assert!(v["not_compared"].as_array().is_some_and(|xs| xs.len() == 2), "so is what was left out: {v}");
+    assert_eq!(
+        v["compared"],
+        serde_json::json!(["effects", "capability scopes (fs.read, fs.write, net, secrets)", "foreign holes"]),
+        "the scope is machine-readable: {v}"
+    );
+    assert!(v["profile_cannot_grant"].as_array().is_some_and(|xs| xs.len() == 3), "so is what no profile can grant: {v}");
 }

@@ -5331,9 +5331,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   ("the guest said nothing for 60s"); `channel::tests::from_now_counts_the_wait_before_the_first_byte` (an in-memory frame
   not read within 100 ms). The same code was green on Windows in `master`'s push runs. To be re-run when the run ends.
 - **What:** `docs/design/models/lean/DeluluCoreSafety.lean` proves progress-or-fault, preservation, effect soundness,
-  safety and no-forgery for the monomorphic, closed-row fragment (Lean 4.32.2). CI checks it, fails on any `sorry`, and
-  requires two rule mutants to fail. `DELULU_CORE.md` v0.4 (entrenched, recorded): the honesty clause, `T-Verify` with
-  `Declassify` as implemented, `E-Expose` and `E-Verify` written, Fact B and Theorem 3 naming `verify`'s label as the one
+  safety, attenuation's monotonicity and no-forgery for the monomorphic, closed-row fragment (Lean 4.32.2). CI checks
+  it, fails on any `sorry`, and requires three mutants to fail. `DELULU_CORE.md` v0.4 (entrenched, recorded): the
+  honesty clause, `T-Verify` with `Declassify` as implemented, `E-Expose` and `E-Verify` written, `narrow` stated, Fact B and Theorem 3 naming `verify`'s label as the one
   no capability witnesses (RW 2.6).
 - Files and folders: A `docs/design/models/lean/DeluluCoreSafety.lean`; M `.github/workflows/ci.yml` (the `formal` job),
   `docs/design/DELULU_CORE.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/design/models/README.md`,
