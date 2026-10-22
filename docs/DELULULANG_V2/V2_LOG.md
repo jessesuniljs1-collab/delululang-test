@@ -8768,3 +8768,24 @@ ignored, the profile's `fs.read` dropped, its secrets dropped. Five approving fi
 name the host their Net service calls, and the scope contract pins the new `compared` and `profile_cannot_grant`. A
 breaking change for a profile that named effects only, under 2.0.0. Green: `deploy_cli` 9, `deploy_plan_adversarial`
 15, `add_path_cli` 8, `signing_cli` 6, `cli` 53, `cli_contract` 19, `json_contract` 13, `delulu-diag`.
+
+## 2026-10-23 (early morning) — the laptop: CI read to its end; a Windows witness made to say why (RW 7.23)
+
+Read since the last entry:
+- PR #50's run `39833210704`: **success**, every job (14, with `miri-slow` and `heavy-gates` skipped as on any pull
+  request). #50 landed by fast-forward, master `05909ef`; its push runs `39836740749` and `39836740781`: **success**.
+- `master`'s push run for `4af166e` (#48), `39831374181`: **success**.
+- `launch/2.0.0`'s everything run `39816919025`: attempt 2 of `test (windows-latest)` **success**, so the run is green on
+  `7e7b2ed`. Attempt 1 had failed three wall-clock tests (RW 7.23 (b)).
+- PR #49's run `39830724209` had reported success while the jobs API still listed its `editor` job as in progress, with no
+  conclusion, when #49 landed. Read again at 03:55 IST: `completed`, `success`. GitHub's job record lagged the run's; the
+  run's result stands.
+- `master`'s push run for `b8c4fde` (#49), `39833849066`: **failure**, one test on `test (windows-latest)`:
+  `monitor_cli`'s `a_monitor_sees_nothing_outside_its_own_subtree`. The run's arm was revoked (`operator-revoke`) after
+  four of five refusals. The same commit's pull-request run and both of `05909ef`'s push runs were green.
+
+`operator-revoke` is the program's word for every dead probe (RW 7.17): a revoked node, which here would be the sibling's
+monitor reaching outside its subtree, or a broker that did not answer within 1 s. The test printed only the program's
+line. Its messages now carry the run's stderr, where the device journal's `lease.revoked` detail keeps the probe's own
+words, and the monitor's report. Falsified by forcing the baseline red: both appear in the message. The test passes
+otherwise, unchanged in what it asserts. RW 7.23 records all four Windows failures; none is root-caused.
