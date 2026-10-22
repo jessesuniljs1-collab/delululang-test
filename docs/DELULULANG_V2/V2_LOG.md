@@ -8617,3 +8617,9 @@ Tests: `cli.rs` `a_grant_naming_a_network_share_is_warned_of_on_windows` (on eve
 elsewhere), `prim.rs` `a_unc_spelling_names_the_machine_it_reaches`. Three mutants red: no warning, the warning every
 time the arguments are read, only `fs.read` warned. Also corrected: RW row 1.11 and its section still called the
 constitution's guarantee 5 unedited and the owner's — it was corrected on 2026-10-17 (7.10a, D-V2-141).
+
+Then, reading the open rows: two of this night's RW edits (4.17, 7.17) had wrapped a table row across lines, and five
+older rows were the same (4.58, 4.59, 4.53, 4.46, 5.6) — a Markdown row is one line, so each rendered as a stub and loose
+paragraphs, and nothing caught it. Joined (the file's words unchanged, 27,939 in the same order), and gated:
+`repository_structure.rs` `every_remaining_work_row_is_one_line`, red on the file before (all seven named), and
+`the_broken_row_rule_finds_a_wrapped_row_and_nothing_else` (a code span holding `|` is not a break).

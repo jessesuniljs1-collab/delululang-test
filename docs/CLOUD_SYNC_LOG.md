@@ -5262,7 +5262,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   **success** — RW 7.17's measurement: no answer late in four no-revoke control runs.
 - **What:** on Windows an `fs.read`/`fs.write`/`plugin` grant naming `\\server\share` is warned of once, naming the server
   and the NTLM exposure; the run goes on (`prim::unc_server`, `cli::warn_on_unc_grant`). RW 1.11's stale "not edited"
-  corrected (the constitution was corrected 2026-10-17, D-V2-141).
+  corrected (the constitution was corrected 2026-10-17, D-V2-141). Then seven `REMAINING_WORK.md` rows wrapped across
+  lines (two by this night's edits, five older) joined, words unchanged, and gated (`repository_structure.rs`
+  `every_remaining_work_row_is_one_line`, red before) — M `crates/delulu/tests/repository_structure.rs` too.
 - Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
   `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
