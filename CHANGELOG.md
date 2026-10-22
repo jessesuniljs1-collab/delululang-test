@@ -11,6 +11,13 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a capability or a secret in a list, an option, a record or a map compiles to WASM, 2026-10-23
+
+- **Added: on `--target wasm`, a capability or a secret may sit in a list, an option, a record field or a map's value**
+  (RW 3.4, D-V2-177). The slot holds the host's handle, as a variable does; what the program does through it is the
+  interpreter's, byte for byte. Before, each was refused with DL1201 and the program ran on the interpreter. Exposing a
+  secret stays DL1205.
+
 ## Unreleased — `deploy plan` checks every request against the environment profile, 2026-10-22
 
 - **Changed (breaking for a profile that names effects only): `delulu deploy plan` checks each service's requests, not

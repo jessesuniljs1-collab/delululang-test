@@ -292,14 +292,16 @@ fn main(root: Root) ! {Write, Clock, Rand} {
     assert!(w.as_deref().is_ok_and(|o| o.starts_with("1700000000000 ")), "the fixed clock, read in the literal: {w:?}");
 }
 
-/// Outside the fragment, and refused: a record whose field holds a type the backend does not (a function, a capability).
-/// (`str` and `==` of a whole record compile since the host's value interface, `value_parity.rs`; a field holding an
-/// `Option` of a list or a map since a slot holds a pointer to any of them, `nested_parity.rs`.)
+/// Outside the fragment, and refused: a record whose field holds a type no slot holds (a function; the root, which enters
+/// only at `main`). (`str` and `==` of a whole record compile since the host's value interface,
+/// `value_parity.rs`; a field holding an `Option` of a list or a map since a slot holds a pointer to any of them,
+/// `nested_parity.rs`; a field holding a capability a variable may hold since a slot holds a handle, D-V2-177,
+/// `handle_parity.rs`.)
 #[test]
 fn what_the_record_fragment_leaves_out_is_refused() {
     for src in [
         "module m\ntype N {\n  v: Int,\n  h: fn(Int) -> Int,\n}\nfn f() -> Int {\n  let n = N { v: 1, h: fn(x: Int) -> Int { x } }\n  n.v\n}\n",
-        "module m\ntype N {\n  v: Int,\n  c: Cap[Console],\n}\nfn f(c: Cap[Console]) -> Int {\n  let n = N { v: 1, c: c }\n  n.v\n}\n",
+        "module m\ntype N {\n  v: Int,\n  r: Root,\n}\nfn f(root: Root) -> Int {\n  let n = N { v: 1, r: root }\n  n.v\n}\n",
     ] {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{src}\n{:?}", checked.diagnostics);

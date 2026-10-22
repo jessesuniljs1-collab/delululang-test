@@ -3102,7 +3102,7 @@ fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
         Type::Cap(k) => {
             use delulu_check::ResourceKind as K;
             match k {
-                K::Console if false => Ty::Cap,
+                K::Console => Ty::Cap,
                 K::Clock => Ty::Clock,
                 K::Rand => Ty::Rand,
                 K::FsRead => Ty::FsRead,
@@ -3112,7 +3112,7 @@ fn checked_ty(t: &delulu_check::Type) -> Option<Ty> {
                 _ => return None,
             }
         }
-        Type::Secret(s) if **s == Type::Str && false => Ty::Secret,
+        Type::Secret(s) if **s == Type::Str => Ty::Secret,
         _ => return None,
     })
 }

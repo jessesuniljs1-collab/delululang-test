@@ -8768,3 +8768,20 @@ ignored, the profile's `fs.read` dropped, its secrets dropped. Five approving fi
 name the host their Net service calls, and the scope contract pins the new `compared` and `profile_cannot_grant`. A
 breaking change for a profile that named effects only, under 2.0.0. Green: `deploy_cli` 9, `deploy_plan_adversarial`
 15, `add_path_cli` 8, `signing_cli` 6, `cli` 53, `cli_contract` 19, `json_contract` 13, `delulu-diag`.
+
+## 2026-10-23 (morning) — the laptop: a WASM slot holds a capability or a secret (RW 3.4, D-V2-177)
+
+The parked branch `laptop/wasm-handles-in-slots` (`5373158`) finished. `Scalar::Handle` stores and loads a capability's
+or a secret's index as one word, so a list, an option, a record field and a map's value can hold one. What it had left
+open: a `Map()` or a `None` whose type only the checker names stayed DL1201, because `checked_ty` did not map a handle
+type. It does now, for the same types `wasm_ty` reads from an annotation.
+
+Tests, `handle_parity.rs`, 2:
+- a list walked and indexed, an option, a record field, an annotated map and an inferred one, each printing through the
+  handle it holds, held to the interpreter;
+- a secret in a list or an option compiles, and `expose` from a list stays DL1205.
+
+Both are red on `master`'s code (DL1201). The `checked_ty` mutants, Console and Secret: red. The first form of the test
+used only annotated maps, and the `checked_ty` mutant survived it, so the inferred map and `None` were added.
+`list_parity.rs` had pinned a list of capabilities as refused; that pin was about the fragment's edge, not about safety,
+and the case moved to the parity test. All of `delulu-wasm`'s tests: green.
