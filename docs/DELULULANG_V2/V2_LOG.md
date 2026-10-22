@@ -8562,3 +8562,13 @@ unpushed. The new one pushed both, sent `master` to `autosave/laptop-master` whi
 `diverged`, refused the orphan, pushed nothing on a second run, followed one more `master` commit, and snapshotted an
 uncommitted edit. A dry run over the real repository's 47 branches would push only the witness branch, deleted afterwards
 (local only, never pushed).
+
+Then, at the owner's word (*"also snapshot the dl-launch worktree"*): the snapshot step read only the repository's own
+checkout, so a session's uncommitted edits in the linked worktree `D:\nelan\dl-launch` — where `launch/2.0.0` is merged,
+CHANGELOG conflicts resolved by hand — reached no snapshot. Now each worktree `git worktree list` names is snapshotted:
+the repository's own checkout to `autosave/laptop` as before, a linked one to `autosave/laptop-<its folder>`
+(`autosave/laptop-dl-launch`), each through its own private index, under the same refusals; a worktree whose folder is
+gone is logged and skipped. On a throwaway setup with a linked worktree holding an edit and a new file, and a removed
+one: the snapshot carried both, named the worktree in its message, left the worktree's own index unstaged, was
+`unchanged` on the next run, and the removed worktree was logged; the repository's own checkout still snapshotted to
+`autosave/laptop`. A dry run on the real repository: `clean: launch-merge-1020 7b5aec3 in D:\nelan\dl-launch`.

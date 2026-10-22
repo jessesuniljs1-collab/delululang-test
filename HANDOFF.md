@@ -600,8 +600,10 @@ wins, and you should update the memory to match.
   that `master`'s and `main`'s go to `autosave/laptop-master` / `-main`, since `master` lands only by fast-forward on a
   green run. (Until 2026-10-22 it asked each branch's upstream: a branch made with `git switch -c X master` has none, so
   a commit on it a session had not pushed stayed on the disk alone, and a `master` ahead was pushed onto `origin`'s
-  `master` — both witnessed on throwaway repositories.) It also snapshots uncommitted work — tracked edits and new unignored files — to `autosave/laptop`, through a
-  private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
+  `master` — both witnessed on throwaway repositories.) It also snapshots uncommitted work — tracked edits and new
+  unignored files — of the repository's own checkout to `autosave/laptop`, and of each linked worktree to
+  `autosave/laptop-<its folder>` (`D:\nelan\dl-launch`, where `launch/2.0.0` is merged, to `autosave/laptop-dl-launch`;
+  the owner, 2026-10-22: *"also snapshot the dl-launch worktree"*), each through a private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
   so the branch only fast-forwards. It refuses a snapshot carrying the banned word (guard falsified with a probe token),
   a file over 50 MB, or a HEAD on no branch of `origin` — after the launch `origin` is the public repository, and a
   snapshot of a checkout still on the development history would publish all of it there (guard falsified on throwaway
