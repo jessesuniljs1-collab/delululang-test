@@ -5385,5 +5385,5 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Branch: `laptop/channel-control-busy-runner` (on `master` `36740a4`)   Pull request: the one this entry rides in
 - **Landed and read since the last entry:** PR #52's run `39867706347` **success**, so #52 landed by fast-forward, master `36740a4`. `launch/2.0.0`'s release dry run `39865371700` **success**; its everything run `39865367900` red on `test (windows-latest)`, one test (RW 7.23 (c)).
 - **What:** `channel.rs`'s test reader no longer sleeps a zero gap; RW 7.23 (b)'s `channel` test root-caused; (c) recorded; a trap in `HANDOFF.md` §11.5.
-- Files and folders: M `crates/delulu-runtime/src/channel.rs`, `HANDOFF.md` (§11.5), `docs/REMAINING_WORK.md` (7.23), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Files and folders: M `crates/delulu-runtime/src/channel.rs`, `crates/delulu/tests/plugin_load_cli.rs` (RW 7.23 (c) says why), `HANDOFF.md` (§11.5), `docs/REMAINING_WORK.md` (7.23), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

@@ -8836,3 +8836,7 @@ all five attempts took ~162 ms, every time. That is not a stall but a cost per b
 the processor. With no zero sleep: 0 red in 100 at normal priority and 0 in 100 above normal. The five attempts were
 taken out again; the control is as strict as it was. Falsified: `from_now` counting from the first byte turns the test
 red. No production code calls `yield_now` or sleeps zero (`crates/*/src` searched).
+
+RW 7.23 (c)'s program now prints which refusal it was given and its words; falsified by commanding 30 degrees
+against the rudder's 25: the message read ``refused: envelope: `deflect_deg` = 30 is outside the envelope [-25, 25]``.
+`plugin_load_cli`'s three lease tests: green.
