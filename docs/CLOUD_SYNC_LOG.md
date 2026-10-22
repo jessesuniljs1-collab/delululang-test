@@ -5239,7 +5239,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `git switch -c X master`) was skipped, so its unpushed commit stayed on the disk alone; a `master` ahead was pushed onto
   `origin`'s `master`. Now a branch with a commit `origin` lacks is pushed under its own name; `master`/`main` go to
   `autosave/laptop-master`/`-main`; an orphan is refused; `-DryRun` added. Witnessed and checked on throwaway origins
-  (`V2_LOG.md`). The task keeps running the installed copy until it is re-installed from the landed script.
+  (`V2_LOG.md`). Then, at the owner's word, every linked worktree is snapshotted too — `D:\nelan\dl-launch` to
+  `autosave/laptop-dl-launch`. The task was re-installed from this branch's script (the owner asked for it live), and
+  `master` push run `39804641086` (`37b3e4c`, #41) read **success**.
 - Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
