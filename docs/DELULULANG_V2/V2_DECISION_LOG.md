@@ -4518,3 +4518,29 @@ P1-F on the owner's word; D-NE-24, D-NE-26 and **D-NE-31** were ruled by the own
 operator may change them**; D-NE-33 was superseded by D-V2-25 and then set by D-V2-26. The list was
 written before those rulings and never walked back, so PS-B's own entries went on calling D-NE-31
 "the owner's" while the answer sat 280 lines above them. Found while checking the earlier phases.
+
+## D-V2-177 — RW 3.4: a WASM slot holds a capability or a secret as its handle — TAKEN (head chef, 2026-10-23, under the owner's delegation)
+
+**The question:** on the WASM engine a capability or a secret could sit in a variable but not in a list, an option, a
+record field or a map's value; each was refused with DL1201 ("a list of Cap") and the program ran on the interpreter.
+
+**Decided:** a slot holds a handle as a variable does: its `i32` index into the host's table (`Scalar::Handle`, stored
+and loaded as one word). The handles are the ones a variable may hold: `Cap[Console]`, `Clock`, `Rand`, `FsRead`,
+`FsWrite`, `Http`, `ForeignLoad` and `Secret[Str]`. Not `Root`, which enters only at `main`. `checked_ty` maps the
+same types, so a `Map()` or a `None` whose type only the checker names compiles too.
+
+**Why it is safe:** the guest never reads through a handle, and could already pass any `i32` to any import. The host
+checks each index against its table and the kind the import needs (`CapKind`, D-V2-174). The checker gives none of these
+types a `str` or an `==` (DL0604, DL0605), so the host never rebuilds one from memory (`type_desc` refuses it).
+`expose`, `root.declassify()` and `Secret.map` stay DL1205, however the secret was reached.
+
+**Evidence:** `crates/delulu-wasm/tests/handle_parity.rs`:
+- `a_capability_in_a_list_an_option_a_record_and_a_map_acts_as_on_the_interpreter`: a list walked and indexed, an
+  option, a record field, an annotated map and one the checker typed, each printing through the handle it holds, held to
+  the interpreter's output;
+- `a_secret_in_a_list_or_an_option_is_a_handle_and_exposing_it_stays_dl1205`.
+
+Both fail on `master`'s code (DL1201, "a list of Cap"). The `checked_ty` arms dropped: both fail (Console, Secret).
+`list_parity.rs` and `record_parity.rs` had pinned a list, and a record field, of `Cap[Console]` as refused: outside the
+fragment, not unsafe. Those cases moved here. The pins now hold the root, the handle no slot holds: a list of it, a
+record field of it. Letting `Root` into a slot turns both red.

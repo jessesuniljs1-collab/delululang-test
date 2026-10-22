@@ -5359,3 +5359,11 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (D-V2-176), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.6), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
   Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (morning) — a WASM slot holds a capability or a secret (RW 3.4, D-V2-177) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-handles` (on `master` `05909ef`; the parked `laptop/wasm-handles-in-slots` `5373158` folded in, not merged)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** `launch/2.0.0` = `e51b4f3` (master merged in, #47-#50); its release dry run `39865371700` **success**; its everything run `39865367900` was running. The Windows witness of RW 7.23 (a), `39864919206`: **success**.
+- **What:** a list, an option, a record field and a map's value hold a capability or a secret as its handle on WASM; `checked_ty` maps the handle types.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/list_parity.rs`, `crates/delulu-wasm/tests/record_parity.rs`, `CHANGELOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (3.4), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-177), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added: `crates/delulu-wasm/tests/handle_parity.rs`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
