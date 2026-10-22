@@ -8532,3 +8532,33 @@ test's pair is four holes refused (43,367 cells to prove) and three proved (3,69
 other match the `delulu-check` and `delulu-atlas` lib tests check — the two Miri jobs that reach the checker — reads at
 most 11 cells (307 searches; atlas reaches none). With both `cfg!(miri)` arms forced true natively, the test passes, the
 255 lib tests pass, and a mutant passing a spent search is red. The native limit and native test are unchanged.
+
+## 2026-10-22 (evening) — the laptop: autosave pushes what origin lacks, not what an upstream lacks
+
+Read at the owner's question, *"is autosave working properly as intended, To which branch autosave windows task
+scheduler pushing everything"*. The task runs `%LOCALAPPDATA%\DeluluLang\autosave.ps1` (byte-identical to
+`scripts/autosave.ps1`) every 10 minutes. Its snapshot step works: at 15:33 UTC it pushed this session's uncommitted
+records as `b35b6b1` to `autosave/laptop`, and its newest earlier snapshot `838c739` is tree-identical to `8a88466`, the
+commit that landed it. Its log's 16-hour gap is the laptop switched off (Kernel-Power: shut down 04:59 IST, booted 20:49).
+
+Its push step asked each branch's configured upstream, and that was wrong three ways, witnessed:
+- **A branch with no upstream was skipped** — every branch made with `git switch -c X master` until its first
+  `push -u`. A commit on one that the session had not pushed stayed on this disk alone, and the snapshot step, seeing
+  a clean tree, logged `clean`. Witnessed on the real repository: a local branch with one commit no origin branch
+  held, the installed script run once by hand, `clean`, the commit still not on origin.
+- **A `master` ahead of `origin/master` was pushed onto it** — past the rule that `master` lands only by fast-forward
+  on a green run (owner, 2026-10-19). Witnessed on a throwaway origin.
+- **A branch whose upstream has another name** (`launch-merge-1020`, tracking `launch/2.0.0`) was pushed under its own
+  name each run (the stray `origin/launch-merge-1020`, `8ff2b17`, contained in `launch/2.0.0`), and one tracking
+  `origin/master` was pushed again every run, unchanged (`laptop/wasm-contains-compound`, three runs on 2026-10-21).
+
+Now a branch is pushed, under its own name, when it holds a commit no branch of `origin` holds; the snapshot branches
+are left out of that question, since each carries HEAD as a parent. `master`'s and `main`'s unpushed commits go to
+`autosave/laptop-master` / `-main`, never merged. A branch diverged from its namesake is logged, and one sharing no
+commit with `origin` is refused — after the launch, that is the development history. `-DryRun` logs what a run would
+push. On two identical throwaway setups (bare origin plus a clone, one branch per case): the old script pushed `master`
+onto origin's `master`, re-pushed the branch tracking `origin/master`, and left `no-upstream` and `snap-parent`
+unpushed. The new one pushed both, sent `master` to `autosave/laptop-master` while origin's `master` stayed put, logged
+`diverged`, refused the orphan, pushed nothing on a second run, followed one more `master` commit, and snapshotted an
+uncommitted edit. A dry run over the real repository's 47 branches would push only the witness branch, deleted afterwards
+(local only, never pushed).

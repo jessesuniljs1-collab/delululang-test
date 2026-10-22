@@ -6,9 +6,12 @@
   on one disk. This runs OUTSIDE Claude - Windows Task Scheduler, every 10 minutes, no usage spent - and does two
   things:
 
-  1. Pushes every local branch that is AHEAD of its upstream: a plain push, never a force; a branch that has
-     diverged is logged and left alone. Commits are made only after the gates (AGENTS.md), so this pushes nothing
-     a session would not have pushed itself a minute later.
+  1. Pushes every local branch that holds a commit no branch of origin holds, under its own name: a plain push,
+     never a force; a branch that has diverged from its namesake on origin is logged and left alone. Commits are
+     made only after the gates (AGENTS.md), so this pushes nothing a session would not have pushed itself a minute
+     later - except `master` and `main`, which land only by fast-forward on a green run (owner, 2026-10-19): their
+     unpushed commits go to `autosave/laptop-master` (or `-main`), never merged. A branch that shares no commit with
+     origin is refused (after the launch, that is the whole development history).
   2. Snapshots UNCOMMITTED work - tracked edits and the new files git does not ignore - onto the branch
      `autosave/laptop`, without touching HEAD, the index or the working tree (a private index, write-tree,
      commit-tree). Each snapshot's parents are the previous snapshot and HEAD, so the branch only ever
@@ -22,12 +25,14 @@
   Install (a task for the current user, every 10 minutes for 7 hours): powershell -File scripts\autosave.ps1 -Install
   Remove:                                                               powershell -File scripts\autosave.ps1 -Uninstall
   One run by hand:                                                      powershell -File scripts\autosave.ps1
+  One run that pushes nothing, logging what it would push:              powershell -File scripts\autosave.ps1 -DryRun
   Log: %LOCALAPPDATA%\DeluluLang\autosave.log
 #>
 param(
     [string]$Repo = (Split-Path -Parent $PSScriptRoot),
     [switch]$Install,
     [switch]$Uninstall,
+    [switch]$DryRun,
     [int]$Hours = 7,
     [int]$Minutes = 10,
     [string]$Branch = 'autosave/laptop',
@@ -87,19 +92,32 @@ function Git-Logged([string]$line) {
 Git-Logged 'fetch -q --prune origin'
 if ($LASTEXITCODE -ne 0) { Say 'fetch failed; nothing pushed'; exit 1 }
 
-# 1. Committed work: every branch ahead of its upstream, fast-forward only.
-foreach ($row in (Git-Quiet for-each-ref '--format=%(refname:short)|%(upstream:short)|%(upstream:track)' refs/heads)) {
-    $b, $up, $track = $row -split '\|', 3
-    if (-not $up) { continue }
-    if ($track -match 'behind') {
-        if ($track -match 'ahead') { Say "$b has diverged from $up $track - not pushed" }
+# 1. Committed work: every branch holding a commit that no branch of origin holds, fast-forward only. Not judged by the
+# branch's upstream (2026-10-22): a branch made with `git switch -c X master` has none, so a session's commit on it that
+# the session had not pushed was skipped here and, its tree clean, never snapshotted - kept on this disk alone; a branch
+# whose upstream has another name (`launch-merge-1020`, `launch/2.0.0`) went to origin under its own name every run, and
+# one tracking `origin/master` was pushed again every run, unchanged. The snapshots are left out of "origin holds it":
+# each carries HEAD as a parent.
+foreach ($b in (Git-Quiet for-each-ref '--format=%(refname:short)' refs/heads)) {
+    $only = Git-Quiet rev-list --count "refs/heads/$b" --not "--exclude=origin/$Branch*" '--exclude=origin/autosave/*' --remotes=origin
+    if ($LASTEXITCODE -ne 0 -or $only -notmatch '^\d+$') { Say "$b - could not count its commits; not pushed"; continue }
+    if ([int]$only -eq 0) { continue }
+    if ([int]$only -eq [int](Git-Quiet rev-list --count "refs/heads/$b")) {
+        Say "REFUSED: $b shares no commit with origin - pushing it would carry history origin does not have"
         continue
     }
-    if ($track -match 'ahead') {
-        Say "push $b $track"
-        Git-Logged "push -q origin $b"
-        if ($LASTEXITCODE -ne 0) { Say "push $b FAILED" }
+    $to = $b
+    if ($b -eq 'master' -or $b -eq 'main') { $to = "$Branch-$b" }
+    $there = Git-Quiet rev-parse -q --verify "refs/remotes/origin/$to"
+    if ($there -and $there -eq (Git-Quiet rev-parse "refs/heads/$b")) { continue }
+    if ($there) {
+        Git-Quiet merge-base --is-ancestor $there "refs/heads/$b" | Out-Null
+        if ($LASTEXITCODE -ne 0) { Say "$b has diverged from origin/$to - not pushed ($only commit(s) only here)"; continue }
     }
+    if ($DryRun) { Say "would push $b to $to - $only commit(s) not on origin"; continue }
+    Say "push $b to $to - $only commit(s) not on origin"
+    Git-Logged "push -q origin refs/heads/${b}:refs/heads/$to"
+    if ($LASTEXITCODE -ne 0) { Say "push $b FAILED" }
 }
 
 # 2. Uncommitted work: a snapshot through a private index, so HEAD, the index and the tree are untouched.
@@ -140,7 +158,8 @@ if ($prev) {
     $parents += '-p', $head
 }
 $changed = @(Git-Quiet diff --name-only $head $tree)
-$when = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm') + ' UTC'
+if ($DryRun) { Say "would snapshot $($changed.Count) path(s) over $($head.Substring(0, 7)) on $on to $Branch"; exit 0 }
+$when =(Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm') + ' UTC'
 $msg = @"
 autosave: uncommitted laptop work on $on at $when
 
