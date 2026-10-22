@@ -1,18 +1,20 @@
 /-
-  Delulu Core v0.3 — Progress-or-fault, Preservation and Effect Soundness, MACHINE CHECKED.
+  Delulu Core v0.4 — Progress-or-fault, Preservation, Effect Soundness and No-forgery, MACHINE CHECKED.
 
   RW 5.1. `DELULU_CORE.md` §1–§4 and the three theorems of §7, for the calculus's monomorphic, closed-row
   fragment: functions carrying their effect rows, `let`, products, sums, capability tokens in a store, primitive
   operations on a capability (`E-Op` and `E-Refuse`, the fault), a higher-order primitive that invokes its function
   argument (`T-HOp`/`E-HOp`), and secrets (`wrap`, `verify`, `expose`). What is NOT here, so the result is not read
-  wider than it is: type variables and open rows (§5's unification), attenuation (`narrow`: the store here never
-  grows), and the internals of `Σ`. Each primitive's result on a permitted argument is assumed well typed with an empty
-  row (`SigOk`), which is what §2 asks of `Σ`: the image of the runtime's primitive table and the checker's, made to agree.
+  wider than it is: type variables and open rows (§5's unification), and the internals of `Σ`. Each primitive's result
+  on a permitted argument is assumed well typed with an empty row (`SigOk`), which is what §2 asks of `Σ`: the image of
+  the runtime's primitive table and the checker's, made to agree. Attenuation IS here: `narrow` mints a token at the end
+  of the store, of its parent's kind and under its parent's scope, or faults, and `attenuation_monotone` proves the
+  No-forgery corollary's scope clause (audit R-7) over an abstract scope order with the one law attenuation needs.
   `E-HOp` is modelled by its simplest instance, a primitive whose unfolding applies the callback once; the higher-order
   file beside this one, `DeluluCore.lean`, treats the construct on its own.
 
-  `verify`'s label is a parameter (`Sig.verifyLabel`): none, as §3's `T-Verify` writes it, or `Declassify`, as the
-  implementation types and traces it since campaign finding P17-IF1. Every theorem holds for either.
+  `verify`'s label is a parameter (`Sig.verifyLabel`): none, as v0.3's `T-Verify` wrote it, or `Declassify`, as v0.4
+  writes it and the implementation has typed and traced it since campaign finding P17-IF1. Every theorem holds for either.
 
   Check it yourself rather than taking this comment's word:
 
@@ -21,7 +23,8 @@
   Lean reports a `sorry` only as a warning ("declaration uses `sorry`") and still exits 0, so CI's `formal` job fails on
   any `sorry` in its output. The `#print axioms` block at the bottom lists what each theorem rests on: Lean's standard
   `propext`, `Classical.choice` and `Quot.sound`, and no `sorryAx`. (`DeluluCore.lean` rests on none at all.) And the
-  proofs have teeth: with `T-Op`'s label or `T-HOp`'s latent row taken out of the rules, this file fails to check.
+  proofs have teeth: with `T-Op`'s label or `T-HOp`'s latent row taken out of the rules, or the law that a narrowed
+  scope is under its parent's weakened to `le s s`, this file fails to check. CI requires each of the three to fail.
 -/
 
 namespace DeluluSafety
@@ -71,6 +74,7 @@ inductive Tm where
   | wrap   : Tm → Tm                 -- wrapₛ e
   | verify : Tm → Tm → Tm
   | expose : Tm → Tm → Tm            -- expose(e, d)
+  | narrow : Tm → Tm → Tm            -- c.narrow(e): a capability for a part of c's scope (attenuation)
   | tok    : Nat → Tm                -- κ: a capability token; no surface syntax, it lives in the store
   deriving DecidableEq, Repr
 
@@ -89,9 +93,20 @@ structure Sig where
   declassifyKind  : Kind
   declassifyLabel : Label
   verifyLabel     : Option Label
+  /-- Attenuation (`narrow`): the argument it takes, whether a scope admits it (a spelling that escapes it is refused,
+      `DL0904`), and the narrowed scope; and the scope order `⊑`, a preorder, with the one law attenuation needs: a
+      narrowed scope is under its parent's. -/
+  narrowArgTy     : Ty
+  narrowOk        : Nat → Tm → Bool
+  narrowScope     : Nat → Tm → Nat
+  le              : Nat → Nat → Prop
+  le_refl         : ∀ s, le s s
+  le_trans        : ∀ a b c, le a b → le b c → le a c
+  narrow_le       : ∀ s v, le (narrowScope s v) s
 
-/-- The capability store `σ` (§4): each token's resource kind and scope. -/
-abbrev Store := Nat → Option (Kind × Nat)
+/-- The capability store `σ` (§4): each token's resource kind and scope; a token is its index. Attenuation adds a token
+    at the end, so a fresh one always exists and an old one never moves. -/
+abbrev Store := List (Kind × Nat)
 
 /-- Values. -/
 inductive Value : Tm → Prop where
@@ -144,8 +159,11 @@ inductive HasType (S : Sig) (σ : Store) : List Ty → Tm → Ty → Row → Pro
   | expose {Γ e d τ ρe ρd} :
       HasType S σ Γ e (.secret τ) ρe → HasType S σ Γ d (.cap S.declassifyKind) ρd →
       HasType S σ Γ (.expose e d) τ (S.declassifyLabel :: (ρe ++ ρd))
+  /-- Attenuation is pure: minting a narrower capability performs nothing, as minting from `Root` does not (§4). -/
+  | narrow {Γ e₀ e₁ R ρ₀ ρ₁} :
+      HasType S σ Γ e₀ (.cap R) ρ₀ → HasType S σ Γ e₁ S.narrowArgTy ρ₁ → HasType S σ Γ (.narrow e₀ e₁) (.cap R) (ρ₀ ++ ρ₁)
   /-- A token is typed by the store: a capability exists only where `σ` holds it (unforgeability, §1). -/
-  | tok {Γ κ R s} : σ κ = some (R, s) → HasType S σ Γ (.tok κ) (.cap R) []
+  | tok {Γ κ R s} : σ[κ]? = some (R, s) → HasType S σ Γ (.tok κ) (.cap R) []
 
 /-! ### Rows -/
 
@@ -185,6 +203,7 @@ theorem weaken_end {S σ Γ e τ ρ} (h : HasType S σ Γ e τ ρ) (Δ : List Ty
   | wrap _ ih => exact .wrap ih
   | verify _ _ ih₁ ih₂ => exact .verify ih₁ ih₂
   | expose _ _ ih₁ ih₂ => exact .expose ih₁ ih₂
+  | narrow _ _ ih₀ ih₁ => exact .narrow ih₀ ih₁
   | tok hκ => exact .tok hκ
 
 /-- `subst k v e`: `e` with the variable `k` replaced by the CLOSED value `v` and every variable above `k` moved down
@@ -209,6 +228,7 @@ def subst (k : Nat) (v : Tm) : Tm → Tm
   | .wrap e => .wrap (subst k v e)
   | .verify e₁ e₂ => .verify (subst k v e₁) (subst k v e₂)
   | .expose e d => .expose (subst k v e) (subst k v d)
+  | .narrow e₀ e₁ => .narrow (subst k v e₀) (subst k v e₁)
   | .tok κ => .tok κ
 
 /-- The substitution lemma: types AND rows are preserved — the row of `e` does not change when a closed value, whose
@@ -264,12 +284,43 @@ theorem subst_typing {S σ Γ Δ e τ ρ τ₁ v} (h : HasType S σ (Γ ++ τ₁
   | wrap _ ih => subst hc; exact .wrap (ih rfl)
   | verify _ _ ih₁ ih₂ => subst hc; exact .verify (ih₁ rfl) (ih₂ rfl)
   | expose _ _ ih₁ ih₂ => subst hc; exact .expose (ih₁ rfl) (ih₂ rfl)
+  | narrow _ _ ih₀ ih₁ => subst hc; exact .narrow (ih₀ rfl) (ih₁ rfl)
   | tok hκ => exact .tok hκ
 
 /-- Substitution into a body typed under one binder, in the empty context. -/
 theorem subst0_typing {S σ e τ ρ τ₁ v} (h : HasType S σ [τ₁] e τ ρ) (hv : HasType S σ [] v τ₁ []) :
     HasType S σ [] (subst 0 v e) τ ρ :=
   subst_typing (Γ := []) (Δ := []) h hv
+
+/-! ### The store only grows -/
+
+/-- A derivation under a store stays one under any extension of it: a token keeps its index, kind and scope. -/
+theorem weaken_store {S σ Γ e τ ρ} (h : HasType S σ Γ e τ ρ) (δ : Store) : HasType S (σ ++ δ) Γ e τ ρ := by
+  induction h with
+  | var hn => exact .var hn
+  | unit => exact .unit
+  | bool => exact .bool
+  | int => exact .int
+  | str => exact .str
+  | lam _ hs ih => exact .lam ih hs
+  | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
+  | letin _ _ ih₁ ih₂ => exact .letin ih₁ ih₂
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+  | fst _ ih => exact .fst ih
+  | snd _ ih => exact .snd ih
+  | inl _ ih => exact .inl ih
+  | inr _ ih => exact .inr ih
+  | case _ _ _ ih ih₁ ih₂ => exact .case ih ih₁ ih₂
+  | op _ _ ih₀ ih₁ => exact .op ih₀ ih₁
+  | hop _ _ ih₀ ih₁ => exact .hop ih₀ ih₁
+  | wrap _ ih => exact .wrap ih
+  | verify _ _ ih₁ ih₂ => exact .verify ih₁ ih₂
+  | expose _ _ ih₁ ih₂ => exact .expose ih₁ ih₂
+  | narrow _ _ ih₀ ih₁ => exact .narrow ih₀ ih₁
+  | tok hκ =>
+    apply HasType.tok
+    rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hκ).1]
+    exact hκ
 
 /-! ### Operational semantics (§4) -/
 
@@ -299,6 +350,8 @@ inductive Frame where
   | verify2 (v₁ : Tm)
   | expose1 (d : Tm)
   | expose2 (v : Tm)
+  | narrow0 (e₁ : Tm)
+  | narrow1 (v₀ : Tm)
 
 /-- The term with `e` in the frame's hole. -/
 def Frame.plug : Frame → Tm → Tm
@@ -321,43 +374,61 @@ def Frame.plug : Frame → Tm → Tm
   | .verify2 v₁, e => .verify v₁ e
   | .expose1 d, e => .expose e d
   | .expose2 v, e => .expose v e
+  | .narrow0 e₁, e => .narrow e e₁
+  | .narrow1 v₀, e => .narrow v₀ e
 
 /-- A frame's left neighbours are values (call-by-value, left to right). -/
 def Frame.wf : Frame → Prop
-  | .app2 v | .pair2 v | .op1 _ v | .hop1 v | .verify2 v | .expose2 v => Value v
+  | .app2 v | .pair2 v | .op1 _ v | .hop1 v | .verify2 v | .expose2 v | .narrow1 v => Value v
   | _ => True
 
-/-- `⟨σ ; e⟩ ⟶ r`, optionally emitting a label (§4). -/
-inductive Step (S : Sig) (σ : Store) : Tm → Option Label → Res → Prop where
-  | appβ {τ ρ e v} : Value v → Step S σ (.app (.lam τ ρ e) v) none (.ok (subst 0 v e))
-  | letβ {v e} : Value v → Step S σ (.letin v e) none (.ok (subst 0 v e))
-  | fstβ {v₁ v₂} : Value v₁ → Value v₂ → Step S σ (.fst (.pair v₁ v₂)) none (.ok v₁)
-  | sndβ {v₁ v₂} : Value v₁ → Value v₂ → Step S σ (.snd (.pair v₁ v₂)) none (.ok v₂)
-  | caseL {v e₁ e₂} : Value v → Step S σ (.case (.inl v) e₁ e₂) none (.ok (subst 0 v e₁))
-  | caseR {v e₁ e₂} : Value v → Step S σ (.case (.inr v) e₁ e₂) none (.ok (subst 0 v e₂))
+/-- `⟨σ ; e⟩ ⟶ ⟨σ' ; r⟩`, optionally emitting a label (§4). Only attenuation changes the store, and only by adding a
+    token at its end. -/
+inductive Step (S : Sig) : Store → Tm → Option Label → Store → Res → Prop where
+  | appβ {σ τ ρ e v} : Value v → Step S σ (.app (.lam τ ρ e) v) none σ (.ok (subst 0 v e))
+  | letβ {σ v e} : Value v → Step S σ (.letin v e) none σ (.ok (subst 0 v e))
+  | fstβ {σ v₁ v₂} : Value v₁ → Value v₂ → Step S σ (.fst (.pair v₁ v₂)) none σ (.ok v₁)
+  | sndβ {σ v₁ v₂} : Value v₁ → Value v₂ → Step S σ (.snd (.pair v₁ v₂)) none σ (.ok v₂)
+  | caseL {σ v e₁ e₂} : Value v → Step S σ (.case (.inl v) e₁ e₂) none σ (.ok (subst 0 v e₁))
+  | caseR {σ v e₁ e₂} : Value v → Step S σ (.case (.inr v) e₁ e₂) none σ (.ok (subst 0 v e₂))
   /-- `E-Op`: fires only on a token the store holds, of the operation's kind, whose scope permits the argument. -/
-  | opOk {o κ s v} : σ κ = some (S.kind o, s) → Value v → S.permits s v = true →
-      Step S σ (.op o (.tok κ) v) (some (S.label o)) (.ok (S.δ o v))
+  | opOk {σ o κ s v} : σ[κ]? = some (S.kind o, s) → Value v → S.permits s v = true →
+      Step S σ (.op o (.tok κ) v) (some (S.label o)) σ (.ok (S.δ o v))
   /-- `E-Refuse` (v0.3): a present capability whose scope does not cover the argument — the operation is not performed,
       the run faults, and the trace still records the attempt. -/
-  | opRefuse {o κ s v} : σ κ = some (S.kind o, s) → Value v → S.permits s v = false →
-      Step S σ (.op o (.tok κ) v) (some (S.label o)) .fault
+  | opRefuse {σ o κ s v} : σ[κ]? = some (S.kind o, s) → Value v → S.permits s v = false →
+      Step S σ (.op o (.tok κ) v) (some (S.label o)) σ .fault
   /-- `E-HOp` (v0.3), for the primitive whose unfolding `δ_hop(v_f, v)` is the callback applied once: it emits nothing
       itself; the callback's labels are emitted by the application as it reduces. -/
-  | hopβ {f v} : Value f → Value v → Step S σ (.hop f v) none (.ok (.app f v))
-  | verifyβ {v₁ v₂} : Value v₁ → Value v₂ →
-      Step S σ (.verify (.wrap v₁) (.wrap v₂)) S.verifyLabel (.ok (.bool (decide (v₁ = v₂))))
-  | exposeβ {v κ s} : Value v → σ κ = some (S.declassifyKind, s) →
-      Step S σ (.expose (.wrap v) (.tok κ)) (some S.declassifyLabel) (.ok v)
+  | hopβ {σ f v} : Value f → Value v → Step S σ (.hop f v) none σ (.ok (.app f v))
+  | verifyβ {σ v₁ v₂} : Value v₁ → Value v₂ →
+      Step S σ (.verify (.wrap v₁) (.wrap v₂)) S.verifyLabel σ (.ok (.bool (decide (v₁ = v₂))))
+  | exposeβ {σ v κ s} : Value v → σ[κ]? = some (S.declassifyKind, s) →
+      Step S σ (.expose (.wrap v) (.tok κ)) (some S.declassifyLabel) σ (.ok v)
+  /-- Attenuation: a new token, of the parent's kind, at the end of the store, its scope the parent's narrowed — the one
+      way reduction creates a token (§4). Pure: no label. -/
+  | narrowOk {σ κ R s v} : σ[κ]? = some (R, s) → Value v → S.narrowOk s v = true →
+      Step S σ (.narrow (.tok κ) v) none (σ ++ [(R, S.narrowScope s v)]) (.ok (.tok σ.length))
+  /-- A narrowing the parent's scope does not admit (a spelling that escapes it, `DL0904`) is refused: a fault, no token. -/
+  | narrowRefuse {σ κ R s v} : σ[κ]? = some (R, s) → Value v → S.narrowOk s v = false →
+      Step S σ (.narrow (.tok κ) v) none σ .fault
   /-- Congruence: a subterm's step is the whole term's. -/
-  | ctx {F : Frame} {e l e'} : F.wf → Step S σ e l (.ok e') → Step S σ (F.plug e) l (.ok (F.plug e'))
+  | ctx {σ σ' : Store} {F : Frame} {e l e'} : F.wf → Step S σ e l σ' (.ok e') → Step S σ (F.plug e) l σ' (.ok (F.plug e'))
   /-- `E-Fault` (v0.3): nothing in the calculus can catch a fault, so it is the whole configuration's. -/
-  | ctxF {F : Frame} {e l} : F.wf → Step S σ e l .fault → Step S σ (F.plug e) l .fault
+  | ctxF {σ σ' : Store} {F : Frame} {e l} : F.wf → Step S σ e l σ' .fault → Step S σ (F.plug e) l σ' .fault
+
+/-- A step only extends the store. -/
+theorem step_extends {S σ e l σ' r} (h : Step S σ e l σ' r) : ∃ δ, σ' = σ ++ δ := by
+  induction h with
+  | narrowOk => exact ⟨_, rfl⟩
+  | ctx _ _ ih => exact ih
+  | ctxF _ _ ih => exact ih
+  | _ => exact ⟨[], by simp⟩
 
 /-- What the theorems ask of `Σ`: an operation's result on a permitted, well-typed argument is a closed term of its
     result type with an empty row — the operation's own label is accounted for by `T-Op`, and nothing else is emitted. -/
-def SigOk (S : Sig) (σ : Store) : Prop :=
-  ∀ o s v, Value v → HasType S σ [] v (S.argTy o) [] → S.permits s v = true → HasType S σ [] (S.δ o v) (S.resTy o) []
+def SigOk (S : Sig) : Prop :=
+  ∀ σ o s v, Value v → HasType S σ [] v (S.argTy o) [] → S.permits s v = true → HasType S σ [] (S.δ o v) (S.resTy o) []
 
 /-! ### Values -/
 
@@ -380,7 +451,7 @@ theorem canon_arr {S σ v τ₁ ρf τ₂ ρ} (hv : Value v) (h : HasType S σ [
     ∃ e, v = .lam τ₁ ρf e := by
   cases hv <;> cases h; exact ⟨_, rfl⟩
 
-theorem canon_cap {S σ v R ρ} (hv : Value v) (h : HasType S σ [] v (.cap R) ρ) : ∃ κ s, v = .tok κ ∧ σ κ = some (R, s) := by
+theorem canon_cap {S σ v R ρ} (hv : Value v) (h : HasType S σ [] v (.cap R) ρ) : ∃ κ s, v = .tok κ ∧ σ[κ]? = some (R, s) := by
   cases hv <;> cases h; exact ⟨_, _, rfl, ‹_›⟩
 
 theorem canon_secret {S σ v τ ρ} (hv : Value v) (h : HasType S σ [] v (.secret τ) ρ) : ∃ w, v = .wrap w ∧ Value w := by
@@ -402,57 +473,64 @@ theorem canon_sum {S σ v τ₁ τ₂ ρ} (hv : Value v) (h : HasType S σ [] v 
 macro "rowsub" : tactic => `(tactic| (simp only [Row.sub] at *; grind))
 
 /-- The term in a frame's hole is typed, its row is inside the whole's, and any term of the hole's type with a smaller
-    row can take its place with the whole's type at a smaller row. Every congruence case of Preservation is this. -/
+    row, under any extension of the store, can take its place with the whole's type at a smaller row. Every congruence
+    case of Preservation is this. -/
 theorem frame_typing {S σ F e τ ρ} (h : HasType S σ [] (Frame.plug F e) τ ρ) :
     ∃ τh ρh, HasType S σ [] e τh ρh ∧ Row.sub ρh ρ ∧
-      ∀ e' ρh', HasType S σ [] e' τh ρh' → Row.sub ρh' ρh →
-        ∃ ρ', HasType S σ [] (Frame.plug F e') τ ρ' ∧ Row.sub ρ' ρ := by
+      ∀ δ e' ρh', HasType S (σ ++ δ) [] e' τh ρh' → Row.sub ρh' ρh →
+        ∃ ρ', HasType S (σ ++ δ) [] (Frame.plug F e') τ ρ' ∧ Row.sub ρ' ρ := by
   cases F <;> simp only [Frame.plug] at h ⊢
   case app1 => cases h with
-    | app h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .app h' h₂, by rowsub⟩⟩
+    | app h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .app h' (weaken_store h₂ δ), by rowsub⟩⟩
   case app2 => cases h with
-    | app h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun _ _ h' hs => ⟨_, .app h₁ h', by rowsub⟩⟩
+    | app h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun δ _ _ h' hs => ⟨_, .app (weaken_store h₁ δ) h', by rowsub⟩⟩
   case let1 => cases h with
-    | letin h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .letin h' h₂, by rowsub⟩⟩
+    | letin h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .letin h' (weaken_store h₂ δ), by rowsub⟩⟩
   case pair1 => cases h with
-    | pair h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .pair h' h₂, by rowsub⟩⟩
+    | pair h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .pair h' (weaken_store h₂ δ), by rowsub⟩⟩
   case pair2 => cases h with
-    | pair h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun _ _ h' hs => ⟨_, .pair h₁ h', by rowsub⟩⟩
+    | pair h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun δ _ _ h' hs => ⟨_, .pair (weaken_store h₁ δ) h', by rowsub⟩⟩
   case fst => cases h with
-    | fst h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ h' hs => ⟨_, .fst h', hs⟩⟩
+    | fst h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ _ h' hs => ⟨_, .fst h', hs⟩⟩
   case snd => cases h with
-    | snd h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ h' hs => ⟨_, .snd h', hs⟩⟩
+    | snd h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ _ h' hs => ⟨_, .snd h', hs⟩⟩
   case inl => cases h with
-    | inl h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ h' hs => ⟨_, .inl h', hs⟩⟩
+    | inl h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ _ h' hs => ⟨_, .inl h', hs⟩⟩
   case inr => cases h with
-    | inr h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ h' hs => ⟨_, .inr h', hs⟩⟩
+    | inr h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ _ h' hs => ⟨_, .inr h', hs⟩⟩
   case case1 => cases h with
-    | case h₀ h₁ h₂ => exact ⟨_, _, h₀, by rowsub, fun _ _ h' hs => ⟨_, .case h' h₁ h₂, by rowsub⟩⟩
+    | case h₀ h₁ h₂ =>
+      exact ⟨_, _, h₀, by rowsub, fun δ _ _ h' hs => ⟨_, .case h' (weaken_store h₁ δ) (weaken_store h₂ δ), by rowsub⟩⟩
   case op0 => cases h with
-    | op h₀ h₁ => exact ⟨_, _, h₀, by rowsub, fun _ _ h' hs => ⟨_, .op h' h₁, by rowsub⟩⟩
+    | op h₀ h₁ => exact ⟨_, _, h₀, by rowsub, fun δ _ _ h' hs => ⟨_, .op h' (weaken_store h₁ δ), by rowsub⟩⟩
   case op1 => cases h with
-    | op h₀ h₁ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .op h₀ h', by rowsub⟩⟩
+    | op h₀ h₁ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .op (weaken_store h₀ δ) h', by rowsub⟩⟩
   case hop0 => cases h with
-    | hop h₀ h₁ => exact ⟨_, _, h₀, by rowsub, fun _ _ h' hs => ⟨_, .hop h' h₁, by rowsub⟩⟩
+    | hop h₀ h₁ => exact ⟨_, _, h₀, by rowsub, fun δ _ _ h' hs => ⟨_, .hop h' (weaken_store h₁ δ), by rowsub⟩⟩
   case hop1 => cases h with
-    | hop h₀ h₁ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .hop h₀ h', by rowsub⟩⟩
+    | hop h₀ h₁ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .hop (weaken_store h₀ δ) h', by rowsub⟩⟩
   case wrap => cases h with
-    | wrap h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ h' hs => ⟨_, .wrap h', hs⟩⟩
+    | wrap h₁ => exact ⟨_, _, h₁, Row.sub_refl _, fun _ _ _ h' hs => ⟨_, .wrap h', hs⟩⟩
   case verify1 => cases h with
-    | verify h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .verify h' h₂, by rowsub⟩⟩
+    | verify h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .verify h' (weaken_store h₂ δ), by rowsub⟩⟩
   case verify2 => cases h with
-    | verify h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun _ _ h' hs => ⟨_, .verify h₁ h', by rowsub⟩⟩
+    | verify h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun δ _ _ h' hs => ⟨_, .verify (weaken_store h₁ δ) h', by rowsub⟩⟩
   case expose1 => cases h with
-    | expose h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun _ _ h' hs => ⟨_, .expose h' h₂, by rowsub⟩⟩
+    | expose h₁ h₂ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .expose h' (weaken_store h₂ δ), by rowsub⟩⟩
   case expose2 => cases h with
-    | expose h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun _ _ h' hs => ⟨_, .expose h₁ h', by rowsub⟩⟩
+    | expose h₁ h₂ => exact ⟨_, _, h₂, by rowsub, fun δ _ _ h' hs => ⟨_, .expose (weaken_store h₁ δ) h', by rowsub⟩⟩
+  case narrow0 => cases h with
+    | narrow h₀ h₁ => exact ⟨_, _, h₀, by rowsub, fun δ _ _ h' hs => ⟨_, .narrow h' (weaken_store h₁ δ), by rowsub⟩⟩
+  case narrow1 => cases h with
+    | narrow h₀ h₁ => exact ⟨_, _, h₁, by rowsub, fun δ _ _ h' hs => ⟨_, .narrow (weaken_store h₀ δ) h', by rowsub⟩⟩
 
 /-! ### Theorem 2 — Preservation, types and rows -/
 
 /-- **Theorem 2.** A step from a well-typed closed term emits only a label its row holds, and what it steps to has the
-    same type at a row inside the old one; a step to a fault emits only a label its row holds. -/
-theorem preservation {S σ e l r τ ρ} (hS : SigOk S σ) (hst : Step S σ e l r) (h : HasType S σ [] e τ ρ) :
-    (∀ x, l = some x → x ∈ ρ) ∧ (∀ e', r = .ok e' → ∃ ρ', HasType S σ [] e' τ ρ' ∧ Row.sub ρ' ρ) := by
+    same type, under the store the step leaves, at a row inside the old one; a step to a fault emits only a label its
+    row holds. -/
+theorem preservation {S σ e l σ' r τ ρ} (hS : SigOk S) (hst : Step S σ e l σ' r) (h : HasType S σ [] e τ ρ) :
+    (∀ x, l = some x → x ∈ ρ) ∧ (∀ e', r = .ok e' → ∃ ρ', HasType S σ' [] e' τ ρ' ∧ Row.sub ρ' ρ) := by
   induction hst generalizing τ ρ with
   | appβ hv =>
     cases h with
@@ -510,7 +588,7 @@ theorem preservation {S σ e l r τ ρ} (hS : SigOk S σ) (hst : Step S σ e l r
       have := value_row hv h₁; subst this
       refine ⟨by simp, fun e' he' => ?_⟩
       cases he'
-      exact ⟨_, hS _ _ _ hv h₁ hp, Row.nil_sub _⟩
+      exact ⟨_, hS _ _ _ _ hv h₁ hp, Row.nil_sub _⟩
   | opRefuse =>
     cases h with
     | op => exact ⟨by simp, fun e' he' => nomatch he'⟩
@@ -537,13 +615,28 @@ theorem preservation {S σ e l r τ ρ} (hS : SigOk S σ) (hst : Step S σ e l r
         refine ⟨by simp, fun e' he' => ?_⟩
         cases he'
         exact ⟨_, hw, Row.nil_sub _⟩
-  | ctx _ _ ih =>
+  | @narrowOk κ R s v hκ =>
+    cases h with
+    | narrow h₀ h₁ =>
+      cases h₀ with
+      | tok hκ' =>
+        rw [hκ] at hκ'
+        simp only [Option.some.injEq, Prod.mk.injEq] at hκ'
+        obtain ⟨rfl, rfl⟩ := hκ'
+        refine ⟨by simp, fun e' he' => ?_⟩
+        cases he'
+        exact ⟨_, .tok (s := S.narrowScope s v) (by simp), Row.nil_sub _⟩
+  | narrowRefuse =>
+    cases h with
+    | narrow => exact ⟨by simp, fun e' he' => nomatch he'⟩
+  | ctx _ hstep ih =>
     obtain ⟨τh, ρh, he, hsub, back⟩ := frame_typing h
     obtain ⟨hl, hok⟩ := ih he
     refine ⟨fun x hx => hsub x (hl x hx), fun e' he' => ?_⟩
     cases he'
     obtain ⟨ρh', he', hsub'⟩ := hok _ rfl
-    exact back _ _ he' hsub'
+    obtain ⟨δ, rfl⟩ := step_extends hstep
+    exact back _ _ _ he' hsub'
   | ctxF _ _ ih =>
     obtain ⟨τh, ρh, he, hsub, _⟩ := frame_typing h
     obtain ⟨hl, _⟩ := ih he
@@ -551,14 +644,15 @@ theorem preservation {S σ e l r τ ρ} (hS : SigOk S σ) (hst : Step S σ e l r
 
 /-! ### Theorem 1 — Progress-or-fault -/
 
-theorem step_in {S σ e l r} (F : Frame) (hF : F.wf) (hs : Step S σ e l r) : ∃ l r, Step S σ (F.plug e) l r := by
+theorem step_in {S σ e l σ' r} (F : Frame) (hF : F.wf) (hs : Step S σ e l σ' r) :
+    ∃ l σ' r, Step S σ (F.plug e) l σ' r := by
   cases r with
-  | ok e' => exact ⟨_, _, .ctx hF hs⟩
-  | fault => exact ⟨_, _, .ctxF hF hs⟩
+  | ok e' => exact ⟨_, _, _, .ctx hF hs⟩
+  | fault => exact ⟨_, _, _, .ctxF hF hs⟩
 
 /-- **Theorem 1.** A well-typed closed term is a value or takes a step — to a term, or to a fault. None is stuck: a
     missing capability is a type error, and a present one whose scope does not cover the argument is `E-Refuse`. -/
-theorem progress {S σ e τ ρ} (h : HasType S σ [] e τ ρ) : Value e ∨ ∃ l r, Step S σ e l r := by
+theorem progress {S σ e τ ρ} (h : HasType S σ [] e τ ρ) : Value e ∨ ∃ l σ' r, Step S σ e l σ' r := by
   generalize hΓ : ([] : List Ty) = Γ at h
   induction h with
   | var hn => subst hΓ; simp at hn
@@ -569,107 +663,117 @@ theorem progress {S σ e τ ρ} (h : HasType S σ [] e τ ρ) : Value e ∨ ∃ 
   | lam => exact .inl (.lam _ _ _)
   | app h₁ _ ih₁ ih₂ =>
     subst hΓ; right
-    rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-    · rcases ih₂ rfl with hv₂ | ⟨l, r, hs⟩
+    rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+    · rcases ih₂ rfl with hv₂ | ⟨l, σ', r, hs⟩
       · obtain ⟨e, rfl⟩ := canon_arr hv₁ h₁
-        exact ⟨_, _, .appβ hv₂⟩
+        exact ⟨_, _, _, .appβ hv₂⟩
       · exact step_in (.app2 _) hv₁ hs
     · exact step_in (.app1 _) trivial hs
   | letin _ _ ih₁ _ =>
     subst hΓ; right
-    rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-    · exact ⟨_, _, .letβ hv₁⟩
+    rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+    · exact ⟨_, _, _, .letβ hv₁⟩
     · exact step_in (.let1 _) trivial hs
   | pair _ _ ih₁ ih₂ =>
     subst hΓ
-    rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-    · rcases ih₂ rfl with hv₂ | ⟨l, r, hs⟩
+    rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+    · rcases ih₂ rfl with hv₂ | ⟨l, σ', r, hs⟩
       · exact .inl (.pair hv₁ hv₂)
       · exact .inr (step_in (.pair2 _) hv₁ hs)
     · exact .inr (step_in (.pair1 _) trivial hs)
   | fst h₁ ih =>
     subst hΓ; right
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · obtain ⟨v₁, v₂, rfl, hv₁, hv₂⟩ := canon_prod hv h₁
-      exact ⟨_, _, .fstβ hv₁ hv₂⟩
+      exact ⟨_, _, _, .fstβ hv₁ hv₂⟩
     · exact step_in .fst trivial hs
   | snd h₁ ih =>
     subst hΓ; right
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · obtain ⟨v₁, v₂, rfl, hv₁, hv₂⟩ := canon_prod hv h₁
-      exact ⟨_, _, .sndβ hv₁ hv₂⟩
+      exact ⟨_, _, _, .sndβ hv₁ hv₂⟩
     · exact step_in .snd trivial hs
   | inl _ ih =>
     subst hΓ
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · exact .inl (.inl hv)
     · exact .inr (step_in .inl trivial hs)
   | inr _ ih =>
     subst hΓ
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · exact .inl (.inr hv)
     · exact .inr (step_in .inr trivial hs)
   | case h₀ _ _ ih _ _ =>
     subst hΓ; right
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · obtain ⟨w, hw, rfl | rfl⟩ := canon_sum hv h₀
-      · exact ⟨_, _, .caseL hw⟩
-      · exact ⟨_, _, .caseR hw⟩
+      · exact ⟨_, _, _, .caseL hw⟩
+      · exact ⟨_, _, _, .caseR hw⟩
     · exact step_in (.case1 _ _) trivial hs
   | @op _ o e₀ e₁ _ _ h₀ _ ih₀ ih₁ =>
     subst hΓ; right
-    rcases ih₀ rfl with hv₀ | ⟨l, r, hs⟩
-    · rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
+    rcases ih₀ rfl with hv₀ | ⟨l, σ', r, hs⟩
+    · rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
       · obtain ⟨κ, s, rfl, hκ⟩ := canon_cap hv₀ h₀
         cases hp : S.permits s e₁ with
-        | true => exact ⟨_, _, .opOk hκ hv₁ hp⟩
-        | false => exact ⟨_, _, .opRefuse hκ hv₁ hp⟩
+        | true => exact ⟨_, _, _, .opOk hκ hv₁ hp⟩
+        | false => exact ⟨_, _, _, .opRefuse hκ hv₁ hp⟩
       · exact step_in (.op1 _ _) hv₀ hs
     · exact step_in (.op0 _ _) trivial hs
   | hop _ _ ih₀ ih₁ =>
     subst hΓ; right
-    rcases ih₀ rfl with hv₀ | ⟨l, r, hs⟩
-    · rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-      · exact ⟨_, _, .hopβ hv₀ hv₁⟩
+    rcases ih₀ rfl with hv₀ | ⟨l, σ', r, hs⟩
+    · rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+      · exact ⟨_, _, _, .hopβ hv₀ hv₁⟩
       · exact step_in (.hop1 _) hv₀ hs
     · exact step_in (.hop0 _) trivial hs
   | wrap _ ih =>
     subst hΓ
-    rcases ih rfl with hv | ⟨l, r, hs⟩
+    rcases ih rfl with hv | ⟨l, σ', r, hs⟩
     · exact .inl (.wrap hv)
     · exact .inr (step_in .wrap trivial hs)
   | verify h₁ h₂ ih₁ ih₂ =>
     subst hΓ; right
-    rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-    · rcases ih₂ rfl with hv₂ | ⟨l, r, hs⟩
+    rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+    · rcases ih₂ rfl with hv₂ | ⟨l, σ', r, hs⟩
       · obtain ⟨w₁, rfl, hw₁⟩ := canon_secret hv₁ h₁
         obtain ⟨w₂, rfl, hw₂⟩ := canon_secret hv₂ h₂
-        exact ⟨_, _, .verifyβ hw₁ hw₂⟩
+        exact ⟨_, _, _, .verifyβ hw₁ hw₂⟩
       · exact step_in (.verify2 _) hv₁ hs
     · exact step_in (.verify1 _) trivial hs
   | expose h₁ h₂ ih₁ ih₂ =>
     subst hΓ; right
-    rcases ih₁ rfl with hv₁ | ⟨l, r, hs⟩
-    · rcases ih₂ rfl with hv₂ | ⟨l, r, hs⟩
+    rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+    · rcases ih₂ rfl with hv₂ | ⟨l, σ', r, hs⟩
       · obtain ⟨w, rfl, hw⟩ := canon_secret hv₁ h₁
         obtain ⟨κ, s, rfl, hκ⟩ := canon_cap hv₂ h₂
-        exact ⟨_, _, .exposeβ hw hκ⟩
+        exact ⟨_, _, _, .exposeβ hw hκ⟩
       · exact step_in (.expose2 _) hv₁ hs
     · exact step_in (.expose1 _) trivial hs
+  | @narrow _ e₀ e₁ _ _ _ h₀ _ ih₀ ih₁ =>
+    subst hΓ; right
+    rcases ih₀ rfl with hv₀ | ⟨l, σ', r, hs⟩
+    · rcases ih₁ rfl with hv₁ | ⟨l, σ', r, hs⟩
+      · obtain ⟨κ, s, rfl, hκ⟩ := canon_cap hv₀ h₀
+        cases hp : S.narrowOk s e₁ with
+        | true => exact ⟨_, _, _, .narrowOk hκ hv₁ hp⟩
+        | false => exact ⟨_, _, _, .narrowRefuse hκ hv₁ hp⟩
+      · exact step_in (.narrow1 _) hv₀ hs
+    · exact step_in (.narrow0 _) trivial hs
   | tok => exact .inl (.tok _)
 
 /-! ### Theorem 3 — Effect soundness, over every finite prefix of a run -/
 
-/-- `⟨σ ; e⟩ ⟶* r`, with the labels emitted on the way: any number of steps to a term (a value, or any configuration
-    part-way — every finite prefix of a run, including one that never ends), or to a fault. -/
-inductive Steps (S : Sig) (σ : Store) : Tm → List Label → Res → Prop where
-  | refl {e} : Steps S σ e [] (.ok e)
-  | step {e l e' tr r} : Step S σ e l (.ok e') → Steps S σ e' tr r → Steps S σ e (l.toList ++ tr) r
-  | fault {e l} : Step S σ e l .fault → Steps S σ e l.toList .fault
+/-- `⟨σ ; e⟩ ⟶* ⟨σ' ; r⟩`, with the labels emitted on the way: any number of steps to a term (a value, or any
+    configuration part-way — every finite prefix of a run, including one that never ends), or to a fault. -/
+inductive Steps (S : Sig) : Store → Tm → List Label → Store → Res → Prop where
+  | refl {σ e} : Steps S σ e [] σ (.ok e)
+  | step {σ e l σ₁ e' tr σ' r} : Step S σ e l σ₁ (.ok e') → Steps S σ₁ e' tr σ' r → Steps S σ e (l.toList ++ tr) σ' r
+  | fault {σ e l σ'} : Step S σ e l σ' .fault → Steps S σ e l.toList σ' .fault
 
 /-- **Theorem 3 (Effect soundness — "authority cannot escape the type").** Every label a run of a well-typed closed term
     emits is in the term's row, whether the run ends in a value, a fault, or is cut anywhere part-way. -/
-theorem effect_soundness {S σ e τ ρ tr r} (hS : SigOk S σ) (h : HasType S σ [] e τ ρ) (hs : Steps S σ e tr r) :
+theorem effect_soundness {S σ e τ ρ tr σ' r} (hS : SigOk S) (h : HasType S σ [] e τ ρ) (hs : Steps S σ e tr σ' r) :
     ∀ x, x ∈ tr → x ∈ ρ := by
   induction hs generalizing ρ with
   | refl => intro x hx; nomatch hx
@@ -685,11 +789,11 @@ theorem effect_soundness {S σ e τ ρ tr r} (hS : SigOk S σ) (h : HasType S σ
     intro x hx
     exact hl x (by simpa using hx)
 
-/-- Type safety along a run: every configuration a well-typed closed term reaches is well typed at a smaller row, and
-    is a value or steps — no run gets stuck. -/
-theorem safety {S σ e τ ρ tr e'} (hS : SigOk S σ) (h : HasType S σ [] e τ ρ) (hs : Steps S σ e tr (.ok e')) :
-    (∃ ρ', HasType S σ [] e' τ ρ' ∧ Row.sub ρ' ρ) ∧ (Value e' ∨ ∃ l r, Step S σ e' l r) := by
-  have typed : ∃ ρ', HasType S σ [] e' τ ρ' ∧ Row.sub ρ' ρ := by
+/-- Type safety along a run: every configuration a well-typed closed term reaches is well typed, under the store the run
+    has built, at a smaller row, and is a value or steps — no run gets stuck. -/
+theorem safety {S σ e τ ρ tr σ' e'} (hS : SigOk S) (h : HasType S σ [] e τ ρ) (hs : Steps S σ e tr σ' (.ok e')) :
+    (∃ ρ', HasType S σ' [] e' τ ρ' ∧ Row.sub ρ' ρ) ∧ (Value e' ∨ ∃ l σ'' r, Step S σ' e' l σ'' r) := by
+  have typed : ∃ ρ', HasType S σ' [] e' τ ρ' ∧ Row.sub ρ' ρ := by
     generalize hr : Res.ok e' = r at hs
     induction hs generalizing ρ with
     | refl => cases hr; exact ⟨_, h, Row.sub_refl _⟩
@@ -702,25 +806,26 @@ theorem safety {S σ e τ ρ tr e'} (hS : SigOk S σ) (h : HasType S σ [] e τ 
   obtain ⟨ρ', h', hsub⟩ := typed
   exact ⟨⟨ρ', h', hsub⟩, progress h'⟩
 
-/-! ### No forgery: a reachable term holds only tokens the store holds -/
+/-! ### No forgery, and attenuation is monotone -/
 
 /-- The capability tokens occurring in a term. -/
 def Tm.toks : Tm → List Nat
   | .var _ | .unit | .bool _ | .int _ | .str _ => []
   | .lam _ _ e | .fst e | .snd e | .inl e | .inr e | .wrap e => e.toks
-  | .app a b | .letin a b | .pair a b | .op _ a b | .hop a b | .verify a b | .expose a b => a.toks ++ b.toks
+  | .app a b | .letin a b | .pair a b | .op _ a b | .hop a b | .verify a b | .expose a b | .narrow a b =>
+    a.toks ++ b.toks
   | .case a b c => a.toks ++ b.toks ++ c.toks
   | .tok κ => [κ]
 
 /-- A well-typed term names only tokens the store holds — the typing rule for a token is the store's word. -/
-theorem typed_toks {S σ Γ e τ ρ} (h : HasType S σ Γ e τ ρ) : ∀ κ, κ ∈ e.toks → ∃ R s, σ κ = some (R, s) := by
+theorem typed_toks {S σ Γ e τ ρ} (h : HasType S σ Γ e τ ρ) : ∀ κ, κ ∈ e.toks → ∃ R s, σ[κ]? = some (R, s) := by
   induction h with
   | tok hκ => intro κ hk; simp [Tm.toks] at hk; subst hk; exact ⟨_, _, hκ⟩
   | var | unit | bool | int | str => intro κ hk; simp [Tm.toks] at hk
   | lam _ _ ih | fst _ ih | snd _ ih | inl _ ih | inr _ ih | wrap _ ih =>
     intro κ hk; exact ih κ (by simpa [Tm.toks] using hk)
   | app _ _ ih₁ ih₂ | letin _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ | op _ _ ih₁ ih₂ | hop _ _ ih₁ ih₂ | verify _ _ ih₁ ih₂
-    | expose _ _ ih₁ ih₂ =>
+    | expose _ _ ih₁ ih₂ | narrow _ _ ih₁ ih₂ =>
     intro κ hk
     simp only [Tm.toks, List.mem_append] at hk
     rcases hk with hk | hk
@@ -734,13 +839,57 @@ theorem typed_toks {S σ Γ e τ ρ} (h : HasType S σ Γ e τ ρ) : ∀ κ, κ 
     · exact ih₁ κ hk
     · exact ih₂ κ hk
 
-/-- **Corollary (No-forgery), for this fragment.** Every token in any configuration a well-typed program reaches is one
-    the store holds: reduction mints none (attenuation is not modelled here, so the store never grows), and an
-    operation's result names only tokens of the store (`SigOk`). -/
-theorem no_forgery {S σ e τ ρ tr e'} (hS : SigOk S σ) (h : HasType S σ [] e τ ρ) (hs : Steps S σ e tr (.ok e')) :
-    ∀ κ, κ ∈ e'.toks → ∃ R s, σ κ = some (R, s) := by
+/-- Every token of `σ` descends from one of `σ₀`: the same kind, a scope under its scope. -/
+def Descends (S : Sig) (σ₀ σ : Store) : Prop :=
+  ∀ (κ : Nat) (R : Kind) (s : Nat), σ[κ]? = some (R, s) → ∃ (κ₀ : Nat) (s₀ : Nat), σ₀[κ₀]? = some (R, s₀) ∧ S.le s s₀
+
+theorem descends_refl (S : Sig) (σ : Store) : Descends S σ σ := fun κ _ s h => ⟨κ, s, h, S.le_refl s⟩
+
+/-- A step keeps every token descended from the root store: the only token it can add is a narrowing, of its parent's
+    kind and under its parent's scope (audit R-7). -/
+theorem step_descends {S σ₀ σ e l σ' r} (hst : Step S σ e l σ' r) (hd : Descends S σ₀ σ) : Descends S σ₀ σ' := by
+  induction hst with
+  | @narrowOk κ R s v hκ =>
+    unfold Descends at hd ⊢
+    intro κ' R' s' h'
+    by_cases hlt : κ' < σ.length
+    · rw [List.getElem?_append_left hlt] at h'
+      exact hd κ' R' s' h'
+    · rw [List.getElem?_append_right (by omega)] at h'
+      by_cases heq : κ' = σ.length
+      · subst heq
+        simp at h'
+        obtain ⟨rfl, rfl⟩ := h'
+        obtain ⟨κ₀, s₀, h₀, hle⟩ := hd κ R s hκ
+        exact ⟨κ₀, s₀, h₀, S.le_trans _ _ _ (S.narrow_le s v) hle⟩
+      · have : κ' - σ.length ≠ 0 := by omega
+        simp [this] at h'
+  | ctx _ _ ih => exact ih
+  | ctxF _ _ ih => exact ih
+  | _ => exact hd
+
+/-- **Attenuation is monotone (audit R-7).** Every token in any store a run builds descends from the root store: the same
+    kind as a root token, and a scope `⊑` its scope. -/
+theorem attenuation_monotone {S σ₀ e tr σ' r} (hs : Steps S σ₀ e tr σ' r) : Descends S σ₀ σ' := by
+  suffices ∀ σ, Descends S σ₀ σ → ∀ {e tr σ' r}, Steps S σ e tr σ' r → Descends S σ₀ σ' from
+    this σ₀ (descends_refl S σ₀) hs
+  intro σ hd e tr σ' r hs
+  induction hs with
+  | refl => exact hd
+  | step hst _ ih => exact ih (step_descends hst hd)
+  | fault hst => exact step_descends hst hd
+
+/-- **Corollary (No-forgery).** In any configuration a well-typed program reaches from the root store, every token in
+    the term is one the store holds, and it descends from a root token: the same kind, a scope `⊑` that token's. So the
+    program's authority is bounded by `σ_root` for scopes, as Theorem 3 bounds it by `row(main)` for kinds. -/
+theorem no_forgery {S σ₀ e τ ρ tr σ' e'} (hS : SigOk S) (h : HasType S σ₀ [] e τ ρ) (hs : Steps S σ₀ e tr σ' (.ok e')) :
+    ∀ κ, κ ∈ e'.toks →
+      ∃ (R : Kind) (s : Nat) (κ₀ : Nat) (s₀ : Nat), σ'[κ]? = some (R, s) ∧ σ₀[κ₀]? = some (R, s₀) ∧ S.le s s₀ := by
   obtain ⟨⟨_, h', _⟩, _⟩ := safety hS h hs
-  exact typed_toks h'
+  intro κ hk
+  obtain ⟨R, s, hκ⟩ := typed_toks h' κ hk
+  obtain ⟨κ₀, s₀, h₀, hle⟩ := attenuation_monotone hs κ R s hκ
+  exact ⟨R, s, κ₀, s₀, hκ, h₀, hle⟩
 
 /-! ### The axioms each theorem rests on -/
 
@@ -749,6 +898,7 @@ theorem no_forgery {S σ e τ ρ tr e'} (hS : SigOk S σ) (h : HasType S σ [] e
 #print axioms progress
 #print axioms effect_soundness
 #print axioms safety
+#print axioms attenuation_monotone
 #print axioms no_forgery
 
 end DeluluSafety

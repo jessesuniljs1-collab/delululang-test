@@ -18,7 +18,7 @@ and nothing is allowed to sit between them:
 
 A claim with no category is a claim to be deleted or demoted. **Category 2 holds the higher-order
 fragment and, since 2026-10-22, Progress, Preservation and Effect Soundness for the monomorphic,
-closed-row fragment** — type variables and attenuation are still unmechanized, and §12 says so plainly
+closed-row fragment**, attenuation and No-forgery included — type variables are still unmechanized, and §12 says so plainly
 rather than rounding up.
 
 Findings referenced as `F1`–`F4`, `IF-1`, `P17-*` are recorded with witnesses in
@@ -498,7 +498,7 @@ question that cost this project its worst soundness hole, and it settles nothing
 | # | Category | Status |
 |---|---|---|
 | 1 | Mathematically proven | **Non-empty.** The ten-dimension order (Z3, 26 obligations); device containment; the budget dimension (PS-B-05); actor data-race freedom by construction. |
-| 2 | **Machine checked** | **NON-EMPTY, for the first time — but narrowly.** Lean 4.32.2 proves Effect Soundness for the **higher-order fragment**, and proves that the calculus as written admits a program whose trace escapes its row (`design/models/lean/DeluluCore.lean`). `#print axioms` reports **"does not depend on any axioms"** for all three theorems — not even `propext` or `Classical.choice`. **Since 2026-10-22 (D-V2-175)** `design/models/lean/DeluluCoreSafety.lean` proves Theorems 1–3 of `DELULU_CORE.md` (Progress-or-fault, Preservation, Effect Soundness), plus safety along a run and no-forgery, for the **monomorphic, closed-row fragment** with capabilities, the store, faults and secrets — on Lean's standard `propext`, `Classical.choice` and `Quot.sound`, no `sorry`, and with teeth (two rule mutants fail to check in CI). **Still NOT mechanized:** type variables and open rows, attenuation, and `Σ`'s internals (assumed well typed). |
+| 2 | **Machine checked** | **NON-EMPTY, for the first time — but narrowly.** Lean 4.32.2 proves Effect Soundness for the **higher-order fragment**, and proves that the calculus as written admits a program whose trace escapes its row (`design/models/lean/DeluluCore.lean`). `#print axioms` reports **"does not depend on any axioms"** for all three theorems — not even `propext` or `Classical.choice`. **Since 2026-10-22 (D-V2-175)** `design/models/lean/DeluluCoreSafety.lean` proves Theorems 1–3 of `DELULU_CORE.md` (Progress-or-fault, Preservation, Effect Soundness), plus safety along a run, attenuation's monotonicity and the No-forgery corollary, for the **monomorphic, closed-row fragment** with capabilities, the store, attenuation, faults and secrets — on Lean's standard `propext`, `Classical.choice` and `Quot.sound`, no `sorry`, and with teeth (three mutants fail to check in CI). **Still NOT mechanized:** type variables and open rows, and `Σ`'s internals (assumed well typed). |
 | 3 | Model checked | **Non-empty.** 585,771 + 2,421 distinct states, with three teeth tests reconstructing three real bugs. |
 | 4 | Property tested | **Non-empty.** 250,000 generated programs; exhaustive enumeration of the order laws; the Survey's totality properties. |
 | 5 | Differentially verified | **Non-empty.** Interpreter vs WASM engine, ~1,000 lines of parity tests; fault parity is a tested law. |

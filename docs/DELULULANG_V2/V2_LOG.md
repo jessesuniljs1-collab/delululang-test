@@ -8702,16 +8702,24 @@ laptop, 640 tests, none failed: every `delulu-wasm` target, `delulu-runtime`'s u
 (17), `within_cli` (17), `json_contract` (13), `broker_cli` (12), `egress_cli` (9), `package_run` (6), `release` (6),
 `grants_cli` (5), `artifact_review` (4), `conformance` (4).
 
-## 2026-10-22 (night) — the laptop: Delulu Core's Theorems 1–3, machine-checked for the monomorphic fragment (RW 5.1, D-V2-175)
+## 2026-10-22 (night) — the laptop: Delulu Core's Theorems 1–3 and No-forgery, machine-checked for the monomorphic fragment (RW 5.1, D-V2-175)
 
 RW 5.1 was the headline evidence gap: beyond P17-9's higher-order fragment, nothing of `DELULU_CORE.md` §1–§7 was
-mechanized. `docs/design/models/lean/DeluluCoreSafety.lean` (754 lines, core Lean 4.32.2) now states §1–§4 for the
+mechanized. `docs/design/models/lean/DeluluCoreSafety.lean` (903 lines, core Lean 4.32.2) now states §1–§4 for the
 monomorphic, closed-row fragment: rows on arrows, `let`, products, sums, the capability store, `op` with `E-Op` and
 `E-Refuse`, `hop`, `wrap`, `verify` and `expose`. Evaluation is call-by-value by frames, with faults propagating. It
 proves progress-or-fault, preservation, effect soundness over every finite prefix of a run, safety along a run, and
 no-forgery. `grind` closes the row bookkeeping; the substitution lemma substitutes closed values only, as call-by-value
 evaluation of a closed program does. It rests on Lean's standard `propext`, `Classical.choice` and `Quot.sound`.
-Assumed: `SigOk`, that each primitive's result is well typed. Left out: type variables, open rows, attenuation.
+Assumed: `SigOk`, that each primitive's result is well typed. Left out: type variables, open rows.
+
+A second pass added attenuation. The store became a list, with a fresh token at its end; a step may extend it, and
+typing survives the extension (`weaken_store`). `narrow` mints a token of its parent's kind under its parent's scope,
+or faults. `attenuation_monotone` proves every token a run's store holds descends from a root token, over an abstract
+scope preorder with the one law `narrow(s, v) ⊑ s`, and `no_forgery` carries the Corollary's scope clause. Lean
+promoted the input store to a parameter of `Step` (it is the same in every rule), which shifted every `@`-pattern by
+one until noticed. The third mutant, the law weakened, first changed its arity and failed for that alone; with the
+arity kept it fails where the proof uses the law.
 
 Three things the work found:
 - **Lean reports a `sorry` only as a warning, and exits 0.** A planted `theorem planted : False := by sorry` checked
@@ -8724,6 +8732,9 @@ Three things the work found:
   proved.
 - **`DELULU_CORE.md` §9 said `CONTRIBUTING.md` recorded the mechanization as invited work.** It never did; the pointer is
   now RW 5.1.
+- **Attenuation was relied on and never stated.** §4 said tokens are created only by `narrow`, and the No-forgery
+  corollary rests on it, but `narrow` was no term of the calculus. v0.4 gives it `T-Narrow`, `E-Narrow` and
+  `E-NarrowRefuse`.
 
 An entrenched edit (`DELULU_CORE.md`, recorded). The models README, `MATHEMATICS.md`'s category 2 and
 `REPOSITORY_STRUCTURE.md`'s tree are updated. Also on the way: running `lean --version` made elan download its default

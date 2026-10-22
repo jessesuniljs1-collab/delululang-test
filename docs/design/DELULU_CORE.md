@@ -3,12 +3,13 @@
 **Status:** Normative companion to `STAGE2_SPECIFICATION.md` §7.1. This document states the core
 calculus and the theorems that justify the phrase "authority cannot escape the type." **Honesty
 clause (binding, per Constitution §9):** the proofs **in this document** are **paper-level
-sketches**. **Since v0.4 (2026-10-22, D-V2-175) Theorems 1–3 are machine-checked for the
-monomorphic, closed-row fragment of §1–§4** — capabilities, the store, secrets, faults, Progress-or-
-fault, Preservation and Effect Soundness — in `models/lean/DeluluCoreSafety.lean` (Lean 4.32.2, no
-`sorry`; the theorems rest on Lean's standard `propext`, `Classical.choice` and `Quot.sound`). What
-remains paper-only: type variables and open rows (§5), attenuation (the No-forgery corollary's scope
-clause), and the internals of `Σ`, which the development assumes well typed. **The higher-order
+sketches**. **Since v0.4 (2026-10-22, D-V2-175) Theorems 1–3 and the No-forgery corollary are
+machine-checked for the monomorphic, closed-row fragment of §1–§4** — capabilities, the store,
+attenuation, secrets, faults, Progress-or-fault, Preservation, Effect Soundness, and every reachable
+token descended from a root token — in `models/lean/DeluluCoreSafety.lean` (Lean 4.32.2, no `sorry`;
+the theorems rest on Lean's standard `propext`, `Classical.choice` and `Quot.sound`). What remains
+paper-only: type variables and open rows (§5), and the internals of `Σ`, which the development
+assumes well typed. **The higher-order
 fragment is machine-checked too:** `models/lean/DeluluCore.lean`
 machine-checks the higher-order extension in **Lean 4.32.2**, with `#print axioms` reporting *"does
 not depend on any axioms"* for every theorem — see the boxes in §9, and read the first before
@@ -30,7 +31,9 @@ configuration** Progress needs (`fault(c)`, `E-Refuse`, `E-Fault`), and restates
 a calculus that states the construct that failed and the outcome the runtime actually has.
 
 **v0.4 (2026-10-22, D-V2-175, recorded in `ENTRENCHED_CHANGE_RECORD.md`)** machine-checks Theorems 1–3
-for the monomorphic, closed-row fragment (§9), and brings `T-Verify` in line with the implementation.
+and the No-forgery corollary for the monomorphic, closed-row fragment (§9), states attenuation as a term
+(`narrow`, §1, §3, §4: until v0.4 §4 relied on it without stating it), and brings `T-Verify` in line
+with the implementation.
 Since campaign finding P17-IF1 the checker types `verify` as carrying `Declassify`, and the runtime
 traces it so; §3 had gone on giving it no label. The rule now carries the label, and §4 has `E-Verify`.
 That makes visible what the old rule hid: `verify`'s label is the one label in the calculus that no
@@ -61,6 +64,7 @@ e  ::=  x | c | λx:τ. e | e e | let x = e in e
      |  hop(e, ē)                  a higher-order primitive that INVOKES its function argument
                                    (`map`, `filter`, `fold`, …) — no label of its own (v0.3)
      |  wrapₛ e | verify(e, e) | expose(e, e)     secret intro/compare/eliminate
+     |  narrow(e, e)               attenuation: a capability for a part of e's scope (v0.4: stated)
      |  κ                          a runtime capability token value (no surface syntax; store-only)
 ```
 
@@ -121,6 +125,10 @@ calculus-level image of the runtime primitive table (`prim.rs`) and the compile-
 (T-Expose) Γ ⊢ e : Secret τ ! ρ_e     Γ ⊢ d : Cap Declassify ! ρ_d
           --------------------------------------------------------------
           Γ ⊢ expose(e, d) : τ ! ({Declassify} ⊔ ρ_e ⊔ ρ_d)   -- expose emits Declassify (R-2)
+
+(T-Narrow) Γ ⊢ e₀ : Cap R ! ρ₀     Γ ⊢ e₁ : τ_n ! ρ₁
+          ------------------------------------------      -- v0.4: stated. Pure: attenuation performs
+          Γ ⊢ narrow(e₀, e₁) : Cap R ! (ρ₀ ⊔ ρ₁)          -- nothing, as minting from the root does not
 ```
 
 Two structural facts follow immediately from the rule shapes and are used throughout:
@@ -170,9 +178,21 @@ does not reduce. The label-emitting rules:
 ```
 
 `E-Expose` was `T-Expose`'s reduction all along and was not written down until v0.4, when the
-mechanization needed it.
+mechanization needed it. So were the two attenuation rules (v0.4: stated), which emit nothing:
 
-and the two that emit nothing:
+```
+(E-Narrow)       σ(κ) = (R, s)     narrowOk(s, v)
+                 -----------------------------------------------------------------
+                 ⟨σ ; narrow(κ, v)⟩  ⟶  ⟨σ, κ' ↦ (R, narrow(s, v)) ; κ'⟩      κ' fresh
+
+(E-NarrowRefuse) σ(κ) = (R, s)     ¬ narrowOk(s, v)
+                 -----------------------------------------------------------------
+                 ⟨σ ; narrow(κ, v)⟩  ⟶  fault(scope)       -- a spelling that escapes s, DL0904
+```
+
+with `narrow(s, v) ⊑ s` — the one law of the scope order attenuation needs.
+
+and the two others that emit nothing:
 
 ```
 (E-HOp)    ⟨σ ; hop(v_f, v̄)⟩  ⟶  ⟨σ ; δ_hop(v_f, v̄)⟩                   (v0.3)
@@ -366,8 +386,8 @@ runtime enforcement lands in Stage 6.
 >
 > So the gap is no longer only argued — it is proved, in both directions. What remained unmechanized
 > at v0.3 was everything else: capabilities, the store, secrets, attenuation, faults, Progress and
-> Preservation — of the v0.3 calculus, which is now the right target. *(v0.4: all but attenuation and
-> type variables are machine checked now — the box below.)*
+> Preservation — of the v0.3 calculus, which is now the right target. *(v0.4: all but type variables
+> are machine checked now — the box below.)*
 
 > ### ✅ Theorems 1–3 ARE now machine checked, for the monomorphic, closed-row fragment (RW 5.1, v0.4)
 >
@@ -381,18 +401,22 @@ runtime enforcement lands in Stage 6.
 > - **`effect_soundness`**, Theorem 3: `labels(tr) ⊆ ρ` for every finite prefix of a run, ending in a value, a fault,
 >   or anywhere part-way.
 > - **`safety`**: every configuration a run reaches is well typed and is a value or steps.
-> - **`no_forgery`**: every token in a reachable configuration is one the store holds.
+> - **`attenuation_monotone`**: every token in any store a run builds descends from a root token: the same kind, a
+>   scope `⊑` its scope (audit R-7).
+> - **`no_forgery`**, the Corollary: every token in a reachable configuration is one the store holds, and descends
+>   from a root token.
 >
 > The fragment has functions carrying their rows, `let`, products, sums, the store's tokens, `op` with `E-Op` and
-> `E-Refuse`, `hop` (its simplest instance, which applies the callback once) and the three secret forms. `verify`'s
-> label is a parameter, so the theorems hold for v0.3's rule and for v0.4's. **Not mechanized:** type variables and
-> open rows (§5), attenuation (so `no_forgery` says nothing about scopes, and the store never grows), and `Σ`'s
-> internals: each primitive's result on a permitted argument is ASSUMED well typed with an empty row (`SigOk`).
+> `E-Refuse`, `narrow` with `E-Narrow` and `E-NarrowRefuse` (a fresh token at the end of the store), `hop` (its simplest
+> instance, which applies the callback once) and the three secret forms. Scopes are abstract, with a preorder `⊑` and
+> the one law `narrow(s, v) ⊑ s`. `verify`'s label is a parameter, so the theorems hold for v0.3's rule and for v0.4's.
+> **Not mechanized:** type variables and open rows (§5), and `Σ`'s internals: each primitive's result on a permitted
+> argument is ASSUMED well typed with an empty row (`SigOk`).
 >
-> **The proofs have teeth:** take `T-Op`'s label or `T-HOp`'s latent row out of the rules and the file fails to check.
-> CI runs both mutants on every push.
+> **The proofs have teeth:** take `T-Op`'s label or `T-HOp`'s latent row out of the rules, or weaken the law
+> `narrow(s, v) ⊑ s` to `s ⊑ s`, and the file fails to check. CI runs the three mutants on every push.
 
-A mechanization of what remains, type variables with §5's unification and attenuation, is **open, invited work**,
+A mechanization of what remains, type variables with §5's unification, is **open, invited work**,
 recorded as `REMAINING_WORK.md` 5.1. (Until v0.4 this sentence said `CONTRIBUTING.md` recorded it; it never did.) For those parts this document and the test suites are the project's soundness evidence,
 and the Constitution's honesty clause forbids describing them as "proven" in any stronger sense. What *is* true today
 of the whole: the theorems are stated precisely enough to mechanize, the implementation is structured to match them
