@@ -3919,8 +3919,10 @@ fn collect_self_field_assigns(b: &Block, out: &mut HashSet<String>) {
 /// unmarshallable type could emit unrelated diagnostics).
 /// The cells the exhaustiveness search may read for one `match` (MATCH-EXHAUST-1) — a step reads its rows' cells — far
 /// past any match a person writes, whose search reads a few cells per arm. A match whose search spends them is refused
-/// (DL0407), never passed unproved.
-const EXHAUSTIVE_BUDGET: u32 = 10_000_000;
+/// (DL0407), never passed unproved. Under Miri a cell costs about a millisecond, and the test that spends the full limit
+/// ran 3.3 hours and its job out of time (run 39746314492); every other match its tests check reads at most 11 cells, so
+/// there the limit is ten thousand, and the same refusal is reached in seconds.
+const EXHAUSTIVE_BUDGET: u32 = if cfg!(miri) { 10_000 } else { 10_000_000 };
 
 /// The exhaustiveness search's cells left, and whether it wanted more.
 struct Search {
