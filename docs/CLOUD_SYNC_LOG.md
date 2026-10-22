@@ -5360,10 +5360,22 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
 
+### 2026-10-23 (early morning) — CI read to its end; `a_monitor_sees_nothing_outside_its_own_subtree` says why (RW 7.23) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/monitor-witness-says-why` (on `master` `05909ef`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #50's run `39833210704` **success**, so #50 landed by fast-forward, master
+  `05909ef` (push runs `39836740749`, `39836740781`: **success**). `39831374181` (`4af166e`): **success**. The launch run
+  `39816919025`: **success** on attempt 2 of its Windows job. `39830724209`'s `editor` job: read `completed success` at
+  03:55 IST (it had lagged the run). `39833849066` (`b8c4fde`): **failure**, one Windows test, RW 7.23.
+- **What:** the failing test's messages carry the run's stderr and the monitor's report; RW 7.23 records the four Windows
+  wall-clock failures of 2026-10-22.
+- Files and folders: M `crates/delulu/tests/monitor_cli.rs`, `docs/REMAINING_WORK.md` (7.23),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+
 ### 2026-10-23 (morning) — a WASM slot holds a capability or a secret (RW 3.4, D-V2-177) (made on the laptop)
 - Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
 - Branch: `laptop/wasm-handles` (on `master` `05909ef`; the parked `laptop/wasm-handles-in-slots` `5373158` folded in, not merged)   Pull request: the one this entry rides in
-- **Landed and read since the last entry:** `launch/2.0.0` = `e51b4f3` (master merged in, #47-#50); its release dry run `39865371700` **success**; its everything run `39865367900` was running. The Windows witness of RW 7.23 (a), `39864919206`: **success**.
+- **Landed and read since the last entry:** `launch/2.0.0` = `e51b4f3` (master merged in, #47-#50); its release dry run `39865371700` **success**; its everything run `39865367900` was running. The Windows witness of RW 7.23 (a), `39864919206`: **success**. PR #51's run `39864920827`: **success**, every job, so #51 landed by fast-forward, master `c153433`; merged into this branch, its log entries kept first.
 - **What:** a list, an option, a record field and a map's value hold a capability or a secret as its handle on WASM; `checked_ty` maps the handle types.
-- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/list_parity.rs`, `crates/delulu-wasm/tests/record_parity.rs`, `CHANGELOG.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (3.4), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-177), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added: `crates/delulu-wasm/tests/handle_parity.rs`. Deleted, renamed: nothing.
+- Files and folders: M `crates/delulu-wasm/src/codegen.rs`, `crates/delulu-wasm/tests/list_parity.rs`, `crates/delulu-wasm/tests/record_parity.rs`, `CHANGELOG.md`, `docs/for-agents.md`, `docs/book/THE_DELULULANG_BOOK.md` (chapter 9), `docs/REMAINING_WORK.md` (3.4), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-177), `docs/DELULULANG_V2/V2_LOG.md`, `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added: `crates/delulu-wasm/tests/handle_parity.rs`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

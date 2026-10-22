@@ -477,14 +477,18 @@ fn a_monitor_sees_nothing_outside_its_own_subtree() {
     let mon = start_monitor(&f, &sibling, "envelope");
 
     let o = delulu_in(&f.cwd, &f.state, &["run", "persist.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
-    let so = stdout(&o);
+    let (so, se) = (stdout(&o), stderr(&o));
     // Let the monitor read past the run's last record before it is stopped.
     std::thread::sleep(std::time::Duration::from_millis(300));
-    let (report, _) = stop_monitor(&f, &sibling, mon);
+    let (report, mon_err) = stop_monitor(&f, &sibling, mon);
+    // RW 7.23: a Windows runner once saw the arm revoked after four refusals, and this printed only the program's
+    // line — which says `operator-revoke` for every dead probe (RW 7.17). The run's stderr carries the probe's own
+    // words (`lease.revoked`), and the monitor's report whether it quarantined anything: both go into every message.
+    let all = format!("stdout:\n{so}\nstderr:\n{se}\nmonitor: {report}\n{mon_err:?}");
 
-    assert!(o.status.success(), "{so}\n{}", stderr(&o));
-    assert_eq!(so.matches("REFUSED:").count(), 5, "the baseline — five refusals happened:\n{so}");
-    assert!(!so.contains("REVOKED:"), "nothing took the arm:\n{so}");
+    assert!(o.status.success(), "{all}");
+    assert_eq!(so.matches("REFUSED:").count(), 5, "the baseline — five refusals happened:\n{all}");
+    assert!(!so.contains("REVOKED:"), "nothing took the arm:\n{all}");
     let refusals = all_records(&f)
         .into_iter()
         .filter(|r| r["actor_node"] == run.as_str() && r["authority"]["refused_by"] == "envelope")
