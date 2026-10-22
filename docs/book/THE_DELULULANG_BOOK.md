@@ -609,9 +609,12 @@ swaps — not a cryptographic signature proving *who* built it; signing is a sep
 > a description its own code contradicted. Now the claim is enforced: `delulu run` refuses the first effect the
 > section does not declare (DL1202), before it happens. So an artifact can run only what it says it may.
 
-Secrets get a special guarantee here: secret-handling code **does not compile to WASM at all**
-(DL1205), so secret bytes can never enter a guest's linear memory. The strongest hygiene is the byte
-that never arrives.
+Secrets get a special guarantee here: a secret's bytes **never enter a guest's linear memory**. A
+WASM program holds a secret as a handle, an index into the host's table. The host keeps the secret,
+a request sends it from there (`get_with_secret`), and `verify` compares two there. Code that would
+hand the bytes to the program (`root.declassify()`, `Secret.expose`) or run the program's own
+function on them (`Secret.map`) does not compile to WASM (DL1205); it runs on the interpreter. The
+strongest hygiene is the byte that never arrives.
 
 ### The process sandbox: a guest that holds no authority
 

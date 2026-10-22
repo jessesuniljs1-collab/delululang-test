@@ -1186,7 +1186,7 @@ fn run_inner(args: &[String]) -> i32 {
         "sign" => crate::signing::cmd_sign(rest),
         "verify-sig" => crate::signing::cmd_verify_sig(rest),
         "publish" => crate::signing::cmd_publish(rest, package_authority_value),
-        "deploy" => crate::deploy::cmd_deploy(rest, package_authority_value),
+        "deploy" => crate::deploy::cmd_deploy(rest, checked_package),
         "add" => crate::signing::cmd_add(rest),
         "login" => crate::signing::cmd_login(rest),
         "build" => cmd_build(rest),
@@ -1414,7 +1414,7 @@ fn usage() -> &'static str {
      \x20 delulu check     <file.delulu>... | <package-dir> [--locked] [--json]   (several files in ONE process:\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the per-invocation floor dominates a small check — see measurements/agent-loop/RECORD.md)\n\
      \x20 delulu build     <package-dir> [--locked] [--deny-advisories] [--advisory-feed F] [--json]   (resolve deps + verify pins/authority)\n\
-     \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
+     \x20 delulu build     <file.delulu|package-dir> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
@@ -1587,8 +1587,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 shown and refused until you accept it — granting authority stays a person's decision)\n\
      \x20 delulu login     --registry URL --token VALUE [--json] (store a scoped publish token; never echoed)\n\
-     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service's effects and requests against the environment profile;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 DL1909 when one exceeds it, naming the call — scopes decided as `authority --within` decides them)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 update <artifact> --members N --approved F --previous H [--fail-health-at I] [--json]\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR | E-SANDBOX> [--json]\n\
@@ -4672,7 +4672,10 @@ fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
 
 /// The manifest's declared `foreign.python` import allowlist next to `file` (empty when no manifest).
 fn manifest_python_allowlist(file: &str) -> Vec<String> {
-    let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    python_allowlist_in_dir(std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new(".")))
+}
+
+fn python_allowlist_in_dir(dir: &std::path::Path) -> Vec<String> {
     match std::fs::read_to_string(dir.join("delulu.toml")) {
         Ok(src) => parse_manifest(&src).foreign_python,
         Err(_) => Vec::new(),
@@ -4693,8 +4696,12 @@ fn cmd_build(rest: &[String]) -> i32 {
         eprintln!("error: `build` needs a source file (`--target wasm`) or a package directory");
         return 2;
     };
-    // `build --target wasm <file.delulu>` emits a `.dwx` artifact (Stage 3 §5).
+    // `build --target wasm <file.delulu>` emits a `.dwx` artifact (Stage 3 §5); so does a package directory, compiled as
+    // the program `run <dir>` runs.
     if opts.target.as_deref() == Some("wasm") {
+        if std::path::Path::new(&path).is_dir() {
+            return build_wasm_package(&path, &opts);
+        }
         return build_wasm_artifact(&path, &opts);
     }
     if let Some(t) = &opts.target {
@@ -4722,12 +4729,52 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         print_diagnostics("build", &checked.diagnostics, &map, None, opts.json);
         return 1;
     }
+    let out = std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string();
+    let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    emit_dwx(file, &map, &checked, dir, out, opts)
+}
+
+/// `build --target wasm <package-dir>`: the package resolved, checked as a workspace and flattened exactly as `run <dir>`
+/// does — the same program, so its `.dwx` runs what the run would — then compiled and written, by default, beside the
+/// package's `interface.json` (`target/<name>/<name>.dwx`). Its authority's scopes are the package's manifest's. Until
+/// 2026-10-22 a directory was refused with a note to try `delulu build .`, which was what had been typed.
+fn build_wasm_package(dir: &str, opts: &Opts) -> i32 {
+    let (map, checked, _) = match crate::run_cmd::load_package_flattened(dir, opts, "build") {
+        Ok(x) => x,
+        Err(c) => return c,
+    };
+    let name = std::fs::read_to_string(std::path::Path::new(dir).join("delulu.toml"))
+        .ok()
+        .and_then(|src| parse_manifest(&src).name)
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| checked.module.name.dotted());
+    let target = std::path::Path::new(dir).join("target").join(&name);
+    if opts.out.is_none() {
+        if let Err(e) = std::fs::create_dir_all(&target) {
+            eprintln!("error: could not create `{}`: {e}", target.display());
+            return 2;
+        }
+    }
+    let out = target.join(format!("{name}.dwx")).to_string_lossy().to_string();
+    emit_dwx(dir, &map, &checked, std::path::Path::new(dir), out, opts)
+}
+
+/// Compile a checked program's `main` and write its `.dwx` — to `--out`, or else `default_out` — with the authority
+/// embedded: the checker's answer, the scopes and Python allowlist of the manifest in `manifest_dir`.
+fn emit_dwx(
+    file: &str,
+    map: &SourceMap,
+    checked: &delulu_check::Checked,
+    manifest_dir: &std::path::Path,
+    default_out: String,
+    opts: &Opts,
+) -> i32 {
     if !checked.result.main_present {
         let d = Diagnostic::error(
             "DL1201",
             format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"),
         );
-        print_diagnostics("build", &[d], &map, None, opts.json);
+        print_diagnostics("build", &[d], map, None, opts.json);
         return 1;
     }
     let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
@@ -4737,22 +4784,21 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
                 e.code(),
                 format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()),
             );
-            print_diagnostics("build", &[d], &map, None, opts.json);
+            print_diagnostics("build", &[d], map, None, opts.json);
             return 1;
         }
     };
     // Embed the same authority answer `delulu authority` reports (incl. the `foreign_calls` entries),
     // so the artifact carries its own truthful manifest of what it can do — a foreign-using program's
     // manifest lists its foreign entries under the "outside the proof" separator (Stage 4 phase 4g).
-    let mut scopes = manifest_scopes(file);
-    let python_allowlist = manifest_python_allowlist(file);
-    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
+    let mut scopes = scopes_in_dir(manifest_dir);
+    let python_allowlist = python_allowlist_in_dir(manifest_dir);
+    scopes.foreign_calls = foreign_calls_json(&checked.module, map, &python_allowlist);
     let program = checked.module.name.dotted();
     let authority = authority_report(&program, &checked.result, &scopes);
     let dwx = delulu_wasm::embed_authority(&wasm, &authority);
 
-    let out_path =
-        opts.out.clone().unwrap_or_else(|| std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string());
+    let out_path = opts.out.clone().unwrap_or(default_out);
     if let Err(e) = std::fs::write(&out_path, &dwx) {
         eprintln!("error: could not write `{out_path}`: {e}");
         return 2;
@@ -4760,7 +4806,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     if opts.json {
         let report = json!({ "artifact": out_path, "bytes": dwx.len(), "authority": authority });
         note_json_emitted();
-        println!("{}", envelope_to_string("build", &[], Some(report), &map));
+        println!("{}", envelope_to_string("build", &[], Some(report), map));
     } else {
         ok_line!("ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`", dwx.len(), delulu_wasm::AUTHORITY_SECTION);
     }
@@ -5538,14 +5584,51 @@ fn cmd_lock(rest: &[String]) -> i32 {
 /// --dry-run` embeds this summary in the index line). `None` if the package does not
 /// check clean — an unpublishable package has no honest authority to advertise.
 pub(crate) fn package_authority_value(dir: &str) -> Option<Json> {
-    let pkg = load_package(dir);
-    let program = check_program(&pkg);
-    if errors(&program.diagnostics) > 0 {
-        return None;
-    }
-    let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
-    let scopes = scopes_in_dir(std::path::Path::new(dir));
-    Some(program_authority(&program, &name, &scopes))
+    checked_package(dir).map(|p| p.report)
+}
+
+/// A package checked as `delulu authority <dir>` checks it: its authority report, and what it asks for in the `--grant`
+/// grammar with the calls that ask (`requirements`), which `within::verdict` decides against a boundary.
+pub(crate) struct CheckedPackage {
+    pub(crate) report: Json,
+    pub(crate) requirements: Vec<Requirement>,
+    pub(crate) unsupported: Vec<String>,
+    pub(crate) map: SourceMap,
+}
+
+/// The package in `dir`, checked by the loader `delulu authority <dir>` uses: the workspace loader when the directory has a
+/// `delulu.toml`, so a package with dependencies is seen whole (C51). DEPLOY-PKG-1 (2026-10-22): `deploy plan`, `publish`
+/// and `add` kept the single-package loader after C51 moved `authority` off it, and refused every package with a
+/// dependency as one that "does not check cleanly". `None` when the package does not check clean.
+pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
+    let path = std::path::Path::new(dir);
+    let (program, name, map, modules) = if path.join("delulu.toml").is_file() {
+        let ws = resolve_workspace(dir);
+        let program = check_workspace(&ws);
+        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
+            return None;
+        }
+        let name = program
+            .entry_module
+            .clone()
+            .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
+            .unwrap_or_else(|| "package".to_string());
+        let modules: Vec<delulu_syntax::ast::Module> = ws.modules.iter().map(|m| m.unit.module.clone()).collect();
+        (program, name, ws.source_map, modules)
+    } else {
+        let pkg = load_package(dir);
+        let program = check_program(&pkg);
+        if errors(&program.diagnostics) > 0 {
+            return None;
+        }
+        let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
+        let modules: Vec<delulu_syntax::ast::Module> = pkg.modules.iter().map(|m| m.module.clone()).collect();
+        (program, name, pkg.source_map, modules)
+    };
+    let report = program_authority(&program, &name, &scopes_in_dir(path));
+    let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
+    let (requirements, unsupported) = requirements(&report, &requested_scopes(&refs));
+    Some(CheckedPackage { report, requirements, unsupported, map })
 }
 
 /// `delulu authority <dir>`.

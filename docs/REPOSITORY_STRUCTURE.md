@@ -404,6 +404,11 @@ DeluluLang/
     │   │   │                        #   axioms at all): Effect Soundness for the higher-order
     │   │   │                        #   fragment, AND a proof that the calculus AS WRITTEN admits
     │   │   │                        #   a program whose trace escapes its row — C88 mechanized.
+    │   │   ├── lean/DeluluCoreSafety.lean # [RW 5.1, D-V2-175] MACHINE CHECKED (Lean 4.32.2, no sorry;
+    │   │   │                        #   propext/choice/Quot.sound): Progress-or-fault, Preservation,
+    │   │   │                        #   Effect Soundness, safety, attenuation monotone, no-forgery —
+    │   │   │                        #   the monomorphic, closed-row fragment with capabilities, the
+    │   │   │                        #   store, attenuation and secrets.
     │   │   ├── authority_algebra.py #   [P17-8] the NINE-DIMENSION order proved in Z3: 17
     │   │   │                        #   obligations — reflexive, transitive, meet-is-GLB and the
     │   │   │                        #   NO-WIDENING law across all dimensions at once. Localises
@@ -413,12 +418,11 @@ DeluluLang/
     │   │                            #   tla2tools.jar is NOT vendored — fetch it.
     │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green locally; CI runs recorded (§9), macOS green there
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
-    │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).
-    │   │                                #   §9's ~500-line Lean/Coq mechanization of §1–§7 is still
-    │   │                                #   OPEN — no capabilities, store, secrets, attenuation,
-    │   │                                #   Progress or Preservation. But category 2 is NOT empty:
-    │   │                                #   models/lean/DeluluCore.lean machine-checks the
-    │   │                                #   HIGHER-ORDER FRAGMENT (Lean 4.32.2, zero axioms).
+    │   ├── DELULU_CORE.md              # the formal calculus (v0.4; paper sketches, honesty-labeled).
+    │   │                                #   Theorems 1–3 machine-checked for the monomorphic, closed-
+    │   │                                #   row fragment (models/lean/DeluluCoreSafety.lean) and the
+    │   │                                #   higher-order fragment (models/lean/DeluluCore.lean); type
+    │   │                                #   variables still OPEN (RW 5.1).
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
     │   ├── STAGE10_AUTONOMY_ADDENDUM.md # [Stage 10] autonomy domains (spec Rev 2): vehicles/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs

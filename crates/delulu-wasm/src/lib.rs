@@ -26,7 +26,8 @@ pub use dpx::{
     LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
 pub use host::{
-    run_artifact, run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, WasmError,
+    run_artifact, run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig,
+    SecretGrants, WasmError,
 };
 
 use std::collections::HashMap;
@@ -455,14 +456,24 @@ mod tests {
         }
     }
 
+    // Minting alone was refused here until 2026-10-22, because "the secret bytes would still be placed in guest memory at
+    // `root.secret(...)`". Since D-V2-174 a secret is a host handle and no byte of it is placed there — which
+    // `host::secret_handle_tests::a_minted_and_sent_secret_never_enters_the_guests_memory` checks in the guest's memory.
+    /// D-V2-174: the guest holds a secret's index; `Secret.map(f)` would run the program's function on its bytes in the
+    /// guest, and `expose` would hand them to it — both stay on the interpreter (DL1205); minting alone compiles.
     #[test]
-    fn minting_a_secret_alone_is_refused_dl1205() {
-        // Even minting a secret and never using it is refused: the secret bytes would still be placed
-        // in guest memory at `root.secret(...)`.
-        let src = "module m\nfn f(root: Root) -> Bool { let key = root.secret(\"API_KEY\")\n true }\n";
-        let checked = check_source(0, src);
-        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
-        assert!(matches!(compile_module(&checked.module), Err(ref e) if e.code() == "DL1205"));
+    fn a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205() {
+        let compile = |body: &str| {
+            let src = format!(
+                "module m\nfn f(root: Root) -> Bool ! {{Declassify}} {{ let key = root.secret(\"API_KEY\")\n {body}\n true }}\n"
+            );
+            let checked = check_source(0, &src);
+            assert!(!checked.has_errors(), "{body}: {:?}", checked.diagnostics);
+            compile_checked(&checked.module, &checked.result).map(|_| ()).map_err(|e| e.code())
+        };
+        assert_eq!(compile(""), Ok(()), "minting is a handle");
+        assert_eq!(compile("let k = key.map(fn(s: Str) -> Str { s + \"!\" })"), Err("DL1205"), "map runs code on the bytes");
+        assert_eq!(compile("let d = root.declassify()\n let s = key.expose(d)"), Err("DL1205"), "expose reveals them");
     }
 
     #[test]

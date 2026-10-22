@@ -8669,3 +8669,133 @@ of five removed at once, three runs; the secret tests left no directory in three
 `guard_cli` 2 green. Test: `broker_cli` `a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once`; a
 mutant whose exit check always says "gone" is red. An operator gains the same: `stop` then `start` no longer meets the
 old daemon still there.
+
+## 2026-10-22 (evening) — the laptop: a package builds to one `.dwx` (RW 3.4)
+
+RW 3.4 counted 12 of the corpus's 17 entry points compiling to WASM, two stopping at "a package's other modules". Read
+again: `run <dir> --engine wasm` already ran both packages on WASM — `run` flattens a package into one checked module
+and the backend compiles that — and the four-package `station` printed and wrote what the interpreter did, byte for
+byte. What stopped them was the counter's question, `build FILE --target wasm`: an entry file alone cannot see its
+package's other modules (DL0301), and `build <dir> --target wasm` refused a directory with a note to try `delulu build
+.` — what had been typed. So a program of more than one module had no artifact.
+
+Now `build <dir> --target wasm` compiles the program `run <dir>` runs: `load_package_flattened` (the run's loader, its
+diagnostics now naming the command) resolves, checks the workspace — the authoritative gate — and flattens, and
+`emit_dwx`, shared with the file route, compiles and embeds the authority with the scopes of the package's own manifest,
+by default at `target/<name>/<name>.dwx` beside its `interface.json`. `station`'s artifact (4,226 bytes) runs with its
+authority verified (`Read, Write`; `FsRead ./data`, `FsWrite ./out`, `Console`), its output and both files equal to
+`run .`'s; the greeter's too. Re-measured file by file the same day: the 12, `demo` DL1205, the plugin host and
+`numpy_mean` DL1201, the two packages' entry files DL0301 alone — **14 of 17** as programs.
+
+Test: `package_run.rs` `a_four_package_program_builds_to_one_dwx_that_runs_as_the_package_does` — built from the
+directory above, so the scopes must come from the package's manifest. Three mutants red: no directory route; the scopes
+read from the working directory (it survived the first version of the test, which built from inside the package, and
+the test was moved); the artifact written beside the directory. `artifact_review`, `grants_cli`, `json_contract`,
+`plugin_cli`, `release`, `wasm_cli`, `cli` (53) green.
+
+Also: three of this night's `CLOUD_SYNC_LOG.md` entries had been scrambled — each new one inserted after an anchor in
+the middle of the one before, ahead of its file list; the lists moved back, every line kept (checked).
+
+## 2026-10-22 (night) — the laptop: a WASM program holds a secret and sends it (RW 3.4, D-V2-174)
+
+Of the corpus's three entry points still off WASM, `demo` stopped at one line: `root.secret("API_KEY")`, a secret
+minted and never used, DL1205. Phase 3n refused the mint because the bytes "would still be placed in guest memory"; the
+Stage 3 spec's normative §4.4 had said a secret in WASM lives "only in the host secret table", the guest holding a
+reference. D-V2-174 builds that table. `root.secret` mints by the interpreter's own rule against the run's grants (the
+value under embedded custody, the broker's handle under the daemon) into the host's capability table, and the guest
+gets the index. `get_with_secret` runs host-side in the interpreter's order: trace record `«opaque»`, custody on the
+host, then `broker_secret_send`, now one function shared with the interpreter, then its egress client. `verify` is
+compared by `secret_verify`, also shared, under a `.dwx`'s declared-effects ceiling. `expose`, `root.declassify()` and
+`Secret.map` stay DL1205.
+
+Evidence: after a run that minted a secret and sent it to the egress client, the guest's memory holds no byte of it
+(`host::secret_handle_tests`, with a control that finds the program's own strings). On the interpreter, on
+`--engine wasm` and from a `.dwx`, the same request leaves as TLS to the audience only, with identical traces
+(`egress_cli`). Under the daemon the WASM run's audit chain is the interpreter's, record for record (`broker_cli`).
+`demo` prints what the interpreter prints, from source and artifact (`wasm_cli`). `verify` answers alike, and a
+manifest stripped of `Declassify` is DL1202 at it (`wasm_cli`). Eight mutants red, one per claim.
+
+Two things found on the way. The first version of the change broke Phase 3n's own `expose` test: its program
+declassifies before it exposes, and `root.declassify()` had only ever been unreachable, so it now meets DL1201 first.
+`declassify` is refused by name as DL1205, its one use being `expose`. And re-measuring the corpus found chapter five of
+the guide newly refused: its never-called `password_matches(held: Secret[Str], …)` used to be skipped because the
+backend had no type for the parameter, and now compiled up to its `verify`. Hence `verify`. A unit test that waited for
+a connection also hung: tested alone, `delulu-wasm` builds the egress client without a transport.
+
+PR #48's first run (`39825874508`) was red on `test (ubuntu-24.04)`, twice over. The memory test asserted `no-client`,
+which held on the laptop's `-p delulu-wasm` and not on CI's workspace build, where cargo turns `net` on and the same
+request tried to connect. It now accepts either; both builds were run on the laptop. And the conformance witness for
+`ref.diag.DL1205` still named the replaced pin, which the laptop's run, lacking `delulu-conform`, had not caught. It now
+names the replacement (an entrenched edit, recorded), and `delulu-conform` is green (28). Both lessons are in HANDOFF §11.5.
+
+Re-measured file by file: **15 of 17** build as programs; `numpy_mean` and the plugin host remain (DL1201). Green on the
+laptop, 640 tests, none failed: every `delulu-wasm` target, `delulu-runtime`'s unit tests, `delulu-diag`, and `wasm_cli`
+(17), `within_cli` (17), `json_contract` (13), `broker_cli` (12), `egress_cli` (9), `package_run` (6), `release` (6),
+`grants_cli` (5), `artifact_review` (4), `conformance` (4).
+
+## 2026-10-22 (night) — the laptop: Delulu Core's Theorems 1–3 and No-forgery, machine-checked for the monomorphic fragment (RW 5.1, D-V2-175)
+
+RW 5.1 was the headline evidence gap: beyond P17-9's higher-order fragment, nothing of `DELULU_CORE.md` §1–§7 was
+mechanized. `docs/design/models/lean/DeluluCoreSafety.lean` (903 lines, core Lean 4.32.2) now states §1–§4 for the
+monomorphic, closed-row fragment: rows on arrows, `let`, products, sums, the capability store, `op` with `E-Op` and
+`E-Refuse`, `hop`, `wrap`, `verify` and `expose`. Evaluation is call-by-value by frames, with faults propagating. It
+proves progress-or-fault, preservation, effect soundness over every finite prefix of a run, safety along a run, and
+no-forgery. `grind` closes the row bookkeeping; the substitution lemma substitutes closed values only, as call-by-value
+evaluation of a closed program does. It rests on Lean's standard `propext`, `Classical.choice` and `Quot.sound`.
+Assumed: `SigOk`, that each primitive's result is well typed. Left out: type variables, open rows.
+
+A second pass added attenuation. The store became a list, with a fresh token at its end; a step may extend it, and
+typing survives the extension (`weaken_store`). `narrow` mints a token of its parent's kind under its parent's scope,
+or faults. `attenuation_monotone` proves every token a run's store holds descends from a root token, over an abstract
+scope preorder with the one law `narrow(s, v) ⊑ s`, and `no_forgery` carries the Corollary's scope clause. Lean
+promoted the input store to a parameter of `Step` (it is the same in every rule), which shifted every `@`-pattern by
+one until noticed. The third mutant, the law weakened, first changed its arity and failed for that alone; with the
+arity kept it fails where the proof uses the law.
+
+Three things the work found:
+- **Lean reports a `sorry` only as a warning, and exits 0.** A planted `theorem planted : False := by sorry` checked
+  "clean", and CI's step read only the exit code. The step now fails on any `sorry` in the output. CI also requires
+  two rule mutants to fail to check: `T-Op` without its label, and `T-HOp` without the callback's row (C88's shape).
+- **`T-Verify` was stale.** §3 gave `verify` no label, while the checker has typed it `Declassify` since P17-IF1.
+  Witnessed: a pure function calling it is DL0501, and the trace records `Declassify`. And `E-Expose` was never written.
+  v0.4 states both. Stated, `T-Verify` makes Fact B and Theorem 3's capability-witness clause false for that one label,
+  which is RW 2.6, now named in the calculus. The development takes `verify`'s label as a parameter, so both rules are
+  proved.
+- **`DELULU_CORE.md` §9 said `CONTRIBUTING.md` recorded the mechanization as invited work.** It never did; the pointer is
+  now RW 5.1.
+- **Attenuation was relied on and never stated.** §4 said tokens are created only by `narrow`, and the No-forgery
+  corollary rests on it, but `narrow` was no term of the calculus. v0.4 gives it `T-Narrow`, `E-Narrow` and
+  `E-NarrowRefuse`.
+
+An entrenched edit (`DELULU_CORE.md`, recorded). The models README, `MATHEMATICS.md`'s category 2 and
+`REPOSITORY_STRUCTURE.md`'s tree are updated. Also on the way: running `lean --version` made elan download its default
+toolchain, 4.35.0, beside the pinned 4.32.2 (local only).
+
+## 2026-10-23 (small hours) — the laptop: `deploy plan` checks every request against the profile (RW 6.6, D-V2-176), and DEPLOY-PKG-1
+
+RW 6.6: `deploy plan` compared a service's effects with the profile's ceiling and nothing else, though a profile can name
+paths, hosts, secrets and foreign libraries. The command that answers the rest already existed: `authority --within`
+decides each request a program makes, in the `--grant` grammar, by the runtime's own mint, with the call that makes it.
+So the profile becomes a boundary (`profile_boundary`):
+- `fs.read`, `fs.write`, `net` and `foreign.python` go through `Grants::add`, so a special-use host under `net` is refused
+  as no boundary at all, D-NE-28;
+- secrets and `foreign.c` are matched by name;
+- `console`, `clock`, `rand` and `declassify` are granted where its effects grant them.
+
+Each service's requirements go to `within::verdict`. A plan is approved only if every service's effects fit and its
+verdict is *within*. Anything else refuses the whole plan, DL1909, named at the call:
+`fs.read=./data at src/station.delulu:16, exceeds: …`, or a computed path as *inconclusive*. `accept_manifest`, the
+run's own reading of a manifest, was not usable: it takes a secret only if it is set in the environment, and no
+`foreign.c`.
+
+Trying it on the four-package `station` found **DEPLOY-PKG-1**. `deploy plan` refused it as a service that "does not
+check cleanly" while `authority` reported it. `package_authority_value`, the helper behind `deploy plan`, `publish` and
+`add`, still used the single-package loader that C51 moved `authority` off, so all three refused every package with a
+dependency. Witnessed for `add` on the old binary ("does not check clean, so its authority cannot be computed"). The
+helper is now `checked_package`, the loader `authority` uses.
+
+Tests: four new in `deploy_cli.rs` and one in `add_path_cli.rs`. Four mutants are red: the old loader, the verdict
+ignored, the profile's `fs.read` dropped, its secrets dropped. Five approving fixtures in `deploy_plan_adversarial.rs`
+name the host their Net service calls, and the scope contract pins the new `compared` and `profile_cannot_grant`. A
+breaking change for a profile that named effects only, under 2.0.0. Green: `deploy_cli` 9, `deploy_plan_adversarial`
+15, `add_path_cli` 8, `signing_cli` 6, `cli` 53, `cli_contract` 19, `json_contract` 13, `delulu-diag`.

@@ -40,6 +40,16 @@ use super::cli::*;
 /// The third value is the flattened text itself: a sandboxed run hands exactly that to its guest, so
 /// the program a guest runs is the program an ordinary run would have run (P5, D-V2-42).
 pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
+    load_package_flattened(dir, opts, "run")
+}
+
+/// [`load_package_for_run`] for `command` — `build --target wasm` compiles the same flattened program a run runs, and its
+/// diagnostics say `build`.
+pub(crate) fn load_package_flattened(
+    dir: &str,
+    opts: &Opts,
+    command: &str,
+) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
     // A directory that is not a package at all. Before D61 this said "is a directory — try `delulu
     // build`", which was right then and is wrong now: `run` DOES take a directory. What it must never
     // do is leak the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a directory` on
@@ -60,7 +70,7 @@ pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap,
     if ws.modules.is_empty() {
         let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
         if errors(&diags) > 0 {
-            print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+            print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         } else {
             diags.clear();
             eprintln!(
@@ -77,7 +87,7 @@ pub(crate) fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap,
     let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
     diags.extend(program.diagnostics.iter().cloned());
     if errors(&diags) > 0 {
-        print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+        print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
         return Err(1);
     }
 
@@ -273,7 +283,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let RunCustody { custody, run_node: _run_node, .. } = match custody_for_run(opts, &grants, &map, file, lease_custody) {
+    let RunCustody { daemon_mode, custody, run_node: _run_node } = match custody_for_run(opts, &grants, &map, file, lease_custody)
+    {
         Ok(c) => c,
         Err(code) => return code,
     };
@@ -297,6 +308,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         lease: root.lease.clone(),
         net: root.net.clone(),
         net_special: root.net_special.clone(),
+        secrets: wasm_secrets(&root, daemon_mode),
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
         stream_console: true,
@@ -722,6 +734,20 @@ fn assert_wasm_trace(
         .collect();
     print_diagnostics("run", &diags, map, None, opts.json);
     Some(3)
+}
+
+/// The run's secret grants for the WASM host (D-V2-174), as the interpreter's root is given them: the values under embedded
+/// custody; under the broker daemon the names alone — each a handle, the bytes the broker's, the values dropped (Phase 5g,
+/// invariant 23).
+fn wasm_secrets(root: &delulu_runtime::RootVal, daemon_mode: bool) -> delulu_wasm::SecretGrants {
+    let audiences = root.secret_audiences.clone();
+    if daemon_mode {
+        let mut broker: Vec<String> = root.secrets.keys().cloned().collect();
+        broker.sort();
+        delulu_wasm::SecretGrants { values: Default::default(), audiences, broker }
+    } else {
+        delulu_wasm::SecretGrants { values: root.secrets.clone(), audiences, broker: Vec::new() }
+    }
 }
 
 /// The custody a run's effects go through (Stage 5 phase 5f), and the node it holds for its length.
@@ -1405,6 +1431,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             lease: root.lease.clone(), // RW 6.15: the remedy a refusal names
             net: root.net.clone(),
             net_special: root.net_special.clone(),
+            secrets: wasm_secrets(&root, daemon_mode),
             declared_effects: None, // the checker computed this program's row; ARTIFACT-CLAIM-1 is a `.dwx`'s
 
             fixed_clock_ms: opts.clock_ms,

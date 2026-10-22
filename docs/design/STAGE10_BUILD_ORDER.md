@@ -1746,6 +1746,10 @@ exist; this compares one. Same reasoning as D41's mermaid fix: the artifact trav
 that qualify it. RULED: `EFFECT ceiling` in the verdict, plus `compared`/`not_compared` on BOTH surfaces
 — an agent reading `--json` gets what a human is told, per the no-discrimination rule. The verdict stays
 the last human line, because `deploy_plan_adversarial.rs` contracts that and CI logs rely on it.
+*(2026-10-22, D-V2-176, RW 6.6: the plan now compares every request's scope too, decided by `authority
+--within`'s verdict against the profile's boundary, so the verdict says `authority ceiling` again and
+carries `compared` (three dimensions) and `profile_cannot_grant` (`net.special`, plugin roots, devices).
+C45's rule stands: the approval names its own scope.)*
 
 **Verified-and-held in Stage 10 (do not re-derive):** DL1909 cannot be bypassed by an empty,
 unparseable, mis-sectioned (`[authorities]`), mis-keyed (`effect =`) or wrong-typed (`effects = "Clock"`)

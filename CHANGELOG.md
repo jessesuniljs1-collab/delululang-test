@@ -21,13 +21,66 @@ application's or the system's directories; the broker daemon's wire refuses byte
 refuses the `run` flags it does not apply instead of ignoring them (RW 3.19; since 2026-10-21 it applies `--lease`,
 `--broker` and the trace flags); a `.dwx` is refused at the first effect its manifest does not declare (DL1202, RW 4.73);
 a `match` that leaves a case uncovered below its top level, or literal arms with no catch-all, is refused (DL0407,
-D-V2-172).
+D-V2-172); `deploy plan` refuses a service whose paths, hosts or secrets the environment profile does not name (DL1909,
+D-V2-176).
 
 **History.** 2.0.0 is the first release from the public repository, which starts with a fresh history. Commit hashes
 and CI run ids cited below, and in every record dated before 2.0.0, refer to the development repository,
 `jessesuniljs1-collab/delululang-test`, kept as its archive (D-V2-153).
 
 The sections below are V2's development record, newest first, exactly as each was written when its change landed.
+
+### `deploy plan` checks every request against the environment profile, 2026-10-22
+
+- **Changed (breaking for a profile that names effects only): `delulu deploy plan` checks each service's requests, not
+  only its effects** (RW 6.6, D-V2-176). Every path a service reads or writes, every host it calls, every secret and
+  foreign library it holds is decided against the profile's `fs.read`, `fs.write`, `net`, `secrets`, `foreign.c` and
+  `foreign.python`, the way `delulu authority --within` decides it. A request outside the profile, or one whose scope the
+  source computes, refuses the whole plan (DL1909), named at the call that makes it. A profile that granted the `Net`
+  effect without naming hosts now approves no service that makes a request: name the hosts. The approval says what it
+  compared, and what a profile cannot grant (`net.special`, plugin roots, devices).
+- **Fixed: `deploy plan`, `publish` and `add` check a package with dependencies whole.** They used a loader that cannot see
+  a dependency, and refused every such package as one that "does not check cleanly", while `delulu authority` checked it.
+
+### Delulu Core's type safety, machine-checked for a fragment, 2026-10-22
+
+- **New: Progress, Preservation, Effect Soundness and No-forgery are machine-checked for the monomorphic, closed-row
+  fragment of Delulu Core** (RW 5.1, D-V2-175). `docs/design/models/lean/DeluluCoreSafety.lean` (Lean 4.32.2, core only) covers
+  functions carrying their effect rows, products, sums, the capability store, primitive operations with their refusal
+  (the fault), attenuation, a primitive that invokes its callback, and secrets. It proves that a well-typed program
+  never gets stuck, that every effect it performs on any run, cut anywhere, is one its type declares, and that every
+  capability it can reach descends from one it was granted, with a scope no wider. Not yet covered: type variables and
+  open rows. CI checks the proofs on every push, fails on any `sorry`, and requires three weakened rule sets to fail to
+  check.
+- **Changed: `DELULU_CORE.md` v0.4 states `verify` as implemented.** The calculus had given `Secret.verify` no effect,
+  while the checker has typed it as `Declassify` since campaign finding P17-IF1. Stating it shows that `verify`'s
+  `Declassify` is the one effect that no capability witnesses (`REMAINING_WORK.md` 2.6, unchanged). The language itself
+  does not change.
+
+### a WASM program holds a secret and sends it, 2026-10-22
+
+- **New: `root.secret(name)`, `Cap[Http].get_with_secret` and `Secret.verify` run on `--engine wasm` and in a `.dwx`**
+  (RW 3.4, D-V2-174). The program holds the secret as a handle, an index into the host's table, and the host keeps the
+  secret: its value under embedded custody, the broker's handle under `--broker daemon`. A request sends it from the
+  host with the interpreter's own code: the audience check, the egress client, the custody check on the URL's host and,
+  under the daemon, the broker's `send` record. `verify` compares two secrets there. The traces are the interpreter's.
+  No byte of a secret is in the program's memory or in the artifact. Until now a program that so much as minted a
+  secret was refused (DL1205), so `examples/demo.delulu` could not build. It now runs on WASM and prints what the
+  interpreter prints, and 15 of the 17 programs in the corpus and examples build.
+- **Unchanged: what would put a secret's bytes in the program is still DL1205.** That is `Secret.expose`,
+  `root.declassify()` (whose one use is `expose`; it was refused as an unsupported method, DL1201) and `Secret.map`,
+  which runs the program's own function on the bytes. A program that uses them runs on the interpreter. An artifact
+  whose manifest does not declare `Declassify` is refused at its first `verify` (DL1202).
+
+### a package builds to one `.dwx`, 2026-10-22
+
+- **Added: `delulu build <package-dir> --target wasm` builds a whole package into one `.dwx`** (RW 3.4). It compiles
+  exactly the program `delulu run <package-dir>` would run: dependencies resolved, everything checked as a workspace,
+  then flattened into one module. The authority it embeds carries the package manifest's scopes. By default the artifact
+  is written to `target/<name>/<name>.dwx`, next to the package's `interface.json`; `--out` puts it elsewhere. Until
+  now a package directory was refused with a note to try `delulu build .`, which is what had been typed, so a program
+  of more than one module had no artifact. The four-package `station` corpus program now builds to one `.dwx` whose
+  output, and the files it writes, match `run .`.
 
 ### `broker stop` waits for the daemon to exit, 2026-10-22
 

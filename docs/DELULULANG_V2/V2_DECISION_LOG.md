@@ -4336,6 +4336,176 @@ written (the parser has no `Float` pattern).
   first, per POP-WALK-1).
 - The whole `delulu-wasm` suite passes.
 
+## D-V2-174 — RW 3.4: a WASM program holds a secret as a handle the host keeps; a request sends it from the host — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**The question:** Phase 3n refused a WASM program that so much as minted a secret (DL1205): minting, it said, would place
+the secret's bytes in the guest's memory. `STAGE3_SPECIFICATION.md` §4.4, the normative design, says otherwise: "`Secret[T]`
+values in WASM are externrefs; the bytes live only in the host secret table", and DL1205 is for "guest closures over
+secret *contents*". Phase 3n's refusal of the mint was a stricter stand-in for that table, never built. It kept every
+program that holds a secret off the WASM engine, `examples/demo.delulu` among them, which mints one and does nothing else.
+
+**Decided:**
+1. `root.secret(name)` compiles. The host mints the secret by the interpreter's own rule (`call_root_method`) against the
+   run's secret grants, keeps it in its capability table (`CapKind::Secret`), and gives the guest the entry's index. Under
+   embedded custody the table holds the value; under `--broker daemon` it holds the broker's handle, as the interpreter's
+   root does (Phase 5g). An index in place of §4.4's externref: the host's other capabilities are indices already.
+2. `Cap[Http].get_with_secret(url, headers, header, secret)` compiles. The host performs it in the interpreter's order:
+   the trace record at dispatch with detail `«opaque»`, the custody on the URL's host, then the secret judged and, if the
+   broker holds it, its bytes asked for the one origin. That judgement is one function for both engines,
+   `interp::broker_secret_send`, taken out of the interpreter's `send_broker_secret`. Then comes the interpreter's own
+   `get_with_secret` and its egress client.
+3. `Secret.verify(other)` compiles, compared by `interp::secret_verify` (taken out of the interpreter's `verify_secret`):
+   two secrets the process holds are compared there, two the broker holds are compared by the broker. It is a
+   `Declassify` effect that the interpreter performs without a custody op, so the host asks a `.dwx`'s declared-effects
+   ceiling for it directly (ARTIFACT-CLAIM-1, `declared_allows`).
+4. What would hand a secret's bytes to the program, or run the program's code on them, stays DL1205: `Secret.expose`,
+   `root.declassify()` (whose one use is `expose`, the checker's R-2; refused where it begins, because it would
+   otherwise reach only a DL1201) and `Secret.map(f)`. §4.4's host-side pure-op whitelist for `map` is not built here.
+   A secret in a list, a record or an option is DL1201, as a capability there is.
+5. DL1205 keeps its meaning: secret contents cannot enter the WASM guest. What changed is that holding a secret no longer
+   needs its contents there. Its `explain` text now says so.
+
+**Evidence:**
+- `host::secret_handle_tests::a_minted_and_sent_secret_never_enters_the_guests_memory`. After a run that minted a secret
+  and sent it past its audience to the egress client, no byte of it is in the guest's memory, and the module was built
+  without it. The control: the scan finds the program's own strings. Phase 3n called §9.8's memory scan vacuous "when the
+  bytes never enter"; it now reads a memory for which the host has handled the secret. (The request ends at the egress
+  client's transport: `no-client` when the crate is tested alone, which builds the runtime without `net`, and `connect`
+  in a workspace build, where `net` is on and nothing listens on port 9. The CLI tests below see it leave.)
+- The conformance witness for `ref.diag.DL1205` named the replaced pin until PR #48's first run (`39825874508`) refused
+  it as dangling. It now names `a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205`, an entrenched edit
+  recorded in `ENTRENCHED_CHANGE_RECORD.md` (2026-10-22).
+- `egress_cli.rs` `a_wasm_program_sends_its_secret_from_the_host_as_the_interpreter_does` runs the same program on the
+  interpreter, on `--engine wasm` and as a built `.dwx`. In the audience, the request leaves as TLS and the report's hop
+  names the secret. Outside it, nothing connects and the operator is told `audience`. The three traces are identical.
+  No byte of the secret is in the artifact, trace, report or output.
+- `broker_cli.rs` `a_wasm_runs_broker_held_secret_is_sent_through_the_broker_as_the_interpreters_is`. Under the daemon,
+  the WASM run's audit chain matches the interpreter's record for record, with one `send allow` for the pair.
+- `wasm_cli.rs`:
+  - `demo_runs_on_wasm_as_on_the_interpreter_and_its_secret_stays_on_the_host`: `demo` prints what the interpreter
+    prints, from the source and from its `.dwx`. Ungranted, both engines refuse in the interpreter's words.
+  - `a_secret_is_verified_on_wasm_as_on_the_interpreter_and_only_where_the_artifact_declares_it`: the same answers and
+    the same trace from all three. A `.dwx` whose manifest lost `Declassify` is DL1202 at its first `verify`, before it
+    prints.
+- `lib.rs` `a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205`, and Phase 3n's
+  `secret_handling_program_is_refused_dl1205` unchanged and green.
+  - The pin it replaces, `minting_a_secret_alone_is_refused_dl1205`, was read first (POP-WALK-1). Its reason was that the
+    bytes would be placed in guest memory, and the memory test checks exactly that.
+  - That test went red on the first version of this change, at `root.declassify()`, which is why `declassify` is refused
+    by name.
+- **A regression found by re-measuring, not by a test run.** Chapter five of the guide holds `password_matches(held:
+  Secret[Str], …)`, which `main` never calls. While a `Secret[Str]` parameter had no WASM type, the backend skipped that
+  function. Once the parameter compiled, the chapter stopped at its `verify` (DL1201), and the corpus counter fell to
+  12. `verify` is item 3. `wasm_cli` `the_guide_chapters_the_wasm_engine_runs_match_the_interpreter` covers the chapter.
+- Mutants, each red at the assertion named:
+  - the host writes the secret's bytes into guest memory at the mint (the memory scan);
+  - the send's trace detail is the URL (`«opaque»`);
+  - the WASM run loses the audiences (nothing connected);
+  - under the daemon it is given values, not handles (the broker was asked once);
+  - the custody check before the send is skipped (the chain is the interpreter's);
+  - `declassify` is no longer refused (DL1205);
+  - `verify` skips the ceiling (DL1202);
+  - `verify`'s trace detail is dropped (the trace is the interpreter's).
+- The corpus re-measured file by file: **15 of 17** build as programs (13 files, plus the two packages, whose entry files
+  alone stay DL0301). `numpy_mean` and the plugin host remain, DL1201.
+
+## D-V2-175 — RW 5.1: Theorems 1–3 and No-forgery machine-checked for the monomorphic fragment; Delulu Core v0.4 states `verify` and `narrow` — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**The question:** RW 5.1, "the headline evidence gap": `DELULU_CORE.md` §1–§7 had no mechanized proof beyond the
+higher-order fragment (P17-9), with no capabilities, store, secrets, faults, Progress or Preservation.
+
+**Decided:**
+1. `docs/design/models/lean/DeluluCoreSafety.lean` (903 lines, core Lean 4.32.2, no Lake, no mathlib) states §1–§4 for
+   the **monomorphic, closed-row fragment** and proves:
+   - `progress`, Theorem 1 (progress-or-fault);
+   - `preservation`, Theorem 2 (types and rows);
+   - `effect_soundness`, Theorem 3, for every finite prefix of a run;
+   - `safety`, every reachable configuration typed and not stuck;
+   - `attenuation_monotone`, every token a run's store holds descending from a root token: its kind, a scope `⊑` its
+     scope (audit R-7);
+   - `no_forgery`, the Corollary: every reachable token in the store and so descended.
+
+   The fragment has functions carrying rows, `let`, products, sums, capability tokens, `op` with `E-Op` and `E-Refuse`,
+   `narrow` (a fresh token at the end of the store, or a fault), `hop`, `wrap`, `verify` and `expose`. Its evaluation is
+   call-by-value, by frames, with faults propagating (`E-Fault`). Scopes are abstract, with a preorder and the one law
+   `narrow(s, v) ⊑ s`.
+2. What it assumes, stated in the file and in `DELULU_CORE.md` §9:
+   - `SigOk`: each primitive's result on a permitted, well-typed argument is well typed with an empty row.
+   - `hop` is its simplest instance, applying the callback once.
+   - `verify`'s label is a parameter, so v0.3's rule and v0.4's are both proved.
+
+   What it leaves out: type variables and open rows (§5).
+3. CI's `formal` job checks the file with the pinned Lean, and fails on any `sorry` in either file's output. Lean reports
+   a `sorry` only as a warning: a planted `theorem planted : False := by sorry` checked "clean" before this gate. Three
+   mutants must each fail to check: `T-Op` without its label, `T-HOp` without the callback's latent row, and the law
+   `narrow(s, v) ⊑ s` weakened to `s ⊑ s`, its arity kept (a first version changed the arity and failed for a syntax
+   error, not the proof).
+4. `DELULU_CORE.md` becomes v0.4, an entrenched edit recorded in `ENTRENCHED_CHANGE_RECORD.md`:
+   - the honesty clause says what is now machine-checked;
+   - `T-Verify` carries `Declassify`, as the checker has typed it since P17-IF1;
+   - `E-Expose` and `E-Verify` are written in §4, and attenuation is a term (`narrow`, `T-Narrow`, `E-Narrow`,
+     `E-NarrowRefuse`), which §4 had relied on without stating;
+   - Fact B and Theorem 3's capability-witness clause name `verify`'s label as the one no capability witnesses (RW 2.6);
+   - §9 gains a box for the development.
+
+**Evidence:**
+- `lean DeluluCoreSafety.lean` checks. `#print axioms` lists `propext`, `Classical.choice` and `Quot.sound` for the
+  theorems, and no `sorryAx`. (`DeluluCore.lean` rests on none, and is unchanged.)
+- The three mutants fail to check. The planted `sorry` is caught by the gate. The CI steps were simulated locally with the
+  same `sed` patterns.
+- The implementation's `verify`, on the current binary: a pure function calling it is `DL0501` ("performs effect
+  `Declassify` not declared in its row"), and `--trace-effects` records it as `Declassify`.
+- `delulu-survey impact doc:docs/design/DELULU_CORE.md`: 0 nodes reached.
+- What mechanizing found: §3's `T-Verify` stale against P17-IF1, and `E-Expose` never written. Both are stated now, and
+  stating them shows Theorem 3's capability-witness clause was never true of `verify` (RW 2.6, unchanged and now named in
+  the calculus).
+
+## D-V2-176 — RW 6.6: `deploy plan` compares every request's scope, decided by `authority --within`; a package with dependencies plans whole — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**The question:** `delulu deploy plan` compared one dimension of the authority answer spec §9.2 asks for, the effect row.
+An environment profile could name `fs.read`, `fs.write`, `net`, `secrets`, `foreign.c` and `foreign.python`, and none of
+them bounded a service. A plan was approved whatever paths, hosts or secrets its services asked for, if their effects fit.
+And reading the code found DEPLOY-PKG-1: `package_authority_value`, shared by `deploy plan`, `publish` and `add`, kept the
+single-package loader after C51 moved `authority` off it. So every package with a dependency was refused as one that "does
+not check cleanly". Witnessed on the four-package `station` (`deploy plan`) and on a library depending on another (`add`).
+
+**Decided:**
+1. A service is checked as `delulu authority <dir>` checks it (`cli::checked_package`): the workspace loader when the
+   directory has a `delulu.toml`. `deploy plan`, `publish` and `add` all go through it.
+2. The profile is a boundary in the `--grant` grammar:
+   - `fs.read`, `fs.write`, `net` and `foreign.python` lines go through `Grants::add`, the parser `run --grant` uses, so a
+     special-use host under `net` is refused as no boundary (D-NE-28) with exit 2;
+   - secrets and `foreign.c` libraries are matched by name;
+   - `console`, `clock`, `rand` and `declassify` are granted where the profile's effects grant `Write`, `Clock`, `Rand`
+     and `Declassify`.
+
+   (`Grants::accept_manifest` was not used: it takes secrets only when they are set in the environment, and no
+   `foreign.c`.)
+3. Each service's requirements are decided by `within::verdict`, the verdict `authority --within` gives: the runtime's own
+   mint for each path, host and secret. A service fits only if its effects are within the ceiling and its verdict is
+   *within*. Exceeds, unsupported and inconclusive (a scope the source computes) all refuse the whole plan with DL1909,
+   naming each request with its call (`file:line`) and the runtime's words. No new code.
+4. The approval carries its scope (C45): `compared` names effects, capability scopes and foreign holes, and
+   `profile_cannot_grant` names `net.special`, plugin roots and devices. The human verdict says "authority ceiling".
+5. A breaking change for a profile that named effects only: a service that reads files, makes requests or holds secrets
+   now needs the profile to name them. 2.0 is unreleased, so it goes under 2.0.0's Breaking.
+
+**Evidence:**
+- `deploy_cli.rs`:
+  - `a_package_with_dependencies_plans_as_authority_checks_it` (`station`, approved);
+  - `a_request_outside_the_profiles_scopes_is_refused_at_its_call` (`fs.read=./data` at `src/station.delulu:16`, exceeds);
+  - `a_scope_the_source_computes_is_refused_as_inconclusive`;
+  - `a_secret_is_bounded_by_name_and_a_special_use_host_is_no_boundary`.
+- `add_path_cli.rs` `a_dependency_with_dependencies_of_its_own_is_computed_whole`. The old loader's exact words,
+  "does not check clean, so its authority cannot be computed", came back under the mutant.
+- Four mutants red:
+  - the single-package loader (two `deploy_cli` tests, and the `add` test);
+  - the verdict ignored (three);
+  - the profile's `fs.read` dropped (two);
+  - its secrets dropped (one).
+- `deploy_plan_adversarial.rs`: five approving fixtures name the host their Net service calls (`net = ["example.com"]`).
+  The scope contract test now pins `compared` (three) and `profile_cannot_grant` (three). The refusal tests are unchanged.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

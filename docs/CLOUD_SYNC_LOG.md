@@ -5283,6 +5283,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (`V2_LOG.md`). Then, at the owner's word, every linked worktree is snapshotted too — `D:\nelan\dl-launch` to
   `autosave/laptop-dl-launch`. The task was re-installed from this branch's script (the owner asked for it live), and
   `master` push run `39804641086` (`37b3e4c`, #41) read **success**.
+- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 
 ### 2026-10-22 (evening) — the broker log names a late answer (RW 7.17's instrument) (made on the laptop)
 - Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
@@ -5306,6 +5309,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   corrected (the constitution was corrected 2026-10-17, D-V2-141). Then seven `REMAINING_WORK.md` rows wrapped across
   lines (two by this night's edits, five older) joined, words unchanged, and gated (`repository_structure.rs`
   `every_remaining_work_row_is_one_line`, red before) — M `crates/delulu/tests/repository_structure.rs` too.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 
 ### 2026-10-22 (evening) — `broker stop` waits for the daemon to exit (RW 7.19 closed) (made on the laptop)
 - Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
@@ -5316,10 +5323,80 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.19), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
-- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
-  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+
+### 2026-10-22 (evening) — a package builds to one `.dwx` (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-package-build` (on `master` `41e9724`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** #42–#44 by fast-forward to `86b8df5` on their green runs (the `miri-slow`
+  dispatch `39805331281`: `delulu-check` **success in 54 minutes**, the pigeonhole test 78 s where it had been 11,873 s);
+  #45–#46 to `41e9724` on #46's green `39813045667` (#45's own `39811689314` and `39812124486` green too); `master`'s push
+  run `39814780780` (`86b8df5`) **success**. `launch/2.0.0` = `7e7b2ed` (merge of master ..`41e9724`; three CHANGELOG
+  sections under 2.0.0; Survey 1554/16104; doctor ok; clippy stamped; the ten gates 77 passed); its release dry run
+  `39816924661` **success**, its `jobs=everything` `39816919025` running.
+- **What:** `build <dir> --target wasm` writes a package's `.dwx` (the program `run <dir>` runs; the manifest's scopes;
+  `target/<name>/<name>.dwx`) — the corpus counter 14 of 17 as programs. Also: three entries of this log had been
+  scrambled by tonight's inserts (each new one placed before the previous one's file list); the file lists moved back,
+  no line changed.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/package_run.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
-- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
-  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+
+### 2026-10-22 (night) — a WASM program holds a secret and sends it (RW 3.4, D-V2-174) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-secret-handle` (on `laptop/wasm-package-build` `0344884`, PR #47)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** `master`'s push run `39816526461` (`41e9724`) **success**; PR #47's run
+  `39818530211` **success** (14 jobs, 2 skipped), so #47 landed by fast-forward to `0344884`, and `master`'s push run
+  `39821304180` for it **success**.
+- **What:** in a WASM program a secret is a handle in the host's table (D-V2-174, the Stage 3 spec's §4.4 built).
+  `root.secret`, `get_with_secret` (sent from the host by the interpreter's own code: audience, custody, broker `send`)
+  and `verify` compile. `expose`, `root.declassify()` and `Secret.map` stay DL1205. `broker_secret_send` and
+  `secret_verify` are now shared by both engines. `demo` and chapter five build: the corpus counter is 15 of 17.
+- Files and folders: M `crates/delulu-runtime/src/interp.rs`, `crates/delulu-wasm/src/codegen.rs`,
+  `crates/delulu-wasm/src/host.rs`, `crates/delulu-wasm/src/lib.rs`, `crates/delulu/src/run_cmd.rs`,
+  `crates/delulu-diag/src/codes.rs` (DL1205's explain), `crates/delulu/tests/broker_cli.rs`,
+  `crates/delulu/tests/egress_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.5),
+  `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/STAGE3_SPECIFICATION.md` (a dated note under Phase 3n),
+  `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-174), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4),
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; and in the PR's second commit, after its first run (`39825874508`) was red on
+  `test (ubuntu-24.04)`: `tests/conformance/witnesses.toml` (entrenched: the DL1205 witness renamed) and
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — Delulu Core's Theorems 1–3 machine-checked for the monomorphic fragment (RW 5.1, D-V2-175) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/core-mechanized` (on `laptop/wasm-secret-handle` `4af166e`, PR #48)   Pull request: the one this entry rides in
+- **Read since the last entry:** the launch `jobs=everything` run `39816919025` on `launch/2.0.0` `7e7b2ed`: **red on
+  `test (windows-latest)`**, three wall-clock tests on one runner. `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`
+  ("broker daemon did not come up within 5s"); `sandbox_devices_cli` `a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock`
+  ("the guest said nothing for 60s"); `channel::tests::from_now_counts_the_wait_before_the_first_byte` (an in-memory frame
+  not read within 100 ms). The same code was green on Windows in `master`'s push runs. To be re-run when the run ends.
+- **What:** `docs/design/models/lean/DeluluCoreSafety.lean` proves progress-or-fault, preservation, effect soundness,
+  safety, attenuation's monotonicity and no-forgery for the monomorphic, closed-row fragment (Lean 4.32.2). CI checks
+  it, fails on any `sorry`, and requires three mutants to fail. `DELULU_CORE.md` v0.4 (entrenched, recorded): the
+  honesty clause, `T-Verify` with `Declassify` as implemented, `E-Expose` and `E-Verify` written, `narrow` stated, Fact B and Theorem 3 naming `verify`'s label as the one
+  no capability witnesses (RW 2.6).
+- Files and folders: A `docs/design/models/lean/DeluluCoreSafety.lean`; M `.github/workflows/ci.yml` (the `formal` job),
+  `docs/design/DELULU_CORE.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/design/models/README.md`,
+  `docs/MATHEMATICS.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md` (5.1, 2.6), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-175), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (small hours) — `deploy plan` checks every request against the profile (RW 6.6, D-V2-176); DEPLOY-PKG-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deploy-plan-scopes` (on `laptop/core-mechanized` `b8c4fde`, PR #49)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #48's second run `39827827803` **success** (14 jobs, 2 skipped), so #48 landed
+  by fast-forward, master `4af166e` (push run `39831374181`). The `miri-slow` dispatch `39805331281` finished **success**,
+  every job, the broker's included.
+- **What:** `deploy plan` decides each service's requests against the profile's boundary by `authority --within`'s verdict,
+  refusing the whole plan on any request outside it or any computed scope, named at the call (DL1909). `deploy plan`,
+  `publish` and `add` check a package with dependencies whole (DEPLOY-PKG-1: they had kept the single-package loader).
+  Breaking for a profile that named effects only.
+- Files and folders: M `crates/delulu/src/deploy.rs`, `crates/delulu/src/cli.rs` (`checked_package`; the help line),
+  `crates/delulu-diag/src/codes.rs` (DL1909's explain), `crates/delulu/tests/deploy_cli.rs`,
+  `crates/delulu/tests/deploy_plan_adversarial.rs`, `crates/delulu/tests/add_path_cli.rs`, `CHANGELOG.md`, `HANDOFF.md`
+  (§11.5), `docs/design/STAGE10_BUILD_ORDER.md` (a dated note under C45), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-176), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.6), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

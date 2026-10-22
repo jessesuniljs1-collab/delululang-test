@@ -367,3 +367,97 @@ a new primitive and the grant form it reads — is the language change, taken as
 git checkout 91a1eb7^ -- tests/conformance/witnesses.toml
 ```
 — together with D-V2-131's code, or the release gate refuses the uncovered anchor.
+
+## 2026-10-22 — `tests/conformance/witnesses.toml`: `ref.diag.DL1205`'s rejecting witness
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `tests/conformance/witnesses.toml`: the `negative` `[[witness]]` row for `ref.diag.DL1205` names `a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205` in place of `minting_a_secret_alone_is_refused_dl1205`, in the same file (`crates/delulu-wasm/src/lib.rs`). No other row is touched. |
+| Entrenched by | `.github/CODEOWNERS:33` → `@jessesuniljs1-collab` |
+| Campaign | RW 3.4; decision D-V2-174 |
+| Approved by | **the head chef, 2026-10-22, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"* — the entrenched files among them, each change with its `D-V2-nn` and this record. |
+
+**Why**
+
+D-V2-174 compiles `root.secret` to a handle the host keeps, so the test this row named, which pinned that minting a secret
+alone was DL1205, was replaced by one that pins what stays DL1205: `Secret.map` and `Secret.expose`, with `root.declassify()`.
+The row went on naming the removed test, and the coverage law refused the dangling witness: PR #48's run `39825874508`,
+`test (ubuntu-24.04)`, with `coverage_never_regresses`, `release_requires_full_coverage` and
+`the_generated_reference_is_not_stale` red. The laptop's run of the change had not included `delulu-conform`.
+
+**Why this is not an RFC**
+
+A witness row maps an existing test to an anchor; it changes no rule, no diagnostic and no behaviour. DL1205 still means
+that secret contents cannot enter the WASM guest, and the test the row now names produces it twice. The narrowing of what
+DL1205 refuses is the language change, taken as D-V2-174. `COVERED_FLOOR` in `crates/delulu-conform/` is untouched.
+
+**Verified before the change**
+
+1. The named test exists and passes (`cargo test -p delulu-wasm --lib a_secret_compiles_as_a_handle`).
+2. `delulu-conform --reference` regenerated `docs/reference/` with no difference from what is committed, and
+   `cargo test -p delulu-conform` is green.
+
+**How to revert**
+
+Together with D-V2-174's code. Reverting the row alone would name a test that no longer exists, which the coverage law
+refuses.
+
+## 2026-10-22 — `docs/design/DELULU_CORE.md` v0.4: Theorems 1–3 machine-checked for a fragment; `T-Verify` and `E-Expose` stated as implemented
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/DELULU_CORE.md` — the title (v0.3 → v0.4), the Status block's honesty clause, a v0.4 note, §1 (`narrow`), §3 (`T-Verify` carries `Declassify`; `T-Narrow`; Facts A and B), §4 (`E-Expose`, `E-Verify`, `E-Narrow` and `E-NarrowRefuse` written), §7 (Theorem 3's capability-witness clause names `verify`'s label as the exception), §9 (a box for the new development; the P17-9 box's "what remains" marked as v0.3's; the closing paragraph's pointer to `CONTRIBUTING.md`, which never recorded the work, replaced by RW 5.1). |
+| Entrenched by | `.github/CODEOWNERS:13` → `@jessesuniljs1-collab` |
+| Campaign | RW 5.1; decision D-V2-175 |
+| Approved by | **the head chef, 2026-10-22, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, the entrenched files among them, each change with its `D-V2-nn` and this record. |
+
+**Why**
+
+`models/lean/DeluluCoreSafety.lean` machine-checks Theorems 1–3 and the No-forgery corollary for the monomorphic,
+closed-row fragment of §1–§4, attenuation included. The
+Status block's "§1–§7 as a whole remain unmechanized — no capabilities, no store, no secrets, … no Progress and no
+Preservation" stopped being true, and the honesty clause binds in both directions. Mechanizing also found two places where
+the calculus did not state the implemented language, which §6 says it models faithfully:
+- **`T-Verify` gave `verify` no label.** Since campaign finding P17-IF1 the checker types `verify` as carrying `Declassify`,
+  and the runtime traces it so.
+- **`E-Expose` was never written.** `T-Expose` emitted a label that no reduction rule produced.
+- **Attenuation was relied on and never stated.** §4 said tokens are created only by `narrow`, and the No-forgery
+  corollary rests on it, but `narrow` was not a term and had no rule. It has `T-Narrow`, `E-Narrow` and `E-NarrowRefuse`
+  now, with the one law the corollary needs: a narrowed scope is under its parent's.
+
+Stating `T-Verify` as implemented makes Fact B's "a label demands a capability" and Theorem 3's capability-witness clause
+false for that one label: `verify` declassifies without `Cap[Declassify]`, the R-5 residue already recorded as RW 2.6. v0.4
+says so where those claims are made, rather than keeping a rule that hid it.
+
+**Why this is not an RFC**
+
+The language does not move: no surface rule, diagnostic, exit code, artifact format or `STABILITY.md` line changes, and the
+checker and runtime are untouched. The calculus is corrected to describe the language as implemented, as v0.3 was. The
+mechanization takes `verify`'s label as a parameter and proves the theorems for v0.3's rule and v0.4's alike.
+
+**Verified before the change**
+
+1. **`T-Verify` is what the checker does:** a function declared pure that calls `a.verify(b)` is refused `DL0501`
+   ("function `same` performs effect `Declassify` not declared in its row").
+2. **`E-Verify` is what the runtime does:** `--trace-effects` records `verify` as `"effect":"Declassify"`, detail `«opaque»`.
+3. **The proofs:** `lean DeluluCoreSafety.lean` (Lean 4.32.2) checks, and `#print axioms` lists only `propext`,
+   `Classical.choice` and `Quot.sound`. A planted `sorry` is caught by the new CI gate, and the three mutants (`T-Op`'s
+   label, `T-HOp`'s latent row, the narrowing law weakened) each fail to check.
+4. **The blast radius is zero:** `delulu-survey impact doc:docs/design/DELULU_CORE.md` reaches 0 nodes. No section is
+   renumbered.
+
+**What did NOT change, and is the honest residue**
+
+Type variables and open rows (§5), and `Σ`'s internals, stay paper. RW 2.6 is stated, not closed.
+`DeluluCore.lean` is unchanged.
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
+cargo run -p delulu-survey -- build
+```

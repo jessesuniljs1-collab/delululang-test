@@ -1791,6 +1791,30 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the test binary, its filter run a few hundred times at `--test-threads 16`, turned "once on the laptop" into 13 of 400
   in the VM, and the fixed binary beside it, under the same load, into the control (0 of 400).
 
+- **A crate's test can see one build of its dependency on the laptop and another on CI** (the laptop, 2026-10-22,
+  D-V2-174): `delulu-wasm` depends on `delulu-runtime` with `default-features = false`. Tested alone (`cargo test -p
+  delulu-wasm`), its egress client has no transport (`net` off: `NoTransport`, reason `no-client`). In CI's workspace
+  build, cargo unifies features: `delulu` turns `net` on, and the same test's request tried to connect (`connect`). A unit
+  test that waited for a listener hung on the laptop; one that asserted `no-client` passed there and failed on CI (PR #48,
+  run `39825874508`). Assert what holds in both builds, and prove that a request leaves with the binary (`egress_cli.rs`).
+  **And a test you rename or remove may be a conformance witness:** `tests/conformance/witnesses.toml` still named the
+  replaced pin, and only `cargo test -p delulu-conform` sees a dangling witness. Run it whenever a test's name changes.
+  **The same change's regression:** a type the WASM backend newly lowers (`Secret[Str]`) brings into the compile every
+  function that names it, called or not. Chapter five's never-called `password_matches` stopped the chapter at its
+  `verify`, and the corpus re-measure found that, not the targeted tests. After widening a type, re-measure the whole
+  corpus, not only the programs the widening was for.
+
+- **A `sorry` is only a warning to Lean, which still exits 0** (the laptop, 2026-10-22, D-V2-175): a planted `theorem
+  planted : False := by sorry` checked "clean", and CI's `formal` step read only the exit code. `#print axioms` shows
+  `sorryAx` only for the theorems it is asked about. The step now fails on any `sorry` in the output, and two rule mutants
+  must fail to check. For any checker: ask what it reports as a warning and still passes.
+
+- **A fix made at one call site leaves the helper it bypassed in use elsewhere** (the laptop, 2026-10-22, DEPLOY-PKG-1):
+  C51 moved `delulu authority <dir>` to the workspace loader, so a package with dependencies is seen whole. But
+  `package_authority_value`, the helper `deploy plan`, `publish` and `add` shared, kept the single-package loader, and
+  all three refused every package with a dependency for months. When a fix replaces how one caller does a thing, list
+  every caller of the old way (`grep` the function, not the command) and fix them together, or name why not.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

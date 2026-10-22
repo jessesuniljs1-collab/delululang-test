@@ -1133,7 +1133,11 @@ pub fn code_explain(code: &str) -> Option<String> {
              interface version by guessing would be a silent compatibility break.",
         "DL1205" => "Secret contents cannot enter the WASM guest. The guest's memory is a different \
              trust domain, and a secret that crosses into it is no longer protected by the rules \
-             that made it a secret.",
+             that made it a secret. A WASM program may hold a secret as a handle: the host keeps \
+             it, `get_with_secret` sends it from there and `verify` compares two there. What would \
+             hand its bytes to the program (`root.declassify()`, `Secret.expose`) or run the \
+             program's own code on them (`Secret.map`) is refused with this code, and such a \
+             program runs on the interpreter.",
         "DL1206" => "The two engines disagreed on the same program in a parity self-check. \
              Compiler-bug class: the interpreter and the WASM backend must produce the same \
              observable behavior for any program both support. Please report it.",
@@ -1577,22 +1581,26 @@ pub fn code_explain(code: &str) -> Option<String> {
              post-quantum signature and no classical one is also refused, because the guarantee \
              must never be weaker than what v1.0 already ships.",
         "DL1909" => "A `delulu deploy plan` computed the whole-deployment authority answer for \
-             every named service — the same effect summary `delulu authority` prints for one \
-             package — and at least one service's effects include something the environment \
-             profile's ceiling does not list (spec §9.2, invariant 53: no plan, no launch). The \
+             every named service — the effects `delulu authority` reports for one package, and \
+             every request it makes in the `--grant` grammar — and at least one service goes beyond \
+             the environment profile: an effect its ceiling does not list, or a request outside the \
+             paths, hosts, secrets and foreign libraries it names, decided as `delulu authority \
+             --within` decides it, or a request whose scope the source computes and no reading can \
+             bound (spec §9.2, invariant 53: no plan, no launch). The \
              refusal covers the WHOLE plan, never a partial approval: passing every service except \
              the one that widened would still deploy something nobody checked against the profile, \
              which defeats the reason to compute an authority answer before anything runs. The \
-             message names the exceeding service and its exceeding effect(s) — never a generic \
-             'authority exceeded' — because the repair is either narrowing the plan (drop or \
-             replace the service performing that effect) or widening the environment profile, and \
+             message names the exceeding service, its exceeding effect(s) and each request outside \
+             the profile with the call that makes it — never a generic 'authority exceeded' — \
+             because the repair is either narrowing the plan or widening the environment profile, and \
              only a human should choose which. This is a policy refusal in the shape of DL1905's \
              hardware sign-off gate, not a text edit: there is no byte-offset span in a `.delulu` \
              source file that would make a TOML environment profile wider, so this diagnostic \
-             carries no machine-applicable repair. Honesty note: the ceiling check compares \
-             EFFECTS only — it says nothing about capability SCOPES, foreign holes, or what a \
-             service actually does once running. It is the authority-widening gate for \
-             infrastructure, not a safety case for it.",
+             carries no machine-applicable repair. Honesty note: it compares what a service ASKS \
+             for — its effects and its requests' scopes, read from the source — and says nothing \
+             about what a service does once running. A profile has no spelling for `net.special`, \
+             plugin roots or devices, so a service needing one is refused. It is the \
+             authority-widening gate for infrastructure, not a safety case for it.",
         "DL1910" => "A post-quantum operation was attempted without `--unstable`. This build's \
              ML-DSA/ML-KEM implementations are adopted from RustCrypto — cryptography is never \
              hand-rolled — and they are not yet stable HERE for two independent reasons, both \

@@ -629,12 +629,14 @@ jobs:
             echo "caught: $m"
           done
 
-      # P17-9: the higher-order fragment, machine checked. Silence means every declaration
-      # type-checked; the file's own `#print axioms` block is what proves no `sorry` is hiding.
+      # P17-9 and RW 5.1: Delulu Core, machine checked — the higher-order fragment (`DeluluCore.lean`), and Progress-or-fault,
+      # Preservation and Effect Soundness for the monomorphic, closed-row fragment (`DeluluCoreSafety.lean`, D-V2-175). A
+      # `sorry` is only a WARNING to Lean, which still exits 0 (2026-10-22: a planted `theorem planted : False := by sorry`
+      # checked "clean"), so each file's output is searched for one; the `#print axioms` blocks list what the theorems rest on.
       # The toolchain is Lean's own release tarball from GitHub, pinned by SHA-256 (taken 2026-10-19 from that asset; Lean
       # publishes no checksum file to check it against) — not elan, whose downloads come from releases.lean-lang.org, which
       # refused the runners' TLS on 2026-10-19 and turned `formal` red on two pushes (`0e4e9a2`, `6c26aed`) before any proof
-      # ran. The model is one core-Lean file (no Lake, no Mathlib), so the binary is all it needs.
+      # ran. Each model is one core-Lean file (no Lake, no Mathlib), so the binary is all it needs.
       - name: Machine-check Delulu Core (Lean)
         run: |
           v=4.32.2
@@ -643,4 +645,30 @@ jobs:
           echo "5f2069e6f5db73780f374ccb49ce8ea649aa20a0cebf0116816744c999ce72aa  $RUNNER_TEMP/$f" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/lean" && tar --zstd -xf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP/lean" --strip-components=1
           "$RUNNER_TEMP/lean/bin/lean" --version
-          cd docs/design/models/lean && "$RUNNER_TEMP/lean/bin/lean" DeluluCore.lean
+          cd docs/design/models/lean
+          for m in DeluluCore.lean DeluluCoreSafety.lean; do
+            out=$("$RUNNER_TEMP/lean/bin/lean" "$m" 2>&1)
+            echo "$out"
+            if echo "$out" | grep -q "sorry"; then echo "::error::$m: a proof uses sorry"; exit 1; fi
+          done
+
+      # The safety proofs have teeth: take `T-Op`'s label, or `T-HOp`'s latent row (C88's shape), out of the typing rules
+      # and the development must FAIL to check — Preservation can then not account for what a step emits; and weaken the
+      # law that a narrowed scope is under its parent's to `le s s` (its arity kept, so the failure is the proof's, not a
+      # syntax error's) and attenuation can no longer be shown monotone.
+      - name: The Lean proofs have teeth (three mutants must each fail)
+        run: |
+          cd docs/design/models/lean
+          mutants=(
+            's/(S.label o :: (ρ₀ ++ ρ₁))/(ρ₀ ++ ρ₁)/'
+            's/(.hop e₀ e₁) τ₂ (ρf ++ ρ₀ ++ ρ₁)/(.hop e₀ e₁) τ₂ (ρ₀ ++ ρ₁)/'
+            's/  narrow_le       : ∀ s v, le (narrowScope s v) s/  narrow_le       : ∀ s (_v : Tm), le s s/'
+          )
+          for m in "${mutants[@]}"; do
+            sed "$m" DeluluCoreSafety.lean > "$RUNNER_TEMP/mutant.lean"
+            if cmp -s DeluluCoreSafety.lean "$RUNNER_TEMP/mutant.lean"; then echo "::error::the mutant did not apply: $m"; exit 1; fi
+            if "$RUNNER_TEMP/lean/bin/lean" "$RUNNER_TEMP/mutant.lean" > /dev/null 2>&1; then
+              echo "::error::the proofs survived a mutant: $m"; exit 1
+            fi
+            echo "caught: $m"
+          done

@@ -113,6 +113,42 @@ fn a_dependency_that_needs_authority_is_refused_until_it_is_accepted() {
     assert_eq!(chk.status.code(), Some(0), "and it checks clean:\n{}", stderr(&chk));
 }
 
+/// DEPLOY-PKG-1 (2026-10-22): a dependency with dependencies of its own is computed whole, by the loader `delulu authority
+/// <dir>` uses. `add` shared `deploy plan`'s single-package loader, which cannot see a dependency, and refused such a
+/// package as one that "does not check clean, so its authority cannot be computed". Its authority is the join, so it is
+/// shown and refused until accepted, and then pinned at what the whole package needs.
+#[test]
+fn a_dependency_with_dependencies_of_its_own_is_computed_whole() {
+    let w = workspace("deep");
+    let o = delulu_in(&w, &["new", "midlib", "--lib"]);
+    assert_eq!(o.status.code(), Some(0), "scaffolding failed: {}", stderr(&o));
+    std::fs::write(
+        w.join("midlib").join("delulu.toml"),
+        "[package]\nname = \"midlib\"\nversion = \"0.1.0\"\nkind = \"lib\"\n\n[authority]\neffects = [\"Write\"]\n\n\
+         [dependencies]\nwriterlib = { path = \"../writerlib\", authority = { effects = [\"Write\"] } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        w.join("midlib").join("src").join("midlib.delulu"),
+        "module midlib\n\nimport writerlib\n\npub fn greet(out: Cap[Console]) ! {Write} {\n    shout(out, \"hi\")\n}\n",
+    )
+    .unwrap();
+    let chk = delulu_in(&w.join("midlib"), &["check", "."]);
+    assert_eq!(chk.status.code(), Some(0), "the fixture checks on its own:\n{}", stderr(&chk));
+
+    let o = delulu_in(&w.join("app"), &["add", "--path", "../midlib"]);
+    assert_eq!(o.status.code(), Some(1), "shown and refused until accepted:\n{}", stderr(&o));
+    assert!(!stderr(&o).contains("does not check clean"), "computed, not refused unread:\n{}", stderr(&o));
+    assert!(stderr(&o).contains("Write"), "{}", stderr(&o));
+    let ok = delulu_in(&w.join("app"), &["add", "--path", "../midlib", "--accept-authority"]);
+    assert_eq!(ok.status.code(), Some(0), "{}", stderr(&ok));
+    assert!(
+        manifest(&w).contains("midlib = { path = \"../midlib\", authority = { effects = [\"Write\"] } }"),
+        "pinned at the whole package's authority:\n{}",
+        manifest(&w)
+    );
+}
+
 /// The pin is computed from the dependency, not defaulted to something permissive.
 ///
 /// The tempting shortcut is a pin that covers everything so the first `check` passes. That pin
