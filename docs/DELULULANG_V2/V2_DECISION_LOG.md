@@ -4541,5 +4541,6 @@ types a `str` or an `==` (DL0604, DL0605), so the host never rebuilds one from m
 - `a_secret_in_a_list_or_an_option_is_a_handle_and_exposing_it_stays_dl1205`.
 
 Both fail on `master`'s code (DL1201, "a list of Cap"). The `checked_ty` arms dropped: both fail (Console, Secret).
-`list_parity.rs`'s pinned refusal of a list of capabilities moved here; it was pinned as outside the fragment, not as
-unsafe.
+`list_parity.rs` and `record_parity.rs` had pinned a list, and a record field, of `Cap[Console]` as refused: outside the
+fragment, not unsafe. Those cases moved here. The pins now hold the root, the handle no slot holds: a list of it, a
+record field of it. Letting `Root` into a slot turns both red.

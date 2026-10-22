@@ -1647,7 +1647,14 @@ mod tests {
             if self.at == self.bytes.len() || buf.is_empty() {
                 return Ok(0);
             }
-            std::thread::sleep(if self.at == 0 { self.pause } else { self.gap });
+            // RW 7.23 (b): never `sleep(ZERO)`. On Windows it is `Sleep(0)`, which yields the processor to any ready
+            // thread, so on a busy runner each byte of a frame "with no gap" waited a time slice: about 16 ms a byte,
+            // 160 ms a frame, measured with 32 busy loops on the laptop's 16 CPUs (98 runs in 100 over the 100 ms the
+            // control allows; none unloaded). On Unix a zero sleep returns at once, which is why only Windows saw it.
+            let wait = if self.at == 0 { self.pause } else { self.gap };
+            if !wait.is_zero() {
+                std::thread::sleep(wait);
+            }
             buf[0] = self.bytes[self.at];
             self.at += 1;
             Ok(1)
