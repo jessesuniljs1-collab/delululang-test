@@ -11,6 +11,20 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — Delulu Core's type safety, machine-checked for a fragment, 2026-10-22
+
+- **New: Progress, Preservation and Effect Soundness are machine-checked for the monomorphic, closed-row fragment of
+  Delulu Core** (RW 5.1, D-V2-175). `docs/design/models/lean/DeluluCoreSafety.lean` (Lean 4.32.2, core only) covers
+  functions carrying their effect rows, products, sums, the capability store, primitive operations with their refusal
+  (the fault), a primitive that invokes its callback, and secrets. It proves that a well-typed program never gets stuck
+  and that every effect it performs on any run, cut anywhere, is one its type declares. Not yet covered: type variables
+  and open rows, and attenuation. CI checks the proofs on every push, fails on any `sorry`, and requires two weakened
+  rule sets to fail to check.
+- **Changed: `DELULU_CORE.md` v0.4 states `verify` as implemented.** The calculus had given `Secret.verify` no effect,
+  while the checker has typed it as `Declassify` since campaign finding P17-IF1. Stating it shows that `verify`'s
+  `Declassify` is the one effect that no capability witnesses (`REMAINING_WORK.md` 2.6, unchanged). The language itself
+  does not change.
+
 ## Unreleased — a WASM program holds a secret and sends it, 2026-10-22
 
 - **New: `root.secret(name)`, `Cap[Http].get_with_secret` and `Secret.verify` run on `--engine wasm` and in a `.dwx`**

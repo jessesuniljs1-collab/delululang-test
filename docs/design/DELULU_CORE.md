@@ -1,14 +1,18 @@
-# Delulu Core — the formal core calculus (v0.3)
+# Delulu Core — the formal core calculus (v0.4)
 
 **Status:** Normative companion to `STAGE2_SPECIFICATION.md` §7.1. This document states the core
 calculus and the theorems that justify the phrase "authority cannot escape the type." **Honesty
 clause (binding, per Constitution §9):** the proofs **in this document** are **paper-level
-sketches**, not a mechanized development, and **§1–§7 as a whole remain unmechanized** — no
-capabilities, no store, no secrets, no attenuation, no Progress and no Preservation. That is still
-committed future work. **One fragment is no longer a sketch:** `models/lean/DeluluCore.lean`
+sketches**. **Since v0.4 (2026-10-22, D-V2-175) Theorems 1–3 are machine-checked for the
+monomorphic, closed-row fragment of §1–§4** — capabilities, the store, secrets, faults, Progress-or-
+fault, Preservation and Effect Soundness — in `models/lean/DeluluCoreSafety.lean` (Lean 4.32.2, no
+`sorry`; the theorems rest on Lean's standard `propext`, `Classical.choice` and `Quot.sound`). What
+remains paper-only: type variables and open rows (§5), attenuation (the No-forgery corollary's scope
+clause), and the internals of `Σ`, which the development assumes well typed. **The higher-order
+fragment is machine-checked too:** `models/lean/DeluluCore.lean`
 machine-checks the higher-order extension in **Lean 4.32.2**, with `#print axioms` reporting *"does
-not depend on any axioms"* for every theorem — see the box in §9, and read it before starting the
-rest, because it also proves v0.2's `T-Op` unsound for that construct. The
+not depend on any axioms"* for every theorem — see the boxes in §9, and read the first before
+extending either, because it also proves v0.2's `T-Op` unsound for that construct. The
 implementation's soundness is additionally guarded by the laundering suite
 (`crates/delulu-check/tests/laundering.rs`), the conformance corpus, and the executable
 `trace ⊆ row` witness (`--assert-trace`), which are evidence, not proof.
@@ -24,6 +28,14 @@ proof campaign found in v0.2 (§9): it adds the **higher-order primitive** the c
 configuration** Progress needs (`fault(c)`, `E-Refuse`, `E-Fault`), and restates Theorem 1 as
 **progress-or-fault** (P17-T2). It proves nothing new by machine: §1–§7 remain paper sketches, now of
 a calculus that states the construct that failed and the outcome the runtime actually has.
+
+**v0.4 (2026-10-22, D-V2-175, recorded in `ENTRENCHED_CHANGE_RECORD.md`)** machine-checks Theorems 1–3
+for the monomorphic, closed-row fragment (§9), and brings `T-Verify` in line with the implementation.
+Since campaign finding P17-IF1 the checker types `verify` as carrying `Declassify`, and the runtime
+traces it so; §3 had gone on giving it no label. The rule now carries the label, and §4 has `E-Verify`.
+That makes visible what the old rule hid: `verify`'s label is the one label in the calculus that no
+capability witnesses (Fact B, Theorem 3), which is `REMAINING_WORK.md` 2.6. The mechanization proves the
+theorems for either rule.
 
 ---
 
@@ -101,8 +113,10 @@ calculus-level image of the runtime primitive table (`prim.rs`) and the compile-
           Γ ⊢ hop(e₀, ē) : τ ! (ρ_f ⊔ ρ₀ ⊔ ⊔ᵢ ρᵢ)   -- the callback's LATENT row joins here (R-4, v0.3)
 
 (T-Sec)   Γ ⊢ e : τ ! ρ                        (T-Verify) Γ ⊢ e₁,e₂ : Secret Str ! ρ₁,ρ₂
-          -------------------------                        -----------------------------------
-          Γ ⊢ wrapₛ e : Secret τ ! ρ                       Γ ⊢ verify(e₁,e₂) : Bool ! (ρ₁ ⊔ ρ₂)
+          -------------------------                        ----------------------------------------------------
+          Γ ⊢ wrapₛ e : Secret τ ! ρ                       Γ ⊢ verify(e₁,e₂) : Bool ! ({Declassify} ⊔ ρ₁ ⊔ ρ₂)
+                                                           -- v0.4: the implementation's row since P17-IF1; the
+                                                           -- bit it returns is derived from the secrets
 
 (T-Expose) Γ ⊢ e : Secret τ ! ρ_e     Γ ⊢ d : Cap Declassify ! ρ_d
           --------------------------------------------------------------
@@ -111,14 +125,17 @@ calculus-level image of the runtime primitive table (`prim.rs`) and the compile-
 
 Two structural facts follow immediately from the rule shapes and are used throughout:
 
-- **(Fact A — labels come only from T-Op/T-Expose.)** No rule other than `T-Op` and `T-Expose`
-  adds a concrete label to a row; every other rule only unions the rows of subterms and the latent
-  rows of arrow types (`T-App`, and `T-HOp` since v0.3), and a latent row is itself fixed at a `T-Abs`.
-  Hence a label `ℓ` in a derivation's conclusion is traceable to a `T-Op` (or `T-Expose`) node in the
-  tree, or to a declared row that over-approximates one.
-- **(Fact B — a label demands a capability.)** The `T-Op`/`T-Expose` premises require a subterm of
-  type `Cap R` (with `R` the resource kind for `ℓ`; `Declassify` for expose). By the shapes of the
-  typing rules, a closed term of type `Cap R` reduces (Theorem 1) to a token `κ` for `R`.
+- **(Fact A — labels come only from T-Op/T-Expose/T-Verify.)** No rule other than `T-Op`, `T-Expose`
+  and (since v0.4) `T-Verify` adds a concrete label to a row; every other rule only unions the rows of
+  subterms and the latent rows of arrow types (`T-App`, and `T-HOp` since v0.3), and a latent row is
+  itself fixed at a `T-Abs`. Hence a label `ℓ` in a derivation's conclusion is traceable to one of
+  those three nodes in the tree, or to a declared row that over-approximates one.
+- **(Fact B — a label demands a capability, but one.)** The `T-Op`/`T-Expose` premises require a
+  subterm of type `Cap R` (with `R` the resource kind for `ℓ`; `Declassify` for expose). By the shapes
+  of the typing rules, a closed term of type `Cap R` reduces (Theorem 1) to a token `κ` for `R`.
+  **`T-Verify` has no such premise:** its `Declassify` is in the row, so the authority report shows
+  it, but no capability is asked for. Holding two secrets buys one chosen bit per call. This is the
+  R-5 residue, `REMAINING_WORK.md` 2.6. Closing it needs `verify` to return `Secret[Bool]`.
 
 **Opacity (R-5), as a syntactic side condition.** The eliminators that would leak a `Secret`/`Cap`
 — string conversion, structural equality, serialization — are simply **not in the grammar**. The
@@ -143,7 +160,17 @@ does not reduce. The label-emitting rules:
 (E-Refuse) κ ∈ dom(σ)     σ(κ) = R     ¬ permits(σ, κ, v̄)
            ------------------------------------------------
            ⟨σ ; op_ℓ[R](κ, v̄)⟩  ⟶  fault(scope)      emitting  ℓ       (v0.3)
+
+(E-Expose) κ ∈ dom(σ)     σ(κ) = Declassify
+           ------------------------------------------------
+           ⟨σ ; expose(wrapₛ v, κ)⟩  ⟶  ⟨σ ; v⟩      emitting  Declassify   (v0.4: stated)
+
+(E-Verify) ⟨σ ; verify(wrapₛ v₁, wrapₛ v₂)⟩  ⟶  ⟨σ ; b⟩    emitting  Declassify   (v0.4)
+           where b is whether v₁ = v₂ — constant-time by fiat; no token is consulted (Fact B)
 ```
+
+`E-Expose` was `T-Expose`'s reduction all along and was not written down until v0.4, when the
+mechanization needed it.
 
 and the two that emit nothing:
 
@@ -243,8 +270,9 @@ row in `e`'s typing.
 > **Theorem 3 (Effect soundness — "authority cannot escape the type").** If `∅ ⊢ e : τ ! ρ` and
 > `⟨σ_root ; e⟩ ⟶* C` emitting trace `tr` — whether `C` is a value, a fault, or any configuration
 > part-way (every finite prefix of a run, including one that never ends) — then `labels(tr) ⊆ ρ`. In particular, every
-> emitted label is witnessed by a capability token that descends, by explicit passing or
-> attenuation, from `σ_root`.
+> emitted label **but `verify`'s `Declassify`** is witnessed by a capability token that descends, by explicit passing or
+> attenuation, from `σ_root`. (`verify`'s is in the row, so `labels(tr) ⊆ ρ` holds for it, but no token witnesses it —
+> Fact B, `REMAINING_WORK.md` 2.6. v0.4: the exception was always true of the implementation, and is now stated.)
 >
 > *Sketch.* Immediate from Theorem 2 by induction on the reduction length: each step's emitted
 > labels are absorbed into the standing row bound, and the row never grows. The capability-descent
@@ -336,14 +364,37 @@ runtime enforcement lands in Stage 6.
 > - **`bad_unsound`** — with the rule THIS DOCUMENT states, a well-typed program's trace escapes its
 >   row: `ho (lam [write] (op write))` types at row `[]` and emits `write`. **C88, mechanized.**
 >
-> So the gap is no longer only argued — it is proved, in both directions. What remains unmechanized
-> is everything else: capabilities, the store, secrets, attenuation, faults, Progress and
-> Preservation — of the v0.3 calculus, which is now the right target.
+> So the gap is no longer only argued — it is proved, in both directions. What remained unmechanized
+> at v0.3 was everything else: capabilities, the store, secrets, attenuation, faults, Progress and
+> Preservation — of the v0.3 calculus, which is now the right target. *(v0.4: all but attenuation and
+> type variables are machine checked now — the box below.)*
 
-A machine-checked development (the natural target is a ~500-line Lean or Coq formalization of §1–§7)
-is **open, invited work** recorded in `CONTRIBUTING.md`. Until it exists, this document and the
-test suites are the project's soundness evidence, and the Constitution's honesty clause forbids
-describing the guarantee as "proven" in any stronger sense. What *is* true today: the theorems are
-stated precisely enough to mechanize, the implementation is structured to match them
-one-to-one (§8), and the dynamic witness (`--assert-trace`) has never reported a violation across
-the conformance and fuzz corpora.
+> ### ✅ Theorems 1–3 ARE now machine checked, for the monomorphic, closed-row fragment (RW 5.1, v0.4)
+>
+> `docs/design/models/lean/DeluluCoreSafety.lean` — Lean 4.32.2, no `sorry` (CI's `formal` job fails on one: Lean
+> reports a `sorry` only as a warning), and every theorem rests only on Lean's standard axioms (`propext`,
+> `Classical.choice`, `Quot.sound`). It states §1–§4 for that fragment and proves:
+>
+> - **`progress`**, Theorem 1: a well-typed closed term is a value, steps, or faults (`E-Refuse`). None is stuck.
+> - **`preservation`**, Theorem 2: a step emits only a label in the row, and leaves a term of the same type at a row
+>   inside the old one; a step to a fault emits only a label in the row.
+> - **`effect_soundness`**, Theorem 3: `labels(tr) ⊆ ρ` for every finite prefix of a run, ending in a value, a fault,
+>   or anywhere part-way.
+> - **`safety`**: every configuration a run reaches is well typed and is a value or steps.
+> - **`no_forgery`**: every token in a reachable configuration is one the store holds.
+>
+> The fragment has functions carrying their rows, `let`, products, sums, the store's tokens, `op` with `E-Op` and
+> `E-Refuse`, `hop` (its simplest instance, which applies the callback once) and the three secret forms. `verify`'s
+> label is a parameter, so the theorems hold for v0.3's rule and for v0.4's. **Not mechanized:** type variables and
+> open rows (§5), attenuation (so `no_forgery` says nothing about scopes, and the store never grows), and `Σ`'s
+> internals: each primitive's result on a permitted argument is ASSUMED well typed with an empty row (`SigOk`).
+>
+> **The proofs have teeth:** take `T-Op`'s label or `T-HOp`'s latent row out of the rules and the file fails to check.
+> CI runs both mutants on every push.
+
+A mechanization of what remains, type variables with §5's unification and attenuation, is **open, invited work**,
+recorded as `REMAINING_WORK.md` 5.1. (Until v0.4 this sentence said `CONTRIBUTING.md` recorded it; it never did.) For those parts this document and the test suites are the project's soundness evidence,
+and the Constitution's honesty clause forbids describing them as "proven" in any stronger sense. What *is* true today
+of the whole: the theorems are stated precisely enough to mechanize, the implementation is structured to match them
+one-to-one (§8), and the dynamic witness (`--assert-trace`) has never reported a violation across the conformance and
+fuzz corpora.
