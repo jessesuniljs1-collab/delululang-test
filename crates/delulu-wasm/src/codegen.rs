@@ -162,6 +162,54 @@ enum Scalar {
     /// lists, a map in a list, an option of a list compile (RW 3.4). The type it points to is interned (`boxed`), so a
     /// `Scalar` stays `Copy`.
     Boxed(&'static Ty),
+    /// A capability or a secret held in a slot (D-V2-177): its index into the host's table, as a variable holds it, so a
+    /// list of capabilities, an option of a secret, a record with a capability field compile. Never a pointer: nothing
+    /// in the guest reads through it, and the checker gives none of these a `str` or an `==` (DL0604, DL0605), so the host
+    /// never rebuilds one (`type_desc` refuses it).
+    Handle(Handle),
+}
+
+/// The host handles a slot may hold (`Scalar::Handle`): the guest's capabilities and its secrets. Not `Root` — the root
+/// enters only at `main` — and not a bound `foreign` lib, which has its own scalar.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Handle {
+    Console,
+    Clock,
+    Rand,
+    FsRead,
+    FsWrite,
+    Http,
+    Secret,
+    ForeignLoad,
+}
+
+impl Handle {
+    fn of(t: Ty) -> Option<Handle> {
+        Some(match t {
+            Ty::Cap => Handle::Console,
+            Ty::Clock => Handle::Clock,
+            Ty::Rand => Handle::Rand,
+            Ty::FsRead => Handle::FsRead,
+            Ty::FsWrite => Handle::FsWrite,
+            Ty::Http => Handle::Http,
+            Ty::Secret => Handle::Secret,
+            Ty::ForeignLoad => Handle::ForeignLoad,
+            _ => return None,
+        })
+    }
+
+    fn to_ty(self) -> Ty {
+        match self {
+            Handle::Console => Ty::Cap,
+            Handle::Clock => Ty::Clock,
+            Handle::Rand => Ty::Rand,
+            Handle::FsRead => Ty::FsRead,
+            Handle::FsWrite => Ty::FsWrite,
+            Handle::Http => Ty::Http,
+            Handle::Secret => Ty::Secret,
+            Handle::ForeignLoad => Ty::ForeignLoad,
+        }
+    }
 }
 
 /// The `Scalar` that holds `t`, a list, a map, an option or a result, in a slot. Each such type is made once for the
@@ -191,6 +239,7 @@ impl Scalar {
             Scalar::ForeignPtr => Ty::ForeignPtr,
             Scalar::Record(i) => Ty::Record(i),
             Scalar::Boxed(t) => *t,
+            Scalar::Handle(h) => h.to_ty(),
         }
     }
 }
@@ -208,7 +257,7 @@ fn ty_to_scalar(t: Ty) -> Option<Scalar> {
         Ty::ForeignPtr => Some(Scalar::ForeignPtr),
         Ty::Record(i) => Some(Scalar::Record(i)),
         Ty::List(_) | Ty::Map(..) | Ty::Option(_) | Ty::Result(..) => Some(boxed(t)),
-        _ => None,
+        _ => Handle::of(t).map(Scalar::Handle),
     }
 }
 
@@ -223,7 +272,8 @@ fn store_scalar(cx: &mut Cx, s: Scalar) {
         | Scalar::Foreign(_)
         | Scalar::ForeignPtr
         | Scalar::Record(_)
-        | Scalar::Boxed(_) => cx.emit(Instruction::I32Store(u32_at())),
+        | Scalar::Boxed(_)
+        | Scalar::Handle(_) => cx.emit(Instruction::I32Store(u32_at())),
         Scalar::Unit => {}
     }
 }
@@ -239,7 +289,8 @@ fn load_scalar(cx: &mut Cx, s: Scalar) {
         | Scalar::Foreign(_)
         | Scalar::ForeignPtr
         | Scalar::Record(_)
-        | Scalar::Boxed(_) => cx.emit(Instruction::I32Load(u32_at())),
+        | Scalar::Boxed(_)
+        | Scalar::Handle(_) => cx.emit(Instruction::I32Load(u32_at())),
         Scalar::Unit => {}
     }
 }
@@ -792,9 +843,14 @@ fn block_type(t: Ty) -> BlockType {
 /// The element types a `List` may hold on the WASM engine: the scalars a slot can carry and a `match` can bind.
 fn list_element(t: Ty) -> Option<Scalar> {
     match ty_to_scalar(t)? {
-        s @ (Scalar::I64 | Scalar::I32 | Scalar::F64 | Scalar::Str | Scalar::Enum(_) | Scalar::Record(_) | Scalar::Boxed(_)) => {
-            Some(s)
-        }
+        s @ (Scalar::I64
+        | Scalar::I32
+        | Scalar::F64
+        | Scalar::Str
+        | Scalar::Enum(_)
+        | Scalar::Record(_)
+        | Scalar::Boxed(_)
+        | Scalar::Handle(_)) => Some(s),
         _ => None,
     }
 }
