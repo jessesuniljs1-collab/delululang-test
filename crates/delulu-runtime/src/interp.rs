@@ -2151,25 +2151,7 @@ impl Interp {
     /// by the broker (`Custody::verify` — the Guard decides, the chain records it); one of each is
     /// refused, because neither side holds both (VERIFY-FABRICATED-1: the old path answered `false`).
     fn verify_secret(&self, s: &Rc<SecretVal>, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let Some(Value::Secret(other)) = args.first() else {
-            return prim::call_secret_method(s, "verify", args, span);
-        };
-        match (s.handle_name(), other.handle_name()) {
-            (None, None) => prim::call_secret_method(s, "verify", args, span),
-            (Some(a), Some(b)) => {
-                let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
-                match self.custody.borrow_mut().verify(a, b, Some(&span_str)) {
-                    Ok(equal) => Ok(Value::Bool(equal)),
-                    Err(d) => Err(Fault::at(d.code, d.message, span)),
-                }
-            }
-            _ => Err(Fault::at(
-                "DL0904",
-                "`Secret.verify` of a broker-held secret against one this process holds: neither side has both, \
-                 so the comparison cannot be made — hold both in the broker (a lease) or both locally (`--grant secret:`)",
-                span,
-            )),
-        }
+        secret_verify(&mut **self.custody.borrow_mut(), s, args, span)
     }
 
     /// P9-04 (d), D-V2-134: `http.get_with_secret` of a broker-held secret. The effect's own refusals answer first, in their
@@ -2457,6 +2439,36 @@ pub(crate) fn custody_op_for(
 
 /// The request path a network use names, for its custody to judge and record (P9-05, D-V2-169): `prim::request_path` of
 /// the URL [`custody_op_for`] took the host from. `None` for every other op.
+/// `Secret.verify`: two secrets this process holds are compared here (`prim`); two the broker holds, by the broker
+/// (VERIFY-FABRICATED-1); one of each cannot be, by either side. One function for both engines: the interpreter's
+/// `verify_secret` and the WASM host's, which holds each secret as a handle (D-V2-174).
+pub fn secret_verify(
+    custody: &mut dyn Custody,
+    s: &SecretVal,
+    args: &[Value],
+    span: delulu_diag::Span,
+) -> Result<Value, Fault> {
+    let Some(Value::Secret(other)) = args.first() else {
+        return prim::call_secret_method(s, "verify", args, span);
+    };
+    match (s.handle_name(), other.handle_name()) {
+        (None, None) => prim::call_secret_method(s, "verify", args, span),
+        (Some(a), Some(b)) => {
+            let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+            match custody.verify(a, b, Some(&span_str)) {
+                Ok(equal) => Ok(Value::Bool(equal)),
+                Err(d) => Err(Fault::at(d.code, d.message, span)),
+            }
+        }
+        _ => Err(Fault::at(
+            "DL0904",
+            "`Secret.verify` of a broker-held secret against one this process holds: neither side has both, \
+             so the comparison cannot be made — hold both in the broker (a lease) or both locally (`--grant secret:`)",
+            span,
+        )),
+    }
+}
+
 /// What `http.get_with_secret` sends, once [`broker_secret_send`] has judged it.
 pub enum SecretSend {
     /// The arguments as given: the secret is not broker-held, or the effect itself refuses the request in its own words

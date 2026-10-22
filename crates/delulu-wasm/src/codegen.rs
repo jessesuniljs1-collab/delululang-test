@@ -674,6 +674,8 @@ struct Imports {
     /// the interpreter's own rule and keeps, and `Cap[Http].get_with_secret`, which sends it from the host (D-V2-174).
     root_secret: u32,
     http_get_with_secret: u32,
+    /// `delulu:cap.secret_verify` — `Secret.verify(other)`, compared host-side by the interpreter's own `secret_verify`.
+    secret_verify: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
     foreign_load: u32,
     foreign_bind: u32,
@@ -1232,6 +1234,7 @@ fn compile_module_typed(
         http_get: u32::MAX,
         root_secret: u32::MAX,
         http_get_with_secret: u32::MAX,
+        secret_verify: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
@@ -1302,6 +1305,12 @@ fn compile_module_typed(
     let needs_secret_send = needs_http && needs_secret && module_calls_method(&env, module, &["get_with_secret"]);
     if needs_secret_send {
         imp.http_get_with_secret = n_imports;
+        n_imports += 1;
+    }
+    // A function taking two secrets compiles wherever it is written, so a module may verify what it never mints.
+    let needs_secret_verify = module_calls_method(&env, module, &["verify"]);
+    if needs_secret_verify {
+        imp.secret_verify = n_imports;
         n_imports += 1;
     }
     if needs_foreign {
@@ -1508,6 +1517,12 @@ fn compile_module_typed(
         types.ty().function([ValType::I32; 9], [ValType::I32]);
         next_type += 1;
     }
+    let mut secret_verify_ty = 0;
+    if needs_secret_verify {
+        secret_verify_ty = next_type;
+        types.ty().function([ValType::I32; 5], [ValType::I32]); // secret_verify(a, b, file, start, end) -> bool
+        next_type += 1;
+    }
     let mut foreign_load_ty = 0;
     let mut foreign_bind_ty = 0;
     let mut foreign_call_ty = 0;
@@ -1708,6 +1723,9 @@ fn compile_module_typed(
     }
     if needs_secret_send {
         imports.import("delulu:cap", "http_get_with_secret", EntityType::Function(secret_send_ty));
+    }
+    if needs_secret_verify {
+        imports.import("delulu:cap", "secret_verify", EntityType::Function(secret_verify_ty));
     }
     if needs_foreign {
         imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
@@ -3804,7 +3822,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 return Ok(Ty::Secret);
             }
             // Phase 3n (secrets stay host-side, §4.4/DL1205): declassifying a secret (`secret.expose(...)`) would put its
-            // bytes in guest linear memory. Refuse so the program runs on the interpreter.
+            // bytes in guest linear memory. Refuse so the program runs on the interpreter — and its `Cap[Declassify]` with
+            // it, whose one use is `expose` (the checker's R-2), so a program that declassifies says why where it begins.
+            if name.name == "declassify" && args.is_empty() {
+                return Err(CompileError::SecretInGuest(
+                    "`root.declassify()` mints the capability whose one use is handing a secret's bytes to the program \
+                     (`Secret.expose`)"
+                        .into(),
+                ));
+            }
             if name.name == "expose" {
                 return Err(CompileError::SecretInGuest("`Secret.expose(...)` reveals secret bytes to the guest".into()));
             }
@@ -3814,6 +3840,18 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             let recv_ty = compile_expr(recv, cx)?;
             // D-V2-174: what would run the program's code on a secret's bytes stays on the interpreter (DL1205); a secret
             // leaves only through `get_with_secret`, sent from the host (below, on its `Cap[Http]`).
+            // `Secret.verify(other)` -> `Bool`, compared host-side by the interpreter's own `secret_verify` (D-V2-174).
+            if recv_ty == Ty::Secret && name.name == "verify" && args.len() == 1 {
+                if cx.imp.secret_verify == u32::MAX {
+                    return Err(CompileError::Unsupported("`verify` without the secret host interface".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Secret {
+                    return Err(CompileError::Unsupported("`Secret.verify` of a value that is not a Secret[Str]".into()));
+                }
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.secret_verify));
+                return Ok(Ty::I32);
+            }
             if recv_ty == Ty::Secret {
                 return Err(match name.name.as_str() {
                     "map" => CompileError::SecretInGuest(

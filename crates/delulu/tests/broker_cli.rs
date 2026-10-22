@@ -377,8 +377,9 @@ fn a_broker_held_secret_is_sent_only_to_its_nodes_audience_and_the_send_is_recor
 
 /// D-V2-174: on the WASM engine under the daemon, a run's secret is the broker's handle, as on the interpreter — the
 /// program holds an index to it, the host holds the handle — and `get_with_secret` asks the broker for the bytes for the
-/// one origin by the interpreter's own code: the chain records the `send`, the request goes out, and no byte of the secret
-/// is in the chain or in anything the run said.
+/// one origin by the interpreter's own code. The same program run on each engine writes the same chain, record for
+/// record (the custody's `use` of the host, then the `send`), each request goes out, and no byte of the secret is in the
+/// chain or in anything a run said.
 #[test]
 fn a_wasm_runs_broker_held_secret_is_sent_through_the_broker_as_the_interpreters_is() {
     let base = std::env::temp_dir().join(format!("delulu_bsec_wasm_{}", std::process::id()));
@@ -401,27 +402,37 @@ fn a_wasm_runs_broker_held_secret_is_sent_through_the_broker_as_the_interpreters
     assert!(o.status.success(), "broker start: {}", stderr(&o));
     let guard = DaemonGuard { state: state.clone() };
     l.set_nonblocking(true).unwrap();
-    let accepter = std::thread::spawn(move || {
-        let started = std::time::Instant::now();
-        loop {
-            match l.accept() {
-                Ok(_) => return true,
-                Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
-                    std::thread::sleep(std::time::Duration::from_millis(10))
+    let l = std::sync::Arc::new(l);
+    let accepted = |l: std::sync::Arc<std::net::TcpListener>| {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            loop {
+                match l.accept() {
+                    Ok(_) => return true,
+                    Err(_) if started.elapsed() < std::time::Duration::from_secs(20) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10))
+                    }
+                    Err(_) => return false,
                 }
-                Err(_) => return false,
             }
-        }
-    });
+        })
+    };
+    let audit_dir = state.join("audit").to_string_lossy().to_string();
+    let records = || -> Vec<serde_json::Value> {
+        let o = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("audit query json");
+        v["records"].as_array().expect("records").clone()
+    };
     let grant = format!("secret:API_TOKEN@127.0.0.1:{port}=broker");
-    let o = delulu_in(
-        &cwd,
-        &state,
-        &[
+    // Each engine's run, and the records it added: its action, decision and — for a use and a send — its target (the
+    // others name the run's own node, which differs).
+    let mut chains = Vec::new();
+    for engine in ["interp", "wasm"] {
+        let before = records().len();
+        let went = accepted(l.clone());
+        let mut args = vec![
             "run",
             "send.delulu",
-            "--engine",
-            "wasm",
             "--grant",
             "console",
             "--grant",
@@ -431,24 +442,31 @@ fn a_wasm_runs_broker_held_secret_is_sent_through_the_broker_as_the_interpreters
             "--no-prompt",
             "--broker",
             "daemon",
-        ],
-    );
-    assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{}", stderr(&o));
-    assert!(accepter.join().unwrap(), "the request went out: {}", stderr(&o));
-    let audit_dir = state.join("audit").to_string_lossy().to_string();
-    let q = delulu_in(&cwd, &state, &["audit", "query", "--dir", &audit_dir, "--json"]);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&q)).expect("audit query json");
-    let sent: Vec<_> = v["records"].as_array().expect("records").iter().filter(|r| r["action"] == "send").cloned().collect();
-    assert_eq!(sent.len(), 1, "the broker was asked once: {v:#}");
-    assert_eq!(
-        (sent[0]["decision"].as_str(), sent[0]["target"].as_str()),
-        (Some("allow"), Some(format!("API_TOKEN@127.0.0.1:{port}").as_str()))
-    );
+        ];
+        if engine == "wasm" {
+            args.extend(["--engine", "wasm"]);
+        }
+        let o = delulu_in(&cwd, &state, &args);
+        assert_eq!((o.status.code(), stdout(&o).as_str()), (Some(0), "not delivered\n"), "{engine}: {}", stderr(&o));
+        assert!(went.join().unwrap(), "{engine}: the request went out: {}", stderr(&o));
+        assert!(!stdout(&o).contains(CANARY) && !stderr(&o).contains(CANARY), "{engine}: {}{}", stdout(&o), stderr(&o));
+        let added: Vec<String> = records()[before..]
+            .iter()
+            .map(|r| {
+                let target = if r["action"] == "use" || r["action"] == "send" { r["target"].to_string() } else { String::new() };
+                format!("{} {} {target}", r["action"], r["decision"])
+            })
+            .collect();
+        let sends = added.iter().filter(|a| a.starts_with("\"send\" \"allow\"")).count();
+        assert_eq!(sends, 1, "{engine}: the broker was asked once, and gave: {added:#?}");
+        assert!(added.iter().any(|a| a.contains(&format!("API_TOKEN@127.0.0.1:{port}"))), "{engine}: {added:#?}");
+        chains.push(added);
+    }
+    assert_eq!(chains[1], chains[0], "the WASM run's chain is the interpreter's");
     for entry in std::fs::read_dir(state.join("audit")).unwrap() {
         let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
         assert!(!text.contains(CANARY), "the chain holds the bytes");
     }
-    assert!(!stdout(&o).contains(CANARY) && !stderr(&o).contains(CANARY), "{}{}", stdout(&o), stderr(&o));
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }

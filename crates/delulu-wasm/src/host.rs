@@ -322,24 +322,30 @@ impl HostState {
         self.custody_allows_at(op, arg, None)
     }
 
+    /// ARTIFACT-CLAIM-1's ceiling: whether a `.dwx`'s manifest declares `effect` (always, for a program compiled here). A
+    /// refusal is recorded (DL1202) and `false` returned. Asked by [`HostState::custody_allows_at`] of every custody op, and
+    /// directly of an effect the host performs with no custody op, as the interpreter does (`Secret.verify`'s `Declassify`).
+    fn declared_allows(&mut self, effect: &str) -> bool {
+        let Some(declared) = &self.declared_effects else { return true };
+        if declared.contains(effect) {
+            return true;
+        }
+        self.refused = Some(format!(
+            "DL1202: the artifact performed `{effect}`, an effect its `delulu:authority` manifest does not declare (it \
+             declares {}) — its manifest is not this code's, so nothing it did not declare runs",
+            if declared.is_empty() { "none".to_string() } else { declared.iter().cloned().collect::<Vec<_>>().join(", ") }
+        ));
+        false
+    }
+
     /// [`HostState::custody_allows`] for a network use naming its request path (P9-05, D-V2-169): the custody judges it
     /// and names it in the use's record, as the interpreter's gate does.
     fn custody_allows_at(&mut self, op: CustodyOp, arg: Option<&str>, url_path: Option<&str>) -> bool {
         // ARTIFACT-CLAIM-1: an artifact's declared effects are a ceiling its code cannot pass — asked first, of every effect
         // the host performs, by the rule the grant tree applies (`Op::required_effect`). Its code hash binds only the code,
         // so the manifest is its builder's word; enforced, the review surface that reads it is true of what can run.
-        if let (Some(declared), Some(effect)) = (&self.declared_effects, op.required_effect()) {
-            if !declared.contains(effect.name()) {
-                self.refused = Some(format!(
-                    "DL1202: the artifact performed `{}`, an effect its `delulu:authority` manifest does not declare (it \
-                     declares {}) — its manifest is not this code's, so nothing it did not declare runs",
-                    effect.name(),
-                    if declared.is_empty() {
-                        "none".to_string()
-                    } else {
-                        declared.iter().cloned().collect::<Vec<_>>().join(", ")
-                    }
-                ));
+        if let Some(effect) = op.required_effect() {
+            if !self.declared_allows(effect.name()) {
                 return false;
             }
         }
@@ -1524,6 +1530,49 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 }
             }
         })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `Secret.verify(other)` (D-V2-174): the interpreter's order — the record at dispatch, `Declassify` with detail
+    // `«opaque»` — and no custody op, as there; a `.dwx` that does not declare `Declassify` is refused (ARTIFACT-CLAIM-1).
+    // Then the interpreter's own `secret_verify`: compared here, or by the broker when it holds both.
+    linker
+        .func_wrap(
+            "delulu:cap",
+            "secret_verify",
+            |mut caller: Caller<'_, HostState>, a: i32, b: i32, file: i32, start: i32, end: i32| -> i32 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let held = |caller: &Caller<'_, HostState>, h: i32| match caller.data().caps.get(h as usize) {
+                    Some(CapKind::Secret(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                let (Some(sa), Some(sb)) = (held(&caller, a), held(&caller, b)) else {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {a} or {b} is not a secret"));
+                    return 0;
+                };
+                let detail = Some(delulu_runtime::trace::OPAQUE.to_string());
+                caller.data_mut().push_trace("Declassify", "verify", "Secret", detail, file, start, end);
+                if !caller.data_mut().declared_allows("Declassify") {
+                    caller.data_mut().push_refusal_trace("Declassify", "verify", "Secret", file, start, end);
+                    return 0;
+                }
+                let span = delulu_diag::Span::new(file as u32, start as u32, end as u32);
+                let args = [Value::Secret(sb)];
+                let answer = match &caller.data().custody {
+                    Some(custody) => delulu_runtime::interp::secret_verify(&mut **custody.borrow_mut(), &sa, &args, span),
+                    None => delulu_runtime::interp::secret_verify(&mut delulu_runtime::EmbeddedCustody::new(), &sa, &args, span),
+                };
+                match answer {
+                    Ok(Value::Bool(equal)) => i32::from(equal),
+                    Ok(other) => unheld(&mut caller, "Secret.verify", &other, 0),
+                    Err(fault) => {
+                        caller.data_mut().refused = Some(format!("{}: {}", fault.code, fault.message));
+                        caller.data_mut().push_refusal_trace("Declassify", "verify", "Secret", file, start, end);
+                        0
+                    }
+                }
+            },
+        )
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     // `Cap[Http].get_with_secret(url, headers, header, secret)` (D-V2-174): `get`'s order — the record at dispatch, its
     // detail `«opaque»` as every secret-involving record's is; the custody on the URL's host, unless the URL is not
@@ -2761,27 +2810,20 @@ mod secret_handle_tests {
     }
 
     /// D-V2-174: a WASM program that mints a secret and sends it holds an index into the host's table and nothing of the
-    /// secret — after the run, after the host has put its bytes in a request, no byte of it is in the guest's memory,
-    /// which is what DL1205 exists for. The request went out (the listener saw a TLS handshake), so the bytes were used.
+    /// secret — after the run, after the host has put its bytes in a request, no byte of it is in the guest's memory, which
+    /// is what DL1205 exists for. The request reached the egress client inside the secret's audience; this crate's own
+    /// tests build that client without a transport, so it ends there (`no-client`) — `egress_cli.rs` sees the same request
+    /// leave as TLS from the real binary, on both engines.
     #[test]
     fn a_minted_and_sent_secret_never_enters_the_guests_memory() {
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = l.local_addr().unwrap().port();
-        let seen = std::thread::spawn(move || {
-            use std::io::Read;
-            let (mut s, _) = l.accept().ok()?;
-            s.set_read_timeout(Some(std::time::Duration::from_secs(10))).ok()?;
-            let mut first = [0u8; 3];
-            s.read_exact(&mut first).ok()?;
-            Some(first)
-        });
+        let url = "https://127.0.0.1:9/probe";
         let src = format!(
             "module m\nfn main(root: Root) ! {{Net, Write}} {{\n let out = root.console()\n let h = root.http([\"127.0.0.1\"])\n \
              let tok = root.secret(\"API_TOKEN\")\n let hs = Map()\n \
-             match h.get_with_secret(\"https://127.0.0.1:{port}/probe\", hs, \"X-Api-Key\", tok) {{\n \
+             match h.get_with_secret(\"{url}\", hs, \"X-Api-Key\", tok) {{\n \
              Ok(b) => out.println(\"delivered\")\n Err(e) => out.println(\"not delivered\")\n }}\n}}\n"
         );
-        let audience = delulu_runtime::egress::Audience { host: "127.0.0.1".into(), port };
+        let audience = delulu_runtime::egress::Audience { host: "127.0.0.1".into(), port: 9 };
         let cfg = HostConfig {
             console: true,
             net: vec!["127.0.0.1".into()],
@@ -2794,10 +2836,12 @@ mod secret_handle_tests {
             ..HostConfig::default()
         };
         let (out, memory) = run_keeping_memory(&src, &cfg);
-        assert_eq!(out.map_err(|e| e.message()), Ok("not delivered\n".to_string()), "the listener hung up");
-        assert_eq!(seen.join().unwrap().map(|f| (f[0], f[1])), Some((0x16, 0x03)), "the request left, as TLS");
+        assert_eq!(out.map_err(|e| e.message()), Ok("not delivered\n".to_string()));
+        let log = delulu_runtime::egress::snapshot().to_json();
+        let reached = log["records"].as_array().into_iter().flatten().find(|r| r["url"] == url).cloned();
+        assert_eq!(reached.map(|r| r["reason"].clone()), Some("no-client".into()), "past its audience, to the client: {log}");
         assert!(!memory.is_empty() && !holds(&memory, CANARY), "no byte of the secret in the guest's memory");
-        // The control: the guest's memory is searchable, and holds what the program put there.
+        // The control: the search reads the guest's memory, which holds what the program put there.
         assert!(holds(&memory, "not delivered") && holds(&memory, "X-Api-Key"), "the search reads the guest's memory");
     }
 }

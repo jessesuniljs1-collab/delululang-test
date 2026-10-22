@@ -139,6 +139,60 @@ fn demo_runs_on_wasm_as_on_the_interpreter_and_its_secret_stays_on_the_host() {
     let _ = std::fs::remove_file(&dwx);
 }
 
+/// D-V2-174: `Secret.verify` on the WASM engine compares two secrets the host holds, by the interpreter's own code — the
+/// same answers and the same trace (`Declassify`, detail `«opaque»`) from the source and from its `.dwx` — and, since it
+/// is a `Declassify` effect with no custody op, an artifact whose manifest does not declare `Declassify` is refused at it
+/// (ARTIFACT-CLAIM-1, DL1202) before it answers. (Chapter five of the guide holds a function taking two secrets; once a
+/// `Secret[Str]` parameter compiled, that chapter stopped at its `verify` until `verify` did.)
+#[test]
+fn a_secret_is_verified_on_wasm_as_on_the_interpreter_and_only_where_the_artifact_declares_it() {
+    let dir = std::env::temp_dir().join(format!("delulu_wasm_verify_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = "module m\nfn same(a: Secret[Str], b: Secret[Str]) -> Bool ! {Declassify} { a.verify(b) }\n\
+                   fn main(root: Root) ! {Declassify, Write} {\n    let out = root.console()\n    \
+                   let a = root.secret(\"A\")\n    let b = root.secret(\"B\")\n    let c = root.secret(\"C\")\n    \
+                   out.println(\"a~b \" + str(same(a, b)))\n    out.println(\"a~c \" + str(same(a, c)))\n}\n";
+    std::fs::write(dir.join("v.delulu"), program).unwrap();
+    let b = delulu_in(&dir, &["build", "v.delulu", "--target", "wasm", "-o", "v.dwx"]);
+    assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
+    let grants = ["--grant", "console", "--grant", "secret:A=pw-1", "--grant", "secret:B=pw-1", "--grant", "secret:C=pw-2"];
+    let mut traces = Vec::new();
+    for (target, engine) in [("v.delulu", None), ("v.delulu", Some("wasm")), ("v.dwx", None)] {
+        let trace = format!("t-{target}-{}.jsonl", engine.unwrap_or("default"));
+        let mut args = vec!["run", target];
+        args.extend(grants);
+        args.extend(["--trace-effects", "--trace-out", &trace]);
+        if let Some(e) = engine {
+            args.extend(["--engine", e]);
+        }
+        let o = delulu_in(&dir, &args);
+        assert!(o.status.success(), "{target} {engine:?}: {}", String::from_utf8_lossy(&o.stderr));
+        assert_eq!(stdout(&o), "a~b true\na~c false\n", "{target} {engine:?}");
+        traces.push(std::fs::read_to_string(dir.join(&trace)).expect("a trace"));
+    }
+    assert!(traces[0].contains("\"op\":\"verify\"") && traces[0].contains("«opaque»"), "{}", traces[0]);
+    assert!(!traces[0].contains("pw-"), "no secret in the trace: {}", traces[0]);
+    assert_eq!(traces[1], traces[0], "the WASM engine's trace is the interpreter's");
+    assert_eq!(traces[2], traces[0], "the artifact's trace is the interpreter's");
+    // The manifest made to declare `Write` alone — `"Declassify",` blanked, so it stays well-formed — is refused at the
+    // first `verify`, before anything is printed.
+    let dwx = std::fs::read(dir.join("v.dwx")).unwrap();
+    let needle = b"\"Declassify\",";
+    let at = dwx.windows(needle.len()).position(|w| w == needle).expect("the manifest names Declassify");
+    let mut lie = dwx.clone();
+    lie[at..at + needle.len()].fill(b' ');
+    std::fs::write(dir.join("lie.dwx"), &lie).unwrap();
+    let mut args = vec!["run", "lie.dwx"];
+    args.extend(grants);
+    let o = delulu_in(&dir, &args);
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(1), "{e}");
+    assert!(e.contains("error[DL1202]") && e.contains("performed `Declassify`"), "{e}");
+    assert!(stdout(&o).is_empty(), "nothing it did not declare ran: {}", stdout(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ----- Phase 3g: the .dwx authority-carrying artifact ---------------------------------------
 
 #[test]
