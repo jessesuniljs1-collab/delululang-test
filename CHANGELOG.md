@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `broker stop` waits for the daemon to exit, 2026-10-22
+
+- **Changed: `delulu broker stop` returns only after the daemon has exited, and says `ok: broker stopped`** (RW 7.19).
+  Before, it returned as soon as the daemon acknowledged the request, while the daemon was still shutting down. On
+  Windows a running daemon holds its state directory, so deleting the directory straight after `stop` failed with
+  "being used by another process", and `stop` followed by `start` could find the old daemon still there. `stop` waits
+  up to 5 s. If the daemon hasn't exited by then, it says so and names the pid.
+
 ## Unreleased — a grant naming a network share is warned of on Windows, 2026-10-22
 
 - **Added: on Windows, an `fs.read`, `fs.write` or `plugin` grant that names a network share (`\\server\share`, either

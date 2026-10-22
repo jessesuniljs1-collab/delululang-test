@@ -8623,3 +8623,18 @@ older rows were the same (4.58, 4.59, 4.53, 4.46, 5.6) — a Markdown row is one
 paragraphs, and nothing caught it. Joined (the file's words unchanged, 27,939 in the same order), and gated:
 `repository_structure.rs` `every_remaining_work_row_is_one_line`, red on the file before (all seven named), and
 `the_broken_row_rule_finds_a_wrapped_row_and_nothing_else` (a code span holding `|` is not a break).
+
+## 2026-10-22 (evening) — the laptop: `broker stop` waits for the daemon to exit (RW 7.19 closed)
+
+RW 7.19: on Windows `broker_cli`'s secret tests left their temp directories behind on most runs, the cause suspected
+(the daemon runs with its working directory in the state directory) and not confirmed. Confirmed: `broker stop` returned
+once the daemon ANSWERED `Shutdown`, and the daemon then still had to leave its loop, wake its accept thread, remove its
+pid file and exit — a directory removed in that window fails with OS error 32, *"The process cannot access the file
+because it is being used by another process"*. Witnessed on the old code: start, stop, remove at once — the first of five
+tries failed, both times it was run. Now `stop` asks `Status` for the daemon's pid first and returns once that process is
+gone (`process_gone`: `kill(pid, 0)` and `ESRCH` on Linux and macOS, `GetExitCodeProcess` on Windows — an exited process
+has closed every handle it held), waiting at most 5 s and saying so if that passes; it says `ok: broker stopped`. Five
+of five removed at once, three runs; the secret tests left no directory in three runs; `broker_cli` 11, `estop_cli` 8,
+`guard_cli` 2 green. Test: `broker_cli` `a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once`; a
+mutant whose exit check always says "gone" is red. An operator gains the same: `stop` then `start` no longer meets the
+old daemon still there.

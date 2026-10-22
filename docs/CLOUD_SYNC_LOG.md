@@ -5265,6 +5265,16 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   corrected (the constitution was corrected 2026-10-17, D-V2-141). Then seven `REMAINING_WORK.md` rows wrapped across
   lines (two by this night's edits, five older) joined, words unchanged, and gated (`repository_structure.rs`
   `every_remaining_work_row_is_one_line`, red before) — M `crates/delulu/tests/repository_structure.rs` too.
+
+### 2026-10-22 (evening) — `broker stop` waits for the daemon to exit (RW 7.19 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/broker-stop-waits` (on `laptop/unc-grant-warning` `a47516c`, PR #45)   Pull request: the one this entry rides in
+- **What:** `broker stop` returns once the daemon's process is gone (5 s bound), not when it answers — the cause of
+  RW 7.19, witnessed (OS error 32 removing the state directory at once on the old code). `ok: broker stopped`.
+- Files and folders: M `crates/delulu/src/brokerd.rs`, `crates/delulu/tests/broker_cli.rs`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.19), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 - Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
   `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.

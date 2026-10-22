@@ -1956,18 +1956,32 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
                 1
             }
         },
-        "stop" => match request(&state_dir, ReqBody::Shutdown) {
-            Ok(_) => {
-                if !json {
-                    eprintln!("ok: broker shutdown requested");
+        "stop" => {
+            // RW 7.19: the daemon's pid, so `stop` returns once it is gone — it answers `Shutdown` before it exits, and on
+            // Windows a running daemon holds its working directory, the state directory, against deletion.
+            let pid = match request(&state_dir, ReqBody::Status) {
+                Ok(Response::Status { pid, .. }) => Some(pid),
+                _ => None,
+            };
+            match request(&state_dir, ReqBody::Shutdown) {
+                Ok(_) => {
+                    let gone = pid.is_none_or(|p| wait_gone(p, std::time::Duration::from_secs(5)));
+                    if !json {
+                        match pid {
+                            Some(p) if !gone => {
+                                eprintln!("ok: broker shutdown requested; the daemon (pid {p}) had not exited within 5s")
+                            }
+                            _ => eprintln!("ok: broker stopped"),
+                        }
+                    }
+                    0
                 }
-                0
+                Err(_) => {
+                    eprintln!("broker not running (nothing to stop)");
+                    1
+                }
             }
-            Err(_) => {
-                eprintln!("broker not running (nothing to stop)");
-                1
-            }
-        },
+        }
         "rotate-key" => match request(&state_dir, ReqBody::RotateKey) {
             Ok(Response::Ok) => {
                 if !json {
@@ -1989,6 +2003,51 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
             2
         }
     }
+}
+
+/// Wait until process `pid` has exited, up to `within`; whether it had.
+fn wait_gone(pid: u32, within: std::time::Duration) -> bool {
+    let t = std::time::Instant::now();
+    loop {
+        if process_gone(pid) {
+            return true;
+        }
+        if t.elapsed() >= within {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn process_gone(pid: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(pid) else { return true };
+    // SAFETY: signal 0 only asks whether the process exists.
+    unsafe { libc::kill(pid, 0) != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) }
+}
+
+#[cfg(windows)]
+fn process_gone(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    // SAFETY: the handle, when there is one, is closed before return; the call writes one u32.
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            return true;
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(h, &mut code);
+        CloseHandle(h);
+        // STILL_ACTIVE (259) while it runs; a process that has exited has closed every handle it held, its working
+        // directory's among them.
+        !(ok != 0 && code == 259)
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn process_gone(_pid: u32) -> bool {
+    true
 }
 
 /// Spawn a detached child running the serve loop, then wait until it answers `Status`.

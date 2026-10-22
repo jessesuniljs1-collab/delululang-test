@@ -847,3 +847,29 @@ fn an_answer_given_late_is_named_in_the_broker_log() {
     drop(guard);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// RW 7.19: `broker stop` returns once the daemon has exited, so what it held is free — on Windows a running daemon holds
+/// its working directory, the state directory, and `broker_cli`'s secret tests left theirs behind on most runs: `stop`
+/// returned when the daemon ANSWERED, and the directory was removed while it was still exiting. Five times over, the
+/// state directory is removed the moment `stop` returns.
+#[test]
+fn a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once() {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    for i in 0..5 {
+        // Short: a broker's socket lives in the state directory (macOS allows 103 bytes).
+        let base = std::env::temp_dir().join(format!("dlx-{}-{}-{i}", std::process::id(), t % 1_000_000_000));
+        let _ = std::fs::remove_dir_all(&base);
+        let (cwd, state) = (base.join("w"), base.join("s"));
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&state).unwrap();
+        let s = delulu_in(&cwd, &state, &["broker", "start"]);
+        assert!(s.status.success(), "broker start: {}", stderr(&s));
+        let guard = DaemonGuard { state: state.clone() };
+        let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "stop"]);
+        assert!(o.status.success(), "broker stop: {}", stderr(&o));
+        assert!(stderr(&o).contains("ok: broker stopped"), "stop waits for the daemon to be gone: {}", stderr(&o));
+        let removed = std::fs::remove_dir_all(&base);
+        assert!(removed.is_ok() && !base.exists(), "run {i}: the state directory is held after `stop`: {removed:?}");
+        std::mem::forget(guard);
+    }
+}
