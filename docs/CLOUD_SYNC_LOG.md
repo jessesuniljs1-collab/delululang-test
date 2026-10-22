@@ -5231,3 +5231,15 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (2.20), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — autosave pushes what origin lacks, not what an upstream lacks (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/autosave-push` (on `laptop/miri-exhaust-budget` `1f44f55`, PR #42)   Pull request: the one this entry rides in
+- **What:** `scripts/autosave.ps1`'s push step asked each branch's upstream: a branch with none (every
+  `git switch -c X master`) was skipped, so its unpushed commit stayed on the disk alone; a `master` ahead was pushed onto
+  `origin`'s `master`. Now a branch with a commit `origin` lacks is pushed under its own name; `master`/`main` go to
+  `autosave/laptop-master`/`-main`; an orphan is refused; `-DryRun` added. Witnessed and checked on throwaway origins
+  (`V2_LOG.md`). The task keeps running the installed copy until it is re-installed from the landed script.
+- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
