@@ -5321,3 +5321,23 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `test (ubuntu-24.04)`: `tests/conformance/witnesses.toml` (entrenched: the DL1205 witness renamed) and
   `docs/design/ENTRENCHED_CHANGE_RECORD.md`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (night) — Delulu Core's Theorems 1–3 machine-checked for the monomorphic fragment (RW 5.1, D-V2-175) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/core-mechanized` (on `laptop/wasm-secret-handle` `4af166e`, PR #48)   Pull request: the one this entry rides in
+- **Read since the last entry:** the launch `jobs=everything` run `39816919025` on `launch/2.0.0` `7e7b2ed`: **red on
+  `test (windows-latest)`**, three wall-clock tests on one runner. `monitor_cli` `a_long_chain_does_not_kill_a_healthy_monitor`
+  ("broker daemon did not come up within 5s"); `sandbox_devices_cli` `a_guest_that_stops_beating_loses_its_actuator_on_the_hosts_clock`
+  ("the guest said nothing for 60s"); `channel::tests::from_now_counts_the_wait_before_the_first_byte` (an in-memory frame
+  not read within 100 ms). The same code was green on Windows in `master`'s push runs. To be re-run when the run ends.
+- **What:** `docs/design/models/lean/DeluluCoreSafety.lean` proves progress-or-fault, preservation, effect soundness,
+  safety and no-forgery for the monomorphic, closed-row fragment (Lean 4.32.2). CI checks it, fails on any `sorry`, and
+  requires two rule mutants to fail. `DELULU_CORE.md` v0.4 (entrenched, recorded): the honesty clause, `T-Verify` with
+  `Declassify` as implemented, `E-Expose` and `E-Verify` written, Fact B and Theorem 3 naming `verify`'s label as the one
+  no capability witnesses (RW 2.6).
+- Files and folders: A `docs/design/models/lean/DeluluCoreSafety.lean`; M `.github/workflows/ci.yml` (the `formal` job),
+  `docs/design/DELULU_CORE.md`, `docs/design/ENTRENCHED_CHANGE_RECORD.md`, `docs/design/models/README.md`,
+  `docs/MATHEMATICS.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/REMAINING_WORK.md` (5.1, 2.6), `CHANGELOG.md`,
+  `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-175), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

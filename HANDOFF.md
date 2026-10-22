@@ -1803,6 +1803,11 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `verify`, and the corpus re-measure found that, not the targeted tests. After widening a type, re-measure the whole
   corpus, not only the programs the widening was for.
 
+- **A `sorry` is only a warning to Lean, which still exits 0** (the laptop, 2026-10-22, D-V2-175): a planted `theorem
+  planted : False := by sorry` checked "clean", and CI's `formal` step read only the exit code. `#print axioms` shows
+  `sorryAx` only for the theorems it is asked about. The step now fails on any `sorry` in the output, and two rule mutants
+  must fail to check. For any checker: ask what it reports as a warning and still passes.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and

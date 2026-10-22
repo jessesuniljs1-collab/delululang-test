@@ -8701,3 +8701,30 @@ Re-measured file by file: **15 of 17** build as programs; `numpy_mean` and the p
 laptop, 640 tests, none failed: every `delulu-wasm` target, `delulu-runtime`'s unit tests, `delulu-diag`, and `wasm_cli`
 (17), `within_cli` (17), `json_contract` (13), `broker_cli` (12), `egress_cli` (9), `package_run` (6), `release` (6),
 `grants_cli` (5), `artifact_review` (4), `conformance` (4).
+
+## 2026-10-22 (night) — the laptop: Delulu Core's Theorems 1–3, machine-checked for the monomorphic fragment (RW 5.1, D-V2-175)
+
+RW 5.1 was the headline evidence gap: beyond P17-9's higher-order fragment, nothing of `DELULU_CORE.md` §1–§7 was
+mechanized. `docs/design/models/lean/DeluluCoreSafety.lean` (754 lines, core Lean 4.32.2) now states §1–§4 for the
+monomorphic, closed-row fragment: rows on arrows, `let`, products, sums, the capability store, `op` with `E-Op` and
+`E-Refuse`, `hop`, `wrap`, `verify` and `expose`. Evaluation is call-by-value by frames, with faults propagating. It
+proves progress-or-fault, preservation, effect soundness over every finite prefix of a run, safety along a run, and
+no-forgery. `grind` closes the row bookkeeping; the substitution lemma substitutes closed values only, as call-by-value
+evaluation of a closed program does. It rests on Lean's standard `propext`, `Classical.choice` and `Quot.sound`.
+Assumed: `SigOk`, that each primitive's result is well typed. Left out: type variables, open rows, attenuation.
+
+Three things the work found:
+- **Lean reports a `sorry` only as a warning, and exits 0.** A planted `theorem planted : False := by sorry` checked
+  "clean", and CI's step read only the exit code. The step now fails on any `sorry` in the output. CI also requires
+  two rule mutants to fail to check: `T-Op` without its label, and `T-HOp` without the callback's row (C88's shape).
+- **`T-Verify` was stale.** §3 gave `verify` no label, while the checker has typed it `Declassify` since P17-IF1.
+  Witnessed: a pure function calling it is DL0501, and the trace records `Declassify`. And `E-Expose` was never written.
+  v0.4 states both. Stated, `T-Verify` makes Fact B and Theorem 3's capability-witness clause false for that one label,
+  which is RW 2.6, now named in the calculus. The development takes `verify`'s label as a parameter, so both rules are
+  proved.
+- **`DELULU_CORE.md` §9 said `CONTRIBUTING.md` recorded the mechanization as invited work.** It never did; the pointer is
+  now RW 5.1.
+
+An entrenched edit (`DELULU_CORE.md`, recorded). The models README, `MATHEMATICS.md`'s category 2 and
+`REPOSITORY_STRUCTURE.md`'s tree are updated. Also on the way: running `lean --version` made elan download its default
+toolchain, 4.35.0, beside the pinned 4.32.2 (local only).

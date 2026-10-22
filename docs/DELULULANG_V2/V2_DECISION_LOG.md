@@ -4392,6 +4392,50 @@ program that holds a secret off the WASM engine, `examples/demo.delulu` among th
 - The corpus re-measured file by file: **15 of 17** build as programs (13 files, plus the two packages, whose entry files
   alone stay DL0301). `numpy_mean` and the plugin host remain, DL1201.
 
+## D-V2-175 — RW 5.1: Theorems 1–3 machine-checked for the monomorphic fragment; Delulu Core v0.4 states `verify` as implemented — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**The question:** RW 5.1, "the headline evidence gap": `DELULU_CORE.md` §1–§7 had no mechanized proof beyond the
+higher-order fragment (P17-9), with no capabilities, store, secrets, faults, Progress or Preservation.
+
+**Decided:**
+1. `docs/design/models/lean/DeluluCoreSafety.lean` (754 lines, core Lean 4.32.2, no Lake, no mathlib) states §1–§4 for
+   the **monomorphic, closed-row fragment** and proves:
+   - `progress`, Theorem 1 (progress-or-fault);
+   - `preservation`, Theorem 2 (types and rows);
+   - `effect_soundness`, Theorem 3, for every finite prefix of a run;
+   - `safety`, every reachable configuration typed and not stuck;
+   - `no_forgery`, every reachable token in the store.
+
+   The fragment has functions carrying rows, `let`, products, sums, capability tokens, `op` with `E-Op` and `E-Refuse`,
+   `hop`, `wrap`, `verify` and `expose`. Its evaluation is call-by-value, by frames, with faults propagating (`E-Fault`).
+2. What it assumes, stated in the file and in `DELULU_CORE.md` §9:
+   - `SigOk`: each primitive's result on a permitted, well-typed argument is well typed with an empty row.
+   - `hop` is its simplest instance, applying the callback once.
+   - `verify`'s label is a parameter, so v0.3's rule and v0.4's are both proved.
+
+   What it leaves out: type variables and open rows (§5), and attenuation; the store never grows.
+3. CI's `formal` job checks the file with the pinned Lean, and fails on any `sorry` in either file's output. Lean reports
+   a `sorry` only as a warning: a planted `theorem planted : False := by sorry` checked "clean" before this gate. Two rule
+   mutants must each fail to check: `T-Op` without its label, and `T-HOp` without the callback's latent row.
+4. `DELULU_CORE.md` becomes v0.4, an entrenched edit recorded in `ENTRENCHED_CHANGE_RECORD.md`:
+   - the honesty clause says what is now machine-checked;
+   - `T-Verify` carries `Declassify`, as the checker has typed it since P17-IF1;
+   - `E-Expose` and `E-Verify` are written in §4;
+   - Fact B and Theorem 3's capability-witness clause name `verify`'s label as the one no capability witnesses (RW 2.6);
+   - §9 gains a box for the development.
+
+**Evidence:**
+- `lean DeluluCoreSafety.lean` checks. `#print axioms` lists `propext`, `Classical.choice` and `Quot.sound` for the
+  theorems, and no `sorryAx`. (`DeluluCore.lean` rests on none, and is unchanged.)
+- Both rule mutants fail to check. The planted `sorry` is caught by the gate. The CI steps were simulated locally with the
+  same `sed` patterns.
+- The implementation's `verify`, on the current binary: a pure function calling it is `DL0501` ("performs effect
+  `Declassify` not declared in its row"), and `--trace-effects` records it as `Declassify`.
+- `delulu-survey impact doc:docs/design/DELULU_CORE.md`: 0 nodes reached.
+- What mechanizing found: §3's `T-Verify` stale against P17-IF1, and `E-Expose` never written. Both are stated now, and
+  stating them shows Theorem 3's capability-witness clause was never true of `verify` (RW 2.6, unchanged and now named in
+  the calculus).
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

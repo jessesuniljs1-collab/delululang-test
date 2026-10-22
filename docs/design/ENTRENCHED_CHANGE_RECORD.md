@@ -403,3 +403,57 @@ DL1205 refuses is the language change, taken as D-V2-174. `COVERED_FLOOR` in `cr
 
 Together with D-V2-174's code. Reverting the row alone would name a test that no longer exists, which the coverage law
 refuses.
+
+## 2026-10-22 — `docs/design/DELULU_CORE.md` v0.4: Theorems 1–3 machine-checked for a fragment; `T-Verify` and `E-Expose` stated as implemented
+
+**Changed**
+
+| | |
+|---|---|
+| Path | `docs/design/DELULU_CORE.md` — the title (v0.3 → v0.4), the Status block's honesty clause, a v0.4 note, §3 (`T-Verify` carries `Declassify`; Facts A and B), §4 (`E-Expose` and `E-Verify` written), §7 (Theorem 3's capability-witness clause names `verify`'s label as the exception), §9 (a box for the new development; the P17-9 box's "what remains" marked as v0.3's; the closing paragraph's pointer to `CONTRIBUTING.md`, which never recorded the work, replaced by RW 5.1). |
+| Entrenched by | `.github/CODEOWNERS:13` → `@jessesuniljs1-collab` |
+| Campaign | RW 5.1; decision D-V2-175 |
+| Approved by | **the head chef, 2026-10-22, under the owner's delegation of 2026-10-17** (his commission, `docs/design/DeluluLang_Autonomous_Development_Prompt.md`): *"You do not need to wait for my review or approval for any outstanding project decisions"*, the entrenched files among them, each change with its `D-V2-nn` and this record. |
+
+**Why**
+
+`models/lean/DeluluCoreSafety.lean` machine-checks Theorems 1–3 for the monomorphic, closed-row fragment of §1–§4. The
+Status block's "§1–§7 as a whole remain unmechanized — no capabilities, no store, no secrets, … no Progress and no
+Preservation" stopped being true, and the honesty clause binds in both directions. Mechanizing also found two places where
+the calculus did not state the implemented language, which §6 says it models faithfully:
+- **`T-Verify` gave `verify` no label.** Since campaign finding P17-IF1 the checker types `verify` as carrying `Declassify`,
+  and the runtime traces it so.
+- **`E-Expose` was never written.** `T-Expose` emitted a label that no reduction rule produced.
+
+Stating `T-Verify` as implemented makes Fact B's "a label demands a capability" and Theorem 3's capability-witness clause
+false for that one label: `verify` declassifies without `Cap[Declassify]`, the R-5 residue already recorded as RW 2.6. v0.4
+says so where those claims are made, rather than keeping a rule that hid it.
+
+**Why this is not an RFC**
+
+The language does not move: no surface rule, diagnostic, exit code, artifact format or `STABILITY.md` line changes, and the
+checker and runtime are untouched. The calculus is corrected to describe the language as implemented, as v0.3 was. The
+mechanization takes `verify`'s label as a parameter and proves the theorems for v0.3's rule and v0.4's alike.
+
+**Verified before the change**
+
+1. **`T-Verify` is what the checker does:** a function declared pure that calls `a.verify(b)` is refused `DL0501`
+   ("function `same` performs effect `Declassify` not declared in its row").
+2. **`E-Verify` is what the runtime does:** `--trace-effects` records `verify` as `"effect":"Declassify"`, detail `«opaque»`.
+3. **The proofs:** `lean DeluluCoreSafety.lean` (Lean 4.32.2) checks, and `#print axioms` lists only `propext`,
+   `Classical.choice` and `Quot.sound`. A planted `sorry` is caught by the new CI gate, and the two rule mutants (`T-Op`'s
+   label, `T-HOp`'s latent row) each fail to check.
+4. **The blast radius is zero:** `delulu-survey impact doc:docs/design/DELULU_CORE.md` reaches 0 nodes. No section is
+   renumbered.
+
+**What did NOT change, and is the honest residue**
+
+Type variables and open rows (§5), attenuation, and `Σ`'s internals stay paper. RW 2.6 is stated, not closed.
+`DeluluCore.lean` is unchanged.
+
+**How to revert**
+
+```
+git checkout <this-commit>^ -- docs/design/DELULU_CORE.md
+cargo run -p delulu-survey -- build
+```
