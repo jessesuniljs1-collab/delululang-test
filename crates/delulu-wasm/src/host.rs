@@ -2810,9 +2810,10 @@ mod secret_handle_tests {
 
     /// D-V2-174: a WASM program that mints a secret and sends it holds an index into the host's table and nothing of the
     /// secret — after the run, after the host has put its bytes in a request, no byte of it is in the guest's memory, which
-    /// is what DL1205 exists for. The request reached the egress client inside the secret's audience; this crate's own
-    /// tests build that client without a transport, so it ends there (`no-client`) — `egress_cli.rs` sees the same request
-    /// leave as TLS from the real binary, on both engines.
+    /// is what DL1205 exists for. The request got past the secret's audience and its headers to the egress client's
+    /// transport, and ends there: `no-client` when this crate is built alone (the runtime without `net`), `connect` in a
+    /// workspace build, where cargo turns `net` on for every crate and nothing listens on port 9. `egress_cli.rs` sees the
+    /// same request leave as TLS from the real binary, on both engines.
     #[test]
     fn a_minted_and_sent_secret_never_enters_the_guests_memory() {
         let url = "https://127.0.0.1:9/probe";
@@ -2838,7 +2839,8 @@ mod secret_handle_tests {
         assert_eq!(out.map_err(|e| e.message()), Ok("not delivered\n".to_string()));
         let log = delulu_runtime::egress::snapshot().to_json();
         let reached = log["records"].as_array().into_iter().flatten().find(|r| r["url"] == url).cloned();
-        assert_eq!(reached.map(|r| r["reason"].clone()), Some("no-client".into()), "past its audience, to the client: {log}");
+        let reason = reached.as_ref().and_then(|r| r["reason"].as_str());
+        assert!(matches!(reason, Some("no-client" | "connect")), "past its audience and headers, to the transport: {log}");
         assert!(!memory.is_empty() && !holds(&memory, CANARY), "no byte of the secret in the guest's memory");
         // The control: the search reads the guest's memory, which holds what the program put there.
         assert!(holds(&memory, "not delivered") && holds(&memory, "X-Api-Key"), "the search reads the guest's memory");

@@ -8689,7 +8689,13 @@ declassifies before it exposes, and `root.declassify()` had only ever been unrea
 `declassify` is refused by name as DL1205, its one use being `expose`. And re-measuring the corpus found chapter five of
 the guide newly refused: its never-called `password_matches(held: Secret[Str], …)` used to be skipped because the
 backend had no type for the parameter, and now compiled up to its `verify`. Hence `verify`. A unit test that waited for
-a connection also hung: `delulu-wasm`'s tests build the egress client without a transport (HANDOFF §11.5).
+a connection also hung: tested alone, `delulu-wasm` builds the egress client without a transport.
+
+PR #48's first run (`39825874508`) was red on `test (ubuntu-24.04)`, twice over. The memory test asserted `no-client`,
+which held on the laptop's `-p delulu-wasm` and not on CI's workspace build, where cargo turns `net` on and the same
+request tried to connect. It now accepts either; both builds were run on the laptop. And the conformance witness for
+`ref.diag.DL1205` still named the replaced pin, which the laptop's run, lacking `delulu-conform`, had not caught. It now
+names the replacement (an entrenched edit, recorded), and `delulu-conform` is green (28). Both lessons are in HANDOFF §11.5.
 
 Re-measured file by file: **15 of 17** build as programs; `numpy_mean` and the plugin host remain (DL1201). Green on the
 laptop, 640 tests, none failed: every `delulu-wasm` target, `delulu-runtime`'s unit tests, `delulu-diag`, and `wasm_cli`

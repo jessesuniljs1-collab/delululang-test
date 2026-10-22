@@ -1790,11 +1790,14 @@ Added in V2 (2026-09-17 → 2026-09-28):
   the test binary, its filter run a few hundred times at `--test-threads 16`, turned "once on the laptop" into 13 of 400
   in the VM, and the fixed binary beside it, under the same load, into the control (0 of 400).
 
-- **A crate's tests can be built without a feature the binary turns on, and then a request never leaves** (the laptop,
-  2026-10-22, D-V2-174): `delulu-wasm` depends on `delulu-runtime` with `default-features = false`, so its own tests get
-  the egress client without a transport (`net` off: `NoTransport`, reason `no-client`). A unit test there that waited for
-  a listener to see a connection hung; one asserting "nothing connected" would pass for that reason alone. Prove that a
-  request leaves with the binary (`egress_cli.rs`); in a crate's test, read the egress record's `reason`.
+- **A crate's test can see one build of its dependency on the laptop and another on CI** (the laptop, 2026-10-22,
+  D-V2-174): `delulu-wasm` depends on `delulu-runtime` with `default-features = false`. Tested alone (`cargo test -p
+  delulu-wasm`), its egress client has no transport (`net` off: `NoTransport`, reason `no-client`). In CI's workspace
+  build, cargo unifies features: `delulu` turns `net` on, and the same test's request tried to connect (`connect`). A unit
+  test that waited for a listener hung on the laptop; one that asserted `no-client` passed there and failed on CI (PR #48,
+  run `39825874508`). Assert what holds in both builds, and prove that a request leaves with the binary (`egress_cli.rs`).
+  **And a test you rename or remove may be a conformance witness:** `tests/conformance/witnesses.toml` still named the
+  replaced pin, and only `cargo test -p delulu-conform` sees a dangling witness. Run it whenever a test's name changes.
   **The same change's regression:** a type the WASM backend newly lowers (`Secret[Str]`) brings into the compile every
   function that names it, called or not. Chapter five's never-called `password_matches` stopped the chapter at its
   `verify`, and the corpus re-measure found that, not the targeted tests. After widening a type, re-measure the whole

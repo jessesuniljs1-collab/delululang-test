@@ -4352,8 +4352,12 @@ program that holds a secret off the WASM engine, `examples/demo.delulu` among th
 - `host::secret_handle_tests::a_minted_and_sent_secret_never_enters_the_guests_memory`. After a run that minted a secret
   and sent it past its audience to the egress client, no byte of it is in the guest's memory, and the module was built
   without it. The control: the scan finds the program's own strings. Phase 3n called §9.8's memory scan vacuous "when the
-  bytes never enter"; it now reads a memory for which the host has handled the secret. (This crate's tests build the
-  egress client without a transport, so the request ends there as `no-client`. The CLI tests below see it leave.)
+  bytes never enter"; it now reads a memory for which the host has handled the secret. (The request ends at the egress
+  client's transport: `no-client` when the crate is tested alone, which builds the runtime without `net`, and `connect`
+  in a workspace build, where `net` is on and nothing listens on port 9. The CLI tests below see it leave.)
+- The conformance witness for `ref.diag.DL1205` named the replaced pin until PR #48's first run (`39825874508`) refused
+  it as dangling. It now names `a_secret_compiles_as_a_handle_and_what_would_read_it_stays_dl1205`, an entrenched edit
+  recorded in `ENTRENCHED_CHANGE_RECORD.md` (2026-10-22).
 - `egress_cli.rs` `a_wasm_program_sends_its_secret_from_the_host_as_the_interpreter_does` runs the same program on the
   interpreter, on `--engine wasm` and as a built `.dwx`. In the audience, the request leaves as TLS and the report's hop
   names the secret. Outside it, nothing connects and the operator is told `audience`. The three traces are identical.

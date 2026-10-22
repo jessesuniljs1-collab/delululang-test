@@ -5317,5 +5317,7 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `crates/delulu/tests/egress_cli.rs`, `crates/delulu/tests/wasm_cli.rs`, `CHANGELOG.md`, `HANDOFF.md` (§11.5),
   `docs/book/THE_DELULULANG_BOOK.md`, `docs/design/STAGE3_SPECIFICATION.md` (a dated note under Phase 3n),
   `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-174), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4),
-  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`; and in the PR's second commit, after its first run (`39825874508`) was red on
+  `test (ubuntu-24.04)`: `tests/conformance/witnesses.toml` (entrenched: the DL1205 witness renamed) and
+  `docs/design/ENTRENCHED_CHANGE_RECORD.md`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
