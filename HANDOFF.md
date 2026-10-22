@@ -1291,6 +1291,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Miri is about a hundred times slower** — which is how it found AUDIT-LOCK-TAKEOVER-1. Shrink a test
   under `cfg!(miri)` only where its size is not the witness (D-V2-45); a test whose witness is the wall
   clock is ignored under Miri and runs natively on every push. `miri-slow` jobs get 240 minutes.
+- **A test that spends a production limit spends it under Miri too, and `miri-slow` never runs on a pull request**
+  (2026-10-22): `a_match_the_search_cannot_finish_is_refused_not_passed` spent the checker's 10,000,000-cell search
+  limit — under a second natively, 3.3 hours under Miri — landed green in PR #34, and the next two full runs timed
+  `miri-slow (delulu-check)` out. Before landing a test that spends a bound, multiply its cost by Miri's (here about a
+  millisecond a cell) or dispatch `-f jobs=miri-slow` at the branch; give the limit a Miri arm (`EXHAUSTIVE_BUDGET`,
+  `LOCK_WAIT`) and size the test to the arm compiled.
 - **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
   `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
 - **A sandboxed run writes its audit records only where the chain already exists**

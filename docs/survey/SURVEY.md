@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 326 |
-| Rust lines | 185492 |
+| Rust lines | 185544 |
 | Rust files outside `src/` (test/bench targets) | 156 |
 | Markdown documents | 270 |
-| Markdown lines | 84244 |
+| Markdown lines | 84325 |
 | DeluluLang programs | 254 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1553 / 16038 |
+| Nodes / edges in this map | 1553 / 16051 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -192,17 +192,17 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 15728 lines
+- **Modules:** 18 files, 15733 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 4120 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 4122 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 169 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1452 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 860 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
-| `src/lib.rs` | 2116 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
+| `src/lib.rs` | 2119 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 573 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 380 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 236 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |
@@ -304,7 +304,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 24 files, 23260 lines
+- **Modules:** 24 files, 23293 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -315,7 +315,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/channel.rs` | 2064 | `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since |
 | `src/compute.rs` | 626 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 388 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
-| `src/cycles.rs` | 255 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
+| `src/cycles.rs` | 288 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1436 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/egress.rs` | 1318 | The egress client (PS-B-02, owner ruling D-V2-30): the first code in DeluluLang that sends a byte |
 | `src/egress/tests.rs` | 1196 | The egress client's tests. Most of the policy is tested OFFLINE, with a resolver and a transport |

@@ -1950,7 +1950,9 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
 
     /// A match whose search outruns its limit is refused in words, never passed unproved: the pigeonhole principle for
     /// eight pigeons and seven holes — each arm one clause ruled out — covers every case, but proving it needs an
-    /// exponential search; seven pigeons and six holes are proved within the limit.
+    /// exponential search; seven pigeons and six holes are proved within the limit. Under Miri, whose limit is ten
+    /// thousand cells, the pair is five pigeons in four holes refused (43,367 cells to prove) and four in three proved
+    /// (3,694).
     #[test]
     fn a_match_the_search_cannot_finish_is_refused_not_passed() {
         let php = |holes: usize| {
@@ -1978,8 +1980,9 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
             let fields = vec!["Bool"; n].join(", ");
             format!("module m\ntype P = P({fields})\nfn f(p: P) -> Int {{\n  match p {{\n{}\n  }}\n}}\n", arms.join("\n"))
         };
-        assert_eq!(errors(&php(6)), Vec::<String>::new(), "six holes are proved");
-        let c = check(&php(7));
+        let (proved, refused) = if cfg!(miri) { (3, 4) } else { (6, 7) };
+        assert_eq!(errors(&php(proved)), Vec::<String>::new(), "{proved} holes are proved");
+        let c = check(&php(refused));
         let msgs: Vec<_> = c.diagnostics.iter().filter(|d| d.is_error()).map(|d| (d.code, d.message.as_str())).collect();
         assert_eq!(
             msgs,

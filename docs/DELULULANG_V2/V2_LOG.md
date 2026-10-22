@@ -8505,3 +8505,30 @@ marking `match` ended in `_ => {}`, and `Map` fell there: the collector dates fr
   witness is exercised. It is red on the old collector (`{k: []}`), and that mutant is exactly the old code.
 - **Residual.** A cycle through a map is not collected, because a map cell is not registered. That is a leak, the safe
   direction.
+
+## 2026-10-22 (night) — the laptop: a cycle through a map is collected (GC-MAP-1's residual)
+
+Witnessed: an actor turn that makes 200 cycles through maps (`g.insert("self", Link(g))`) reached **0 sweeps**, and all
+200 leaked. `note_value` registered lists, records and closures' scopes and passed every other kind to `_ => {}`, so a
+map was never registered, the pressure never reached the threshold, and no sweep ran. Now a map is registered
+(`RegCell::Map`, `note_map`) and broken like a list, and `note_value` names every `Value` kind, as the marking walk does.
+The same turn: 1 sweep, 200 collected. The live map of GC-MAP-1's witness is now registered as well, and stays whole
+through two sweeps. Test: `actors_cycles_cli.rs` `a_turn_full_of_cycles_through_maps_is_collected`, red on the old
+collector (no sweep).
+
+## 2026-10-22 (evening) — the laptop: the exhaustiveness limit's test fits Miri (`miri-slow` timed out twice)
+
+Witnessed: `miri-slow (delulu-check)` ran out of its 240 minutes on `launch/2.0.0`'s `jobs=everything` run `39678647200`
+(`7b5aec3`) and on `master`'s nightly `39746314492` (`35d8208`); on `81f34d1` (run `39646720253`) it had taken 57
+minutes. Every other job of both runs passed. The gaps between the job log's test lines name one test:
+`a_match_the_search_cannot_finish_is_refused_not_passed` (PR #34) took 11,873 s. It reads about 15 million search cells
+— 5,042,506 to prove six holes, then the whole 10,000,000-cell limit refusing seven — and a cell costs Miri about a
+millisecond. `miri-slow` runs on the nightly and on `jobs=everything`, never on a pull request, so the test landed green.
+(The next slowest, `forward_references_chains_and_recursive_nominals_still_work`, took 632 s; it took 847 s in the green
+run, so it is not new.)
+
+Now `EXHAUSTIVE_BUDGET` is ten thousand under Miri, as `audit.rs`'s `LOCK_WAIT` is an hour there, and under Miri the
+test's pair is four holes refused (43,367 cells to prove) and three proved (3,694). Measured with a native probe: every
+other match the `delulu-check` and `delulu-atlas` lib tests check — the two Miri jobs that reach the checker — reads at
+most 11 cells (307 searches; atlas reaches none). With both `cfg!(miri)` arms forced true natively, the test passes, the
+255 lib tests pass, and a mutant passing a spent search is red. The native limit and native test are unchanged.

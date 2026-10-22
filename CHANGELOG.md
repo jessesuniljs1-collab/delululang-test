@@ -17,6 +17,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   didn't look inside maps. So a list or record that an actor could reach only through a map looked like garbage, and a
   sweep emptied it in place. A map holding `[1, 2, 3]` read back as `[]`, and the only sign was a "collected" count
   under `--trace-memory`. This affected actor programs since maps were added (2026-09-20).
+- **Fixed: a garbage cycle through a map in an actor was never collected.** The collector didn't track maps, so
+  cycles through them leaked. Maps are now tracked and collected the same way lists are.
 
 ## Unreleased — `--debug-rcaps` on a deep graph, 2026-10-22
 
