@@ -5242,6 +5242,9 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   (`V2_LOG.md`). Then, at the owner's word, every linked worktree is snapshotted too — `D:\nelan\dl-launch` to
   `autosave/laptop-dl-launch`. The task was re-installed from this branch's script (the owner asked for it live), and
   `master` push run `39804641086` (`37b3e4c`, #41) read **success**.
+- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 
 ### 2026-10-22 (evening) — the broker log names a late answer (RW 7.17's instrument) (made on the laptop)
 - Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
@@ -5265,6 +5268,10 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   corrected (the constitution was corrected 2026-10-17, D-V2-141). Then seven `REMAINING_WORK.md` rows wrapped across
   lines (two by this night's edits, five older) joined, words unchanged, and gated (`repository_structure.rs`
   `every_remaining_work_row_is_one_line`, red before) — M `crates/delulu/tests/repository_structure.rs` too.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 
 ### 2026-10-22 (evening) — `broker stop` waits for the daemon to exit (RW 7.19 closed) (made on the laptop)
 - Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
@@ -5275,10 +5282,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.19), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
   deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
-- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
-  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+
+### 2026-10-22 (evening) — a package builds to one `.dwx` (RW 3.4) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/wasm-package-build` (on `master` `41e9724`)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** #42–#44 by fast-forward to `86b8df5` on their green runs (the `miri-slow`
+  dispatch `39805331281`: `delulu-check` **success in 54 minutes**, the pigeonhole test 78 s where it had been 11,873 s);
+  #45–#46 to `41e9724` on #46's green `39813045667` (#45's own `39811689314` and `39812124486` green too); `master`'s push
+  run `39814780780` (`86b8df5`) **success**. `launch/2.0.0` = `7e7b2ed` (merge of master ..`41e9724`; three CHANGELOG
+  sections under 2.0.0; Survey 1554/16104; doctor ok; clippy stamped; the ten gates 77 passed); its release dry run
+  `39816924661` **success**, its `jobs=everything` `39816919025` running.
+- **What:** `build <dir> --target wasm` writes a package's `.dwx` (the program `run <dir>` runs; the manifest's scopes;
+  `target/<name>/<name>.dwx`) — the corpus counter 14 of 17 as programs. Also: three entries of this log had been
+  scrambled by tonight's inserts (each new one placed before the previous one's file list); the file lists moved back,
+  no line changed.
+- Files and folders: M `crates/delulu/src/cli.rs`, `crates/delulu/src/run_cmd.rs`, `crates/delulu/tests/package_run.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (3.4), `docs/CLOUD_SYNC_LOG.md`,
   `docs/survey/*`. Added, deleted, renamed: nothing.
-- Survey and doctor (after the last edit): in the commit message.
-- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
-  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

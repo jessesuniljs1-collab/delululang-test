@@ -11,6 +11,16 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a package builds to one `.dwx`, 2026-10-22
+
+- **Added: `delulu build <package-dir> --target wasm` builds a whole package into one `.dwx`** (RW 3.4). It compiles
+  exactly the program `delulu run <package-dir>` would run: dependencies resolved, everything checked as a workspace,
+  then flattened into one module. The authority it embeds carries the package manifest's scopes. By default the artifact
+  is written to `target/<name>/<name>.dwx`, next to the package's `interface.json`; `--out` puts it elsewhere. Until
+  now a package directory was refused with a note to try `delulu build .`, which is what had been typed, so a program
+  of more than one module had no artifact. The four-package `station` corpus program now builds to one `.dwx` whose
+  output, and the files it writes, match `run .`.
+
 ## Unreleased — `broker stop` waits for the daemon to exit, 2026-10-22
 
 - **Changed: `delulu broker stop` returns only after the daemon has exited, and says `ok: broker stopped`** (RW 7.19).
