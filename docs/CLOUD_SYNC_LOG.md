@@ -5240,3 +5240,86 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Also in this branch: RW 7.17 records the next red's own words — `estop_cli`'s actor control on `windows-latest` (PR #38's
   run `39672085470`) lost its arm because the daemon accepted a liveness probe and did not answer within DEADMAN-1's 1 s;
   RW 4.53's measured 1.077 s maximum beside busy writers is past that deadline. The fix direction is recorded, not taken.
+
+### 2026-10-22 (night) — `launch/2.0.0` brought up to `master` twice; RW 7.17's fix direction corrected (made on the laptop)
+- Session: `https://claude.ai/code/session_01GMTbobfi6fosrVt6Qfpkfb`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/records-1022` (on `master` `35d8208`, where #40 landed on its green run `39675143583`; #38 and #39 landed
+  together at `8a88466` on #39's green run `39672866524`, #38's own rerun `39672085470` attempt 2 also green; `master`'s push
+  runs `39669143464` (`f791ded`), `39672300209` (`ec333c4`) and `39673797633` (`8fb2867`) **success**)   Pull request: the one this entry rides in
+- **`launch/2.0.0`:** `3d4c2c2` merged `master` ..`8fb2867` (#33–#37; the four new sections under `## [2.0.0]`; the stricter
+  DL0407 added to 2.0.0's **Breaking** list — a program that checked under 1.x can be refused) and `7b5aec3` merged
+  ..`35d8208` (#38–#40). Each: Survey rebuilt, doctor ok, clippy stamped, the ten gates 75 passed. Dispatched on `7b5aec3`:
+  CI `jobs=everything` `39678647200` and the release dry run `39678652131` — running at this commit; the next master commit
+  records them.
+- **What (master):** RW 7.17's two fix directions marked unsafe as stated — an off-queue liveness answer would hide a stuck
+  handler from the e-stop; the next step is a measurement.
+- Files and folders: M `docs/REMAINING_WORK.md` (7.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
+  nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — the exhaustiveness limit's test fits Miri (`miri-slow` timed out twice) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/miri-exhaust-budget` (on `master` `37b3e4c`, where PR #41 landed on its green run `39678800260`)   Pull request: #42
+- **CI read since the last entry:** `master`'s push run `39678411414` (`35d8208`) **success**; on `launch/2.0.0` `7b5aec3`
+  the release dry run `39678652131` **success** and CI `jobs=everything` `39678647200` **cancelled** — every job passed
+  except `miri-slow (delulu-check)`, stopped at its 240 minutes; `master`'s nightly `39746314492` (`35d8208`) the same.
+- **What:** that job's time went to one test spending the checker's 10,000,000-cell search limit (11,873 s); the limit
+  is ten thousand under Miri and the test is sized to it. Evidence in `V2_LOG.md`.
+- **`autosave/laptop`** (read at the owner's word): its newest snapshot `838c739` (2026-10-21 20:43 UTC, on
+  `laptop/gc-map`) is tree-identical to `8a88466`, the commit that landed it — nothing to recover. The task is `Ready`,
+  last result 0, renewed to 2026-10-28. All 46 local branches' commits are on `origin`.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs`, `HANDOFF.md` (§11.5),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (2.20), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — autosave pushes what origin lacks, not what an upstream lacks (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/autosave-push` (on `laptop/miri-exhaust-budget` `1f44f55`, PR #42)   Pull request: the one this entry rides in
+- **What:** `scripts/autosave.ps1`'s push step asked each branch's upstream: a branch with none (every
+  `git switch -c X master`) was skipped, so its unpushed commit stayed on the disk alone; a `master` ahead was pushed onto
+  `origin`'s `master`. Now a branch with a commit `origin` lacks is pushed under its own name; `master`/`main` go to
+  `autosave/laptop-master`/`-main`; an orphan is refused; `-DryRun` added. Witnessed and checked on throwaway origins
+  (`V2_LOG.md`). Then, at the owner's word, every linked worktree is snapshotted too — `D:\nelan\dl-launch` to
+  `autosave/laptop-dl-launch`. The task was re-installed from this branch's script (the owner asked for it live), and
+  `master` push run `39804641086` (`37b3e4c`, #41) read **success**.
+
+### 2026-10-22 (evening) — the broker log names a late answer (RW 7.17's instrument) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/broker-slow-answer` (on `laptop/autosave-push` `e8b3be4`, PR #43)   Pull request: the one this entry rides in
+- **What:** the daemon names in `broker.log` each answer given 500 ms or more after its request arrived (kind, queue
+  wait, own time); `ReqBody::kind`; `estop_cli`'s no-revoke controls attach `broker.log` to a failure and print late
+  answers on a green run (the measurement: `witness.yml` on `windows-latest` at `estop_cli`).
+- Files and folders: M `crates/delulu/src/broker_ipc.rs`, `crates/delulu/src/brokerd.rs`,
+  `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/estop_cli.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/REMAINING_WORK.md` (7.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — a grant naming a network share is warned of on Windows (RW 4.17 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/unc-grant-warning` (on `laptop/broker-slow-answer` `86b8df5`, PR #44)   Pull request: the one this entry rides in
+- **CI read:** PR #42's runs `39805379666` and `39806203436` **success**; PR #43's `39807030815` (`a1ab1d1`) and
+  `39808528500` (`e8b3be4`) **success**; `witness.yml` on `windows-latest` at `86b8df5`, `39810107555` and `39810113455`,
+  **success** — RW 7.17's measurement: no answer late in four no-revoke control runs.
+- **What:** on Windows an `fs.read`/`fs.write`/`plugin` grant naming `\\server\share` is warned of once, naming the server
+  and the NTLM exposure; the run goes on (`prim::unc_server`, `cli::warn_on_unc_grant`). RW 1.11's stale "not edited"
+  corrected (the constitution was corrected 2026-10-17, D-V2-141). Then seven `REMAINING_WORK.md` rows wrapped across
+  lines (two by this night's edits, five older) joined, words unchanged, and gated (`repository_structure.rs`
+  `every_remaining_work_row_is_one_line`, red before) — M `crates/delulu/tests/repository_structure.rs` too.
+
+### 2026-10-22 (evening) — `broker stop` waits for the daemon to exit (RW 7.19 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/broker-stop-waits` (on `laptop/unc-grant-warning` `a47516c`, PR #45)   Pull request: the one this entry rides in
+- **What:** `broker stop` returns once the daemon's process is gone (5 s bound), not when it answers — the cause of
+  RW 7.19, witnessed (OS error 32 removing the state directory at once on the old code). `ok: broker stopped`.
+- Files and folders: M `crates/delulu/src/brokerd.rs`, `crates/delulu/tests/broker_cli.rs`, `CHANGELOG.md`,
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (7.19), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
+- Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
+  `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

@@ -178,3 +178,40 @@ fn the_repeated_heading_rule_finds_the_shape_it_was_written_for_and_nothing_else
         "## 2026-10-11\n### Evidence\ntext\n## 2026-10-12\n### Evidence\ntext\n```\n# x\n# x\n```\n#hashtag\n#hashtag\n";
     assert!(repeated_headings(control).is_empty(), "{:?}", repeated_headings(control));
 }
+
+/// The rows of `docs/REMAINING_WORK.md`'s tables that do not end on the line they start on — a Markdown table row is one
+/// line, and a row broken across lines renders as a stub row and loose paragraphs. Seven were (2026-10-22): five written
+/// so by earlier sessions, two by a wrapped edit that night, none caught.
+fn broken_rows(text: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let mut cells = line.splitn(3, '|');
+        let (lead, id) = (cells.next(), cells.next());
+        let is_row = lead == Some("")
+            && id.is_some_and(|c| {
+                let c = c.trim();
+                !c.is_empty() && c.starts_with(|ch: char| ch.is_ascii_digit()) && c.contains('.')
+            });
+        if is_row && !(line.matches('|').count() >= 6 && line.trim_end().ends_with('|')) {
+            out.push((i + 1, line.chars().take(40).collect()));
+        }
+    }
+    out
+}
+
+#[test]
+fn every_remaining_work_row_is_one_line() {
+    let text = std::fs::read_to_string(repo_root().join("docs/REMAINING_WORK.md")).expect("docs/REMAINING_WORK.md");
+    let bad: Vec<String> = broken_rows(&text).into_iter().map(|(n, l)| format!("line {n}: {l}…")).collect();
+    assert!(bad.is_empty(), "a table row broken across lines:\n  {}", bad.join("\n  "));
+}
+
+/// The check above, watched failing: a row wrapped onto a second line is found; a whole row, one whose code span holds a
+/// `|`, and a header are not.
+#[test]
+fn the_broken_row_rule_finds_a_wrapped_row_and_nothing_else() {
+    let wrapped = "| 7.17 | **a defect** | **Open** — and more\nwords on the next line. | `x.rs` | — |\n";
+    assert_eq!(broken_rows(wrapped).len(), 1, "a wrapped row must be found");
+    let control = "| # | Gap | Status | Evidence | Next |\n|---|---|---|---|---|\n| 2.20 | a | b | c | d |\n| 4.1 | `a | b` | c | d | e |\n";
+    assert!(broken_rows(control).is_empty(), "{:?}", broken_rows(control));
+}

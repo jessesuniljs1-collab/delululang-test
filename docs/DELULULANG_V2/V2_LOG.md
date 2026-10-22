@@ -8546,3 +8546,126 @@ map was never registered, the pressure never reached the threshold, and no sweep
 The same turn: 1 sweep, 200 collected. The live map of GC-MAP-1's witness is now registered as well, and stays whole
 through two sweeps. Test: `actors_cycles_cli.rs` `a_turn_full_of_cycles_through_maps_is_collected`, red on the old
 collector (no sweep).
+
+## 2026-10-22 (evening) — the laptop: the exhaustiveness limit's test fits Miri (`miri-slow` timed out twice)
+
+Witnessed: `miri-slow (delulu-check)` ran out of its 240 minutes on `launch/2.0.0`'s `jobs=everything` run `39678647200`
+(`7b5aec3`) and on `master`'s nightly `39746314492` (`35d8208`); on `81f34d1` (run `39646720253`) it had taken 57
+minutes. Every other job of both runs passed. The gaps between the job log's test lines name one test:
+`a_match_the_search_cannot_finish_is_refused_not_passed` (PR #34) took 11,873 s. It reads about 15 million search cells
+— 5,042,506 to prove six holes, then the whole 10,000,000-cell limit refusing seven — and a cell costs Miri about a
+millisecond. `miri-slow` runs on the nightly and on `jobs=everything`, never on a pull request, so the test landed green.
+(The next slowest, `forward_references_chains_and_recursive_nominals_still_work`, took 632 s; it took 847 s in the green
+run, so it is not new.)
+
+Now `EXHAUSTIVE_BUDGET` is ten thousand under Miri, as `audit.rs`'s `LOCK_WAIT` is an hour there, and under Miri the
+test's pair is four holes refused (43,367 cells to prove) and three proved (3,694). Measured with a native probe: every
+other match the `delulu-check` and `delulu-atlas` lib tests check — the two Miri jobs that reach the checker — reads at
+most 11 cells (307 searches; atlas reaches none). With both `cfg!(miri)` arms forced true natively, the test passes, the
+255 lib tests pass, and a mutant passing a spent search is red. The native limit and native test are unchanged.
+
+## 2026-10-22 (evening) — the laptop: autosave pushes what origin lacks, not what an upstream lacks
+
+Read at the owner's question, *"is autosave working properly as intended, To which branch autosave windows task
+scheduler pushing everything"*. The task runs `%LOCALAPPDATA%\DeluluLang\autosave.ps1` (byte-identical to
+`scripts/autosave.ps1`) every 10 minutes. Its snapshot step works: at 15:33 UTC it pushed this session's uncommitted
+records as `b35b6b1` to `autosave/laptop`, and its newest earlier snapshot `838c739` is tree-identical to `8a88466`, the
+commit that landed it. Its log's 16-hour gap is the laptop switched off (Kernel-Power: shut down 04:59 IST, booted 20:49).
+
+Its push step asked each branch's configured upstream, and that was wrong three ways, witnessed:
+- **A branch with no upstream was skipped** — every branch made with `git switch -c X master` until its first
+  `push -u`. A commit on one that the session had not pushed stayed on this disk alone, and the snapshot step, seeing
+  a clean tree, logged `clean`. Witnessed on the real repository: a local branch with one commit no origin branch
+  held, the installed script run once by hand, `clean`, the commit still not on origin.
+- **A `master` ahead of `origin/master` was pushed onto it** — past the rule that `master` lands only by fast-forward
+  on a green run (owner, 2026-10-19). Witnessed on a throwaway origin.
+- **A branch whose upstream has another name** (`launch-merge-1020`, tracking `launch/2.0.0`) was pushed under its own
+  name each run (the stray `origin/launch-merge-1020`, `8ff2b17`, contained in `launch/2.0.0`), and one tracking
+  `origin/master` was pushed again every run, unchanged (`laptop/wasm-contains-compound`, three runs on 2026-10-21).
+
+Now a branch is pushed, under its own name, when it holds a commit no branch of `origin` holds; the snapshot branches
+are left out of that question, since each carries HEAD as a parent. `master`'s and `main`'s unpushed commits go to
+`autosave/laptop-master` / `-main`, never merged. A branch diverged from its namesake is logged, and one sharing no
+commit with `origin` is refused — after the launch, that is the development history. `-DryRun` logs what a run would
+push. On two identical throwaway setups (bare origin plus a clone, one branch per case): the old script pushed `master`
+onto origin's `master`, re-pushed the branch tracking `origin/master`, and left `no-upstream` and `snap-parent`
+unpushed. The new one pushed both, sent `master` to `autosave/laptop-master` while origin's `master` stayed put, logged
+`diverged`, refused the orphan, pushed nothing on a second run, followed one more `master` commit, and snapshotted an
+uncommitted edit. A dry run over the real repository's 47 branches would push only the witness branch, deleted afterwards
+(local only, never pushed).
+
+Then, at the owner's word (*"also snapshot the dl-launch worktree"*): the snapshot step read only the repository's own
+checkout, so a session's uncommitted edits in the linked worktree `D:\nelan\dl-launch` — where `launch/2.0.0` is merged,
+CHANGELOG conflicts resolved by hand — reached no snapshot. Now each worktree `git worktree list` names is snapshotted:
+the repository's own checkout to `autosave/laptop` as before, a linked one to `autosave/laptop-<its folder>`
+(`autosave/laptop-dl-launch`), each through its own private index, under the same refusals; a worktree whose folder is
+gone is logged and skipped. On a throwaway setup with a linked worktree holding an edit and a new file, and a removed
+one: the snapshot carried both, named the worktree in its message, left the worktree's own index unstaged, was
+`unchanged` on the next run, and the removed worktree was logged; the repository's own checkout still snapshotted to
+`autosave/laptop`. A dry run on the real repository: `clean: launch-merge-1020 7b5aec3 in D:\nelan\dl-launch`.
+
+## 2026-10-22 (evening) — the laptop: the broker log names a late answer (RW 7.17's instrument)
+
+RW 7.17's next step was a measurement: how long the serial daemon takes to answer a device's 1 s authority probe beside a
+run's own appends. Nothing measured it — the daemon timed no request, and a run's line says `operator-revoke` for a probe
+that got no answer in time, as for a revoke (D-V2-99). Now the serve loop notes when it took each request off its queue,
+and an answer that leaves 500 ms or more after its request arrived (half the probe's deadline) is named in `broker.log`:
+the request's kind (`ReqBody::kind`, a name and none of its fields — a field can be a token or a beat's key), the time it
+waited for the requests ahead of it, and the time it took itself. An answer that could not be written has its own line
+already and is not named twice.
+
+Test: `broker_cli.rs` `an_answer_given_late_is_named_in_the_broker_log`, on every OS. The handler is held as RW 4.35's red
+team held it — twelve pending guard requests with long justifications, asked for on the daemon's own endpoint (the
+socket, or the Windows pipe named from the state directory's FNV-1a) by a client that reads 32 KiB a quarter second — and
+`broker status` behind it waits seconds. On this laptop: *"a Status request was answered 2499 ms after it arrived: 2495
+ms waiting for the requests ahead of it, 4 ms handling and answering it"*, the client 2509 ms; three runs green. Three
+mutants red: the line never written, the wait measured from arrival to arrival, the threshold at 50 s. Building it
+found two things a first try missed: identical guard requests are folded into one (`deduped`), so twelve copies asked
+for 30 kB, not 360 kB; and a Windows reply's flush must drain within 1 s, so a holder reading 8 KiB a quarter second was
+dropped after a second (`the reader did not take its answer`) instead of holding the handler.
+
+`estop_cli`'s two no-revoke controls — the arm64 red and the `windows-latest` red — now attach `broker.log` to their
+failure, and print each late answer on a green run too, where `witness.yml`'s `--nocapture` shows it: the measurement is
+`witness.yml -f os=windows-latest -f target=estop_cli`. On this laptop: eight green, no answer late.
+
+**Read on `windows-latest`** (`witness.yml` at `86b8df5`): runs `39810107555` (`estop_cli`, 8 green) and `39810113455`
+(`estop_cli` and `broker_cli`, 18 green, the new test among them) — in the four no-revoke control runs no answer was late
+(no `late answer:` line). The red stays a rare timing-class event; when it recurs, its failure carries `broker.log`.
+
+## 2026-10-22 (evening) — the laptop: a grant naming a network share is warned of on Windows (RW 4.17's UNC half)
+
+RW 4.17 left one question: an operator's `fs.read`, `fs.write` or `plugin` grant may name `\\server\share` (a program's own
+path may not, PS-0-06), and on Windows reaching that share can send the user's NTLM credentials to `server`. Decided as
+the row proposed: said, not refused — the grant is the operator's informed choice. `prim::unc_server` names the machine a
+UNC spelling reaches (either slash; none for a local path or the `\\?\` / `\\.\` prefixes the grant parser refuses), and
+the option parser warns as it reads each `--grant`, on Windows only — elsewhere `//server/share` is an ordinary path. The
+first try printed the warning three times: `run` reads its arguments three times, so it is said once per spelling.
+
+On this laptop: `fs.read=\\fileserver.invalid\share`, `fs.write=//fileserver.invalid/share` and
+`plugin=\\fileserver.invalid\p` each warn once, naming the server, and the program runs (16 ms — nothing touches the
+share until a program opens it); `fs.read=\\?\UNC\srv\share` is refused as before; local paths and `net=` are silent.
+Tests: `cli.rs` `a_grant_naming_a_network_share_is_warned_of_on_windows` (on every OS: warned on Windows, silent
+elsewhere), `prim.rs` `a_unc_spelling_names_the_machine_it_reaches`. Three mutants red: no warning, the warning every
+time the arguments are read, only `fs.read` warned. Also corrected: RW row 1.11 and its section still called the
+constitution's guarantee 5 unedited and the owner's — it was corrected on 2026-10-17 (7.10a, D-V2-141).
+
+Then, reading the open rows: two of this night's RW edits (4.17, 7.17) had wrapped a table row across lines, and five
+older rows were the same (4.58, 4.59, 4.53, 4.46, 5.6) — a Markdown row is one line, so each rendered as a stub and loose
+paragraphs, and nothing caught it. Joined (the file's words unchanged, 27,939 in the same order), and gated:
+`repository_structure.rs` `every_remaining_work_row_is_one_line`, red on the file before (all seven named), and
+`the_broken_row_rule_finds_a_wrapped_row_and_nothing_else` (a code span holding `|` is not a break).
+
+## 2026-10-22 (evening) — the laptop: `broker stop` waits for the daemon to exit (RW 7.19 closed)
+
+RW 7.19: on Windows `broker_cli`'s secret tests left their temp directories behind on most runs, the cause suspected
+(the daemon runs with its working directory in the state directory) and not confirmed. Confirmed: `broker stop` returned
+once the daemon ANSWERED `Shutdown`, and the daemon then still had to leave its loop, wake its accept thread, remove its
+pid file and exit — a directory removed in that window fails with OS error 32, *"The process cannot access the file
+because it is being used by another process"*. Witnessed on the old code: start, stop, remove at once — the first of five
+tries failed, both times it was run. Now `stop` asks `Status` for the daemon's pid first and returns once that process is
+gone (`process_gone`: `kill(pid, 0)` and `ESRCH` on Linux and macOS, `GetExitCodeProcess` on Windows — an exited process
+has closed every handle it held), waiting at most 5 s and saying so if that passes; it says `ok: broker stopped`. Five
+of five removed at once, three runs; the secret tests left no directory in three runs; `broker_cli` 11, `estop_cli` 8,
+`guard_cli` 2 green. Test: `broker_cli` `a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once`; a
+mutant whose exit check always says "gone" is red. An operator gains the same: `stop` then `start` no longer meets the
+old daemon still there.

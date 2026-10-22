@@ -595,9 +595,15 @@ wins, and you should update the memory to match.
 - **Everything reaches GitHub even when a session stops** (owner, 2026-10-17: *"Can u run something parellely so that
   everything will get pushed to github repo even if usage limit hits"*): `scripts/autosave.ps1 -Install` registers a
   Windows Task Scheduler job, `DeluluLang-autosave`, that runs every 10 minutes for 7 hours (the owner: *"Maybe next 7 hrs is enough"*; `-Hours N` sets another span) outside Claude (no usage spent).
-  It pushes every local branch that is ahead of its upstream (a plain push, never a force; a diverged branch is only
-  logged) and snapshots uncommitted work — tracked edits and new unignored files — to `autosave/laptop`, through a
-  private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
+  It pushes every local branch that holds a commit no branch of `origin` holds, under its own name (a plain push, never
+  a force; a branch diverged from its namesake is only logged; one sharing no commit with `origin` is refused), except
+  that `master`'s and `main`'s go to `autosave/laptop-master` / `-main`, since `master` lands only by fast-forward on a
+  green run. (Until 2026-10-22 it asked each branch's upstream: a branch made with `git switch -c X master` has none, so
+  a commit on it a session had not pushed stayed on the disk alone, and a `master` ahead was pushed onto `origin`'s
+  `master` — both witnessed on throwaway repositories.) It also snapshots uncommitted work — tracked edits and new
+  unignored files — of the repository's own checkout to `autosave/laptop`, and of each linked worktree to
+  `autosave/laptop-<its folder>` (`D:\nelan\dl-launch`, where `launch/2.0.0` is merged, to `autosave/laptop-dl-launch`;
+  the owner, 2026-10-22: *"also snapshot the dl-launch worktree"*), each through a private index, so HEAD, the index and the tree are untouched; each snapshot's parents are the previous one and HEAD,
   so the branch only fast-forwards. It refuses a snapshot carrying the banned word (guard falsified with a probe token),
   a file over 50 MB, or a HEAD on no branch of `origin` — after the launch `origin` is the public repository, and a
   snapshot of a checkout still on the development history would publish all of it there (guard falsified on throwaway
@@ -1292,6 +1298,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **Miri is about a hundred times slower** — which is how it found AUDIT-LOCK-TAKEOVER-1. Shrink a test
   under `cfg!(miri)` only where its size is not the witness (D-V2-45); a test whose witness is the wall
   clock is ignored under Miri and runs natively on every push. `miri-slow` jobs get 240 minutes.
+- **A test that spends a production limit spends it under Miri too, and `miri-slow` never runs on a pull request**
+  (2026-10-22): `a_match_the_search_cannot_finish_is_refused_not_passed` spent the checker's 10,000,000-cell search
+  limit — under a second natively, 3.3 hours under Miri — landed green in PR #34, and the next two full runs timed
+  `miri-slow (delulu-check)` out. Before landing a test that spends a bound, multiply its cost by Miri's (here about a
+  millisecond a cell) or dispatch `-f jobs=miri-slow` at the branch; give the limit a Miri arm (`EXHAUSTIVE_BUDGET`,
+  `LOCK_WAIT`) and size the test to the arm compiled.
 - **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
   `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
 - **A sandboxed run writes its audit records only where the chain already exists**
