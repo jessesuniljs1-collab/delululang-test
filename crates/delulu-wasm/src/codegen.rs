@@ -101,6 +101,7 @@ enum Ty {
     FsRead,  // i32 host handle (Cap[FsRead], Phase 3p)
     FsWrite, // i32 host handle (Cap[FsWrite], RW 3.4)
     Http,    // i32 host handle (Cap[Http], RW 3.4)
+    Secret,  // i32 host handle (`Secret[Str]`, D-V2-174) — the host keeps the secret; the guest holds its index, never a byte
     Root,    // i32 host handle to the root authority (Phase 3e)
     // Stage 4 phase 4g: `Cap[ForeignLoad]` (i32 host handle) and a bound `foreign` lib handle
     // `Foreign(lib_id)` (i32 host handle; `lib_id` indexes the module's foreign blocks so a method
@@ -669,6 +670,10 @@ struct Imports {
     /// `Cap[Http].get(url)`, performed host-side in the interpreter's order by its own egress client (RW 3.4).
     root_http: u32,
     http_get: u32,
+    /// `delulu:cap.root_secret` and `http_get_with_secret` — `root.secret(name)`, a handle to a secret the host mints by
+    /// the interpreter's own rule and keeps, and `Cap[Http].get_with_secret`, which sends it from the host (D-V2-174).
+    root_secret: u32,
+    http_get_with_secret: u32,
     // Stage 4 phase 4g — the `delulu:foreign` host interface.
     foreign_load: u32,
     foreign_bind: u32,
@@ -759,6 +764,7 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
         | Ty::FsRead
         | Ty::FsWrite
         | Ty::Http
+        | Ty::Secret
         | Ty::Root
         | Ty::ForeignLoad
         | Ty::Foreign(_)
@@ -835,6 +841,15 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                     }
                 }
                 return None; // other capability kinds (e.g. Python) fall back to the interpreter
+            }
+            // D-V2-174: a `Secret[Str]` is a host handle, as a capability is.
+            if name == "Secret" {
+                return match &args[..] {
+                    [TypeExpr::Named { path: sp, args: sa, .. }] if sa.is_empty() && sp.segs.len() == 1 && sp.segs[0].name == "Str" => {
+                        Some(Ty::Secret)
+                    }
+                    _ => None,
+                };
             }
             // Phase 3o: Result[T, E] and Option[T] (payloads may be scalars or named enums).
             if name == "Result" {
@@ -1215,6 +1230,8 @@ fn compile_module_typed(
         fs_write_text: u32::MAX,
         root_http: u32::MAX,
         http_get: u32::MAX,
+        root_secret: u32::MAX,
+        http_get_with_secret: u32::MAX,
         foreign_load: u32::MAX,
         foreign_bind: u32::MAX,
         foreign_call: u32::MAX,
@@ -1275,6 +1292,17 @@ fn compile_module_typed(
         imp.root_http = n_imports;
         imp.http_get = n_imports + 1;
         n_imports += 2;
+    }
+    // D-V2-174: by the mint, as `Cap[Http]`'s — a secret comes from nowhere else; and the send only where both are minted.
+    let needs_secret = module_calls_method(&env, module, &["secret"]);
+    if needs_secret {
+        imp.root_secret = n_imports;
+        n_imports += 1;
+    }
+    let needs_secret_send = needs_http && needs_secret && module_calls_method(&env, module, &["get_with_secret"]);
+    if needs_secret_send {
+        imp.http_get_with_secret = n_imports;
+        n_imports += 1;
     }
     if needs_foreign {
         imp.foreign_load = n_imports;
@@ -1467,6 +1495,18 @@ fn compile_module_typed(
         http_get_ty = next_type + 1;
         types.ty().function([ValType::I32; 5], [ValType::I32]); // http_get(cap, url, file, start, end) -> result_ptr
         next_type += 2;
+    }
+    let (mut secret_root_ty, mut secret_send_ty) = (0, 0);
+    if needs_secret {
+        secret_root_ty = next_type;
+        types.ty().function([ValType::I32; 2], [ValType::I32]); // root_secret(root, name) -> handle
+        next_type += 1;
+    }
+    if needs_secret_send {
+        secret_send_ty = next_type;
+        // http_get_with_secret(cap, url, headers, desc, header, secret, file, start, end) -> result_ptr
+        types.ty().function([ValType::I32; 9], [ValType::I32]);
+        next_type += 1;
     }
     let mut foreign_load_ty = 0;
     let mut foreign_bind_ty = 0;
@@ -1662,6 +1702,12 @@ fn compile_module_typed(
     if needs_http {
         imports.import("delulu:cap", "root_http", EntityType::Function(http_root_ty));
         imports.import("delulu:cap", "http_get", EntityType::Function(http_get_ty));
+    }
+    if needs_secret {
+        imports.import("delulu:cap", "root_secret", EntityType::Function(secret_root_ty));
+    }
+    if needs_secret_send {
+        imports.import("delulu:cap", "http_get_with_secret", EntityType::Function(secret_send_ty));
     }
     if needs_foreign {
         imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
@@ -3741,12 +3787,24 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.foreign_bind));
                 return Ok(Ty::Result(Scalar::Foreign(lib_id), Scalar::Enum(foreign_err)));
             }
-            // Phase 3n (secrets stay host-side, §4.4/DL1205): minting a secret (`root.secret(...)`) or
-            // declassifying one (`secret.expose(...)`) would put secret bytes in guest linear memory.
-            // Refuse so the program runs on the interpreter — where secrets never cross into a guest.
-            if name.name == "secret" {
-                return Err(CompileError::SecretInGuest("`root.secret(...)` mints a secret in the guest".into()));
+            // D-V2-174: `root.secret(name)` -> a `Secret[Str]` the guest holds as a handle. The host mints it by the
+            // interpreter's own rule and keeps it, so no byte of it enters the guest's memory (§4.4) — which is what
+            // Phase 3n refused minting for, when a secret would have been bytes here.
+            if name.name == "secret" && args.len() == 1 {
+                if cx.imp.root_secret == u32::MAX {
+                    return Err(CompileError::Unsupported("secret() without the secret host interface".into()));
+                }
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("secret() on a non-Root receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("secret() of a name that is not a Str".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.root_secret));
+                return Ok(Ty::Secret);
             }
+            // Phase 3n (secrets stay host-side, §4.4/DL1205): declassifying a secret (`secret.expose(...)`) would put its
+            // bytes in guest linear memory. Refuse so the program runs on the interpreter.
             if name.name == "expose" {
                 return Err(CompileError::SecretInGuest("`Secret.expose(...)` reveals secret bytes to the guest".into()));
             }
@@ -3754,6 +3812,16 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             // (the ForeignCall is traced). This is last so the built-in/secret dispatch above wins;
             // the receiver TYPE (`Ty::Foreign(id)`) selects it.
             let recv_ty = compile_expr(recv, cx)?;
+            // D-V2-174: what would run the program's code on a secret's bytes stays on the interpreter (DL1205); a secret
+            // leaves only through `get_with_secret`, sent from the host (below, on its `Cap[Http]`).
+            if recv_ty == Ty::Secret {
+                return Err(match name.name.as_str() {
+                    "map" => CompileError::SecretInGuest(
+                        "`Secret.map(f)` runs the program's function on the secret's bytes, in the guest".into(),
+                    ),
+                    other => CompileError::Unsupported(format!("the method `Secret.{other}`")),
+                });
+            }
             if let Ty::Foreign(lib_id) = recv_ty {
                 return compile_foreign_call(lib_id, &name.name, args, *span, cx);
             }
@@ -3776,6 +3844,34 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     .ok_or_else(|| CompileError::Unsupported("http get without the NetErr prelude type".into()))?;
                 emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.http_get));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
+            }
+            // `Cap[Http].get_with_secret(url, headers, header, secret)` -> `Result[Str, NetErr]` (D-V2-174): the guest names
+            // the secret's handle; the host sends its bytes by the interpreter's own `get_with_secret`.
+            if recv_ty == Ty::Http && name.name == "get_with_secret" && args.len() == 4 {
+                if cx.imp.http_get_with_secret == u32::MAX {
+                    return Err(CompileError::Unsupported("`get_with_secret` in a module that mints no secret".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("http get of a URL that is not a Str".into()));
+                }
+                let headers = compile_expr(&args[1], cx)?;
+                if headers != Ty::Map(Scalar::Str, Scalar::Str) {
+                    return Err(CompileError::Unsupported("request headers that are not a Map[Str, Str]".into()));
+                }
+                cx.emit(Instruction::I32Const(desc_ptr(cx, headers)?));
+                if compile_expr(&args[2], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("a header name that is not a Str".into()));
+                }
+                if compile_expr(&args[3], cx)? != Ty::Secret {
+                    return Err(CompileError::Unsupported("`get_with_secret` of a value that is not a Secret[Str]".into()));
+                }
+                let net_err = cx
+                    .env
+                    .id("NetErr")
+                    .ok_or_else(|| CompileError::Unsupported("http get without the NetErr prelude type".into()))?;
+                emit_span(cx, *span);
+                cx.emit(Instruction::Call(cx.imp.http_get_with_secret));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(net_err)));
             }
             // RW 3.4: `Str.len()`, counted as the interpreter counts it (`__str_len`).

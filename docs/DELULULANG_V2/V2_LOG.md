@@ -8638,3 +8638,29 @@ of five removed at once, three runs; the secret tests left no directory in three
 `guard_cli` 2 green. Test: `broker_cli` `a_stopped_broker_holds_nothing_its_state_directory_can_be_removed_at_once`; a
 mutant whose exit check always says "gone" is red. An operator gains the same: `stop` then `start` no longer meets the
 old daemon still there.
+
+## 2026-10-22 (evening) — the laptop: a package builds to one `.dwx` (RW 3.4)
+
+RW 3.4 counted 12 of the corpus's 17 entry points compiling to WASM, two stopping at "a package's other modules". Read
+again: `run <dir> --engine wasm` already ran both packages on WASM — `run` flattens a package into one checked module
+and the backend compiles that — and the four-package `station` printed and wrote what the interpreter did, byte for
+byte. What stopped them was the counter's question, `build FILE --target wasm`: an entry file alone cannot see its
+package's other modules (DL0301), and `build <dir> --target wasm` refused a directory with a note to try `delulu build
+.` — what had been typed. So a program of more than one module had no artifact.
+
+Now `build <dir> --target wasm` compiles the program `run <dir>` runs: `load_package_flattened` (the run's loader, its
+diagnostics now naming the command) resolves, checks the workspace — the authoritative gate — and flattens, and
+`emit_dwx`, shared with the file route, compiles and embeds the authority with the scopes of the package's own manifest,
+by default at `target/<name>/<name>.dwx` beside its `interface.json`. `station`'s artifact (4,226 bytes) runs with its
+authority verified (`Read, Write`; `FsRead ./data`, `FsWrite ./out`, `Console`), its output and both files equal to
+`run .`'s; the greeter's too. Re-measured file by file the same day: the 12, `demo` DL1205, the plugin host and
+`numpy_mean` DL1201, the two packages' entry files DL0301 alone — **14 of 17** as programs.
+
+Test: `package_run.rs` `a_four_package_program_builds_to_one_dwx_that_runs_as_the_package_does` — built from the
+directory above, so the scopes must come from the package's manifest. Three mutants red: no directory route; the scopes
+read from the working directory (it survived the first version of the test, which built from inside the package, and
+the test was moved); the artifact written beside the directory. `artifact_review`, `grants_cli`, `json_contract`,
+`plugin_cli`, `release`, `wasm_cli`, `cli` (53) green.
+
+Also: three of this night's `CLOUD_SYNC_LOG.md` entries had been scrambled — each new one inserted after an anchor in
+the middle of the one before, ahead of its file list; the lists moved back, every line kept (checked).

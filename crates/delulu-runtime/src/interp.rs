@@ -2180,37 +2180,12 @@ impl Interp {
     /// and the request is made with a secret that holds them and whose audience is that origin alone — so a redirect to
     /// another origin, even one the grant names, drops it. The bytes reach the egress client; no program value holds them.
     fn send_broker_secret(&self, c: &CapVal, argvals: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let CapScope::Net { allow, .. } = &c.scope else {
-            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
-        };
-        let url = prim::str_arg(argvals, 0, span)?;
-        if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
-            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
+        let send = broker_secret_send(&mut **self.custody.borrow_mut(), c, argvals, span)?;
+        match send {
+            SecretSend::AsGiven => self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None),
+            SecretSend::Answered(v) => Ok(v),
+            SecretSend::Held(args) => self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None),
         }
-        let headers = prim::headers_arg(argvals, "get_with_secret", span)?;
-        let header = prim::str_arg(argvals, 2, span)?;
-        let Some(Value::Secret(s)) = argvals.get(3) else {
-            return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
-        };
-        let Some(handle) = s.handle_name() else {
-            return self.effects.cap_method_pinned(c, "get_with_secret", argvals, span, None);
-        };
-        let to = s.audience().map(|a| a.to.as_slice()).unwrap_or(&[]);
-        let origin = match crate::egress::prejudge_secret(&url, &headers, &header, to) {
-            Ok(o) => o,
-            Err(reason) => return Ok(prim::answer_value(crate::egress::refuse_unsent(&url, reason))),
-        };
-        let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
-        let bytes = self
-            .custody
-            .borrow_mut()
-            .send_secret(handle, &origin.to_string(), Some(&span_str))
-            .map_err(|d| Fault::at(d.code, d.message, span))?;
-        let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
-        let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
-        let mut args = argvals.to_vec();
-        args[3] = Value::Secret(Rc::new(held));
-        self.effects.cap_method_pinned(c, "get_with_secret", &args, span, None)
     }
 
     fn expose_secret(&self, s: &Rc<SecretVal>, span: delulu_diag::Span) -> Result<Value, Fault> {
@@ -2482,6 +2457,57 @@ pub(crate) fn custody_op_for(
 
 /// The request path a network use names, for its custody to judge and record (P9-05, D-V2-169): `prim::request_path` of
 /// the URL [`custody_op_for`] took the host from. `None` for every other op.
+/// What `http.get_with_secret` sends, once [`broker_secret_send`] has judged it.
+pub enum SecretSend {
+    /// The arguments as given: the secret is not broker-held, or the effect itself refuses the request in its own words
+    /// (a scheme that is not `https`, a host outside the capability's allowlist).
+    AsGiven,
+    /// Refused before the broker was asked, by what the egress client judges without the bytes — the program's answer.
+    Answered(Value),
+    /// The arguments with the broker's bytes in place of the handle, in a secret whose audience is the request's one origin.
+    Held(Vec<Value>),
+}
+
+/// P9-04 (d), D-V2-134: `http.get_with_secret` of a broker-held secret, judged in order — the effect's own refusals (`prim`),
+/// then everything the egress client can judge without the bytes ([`crate::egress::prejudge_secret`]), and only then the
+/// broker, asked for the bytes for that ONE origin (`Custody::send_secret`). One function for both engines: the
+/// interpreter's `send_broker_secret` and the WASM host's `get_with_secret`, which holds a secret as a handle (D-V2-174).
+pub fn broker_secret_send(
+    custody: &mut dyn Custody,
+    c: &CapVal,
+    argvals: &[Value],
+    span: delulu_diag::Span,
+) -> Result<SecretSend, Fault> {
+    let CapScope::Net { allow, .. } = &c.scope else {
+        return Ok(SecretSend::AsGiven);
+    };
+    let url = prim::str_arg(argvals, 0, span)?;
+    if !url.starts_with("https://") || !prim::url_allowed(&url, allow) {
+        return Ok(SecretSend::AsGiven);
+    }
+    let headers = prim::headers_arg(argvals, "get_with_secret", span)?;
+    let header = prim::str_arg(argvals, 2, span)?;
+    let Some(Value::Secret(s)) = argvals.get(3) else {
+        return Err(Fault::at("DL0907", "http.get_with_secret expects a Secret[Str] (checker bug)", span));
+    };
+    let Some(handle) = s.handle_name() else {
+        return Ok(SecretSend::AsGiven);
+    };
+    let to = s.audience().map(|a| a.to.as_slice()).unwrap_or(&[]);
+    let origin = match crate::egress::prejudge_secret(&url, &headers, &header, to) {
+        Ok(o) => o,
+        Err(reason) => return Ok(SecretSend::Answered(prim::answer_value(crate::egress::refuse_unsent(&url, reason)))),
+    };
+    let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+    let bytes =
+        custody.send_secret(handle, &origin.to_string(), Some(&span_str)).map_err(|d| Fault::at(d.code, d.message, span))?;
+    let name = s.audience().map(|a| a.name.clone()).unwrap_or_else(|| handle.to_string());
+    let held = SecretVal::bound(bytes, Some(Rc::new(crate::value::SecretAudience { name, to: vec![origin] })));
+    let mut args = argvals.to_vec();
+    args[3] = Value::Secret(Rc::new(held));
+    Ok(SecretSend::Held(args))
+}
+
 pub(crate) fn custody_path_for(op: CustodyOp, argvals: &[Value]) -> Option<&str> {
     match (op, argvals.first()) {
         (CustodyOp::Net, Some(Value::Str(url))) => Some(prim::request_path(url)),

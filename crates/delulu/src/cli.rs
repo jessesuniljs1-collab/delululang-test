@@ -1414,7 +1414,7 @@ fn usage() -> &'static str {
      \x20 delulu check     <file.delulu>... | <package-dir> [--locked] [--json]   (several files in ONE process:\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the per-invocation floor dominates a small check — see measurements/agent-loop/RECORD.md)\n\
      \x20 delulu build     <package-dir> [--locked] [--deny-advisories] [--advisory-feed F] [--json]   (resolve deps + verify pins/authority)\n\
-     \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
+     \x20 delulu build     <file.delulu|package-dir> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
@@ -4745,7 +4745,7 @@ fn build_wasm_package(dir: &str, opts: &Opts) -> i32 {
     };
     let name = std::fs::read_to_string(std::path::Path::new(dir).join("delulu.toml"))
         .ok()
-        .map(|src| parse_manifest(&src).name)
+        .and_then(|src| parse_manifest(&src).name)
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| checked.module.name.dotted());
     let target = std::path::Path::new(dir).join("target").join(&name);
@@ -4774,7 +4774,7 @@ fn emit_dwx(
             "DL1201",
             format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"),
         );
-        print_diagnostics("build", &[d], &map, None, opts.json);
+        print_diagnostics("build", &[d], map, None, opts.json);
         return 1;
     }
     let wasm = match delulu_wasm::compile_checked(&checked.module, &checked.result) {
@@ -4784,7 +4784,7 @@ fn emit_dwx(
                 e.code(),
                 format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()),
             );
-            print_diagnostics("build", &[d], &map, None, opts.json);
+            print_diagnostics("build", &[d], map, None, opts.json);
             return 1;
         }
     };
@@ -4793,7 +4793,7 @@ fn emit_dwx(
     // manifest lists its foreign entries under the "outside the proof" separator (Stage 4 phase 4g).
     let mut scopes = scopes_in_dir(manifest_dir);
     let python_allowlist = python_allowlist_in_dir(manifest_dir);
-    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
+    scopes.foreign_calls = foreign_calls_json(&checked.module, map, &python_allowlist);
     let program = checked.module.name.dotted();
     let authority = authority_report(&program, &checked.result, &scopes);
     let dwx = delulu_wasm::embed_authority(&wasm, &authority);
@@ -4806,7 +4806,7 @@ fn emit_dwx(
     if opts.json {
         let report = json!({ "artifact": out_path, "bytes": dwx.len(), "authority": authority });
         note_json_emitted();
-        println!("{}", envelope_to_string("build", &[], Some(report), &map));
+        println!("{}", envelope_to_string("build", &[], Some(report), map));
     } else {
         ok_line!("ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`", dwx.len(), delulu_wasm::AUTHORITY_SECTION);
     }

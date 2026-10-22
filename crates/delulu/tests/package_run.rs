@@ -100,6 +100,56 @@ fn a_four_package_seven_module_program_runs_and_produces_the_right_answer() {
     assert!(alarms.contains("COLD") || alarms.contains("HOT"), "alarms must be archived: {alarms}");
 }
 
+/// The same four-package program built to ONE `.dwx` (`build <dir> --target wasm`) runs as the package runs: the same
+/// lines, the same two files, its authority verified with the package's effects. Until 2026-10-22 `build` refused a
+/// directory under `--target wasm` with a note to try `delulu build .` — what had been typed — so a program of more than
+/// one module had no artifact, though `run <dir> --engine wasm` ran it.
+#[test]
+fn a_four_package_program_builds_to_one_dwx_that_runs_as_the_package_does() {
+    let dir = scratch("tier4dwx");
+    copy_tree(&repo_root().join("tests/corpus/tier4-multimodule"), &dir);
+    let station = dir.join("station");
+    write(&station, "data/telemetry.txt", "bay3=21.5\nbay4=8.25\n\nbay5=41.0\nbroken\nbay6=abc\n");
+
+    // Built from the directory above, so the scopes must come from the package's manifest, not the working directory's.
+    let b = delulu(&dir, &["build", "station", "--target", "wasm"]);
+    assert!(b.status.success(), "the package builds to a .dwx: {}\n{}", stdout(&b), stderr(&b));
+    let dwx = station.join("target").join("station").join("station.dwx");
+    assert!(dwx.is_file(), "beside the package's interface.json, by default: {}{}", stdout(&b), stderr(&b));
+    let a = delulu(&dir, &["authority", "station/target/station/station.dwx", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&a)).unwrap_or_else(|e| panic!("{e}: {}", stdout(&a)));
+    let caps = v["authority"]["capabilities"].to_string();
+    assert!(
+        caps.contains(r#"{"kind":"FsRead","scopes":["./data"]}"#) && caps.contains(r#"{"kind":"FsWrite","scopes":["./out"]}"#),
+        "the artifact carries station's manifest scopes: {caps}"
+    );
+
+    let grants = ["--grant", "console", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"];
+    let mut seen = Vec::new();
+    for target in [".", "target/station/station.dwx"] {
+        let _ = std::fs::remove_dir_all(station.join("out"));
+        std::fs::create_dir_all(station.join("out")).unwrap();
+        let o = delulu(&station, &[&["run", target][..], &grants[..]].concat());
+        assert!(o.status.success(), "`run {target}`: {}\n{}", stdout(&o), stderr(&o));
+        let files =
+            ["readings.log", "alarms.log"].map(|f| std::fs::read_to_string(station.join("out").join(f)).unwrap_or_default());
+        seen.push((target, stdout(&o), files, stderr(&o)));
+    }
+    let (pkg, art) = (&seen[0], &seen[1]);
+    assert!(pkg.1.contains("2 reading(s) outside limits"), "the package's own answer:\n{}", pkg.1);
+    assert_eq!(art.1, pkg.1, "the artifact prints what the package prints");
+    assert_eq!(art.2, pkg.2, "and writes the same two files");
+    assert!(art.3.contains("authority verified; declared effects: Read, Write"), "{}", art.3);
+
+    // `--out` names the artifact anywhere; a second package, the shipped greeter, builds and runs too.
+    let greeter = dir.join("greeter");
+    copy_tree(&repo_root().join("examples/greeter"), &greeter);
+    let b = delulu(&greeter, &["build", ".", "--target", "wasm", "--out", "g.dwx"]);
+    assert!(b.status.success(), "greeter builds: {}", stderr(&b));
+    let o = delulu(&greeter, &["run", "g.dwx", "--grant", "console", "--no-prompt"]);
+    assert!(o.status.success() && stdout(&o).contains("hello, world"), "{}\n{}", stdout(&o), stderr(&o));
+}
+
 /// Authority is not weakened by the package path. Every capability the program needs is still a
 /// grant, and dropping any one of them refuses by name before or during the run.
 #[test]

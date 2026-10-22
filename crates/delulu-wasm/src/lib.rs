@@ -26,7 +26,8 @@ pub use dpx::{
     LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
 pub use host::{
-    run_artifact, run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, WasmError,
+    run_artifact, run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle, HostConfig, SecretGrants,
+    WasmError,
 };
 
 use std::collections::HashMap;
