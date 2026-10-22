@@ -1587,8 +1587,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 shown and refused until you accept it — granting authority stays a person's decision)\n\
      \x20 delulu login     --registry URL --token VALUE [--json] (store a scoped publish token; never echoed)\n\
-     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service's effects and requests against the environment profile;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 DL1909 when one exceeds it, naming the call — scopes decided as `authority --within` decides them)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 update <artifact> --members N --approved F --previous H [--fail-health-at I] [--json]\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR | E-SANDBOX> [--json]\n\

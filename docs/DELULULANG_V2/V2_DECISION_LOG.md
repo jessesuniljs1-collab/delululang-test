@@ -4443,6 +4443,52 @@ higher-order fragment (P17-9), with no capabilities, store, secrets, faults, Pro
   stating them shows Theorem 3's capability-witness clause was never true of `verify` (RW 2.6, unchanged and now named in
   the calculus).
 
+## D-V2-176 — RW 6.6: `deploy plan` compares every request's scope, decided by `authority --within`; a package with dependencies plans whole — TAKEN (head chef, 2026-10-22, under the owner's delegation)
+
+**The question:** `delulu deploy plan` compared one dimension of the authority answer spec §9.2 asks for, the effect row.
+An environment profile could name `fs.read`, `fs.write`, `net`, `secrets`, `foreign.c` and `foreign.python`, and none of
+them bounded a service. A plan was approved whatever paths, hosts or secrets its services asked for, if their effects fit.
+And reading the code found DEPLOY-PKG-1: `package_authority_value`, shared by `deploy plan`, `publish` and `add`, kept the
+single-package loader after C51 moved `authority` off it. So every package with a dependency was refused as one that "does
+not check cleanly". Witnessed on the four-package `station` (`deploy plan`) and on a library depending on another (`add`).
+
+**Decided:**
+1. A service is checked as `delulu authority <dir>` checks it (`cli::checked_package`): the workspace loader when the
+   directory has a `delulu.toml`. `deploy plan`, `publish` and `add` all go through it.
+2. The profile is a boundary in the `--grant` grammar:
+   - `fs.read`, `fs.write`, `net` and `foreign.python` lines go through `Grants::add`, the parser `run --grant` uses, so a
+     special-use host under `net` is refused as no boundary (D-NE-28) with exit 2;
+   - secrets and `foreign.c` libraries are matched by name;
+   - `console`, `clock`, `rand` and `declassify` are granted where the profile's effects grant `Write`, `Clock`, `Rand`
+     and `Declassify`.
+
+   (`Grants::accept_manifest` was not used: it takes secrets only when they are set in the environment, and no
+   `foreign.c`.)
+3. Each service's requirements are decided by `within::verdict`, the verdict `authority --within` gives: the runtime's own
+   mint for each path, host and secret. A service fits only if its effects are within the ceiling and its verdict is
+   *within*. Exceeds, unsupported and inconclusive (a scope the source computes) all refuse the whole plan with DL1909,
+   naming each request with its call (`file:line`) and the runtime's words. No new code.
+4. The approval carries its scope (C45): `compared` names effects, capability scopes and foreign holes, and
+   `profile_cannot_grant` names `net.special`, plugin roots and devices. The human verdict says "authority ceiling".
+5. A breaking change for a profile that named effects only: a service that reads files, makes requests or holds secrets
+   now needs the profile to name them. 2.0 is unreleased, so it goes under 2.0.0's Breaking.
+
+**Evidence:**
+- `deploy_cli.rs`:
+  - `a_package_with_dependencies_plans_as_authority_checks_it` (`station`, approved);
+  - `a_request_outside_the_profiles_scopes_is_refused_at_its_call` (`fs.read=./data` at `src/station.delulu:16`, exceeds);
+  - `a_scope_the_source_computes_is_refused_as_inconclusive`;
+  - `a_secret_is_bounded_by_name_and_a_special_use_host_is_no_boundary`.
+- `add_path_cli.rs` `a_dependency_with_dependencies_of_its_own_is_computed_whole`. The old loader's exact words,
+  "does not check clean, so its authority cannot be computed", came back under the mutant.
+- Four mutants red:
+  - the single-package loader (two `deploy_cli` tests, and the `add` test);
+  - the verdict ignored (three);
+  - the profile's `fs.read` dropped (two);
+  - its secrets dropped (one).
+- `deploy_plan_adversarial.rs`: five approving fixtures name the host their Net service calls (`net = ["example.com"]`).
+  The scope contract test now pins `compared` (three) and `profile_cannot_grant` (three). The refusal tests are unchanged.
+
 ## The owner's word on the repository, 2026-10-17 (night) — it outranks D-V2-153 §3
 
 **The owner:** *"Only push to and use test repo until I tell u to change. Do not change repo, unless told by me. Always push only to my repo"*. **So:** development stays on `delululang-test`; D-V2-153's move to `DeluluLang` `main` at the

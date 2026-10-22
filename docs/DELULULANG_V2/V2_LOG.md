@@ -8739,3 +8739,32 @@ Three things the work found:
 An entrenched edit (`DELULU_CORE.md`, recorded). The models README, `MATHEMATICS.md`'s category 2 and
 `REPOSITORY_STRUCTURE.md`'s tree are updated. Also on the way: running `lean --version` made elan download its default
 toolchain, 4.35.0, beside the pinned 4.32.2 (local only).
+
+## 2026-10-23 (small hours) — the laptop: `deploy plan` checks every request against the profile (RW 6.6, D-V2-176), and DEPLOY-PKG-1
+
+RW 6.6: `deploy plan` compared a service's effects with the profile's ceiling and nothing else, though a profile can name
+paths, hosts, secrets and foreign libraries. The command that answers the rest already existed: `authority --within`
+decides each request a program makes, in the `--grant` grammar, by the runtime's own mint, with the call that makes it.
+So the profile becomes a boundary (`profile_boundary`):
+- `fs.read`, `fs.write`, `net` and `foreign.python` go through `Grants::add`, so a special-use host under `net` is refused
+  as no boundary at all, D-NE-28;
+- secrets and `foreign.c` are matched by name;
+- `console`, `clock`, `rand` and `declassify` are granted where its effects grant them.
+
+Each service's requirements go to `within::verdict`. A plan is approved only if every service's effects fit and its
+verdict is *within*. Anything else refuses the whole plan, DL1909, named at the call:
+`fs.read=./data at src/station.delulu:16, exceeds: …`, or a computed path as *inconclusive*. `accept_manifest`, the
+run's own reading of a manifest, was not usable: it takes a secret only if it is set in the environment, and no
+`foreign.c`.
+
+Trying it on the four-package `station` found **DEPLOY-PKG-1**. `deploy plan` refused it as a service that "does not
+check cleanly" while `authority` reported it. `package_authority_value`, the helper behind `deploy plan`, `publish` and
+`add`, still used the single-package loader that C51 moved `authority` off, so all three refused every package with a
+dependency. Witnessed for `add` on the old binary ("does not check clean, so its authority cannot be computed"). The
+helper is now `checked_package`, the loader `authority` uses.
+
+Tests: four new in `deploy_cli.rs` and one in `add_path_cli.rs`. Four mutants are red: the old loader, the verdict
+ignored, the profile's `fs.read` dropped, its secrets dropped. Five approving fixtures in `deploy_plan_adversarial.rs`
+name the host their Net service calls, and the scope contract pins the new `compared` and `profile_cannot_grant`. A
+breaking change for a profile that named effects only, under 2.0.0. Green: `deploy_cli` 9, `deploy_plan_adversarial`
+15, `add_path_cli` 8, `signing_cli` 6, `cli` 53, `cli_contract` 19, `json_contract` 13, `delulu-diag`.

@@ -5341,3 +5341,21 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `HANDOFF.md` (§11.5), `docs/DELULULANG_V2/V2_DECISION_LOG.md` (D-V2-175), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-23 (small hours) — `deploy plan` checks every request against the profile (RW 6.6, D-V2-176); DEPLOY-PKG-1 (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/deploy-plan-scopes` (on `laptop/core-mechanized` `b8c4fde`, PR #49)   Pull request: the one this entry rides in
+- **Landed and read since the last entry:** PR #48's second run `39827827803` **success** (14 jobs, 2 skipped), so #48 landed
+  by fast-forward, master `4af166e` (push run `39831374181`). The `miri-slow` dispatch `39805331281` finished **success**,
+  every job, the broker's included.
+- **What:** `deploy plan` decides each service's requests against the profile's boundary by `authority --within`'s verdict,
+  refusing the whole plan on any request outside it or any computed scope, named at the call (DL1909). `deploy plan`,
+  `publish` and `add` check a package with dependencies whole (DEPLOY-PKG-1: they had kept the single-package loader).
+  Breaking for a profile that named effects only.
+- Files and folders: M `crates/delulu/src/deploy.rs`, `crates/delulu/src/cli.rs` (`checked_package`; the help line),
+  `crates/delulu-diag/src/codes.rs` (DL1909's explain), `crates/delulu/tests/deploy_cli.rs`,
+  `crates/delulu/tests/deploy_plan_adversarial.rs`, `crates/delulu/tests/add_path_cli.rs`, `CHANGELOG.md`, `HANDOFF.md`
+  (§11.5), `docs/design/STAGE10_BUILD_ORDER.md` (a dated note under C45), `docs/DELULULANG_V2/V2_DECISION_LOG.md`
+  (D-V2-176), `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (6.6), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`.
+  Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.

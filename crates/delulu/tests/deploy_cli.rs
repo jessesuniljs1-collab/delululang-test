@@ -149,7 +149,9 @@ fn a_plan_within_the_ceiling_is_approved() {
         "the exact approved summary line:\n{text}"
     );
     assert!(
-        text.contains("compared: effects, capability scopes (fs.read, fs.write, net, secrets), foreign holes; a profile cannot grant:"),
+        text.contains(
+            "compared: effects, capability scopes (fs.read, fs.write, net, secrets), foreign holes; a profile cannot grant:"
+        ),
         "and the approval carries its own scope:\n{text}"
     );
 }
@@ -259,4 +261,112 @@ fn a_service_that_does_not_check_cleanly_is_refused_without_dl1909() {
     assert_ne!(v["code"], "DL1909", "a check failure is NOT DL1909: {v}");
     let err = v["error"].as_str().unwrap().to_string();
     assert!(err.contains("broken"), "names the failing service:\n{err}");
+}
+
+/// The repository's four-package program (`station`: four packages, seven modules).
+fn station() -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/corpus/tier4-multimodule/station")
+        .canonicalize()
+        .expect("the station corpus package")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn profile(dir: &Path, name: &str, body: &str) -> String {
+    let path = dir.join(name);
+    std::fs::write(&path, format!("[authority]\n{body}")).unwrap();
+    path.to_string_lossy().to_string()
+}
+
+/// DEPLOY-PKG-1 (2026-10-22): a package with dependencies plans as `delulu authority <dir>` checks it — whole. `deploy
+/// plan` had kept the single-package loader after C51 moved `authority` off it, and refused the four-package `station` as
+/// a service that "does not check cleanly" while `authority` reported it. Under a profile naming exactly what it asks for
+/// — its effects, `./data` to read and `./out` to write — it is approved, and its scopes are part of the approval.
+#[test]
+fn a_package_with_dependencies_plans_as_authority_checks_it() {
+    let dir = tmp("station-ok");
+    let env = profile(&dir, "env.toml", "effects = [\"Read\", \"Write\"]\nfs.read = [\"./data\"]\nfs.write = [\"./out\"]\n");
+    let svc = format!("station={}", station());
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc, "--env", &env, "--json"]);
+    assert!(o.status.success(), "a package with dependencies plans:\n{}{}", stdout(&o), stderr(&o));
+    let v: Value = serde_json::from_slice(&o.stdout).expect("valid JSON");
+    assert_eq!(v["approved"], true, "{v}");
+    assert_eq!(v["services"][0]["within"]["result"], "within", "{v}");
+    assert_eq!(v["services"][0]["effects"], serde_json::json!(["Read", "Write"]), "{v}");
+}
+
+/// RW 6.6 (2026-10-22): a request outside the profile's scopes refuses the plan, named at the call that makes it and in
+/// the runtime's own words — `station` reads `./data`, which a profile granting `./other` does not cover, though the
+/// profile grants the `Read` effect. Before, only effects were compared, and this plan was approved.
+#[test]
+fn a_request_outside_the_profiles_scopes_is_refused_at_its_call() {
+    let dir = tmp("station-scope");
+    let env = profile(&dir, "env.toml", "effects = [\"Read\", \"Write\"]\nfs.read = [\"./other\"]\nfs.write = [\"./out\"]\n");
+    let svc = format!("station={}", station());
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc, "--env", &env]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    let err = stderr(&o);
+    assert!(err.contains("DL1909") && err.contains("service `station` asks for `fs.read=./data`"), "{err}");
+    assert!(err.contains("src/station.delulu:16") && err.contains("exceeds"), "named at its call: {err}");
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc, "--env", &env, "--json"]);
+    let v: Value = serde_json::from_slice(&o.stdout).expect("valid JSON");
+    assert_eq!(v["approved"], false, "{v}");
+    let within = &v["services"][0]["within"];
+    assert_eq!(
+        (within["result"].as_str(), within["counterexample"]["grant"].as_str()),
+        (Some("exceeds"), Some("fs.read=./data"))
+    );
+    assert_eq!(within["counterexample"]["at"]["line"], 16, "{v}");
+}
+
+/// A scope the source computes cannot be bounded by reading it: inconclusive, and an inconclusive plan is refused like an
+/// exceeding one — no plan, no launch.
+#[test]
+fn a_scope_the_source_computes_is_refused_as_inconclusive() {
+    let dir = tmp("computed");
+    let svc = dir.join("computed");
+    std::fs::create_dir_all(svc.join("src")).unwrap();
+    std::fs::write(
+        svc.join("delulu.toml"),
+        "[package]\nname = \"computed\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Read\", \"Write\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        svc.join("src/main.delulu"),
+        "module computed\nfn main(root: Root) ! {Read, Write} {\n  let p = \"./da\" + \"ta\"\n  let r = root.fs_read(p)\n  \
+         match r.read_text(\"x\") { Ok(t) => root.console().println(t)  Err(e) => root.console().println(\"no\") }\n}\n",
+    )
+    .unwrap();
+    let env = profile(&dir, "env.toml", "effects = [\"Read\", \"Write\"]\nfs.read = [\"./data\"]\n");
+    let o = delulu(&dir, &["deploy", "plan", "--service", &format!("computed={}", svc.to_string_lossy()), "--env", &env]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(stderr(&o).contains("DL1909") && stderr(&o).contains("inconclusive"), "{}", stderr(&o));
+    assert!(stderr(&o).contains("src/main.delulu:4"), "named at the computed call: {}", stderr(&o));
+}
+
+/// Secrets are bounded by name: a profile that names `API_KEY` approves a service minting it, one that names another
+/// secret refuses it. And a profile that names a special-use host under `net` is not a boundary at all (D-NE-28: a
+/// loopback or private host is granted only by its explicit `net.special` spelling, which a profile does not have).
+#[test]
+fn a_secret_is_bounded_by_name_and_a_special_use_host_is_no_boundary() {
+    let dir = tmp("secret");
+    let svc = dir.join("keyed");
+    std::fs::create_dir_all(svc.join("src")).unwrap();
+    std::fs::write(svc.join("delulu.toml"), "[package]\nname = \"keyed\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n")
+        .unwrap();
+    std::fs::write(svc.join("src/main.delulu"), "module keyed\nfn main(root: Root) {\n  let k = root.secret(\"API_KEY\")\n}\n")
+        .unwrap();
+    let svc_arg = format!("keyed={}", svc.to_string_lossy());
+    let named = profile(&dir, "named.toml", "effects = []\nsecrets = [\"API_KEY\"]\n");
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &named]);
+    assert!(o.status.success(), "{}{}", stdout(&o), stderr(&o));
+    let other = profile(&dir, "other.toml", "effects = []\nsecrets = [\"OTHER\"]\n");
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &other]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(stderr(&o).contains("asks for `secret:API_KEY") && stderr(&o).contains("src/main.delulu:3"), "{}", stderr(&o));
+    let loopback = profile(&dir, "loopback.toml", "effects = [\"Net\"]\nnet = [\"127.0.0.1\"]\n");
+    let o = delulu(&dir, &["deploy", "plan", "--service", &svc_arg, "--env", &loopback]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("`net=127.0.0.1` is not a boundary this profile can give"), "{}", stderr(&o));
 }

@@ -552,7 +552,10 @@ fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
     assert!(human.status.success(), "the fixture approves: {}", combined(&human));
     let text = String::from_utf8_lossy(&human.stdout);
     // RW 6.6 (2026-10-22): the plan compares every request's scope too, and names what a profile has no spelling for.
-    assert!(text.contains("compared: effects") && text.contains("a profile cannot grant"), "the human verdict names its own scope: {text}");
+    assert!(
+        text.contains("compared: effects") && text.contains("a profile cannot grant"),
+        "the human verdict names its own scope: {text}"
+    );
     assert!(
         text.contains("capability scopes") && text.contains("foreign holes") && text.contains("net.special"),
         "and names what it compared and what no profile can grant, specifically: {text}"
