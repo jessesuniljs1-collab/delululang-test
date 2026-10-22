@@ -5215,3 +5215,19 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
 - Files and folders: M `docs/REMAINING_WORK.md` (7.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed:
   nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — the exhaustiveness limit's test fits Miri (`miri-slow` timed out twice) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/miri-exhaust-budget` (on `master` `37b3e4c`, where PR #41 landed on its green run `39678800260`)   Pull request: #42
+- **CI read since the last entry:** `master`'s push run `39678411414` (`35d8208`) **success**; on `launch/2.0.0` `7b5aec3`
+  the release dry run `39678652131` **success** and CI `jobs=everything` `39678647200` **cancelled** — every job passed
+  except `miri-slow (delulu-check)`, stopped at its 240 minutes; `master`'s nightly `39746314492` (`35d8208`) the same.
+- **What:** that job's time went to one test spending the checker's 10,000,000-cell search limit (11,873 s); the limit
+  is ten thousand under Miri and the test is sized to it. Evidence in `V2_LOG.md`.
+- **`autosave/laptop`** (read at the owner's word): its newest snapshot `838c739` (2026-10-21 20:43 UTC, on
+  `laptop/gc-map`) is tree-identical to `8a88466`, the commit that landed it — nothing to recover. The task is `Ready`,
+  last result 0, renewed to 2026-10-28. All 46 local branches' commits are on `origin`.
+- Files and folders: M `crates/delulu-check/src/check.rs`, `crates/delulu-check/src/lib.rs`, `HANDOFF.md` (§11.5),
+  `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (2.20), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added,
+  deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
