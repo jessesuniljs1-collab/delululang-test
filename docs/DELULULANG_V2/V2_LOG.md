@@ -8596,3 +8596,24 @@ dropped after a second (`the reader did not take its answer`) instead of holding
 `estop_cli`'s two no-revoke controls — the arm64 red and the `windows-latest` red — now attach `broker.log` to their
 failure, and print each late answer on a green run too, where `witness.yml`'s `--nocapture` shows it: the measurement is
 `witness.yml -f os=windows-latest -f target=estop_cli`. On this laptop: eight green, no answer late.
+
+**Read on `windows-latest`** (`witness.yml` at `86b8df5`): runs `39810107555` (`estop_cli`, 8 green) and `39810113455`
+(`estop_cli` and `broker_cli`, 18 green, the new test among them) — in the four no-revoke control runs no answer was late
+(no `late answer:` line). The red stays a rare timing-class event; when it recurs, its failure carries `broker.log`.
+
+## 2026-10-22 (evening) — the laptop: a grant naming a network share is warned of on Windows (RW 4.17's UNC half)
+
+RW 4.17 left one question: an operator's `fs.read`, `fs.write` or `plugin` grant may name `\\server\share` (a program's own
+path may not, PS-0-06), and on Windows reaching that share can send the user's NTLM credentials to `server`. Decided as
+the row proposed: said, not refused — the grant is the operator's informed choice. `prim::unc_server` names the machine a
+UNC spelling reaches (either slash; none for a local path or the `\\?\` / `\\.\` prefixes the grant parser refuses), and
+the option parser warns as it reads each `--grant`, on Windows only — elsewhere `//server/share` is an ordinary path. The
+first try printed the warning three times: `run` reads its arguments three times, so it is said once per spelling.
+
+On this laptop: `fs.read=\\fileserver.invalid\share`, `fs.write=//fileserver.invalid/share` and
+`plugin=\\fileserver.invalid\p` each warn once, naming the server, and the program runs (16 ms — nothing touches the
+share until a program opens it); `fs.read=\\?\UNC\srv\share` is refused as before; local paths and `net=` are silent.
+Tests: `cli.rs` `a_grant_naming_a_network_share_is_warned_of_on_windows` (on every OS: warned on Windows, silent
+elsewhere), `prim.rs` `a_unc_spelling_names_the_machine_it_reaches`. Three mutants red: no warning, the warning every
+time the arguments are read, only `fs.read` warned. Also corrected: RW row 1.11 and its section still called the
+constitution's guarantee 5 unedited and the owner's — it was corrected on 2026-10-17 (7.10a, D-V2-141).

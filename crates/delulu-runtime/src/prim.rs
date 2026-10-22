@@ -236,6 +236,22 @@ pub fn contains_on_disk(root: &Path, candidate: &Path) -> bool {
     }
 }
 
+/// The machine a Windows UNC spelling (`\\server\share`, either slash) reaches, or `None` — for a local path, and for the
+/// `\\?\` and `\\.\` prefixes, which [`hostile_path`] refuses. A string question on every platform; only on Windows is
+/// such a spelling a network path (RW 4.17: reaching it can send the user's NTLM credentials to `server`).
+pub fn unc_server(p: &str) -> Option<&str> {
+    let sep = |c: char| c == '\\' || c == '/';
+    let mut cs = p.chars();
+    if !(cs.next().is_some_and(sep) && cs.next().is_some_and(sep)) {
+        return None;
+    }
+    let server = p[2..].split(sep).next().unwrap_or("");
+    if server.is_empty() || server == "?" || server == "." {
+        return None;
+    }
+    Some(server)
+}
+
 /// Why a path SPELLING is refused before any containment decision (D-NE-29, NE-19/NE-20), or `None`.
 ///
 /// Containment decides on a spelling; the OS then acts on what the spelling MEANS. On Windows those
@@ -1762,6 +1778,25 @@ mod containment_tests {
 #[cfg(test)]
 mod hostile_path_tests {
     use super::*;
+
+    /// RW 4.17: the machine a UNC grant reaches, by either slash; none for a local path or a prefix `hostile_path` refuses.
+    #[test]
+    fn a_unc_spelling_names_the_machine_it_reaches() {
+        for (p, server) in [
+            (r"\\fileserver\share\data", Some("fileserver")),
+            ("//fileserver/share", Some("fileserver")),
+            (r"\/10.0.0.5\c$", Some("10.0.0.5")),
+            (r"\\?\UNC\srv\share", None),
+            (r"\\.\pipe\x", None),
+            (r"\\", None),
+            (r"C:\data", None),
+            ("./data", None),
+            ("/data", None),
+            (r"\data", None),
+        ] {
+            assert_eq!(unc_server(p), server, "`{p}`");
+        }
+    }
 
     #[test]
     fn windows_spellings_that_mean_something_else_are_refused() {

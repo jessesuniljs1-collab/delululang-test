@@ -5253,6 +5253,20 @@ and **the laptop was synced on 2026-10-17** — the entry of that day. Were it e
   `crates/delulu/tests/broker_cli.rs`, `crates/delulu/tests/estop_cli.rs`, `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/REMAINING_WORK.md` (7.17), `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.
+
+### 2026-10-22 (evening) — a grant naming a network share is warned of on Windows (RW 4.17 closed) (made on the laptop)
+- Session: `https://claude.ai/code/session_01PPQFYhLFcNmJrr9QuWpyzx`   Model: Claude Opus 5.5 (the laptop; no fallback notice; no sous-chef)
+- Branch: `laptop/unc-grant-warning` (on `laptop/broker-slow-answer` `86b8df5`, PR #44)   Pull request: the one this entry rides in
+- **CI read:** PR #42's runs `39805379666` and `39806203436` **success**; PR #43's `39807030815` (`a1ab1d1`) and
+  `39808528500` (`e8b3be4`) **success**; `witness.yml` on `windows-latest` at `86b8df5`, `39810107555` and `39810113455`,
+  **success** — RW 7.17's measurement: no answer late in four no-revoke control runs.
+- **What:** on Windows an `fs.read`/`fs.write`/`plugin` grant naming `\\server\share` is warned of once, naming the server
+  and the NTLM exposure; the run goes on (`prim::unc_server`, `cli::warn_on_unc_grant`). RW 1.11's stale "not edited"
+  corrected (the constitution was corrected 2026-10-17, D-V2-141).
+- Files and folders: M `crates/delulu-runtime/src/prim.rs`, `crates/delulu/src/cli.rs`, `crates/delulu/tests/cli.rs`,
+  `CHANGELOG.md`, `docs/DELULULANG_V2/V2_LOG.md`, `docs/REMAINING_WORK.md` (1.11, 4.17, 7.17), `docs/CLOUD_SYNC_LOG.md`,
+  `docs/survey/*`. Added, deleted, renamed: nothing.
+- Survey and doctor (after the last edit): in the commit message.
 - Files and folders: M `scripts/autosave.ps1`, `HANDOFF.md` (§11.1, autosave), `docs/DELULULANG_V2/V2_LOG.md`,
   `docs/CLOUD_SYNC_LOG.md`, `docs/survey/*`. Added, deleted, renamed: nothing.
 - Survey and doctor (after the last edit): in the commit message.

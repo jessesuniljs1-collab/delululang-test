@@ -11,6 +11,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — a grant naming a network share is warned of on Windows, 2026-10-22
+
+- **Added: on Windows, an `fs.read`, `fs.write` or `plugin` grant that names a network share (`\\server\share`, either
+  slash) prints a warning** (RW 4.17). The warning names the server, because reaching the share can send this Windows
+  user's NTLM credentials to it. The grant still works: it's the operator's choice, while a program's own paths can't
+  name a share. The warning appears once per command. On other systems `//server/share` isn't a network path, so
+  nothing is printed.
+
 ## Unreleased — the broker log names a late answer, 2026-10-22
 
 - **Added: `broker.log` names every answer the daemon gave more than 500 ms after the request arrived** (RW 7.17). The

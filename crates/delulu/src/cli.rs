@@ -368,6 +368,31 @@ pub(crate) struct Opts {
     pub(crate) advisory_feed: Option<String>,
 }
 
+/// RW 4.17: an `fs.read`, `fs.write` or `plugin` grant may name `\\server\share` — it is the operator's to make, where a
+/// program's own path may not — but on Windows reaching it can send this user's credentials (NTLM) to `server`. Said when
+/// the grant is read, every command alike, once (a command may read its arguments more than once); not refused.
+fn warn_on_unc_grant(spec: &str) {
+    static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    if !cfg!(windows) {
+        return;
+    }
+    let Some((key, val)) = spec.split_once('=') else { return };
+    if !matches!(key.trim(), "fs.read" | "fs.write" | "plugin") {
+        return;
+    }
+    if let Some(server) = delulu_runtime::prim::unc_server(val.trim()) {
+        let mut said = SAID.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if said.iter().any(|s| s == spec) {
+            return;
+        }
+        said.push(spec.to_string());
+        eprintln!(
+            "warning: `--grant {spec}` names a network share on `{server}`: reaching it can send this Windows user's \
+             credentials (NTLM) to `{server}` — grant a local path unless `{server}` is trusted"
+        );
+    }
+}
+
 pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     let mut file = None;
     let mut opts = Opts {
@@ -824,13 +849,17 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--grants" => opts.show_grants = true,
             "--grant" => {
                 if i + 1 < rest.len() {
+                    warn_on_unc_grant(&rest[i + 1]);
                     opts.grants.push(rest[i + 1].clone());
                     i += 1;
                 } else {
                     opts.missing_values.push("--grant".to_string());
                 }
             }
-            s if s.starts_with("--grant=") => opts.grants.push(s["--grant=".len()..].to_string()),
+            s if s.starts_with("--grant=") => {
+                warn_on_unc_grant(&s["--grant=".len()..]);
+                opts.grants.push(s["--grant=".len()..].to_string())
+            }
             s if !s.starts_with('-') => {
                 if file.is_none() {
                     file = Some(s.to_string());
