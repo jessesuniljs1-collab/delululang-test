@@ -2,35 +2,87 @@
 //! anything runs (Stage 10, phase 10j, Track H; spec §9.2, invariant 53: "no plan, no launch").
 //!
 //! A deployment is a set of named services, each backed by a package directory, checked against
-//! an ENVIRONMENT PROFILE — a file in the exact same `[authority]\neffects = [...]` shape a
-//! package's own `delulu.toml` uses, parsed with the SAME `delulu_runtime::parse_manifest` (this
-//! is deliberate reuse, not a coincidence: an environment profile is an authority manifest for a
-//! place a program runs, not a new format that needs its own parser). The profile's `effects`
-//! list is the CEILING — the maximum authority any service in that environment may hold.
+//! an ENVIRONMENT PROFILE — a file in the exact same `[authority]` shape a package's own
+//! `delulu.toml` uses, parsed with the SAME `delulu_runtime::parse_manifest` (this is deliberate
+//! reuse, not a coincidence: an environment profile is an authority manifest for a place a program
+//! runs, not a new format that needs its own parser). The profile is the CEILING — the most any
+//! service in that environment may hold.
 //!
-//! `delulu deploy plan` computes each named service's checked authority the same way `delulu
-//! authority` computes it for one package, and refuses the WHOLE plan — never partially — if any
-//! service's effects go beyond the ceiling (**DL1909**). "What can this deployment do to my cloud
-//! account?" gets the same mechanical answer as "what can this function do?" (spec §9.2).
+//! `delulu deploy plan` checks each named service as `delulu authority <dir>` checks it (the
+//! workspace loader for a package with a `delulu.toml`, so its dependencies are seen — DEPLOY-PKG-1),
+//! and refuses the WHOLE plan — never partially — if any service goes beyond the ceiling
+//! (**DL1909**), in either of the two halves of the answer spec §9.2 asks for:
 //!
-//! Honesty note, stated once here rather than left implicit: this checks EFFECTS only. Spec §9.2
-//! describes the full authority answer as effects, capability scopes, and foreign holes, per
-//! service — capability SCOPES and foreign holes are not compared against the profile by this
-//! command. Recorded as a gap, not implied as covered.
+//! - **effects** — the service's effect row against the profile's `effects`;
+//! - **capability scopes and foreign holes** (RW 6.6, 2026-10-22) — every request the service makes,
+//!   in the `--grant` grammar, decided against the profile's boundary by `delulu authority --within`'s
+//!   own verdict (`within.rs`): the runtime's mint for each path, host and secret, the boundary's
+//!   `foreign.c` and `foreign.python`. The boundary is the profile's `fs.read`, `fs.write`, `net`,
+//!   `secrets`, `foreign.c` and `foreign.python`, with `console`, `clock`, `rand` and `declassify`
+//!   where its effects grant `Write`, `Clock`, `Rand` and `Declassify`. A request the source does not
+//!   show (a computed path) is *inconclusive* unless the profile grants none of its kind, and an
+//!   inconclusive plan is refused like an exceeding one: no plan, no launch.
+//!
+//! "What can this deployment do to my cloud account?" gets the same mechanical answer as "what can
+//! this function do?" (spec §9.2). A profile has no spelling for `net.special`, plugin roots or
+//! devices, so a service that needs one is refused, by name.
 
 use delulu_diag::{render_human, Diagnostic, SourceMap};
-use delulu_runtime::parse_manifest;
+use delulu_runtime::{parse_manifest, Grants, Manifest};
 use serde_json::{json, Value};
 
-/// The authority dimensions `deploy plan` actually compares against the environment profile, and the
-/// ones it does not. Named in the approval itself, not only in this module's header: a verdict that
-/// travels without its scope is read as covering everything, and this one covers one dimension of
-/// nine (`HARDENING_CAMPAIGN.md` C45).
-const COMPARED_DIMENSIONS: &[&str] = &["effects"];
-const UNCOMPARED_DIMENSIONS: &[&str] = &["capability scopes (fs/net/secrets/declassify/device)", "foreign holes"];
+/// The authority dimensions `deploy plan` compares against the environment profile, and what a profile cannot grant.
+/// Named in the approval itself, not only in this module's header: a verdict that travels without its scope is read as
+/// covering everything (`HARDENING_CAMPAIGN.md` C45).
+const COMPARED_DIMENSIONS: &[&str] = &["effects", "capability scopes (fs.read, fs.write, net, secrets)", "foreign holes"];
+const PROFILE_CANNOT_GRANT: &[&str] = &["net.special", "plugin roots", "devices (actuator, sensor, compute)"];
+
+/// The environment profile as a boundary in the `--grant` grammar — the form `delulu authority --within` decides against —
+/// and the lines it was built from. Paths, hosts and Python patterns go through `Grants::add`, the parser `run --grant` uses,
+/// so a profile is read as a run's grants would be (a special-use host under `net` is refused, D-NE-28). Secrets and
+/// `foreign.c` libraries are matched by name; the profile says which may be held, never with what value or binary.
+fn profile_boundary(profile: &Manifest) -> Result<(Grants, Vec<String>), String> {
+    let mut boundary = Grants::default();
+    let mut lines: Vec<String> = Vec::new();
+    for (effect, grant) in [("Write", "console"), ("Clock", "clock"), ("Rand", "rand"), ("Declassify", "declassify")] {
+        if profile.effects.iter().any(|e| e == effect) {
+            lines.push(grant.to_string());
+        }
+    }
+    lines.extend(profile.fs_read.iter().map(|p| format!("fs.read={p}")));
+    lines.extend(profile.fs_write.iter().map(|p| format!("fs.write={p}")));
+    lines.extend(profile.net.iter().map(|h| format!("net={h}")));
+    lines.extend(profile.foreign_python.iter().map(|p| format!("foreign.python={p}")));
+    for line in &lines {
+        boundary.add(line).map_err(|e| format!("`{line}` is not a boundary this profile can give: {e}"))?;
+    }
+    for name in &profile.secrets {
+        boundary.secrets.insert(name.clone(), String::new());
+        lines.push(format!("secret:{name}"));
+    }
+    for lib in &profile.foreign_c {
+        boundary.foreign_c.insert(lib.clone(), String::new());
+        lines.push(format!("foreign.c={lib}"));
+    }
+    Ok((boundary, lines))
+}
+
+/// One service of the plan, as decided: its effects, the effects beyond the ceiling, and its `within` verdict as JSON.
+struct Decided {
+    name: String,
+    effects: Vec<String>,
+    exceeding: Vec<String>,
+    within: Value,
+}
+
+impl Decided {
+    fn fits(&self) -> bool {
+        self.exceeding.is_empty() && self.within["result"] == "within"
+    }
+}
 
 /// Dispatches `delulu deploy <subcommand>`. Only `plan` exists today.
-pub fn cmd_deploy(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>) -> i32 {
+pub fn cmd_deploy(rest: &[String], checked_package: impl Fn(&str) -> Option<crate::cli::CheckedPackage>) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
         eprintln!(
             "error: `deploy` needs a subcommand: plan --service NAME=PACKAGE_DIR [--service ...] \
@@ -39,7 +91,7 @@ pub fn cmd_deploy(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>)
         return 2;
     };
     match sub {
-        "plan" => cmd_deploy_plan(&rest[1..], authority_of),
+        "plan" => cmd_deploy_plan(&rest[1..], checked_package),
         other => {
             eprintln!("error: unknown `deploy` subcommand `{other}` (only `plan` exists)");
             2
@@ -48,9 +100,9 @@ pub fn cmd_deploy(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>)
 }
 
 /// `delulu deploy plan --service NAME=PACKAGE_DIR [--service ...] --env ENVFILE.toml [--json]`
-/// (spec §9.2). Computes every named service's checked authority, then refuses the whole plan
-/// (DL1909) if any service's effects exceed the environment profile's ceiling.
-fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>) -> i32 {
+/// (spec §9.2). Checks every named service, then refuses the whole plan (DL1909) if any service's effects exceed the
+/// environment profile's ceiling or any of its requests falls outside the profile's boundary.
+fn cmd_deploy_plan(rest: &[String], checked_package: impl Fn(&str) -> Option<crate::cli::CheckedPackage>) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
 
     let raw_services = flags_all(rest, "--service");
@@ -81,71 +133,73 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     };
     let profile = parse_manifest(&env_src);
     let ceiling = &profile.effects;
+    let (boundary, boundary_lines) = match profile_boundary(&profile) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: environment profile {env_path}: {e}");
+            return 2;
+        }
+    };
 
-    // Compute every service's checked authority FIRST. A service that does not check cleanly is a
-    // DIFFERENT failure from "checks fine but exceeds the profile" (DL1909 is only the second
-    // kind) — and without a clean check there is no honest authority to compare, so this stops the
-    // whole plan immediately rather than guessing what an unchecked package might do.
-    let mut reports: Vec<(String, Vec<String>)> = Vec::new();
+    // Check every service FIRST. A service that does not check cleanly is a DIFFERENT failure from "checks fine but
+    // exceeds the profile" (DL1909 is only the second kind) — and without a clean check there is no honest authority to
+    // compare, so this stops the whole plan immediately rather than guessing what an unchecked package might do.
+    let mut decided: Vec<Decided> = Vec::new();
     for (name, dir) in &services {
-        let Some(report) = authority_of(dir) else {
+        let Some(pkg) = checked_package(dir) else {
             return report_check_failure(&env_path, name, dir, json);
         };
-        let effects: Vec<String> = report
+        let effects: Vec<String> = pkg
+            .report
             .get("effects")
             .and_then(Value::as_array)
             .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
-        reports.push((name.clone(), effects));
+        let verdict = crate::within::verdict(&pkg.requirements, &pkg.unsupported, &boundary);
+        decided.push(Decided {
+            name: name.clone(),
+            exceeding: exceeding_effects(&effects, ceiling),
+            effects,
+            within: crate::within::verdict_json(&verdict, &boundary_lines, &pkg.map),
+        });
     }
 
-    // The ceiling check runs across EVERY service before any refusal is issued — the whole plan
-    // is refused together, never partially, so "approved" never means anything less than "all of
-    // it fits".
-    let violations: Vec<(String, Vec<String>)> = reports
-        .iter()
-        .filter_map(|(name, effects)| {
-            let exceeding = exceeding_effects(effects, ceiling);
-            if exceeding.is_empty() {
-                None
-            } else {
-                Some((name.clone(), exceeding))
-            }
-        })
-        .collect();
-
-    if !violations.is_empty() {
-        return report_ceiling_violation(&env_path, &violations, ceiling, json);
+    // The ceiling is checked across EVERY service before any refusal is issued — the whole plan is refused together,
+    // never partially, so "approved" never means anything less than "all of it fits".
+    if decided.iter().any(|d| !d.fits()) {
+        return report_ceiling_violation(&env_path, &decided, ceiling, json);
     }
 
     if json {
         let services_json: Vec<Value> =
-            reports.iter().map(|(name, effects)| json!({ "name": name, "effects": effects })).collect();
+            decided.iter().map(|d| json!({ "name": d.name, "effects": d.effects, "within": d.within })).collect();
         crate::cli::print_success_envelope(
             "deploy",
             json!({
                 "subcommand": "plan", "env": env_path, "approved": true,
                 "services": services_json,
-                // What the approval actually rests on. The module header has always recorded that
-                // this compares effects only; a caller reading `"approved": true` had no way to see
-                // it. An approval that does not carry its own scope is read as broader than it is —
-                // the C36 lesson (a mermaid graph away from its docs) applied to a security verdict.
-                "compared": COMPARED_DIMENSIONS, "not_compared": UNCOMPARED_DIMENSIONS,
+                // What the approval rests on, carried in the approval (C45): a caller reading `"approved": true` must
+                // be able to see which dimensions it covers, and what the profile could not have granted.
+                "compared": COMPARED_DIMENSIONS, "profile_cannot_grant": PROFILE_CANNOT_GRANT,
+                "boundary": boundary_lines,
             }),
         );
     } else {
-        for (name, effects) in &reports {
-            println!("  {name}: {}", if effects.is_empty() { "pure".to_string() } else { format!("effects {effects:?}") });
+        for d in &decided {
+            println!(
+                "  {}: {}",
+                d.name,
+                if d.effects.is_empty() { "pure".to_string() } else { format!("effects {:?}", d.effects) }
+            );
         }
-        // The scope goes ABOVE the verdict, deliberately: `deploy_plan_adversarial.rs` contracts that
-        // the last non-empty line is the verdict, which is what a human scanning a CI log and a
-        // script reading the tail both rely on. Qualifying a verdict must not displace it.
+        // The scope goes ABOVE the verdict, deliberately: `deploy_plan_adversarial.rs` contracts that the last non-empty
+        // line is the verdict, which is what a human scanning a CI log and a script reading the tail both rely on.
         println!(
-            "  compared: {}; NOT compared: {} (spec §9.2 describes the full answer; see `delulu explain DL1909`)",
+            "  compared: {}; a profile cannot grant: {} (spec §9.2; see `delulu explain DL1909`)",
             COMPARED_DIMENSIONS.join(", "),
-            UNCOMPARED_DIMENSIONS.join(", "),
+            PROFILE_CANNOT_GRANT.join(", "),
         );
-        println!("deploy plan: approved — {} service(s) within {env_path}'s EFFECT ceiling", reports.len());
+        println!("deploy plan: approved — {} service(s) within {env_path}'s authority ceiling", decided.len());
     }
     0
 }
@@ -169,33 +223,57 @@ fn report_check_failure(env_path: &str, name: &str, dir: &str, json: bool) -> i3
     1
 }
 
-/// The DL1909 ceiling refusal. A PLAIN `Diagnostic::error` (DL1905's real precedent in `cli.rs`)
-/// — deliberately not built with a `Repair`: `Repair` carries byte-offset edits into `.delulu`
-/// SOURCE files, and there is no source span that would widen a TOML environment profile. The
-/// "a human must decide" idea lives in the message's prose instead, exactly as DL1905 states its
-/// own human-decision requirement in prose rather than as a `requires_human` repair flag.
-fn report_ceiling_violation(env_path: &str, violations: &[(String, Vec<String>)], ceiling: &[String], json: bool) -> i32 {
-    let detail = violations
+/// The DL1909 refusal, naming each service that does not fit and why: the effects beyond the ceiling, and each request
+/// outside the boundary with the call that makes it (`within`'s findings — the runtime's own refusal for a path, host or
+/// secret; what no form bounds; what no static reading decides). A PLAIN `Diagnostic::error` (DL1905's real precedent in
+/// `cli.rs`) — deliberately not built with a `Repair`: `Repair` carries byte-offset edits into `.delulu` SOURCE files,
+/// and there is no source span that would widen a TOML environment profile. The "a human must decide" idea lives in the
+/// message's prose instead, exactly as DL1905 states its own human-decision requirement in prose.
+fn report_ceiling_violation(env_path: &str, decided: &[Decided], ceiling: &[String], json: bool) -> i32 {
+    let detail = decided
         .iter()
-        .map(|(name, exceeding)| {
-            format!("service `{name}` requires {} that the environment profile does not grant", backticked(exceeding))
+        .filter(|d| !d.fits())
+        .map(|d| {
+            let mut parts: Vec<String> = Vec::new();
+            if !d.exceeding.is_empty() {
+                parts.push(format!("requires {} that the environment profile does not grant", backticked(&d.exceeding)));
+            }
+            for f in d.within["findings"].as_array().into_iter().flatten() {
+                let asks = match f["grant"].as_str() {
+                    Some(g) if !g.is_empty() => format!("asks for `{g}`"),
+                    _ => format!("holds a `{}` capability", f["dimension"].as_str().unwrap_or("?")),
+                };
+                let at = match (f["at"]["file"].as_str(), f["at"]["line"].as_u64()) {
+                    (Some(file), Some(line)) => format!(" at {file}:{line}"),
+                    _ => String::new(),
+                };
+                parts.push(format!(
+                    "{asks}{at}, {}: {}",
+                    f["result"].as_str().unwrap_or("?"),
+                    f["reason"].as_str().unwrap_or("")
+                ));
+            }
+            format!("service `{}` {}", d.name, parts.join("; "))
         })
         .collect::<Vec<_>>()
         .join("; ");
     let ceiling_str = if ceiling.is_empty() { "no effects at all".to_string() } else { backticked(ceiling) };
     let message = format!(
         "deploy plan for `{env_path}` refused: {detail} — the profile's authority ceiling is \
-         {ceiling_str}, and a plan that would exceed it is refused as a WHOLE, never partially \
-         approved [a human must decide whether to widen the environment profile; see `delulu \
-         explain DL1909` and spec §9.2]"
+         {ceiling_str} with the scopes it names, and a plan that would exceed it is refused as a WHOLE, never partially \
+         approved [a human must decide whether to widen the environment profile; see `delulu explain DL1909` and spec §9.2]"
     );
     let d = Diagnostic::error("DL1909", message);
     if json {
+        let services: Vec<Value> = decided
+            .iter()
+            .map(|d| json!({ "name": d.name, "effects": d.effects, "exceeding_effects": d.exceeding, "within": d.within }))
+            .collect();
         crate::cli::print_success_envelope(
             "deploy",
             json!({
                 "subcommand": "plan", "env": env_path, "approved": false,
-                "code": d.code, "error": d.message,
+                "code": d.code, "error": d.message, "services": services,
                 "summary": { "errors": 1 },
             }),
         );

@@ -1186,7 +1186,7 @@ fn run_inner(args: &[String]) -> i32 {
         "sign" => crate::signing::cmd_sign(rest),
         "verify-sig" => crate::signing::cmd_verify_sig(rest),
         "publish" => crate::signing::cmd_publish(rest, package_authority_value),
-        "deploy" => crate::deploy::cmd_deploy(rest, package_authority_value),
+        "deploy" => crate::deploy::cmd_deploy(rest, checked_package),
         "add" => crate::signing::cmd_add(rest),
         "login" => crate::signing::cmd_login(rest),
         "build" => cmd_build(rest),
@@ -1587,8 +1587,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 shown and refused until you accept it — granting authority stays a person's decision)\n\
      \x20 delulu login     --registry URL --token VALUE [--json] (store a scoped publish token; never echoed)\n\
-     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service's effects and requests against the environment profile;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 DL1909 when one exceeds it, naming the call — scopes decided as `authority --within` decides them)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 update <artifact> --members N --approved F --previous H [--fail-health-at I] [--json]\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR | E-SANDBOX> [--json]\n\
@@ -5584,14 +5584,51 @@ fn cmd_lock(rest: &[String]) -> i32 {
 /// --dry-run` embeds this summary in the index line). `None` if the package does not
 /// check clean — an unpublishable package has no honest authority to advertise.
 pub(crate) fn package_authority_value(dir: &str) -> Option<Json> {
-    let pkg = load_package(dir);
-    let program = check_program(&pkg);
-    if errors(&program.diagnostics) > 0 {
-        return None;
-    }
-    let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
-    let scopes = scopes_in_dir(std::path::Path::new(dir));
-    Some(program_authority(&program, &name, &scopes))
+    checked_package(dir).map(|p| p.report)
+}
+
+/// A package checked as `delulu authority <dir>` checks it: its authority report, and what it asks for in the `--grant`
+/// grammar with the calls that ask (`requirements`), which `within::verdict` decides against a boundary.
+pub(crate) struct CheckedPackage {
+    pub(crate) report: Json,
+    pub(crate) requirements: Vec<Requirement>,
+    pub(crate) unsupported: Vec<String>,
+    pub(crate) map: SourceMap,
+}
+
+/// The package in `dir`, checked by the loader `delulu authority <dir>` uses: the workspace loader when the directory has a
+/// `delulu.toml`, so a package with dependencies is seen whole (C51). DEPLOY-PKG-1 (2026-10-22): `deploy plan`, `publish`
+/// and `add` kept the single-package loader after C51 moved `authority` off it, and refused every package with a
+/// dependency as one that "does not check cleanly". `None` when the package does not check clean.
+pub(crate) fn checked_package(dir: &str) -> Option<CheckedPackage> {
+    let path = std::path::Path::new(dir);
+    let (program, name, map, modules) = if path.join("delulu.toml").is_file() {
+        let ws = resolve_workspace(dir);
+        let program = check_workspace(&ws);
+        if errors(&ws.diagnostics) > 0 || errors(&program.diagnostics) > 0 {
+            return None;
+        }
+        let name = program
+            .entry_module
+            .clone()
+            .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
+            .unwrap_or_else(|| "package".to_string());
+        let modules: Vec<delulu_syntax::ast::Module> = ws.modules.iter().map(|m| m.unit.module.clone()).collect();
+        (program, name, ws.source_map, modules)
+    } else {
+        let pkg = load_package(dir);
+        let program = check_program(&pkg);
+        if errors(&program.diagnostics) > 0 {
+            return None;
+        }
+        let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
+        let modules: Vec<delulu_syntax::ast::Module> = pkg.modules.iter().map(|m| m.module.clone()).collect();
+        (program, name, pkg.source_map, modules)
+    };
+    let report = program_authority(&program, &name, &scopes_in_dir(path));
+    let refs: Vec<&delulu_syntax::ast::Module> = modules.iter().collect();
+    let (requirements, unsupported) = requirements(&report, &requested_scopes(&refs));
+    Some(CheckedPackage { report, requirements, unsupported, map })
 }
 
 /// `delulu authority <dir>`.

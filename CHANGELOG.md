@@ -11,6 +11,18 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 
 
+## Unreleased — `deploy plan` checks every request against the environment profile, 2026-10-22
+
+- **Changed (breaking for a profile that names effects only): `delulu deploy plan` checks each service's requests, not
+  only its effects** (RW 6.6, D-V2-176). Every path a service reads or writes, every host it calls, every secret and
+  foreign library it holds is decided against the profile's `fs.read`, `fs.write`, `net`, `secrets`, `foreign.c` and
+  `foreign.python`, the way `delulu authority --within` decides it. A request outside the profile, or one whose scope the
+  source computes, refuses the whole plan (DL1909), named at the call that makes it. A profile that granted the `Net`
+  effect without naming hosts now approves no service that makes a request: name the hosts. The approval says what it
+  compared, and what a profile cannot grant (`net.special`, plugin roots, devices).
+- **Fixed: `deploy plan`, `publish` and `add` check a package with dependencies whole.** They used a loader that cannot see
+  a dependency, and refused every such package as one that "does not check cleanly", while `delulu authority` checked it.
+
 ## Unreleased — Delulu Core's type safety, machine-checked for a fragment, 2026-10-22
 
 - **New: Progress, Preservation, Effect Soundness and No-forgery are machine-checked for the monomorphic, closed-row

@@ -1808,6 +1808,12 @@ Added in V2 (2026-09-17 → 2026-09-28):
   `sorryAx` only for the theorems it is asked about. The step now fails on any `sorry` in the output, and two rule mutants
   must fail to check. For any checker: ask what it reports as a warning and still passes.
 
+- **A fix made at one call site leaves the helper it bypassed in use elsewhere** (the laptop, 2026-10-22, DEPLOY-PKG-1):
+  C51 moved `delulu authority <dir>` to the workspace loader, so a package with dependencies is seen whole. But
+  `package_authority_value`, the helper `deploy plan`, `publish` and `add` shared, kept the single-package loader, and
+  all three refused every package with a dependency for months. When a fix replaces how one caller does a thing, list
+  every caller of the old way (`grep` the function, not the command) and fix them together, or name why not.
+
 ### 11.6 If you are an assistant with memory, keep it current
 
 After verifying work, update `MEMORY.md` and the topic files. One fact per file, with frontmatter, and
