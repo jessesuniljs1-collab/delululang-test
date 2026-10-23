@@ -198,12 +198,19 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         node_row_accs: HashMap::new(),
         too_large_at: None,
         var_names: VarNames::default(),
+        const_types: HashMap::new(),
     };
     // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
     // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
     // diagnostic), and an alias target must resolve where it is WRITTEN rather than only where it is
     // used. See `check_type_aliases`.
     checker.check_type_aliases(module);
+    // Top-level constants first, in order, so a use anywhere sees the type its value has (CONST-UNCHECKED-1).
+    for item in &module.items {
+        if let Item::Const(c) = item {
+            checker.check_const(c);
+        }
+    }
     for item in &module.items {
         match item {
             Item::Fn(f) => checker.check_fn(f),
@@ -409,6 +416,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         node_row_accs: HashMap::new(),
         too_large_at: None,
         var_names: VarNames::default(),
+        const_types: HashMap::new(),
     };
     let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
     if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
@@ -455,6 +463,9 @@ struct Checker<'a> {
     /// The names the author wrote for the rigid generics of the bodies checked (GENERIC-RIGID-1), so a mismatch names
     /// `T` and `e` rather than `'t0` and `'r0`.
     var_names: VarNames,
+    /// Each top-level constant's type, as its value was checked (CONST-UNCHECKED-1): an unannotated constant has one
+    /// type at every use, not a fresh one per use.
+    const_types: HashMap<String, Type>,
 }
 
 /// Rigid generics' declared names, by variable number (GENERIC-RIGID-1).
@@ -1104,6 +1115,56 @@ impl<'a> Checker<'a> {
     /// DL0501 boundary and `add_effect_to_row` repair as everywhere else. Facts are
     /// deliberately NOT recorded: tests are compiled out of builds (invariant 41), so they
     /// must never appear in authority reports (invariant 38 keeps prior output byte-stable).
+    /// A top-level constant (`let NAME[: T] = value`, CONST-UNCHECKED-1, 2026-10-24). Its value is checked as an
+    /// expression with nothing in scope but the module's items, held to its declared type, and must be pure: the
+    /// runtime evaluates every constant before `main` (`eval_consts`), where nothing holds authority and no row is
+    /// declared. Until this, the item loop passed constants with `_ => {}`: a value was never typed, resolved or
+    /// held to a row, so `let W = spawn Worker()` performed `Async` no report named.
+    fn check_const(&mut self, c: &ConstDecl) {
+        let genv = Genv::default();
+        let mut ctx = FnCtx {
+            name: format!("constant `{}`", c.name.name),
+            genv,
+            ret: Type::Unit,
+            ret_err: None,
+            locals: vec![HashMap::new()],
+            facts: FnFacts::default(),
+            loop_depth: 0,
+        };
+        let (ty, row) = self.check_expr(&c.value, &mut ctx);
+        let ty = match &c.ty {
+            Some(te) => {
+                let declared = self.lower_type(te, &ctx.genv, &mut FnFacts::default());
+                self.expect_type(&declared, &ty, c.value.span(), "a constant's value must match its declared type");
+                declared
+            }
+            None => ty,
+        };
+        let mut effects = row.effects.clone();
+        let mut open = false;
+        for &t in &row.tails {
+            let r = self.cx.apply_row(&Row { effects: BTreeSet::new(), tail: Some(t) });
+            effects.extend(r.effects.iter().cloned());
+            open |= r.tail.is_some();
+        }
+        if !effects.is_empty() || open {
+            let list = effects.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
+            let what = if effects.is_empty() { "may perform an effect".to_string() } else { format!("performs `{list}`") };
+            self.diags.push(
+                Diagnostic::error(
+                    "DL0501",
+                    format!(
+                        "constant `{}`'s value {what}: a constant is evaluated before `main`, holding no authority and \
+                         declaring no row, so its value must be pure — compute it in a function that declares the effect",
+                        c.name.name
+                    ),
+                )
+                .with_span(c.value.span(), "this value is evaluated before `main`"),
+            );
+        }
+        self.const_types.insert(c.name.name.clone(), ty);
+    }
+
     fn check_test(&mut self, t: &TestDecl) {
         let genv = Genv::default();
         let declared_row = match &t.row {
@@ -1540,6 +1601,11 @@ impl<'a> Checker<'a> {
             if let Some(c) = self.table.consts.get(name) {
                 if let Some(ty) = &c.ty {
                     return self.lower_type(&ty.clone(), &ctx.genv, &mut ctx.facts);
+                }
+                // The type its value was checked to have (CONST-UNCHECKED-1); fresh only for a constant used in an
+                // earlier constant's value, before its own is checked.
+                if let Some(t) = self.const_types.get(name) {
+                    return t.clone();
                 }
                 return self.cx.fresh_type();
             }
