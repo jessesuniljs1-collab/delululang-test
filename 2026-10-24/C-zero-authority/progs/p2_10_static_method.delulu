@@ -1,0 +1,5 @@
+module t.staticm
+
+fn main(root: Root) ! {Write} {
+    Root.console(root).println("P2-10-STATIC-ROOT-METHOD")
+}

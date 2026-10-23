@@ -1,0 +1,9 @@
+module t.helpernoroot
+
+fn helper() ! {Write} {
+    root.console().println("P2-03-HELPER-NO-ROOT")
+}
+
+fn main(root: Root) ! {Write} {
+    helper()
+}

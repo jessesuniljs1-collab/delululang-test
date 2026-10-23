@@ -1,0 +1,22 @@
+#01 exit=0 base=[.] path=[forbidden/secret.txt] !!!FORBIDDEN-CANARY-LEAK!!!
+     -> OK:B-FORBIDDEN-CANARY-91c2
+#02 exit=0 base=[.] path=[allowed/ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#03 exit=0 base=[./forbidden] path=[secret.txt] !!!FORBIDDEN-CANARY-LEAK!!!
+     -> OK:B-FORBIDDEN-CANARY-91c2
+#04 exit=1 base=[.] path=[../nonexistent-probe.txt]
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\nonexistent-probe.txt` in scope `fs.rea
+#05 exit=1 base=[..] path=[nonexistent-probe.txt]
+     -> error[DL0703]: filesystem read of `..` was not granted — the lease this run redeemed (node `g_e3d521bda5e61da2e2beab73c5caf811`) does not carry `fs.read=..`, and a `--lease` run takes its authority from its delegation alone (a l
+#06 exit=1 base=[./allowed] path=[../forbidden/secret.txt]
+     -> error[DL0904]: path `../forbidden/secret.txt` escapes the granted scope
+#07 exit=1 base=[.] path=[C:/Windows/win.ini]
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `C:\Windows\win.ini` in scope `fs.read` (capability scope violation)
+#08 exit=1 base=[C:/Windows] path=[win.ini]
+     -> error[DL0703]: filesystem read of `C:/Windows` was not granted — the lease this run redeemed (node `g_e3d521bda5e61da2e2beab73c5caf811`) does not carry `fs.read=C:/Windows`, and a `--lease` run takes its authority from its deleg
+#09 exit=1 base=[.] path=[..\..\Windows\win.ini]
+     -> error[DL0904]: lease `g_e3d521bda5e61da2e2beab73c5caf811` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\Windows\win.ini` in scope `fs.read` (capability
+#10 exit=0 base=[.] path=[state]
+     -> ERR:Denied
+#11 exit=0 base=[.] path=[FORBID~1/secret.txt] !!!FORBIDDEN-CANARY-LEAK!!!
+     -> OK:B-FORBIDDEN-CANARY-91c2

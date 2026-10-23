@@ -1,0 +1,9 @@
+module t.listdir
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("..")
+    match r.list_dir(".") {
+        Ok(names) => root.console().println("P4-05-LISTED " + str(names.len()))
+        Err(e) => root.console().println("P4-05-ERR")
+    }
+}

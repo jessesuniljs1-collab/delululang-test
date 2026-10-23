@@ -1,0 +1,16 @@
+module t.foldpure
+
+fn sum_and_log(out: Cap[Console], xs: List[Int]) -> Int {
+    xs.fold(0, fn(acc: Int, x: Int) -> Int {
+        out.println("P1B-13-FOLD-LEAK")
+        acc + x
+    })
+}
+
+fn pure_wrapper(out: Cap[Console]) -> Int {
+    sum_and_log(out, [1])
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(pure_wrapper(root.console())))
+}

@@ -1,0 +1,24 @@
+module probe.p2
+
+fn main(root: Root) ! {Write, Read} {
+    let out = root.console()
+    let r = root.fs_read("./data")
+    match r.list_dir(".") {
+        Ok(names) => {
+            out.println("n=" + str(names.len()))
+            for n in names { out.println("  [" + n + "]") }
+        }
+        Err(e) => out.println("err " + str(e))
+    }
+    match r.list_dir("sub") {
+        Ok(names) => out.println("sub=" + str(names))
+        Err(e) => out.println("suberr " + str(e))
+    }
+    match r.read_text("nope.txt") {
+        Ok(t) => out.println("?")
+        Err(e) => out.println("nope: " + str(e))
+    }
+    let ws = ["b", "a", "é", "z", "Z", "\u{FF21}", "😀", "\u{FFFF}", "aa", "a "]
+    let sorted = ws.sort()
+    out.println("sorted=" + str(sorted))
+}

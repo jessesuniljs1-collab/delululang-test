@@ -1,0 +1,14 @@
+module t.coercew
+
+fn coerce[A, B](x: A) -> B {
+    x
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let w: Cap[FsWrite] = coerce(out)
+    match w.write_text("pwned-by-coerce.txt", "P2-11-WRITE") {
+        Ok(u) => out.println("P2-11-WROTE")
+        Err(e) => out.println("P2-11-ERR")
+    }
+}

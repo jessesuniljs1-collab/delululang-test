@@ -1,0 +1,10 @@
+module t.purealias
+
+fn writer(out: Cap[Console]) -> fn(Str) -> Unit {
+    fn(s: Str) -> Unit ! {Write} { out.println(s) }
+}
+
+fn main(root: Root) ! {Write} {
+    let f: fn(Str) -> Unit = writer(root.console())
+    f("P1-24-EFFECTFUL-AS-PURE")
+}

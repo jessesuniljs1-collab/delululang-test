@@ -1,0 +1,19 @@
+module probe.p1
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let s = "héllo 世界 😀 e\u{301}"
+    out.println("len=" + str(s.len()))
+    out.println("chars=" + str(s.chars().len()))
+    out.println("split_empty=" + str("".split("\n").len()))
+    out.println("split_nl=" + str("a\nb\n".split("\n").len()))
+    out.println("split_sp=" + str("a  b".split(" ").len()))
+    out.println("slice=" + s.slice(0, 3))
+    out.println("upper=" + s.to_upper())
+    out.println("trim=[" + "  x \r\n".trim() + "]")
+    out.println("cr=" + str("a\r\nb".split("\n").len()))
+    out.println("int=" + str(parse_int("12")))
+    out.println("float=" + str(1.0 / 3.0))
+    out.println("big=" + str(9223372036854775807))
+    out.println("neg mod=" + str(-7 % 3) + " div=" + str(-7 / 2))
+}

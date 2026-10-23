@@ -1,0 +1,17 @@
+[package]
+name = "ratapp"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects  = ["Write"]
+fs.read  = []
+fs.write = []
+net      = []
+secrets  = []
+
+[dependencies.ratlib]
+path = "../ratlib"
+
+[dependencies.ratlib.authority]
+effects = []

@@ -1,0 +1,13 @@
+module t.fsread
+
+fn read_it(fs: Cap[FsRead]) -> Str {
+    match fs.read_text("a.txt") {
+        Ok(s) => s
+        Err(e) => "none"
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let s = read_it(root.fs_read("."))
+    root.console().println(s)
+}

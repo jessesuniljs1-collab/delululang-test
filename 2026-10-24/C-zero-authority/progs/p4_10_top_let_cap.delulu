@@ -1,0 +1,7 @@
+module t.toplet
+
+let OUT = root.console()
+
+fn main(root: Root) ! {Write} {
+    OUT.println("P4-10-TOPLEVEL-CAP")
+}

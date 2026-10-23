@@ -1,0 +1,9 @@
+module t.mintabs
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("C:/")
+    match r.read_text("Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/C-zero-authority/outside.txt") {
+        Ok(s) => root.console().println("P4-03-LEAK " + s)
+        Err(e) => root.console().println("P4-03-ERR")
+    }
+}

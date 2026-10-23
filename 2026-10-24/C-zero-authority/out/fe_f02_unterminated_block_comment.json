@@ -1,0 +1,89 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0105",
+      "explanation_id": "E-DL0105",
+      "message": "unterminated block comment",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 100,
+            "col": 1,
+            "line": 7
+          },
+          "file": "fe/f02_unterminated_block_comment.delulu",
+          "label": "comment opened here",
+          "start": {
+            "byte": 50,
+            "col": 5,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "expected `}`, found end of file",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 100,
+            "col": 1,
+            "line": 7
+          },
+          "file": "fe/f02_unterminated_block_comment.delulu",
+          "label": "expected `}` here",
+          "start": {
+            "byte": 100,
+            "col": 1,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 43,
+            "col": 30,
+            "line": 3
+          },
+          "file": "fe/f02_unterminated_block_comment.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 34,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 1
+  }
+}

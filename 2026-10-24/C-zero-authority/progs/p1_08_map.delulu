@@ -1,0 +1,14 @@
+module t.map
+
+fn fire(m: Map[Str, Cap[Console]]) -> Unit {
+    match m.get("a") {
+        Some(c) => c.println("P1-08-MAP-LEAK")
+        None => {}
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let m = Map()
+    m.insert("a", root.console())
+    fire(m)
+}

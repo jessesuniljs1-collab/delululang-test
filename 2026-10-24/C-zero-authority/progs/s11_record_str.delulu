@@ -1,0 +1,11 @@
+module t.s11
+
+type Rec {
+    k: Secret[Str],
+    n: Int,
+}
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    root.console().println(str(Rec { k: s, n: 1 }))
+}

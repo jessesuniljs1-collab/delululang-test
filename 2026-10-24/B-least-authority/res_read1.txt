@@ -1,0 +1,62 @@
+#01 exit=1 base=[./allowed] path=[..\forbidden\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#02 exit=1 base=[./allowed] path=[./../forbidden/secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#03 exit=1 base=[./allowed] path=[sub/../../forbidden/secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#04 exit=1 base=[./allowed] path=[C:/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/B-least-authority/forbidden/secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#05 exit=1 base=[./allowed] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#06 exit=1 base=[./allowed] path=[..\FORBIDDEN\SECRET.TXT]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\FORBIDDEN\SECRET.TXT`
+#07 exit=1 base=[./allowed] path=[..\FORBID~1\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\FORBID~1\secret.txt` 
+#08 exit=1 base=[./allowed] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-LEAS~1\FORBID~1\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-LEAS~1\FORBID~1\secret.txt` in scope 
+#09 exit=1 base=[./allowed] path=[\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.
+#10 exit=1 base=[./allowed] path=[\\localhost\C$\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `\\localhost\C$\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden
+#11 exit=1 base=[./allowed] path=[ok.txt.]
+     -> error[DL0904]: path `ok.txt.` is refused: `ok.txt.` ends in a dot or a space, which Windows strips — the file written would not be the one named
+#12 exit=0 base=[./allowed] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#13 exit=1 base=[./allowed] path=[ok.txt:hidden]
+     -> error[DL0904]: path `ok.txt:hidden` is refused: `ok.txt:hidden` names an alternate data stream (`:`)
+#14 exit=1 base=[./allowed] path=[ok.txt::$DATA]
+     -> error[DL0904]: path `ok.txt::$DATA` is refused: `ok.txt::$DATA` names an alternate data stream (`:`)
+#15 exit=1 base=[./allowed] path=[NUL]
+     -> error[DL0904]: path `NUL` is refused: `NUL` is a Windows reserved device name
+#16 exit=1 base=[./allowed] path=[CON]
+     -> error[DL0904]: path `CON` is refused: `CON` is a Windows reserved device name
+#17 exit=1 base=[./allowed] path=[COM1]
+     -> error[DL0904]: path `COM1` is refused: `COM1` is a Windows reserved device name
+#18 exit=1 base=[./allowed] path=[con.txt]
+     -> error[DL0904]: path `con.txt` is refused: `con.txt` is a Windows reserved device name
+#19 exit=0 base=[./allowed] path=[]
+     -> ERR:Denied
+#20 exit=0 base=[./allowed] path=[.]
+     -> ERR:Denied
+#21 exit=1 base=[./allowed] path=[..]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority` in scope `fs.read` (
+#22 exit=1 base=[./allowed] path=[/]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\` in scope `fs.read` (capability scope violation)
+#23 exit=1 base=[./allowed] path=[\]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\` in scope `fs.read` (capability scope violation)
+#24 exit=1 base=[./allowed] path=[C:]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:` in scope `fs.read` (capability scope violation)
+#25 exit=1 base=[./allowed] path=[C:forbidden\secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:forbidden\secret.txt` in scope `fs.read` (capability scope violation)
+#26 exit=0 base=[./allowed] path=[OK.TXT] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#27 exit=0 base=[./allowed] path=[./ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#28 exit=0 base=[./allowed] path=[sub/../ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#29 exit=0 base=[./allowed] path=[sub\..\ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#30 exit=0 base=[./allowed] path=[ok.txt/] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#31 exit=0 base=[./allowed] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\allowed\ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a

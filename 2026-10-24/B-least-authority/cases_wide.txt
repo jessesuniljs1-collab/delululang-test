@@ -1,0 +1,11 @@
+.|forbidden/secret.txt
+.|allowed/ok.txt
+./forbidden|secret.txt
+.|../nonexistent-probe.txt
+..|nonexistent-probe.txt
+./allowed|../forbidden/secret.txt
+.|C:/Windows/win.ini
+C:/Windows|win.ini
+.|..\..\Windows\win.ini
+.|state
+.|FORBID~1/secret.txt

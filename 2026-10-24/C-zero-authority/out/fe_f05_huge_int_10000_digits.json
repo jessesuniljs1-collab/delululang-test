@@ -1,0 +1,33 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0104",
+      "explanation_id": "E-DL0104",
+      "message": "integer literal overflows Int (i64)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 10058,
+            "col": 10013,
+            "line": 4
+          },
+          "file": "fe/f05_huge_int_10000_digits.delulu",
+          "start": {
+            "byte": 58,
+            "col": 13,
+            "line": 4
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

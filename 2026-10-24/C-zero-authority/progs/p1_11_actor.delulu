@@ -1,0 +1,18 @@
+module t.actorcase
+
+actor Printer {
+    var n: Int
+
+    new() {
+        self.n = 0
+    }
+
+    be say(c: Cap[Console]) {
+        c.println("P1-11-ACTOR-BEHAVIOR-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let p = spawn Printer()
+    p.say(root.console())
+}

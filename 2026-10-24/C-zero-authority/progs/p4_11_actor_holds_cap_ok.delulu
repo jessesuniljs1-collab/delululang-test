@@ -1,0 +1,18 @@
+module t.actorcapok
+
+actor Speaker {
+    var out: Cap[Console]
+
+    new(c: Cap[Console]) {
+        self.out = c
+    }
+
+    be say(s: Str) ! {Write} {
+        self.out.println("P4-11-ACTOR-SAYS " + s)
+    }
+}
+
+fn main(root: Root) ! {Write, Async} {
+    let sp = spawn Speaker(root.console())
+    sp.say("hi")
+}

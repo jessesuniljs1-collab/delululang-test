@@ -1,0 +1,5 @@
+module t.f19
+
+fn main(root: Root) ! {Write} {
+    root.console().println("bad \q escape \u{zz}")
+}

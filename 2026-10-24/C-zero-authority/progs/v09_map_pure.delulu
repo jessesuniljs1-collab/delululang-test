@@ -1,0 +1,8 @@
+module t.v09
+
+fn main(root: Root) ! {Write} {
+    let m = Map()
+    m.insert("b", 2)
+    m.insert("a", 1)
+    root.console().println("V09-KEYS " + str(m.len()))
+}

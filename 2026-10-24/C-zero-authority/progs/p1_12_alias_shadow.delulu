@@ -1,0 +1,12 @@
+module t.alias
+
+fn alias(root: Root) -> Unit {
+    let a = root.console()
+    let b = a
+    let a = 5
+    b.println("P1-12-ALIAS-LEAK")
+}
+
+fn main(root: Root) ! {Write} {
+    alias(root)
+}

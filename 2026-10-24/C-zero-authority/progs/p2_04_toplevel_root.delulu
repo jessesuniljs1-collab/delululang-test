@@ -1,0 +1,7 @@
+module t.toplevel
+
+const C: Cap[Console] = root.console()
+
+fn main(root: Root) ! {Write} {
+    C.println("P2-04-TOPLEVEL-CAP")
+}

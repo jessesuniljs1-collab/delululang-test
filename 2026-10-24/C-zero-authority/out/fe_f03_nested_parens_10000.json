@@ -1,0 +1,34 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0210",
+      "explanation_id": "E-DL0210",
+      "message": "expression nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 187,
+            "col": 142,
+            "line": 4
+          },
+          "file": "fe/f03_nested_parens_10000.delulu",
+          "label": "simplify or split this expression",
+          "start": {
+            "byte": 186,
+            "col": 141,
+            "line": 4
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

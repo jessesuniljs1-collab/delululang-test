@@ -1,0 +1,7 @@
+error[DL0703]: secret `API` was not granted — pass `--grant secret:API=VALUE` (or `secret:API=env:VAR`)
+  --> progs/s10_expose_no_cap.delulu:8:13
+   |
+ 8 |     let s = root.secret("API")
+   |             ^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

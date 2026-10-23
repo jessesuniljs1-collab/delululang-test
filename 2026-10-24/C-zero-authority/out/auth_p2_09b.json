@@ -1,0 +1,44 @@
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "FsRead",
+        "requested_scopes": [],
+        "scopes": []
+      },
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Read",
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "t.forgeread",
+    "pure_functions": [
+      "forge"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "fs.read=PATH",
+      "console"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

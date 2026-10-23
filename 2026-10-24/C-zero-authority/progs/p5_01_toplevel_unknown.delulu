@@ -1,0 +1,7 @@
+module t.topunknown
+
+let X = nosuch_name
+
+fn main(root: Root) ! {Write} {
+    root.console().println("P5-01-TOPLEVEL-UNKNOWN")
+}

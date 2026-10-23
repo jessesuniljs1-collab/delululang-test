@@ -1,0 +1,10 @@
+module t.loadpure
+
+fn pure_load() -> Int {
+    let p = load("nope.dpl")
+    1
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(pure_load()))
+}

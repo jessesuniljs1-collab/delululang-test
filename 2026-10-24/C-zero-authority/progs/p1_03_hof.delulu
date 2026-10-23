@@ -1,0 +1,13 @@
+module t.hof
+
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+    f(x)
+}
+
+fn pure_caller(out: Cap[Console]) -> Unit {
+    apply(fn(s: Str) -> Unit { out.println(s) }, "P1-03-HOF-LEAK")
+}
+
+fn main(root: Root) ! {Write} {
+    pure_caller(root.console())
+}

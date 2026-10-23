@@ -1,0 +1,17 @@
+module t.fnfield
+
+type Handler {
+    run: fn(Str) -> Unit,
+}
+
+fn mk(out: Cap[Console]) -> Handler {
+    Handler { run: fn(s: Str) -> Unit { out.println(s) } }
+}
+
+fn fire(h: Handler) -> Unit {
+    h.run("P1-17-FNFIELD-LEAK")
+}
+
+fn main(root: Root) ! {Write} {
+    fire(mk(root.console()))
+}

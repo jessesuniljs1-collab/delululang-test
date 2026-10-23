@@ -1,0 +1,14 @@
+module t.v06
+
+fn square(x: Int) -> Int {
+    x * x
+}
+
+fn total(xs: List[Int]) -> Int {
+    xs.fold(0, fn(acc: Int, x: Int) -> Int { acc + x })
+}
+
+fn main(root: Root) ! {Write} {
+    let ys = [1, 2, 3].map(square)
+    root.console().println("V06-TOTAL " + str(total(ys)))
+}

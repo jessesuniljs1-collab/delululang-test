@@ -1,0 +1,57 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0102",
+      "explanation_id": "E-DL0102",
+      "message": "unterminated string literal",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 86,
+            "col": 41,
+            "line": 4
+          },
+          "file": "fe/f01_unterminated_string.delulu",
+          "label": "string opened here",
+          "start": {
+            "byte": 73,
+            "col": 28,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "expected `)`, found `}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 88,
+            "col": 2,
+            "line": 5
+          },
+          "file": "fe/f01_unterminated_string.delulu",
+          "label": "expected `)` here",
+          "start": {
+            "byte": 87,
+            "col": 1,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}

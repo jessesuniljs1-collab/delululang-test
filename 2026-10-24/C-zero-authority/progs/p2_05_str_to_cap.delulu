@@ -1,0 +1,6 @@
+module t.strcap
+
+fn main(root: Root) ! {Write} {
+    let c: Cap[Console] = "stdout"
+    c.println("P2-05-STR-TO-CAP")
+}

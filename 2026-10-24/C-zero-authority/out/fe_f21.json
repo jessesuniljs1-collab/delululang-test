@@ -1,0 +1,112 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0210",
+      "explanation_id": "E-DL0210",
+      "message": "expression nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 33965,
+            "col": 516,
+            "line": 131
+          },
+          "file": "fe/f21_if_nest_200.delulu",
+          "label": "simplify or split this expression",
+          "start": {
+            "byte": 33961,
+            "col": 512,
+            "line": 131
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0213",
+      "explanation_id": "E-DL0213",
+      "message": "block nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 33967,
+            "col": 518,
+            "line": 131
+          },
+          "file": "fe/f21_if_nest_200.delulu",
+          "label": "flatten the nested blocks — extract an inner function",
+          "start": {
+            "byte": 33966,
+            "col": 517,
+            "line": 131
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0408",
+      "explanation_id": "E-DL0408",
+      "message": "`if` condition must be Bool: expected `Bool`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 33965,
+            "col": 516,
+            "line": 131
+          },
+          "file": "fe/f21_if_nest_200.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 33961,
+            "col": 512,
+            "line": 131
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 45,
+            "col": 30,
+            "line": 3
+          },
+          "file": "fe/f21_if_nest_200.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 36,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 3,
+    "warnings": 1
+  }
+}

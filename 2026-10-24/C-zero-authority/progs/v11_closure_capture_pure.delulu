@@ -1,0 +1,10 @@
+module t.v11
+
+fn adder(n: Int) -> fn(Int) -> Int {
+    fn(x: Int) -> Int { x + n }
+}
+
+fn main(root: Root) ! {Write} {
+    let f = adder(10)
+    root.console().println("V11-ADD " + str(f(5)))
+}

@@ -1,0 +1,176 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 43,
+            "col": 30,
+            "line": 3
+          },
+          "file": "progs/b02_memory_list.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 34,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a list element (push) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 224,
+            "col": 121,
+            "line": 7
+          },
+          "file": "progs/b02_memory_list.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 112,
+            "col": 9,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 43,
+            "col": 30,
+            "line": 3
+          },
+          "file": "progs/b06_map_growth.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 34,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a map entry (insert) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 180,
+            "col": 71,
+            "line": 7
+          },
+          "file": "progs/b06_map_growth.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 118,
+            "col": 9,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 43,
+            "col": 30,
+            "line": 3
+          },
+          "file": "progs/b08_huge_list_push.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 34,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a list element (push) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 122,
+            "col": 19,
+            "line": 7
+          },
+          "file": "progs/b08_huge_list_push.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 112,
+            "col": 9,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 3,
+    "warnings": 3
+  }
+}

@@ -1,0 +1,69 @@
+#01 read base=[./allowed] path=[ok.txt]
+   interp exit=0  OK:B-ALLOWED-CANARY-7f3a
+   wasm exit=0  OK:B-ALLOWED-CANARY-7f3a
+#02 read base=[./allowed] path=[../forbidden/secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#03 read base=[./allowed] path=[..\forbidden\secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#04 read base=[./allowed] path=[ok.txt:hidden] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: path `ok.txt:hidden` is refused: `ok.txt:hidden` names an alternate data stream (`:`)
+   wasm exit=1  error[DL0904]: DL0904: path `ok.txt:hidden` is refused: `ok.txt:hidden` names an alternate data stream (`:`)
+#05 read base=[./allowed] path=[NUL] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: path `NUL` is refused: `NUL` is a Windows reserved device name
+   wasm exit=1  error[DL0904]: DL0904: path `NUL` is refused: `NUL` is a Windows reserved device name
+#06 read base=[./allowed] path=[ok.txt.] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: path `ok.txt.` is refused: `ok.txt.` ends in a dot or a space, which Windows strips — the file written would not be the one named
+   wasm exit=1  error[DL0904]: DL0904: path `ok.txt.` is refused: `ok.txt.` ends in a dot or a space, which Windows strips — the file written would not be the one named
+#07 read base=[./allowed] path=[nope.txt]
+   interp exit=0  ERR:NotFound
+   wasm exit=0  ERR:NotFound
+#08 read base=[./allowed] path=[]
+   interp exit=0  ERR:Denied
+   wasm exit=0  ERR:Denied
+#09 read base=[./allowed] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#10 read base=[./allowed] path=[..\FORBID~1\secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#11 read base=[./allowed] path=[sub/../ok.txt]
+   interp exit=0  OK:B-ALLOWED-CANARY-7f3a
+   wasm exit=0  OK:B-ALLOWED-CANARY-7f3a
+#12 read base=[./forbidden] path=[secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0703]: filesystem read of `./forbidden` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.read=./forb
+   wasm exit=1  error[DL0703]: DL0703: filesystem read of `./forbidden` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.rea
+#13 read base=[..] path=[forbidden/secret.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0703]: filesystem read of `..` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.read=..`, and a `--l
+   wasm exit=1  error[DL0703]: DL0703: filesystem read of `..` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.read=..`, an
+#14 read base=[.] path=[allowed/ok.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0703]: filesystem read of `.` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.read=.`, and a `--lea
+   wasm exit=1  error[DL0703]: DL0703: filesystem read of `.` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.read=.`, and 
+#15 write base=[./out] path=[g1.txt]
+   interp exit=0  OK:written
+   wasm exit=0  OK:written
+#16 append base=[./out] path=[g1.txt]
+   interp exit=0  OK:appended
+   wasm exit=0  OK:appended
+#17 write base=[./out] path=[../forbidden/g2.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#18 write base=[./out] path=[..\allowed\g3.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52
+   wasm exit=1  error[DL0904]: DL0904: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-070
+#19 write base=[./allowed] path=[g4.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0703]: filesystem write of `./allowed` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./allo
+   wasm exit=1  error[DL0703]: DL0703: filesystem write of `./allowed` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.writ
+#20 write base=[./forbidden] path=[g5.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0703]: filesystem write of `./forbidden` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./fo
+   wasm exit=1  error[DL0703]: DL0703: filesystem write of `./forbidden` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.wr
+#21 write base=[./out] path=[g6.txt:ads] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: path `g6.txt:ads` is refused: `g6.txt:ads` names an alternate data stream (`:`)
+   wasm exit=1  error[DL0904]: DL0904: path `g6.txt:ads` is refused: `g6.txt:ads` names an alternate data stream (`:`)
+#22 write base=[./out] path=[con.txt] <<< ENGINES DIFFER?
+   interp exit=1  error[DL0904]: path `con.txt` is refused: `con.txt` is a Windows reserved device name
+   wasm exit=1  error[DL0904]: DL0904: path `con.txt` is refused: `con.txt` is a Windows reserved device name
+#23 write base=[./out] path=[sub/g7.txt]
+   interp exit=0  ERR:NotFound
+   wasm exit=0  ERR:NotFound

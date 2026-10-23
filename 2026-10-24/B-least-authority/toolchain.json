@@ -1,0 +1,1975 @@
+{
+  "command": "toolchain",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "toolchain": {
+    "budgets": {
+      "run_default": {
+        "cpu_seconds": 300,
+        "memory_bytes": 1073741824
+      },
+      "sandbox_profiles": [
+        {
+          "cpu_seconds": 1800,
+          "memory_bytes": 4294967296,
+          "name": "dev"
+        },
+        {
+          "cpu_seconds": 300,
+          "memory_bytes": 1073741824,
+          "name": "contained"
+        },
+        {
+          "cpu_seconds": 60,
+          "memory_bytes": 268435456,
+          "name": "hostile-agent"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "flags": [
+          "--lib",
+          "--json"
+        ],
+        "json": true,
+        "name": "new",
+        "usage": [
+          "delulu new       <name> [--lib] [--json]   (a package that already checks, tests and runs;",
+          "its declared ceiling is exactly what its code does — one effect for a bin, none for a lib)"
+        ]
+      },
+      {
+        "flags": [
+          "--locked",
+          "--json"
+        ],
+        "json": true,
+        "name": "check",
+        "usage": [
+          "delulu check     <file.delulu>... | <package-dir> [--locked] [--json]   (several files in ONE process:",
+          "the per-invocation floor dominates a small check — see measurements/agent-loop/RECORD.md)"
+        ]
+      },
+      {
+        "flags": [
+          "--dry-run",
+          "--json",
+          "--accept-widening"
+        ],
+        "json": true,
+        "name": "fix",
+        "usage": [
+          "delulu fix       <file.delulu> [--dry-run] [--json] [--accept-widening <repair-id>]...",
+          "(applies the checker's own typed repairs; a repair that would WIDEN what the program",
+          "may do is never applied unless you name it, and there is no accept-all flag)"
+        ]
+      },
+      {
+        "flags": [
+          "--check",
+          "--json",
+          "--stdin",
+          "--migrate"
+        ],
+        "json": true,
+        "name": "fmt",
+        "usage": [
+          "delulu fmt     <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...",
+          "(one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)"
+        ]
+      },
+      {
+        "flags": [
+          "--json",
+          "--seed",
+          "--test-authority"
+        ],
+        "json": true,
+        "name": "test",
+        "usage": [
+          "delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)",
+          "[--test-authority 'effects = [\"Write\"]']..  (a ceiling in the manifest's [test-authority] syntax:",
+          "inside a package it may only narrow the package's; for a file outside one it is the only ceiling)"
+        ]
+      },
+      {
+        "flags": [],
+        "json": false,
+        "name": "lsp",
+        "usage": [
+          "delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)"
+        ]
+      },
+      {
+        "flags": [
+          "--name",
+          "--json"
+        ],
+        "json": true,
+        "name": "keygen",
+        "usage": [
+          "delulu keygen    [--name N] [--json]                 (mint an ed25519 signing key in ~/.delulu/keys)"
+        ]
+      },
+      {
+        "flags": [
+          "--hybrid",
+          "--unstable",
+          "--json"
+        ],
+        "json": true,
+        "name": "sign",
+        "usage": [
+          "delulu sign      <artifact> [--hybrid] [--unstable] [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--key",
+          "--require-hybrid",
+          "--unstable",
+          "--json",
+          "--hybrid"
+        ],
+        "json": true,
+        "name": "verify-sig",
+        "usage": [
+          "delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable] [--json]",
+          "(detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum",
+          "ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)"
+        ]
+      },
+      {
+        "flags": [
+          "--dry-run",
+          "--index",
+          "--json"
+        ],
+        "json": true,
+        "name": "publish",
+        "usage": [
+          "delulu publish   --dry-run <pkg-dir> [--index DIR] [--json]   (validate manifest + semver-authority + signature; no upload)"
+        ]
+      },
+      {
+        "flags": [
+          "--service",
+          "--env",
+          "--json",
+          "--within"
+        ],
+        "json": true,
+        "name": "deploy",
+        "usage": [
+          "delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service's effects and requests against the environment profile;",
+          "DL1909 when one exceeds it, naming the call — scopes decided as `authority --within` decides them)"
+        ]
+      },
+      {
+        "flags": [
+          "--index",
+          "--path",
+          "--accept-authority",
+          "--json"
+        ],
+        "json": true,
+        "name": "add",
+        "usage": [
+          "delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)",
+          "delulu add       --path <dir> [--accept-authority] [--json]   (declare a dependency on the package",
+          "beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is",
+          "shown and refused until you accept it — granting authority stays a person's decision)"
+        ]
+      },
+      {
+        "flags": [
+          "--registry",
+          "--token",
+          "--json"
+        ],
+        "json": true,
+        "name": "login",
+        "usage": [
+          "delulu login     --registry URL --token VALUE [--json] (store a scoped publish token; never echoed)"
+        ]
+      },
+      {
+        "flags": [
+          "--locked",
+          "--deny-advisories",
+          "--advisory-feed",
+          "--json",
+          "--target",
+          "--out"
+        ],
+        "json": true,
+        "name": "build",
+        "usage": [
+          "delulu build     <package-dir> [--locked] [--deny-advisories] [--advisory-feed F] [--json]   (resolve deps + verify pins/authority)",
+          "delulu build     <file.delulu|package-dir> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)"
+        ]
+      },
+      {
+        "flags": [
+          "--accept-authority",
+          "--json"
+        ],
+        "json": true,
+        "name": "lock",
+        "usage": [
+          "delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--json",
+          "--grant",
+          "--grant-manifest",
+          "--no-prompt",
+          "--trace-effects",
+          "--trace-out",
+          "--assert-trace",
+          "--seed",
+          "--clock",
+          "--sandbox",
+          "--sandbox-profile",
+          "--limits",
+          "--break-glass",
+          "--mode",
+          "--report-out",
+          "--engine",
+          "--broker",
+          "--epoch-ms",
+          "--lease",
+          "--isolation",
+          "--sandbox-backend",
+          "--stdio-pipes",
+          "--require-attestation",
+          "--launcher-digest",
+          "--actors-threads",
+          "--on-quiesce",
+          "--on-actor-death",
+          "--debug-rcaps",
+          "--foreign-isolation",
+          "--foreign-max-ret",
+          "--trace-memory",
+          "--adapter-record",
+          "--broker-profile",
+          "--sim-step",
+          "--signoff",
+          "--approved",
+          "--adapter-cmd",
+          "--require-signed-adapter",
+          "--adapter-artifact",
+          "--adapter-signer",
+          "--adapter-dpx",
+          "--adapter-transport",
+          "--adapter-startup-ms"
+        ],
+        "json": true,
+        "name": "run",
+        "usage": [
+          "delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]",
+          "(a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened",
+          "for execution; two modules declaring the same top-level name are refused, not guessed — D61)",
+          "[--grant plugin=PATH]  (P2/D-V2-27: where a program may LOAD a plugin artifact from. Paths go",
+          "through the containment resolver, so `..`, a symlink or a case difference cannot widen it; a",
+          "package may narrow it further with `[plugins] allow = [\"<blake3>\"]` in delulu.toml)",
+          "[--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]",
+          "[--sandbox | --sandbox=off] [--sandbox-profile dev|contained|hostile-agent] [--limits mem=N,cpu=S,wall=S]",
+          "[--break-glass TICKET]  (PS-B-06: on a host whose operator requires the sandbox, a ticket they",
+          "signed lets this ONE program run once without it — loud, audited, and relaxing nothing else)",
+          "(every run is budgeted: 1 GiB of memory and 5 minutes of processor time unless --limits sets",
+          "others — never zero, never unlimited (D-V2-25); a run that spends one is stopped, and the",
+          "report's outcome.stopped_by says which)",
+          "[--mode strict|audit]  (audit performs NOTHING: it reports the policy that would hold and the",
+          "grants the program would need — the dry run to read before letting unfamiliar code run)",
+          "(--sandbox runs the program as a jailed guest holding no authority of its own: the host",
+          "performs every effect under the same checks. A surface the channel does not carry yet is",
+          "REFUSED, never quietly run unconfined; --limits may narrow a profile, never widen it)",
+          "(PS-A-10: --mode and --sandbox-profile are REFUSED without --sandbox rather than",
+          "ignored, and a command line saying both --sandbox and --sandbox=off is refused in either order)",
+          "[--report-out F]  (the runtime writes the run report there — sandbox level, mode, outcome —",
+          "in every outcome; never on stdout, which the program could forge; refused inside a writable grant)",
+          "[--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)",
+          "[--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)",
+          "[--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)",
+          "[--isolation none|process|microvm]  (process isolates FOREIGN code only — the program stays in-process;",
+          "microvm runs the program as a guest in its own kernel: Linux+KVM+a guest image; elsewhere DL1408)",
+          "[--sandbox-backend external:CMD]  (L3, with --sandbox: the operator's launcher — Docker + gVisor, Kata,",
+          "a cloud sandbox, ssh — runs `delulu __guest --stdio-pipes` in THEIR environment on its stdin/stdout;",
+          "the level is labelled external and its guarantees unknown — DeluluLang measures none of them)",
+          "[--require-attestation HEX]  (PS-D-02, with external: only: the launcher's attester must sign a statement",
+          "over this run's nonce with this pinned ed25519 key, or the program is never sent; its claims are",
+          "reported as the attester's, never as the host's — `delulu sandbox attest` is a software attester)",
+          "[--launcher-digest HEX]  (PS-E-04, with external: only: the launcher's file must have this BLAKE3 digest —",
+          "the `launcher_blake3` every external run reports — or nothing is started)",
+          "[--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)",
+          "[--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]",
+          "[--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;",
+          "hw needs the sign-off record of the artifact simulation approved — DL1905;",
+          "--sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20;",
+          "--adapter-cmd CMD names the hw driver: a signature beside it that does NOT verify always refuses,",
+          "and --require-signed-adapter refuses an unsigned one — D52;",
+          "--adapter-artifact PATH names WHICH bytes were signed (an interpreter-hosted driver",
+          "names the interpreter in --adapter-cmd, not the driver), and --adapter-signer HEX pins",
+          "the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53;",
+          "--adapter-dpx FILE --adapter-transport CMD --adapter-signer HEX: the driver's LOGIC as a signed",
+          "Verified plugin, read once, pinned, re-proved and interpreted by the host; CMD only carries its",
+          "frames to the device and the replies back — P8-02;",
+          "a driver (or transport) prints READY before its first command, within --adapter-startup-ms MS",
+          "(default 10000, at most 120000); silence or any other first line refuses the run — RW 4.19)"
+        ]
+      },
+      {
+        "flags": [
+          "--out",
+          "--sign",
+          "--json"
+        ],
+        "json": true,
+        "name": "plugin",
+        "usage": [
+          "delulu plugin    build <package-dir> [-o out.dpx] [--sign keyfile] [--json]   (a `kind = \"plugin\"` package → .dpx)",
+          "delulu plugin    inspect <file.dpx> [--json]   (manifest, class, exports, section hashes, signature)",
+          "delulu plugin    verify  <file.dpx> [--json]   (load steps 1,2,5 — identical verdicts to a real load)"
+        ]
+      },
+      {
+        "flags": [
+          "--grants",
+          "--json",
+          "--broker",
+          "--foreign-isolation",
+          "--isolation",
+          "--within",
+          "--within-file",
+          "--grant",
+          "--diff"
+        ],
+        "json": true,
+        "name": "authority",
+        "usage": [
+          "delulu authority <file.delulu | package-dir> [--grants] [--json]",
+          "[--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)",
+          "delulu authority <file.delulu> --within <grant>... | --within-file <file> [--json]",
+          "(P9-01: is everything the program asks for inside this boundary? within (exit 0), or exceeds /",
+          "unsupported / inconclusive (exit 1) with each request named and the call that makes it. The",
+          "boundary is in the --grant grammar and is checked against, never granted)",
+          "delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "why",
+        "usage": [
+          "delulu why       <Effect> <file.delulu | package-dir> [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--format",
+          "--out",
+          "--budget",
+          "--gods",
+          "--custody",
+          "--json",
+          "--sandbox-profile"
+        ],
+        "json": true,
+        "name": "atlas",
+        "usage": [
+          "delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]",
+          "(mermaid is a MODULE-LEVEL overview — no functions/effects; dot|json|tree show the whole graph)",
+          "[--out DIR] [--budget N] [--gods N] [--custody] [--json]",
+          "delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]",
+          "delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)",
+          "delulu atlas     chain [target] [--sandbox-profile P] [--json]   (the V2 chain, one view: program →",
+          "authority → effects → capabilities → sandbox policy → resources → plugins →",
+          "actors → devices → execution boundary)"
+        ]
+      },
+      {
+        "flags": [
+          "--grant"
+        ],
+        "json": false,
+        "name": "repl",
+        "usage": [
+          "delulu repl      [--grant K[=V]]..."
+        ]
+      },
+      {
+        "flags": [
+          "--node",
+          "--action",
+          "--effect",
+          "--dir",
+          "--json",
+          "--out",
+          "--expect-start",
+          "--format",
+          "--since",
+          "--device-name",
+          "--ocsf"
+        ],
+        "json": true,
+        "name": "audit",
+        "usage": [
+          "delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify",
+          "[--dir DIR] [--json]  (default DIR: $DELULU_STATE_DIR/audit, else ~/.delulu/audit)",
+          "delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]",
+          "delulu audit     export --format ocsf [--since SEQ] [--out F] [--device-name NAME]  [--dir DIR] [--json]",
+          "(the chain as OCSF 1.8.0 events, each carrying its record) | verify --ocsf F [--expect-start HASH]"
+        ]
+      },
+      {
+        "flags": [
+          "--json",
+          "--parent",
+          "--effects",
+          "--fs-read",
+          "--fs-write",
+          "--net",
+          "--secret",
+          "--secret-to",
+          "--declassify",
+          "--device",
+          "--ttl",
+          "--budget",
+          "--multi",
+          "--owner",
+          "--lease",
+          "--subject",
+          "--key",
+          "--parent-cert",
+          "--out",
+          "--anchor",
+          "--for",
+          "--node",
+          "--report-out",
+          "--reason"
+        ],
+        "json": true,
+        "name": "grants",
+        "usage": [
+          "delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]",
+          "delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..",
+          "[--net H].. [--secret N].. [--secret-to N@HOST[:PORT]].. [--declassify N]..",
+          "[--device DEV:dim=lo..hi,..].. [--ttl 1h] [--budget mem=N,cpu=S] [--multi] [--owner CODE]",
+          "(prints a lease token; a budget left unnamed is the parent's, and a `run --lease` is held to it;",
+          "a secret is sent only to the origins its `--secret-to` names — none is nowhere)",
+          "delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..",
+          "[--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]",
+          "delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)",
+          "delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..",
+          "delulu grants    diff <old.grants> <new.grants> | diff <g_OLD> <g_NEW>   (P9-02: what a change of authority ADDS —",
+          "effect, scope, special-use, device and budget reach; two grant files, one grant a line, or two",
+          "lease nodes through their broker; exit 1 when it adds any, 0 when none)",
+          "delulu grants    propose <report.json> [--node g_ID]   (P9-03: the narrowest grant for the call a refused run was",
+          "refused at, from its `run --report-out` report and the program's source — that call's own requirement;",
+          "exit 1 when there is none to propose, and why; with `--node`, FILED with the broker as the request of",
+          "that node — the one the refused run held — and nothing is granted until it is approved)",
+          "delulu grants    proposals | approve <pp_ID> --parent g_ID [--ttl 1h] [--owner CODE] | reject <pp_ID> --reason \"..\"",
+          "(an approval delegates, under the approver's own node, the proposer's authority and what it asked —",
+          "bounded by ⊑, so a node cannot approve its own widening — and prints a lease token for the re-run;",
+          "a rejection's reason is kept for the proposer, in `grants proposals`)",
+          "delulu grants    auto-approve --parent g_ID [--ttl 1h]   (approves, under the standing node g_ID, every pending proposal",
+          "whose mint is within it, and leaves each other one pending with what it adds beyond the node; never",
+          "guarded authority — it takes no owner code; exit 1 when one is left pending)",
+          "[--json]  (every grants verb)"
+        ]
+      },
+      {
+        "flags": [
+          "--owner",
+          "--use",
+          "--why",
+          "--ttl",
+          "--uses",
+          "--comment",
+          "--json"
+        ],
+        "json": true,
+        "name": "guard",
+        "usage": [
+          "delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]",
+          "delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]",
+          "delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"",
+          "[--json]  (every guard verb)"
+        ]
+      },
+      {
+        "flags": [
+          "--foreground",
+          "--dangerously-bypass-guard",
+          "--guard-policy",
+          "--require-anchored-roots",
+          "--json"
+        ],
+        "json": true,
+        "name": "broker",
+        "usage": [
+          "delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key",
+          "[--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--json",
+          "--sandbox-profile",
+          "--format",
+          "--grant",
+          "--workdir",
+          "--binary",
+          "--run-as",
+          "--break-glass-key",
+          "--no-break-glass",
+          "--break-glass",
+          "--key",
+          "--program",
+          "--release",
+          "--ttl",
+          "--reason",
+          "--out",
+          "--attester",
+          "--guarantee",
+          "--measure-launcher"
+        ],
+        "json": true,
+        "name": "sandbox",
+        "usage": [
+          "delulu sandbox   status [--json]   (what this host can actually confine a guest with, from a real launch, and the",
+          "sandbox lifecycle records in this machine's audit chain — read-only, and it writes nothing)",
+          "delulu sandbox   probe [--json]   (which isolation levels this host can give a program, L0-L4, and for each",
+          "absent one the first missing prerequisite — every line an attempt, never a version string)",
+          "delulu sandbox   policy <file.delulu> [--sandbox-profile dev|contained|hostile-agent] [--json]",
+          "(what confinement a run WOULD have, without running: the limits, the mode, the policy hash,",
+          "and whether the channel can carry this program's surface at all)",
+          "delulu sandbox   policy <file.delulu> --format openshell [--grant K[=V]].. [--workdir DIR] [--binary PATH]",
+          "[--run-as ID[:ID]] [--json]   (PS-E-05: the OpenShell policy for running `delulu run` in its sandbox,",
+          "derived from the program's authority and grants and never wider than both; every grant accounted for)",
+          "delulu sandbox   require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET",
+          "(PS-B-06: the operator requires the sandbox for every program `delulu` runs on this host;",
+          "only a ticket signed by a pinned key lets one program past it, or takes the policy off)",
+          "delulu sandbox   ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE]",
+          "(mint a break-glass ticket, wherever the private key is — not on the host it is for)",
+          "delulu sandbox   attest --key SEED --attester NAME --guarantee TEXT.. [--measure-launcher FILE] -- COMMAND..",
+          "(PS-D-02: a SOFTWARE attester, run as an external launcher: signs the statement over the run's",
+          "nonce, writes it where the host asked, then becomes COMMAND — it says what its key's holder says;",
+          "a `--guarantee PROPERTY:HOW` vouches for one of the five boundary properties, as hostile-agent needs;"
+        ]
+      },
+      {
+        "flags": [
+          "--members",
+          "--approved",
+          "--previous",
+          "--fail-health-at",
+          "--json"
+        ],
+        "json": true,
+        "name": "fleet",
+        "usage": [
+          "delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)",
+          "update <artifact> --members N --approved F --previous H [--fail-health-at I] [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--state-dir",
+          "--json"
+        ],
+        "json": true,
+        "name": "secrets",
+        "usage": [
+          "delulu secrets   set NAME VALUE | list [--state-dir DIR] [--json]  (broker-resident secrets)"
+        ]
+      },
+      {
+        "flags": [
+          "--yes",
+          "--json"
+        ],
+        "json": true,
+        "name": "locale",
+        "usage": [
+          "delulu locale    add <file.dpx> [--yes] | remove <name> | list [--json]   (catalog plugins: verified-class, ZERO authority, prose only)"
+        ]
+      },
+      {
+        "flags": [
+          "--to",
+          "--to-canonical",
+          "--json"
+        ],
+        "json": true,
+        "name": "morph",
+        "usage": [
+          "delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical) [--json]",
+          "(surface keyword skins: human languages or AI-compact profiles; the program is unchanged)"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "explain",
+        "usage": [
+          "delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR | E-SANDBOX> [--json]"
+        ]
+      },
+      {
+        "flags": [
+          "--check",
+          "--json"
+        ],
+        "json": true,
+        "name": "doctor",
+        "usage": [
+          "delulu doctor    [--check] [--json]  (is this machine healthy? inside the source tree, is",
+          "the repository map current and sound? regenerates it when behind; --check never writes)"
+        ]
+      },
+      {
+        "flags": [],
+        "json": false,
+        "name": "completions",
+        "usage": [
+          "delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command",
+          "list it carries is generated from this help, so the two cannot disagree)"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "skill",
+        "usage": [
+          "delulu skill     [--json]   (the Agent Skill for this tool — the same bytes as",
+          "skills/delulu/SKILL.md, embedded, so it reads outside the checkout too)"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "toolchain",
+        "usage": [
+          "delulu toolchain [--json]   (this toolchain as data: every command with the options its help",
+          "documents, the ten effects, the grant grammar, the primitive table, budgets, sandbox",
+          "levels and profiles, every diagnostic code — read from the binary's own tables)"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "schema",
+        "usage": [
+          "delulu schema    [<name>] [--json] | validate <name> <file.json> [--json]   (the JSON Schema of an",
+          "output — envelope, diagnostic, repair, authority, atlas, sandbox, policy, run-report,",
+          "toolchain, edit, chain — closed, so every field is named; `validate` checks a file against one)"
+        ]
+      },
+      {
+        "flags": [
+          "--json"
+        ],
+        "json": true,
+        "name": "examples",
+        "usage": [
+          "delulu examples  [--json]   (the shipped example programs — each checks, with the authority report"
+        ]
+      },
+      {
+        "flags": [],
+        "json": false,
+        "name": "mcp",
+        "usage": [
+          "delulu mcp       (a Model Context Protocol server over stdio — the compiler, authority, Atlas, sandbox",
+          "preview and, in the source tree, the Survey, as tools; READ-ONLY: it never runs, grants or loads)"
+        ]
+      },
+      {
+        "flags": [
+          "--expect-hash",
+          "--edits",
+          "--node",
+          "--with",
+          "--dry-run",
+          "--if-checks",
+          "--json"
+        ],
+        "json": true,
+        "name": "edit",
+        "usage": [
+          "delulu edit      <file.delulu> --expect-hash H (--edits JSON|@F | --node ID --with TEXT|@F)",
+          "[--dry-run] [--if-checks] [--json]   (a checked edit: refused unless the file's blake3 is",
+          "still H; byte ranges in the repair shape, or one fn/type replaced by its Atlas id and",
+          "formatted; the result is checked and the answer carries the new hash)"
+        ]
+      },
+      {
+        "flags": [
+          "--seed",
+          "--actuator",
+          "--sensor",
+          "--json",
+          "--adapter-transport"
+        ],
+        "json": true,
+        "name": "device",
+        "usage": [
+          "delulu device    sim [--seed N] [--actuator DEVICE:dim=lo..hi,heartbeat_ms=N,ttl_ms=N,fail=F]... [--sensor NAME]... [--json]",
+          "(P8-03: the reference SIMULATOR as a device on standard input/output, speaking the CMD/READ line",
+          "protocol a driver's transport writes — `--adapter-transport 'delulu device sim …'`. The bounds given",
+          "here are the BENCH's own limits, not the run's grant: narrower ones simulate a hard stop. It models",
+          "no physics and nothing physical moves; --json describes the bench instead of serving it)"
+        ]
+      },
+      {
+        "flags": [
+          "--node",
+          "--rule",
+          "--poll",
+          "--for",
+          "--on-monitor-death",
+          "--death-after",
+          "--state-dir",
+          "--json"
+        ],
+        "json": true,
+        "name": "monitor",
+        "usage": [
+          "delulu monitor   watch --node g_ID --rule envelope|special-use|break-glass|denies=N/MS... [--poll MS] [--for MS]",
+          "[--on-monitor-death quarantine|continue] [--death-after MS] [--state-dir DIR] [--json]",
+          "(P8-04: an out-of-band monitor. It reads the audit chain as it is appended and QUARANTINES a run under",
+          "g_ID — revokes it, acting as g_ID — when a rule fires: `envelope` (any envelope refusal), `special-use` (any",
+          "fetch refused for reaching a special-use address), `break-glass` (any run under a break-glass ticket) or"
+        ]
+      }
+    ],
+    "diagnostics": {
+      "codes": [
+        {
+          "code": "DL0101",
+          "title": "unexpected character"
+        },
+        {
+          "code": "DL0102",
+          "title": "unterminated string literal"
+        },
+        {
+          "code": "DL0103",
+          "title": "invalid escape sequence"
+        },
+        {
+          "code": "DL0104",
+          "title": "invalid numeric literal"
+        },
+        {
+          "code": "DL0105",
+          "title": "unterminated block comment"
+        },
+        {
+          "code": "DL0106",
+          "title": "reserved word used as a declared name"
+        },
+        {
+          "code": "DL0107",
+          "title": "bidirectional control character in source"
+        },
+        {
+          "code": "DL0108",
+          "title": "line-break-like character in source (renders as a new line, does not act as one)"
+        },
+        {
+          "code": "DL0201",
+          "title": "expected a different token"
+        },
+        {
+          "code": "DL0202",
+          "title": "expected an expression"
+        },
+        {
+          "code": "DL0203",
+          "title": "expected a type"
+        },
+        {
+          "code": "DL0204",
+          "title": "file must begin with a `module` declaration"
+        },
+        {
+          "code": "DL0205",
+          "title": "expected a pattern"
+        },
+        {
+          "code": "DL0206",
+          "title": "comparison operators are non-associative"
+        },
+        {
+          "code": "DL0207",
+          "title": "invalid assignment target"
+        },
+        {
+          "code": "DL0208",
+          "title": "expected an item"
+        },
+        {
+          "code": "DL0209",
+          "title": "expected a statement terminator"
+        },
+        {
+          "code": "DL0210",
+          "title": "expression nests too deeply"
+        },
+        {
+          "code": "DL0211",
+          "title": "type nests too deeply"
+        },
+        {
+          "code": "DL0212",
+          "title": "pattern nests too deeply"
+        },
+        {
+          "code": "DL0213",
+          "title": "block nests too deeply"
+        },
+        {
+          "code": "DL0301",
+          "title": "unknown name"
+        },
+        {
+          "code": "DL0302",
+          "title": "duplicate definition"
+        },
+        {
+          "code": "DL0303",
+          "title": "unknown module in import"
+        },
+        {
+          "code": "DL0304",
+          "title": "a cycle in the declaration graph (imports, or type aliases)"
+        },
+        {
+          "code": "DL0305",
+          "title": "module-level mutable state is forbidden"
+        },
+        {
+          "code": "DL0306",
+          "title": "unknown effect name"
+        },
+        {
+          "code": "DL0307",
+          "title": "not a capability resource kind"
+        },
+        {
+          "code": "DL0401",
+          "title": "type mismatch"
+        },
+        {
+          "code": "DL0402",
+          "title": "mixed numeric types (no implicit coercion)"
+        },
+        {
+          "code": "DL0403",
+          "title": "wrong number of arguments"
+        },
+        {
+          "code": "DL0404",
+          "title": "not callable"
+        },
+        {
+          "code": "DL0405",
+          "title": "unknown field or method"
+        },
+        {
+          "code": "DL0406",
+          "title": "wrong number of type arguments"
+        },
+        {
+          "code": "DL0407",
+          "title": "non-exhaustive match"
+        },
+        {
+          "code": "DL0408",
+          "title": "condition must be Bool"
+        },
+        {
+          "code": "DL0409",
+          "title": "`?` requires Result in a Result-returning function"
+        },
+        {
+          "code": "DL0410",
+          "title": "generic variable used as both type and effect row"
+        },
+        {
+          "code": "DL0411",
+          "title": "`for` iterates something that is not a list"
+        },
+        {
+          "code": "DL0412",
+          "title": "`break` or `continue` outside a loop"
+        },
+        {
+          "code": "DL0501",
+          "title": "function performs an effect not declared in its row"
+        },
+        {
+          "code": "DL0502",
+          "title": "declared effect never performed"
+        },
+        {
+          "code": "DL0504",
+          "title": "conflicting bindings for row variable (rows never union-merge)"
+        },
+        {
+          "code": "DL0601",
+          "title": "capability type cannot be constructed or forged"
+        },
+        {
+          "code": "DL0602",
+          "title": "secret value cannot flow here (Secret[T] is not T)"
+        },
+        {
+          "code": "DL0603",
+          "title": "Secret.map requires a pure function"
+        },
+        {
+          "code": "DL0604",
+          "title": "opaque type cannot be stringified or serialized"
+        },
+        {
+          "code": "DL0605",
+          "title": "opaque type has no structural equality"
+        },
+        {
+          "code": "DL0701",
+          "title": "main's effect row exceeds the authority manifest"
+        },
+        {
+          "code": "DL0703",
+          "title": "root slice not granted"
+        },
+        {
+          "code": "DL0801",
+          "title": "call through revoked plugin reference"
+        },
+        {
+          "code": "DL0802",
+          "title": "grant exceeds holder's grant (attenuation violation)"
+        },
+        {
+          "code": "DL0803",
+          "title": "function-typed argument to Contained plugin export"
+        },
+        {
+          "code": "DL1001",
+          "title": "dependency authority exceeds its pin"
+        },
+        {
+          "code": "DL1002",
+          "title": "locked authority hash mismatch (same version, different authority)"
+        },
+        {
+          "code": "DL1003",
+          "title": "semver-authority violation: authority widened without a major version bump"
+        },
+        {
+          "code": "DL1004",
+          "title": "malformed package manifest"
+        },
+        {
+          "code": "DL1005",
+          "title": "package or re-export cycle"
+        },
+        {
+          "code": "DL1006",
+          "title": "import is ambiguous between a local module and a dependency"
+        },
+        {
+          "code": "DL1007",
+          "title": "git dependency without a pinned rev or tag"
+        },
+        {
+          "code": "DL1008",
+          "title": "version conflict for one package name in the graph"
+        },
+        {
+          "code": "DL1009",
+          "title": "package performs an effect not permitted by its own authority manifest"
+        },
+        {
+          "code": "DL1010",
+          "title": "content hash mismatch (source changed under a locked version)"
+        },
+        {
+          "code": "DL1011",
+          "title": "locked build requires resolution not present in delulu.lock"
+        },
+        {
+          "code": "DL1101",
+          "title": "effect-trace assertion violation (a runtime effect not in the static row)"
+        },
+        {
+          "code": "DL1102",
+          "title": "repair did not produce an accepting program (fuzz harness)"
+        },
+        {
+          "code": "DL1201",
+          "title": "construct not supported by the WASM backend (runs on the interpreter instead)"
+        },
+        {
+          "code": "DL1202",
+          "title": "artifact missing or invalid `delulu:authority` section"
+        },
+        {
+          "code": "DL1204",
+          "title": "delulu:cap interface version unsupported by this toolchain"
+        },
+        {
+          "code": "DL1205",
+          "title": "secret contents cannot enter the WASM guest (`--target wasm`)"
+        },
+        {
+          "code": "DL1206",
+          "title": "engine parity self-check failure (compiler-bug class)"
+        },
+        {
+          "code": "DL1301",
+          "title": "unmarshallable type in a foreign signature (incl. Secret/opaque)"
+        },
+        {
+          "code": "DL1302",
+          "title": "function-typed value crossing the foreign boundary (no callbacks — rule R-6a)"
+        },
+        {
+          "code": "DL1303",
+          "title": "foreign lib used without a manifest entry or runtime grant"
+        },
+        {
+          "code": "DL1304",
+          "title": "foreign symbol not found at bind time"
+        },
+        {
+          "code": "DL1305",
+          "title": "python import not in the granted allowlist"
+        },
+        {
+          "code": "DL1306",
+          "title": "foreign return failed shape validation (encoding or size)"
+        },
+        {
+          "code": "DL1307",
+          "title": "python runtime unavailable"
+        },
+        {
+          "code": "DL1308",
+          "title": "unsupported ABI string in a `foreign` block"
+        },
+        {
+          "code": "DL1401",
+          "title": "broker unreachable / protocol failure (fail closed)"
+        },
+        {
+          "code": "DL1402",
+          "title": "lease expired (TTL)"
+        },
+        {
+          "code": "DL1403",
+          "title": "lease revoked (carries the revoking audit seq)"
+        },
+        {
+          "code": "DL1405",
+          "title": "audit chain verification failure"
+        },
+        {
+          "code": "DL1406",
+          "title": "broker protocol version mismatch"
+        },
+        {
+          "code": "DL1407",
+          "title": "delegation token invalid or already redeemed"
+        },
+        {
+          "code": "DL1408",
+          "title": "isolation profile unavailable on this platform"
+        },
+        {
+          "code": "DL1409",
+          "title": "foreign worker died (process isolation) — the isolated worker crashed; the host survived"
+        },
+        {
+          "code": "DL1410",
+          "title": "guard refusal: guarded authority, no permit (names the exact guard request command)"
+        },
+        {
+          "code": "DL1411",
+          "title": "guard request pending (carries the request id)"
+        },
+        {
+          "code": "DL1412",
+          "title": "guard request denied (carries the principal's comment verbatim)"
+        },
+        {
+          "code": "DL1413",
+          "title": "guard sealed refusal — not runtime-approvable; bypass does not lift it"
+        },
+        {
+          "code": "DL1414",
+          "title": "guard owner code missing or invalid — admin verb refused"
+        },
+        {
+          "code": "DL1415",
+          "title": "grant certificate chain does not verify to a configured trust anchor"
+        },
+        {
+          "code": "DL1416",
+          "title": "grant certificate hop is not an attenuation of its issuer (carries the intersection)"
+        },
+        {
+          "code": "DL1417",
+          "title": "grant certificate is outside its validity window"
+        },
+        {
+          "code": "DL1418",
+          "title": "grant certificate refused: unsupported algorithm/dimension, or malformed"
+        },
+        {
+          "code": "DL1421",
+          "title": "root issuance refused: strict mode requires an anchor-verified certificate (DISC-1)"
+        },
+        {
+          "code": "DL1501",
+          "title": "manifest export signature does not match the plugin code (the manifest never overrides the code)"
+        },
+        {
+          "code": "DL1502",
+          "title": "requested grant exceeds the plugin's declared ceiling"
+        },
+        {
+          "code": "DL1503",
+          "title": "DIR version unsupported (rebuild the plugin)"
+        },
+        {
+          "code": "DL1504",
+          "title": "Verified re-check failed (plugin code unsound or stale) — never falls back to Contained"
+        },
+        {
+          "code": "DL1505",
+          "title": "Contained module imports outside its grant slice"
+        },
+        {
+          "code": "DL1506",
+          "title": "plugin resource limit exceeded (plugin terminated and its grant node revoked)"
+        },
+        {
+          "code": "DL1507",
+          "title": "plugin API version mismatch (rebuild the plugin)"
+        },
+        {
+          "code": "DL1508",
+          "title": "malformed or tampered `.dpx` container (not a valid plugin artifact)"
+        },
+        {
+          "code": "DL1509",
+          "title": "a Contained plugin export's signature must be concrete at the `get` site (R-6a is otherwise undecidable)"
+        },
+        {
+          "code": "DL1510",
+          "title": "plugin signature present but invalid (tampered content, wrong key, or malformed signature)"
+        },
+        {
+          "code": "DL1511",
+          "title": "artifact is unsigned — it carries no signature at all (a DIFFERENT fault from one that fails to verify, DL1510/DL1705)"
+        },
+        {
+          "code": "DL1601",
+          "title": "non-sendable value crossing an actor boundary (incl. unconsumed iso; incl. PyObj pinning)"
+        },
+        {
+          "code": "DL1602",
+          "title": "use of a binding after `consume`"
+        },
+        {
+          "code": "DL1603",
+          "title": "alias violates a reference-capability deny property (incl. a `val` closure over a `ref` capture)"
+        },
+        {
+          "code": "DL1604",
+          "title": "access denied by viewpoint/receiver capability (write via box; field via tag; sync call on tag)"
+        },
+        {
+          "code": "DL1605",
+          "title": "recover block references a non-sendable outer binding"
+        },
+        {
+          "code": "DL1606",
+          "title": "a behavior declares a return type (behaviors yield Unit at the send site)"
+        },
+        {
+          "code": "DL1607",
+          "title": "reference capability invalid for this type (e.g. non-tag on an actor type)"
+        },
+        {
+          "code": "DL1608",
+          "title": "identifier collides with a v0.7 keyword (`consume`/`recover`)"
+        },
+        {
+          "code": "DL1610",
+          "title": "debug race-checker violation (compiler-bug class — file a bug)"
+        },
+        {
+          "code": "DL1701",
+          "title": "LSP/workspace configuration error"
+        },
+        {
+          "code": "DL1702",
+          "title": "formatter identity/idempotence violation (compiler-bug class — file a bug)"
+        },
+        {
+          "code": "DL1703",
+          "title": "test authority exceeds the package test ceiling"
+        },
+        {
+          "code": "DL1704",
+          "title": "catalog invalid: unknown key/placeholder, bad meta, or a welcome-override attempt — entry falls back to en-US"
+        },
+        {
+          "code": "DL1705",
+          "title": "signature verification failed"
+        },
+        {
+          "code": "DL1706",
+          "title": "registry index line invalid / semver-authority conflict at publish"
+        },
+        {
+          "code": "DL1707",
+          "title": "assertion failed (a `test` assertion did not hold at runtime)"
+        },
+        {
+          "code": "DL1710",
+          "title": "morph is not bijective (a keyword renamed twice, or two keywords sharing one alias)"
+        },
+        {
+          "code": "DL1711",
+          "title": "morph alias is another keyword's canonical spelling (the surface would mislead)"
+        },
+        {
+          "code": "DL1712",
+          "title": "morph alias is not a single valid token"
+        },
+        {
+          "code": "DL1713",
+          "title": "morph renames something that is not a renameable keyword"
+        },
+        {
+          "code": "DL1714",
+          "title": "the requested morph is not available"
+        },
+        {
+          "code": "DL1715",
+          "title": "the program uses one of the target morph's aliases as a name"
+        },
+        {
+          "code": "DL1780",
+          "title": "atlas refused: the program has check errors — fix them first (no partial graph)"
+        },
+        {
+          "code": "DL1781",
+          "title": "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it"
+        },
+        {
+          "code": "DL1790",
+          "title": "invalid theme name or malformed theme.toml — using the `default` theme"
+        },
+        {
+          "code": "DL1801",
+          "title": "use of a deprecated feature (RFC-linked)"
+        },
+        {
+          "code": "DL1802",
+          "title": "package declares a newer language edition than this toolchain"
+        },
+        {
+          "code": "DL1901",
+          "title": "unknown attribute"
+        },
+        {
+          "code": "DL1902",
+          "title": "mailbox overflow dropped a message under `drop-new` in abort mode"
+        },
+        {
+          "code": "DL1903",
+          "title": "dependency version has a published security advisory"
+        },
+        {
+          "code": "DL1904",
+          "title": "actuator command refused by its envelope"
+        },
+        {
+          "code": "DL1905",
+          "title": "hardware actuation requested for an artifact that no simulation approved"
+        },
+        {
+          "code": "DL1906",
+          "title": "native-code emission requested without the `exec.native` grant"
+        },
+        {
+          "code": "DL1907",
+          "title": "compute dispatch refused by the device envelope"
+        },
+        {
+          "code": "DL1908",
+          "title": "signature policy requires hybrid; artifact is classical-only or names an unknown algorithm"
+        },
+        {
+          "code": "DL1909",
+          "title": "deploy plan authority exceeds environment profile"
+        },
+        {
+          "code": "DL1910",
+          "title": "unvalidated (pre-KAT, unaudited) cryptography invoked without `--unstable`"
+        },
+        {
+          "code": "DL1911",
+          "title": "compute adapter cannot attest independent below-adapter envelope enforcement"
+        },
+        {
+          "code": "DL1912",
+          "title": "kernel artifact is malformed, unreadable, or its signature does not verify"
+        },
+        {
+          "code": "DL1913",
+          "title": "kernel artifact is unsigned (kernels are always signed — spec §7.1)"
+        },
+        {
+          "code": "DL0901",
+          "title": "integer overflow"
+        },
+        {
+          "code": "DL0902",
+          "title": "division by zero"
+        },
+        {
+          "code": "DL0903",
+          "title": "index out of bounds"
+        },
+        {
+          "code": "DL0904",
+          "title": "capability scope violation"
+        },
+        {
+          "code": "DL0905",
+          "title": "recursion depth exceeded"
+        },
+        {
+          "code": "DL0907",
+          "title": "an internal invariant the checker should have guaranteed was violated (compiler-bug class)"
+        }
+      ],
+      "topics": [
+        "E-ACTOR",
+        "E-GUARD",
+        "E-ATLAS",
+        "E-PALETTE",
+        "E-REVOKE",
+        "E-PLUGIN",
+        "E-SANDBOX"
+      ]
+    },
+    "effects": [
+      "Read",
+      "Write",
+      "Net",
+      "Clock",
+      "Rand",
+      "Declassify",
+      "ForeignCall",
+      "Load",
+      "Async",
+      "Actuate"
+    ],
+    "engines": [
+      "interpreter",
+      "wasm"
+    ],
+    "grants": [
+      {
+        "example": "console",
+        "form": "console",
+        "grants": "the console: print and read lines",
+        "key": "console"
+      },
+      {
+        "example": "clock",
+        "form": "clock",
+        "grants": "the clock",
+        "key": "clock"
+      },
+      {
+        "example": "rand",
+        "form": "rand",
+        "grants": "randomness",
+        "key": "rand"
+      },
+      {
+        "example": "declassify",
+        "form": "declassify",
+        "grants": "declassifying a secret (`Declassify`)",
+        "key": "declassify"
+      },
+      {
+        "example": "exec.native",
+        "form": "exec.native",
+        "grants": "emitting and running native code (no native tier ships yet)",
+        "key": "exec.native"
+      },
+      {
+        "example": "fs.read=./data",
+        "form": "fs.read=PATH",
+        "grants": "reading files under PATH",
+        "key": "fs.read"
+      },
+      {
+        "example": "fs.write=./out",
+        "form": "fs.write=PATH",
+        "grants": "writing files under PATH",
+        "key": "fs.write"
+      },
+      {
+        "example": "net=api.example.com/v1/**",
+        "form": "net=HOST[/PATH]",
+        "grants": "HTTPS to HOST — only under PATH when one is named (`*` one segment, `**` the rest); never a special-use address",
+        "key": "net"
+      },
+      {
+        "example": "net.special=127.0.0.1",
+        "form": "net.special=HOST[/PATH]",
+        "grants": "HTTPS to a special-use address, named explicitly",
+        "key": "net.special"
+      },
+      {
+        "example": "foreign.c=mathlib:libm.so.6",
+        "form": "foreign.c=LOGICAL:PATH",
+        "grants": "binding the C library LOGICAL to PATH",
+        "key": "foreign.c"
+      },
+      {
+        "example": "foreign.python=numpy",
+        "form": "foreign.python=PATTERN",
+        "grants": "importing Python modules matching PATTERN",
+        "key": "foreign.python"
+      },
+      {
+        "example": "actuator=arm1/gripper:width_mm=0..80,heartbeat_ms=60000,ttl_ms=60000,fail=hold",
+        "form": "actuator=DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N],heartbeat_ms=N,ttl_ms=N,fail=STATE",
+        "grants": "commanding DEVICE inside the envelope, with a mandatory dead-man",
+        "key": "actuator"
+      },
+      {
+        "example": "compute=gpu0:memory_bytes=1048576,kernel_ms=0..50,queue_depth=4,power_w=0..120,adapter=cpu-reference,format=refkernel-1,kernel=reduce_sum:k.refkernel",
+        "form": "compute=DEVICE:memory_bytes=N,kernel_ms=lo..hi,queue_depth=N,power_w=lo..hi,adapter=A,format=F,kernel=NAME:PATH[,class=C][,waive-attestation]",
+        "grants": "dispatching to DEVICE inside the envelope; every bounding term is mandatory",
+        "key": "compute"
+      },
+      {
+        "example": "sensor=arm0/angle",
+        "form": "sensor=DEVICE",
+        "grants": "reading DEVICE (`Read` under its scope)",
+        "key": "sensor"
+      },
+      {
+        "example": "plugin=./plugins",
+        "form": "plugin=PATH",
+        "grants": "loading a plugin artifact from under PATH",
+        "key": "plugin"
+      },
+      {
+        "example": "secret:TOKEN@api.example.com=abc",
+        "form": "secret:NAME[@HOST[:PORT][,HOST[:PORT]...]]=VALUE | …=env:VAR",
+        "grants": "the secret NAME, held by the runtime; sent in a request only to the hosts after `@` (none named: sent nowhere)",
+        "key": "secret:"
+      }
+    ],
+    "primitives": {
+      "entries": [
+        {
+          "arity": 0,
+          "method": "console",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "fs_read",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "fs_write",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "http",
+          "receiver": "root"
+        },
+        {
+          "arity": 0,
+          "method": "clock",
+          "receiver": "root"
+        },
+        {
+          "arity": 0,
+          "method": "rand",
+          "receiver": "root"
+        },
+        {
+          "arity": 0,
+          "method": "declassify",
+          "receiver": "root"
+        },
+        {
+          "arity": 0,
+          "method": "foreign_load",
+          "receiver": "root"
+        },
+        {
+          "arity": 0,
+          "method": "plugin_host",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "secret",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "foreign",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "python",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "println",
+          "receiver": "console"
+        },
+        {
+          "arity": 1,
+          "method": "print",
+          "receiver": "console"
+        },
+        {
+          "arity": 0,
+          "method": "readline",
+          "receiver": "console"
+        },
+        {
+          "arity": 1,
+          "method": "read_text",
+          "receiver": "fs_read"
+        },
+        {
+          "arity": 1,
+          "method": "list_dir",
+          "receiver": "fs_read"
+        },
+        {
+          "arity": 1,
+          "method": "narrow",
+          "receiver": "fs_read"
+        },
+        {
+          "arity": 2,
+          "method": "write_text",
+          "receiver": "fs_write"
+        },
+        {
+          "arity": 2,
+          "method": "append_text",
+          "receiver": "fs_write"
+        },
+        {
+          "arity": 1,
+          "method": "get",
+          "receiver": "http"
+        },
+        {
+          "arity": 2,
+          "method": "get_with",
+          "receiver": "http"
+        },
+        {
+          "arity": 4,
+          "method": "get_with_secret",
+          "receiver": "http"
+        },
+        {
+          "arity": 3,
+          "method": "post",
+          "receiver": "http"
+        },
+        {
+          "arity": 5,
+          "method": "post_with_secret",
+          "receiver": "http"
+        },
+        {
+          "arity": 0,
+          "method": "now_ms",
+          "receiver": "clock"
+        },
+        {
+          "arity": 1,
+          "method": "actuator",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "sensor",
+          "receiver": "root"
+        },
+        {
+          "arity": 1,
+          "method": "command",
+          "receiver": "actuator"
+        },
+        {
+          "arity": 0,
+          "method": "read",
+          "receiver": "sensor"
+        },
+        {
+          "arity": 1,
+          "method": "compute",
+          "receiver": "root"
+        },
+        {
+          "arity": 2,
+          "method": "dispatch",
+          "receiver": "compute"
+        },
+        {
+          "arity": 2,
+          "method": "int",
+          "receiver": "rand"
+        },
+        {
+          "arity": 0,
+          "method": "float",
+          "receiver": "rand"
+        },
+        {
+          "arity": 1,
+          "method": "get",
+          "receiver": "plugin"
+        },
+        {
+          "arity": 0,
+          "method": "unload",
+          "receiver": "plugin"
+        },
+        {
+          "arity": 1,
+          "method": "import",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "of_int",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "of_float",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "of_str",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "of_bool",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "list",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "to_int",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "to_float",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "to_str",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "to_bool",
+          "receiver": "python"
+        },
+        {
+          "arity": 1,
+          "method": "attr",
+          "receiver": "pyobj"
+        },
+        {
+          "arity": 1,
+          "method": "call",
+          "receiver": "pyobj"
+        },
+        {
+          "arity": 2,
+          "method": "call_method",
+          "receiver": "pyobj"
+        },
+        {
+          "arity": 1,
+          "method": "index",
+          "receiver": "pyobj"
+        },
+        {
+          "arity": 1,
+          "method": "map",
+          "receiver": "secret"
+        },
+        {
+          "arity": 1,
+          "method": "verify",
+          "receiver": "secret"
+        },
+        {
+          "arity": 1,
+          "method": "expose",
+          "receiver": "secret"
+        },
+        {
+          "arity": 0,
+          "method": "len",
+          "receiver": "str"
+        },
+        {
+          "arity": 0,
+          "method": "trim",
+          "receiver": "str"
+        },
+        {
+          "arity": 1,
+          "method": "contains",
+          "receiver": "str"
+        },
+        {
+          "arity": 1,
+          "method": "starts_with",
+          "receiver": "str"
+        },
+        {
+          "arity": 1,
+          "method": "split",
+          "receiver": "str"
+        },
+        {
+          "arity": 2,
+          "method": "slice",
+          "receiver": "str"
+        },
+        {
+          "arity": 0,
+          "method": "to_upper",
+          "receiver": "str"
+        },
+        {
+          "arity": 0,
+          "method": "to_lower",
+          "receiver": "str"
+        },
+        {
+          "arity": 2,
+          "method": "replace",
+          "receiver": "str"
+        },
+        {
+          "arity": 0,
+          "method": "chars",
+          "receiver": "str"
+        },
+        {
+          "arity": 0,
+          "method": "len",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "get",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "push",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "map",
+          "receiver": "list"
+        },
+        {
+          "arity": 0,
+          "method": "is_empty",
+          "receiver": "list"
+        },
+        {
+          "arity": 0,
+          "method": "pop",
+          "receiver": "list"
+        },
+        {
+          "arity": 0,
+          "method": "reverse",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "concat",
+          "receiver": "list"
+        },
+        {
+          "arity": 2,
+          "method": "slice",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "contains",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "join",
+          "receiver": "list"
+        },
+        {
+          "arity": 0,
+          "method": "sort",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "filter",
+          "receiver": "list"
+        },
+        {
+          "arity": 1,
+          "method": "find",
+          "receiver": "list"
+        },
+        {
+          "arity": 2,
+          "method": "fold",
+          "receiver": "list"
+        },
+        {
+          "arity": 0,
+          "method": "len",
+          "receiver": "map"
+        },
+        {
+          "arity": 0,
+          "method": "is_empty",
+          "receiver": "map"
+        },
+        {
+          "arity": 1,
+          "method": "get",
+          "receiver": "map"
+        },
+        {
+          "arity": 1,
+          "method": "contains_key",
+          "receiver": "map"
+        },
+        {
+          "arity": 2,
+          "method": "insert",
+          "receiver": "map"
+        },
+        {
+          "arity": 1,
+          "method": "remove",
+          "receiver": "map"
+        },
+        {
+          "arity": 0,
+          "method": "keys",
+          "receiver": "map"
+        },
+        {
+          "arity": 0,
+          "method": "values",
+          "receiver": "map"
+        }
+      ],
+      "table_version": 8
+    },
+    "sandbox": {
+      "channel": "delulu-sandbox-channel/3",
+      "levels": [
+        {
+          "level": 0,
+          "name": "none"
+        },
+        {
+          "level": 1,
+          "name": "process"
+        },
+        {
+          "level": 2,
+          "name": "microvm"
+        },
+        {
+          "level": 3,
+          "name": "external"
+        },
+        {
+          "level": 4,
+          "name": "attested"
+        }
+      ],
+      "modes": [
+        "strict",
+        "audit"
+      ]
+    },
+    "version": "1.0.0"
+  }
+}

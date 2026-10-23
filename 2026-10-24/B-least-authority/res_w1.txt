@@ -1,0 +1,78 @@
+#01 exit=0 mode=write base=[./out] path=[w1.txt] body=[hello-out]
+     -> OK:written
+     changed: . ./canary.sha ./cases_w1.txt ./out ./out/w1.txt ./res_w1.txt 
+#02 exit=0 mode=append base=[./out] path=[w1.txt] body=[-more]
+     -> OK:appended
+     changed: . ./out ./out/w1.txt ./res_w1.txt 
+#03 exit=0 mode=write base=[./out] path=[sub/deep/w2.txt] body=[nested]
+     -> ERR:NotFound
+     changed: ./out/w1.txt ./res_w1.txt 
+#04 exit=1 mode=write base=[./out] path=[../allowed/evil.txt] body=[x]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\a
+     changed: ./res_w1.txt 
+#05 exit=1 mode=write base=[./out] path=[..\forbidden\secret.txt] body=[OVERWRITE]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\f
+     changed: ./res_w1.txt 
+#06 exit=1 mode=write base=[./out] path=[../forbidden/new.txt] body=[x]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\f
+     changed: ./res_w1.txt 
+#07 exit=1 mode=write base=[./allowed] path=[evil2.txt] body=[x]
+     -> error[DL0703]: filesystem write of `./allowed` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./allowed`, and a `--lease` run takes its auth
+     changed: ./res_w1.txt 
+#08 exit=1 mode=write base=[./out] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\new2.txt] body=[x]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\f
+     changed: ./res_w1.txt 
+#09 exit=0 mode=write base=[./out] path=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\out\abs.txt] body=[abs-in-scope]
+     -> OK:written
+     changed: ./out ./out/abs.txt ./res_w1.txt 
+#10 exit=1 mode=write base=[./out] path=[w3.txt:ads] body=[stream]
+     -> error[DL0904]: path `w3.txt:ads` is refused: `w3.txt:ads` names an alternate data stream (`:`)
+     changed: ./out ./out/abs.txt ./res_w1.txt 
+#11 exit=1 mode=write base=[./out] path=[w3.txt::$DATA] body=[stream2]
+     -> error[DL0904]: path `w3.txt::$DATA` is refused: `w3.txt::$DATA` names an alternate data stream (`:`)
+     changed: ./res_w1.txt 
+#12 exit=1 mode=write base=[./out] path=[NUL] body=[x]
+     -> error[DL0904]: path `NUL` is refused: `NUL` is a Windows reserved device name
+     changed: ./res_w1.txt 
+#13 exit=1 mode=write base=[./out] path=[con.txt] body=[x]
+     -> error[DL0904]: path `con.txt` is refused: `con.txt` is a Windows reserved device name
+     changed: ./res_w1.txt 
+#14 exit=1 mode=write base=[./out] path=[w4.txt.] body=[x]
+     -> error[DL0904]: path `w4.txt.` is refused: `w4.txt.` ends in a dot or a space, which Windows strips — the file written would not be the one named
+     changed: ./res_w1.txt 
+#15 exit=1 mode=write base=[./out] path=[\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\out\w5.txt] body=[x]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authori
+     changed: ./res_w1.txt 
+#16 exit=0 mode=write base=[./out] path=[] body=[x]
+     -> ERR:Denied
+     changed: ./res_w1.txt 
+#17 exit=0 mode=write base=[./out] path=[.] body=[x]
+     -> ERR:Denied
+     changed: ./res_w1.txt 
+#18 exit=0 mode=write base=[./out] path=[FORBID~1/new3.txt] body=[x]
+     -> ERR:NotFound
+     changed: ./res_w1.txt 
+#19 exit=1 mode=write base=[./out] path=[../FORBID~1/new4.txt] body=[x]
+     -> error[DL0904]: lease `g_838f9483c4516233679526a24d51ea9c` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\F
+     changed: ./res_w1.txt 
+#20 exit=0 mode=write base=[./out] path=[OUT/case.txt] body=[case]
+     -> ERR:NotFound
+     changed: ./res_w1.txt 
+#21 exit=0 mode=write base=[./out] path=[a/../w6.txt] body=[dotdot-inside]
+     -> OK:written
+     changed: ./out ./out/w6.txt ./res_w1.txt 
+#22 exit=0 mode=write base=[./out] path=[../out/w7.txt] body=[dotdot-roundtrip]
+     -> OK:written
+     changed: ./out ./out/w6.txt ./out/w7.txt ./res_w1.txt 
+#23 exit=1 mode=write base=[..] path=[forbidden/new5.txt] body=[x]
+     -> error[DL0703]: filesystem write of `..` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=..`, and a `--lease` run takes its authority from its
+     changed: ./out ./out/w7.txt ./res_w1.txt 
+#24 exit=1 mode=write base=[.] path=[out/w8.txt] body=[x]
+     -> error[DL0703]: filesystem write of `.` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=.`, and a `--lease` run takes its authority from its d
+     changed: ./res_w1.txt 
+#25 exit=1 mode=write base=[./allowed] path=[probe-a.txt] body=[X]
+     -> error[DL0703]: filesystem write of `./allowed` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./allowed`, and a `--lease` run takes its auth
+     changed: ./res_w1.txt 
+#26 exit=1 mode=write base=[./forbidden] path=[probe-f.txt] body=[X]
+     -> error[DL0703]: filesystem write of `./forbidden` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./forbidden`, and a `--lease` run takes its 
+     changed: ./res_w1.txt 

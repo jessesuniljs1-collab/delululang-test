@@ -1,0 +1,14 @@
+module t.coerce
+
+fn coerce[A, B](x: A) -> B {
+    x
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let fs: Cap[FsRead] = coerce(out)
+    match fs.read_text("outside.txt") {
+        Ok(s) => out.println("P2-10-LEAK " + s)
+        Err(e) => out.println("P2-10-ERR")
+    }
+}

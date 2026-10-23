@@ -1,0 +1,50 @@
+#01 exit=1 base=[..] path=[forbidden/secret.txt]
+     -> error[DL0703]: filesystem read of `..` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=..`, and a `--lease` run takes its authority from its delegation alone (a l
+#02 exit=1 base=[.] path=[forbidden/secret.txt]
+     -> error[DL0703]: filesystem read of `.` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=.`, and a `--lease` run takes its authority from its delegation alone (a loc
+#03 exit=1 base=[.] path=[allowed/ok.txt]
+     -> error[DL0703]: filesystem read of `.` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=.`, and a `--lease` run takes its authority from its delegation alone (a loc
+#04 exit=1 base=[./forbidden] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `./forbidden` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=./forbidden`, and a `--lease` run takes its authority from its del
+#05 exit=1 base=[forbidden] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `forbidden` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=forbidden`, and a `--lease` run takes its authority from its delegat
+#06 exit=1 base=[./allowed/..] path=[forbidden/secret.txt]
+     -> error[DL0703]: filesystem read of `./allowed/..` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=./allowed/..`, and a `--lease` run takes its authority from its d
+#07 exit=1 base=[./allowed\..\forbidden] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `./allowed\..\forbidden` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=./allowed\..\forbidden`, and a `--lease` run takes its 
+#08 exit=0 base=[allowed] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#09 exit=0 base=[allowed/] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#10 exit=1 base=[./allowed/sub] path=[../ok.txt]
+     -> error[DL0904]: path `../ok.txt` escapes the granted scope
+#11 exit=1 base=[./allowed/sub] path=[../../forbidden/secret.txt]
+     -> error[DL0904]: lease `g_619ec6eea2f10eeebabf262ac85606b0` does not grant `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden\secret.txt`
+#12 exit=1 base=[C:/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/B-least-authority/forbidden] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `C:/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/B-least-authority/forbidden` was not granted — the lease this run redeemed (
+#13 exit=0 base=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\allowed] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#14 exit=0 base=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-LEAS~1\allowed] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#15 exit=1 base=[C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-LEAS~1\FORBID~1] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-LEAS~1\FORBID~1` was not granted — the lease this run redeemed (node `g_61
+#16 exit=1 base=[\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\allowed] path=[ok.txt]
+     -> error[DL0904]: path `\\\\?\\C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\allowed` is refused: a `\\?\` or `\\.\` prefix bypasses
+#17 exit=1 base=[\\?\C:\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden] path=[secret.txt]
+     -> error[DL0904]: path `\\\\?\\C:\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\forbidden` is refused: a `\\?\` or `\\.\` prefix bypass
+#18 exit=1 base=[\\localhost\C$\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\forbidden] path=[secret.txt]
+     -> error[DL0904]: path `\\\\localhost\\C$\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\forbidden` is refused: a UNC path (`\\server\sh
+#19 exit=1 base=[\\localhost\C$\Users\jesse\AppData\Local\Temp\claude\D--nelan-DeluluLang\eb34182b-835b-44af-b5ec-07064fcae52c\scratchpad\dogfood\B-least-authority\allowed] path=[ok.txt]
+     -> error[DL0904]: path `\\\\localhost\\C$\\Users\\jesse\\AppData\\Local\\Temp\\claude\\D--nelan-DeluluLang\\eb34182b-835b-44af-b5ec-07064fcae52c\\scratchpad\\dogfood\\B-least-authority\\allowed` is refused: a UNC path (`\\server\shar
+#20 exit=0 base=[./ALLOWED] path=[ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a
+#21 exit=1 base=[./allowed.] path=[ok.txt]
+     -> error[DL0904]: path `./allowed.` is refused: `allowed.` ends in a dot or a space, which Windows strips — the file written would not be the one named
+#22 exit=1 base=[./allowed::$DATA] path=[ok.txt]
+     -> error[DL0904]: path `./allowed::$DATA` is refused: `allowed::$DATA` names an alternate data stream (`:`)
+#23 exit=1 base=[] path=[ok.txt]
+     -> error[DL0703]: filesystem read of `` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=`, and a `--lease` run takes its authority from its delegation alone (a local
+#24 exit=1 base=[C:\] path=[Windows/win.ini]
+     -> error[DL0703]: filesystem read of `C:\` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=C:\`, and a `--lease` run takes its authority from its delegation alone (a
+#25 exit=1 base=[/] path=[Windows/win.ini]
+     -> error[DL0703]: filesystem read of `/` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=/`, and a `--lease` run takes its authority from its delegation alone (a loc

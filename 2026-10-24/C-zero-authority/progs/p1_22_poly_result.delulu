@@ -1,0 +1,11 @@
+module t.polyres
+
+fn apply2[T, U, e](f: fn(T) -> U ! e, x: T) -> U {
+    f(x)
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    out.println(apply2(fn(s: Str) -> Str { out.println("P1-22-POLY-LEAK")
+ s }, "x"))
+}

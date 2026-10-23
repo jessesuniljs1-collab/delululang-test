@@ -1,0 +1,16 @@
+#01 exit=1 base=[./allowed] path=[j/secret.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#02 exit=1 base=[./allowed] path=[j\secret.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#03 exit=1 base=[./allowed] path=[J/SECRET.TXT]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#04 exit=1 base=[./allowed] path=[j]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#05 exit=1 base=[./allowed/j] path=[secret.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#06 exit=1 base=[./allowed] path=[hl.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#07 exit=1 base=[./allowed] path=[sub/../j/secret.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter
+#08 exit=1 base=[./allowed] path=[j/../ok.txt]
+     -> error[DL1201]: WASM codegen does not support the method `.readline` — omit `--engine wasm` to run it on the interpreter

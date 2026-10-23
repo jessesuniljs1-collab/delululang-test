@@ -1,0 +1,4 @@
+module t.f18
+
+fn main(root: Root) ! {Write} {
+    root.console().println("F18")

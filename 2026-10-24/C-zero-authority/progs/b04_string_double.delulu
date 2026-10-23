@@ -1,0 +1,8 @@
+module t.b04
+
+fn main(root: Root) ! {Write} {
+    var s = "x"
+    while true {
+        s = s + s
+    }
+}

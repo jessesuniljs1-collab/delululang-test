@@ -1,0 +1,2 @@
+.
+FORBID~1/secret.txt

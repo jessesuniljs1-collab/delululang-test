@@ -1,0 +1,5 @@
+﻿module t.f07
+
+fn main(root: Root) ! {Write} {
+    root.console().println("F07-BOM")
+}

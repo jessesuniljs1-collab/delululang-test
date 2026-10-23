@@ -1,0 +1,66 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 90,
+            "col": 16,
+            "line": 6
+          },
+          "file": "progs/p4_10_top_let_cap.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 83,
+            "col": 9,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 72,
+            "col": 30,
+            "line": 5
+          },
+          "file": "progs/p4_10_top_let_cap.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 63,
+            "col": 21,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 1
+  }
+}

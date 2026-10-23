@@ -1,0 +1,10 @@
+module t.b08
+
+fn main(root: Root) ! {Write} {
+    var xs = [0]
+    var i = 0
+    while true {
+        xs.push(i)
+        i = i + 1
+    }
+}

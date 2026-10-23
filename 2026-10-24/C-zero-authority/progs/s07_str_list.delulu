@@ -1,0 +1,7 @@
+module t.s07
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    let xs = [s]
+    root.console().println(str(xs))
+}

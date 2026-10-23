@@ -1,0 +1,6 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_e3d521bda5e61da2e2beab73c5caf811`
+custody: daemon
+base=[./allowed] path=[ok.txt]
+OK:B-ALLOWED-CANARY-7f3a
+

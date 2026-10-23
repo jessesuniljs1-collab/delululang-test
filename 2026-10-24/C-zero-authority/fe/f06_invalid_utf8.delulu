@@ -1,0 +1,5 @@
+module t.f06
+
+fn main(root: Root) ! {Write} {
+    root.console().println("bad ÿþ bytes")
+}

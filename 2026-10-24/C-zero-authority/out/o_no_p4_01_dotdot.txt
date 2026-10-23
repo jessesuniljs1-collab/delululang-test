@@ -1,0 +1,7 @@
+error[DL0703]: filesystem read of `./a` was not granted — pass `--grant fs.read=./a`
+  --> progs/p4_01_dotdot.delulu:4:13
+   |
+ 4 |     let r = root.fs_read("./a")
+   |             ^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

@@ -1,0 +1,13 @@
+module t.rootrec
+
+type Holder {
+    r: Root,
+}
+
+fn pure_use(h: Holder) -> Unit {
+    h.r.console().println("P2-13-ROOT-IN-RECORD")
+}
+
+fn main(root: Root) ! {Write} {
+    pure_use(Holder { r: root })
+}

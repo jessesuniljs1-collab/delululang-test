@@ -1,0 +1,14 @@
+module t.identsum
+
+type Slot = Empty | Full(Cap[Console])
+
+fn fill(s: Slot) -> Cap[Console] {
+    match s {
+        Empty => Cap[Console]()
+        Full(c) => c
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    fill(Empty).println("P2-14-SUM-FORGE")
+}

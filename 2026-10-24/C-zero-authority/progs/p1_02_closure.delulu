@@ -1,0 +1,10 @@
+module t.closure
+
+fn make(out: Cap[Console]) -> fn() -> Unit {
+    fn() { out.println("P1-02-CLOSURE-LEAK") }
+}
+
+fn main(root: Root) ! {Write} {
+    let f = make(root.console())
+    f()
+}

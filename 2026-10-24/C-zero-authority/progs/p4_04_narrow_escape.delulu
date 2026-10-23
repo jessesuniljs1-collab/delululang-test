@@ -1,0 +1,9 @@
+module t.narrowesc
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("./a").narrow("../")
+    match r.read_text("outside.txt") {
+        Ok(s) => root.console().println("P4-04-LEAK " + s)
+        Err(e) => root.console().println("P4-04-ERR")
+    }
+}

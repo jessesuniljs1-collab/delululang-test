@@ -1,0 +1,12 @@
+module t.listclo
+
+fn run_all(out: Cap[Console]) -> Unit {
+    let fs: List[fn() -> Unit] = [fn() -> Unit { out.println("P1B-08-LIST-CLOSURE-LEAK") }]
+    for f in fs {
+        f()
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    run_all(root.console())
+}

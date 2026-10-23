@@ -1,0 +1,9 @@
+module t.v04
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read(".")
+    match r.read_text("outside.txt") {
+        Ok(s) => root.console().println("V04-READ " + s)
+        Err(e) => root.console().println("V04-ERR")
+    }
+}

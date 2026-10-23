@@ -1,0 +1,27 @@
+version = 1
+
+[[package]]
+name           = "ratapp"
+version        = "0.1.0"
+source         = "path+."
+content_hash   = "blake3:1a4ca98adfd83a4b2f72c515abc27bf78a166c847a699736eca935d9450f2bc5"
+authority_hash = "blake3:7adca8024a8fc617e8c0a6b48c5b2a437d484e22dc469dba168634f621732cea"
+api_row_hash   = "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+effects        = ["Write"]
+cap_kinds      = ["Console"]
+secrets        = []
+scopes         = { net = [], "fs.read" = [], "fs.write" = [] }
+accepted_by    = ""
+
+[[package]]
+name           = "ratlib"
+version        = "0.1.0"
+source         = "path+../ratlib"
+content_hash   = "blake3:ca12c0e2591153d6b2b0defce45b435cf5b96c66cf8eff37c9a3fe6addadd2bb"
+authority_hash = "blake3:c9c9de6d646061fa97e85531289a8239596ab31a6281c5a7fb24314b4f12dcfe"
+api_row_hash   = "blake3:f81ec820ae92bca6c1ea7c620d3d5d5902ab0e7a40939fbeef66b0c6275885cf"
+effects        = []
+cap_kinds      = []
+secrets        = []
+scopes         = { net = [], "fs.read" = [], "fs.write" = [] }
+accepted_by    = ""

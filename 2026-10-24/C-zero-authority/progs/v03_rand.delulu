@@ -1,0 +1,6 @@
+module t.v03
+
+fn main(root: Root) ! {Rand, Write} {
+    let r = root.rand().int(0, 10)
+    root.console().println("V03-RAND " + str(r >= 0))
+}

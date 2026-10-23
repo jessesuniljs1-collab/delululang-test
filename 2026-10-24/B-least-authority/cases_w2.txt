@@ -1,0 +1,8 @@
+write|./out|jx/probe-j.txt|via-junction
+write|./out|jx\probe-j2.txt|via-junction
+write|./out|ja/probe-j3.txt|via-junction-allowed
+append|./out|jx/secret.txt|APPENDED-VIA-JUNCTION
+write|./out|jx|replace-junction-with-file
+write|./out/jx|probe-j4.txt|base-is-junction
+write|./out|JX/probe-j5.txt|via-junction-upper
+write|./out|w9.txt|control-after-junction

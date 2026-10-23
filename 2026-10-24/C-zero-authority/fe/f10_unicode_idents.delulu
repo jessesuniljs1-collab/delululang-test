@@ -1,0 +1,10 @@
+module t.f10
+
+fn 计算(x: Int) -> Int {
+    x + 1
+}
+
+fn main(root: Root) ! {Write} {
+    let café = 计算(1)
+    root.console().println(str(café))
+}

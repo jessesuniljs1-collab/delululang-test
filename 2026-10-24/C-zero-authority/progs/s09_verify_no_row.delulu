@@ -1,0 +1,10 @@
+module t.s09
+
+fn same(a: Secret[Str], b: Secret[Str]) -> Bool {
+    a.verify(b)
+}
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    root.console().println(str(same(s, s)))
+}

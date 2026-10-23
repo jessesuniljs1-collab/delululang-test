@@ -1,0 +1,4 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_9bdcb7501c2ee602bfc8d00089f2ab0a`
+custody: daemon
+error: the run was stopped: it ran for 2 s of wall-clock time, its budget. Budgets are the operator's, set per run with `--limits wall=SECONDS`

@@ -1,0 +1,6 @@
+module t.forgeroot
+
+fn main(root: Root) ! {Write} {
+    let r: Root = Root()
+    r.console().println("P2-02-FORGED-ROOT")
+}

@@ -1,0 +1,7 @@
+module t.s08
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    assert_eq(s, s)
+    root.console().println("S08")
+}

@@ -1,0 +1,5 @@
+module hi
+
+fn main(root: Root) ! {Write} {
+    root.console().println("hi from a lease")
+}

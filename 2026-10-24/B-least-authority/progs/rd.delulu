@@ -1,0 +1,20 @@
+module rd
+
+fn rl(out: Cap[Console]) -> Str ! {Read} {
+    match out.readline() {
+        Ok(s) => s
+        Err(e) => "<EOF>"
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let base = rl(out)
+    let p = rl(out)
+    out.println("base=[" + base + "] path=[" + p + "]")
+    let rd = root.fs_read(base)
+    match rd.read_text(p) {
+        Ok(t) => out.println("OK:" + t)
+        Err(e) => out.println("ERR:" + str(e))
+    }
+}

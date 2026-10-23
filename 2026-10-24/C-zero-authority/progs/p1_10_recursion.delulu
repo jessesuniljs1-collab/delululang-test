@@ -1,0 +1,15 @@
+module t.rec
+
+fn rec(out: Cap[Console], n: Int) -> Int {
+    if n == 0 {
+        out.println("P1-10-RECURSION-LEAK")
+        0
+    } else {
+        rec(out, n - 1)
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let r = rec(root.console(), 3)
+    root.console().println(str(r))
+}

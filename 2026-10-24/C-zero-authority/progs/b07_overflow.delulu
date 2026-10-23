@@ -1,0 +1,8 @@
+module t.b07
+
+fn main(root: Root) ! {Write} {
+    var x = 1
+    while true {
+        x = x * 2
+    }
+}

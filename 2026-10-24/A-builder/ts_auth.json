@@ -1,0 +1,65 @@
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "FsRead",
+        "requested_scopes": [
+          "./data"
+        ],
+        "scopes": []
+      },
+      {
+        "kind": "FsWrite",
+        "requested_scopes": [
+          "./out"
+        ],
+        "scopes": []
+      },
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Read",
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "textstats",
+    "pure_functions": [
+      "count_lines",
+      "ends_with_txt",
+      "normalize",
+      "tally",
+      "top_lines"
+    ],
+    "requested_scopes": {
+      "FsRead": [
+        "./data"
+      ],
+      "FsWrite": [
+        "./out"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./data",
+      "fs.write=./out",
+      "console"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      },
+      {
+        "kind": "Clock",
+        "requested_scopes": [],
+        "scopes": []
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Clock",
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "t.rowbypassclock",
+    "pure_functions": [
+      "coerce",
+      "pure_reader",
+      "timer"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console",
+      "clock"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

@@ -1,0 +1,31 @@
+p+ Some(5)
+p sp Some(5)
+p -0 Some(0)
+p max Some(9223372036854775807)
+p over None
+p min Some(-9223372036854775808)
+p arab None
+p hex None
+p us None
+p empty None
+p dot None
+p lead0 Some(7)
+f1 1.0
+f2 0.30000000000000004
+f3 inf
+f4 NaN
+f5 0.0
+f6 1000000000000000000000.0
+f7 0.0000001
+f8 123456789.125
+f9 inf
+i2f 3.5
+f2i 3
+f2i neg -3
+f2i nan 0
+f2i big 9223372036854775807
+min -9223372036854775808
+neg -5
+cmpf false true
+str= truefalse
+sl lo||hel|

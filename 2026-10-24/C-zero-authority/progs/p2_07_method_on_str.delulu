@@ -1,0 +1,5 @@
+module t.strmeth
+
+fn main(root: Root) ! {Write} {
+    "stdout".println("P2-07-STRING-METHOD")
+}

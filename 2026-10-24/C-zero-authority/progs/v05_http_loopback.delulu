@@ -1,0 +1,9 @@
+module t.v05
+
+fn main(root: Root) ! {Net, Write} {
+    let c = root.http(["127.0.0.1"])
+    match c.get("https://127.0.0.1:9/") {
+        Ok(b) => root.console().println("V05-OK")
+        Err(e) => root.console().println("V05-ERR")
+    }
+}

@@ -1,0 +1,8 @@
+module t.s06
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    let m: Map[Secret[Str], Int] = Map()
+    m.insert(s, 1)
+    root.console().println("S06")
+}

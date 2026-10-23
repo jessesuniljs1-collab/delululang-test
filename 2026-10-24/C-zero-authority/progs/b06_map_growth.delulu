@@ -1,0 +1,10 @@
+module t.b06
+
+fn main(root: Root) ! {Write} {
+    let m = Map()
+    var i = 0
+    while true {
+        m.insert(i, "value-value-value-value-value-value-value-value")
+        i = i + 1
+    }
+}

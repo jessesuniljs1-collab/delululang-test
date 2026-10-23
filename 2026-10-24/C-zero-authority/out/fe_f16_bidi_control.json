@@ -1,0 +1,56 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0107",
+      "explanation_id": "E-DL0107",
+      "message": "bidirectional control character U+202E (RIGHT-TO-LEFT OVERRIDE) in source",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 66,
+            "col": 19,
+            "line": 4
+          },
+          "file": "fe/f16_bidi_control.delulu",
+          "label": "this can make the code render differently than it runs — use the `\\u{…}` escape if a string truly needs it",
+          "start": {
+            "byte": 63,
+            "col": 18,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `‮`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 66,
+            "col": 19,
+            "line": 4
+          },
+          "file": "fe/f16_bidi_control.delulu",
+          "start": {
+            "byte": 63,
+            "col": 18,
+            "line": 4
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}

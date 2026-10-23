@@ -1,0 +1,5 @@
+module t.f09
+
+fn main(root: Root) ! {Write} {
+	root.console().println("F09-TABS")
+}

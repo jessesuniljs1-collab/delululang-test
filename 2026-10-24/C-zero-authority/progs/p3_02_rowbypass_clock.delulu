@@ -1,0 +1,18 @@
+module t.rowbypassclock
+
+fn coerce[A, B](x: A) -> B {
+    x
+}
+
+fn timer(root: Root) -> fn() -> Int ! {Clock} {
+    fn() -> Int ! {Clock} { root.clock().now_ms() }
+}
+
+fn pure_reader(root: Root) -> Int {
+    let f: fn() -> Int = coerce(timer(root))
+    f()
+}
+
+fn main(root: Root) ! {Write, Clock} {
+    root.console().println("P3-02-CLOCK-READ " + str(pure_reader(root) > 0))
+}

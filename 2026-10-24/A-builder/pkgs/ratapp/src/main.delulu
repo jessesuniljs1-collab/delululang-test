@@ -1,0 +1,44 @@
+module ratapp
+
+import ratlib
+import ratlib.bigint
+
+fn show(out: Cap[Console], label: Str, r: Result[Rat, RatErr]) ! {Write} {
+    match r {
+        Ok(v) => out.println(label + " = " + rat_text(v))
+        Err(e) => match e { ZeroDen => out.println(label + " = error: zero denominator"), DivByZero => out.println(label + " = error: division by zero") }
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    show(out, "6/-8", make(6, 0 - 8))
+    show(out, "1/0", make(1, 0))
+    show(out, "0/5", make(0, 5))
+    match make(1, 3) {
+        Ok(third) => {
+            match make(1, 6) {
+                Ok(sixth) => {
+                    out.println("1/3 + 1/6 = " + rat_text(rat_add(third, sixth)))
+                    out.println("1/3 - 1/6 = " + rat_text(rat_sub(third, sixth)))
+                    out.println("1/3 * 1/6 = " + rat_text(rat_mul(third, sixth)))
+                    show(out, "1/3 / 1/6", rat_div(third, sixth))
+                    show(out, "1/3 / 0", rat_div(third, of_int(0)))
+                    out.println("cmp = " + str(rat_cmp(third, sixth)))
+                    out.println("(1/3)^5 = " + rat_text(rat_pow(third, 5)))
+                }
+                Err(e) => out.println("unreachable")
+            }
+        }
+        Err(e) => out.println("unreachable")
+    }
+    out.println("H(10) = " + rat_text(harmonic(10)))
+    out.println("H(30) = " + rat_text(harmonic(30)))
+    out.println("100! = " + big_text(big_factorial(100)))
+    out.println("fib(500) = " + big_text(big_fib(500)))
+    out.println("2^1000 = " + big_text(big_pow(big_of_int(2), 1000)))
+    out.println("300! = " + big_text(big_factorial(300)))
+    out.println(
+        "12345678901234567890^3 = " + big_text(big_pow(big_add(big_mul_small(big_of_int(1234567890), 10000000000), big_of_int(1234567890)), 3)),
+    )
+}

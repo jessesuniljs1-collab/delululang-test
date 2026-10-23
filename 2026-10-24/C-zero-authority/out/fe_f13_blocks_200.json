@@ -1,0 +1,112 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0202",
+      "explanation_id": "E-DL0202",
+      "message": "expected an expression, found `{`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 47,
+            "col": 2,
+            "line": 4
+          },
+          "file": "fe/f13_blocks_200.delulu",
+          "label": "expected an expression",
+          "start": {
+            "byte": 46,
+            "col": 1,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0208",
+      "explanation_id": "E-DL0208",
+      "message": "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 248,
+            "col": 203,
+            "line": 4
+          },
+          "file": "fe/f13_blocks_200.delulu",
+          "label": "not an item",
+          "start": {
+            "byte": 247,
+            "col": 202,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "function body type must match the return type: expected `Unit`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 247,
+            "col": 202,
+            "line": 4
+          },
+          "file": "fe/f13_blocks_200.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 44,
+            "col": 31,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 43,
+            "col": 30,
+            "line": 3
+          },
+          "file": "fe/f13_blocks_200.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 34,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 3,
+    "warnings": 1
+  }
+}

@@ -1,0 +1,7 @@
+module t.s18
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    assert(1 == 2, str(s))
+    root.console().println("S18")
+}

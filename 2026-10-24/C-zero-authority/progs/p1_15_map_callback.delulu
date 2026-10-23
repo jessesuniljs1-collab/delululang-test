@@ -1,0 +1,13 @@
+module t.mapcb
+
+fn pure_loop(out: Cap[Console], xs: List[Int]) -> List[Int] {
+    xs.map(fn(x: Int) -> Int {
+        out.println("P1-15-LISTMAP-CALLBACK-LEAK")
+        x
+    })
+}
+
+fn main(root: Root) ! {Write} {
+    let ys = pure_loop(root.console(), [1, 2])
+    root.console().println(str(ys.len()))
+}

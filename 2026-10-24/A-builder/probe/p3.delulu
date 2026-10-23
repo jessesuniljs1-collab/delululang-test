@@ -1,0 +1,29 @@
+module probe.p3
+
+fn at0(xs: List[Int], i: Int) -> Int {
+    match xs.get(i) {
+        Some(v) => v
+        None => 0
+    }
+}
+
+fn f() -> List[Int] {
+    let out = []
+    out.push(1)
+    let a = at0(out, 0)
+    out.push(a + 2)
+    out
+}
+
+fn g() -> List[Int] {
+    let out = []
+    out.push(1)
+    out.push(at0(out, 0) + 2)
+    out
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println(str(f()))
+    c.println(str(g()))
+}

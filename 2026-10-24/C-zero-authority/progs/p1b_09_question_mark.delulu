@@ -1,0 +1,13 @@
+module t.qmark
+
+fn first(fs: Cap[FsRead]) -> Result[Str, IoErr] {
+    let s = fs.read_text("a.txt")?
+    Ok(s)
+}
+
+fn main(root: Root) ! {Read} {
+    match first(root.fs_read(".")) {
+        Ok(s) => root.console().println(s)
+        Err(e) => {}
+    }
+}

@@ -1,0 +1,8 @@
+./allowed|j/secret.txt
+./allowed|j\secret.txt
+./allowed|J/SECRET.TXT
+./allowed|j
+./allowed/j|secret.txt
+./allowed|hl.txt
+./allowed|sub/../j/secret.txt
+./allowed|j/../ok.txt

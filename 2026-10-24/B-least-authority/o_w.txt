@@ -1,0 +1,5 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_838f9483c4516233679526a24d51ea9c`
+custody: daemon
+mode=[write] base=[./out] path=[w9.txt] body=[control-after-junction]
+OK:written

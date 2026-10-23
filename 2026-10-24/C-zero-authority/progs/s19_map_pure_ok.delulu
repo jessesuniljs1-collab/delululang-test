@@ -1,0 +1,7 @@
+module t.s19
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    let t = s.map(fn(x: Str) -> Str { "pre-" + x })
+    root.console().println("S19-MAPPED")
+}

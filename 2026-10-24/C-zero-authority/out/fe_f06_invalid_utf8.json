@@ -1,0 +1,15 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "error": {
+    "exit": 2,
+    "kind": "usage",
+    "message": "the command could not run; the human-readable reason is on stderr"
+  },
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}

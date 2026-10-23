@@ -1,0 +1,6 @@
+module t.uninit
+
+fn main(root: Root) ! {Write} {
+    var c: Cap[Console]
+    c.println("P2-12-UNINIT-CAP")
+}

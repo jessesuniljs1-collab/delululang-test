@@ -1,0 +1,7 @@
+module t.topuse
+
+let T = root.clock().now_ms()
+
+fn main(root: Root) ! {Write} {
+    root.console().println("P5-02-TOPLEVEL-ROOT-USE")
+}

@@ -1,0 +1,11 @@
+module t.recforge
+
+type Fake {
+    c: Cap[Console],
+}
+
+fn main(root: Root) ! {Write} {
+    let f = Fake { c: root.console() }
+    f.c.println("P2-08-RECORD-OK-CONTROL")
+    let g = Fake { c: f }
+}

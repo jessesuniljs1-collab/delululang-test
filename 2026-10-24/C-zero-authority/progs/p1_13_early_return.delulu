@@ -1,0 +1,13 @@
+module t.early
+
+fn early(root: Root, x: Int) -> Int {
+    if x > 0 {
+        return 1
+    }
+    root.console().println("P1-13-EARLY-RETURN-LEAK")
+    0
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(early(root, 0)))
+}

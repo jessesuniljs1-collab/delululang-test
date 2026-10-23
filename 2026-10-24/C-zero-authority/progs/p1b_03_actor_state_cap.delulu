@@ -1,0 +1,18 @@
+module t.actorstate
+
+actor Holder {
+    var out: Cap[Console]
+
+    new(c: Cap[Console]) {
+        self.out = c
+    }
+
+    be go() {
+        self.out.println("P1B-03-ACTOR-STATE-CAP-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let h = spawn Holder(root.console())
+    h.go()
+}

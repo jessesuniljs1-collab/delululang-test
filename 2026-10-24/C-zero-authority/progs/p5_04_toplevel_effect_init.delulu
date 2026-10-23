@@ -1,0 +1,11 @@
+module t.topeffect
+
+fn shout() -> Int {
+    7
+}
+
+let K = shout()
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(K))
+}

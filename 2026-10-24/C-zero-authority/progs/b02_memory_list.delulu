@@ -1,0 +1,10 @@
+module t.b02
+
+fn main(root: Root) ! {Write} {
+    var xs = ["seed"]
+    var i = 0
+    while true {
+        xs.push("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        i = i + 1
+    }
+}

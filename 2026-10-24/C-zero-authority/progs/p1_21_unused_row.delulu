@@ -1,0 +1,5 @@
+module t.unused
+
+fn main(root: Root) ! {Write, Net, Clock} {
+    root.console().println("P1-21-unused-row-declared")
+}

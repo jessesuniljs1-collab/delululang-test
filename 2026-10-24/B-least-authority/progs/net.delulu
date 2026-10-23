@@ -1,0 +1,31 @@
+module net
+
+fn rl(out: Cap[Console]) -> Str ! {Read} {
+    match out.readline() {
+        Ok(s) => s
+        Err(e) => "<EOF>"
+    }
+}
+
+fn main(root: Root) ! {Read, Write, Net} {
+    let out = root.console()
+    let mode = rl(out)
+    let scope = rl(out)
+    let url = rl(out)
+    let body = rl(out)
+    out.println("mode=[" + mode + "] scope=[" + scope + "] url=[" + url + "]")
+    let c = root.http(scope.split(";"))
+    let hs = Map()
+    hs.insert("Accept", "text/plain")
+    if mode == "post" {
+        match c.post(url, hs, body) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else {
+        match c.get(url) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    }
+}

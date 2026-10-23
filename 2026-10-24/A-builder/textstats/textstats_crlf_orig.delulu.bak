@@ -1,0 +1,129 @@
+module textstats
+
+type Stats { lines: Int, words: Int, chars: Int }
+
+fn ends_with_txt(n: Str) -> Bool {
+    let k = n.len()
+    if k < 4 { false } else { n.slice(k - 4, k) == ".txt" }
+}
+
+fn count_lines(text: Str) -> Int {
+    let parts = text.split("\n")
+    let n = parts.len()
+    match parts.get(n - 1) {
+        Some(last) => if last == "" { n - 1 } else { n }
+        None => 0
+    }
+}
+
+fn normalize(text: Str) -> Str {
+    text.replace("\r", " ").replace("\n", " ").replace("\t", " ").replace(".", " ").replace(",", " ").replace(";", " ").replace("!", " ").replace("?", " ").to_lower()
+}
+
+fn tally(text: Str, m: ref Map[Str, Int]) -> Int {
+    var words = 0
+    for w in normalize(text).split(" ") {
+        if w.len() > 0 {
+            words = words + 1
+            match m.get(w) {
+                Some(c) => m.insert(w, c + 1)
+                None => m.insert(w, 1)
+            }
+        }
+    }
+    words
+}
+
+fn top_lines(m: ref Map[Str, Int], n: Int) -> List[Str] {
+    let keys = m.keys().sort()
+    let used = Map()
+    let out = []
+    var round = 0
+    while round < n {
+        var best = ""
+        var best_c = 0
+        for k in keys {
+            if !used.contains_key(k) {
+                match m.get(k) {
+                    Some(c) => {
+                        if c > best_c {
+                            best = k
+                            best_c = c
+                        }
+                    }
+                    None => {
+                        best_c = best_c
+                    }
+                }
+            }
+        }
+        if best_c > 0 {
+            used.insert(best, true)
+            out.push("  " + best + " " + str(best_c))
+        }
+        round = round + 1
+    }
+    out
+}
+
+fn collect(rd: Cap[FsRead], dir: Str, acc: ref List[Str]) -> Unit ! {Read} {
+    match rd.list_dir(dir) {
+        Ok(names) => {
+            for n in names {
+                let p = if dir == "." { n } else { dir + "/" + n }
+                if ends_with_txt(n) {
+                    acc.push(p)
+                } else {
+                    match rd.list_dir(p) {
+                        Ok(kids) => collect(rd, p, acc)
+                        Err(e) => acc.push("#skip " + p)
+                    }
+                }
+            }
+        }
+        Err(e) => acc.push("#error " + dir)
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let rd = root.fs_read("./data")
+    let wr = root.fs_write("./out")
+    let files = []
+    collect(rd, ".", files)
+    let sorted = files.sort()
+    let total = Map()
+    let report = []
+    var tl = 0
+    var tw = 0
+    var tc = 0
+    for f in sorted {
+        if f.starts_with("#") {
+            report.push(f)
+        } else {
+            match rd.read_text(f) {
+                Ok(text) => {
+                    let m = Map()
+                    let l = count_lines(text)
+                    let w = tally(text, m)
+                    tally(text, total)
+                    let c = text.len()
+                    tl = tl + l
+                    tw = tw + w
+                    tc = tc + c
+                    report.push(f + " lines=" + str(l) + " words=" + str(w) + " chars=" + str(c) + " unique=" + str(m.len()))
+                    for line in top_lines(m, 10) { report.push(line) }
+                }
+                Err(e) => report.push(f + " ERROR " + str(e))
+            }
+        }
+    }
+    report.push("TOTAL lines=" + str(tl) + " words=" + str(tw) + " chars=" + str(tc) + " unique=" + str(total.len()))
+    for line in top_lines(total, 10) { report.push(line) }
+    let body = report.join("\n") + "\n"
+    out.println(body)
+    match wr.write_text("report.txt", body) {
+        Ok(u) => out.println("wrote report.txt (" + str(body.len()) + " chars)")
+        Err(e) => out.println("write failed: " + str(e))
+    }
+}

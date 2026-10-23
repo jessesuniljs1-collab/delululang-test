@@ -1,0 +1,5 @@
+module t.f08
+
+fn main(root: Root) ! {Write} {
+    root.console().println("F08-CRLF")
+}

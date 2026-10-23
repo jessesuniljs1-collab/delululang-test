@@ -1,0 +1,7 @@
+module t.toplist
+
+const CS: List[Cap[Console]] = [root.console()]
+
+fn main(root: Root) ! {Write} {
+    CS.len()
+}

@@ -1,0 +1,14 @@
+module t.forgeread
+
+fn forge[T](x: Int) -> T {
+    x
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let fs: Cap[FsRead] = forge(0)
+    let out = root.console()
+    match fs.read_text("outside.txt") {
+        Ok(s) => out.println("P2-09B-READ " + s)
+        Err(e) => out.println("P2-09B-ERR")
+    }
+}

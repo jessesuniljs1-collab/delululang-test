@@ -1,0 +1,13 @@
+module t.b03
+
+fn deep(n: Int) -> Int {
+    if n == 0 {
+        0
+    } else {
+        1 + deep(n - 1)
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(deep(1000000)))
+}

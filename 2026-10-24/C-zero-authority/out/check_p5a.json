@@ -1,0 +1,98 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0601",
+      "explanation_id": "E-DL0601",
+      "message": "a capability cannot be constructed or forged: `Cap[PluginHost]` is not `Str` (capabilities are derived from `Root`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 71,
+            "col": 29,
+            "line": 4
+          },
+          "file": "progs/p5_03_load_pure.delulu",
+          "label": "a capability value has no constructor",
+          "start": {
+            "byte": 55,
+            "col": 13,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`load` expects 3 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 71,
+            "col": 29,
+            "line": 4
+          },
+          "file": "progs/p5_03_load_pure.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 55,
+            "col": 13,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_load` performs effects `Read, Load` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p5_03_load_pure.delulu",
+              "insert": "! {Read, Load} ",
+              "range": {
+                "end_byte": 41,
+                "start_byte": 41
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 31,
+            "col": 13,
+            "line": 3
+          },
+          "file": "progs/p5_03_load_pure.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 22,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 3,
+    "warnings": 0
+  }
+}

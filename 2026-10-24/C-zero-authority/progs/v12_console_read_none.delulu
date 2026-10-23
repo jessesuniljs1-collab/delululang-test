@@ -1,0 +1,6 @@
+module t.v12
+
+fn main(root: Root) ! {Read} {
+    let line = root.console().readline()
+    root.console().println("V12")
+}

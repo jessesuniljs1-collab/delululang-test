@@ -1,0 +1,6 @@
+module t.f02
+
+fn main(root: Root) ! {Write} {
+    /* never closed
+    root.console().println("x")
+}

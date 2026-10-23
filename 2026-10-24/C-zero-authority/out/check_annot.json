@@ -1,0 +1,57 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a list element (push) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 94,
+            "col": 17,
+            "line": 5
+          },
+          "file": "progs/p6_annot_var_list.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 82,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a list element (push) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 141,
+            "col": 17,
+            "line": 7
+          },
+          "file": "progs/p6_annot_var_list.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 129,
+            "col": 5,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}

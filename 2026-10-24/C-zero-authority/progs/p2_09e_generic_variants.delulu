@@ -1,0 +1,22 @@
+module t.genvariants
+
+fn g2[T](x: T) -> Int {
+    x
+}
+
+fn g3[T]() -> T {
+    1
+}
+
+fn g5[T](x: Int) -> T {
+    x + 1
+}
+
+fn g6[T](x: Int) -> Option[T] {
+    Some(x)
+}
+
+fn main(root: Root) ! {Write} {
+    let a: Int = g2(3)
+    root.console().println(str(a))
+}

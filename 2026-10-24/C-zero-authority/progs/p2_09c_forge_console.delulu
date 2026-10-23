@@ -1,0 +1,10 @@
+module t.forgeconsole
+
+fn forge[T](x: Int) -> T {
+    x
+}
+
+fn main(root: Root) ! {Write} {
+    let c: Cap[Console] = forge(1)
+    c.println("P2-09C-FORGED-CONSOLE")
+}

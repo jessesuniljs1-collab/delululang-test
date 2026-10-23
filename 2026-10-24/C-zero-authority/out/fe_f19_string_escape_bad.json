@@ -1,0 +1,55 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0103",
+      "explanation_id": "E-DL0103",
+      "message": "invalid escape sequence `\\q`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 80,
+            "col": 35,
+            "line": 4
+          },
+          "file": "fe/f19_string_escape_bad.delulu",
+          "start": {
+            "byte": 78,
+            "col": 33,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0103",
+      "explanation_id": "E-DL0103",
+      "message": "invalid unicode escape (expected \\u{1-6 hex digits})",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 91,
+            "col": 46,
+            "line": 4
+          },
+          "file": "fe/f19_string_escape_bad.delulu",
+          "start": {
+            "byte": 88,
+            "col": 43,
+            "line": 4
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}

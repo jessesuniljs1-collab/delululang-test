@@ -1,0 +1,4 @@
+write
+./out
+w9.txt
+control-after-junction

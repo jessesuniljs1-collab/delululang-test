@@ -1,0 +1,14 @@
+module t.sum
+
+type Sink = Quiet | Loud(Cap[Console])
+
+fn emit(s: Sink, msg: Str) -> Unit {
+    match s {
+        Quiet => {}
+        Loud(c) => c.println(msg)
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    emit(Loud(root.console()), "P1-06-SUM-LEAK")
+}

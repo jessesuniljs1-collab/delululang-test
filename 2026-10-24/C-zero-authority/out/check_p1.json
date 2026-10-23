@@ -1,0 +1,1532 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `leak` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_01_direct.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 37,
+                "start_byte": 37
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_01_direct.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 20,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 130,
+            "col": 30,
+            "line": 8
+          },
+          "file": "progs/p1_01_direct.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 121,
+            "col": 21,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "function body type must match the return type: expected `fn() -> Unit`, found `fn() -> Unit !{Write}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 111,
+            "col": 2,
+            "line": 5
+          },
+          "file": "progs/p1_02_closure.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 61,
+            "col": 44,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 142,
+            "col": 30,
+            "line": 7
+          },
+          "file": "progs/p1_02_closure.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 133,
+            "col": 21,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_caller` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_03_hof.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 122,
+                "start_byte": 122
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 94,
+            "col": 15,
+            "line": 7
+          },
+          "file": "progs/p1_03_hof.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 83,
+            "col": 4,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 223,
+            "col": 30,
+            "line": 11
+          },
+          "file": "progs/p1_03_hof.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 214,
+            "col": 21,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `show_all` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_04_generic.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 73,
+                "start_byte": 73
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 29,
+            "col": 12,
+            "line": 3
+          },
+          "file": "progs/p1_04_generic.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 21,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 173,
+            "col": 30,
+            "line": 9
+          },
+          "file": "progs/p1_04_generic.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 164,
+            "col": 21,
+            "line": 9
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0106",
+      "explanation_id": "E-DL0106",
+      "message": "`tag` is reserved for a future stage and cannot be a declared name",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 61,
+            "col": 8,
+            "line": 5
+          },
+          "file": "progs/p1_05_record.delulu",
+          "label": "reserved word",
+          "start": {
+            "byte": 58,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `log_it` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_05_record.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 110,
+                "start_byte": 110
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 80,
+            "col": 10,
+            "line": 8
+          },
+          "file": "progs/p1_05_record.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 74,
+            "col": 4,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 175,
+            "col": 30,
+            "line": 12
+          },
+          "file": "progs/p1_05_record.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 166,
+            "col": 21,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `emit` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_06_sum.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 89,
+                "start_byte": 89
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 61,
+            "col": 8,
+            "line": 5
+          },
+          "file": "progs/p1_06_sum.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 57,
+            "col": 4,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 197,
+            "col": 30,
+            "line": 12
+          },
+          "file": "progs/p1_06_sum.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 188,
+            "col": 21,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `fire` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_07_list.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 55,
+                "start_byte": 55
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 22,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_07_list.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 18,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 150,
+            "col": 30,
+            "line": 9
+          },
+          "file": "progs/p1_07_list.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 141,
+            "col": 21,
+            "line": 9
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `fire` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_08_map.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 57,
+                "start_byte": 57
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 21,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_08_map.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 17,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 186,
+            "col": 30,
+            "line": 10
+          },
+          "file": "progs/p1_08_map.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 177,
+            "col": 21,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_user` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_09_return_cap.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 113,
+                "start_byte": 113
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 92,
+            "col": 13,
+            "line": 7
+          },
+          "file": "progs/p1_09_return_cap.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 83,
+            "col": 4,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 200,
+            "col": 30,
+            "line": 11
+          },
+          "file": "progs/p1_09_return_cap.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 191,
+            "col": 21,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `rec` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_10_recursion.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 55,
+                "start_byte": 55
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 20,
+            "col": 7,
+            "line": 3
+          },
+          "file": "progs/p1_10_recursion.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 17,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0209",
+      "explanation_id": "E-DL0209",
+      "message": "expected end of statement",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 9,
+            "col": 10,
+            "line": 1
+          },
+          "file": "progs/p1_11_actor.delulu",
+          "label": "expected a newline or `;`",
+          "start": {
+            "byte": 8,
+            "col": 9,
+            "line": 1
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown actor `Printer`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 231,
+            "col": 28,
+            "line": 16
+          },
+          "file": "progs/p1_11_actor.delulu",
+          "label": "`spawn` needs an actor declared in this module",
+          "start": {
+            "byte": 216,
+            "col": 13,
+            "line": 16
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `say`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 241,
+            "col": 10,
+            "line": 17
+          },
+          "file": "progs/p1_11_actor.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 238,
+            "col": 7,
+            "line": 17
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Async` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 201,
+            "col": 30,
+            "line": 15
+          },
+          "file": "progs/p1_11_actor.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 192,
+            "col": 21,
+            "line": 15
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `alias` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_12_alias_shadow.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 45,
+                "start_byte": 45
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 9,
+            "line": 3
+          },
+          "file": "progs/p1_12_alias_shadow.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 19,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 168,
+            "col": 30,
+            "line": 10
+          },
+          "file": "progs/p1_12_alias_shadow.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 159,
+            "col": 21,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `early` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_13_early_return.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 52,
+                "start_byte": 52
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 9,
+            "line": 3
+          },
+          "file": "progs/p1_13_early_return.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 19,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pick` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_14_match_arm.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 54,
+                "start_byte": 54
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 26,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_14_match_arm.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 22,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_loop` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_15_map_callback.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 76,
+                "start_byte": 76
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 28,
+            "col": 13,
+            "line": 3
+          },
+          "file": "progs/p1_15_map_callback.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 19,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `total` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_16_fold.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 65,
+                "start_byte": 65
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 23,
+            "col": 9,
+            "line": 3
+          },
+          "file": "progs/p1_16_fold.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 18,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "record field type mismatch: expected `fn(Str) -> Unit`, found `fn(Str) -> Unit !{Write}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 156,
+            "col": 57,
+            "line": 8
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 119,
+            "col": 20,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `Handler` has no method `run`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 201,
+            "col": 10,
+            "line": 12
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 198,
+            "col": 7,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 256,
+            "col": 30,
+            "line": 15
+          },
+          "file": "progs/p1_17_record_fnfield.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 247,
+            "col": 21,
+            "line": 15
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `loop_print` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_18_while.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 69,
+                "start_byte": 69
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 33,
+            "col": 14,
+            "line": 3
+          },
+          "file": "progs/p1_18_while.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 23,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 199,
+            "col": 30,
+            "line": 11
+          },
+          "file": "progs/p1_18_while.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 190,
+            "col": 21,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `read_it` performs effect `Read` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_19_fsread.delulu",
+              "insert": "! {Read} ",
+              "range": {
+                "end_byte": 52,
+                "start_byte": 52
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 27,
+            "col": 11,
+            "line": 3
+          },
+          "file": "progs/p1_19_fsread.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 20,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Read` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 176,
+            "col": 36,
+            "line": 10
+          },
+          "file": "progs/p1_19_fsread.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 161,
+            "col": 21,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `tick` performs effect `Clock` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_20_clock_rand.delulu",
+              "insert": "! {Clock} ",
+              "range": {
+                "end_byte": 47,
+                "start_byte": 47
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 27,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1_20_clock_rand.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 23,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `roll` performs effect `Rand` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_20_clock_rand.delulu",
+              "insert": "! {Rand} ",
+              "range": {
+                "end_byte": 105,
+                "start_byte": 105
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 85,
+            "col": 8,
+            "line": 7
+          },
+          "file": "progs/p1_20_clock_rand.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 81,
+            "col": 4,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effects `Net, Clock` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 58,
+            "col": 42,
+            "line": 3
+          },
+          "file": "progs/p1_21_unused_row.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 37,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `apply2` may perform an effect not declared in its row",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 27,
+            "col": 10,
+            "line": 3
+          },
+          "file": "progs/p1_22_poly_result.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 21,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "function body type must match the return type: expected `fn() -> Int`, found `fn() -> Int !{Clock}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 98,
+            "col": 2,
+            "line": 5
+          },
+          "file": "progs/p1_23_closure_clock.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 53,
+            "col": 34,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "function body type must match the return type: expected `fn(Str) -> Unit`, found `fn(Str) -> Unit !{Write}`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 123,
+            "col": 2,
+            "line": 5
+          },
+          "file": "progs/p1_24_effectful_as_pure.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 68,
+            "col": 49,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 154,
+            "col": 30,
+            "line": 7
+          },
+          "file": "progs/p1_24_effectful_as_pure.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 145,
+            "col": 21,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `send_it` performs effect `Async` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1_25_async_send_pure.delulu",
+              "insert": "! {Async} ",
+              "range": {
+                "end_byte": 193,
+                "start_byte": 193
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 169,
+            "col": 11,
+            "line": 15
+          },
+          "file": "progs/p1_25_async_send_pure.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 162,
+            "col": 4,
+            "line": 15
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 29,
+    "warnings": 16
+  }
+}

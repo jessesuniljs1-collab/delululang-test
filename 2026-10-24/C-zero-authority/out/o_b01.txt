@@ -1,0 +1,4 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_9bdcb7501c2ee602bfc8d00089f2ab0a`
+custody: daemon
+error: the run was stopped: it used 2.0 s of processor time and its budget is 2 s (D-V2-25). Budgets are the operator's, set per run with `--limits cpu=SECONDS`

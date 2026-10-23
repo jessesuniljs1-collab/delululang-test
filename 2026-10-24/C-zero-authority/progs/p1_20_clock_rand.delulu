@@ -1,0 +1,13 @@
+module t.clockpure
+
+fn tick(root: Root) -> Int {
+    root.clock().now_ms()
+}
+
+fn roll(root: Root) -> Int {
+    root.rand().int(0, 10)
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(tick(root) + roll(root)))
+}

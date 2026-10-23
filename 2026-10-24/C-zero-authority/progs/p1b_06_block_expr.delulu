@@ -1,0 +1,14 @@
+module t.blockexpr
+
+fn pure_block(root: Root) -> Int {
+    let x = {
+        let out = root.console()
+        out.println("P1B-06-BLOCK-EXPR-LEAK")
+        1
+    }
+    x
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(pure_block(root)))
+}

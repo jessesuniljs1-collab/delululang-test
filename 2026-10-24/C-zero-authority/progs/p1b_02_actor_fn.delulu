@@ -1,0 +1,24 @@
+module t.actorfn
+
+actor Helper {
+    var n: Int
+    var out: Cap[Console]
+
+    new(c: Cap[Console]) {
+        self.n = 0
+        self.out = c
+    }
+
+    fn shout(s: Str) -> Unit {
+        self.out.println(s)
+    }
+
+    be go() {
+        self.shout("P1B-02-ACTOR-HELPER-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let h = spawn Helper(root.console())
+    h.go()
+}

@@ -1,0 +1,16 @@
+module fsr
+
+fn show(r: Result[Str, IoErr], out: Cap[Console]) ! {Write} {
+    match r {
+        Ok(t) => out.println("OK:" + t)
+        Err(e) => out.println("ERR:" + str(e))
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let rd = root.fs_read("./allowed")
+    show(rd.read_text("ok.txt"), out)
+    show(rd.read_text("../forbidden/secret.txt"), out)
+    show(rd.read_text("nope.txt"), out)
+}

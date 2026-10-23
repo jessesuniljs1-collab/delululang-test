@@ -1,0 +1,9 @@
+module rl
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    match out.readline() {
+        Ok(s) => out.println("len=" + str(s.len()) + " [" + s + "]")
+        Err(e) => out.println("ERR " + str(e))
+    }
+}

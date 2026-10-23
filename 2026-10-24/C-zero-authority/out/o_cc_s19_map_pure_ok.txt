@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_9bdcb7501c2ee602bfc8d00089f2ab0a`
+custody: daemon
+error[DL0703]: secret `API` was not granted — the lease this run redeemed (node `g_9bdcb7501c2ee602bfc8d00089f2ab0a`) does not carry `secret:API`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> progs/s19_map_pure_ok.delulu:4:13
+   |
+ 4 |     let s = root.secret("API")
+   |             ^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

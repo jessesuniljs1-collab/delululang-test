@@ -1,0 +1,19 @@
+module t.actornew
+
+actor Loud {
+    var n: Int
+
+    new(c: Cap[Console]) {
+        c.println("P1B-01-ACTOR-NEW-LEAK")
+        self.n = 0
+    }
+
+    be tick() {
+        self.n = self.n + 1
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let l = spawn Loud(root.console())
+    l.tick()
+}

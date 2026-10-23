@@ -1,0 +1,29 @@
+module wr
+
+fn rl(out: Cap[Console]) -> Str ! {Read} {
+    match out.readline() {
+        Ok(s) => s
+        Err(e) => "<EOF>"
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let mode = rl(out)
+    let base = rl(out)
+    let p = rl(out)
+    let body = rl(out)
+    out.println("mode=[" + mode + "] base=[" + base + "] path=[" + p + "] body=[" + body + "]")
+    let w = root.fs_write(base)
+    if mode == "append" {
+        match w.append_text(p, body) {
+            Ok(u) => out.println("OK:appended")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else {
+        match w.write_text(p, body) {
+            Ok(u) => out.println("OK:written")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    }
+}

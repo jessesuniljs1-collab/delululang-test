@@ -1,0 +1,6 @@
+module t.f16
+
+fn main(root: Root) ! {Write} {
+    let ok = true‮
+    root.console().println("F16")
+}

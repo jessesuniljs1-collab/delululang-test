@@ -1,0 +1,5 @@
+module t.f01
+
+fn main(root: Root) ! {Write} {
+    root.console().println("unterminated
+}

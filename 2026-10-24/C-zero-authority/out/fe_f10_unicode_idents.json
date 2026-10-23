@@ -1,0 +1,166 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `计`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 20,
+            "col": 5,
+            "line": 3
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 17,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `算`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 23,
+            "col": 6,
+            "line": 3
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 20,
+            "col": 5,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `é`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 99,
+            "col": 13,
+            "line": 8
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 97,
+            "col": 12,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `计`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 105,
+            "col": 17,
+            "line": 8
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 102,
+            "col": 16,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `算`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 108,
+            "col": 18,
+            "line": 8
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 105,
+            "col": 17,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0101",
+      "explanation_id": "E-DL0101",
+      "message": "unexpected character `é`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 148,
+            "col": 36,
+            "line": 9
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "start": {
+            "byte": 146,
+            "col": 35,
+            "line": 9
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "expected a name, found `(`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 7,
+            "line": 3
+          },
+          "file": "fe/f10_unicode_idents.delulu",
+          "label": "name expected here",
+          "start": {
+            "byte": 23,
+            "col": 6,
+            "line": 3
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 7,
+    "warnings": 0
+  }
+}

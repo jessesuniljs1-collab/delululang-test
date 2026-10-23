@@ -1,0 +1,10 @@
+module t.direct
+
+fn leak(root: Root) {
+    let out = root.console()
+    out.println("P1-01-LEAK")
+}
+
+fn main(root: Root) ! {Write} {
+    leak(root)
+}

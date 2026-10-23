@@ -1,0 +1,22 @@
+module t.asyncpure
+
+actor Worker {
+    var done: Int
+
+    new() {
+        self.done = 0
+    }
+
+    be job(n: Int) {
+        self.done = self.done + n
+    }
+}
+
+fn send_it(w: tag Worker) -> Unit {
+    w.job(1)
+}
+
+fn main(root: Root) ! {Async} {
+    let w = spawn Worker()
+    send_it(w)
+}

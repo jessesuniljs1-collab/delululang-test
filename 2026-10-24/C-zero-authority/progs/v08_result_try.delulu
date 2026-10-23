@@ -1,0 +1,25 @@
+module t.v08
+
+type ParseErr = Empty | NotANumber(Str)
+
+fn to_int(s: Str) -> Result[Int, ParseErr] {
+    if s.len() == 0 {
+        Err(Empty)
+    } else {
+        match parse_int(s) {
+            Some(n) => Ok(n)
+            None => Err(NotANumber(s))
+        }
+    }
+}
+
+fn describe(s: Str) -> Str {
+    match to_int(s) {
+        Ok(n) => "parsed " + str(n)
+        Err(e) => match e { Empty => "empty", NotANumber(bad) => "bad " + bad }
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println("V08 " + describe("42") + " / " + describe("x"))
+}

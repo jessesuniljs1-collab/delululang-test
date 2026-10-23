@@ -1,0 +1,10 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_8f6da71caa4fda18efabd050b4c23776`
+custody: daemon
+error[DL0703]: filesystem read of `./data` was not granted — the lease this run redeemed (node `g_8f6da71caa4fda18efabd050b4c23776`) does not carry `fs.read=./data`, and a `--lease` run takes its authority from its delegation alone (a local `--grant` is refused)
+  --> textstats/textstats_w.delulu:75:14
+   |
+75 |     let rd = root.fs_read("./data")
+   |              ^^^^^^^^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0703
+

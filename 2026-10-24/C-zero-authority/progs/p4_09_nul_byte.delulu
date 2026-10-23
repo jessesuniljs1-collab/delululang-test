@@ -1,0 +1,9 @@
+module t.nulbyte
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("./a")
+    match r.read_text("../outside.txt\u{0}.ignored") {
+        Ok(s) => root.console().println("P4-09-LEAK " + s)
+        Err(e) => root.console().println("P4-09-ERR")
+    }
+}

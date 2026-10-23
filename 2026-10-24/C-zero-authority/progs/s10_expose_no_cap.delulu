@@ -1,0 +1,10 @@
+module t.s10
+
+fn reveal(s: Secret[Str], d: Cap[Declassify]) -> Str ! {Declassify} {
+    s.expose(d)
+}
+
+fn main(root: Root) ! {Declassify, Write} {
+    let s = root.secret("API")
+    root.console().println(reveal(s, root.declassify()))
+}

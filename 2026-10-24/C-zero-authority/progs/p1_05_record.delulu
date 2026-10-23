@@ -1,0 +1,15 @@
+module t.record
+
+type Logger {
+    out: Cap[Console],
+    tag: Str,
+}
+
+fn log_it(l: Logger, msg: Str) -> Unit {
+    l.out.println(l.tag + msg)
+}
+
+fn main(root: Root) ! {Write} {
+    let l = Logger { out: root.console(), tag: "R:" }
+    log_it(l, "P1-05-RECORD-LEAK")
+}

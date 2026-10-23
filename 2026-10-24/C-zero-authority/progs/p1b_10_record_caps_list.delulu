@@ -1,0 +1,15 @@
+module t.bag
+
+type Bag {
+    items: List[Cap[Console]],
+}
+
+fn fire(b: Bag) -> Unit {
+    for c in b.items {
+        c.println("P1B-10-BAG-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    fire(Bag { items: [root.console()] })
+}

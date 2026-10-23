@@ -1,0 +1,11 @@
+guard: on — guarded: declassify:* (guarded), foreign_c:* (guarded), foreign_python:* (guarded) — to request access: delulu guard request
+lease: running under delegated node `g_619ec6eea2f10eeebabf262ac85606b0`
+custody: daemon
+minted-read
+error[DL0904]: path `secret.txt` escapes the granted scope
+  --> progs/race.delulu:19:15
+   |
+19 |         match rd.read_text(p) {
+   |               ^^^^^^^^^^^^^^^ runtime fault here
+  explain: delulu explain E-DL0904
+

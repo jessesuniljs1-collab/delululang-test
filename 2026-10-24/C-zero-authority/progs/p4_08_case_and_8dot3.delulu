@@ -1,0 +1,13 @@
+module t.casedot
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("./a")
+    match r.read_text("../OUTSIDE.TXT") {
+        Ok(s) => root.console().println("P4-08-LEAK-CASE " + s)
+        Err(e) => root.console().println("P4-08-ERR-CASE")
+    }
+    match r.read_text("../OUTSID~1.TXT") {
+        Ok(s) => root.console().println("P4-08-LEAK-8DOT3 " + s)
+        Err(e) => root.console().println("P4-08-ERR-8DOT3")
+    }
+}

@@ -1,0 +1,18 @@
+module t.rowbypass
+
+fn coerce[A, B](x: A) -> B {
+    x
+}
+
+fn writer(out: Cap[Console]) -> fn(Str) -> Unit ! {Write} {
+    fn(s: Str) -> Unit ! {Write} { out.println(s) }
+}
+
+fn pure_caller(out: Cap[Console]) -> Unit {
+    let f: fn(Str) -> Unit = coerce(writer(out))
+    f("P3-01-ROWBYPASS-PURE-CALLER")
+}
+
+fn main(root: Root) ! {Write} {
+    pure_caller(root.console())
+}

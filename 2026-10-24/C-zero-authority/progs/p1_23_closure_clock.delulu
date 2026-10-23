@@ -1,0 +1,10 @@
+module t.closclock
+
+fn mk(root: Root) -> fn() -> Int {
+    fn() -> Int { root.clock().now_ms() }
+}
+
+fn main(root: Root) ! {Write} {
+    let f = mk(root)
+    root.console().println(str(f()))
+}

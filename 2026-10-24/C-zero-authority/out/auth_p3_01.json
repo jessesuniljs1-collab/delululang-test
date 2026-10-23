@@ -1,0 +1,39 @@
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "t.rowbypass",
+    "pure_functions": [
+      "coerce",
+      "pure_caller",
+      "writer"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "1.0.0",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

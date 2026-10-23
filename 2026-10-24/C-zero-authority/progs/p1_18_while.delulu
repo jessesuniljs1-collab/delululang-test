@@ -1,0 +1,13 @@
+module t.whileloop
+
+fn loop_print(out: Cap[Console], n: Int) -> Unit {
+    var i = 0
+    while i < n {
+        out.println("P1-18-WHILE-LEAK")
+        i = i + 1
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    loop_print(root.console(), 2)
+}

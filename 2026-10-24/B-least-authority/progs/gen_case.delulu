@@ -1,0 +1,10 @@
+module gen_case
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let c = root.fs_write("./out")
+    match c.write_text("sub/g7.txt", "x") {
+        Ok(u) => out.println("OK:written")
+        Err(e) => out.println("ERR:" + str(e))
+    }
+}

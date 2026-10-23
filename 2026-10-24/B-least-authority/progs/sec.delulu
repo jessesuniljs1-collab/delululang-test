@@ -1,0 +1,48 @@
+module sec
+
+fn rl(out: Cap[Console]) -> Str ! {Read} {
+    match out.readline() {
+        Ok(s) => s
+        Err(e) => "<EOF>"
+    }
+}
+
+fn main(root: Root) ! {Read, Write, Net} {
+    let out = root.console()
+    let mode = rl(out)
+    let scope = rl(out)
+    let url = rl(out)
+    let body = rl(out)
+    let hname = rl(out)
+    out.println("mode=[" + mode + "] scope=[" + scope + "] url=[" + url + "] header=[" + hname + "]")
+    let c = root.http(scope.split(";"))
+    let tok = root.secret("TOKEN")
+    let hs = Map()
+    hs.insert("Accept", "text/plain")
+    if mode == "gets" {
+        match c.get_with_secret(url, hs, hname, tok) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else if mode == "posts" {
+        match c.post_with_secret(url, hs, hname, tok, body) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else if mode == "post" {
+        match c.post(url, hs, body) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else if mode == "getw" {
+        match c.get_with(url, hs) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    } else {
+        match c.get(url) {
+            Ok(b) => out.println("OK:" + str(b.len()) + " bytes")
+            Err(e) => out.println("ERR:" + str(e))
+        }
+    }
+}

@@ -1,0 +1,16 @@
+#01 exit=1 base=[./allowed] path=[j/secret.txt]
+     -> error[DL0904]: path `j/secret.txt` escapes the granted scope
+#02 exit=1 base=[./allowed] path=[j\secret.txt]
+     -> error[DL0904]: path `j\secret.txt` escapes the granted scope
+#03 exit=1 base=[./allowed] path=[J/SECRET.TXT]
+     -> error[DL0904]: path `J/SECRET.TXT` escapes the granted scope
+#04 exit=1 base=[./allowed] path=[j]
+     -> error[DL0904]: path `j` escapes the granted scope
+#05 exit=1 base=[./allowed/j] path=[secret.txt]
+     -> error[DL0703]: filesystem read of `./allowed/j` was not granted — the lease this run redeemed (node `g_619ec6eea2f10eeebabf262ac85606b0`) does not carry `fs.read=./allowed/j`, and a `--lease` run takes its authority from its del
+#06 exit=0 base=[./allowed] path=[hl.txt] !!!FORBIDDEN-CANARY-LEAK!!!
+     -> OK:B-FORBIDDEN-CANARY-91c2
+#07 exit=1 base=[./allowed] path=[sub/../j/secret.txt]
+     -> error[DL0904]: path `sub/../j/secret.txt` escapes the granted scope
+#08 exit=0 base=[./allowed] path=[j/../ok.txt] [allowed-canary]
+     -> OK:B-ALLOWED-CANARY-7f3a

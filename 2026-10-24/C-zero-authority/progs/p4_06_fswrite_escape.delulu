@@ -1,0 +1,9 @@
+module t.wescape
+
+fn main(root: Root) ! {Write} {
+    let w = root.fs_write("./out")
+    match w.write_text("../pwned-p4-06.txt", "P4-06") {
+        Ok(u) => root.console().println("P4-06-WROTE")
+        Err(e) => root.console().println("P4-06-ERR")
+    }
+}

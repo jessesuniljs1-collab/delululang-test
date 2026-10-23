@@ -1,0 +1,15 @@
+module t.matcharm
+
+fn pick(root: Root, n: Int) -> Int {
+    match n {
+        0 => {
+            root.console().println("P1-14-MATCH-ARM-LEAK")
+            0
+        }
+        _ => 1
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(pick(root, 0)))
+}

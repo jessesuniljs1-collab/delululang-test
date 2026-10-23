@@ -1,0 +1,74 @@
+#skip notes.md
+ascii.txt lines=5 words=28 chars=120 unique=14
+  the 5
+  a 4
+  dog 4
+  fox 4
+  is 2
+  away 1
+  barks 1
+  brown 1
+  end 1
+  jumps 1
+big.txt lines=36404 words=309954 chars=1951778 unique=38
+  commodo 8363
+  aliqua 8330
+  adipiscing 8320
+  enim 8303
+  consequat 8295
+  ea 8269
+  laboris 8257
+  tempor 8256
+  sit 8249
+  dolore 8241
+crlf.txt lines=5 words=13 chars=68 unique=10
+  line 4
+  four 1
+  has 1
+  last 1
+  more 1
+  newline 1
+  no 1
+  one 1
+  two 1
+  words 1
+empty.txt lines=0 words=0 chars=0 unique=0
+longline.txt lines=1 words=40000 chars=239841 unique=6
+  delta 6769
+  beta 6707
+  zeta 6699
+  alpha 6672
+  epsilon 6624
+  gamma 6529
+nofinal.txt lines=2 words=3 chars=13 unique=3
+  one 1
+  three 1
+  two 1
+sub/nested.txt lines=1 words=3 chars=17 unique=3
+  file 1
+  here 1
+  nested 1
+unicode.txt lines=7 words=34 chars=171 unique=24
+  😀 3
+  école 2
+  γειά 2
+  σου 2
+  мир 2
+  привет 2
+  مرحبا 2
+  नमस्ते 2
+  世界 2
+  café 1
+TOTAL lines=36425 words=350035 chars=2192008 unique=93
+  commodo 8363
+  aliqua 8330
+  adipiscing 8320
+  enim 8303
+  consequat 8295
+  ea 8269
+  laboris 8257
+  tempor 8256
+  sit 8249
+  dolore 8241
+
+wrote report.txt (1137 chars)

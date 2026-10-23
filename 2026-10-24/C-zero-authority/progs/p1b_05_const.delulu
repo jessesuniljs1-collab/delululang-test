@@ -1,0 +1,12 @@
+module t.constpure
+
+fn side(out: Cap[Console]) -> Int {
+    out.println("P1B-05-CONST-LEAK")
+    1
+}
+
+const N: Int = side(0)
+
+fn main(root: Root) ! {Write} {
+    root.console().println(str(N))
+}

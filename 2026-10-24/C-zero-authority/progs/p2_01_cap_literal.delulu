@@ -1,0 +1,6 @@
+module t.forgecap
+
+fn main(root: Root) ! {Write} {
+    let c: Cap[Console] = Cap[Console]()
+    c.println("P2-01-FORGED-CAP")
+}

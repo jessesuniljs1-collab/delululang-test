@@ -1,0 +1,24 @@
+#01 exit=1 mode=write base=[./out] path=[jx/probe-j.txt] body=[via-junction]
+     -> error[DL0904]: path `jx/probe-j.txt` escapes the granted scope
+     changed: . ./cases_w2.txt ./out ./res_w2.txt 
+#02 exit=1 mode=write base=[./out] path=[jx\probe-j2.txt] body=[via-junction]
+     -> error[DL0904]: path `jx\probe-j2.txt` escapes the granted scope
+     changed: ./res_w2.txt 
+#03 exit=1 mode=write base=[./out] path=[ja/probe-j3.txt] body=[via-junction-allowed]
+     -> error[DL0904]: path `ja/probe-j3.txt` escapes the granted scope
+     changed: ./res_w2.txt 
+#04 exit=1 mode=append base=[./out] path=[jx/secret.txt] body=[APPENDED-VIA-JUNCTION]
+     -> error[DL0904]: path `jx/secret.txt` escapes the granted scope
+     changed: ./res_w2.txt 
+#05 exit=1 mode=write base=[./out] path=[jx] body=[replace-junction-with-file]
+     -> error[DL0904]: path `jx` escapes the granted scope
+     changed: ./res_w2.txt 
+#06 exit=1 mode=write base=[./out/jx] path=[probe-j4.txt] body=[base-is-junction]
+     -> error[DL0703]: filesystem write of `./out/jx` was not granted — the lease this run redeemed (node `g_838f9483c4516233679526a24d51ea9c`) does not carry `fs.write=./out/jx`, and a `--lease` run takes its author
+     changed: ./res_w2.txt 
+#07 exit=1 mode=write base=[./out] path=[JX/probe-j5.txt] body=[via-junction-upper]
+     -> error[DL0904]: path `JX/probe-j5.txt` escapes the granted scope
+     changed: ./res_w2.txt 
+#08 exit=0 mode=write base=[./out] path=[w9.txt] body=[control-after-junction]
+     -> OK:written
+     changed: ./out ./out/w9.txt ./res_w2.txt 

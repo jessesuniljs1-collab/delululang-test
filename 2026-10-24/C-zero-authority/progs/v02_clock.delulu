@@ -1,0 +1,6 @@
+module t.v02
+
+fn main(root: Root) ! {Clock, Write} {
+    let t = root.clock().now_ms()
+    root.console().println("V02-CLOCK " + str(t > 0))
+}

@@ -1,0 +1,9 @@
+module t.annot
+
+fn main(root: Root) ! {Write} {
+    var xs: List[Str] = ["a"]
+    xs.push("b")
+    let ys: List[Str] = ["a"]
+    ys.push("c")
+    root.console().println(str(xs.len()))
+}

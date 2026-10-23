@@ -1,0 +1,18 @@
+module t.spawnpure
+
+actor Loud {
+    var n: Int
+
+    new(c: Cap[Console]) {
+        c.println("P1B-04-SPAWN-IN-PURE-LEAK")
+        self.n = 0
+    }
+}
+
+fn make(c: Cap[Console]) -> Unit {
+    let l = spawn Loud(c)
+}
+
+fn main(root: Root) ! {Async, Write} {
+    make(root.console())
+}

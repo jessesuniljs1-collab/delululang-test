@@ -1,0 +1,11 @@
+[package]
+name = "ratlib"
+version = "0.1.0"
+kind = "lib"
+
+# Nothing, and that is the point. A library that computes has no business touching the
+# disk, the network or the clock, and this line is the ENFORCED claim that it does not —
+# not a comment about intent. It is also the most any consumer can ever be asked to
+# grant this package, which is what makes an empty ceiling worth keeping empty.
+[authority]
+effects = []

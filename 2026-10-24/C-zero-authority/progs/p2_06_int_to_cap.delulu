@@ -1,0 +1,6 @@
+module t.intcap
+
+fn main(root: Root) ! {Write} {
+    let c: Cap[Console] = 1
+    c.println("P2-06-INT-TO-CAP")
+}

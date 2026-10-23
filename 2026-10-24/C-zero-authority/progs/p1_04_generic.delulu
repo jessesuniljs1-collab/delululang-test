@@ -1,0 +1,11 @@
+module t.generic
+
+fn show_all[T](xs: List[T], out: Cap[Console]) -> Unit {
+    for x in xs {
+        out.println("P1-04-GENERIC-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    show_all([1, 2], root.console())
+}

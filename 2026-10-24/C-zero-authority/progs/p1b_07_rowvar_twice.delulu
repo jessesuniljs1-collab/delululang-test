@@ -1,0 +1,14 @@
+module t.rowvar
+
+fn twice[e](f: fn() -> Unit ! e) -> Unit ! e {
+    f()
+    f()
+}
+
+fn pure_caller(out: Cap[Console]) -> Unit {
+    twice(fn() -> Unit { out.println("P1B-07-ROWVAR-LEAK") })
+}
+
+fn main(root: Root) ! {Write} {
+    pure_caller(root.console())
+}

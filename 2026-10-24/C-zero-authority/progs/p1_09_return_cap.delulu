@@ -1,0 +1,13 @@
+module t.retcap
+
+fn get_out(root: Root) -> Cap[Console] {
+    root.console()
+}
+
+fn pure_user(root: Root) -> Unit {
+    get_out(root).println("P1-09-RETURNED-CAP-LEAK")
+}
+
+fn main(root: Root) ! {Write} {
+    pure_user(root)
+}

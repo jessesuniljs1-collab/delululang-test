@@ -1,0 +1,96 @@
+#!/bin/bash
+# dl — the test agents' only way to use delulu. The head chef holds the authority: every run takes its
+# access from a lease the head chef delegated (a "condition"); an agent cannot widen, add or change one.
+# Usage:  dl conditions                       list the conditions you may run under
+#         dl run <condition> <file|dir|.dwx> [run flags]   run under that condition's lease (`none`: no authority at all)
+#         dl check|fmt|authority|build|explain|toolchain|examples|schema|new|fix|lock|test ...   (no authority involved)
+#         dl grants propose|proposals|list|tree|inspect|diff ...   ask for more (the head chef decides)
+#         dl guard status|pending|request ...  |  dl audit verify|tail  |  dl sandbox status
+A=/c/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/authority
+BIN="$A/bin/delulu.exe"
+export DELULU_NO_FIRST_RUN=1 DELULU_NO_COLOR=1
+TOOLSTATE=$(cygpath -w /c/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/_tool-state)
+BROKERSTATE=$(cygpath -w "$A/state")
+deny() { echo "dl: refused — $*" >&2; exit 64; }
+
+for a in "$@"; do
+  case "$a" in
+    --grant*|--lease*|--break-glass*|--dangerously*|--owner*|--test-authority*|--accept-authority*|--sandbox-backend*|\
+    --require-attestation*|--launcher-digest*|--adapter-*|--require-signed-adapter*|--broker*|--signoff*|--approved*|\
+    --state-dir*|--require-anchored-roots*|--guard-policy*)
+      deny "\`$a\` sets or names authority. Only the head chef changes what you can do: pick a condition (\`dl conditions\`), or ask with \`dl grants propose\` and say why in your report." ;;
+  esac
+done
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+  conditions)
+    for f in "$A"/conditions/*.desc; do n=$(basename "$f" .desc); printf '%-14s %s\n' "$n" "$(cat "$f")"; done
+    printf '%-14s %s\n' none "no lease and no grant: the program holds no authority at all"
+    ;;
+  run)
+    cond=${1:-}; [ $# -gt 0 ] && shift
+    [ -n "$cond" ] || deny "name a condition: dl run <condition> <file> (see \`dl conditions\`)"
+    if [ "$cond" = none ]; then
+      export DELULU_STATE_DIR="$TOOLSTATE"
+      exec "$BIN" run "$@" --no-prompt
+    fi
+    case "$cond" in *[!A-Za-z0-9_-]*) deny "no condition named \`$cond\`";; esac
+    if [ -f "$A/conditions/$cond.token" ]; then
+      export DELULU_STATE_DIR="$BROKERSTATE"
+      exec "$BIN" run "$@" --no-prompt --broker daemon --lease "$(cat "$A/conditions/$cond.token")"
+    fi
+    # A grant condition: the head chef's own --grant list (one per line), for what a lease cannot carry yet.
+    [ -f "$A/conditions/$cond.grants" ] || deny "no condition named \`$cond\` (see \`dl conditions\`)"
+    [ -f "$A/conditions/$cond.env" ] && { set -a; . "$A/conditions/$cond.env"; set +a; }
+    g=(); while IFS= read -r l || [ -n "$l" ]; do [ -n "$l" ] && g+=(--grant "$l"); done < "$A/conditions/$cond.grants"
+    export DELULU_STATE_DIR="$TOOLSTATE"
+    exec "$BIN" run "$@" --no-prompt "${g[@]}"
+    ;;
+  test)
+    # A package's [test-authority] ceiling is written by the code's author; here the author is the agent, so an
+    # effectful test ceiling would be access the agent gave itself. Pure tests only; ask for anything more.
+    for p in . "$@"; do
+      [ -e "$p" ] || continue
+      d=$(realpath "$p"); [ -f "$d" ] && d=$(dirname "$d")
+      while :; do
+        if [ -f "$d/delulu.toml" ] && grep -q '^\[test-authority\]' "$d/delulu.toml"; then
+          deny "\`$d/delulu.toml\` declares a [test-authority] ceiling — an effectful test's access is the head chef's to give. Remove it (pure tests run), or record what you need in your report."
+        fi
+        [ "$d" = "/" ] || [ "$d" = "$(dirname "$d")" ] && break
+        d=$(dirname "$d")
+      done
+    done
+    export DELULU_STATE_DIR="$TOOLSTATE"
+    exec "$BIN" test "$@"
+    ;;
+  check|fmt|authority|build|explain|toolchain|examples|schema|new|fix|lock|lint)
+    export DELULU_STATE_DIR="$TOOLSTATE"
+    exec "$BIN" "$cmd" "$@"
+    ;;
+  grants)
+    case "${1:-}" in
+      propose|proposals|list|tree|inspect|diff) export DELULU_STATE_DIR="$BROKERSTATE"; exec "$BIN" grants "$@" ;;
+      *) deny "\`grants ${1:-}\` changes authority — that is the head chef's. You may: propose, proposals, list, tree, inspect, diff" ;;
+    esac
+    ;;
+  guard)
+    case "${1:-}" in
+      status|pending|request) export DELULU_STATE_DIR="$BROKERSTATE"; exec "$BIN" guard "$@" ;;
+      *) deny "\`guard ${1:-}\` is the owner's. You may: status, pending, request" ;;
+    esac
+    ;;
+  audit)
+    case "${1:-}" in
+      verify|tail) export DELULU_STATE_DIR="$BROKERSTATE"; exec "$BIN" audit "$@" ;;
+      *) deny "you may: audit verify, audit tail" ;;
+    esac
+    ;;
+  sandbox)
+    [ "${1:-}" = status ] || deny "you may: sandbox status"
+    export DELULU_STATE_DIR="$TOOLSTATE"; exec "$BIN" sandbox status "${@:2}"
+    ;;
+  ""|-h|--help|help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' ;;
+  --version) exec "$BIN" --version ;;
+  *) deny "\`$cmd\` is not open to test agents (broker, secrets, monitor, device, doctor, lsp, mcp are the head chef's)" ;;
+esac

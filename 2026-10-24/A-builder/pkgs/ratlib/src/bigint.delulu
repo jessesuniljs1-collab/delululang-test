@@ -1,0 +1,165 @@
+module ratlib.bigint
+
+fn pad4(x: Int) -> Str {
+    if x >= 1000 {
+        str(x)
+    } else {
+        if x >= 100 { "0" + str(x) } else { if x >= 10 { "00" + str(x) } else { "000" + str(x) } }
+    }
+}
+
+pub fn big_of_int(n: Int) -> List[Int] {
+    let out = []
+    var m = n
+    if m == 0 { out.push(0) }
+    while m > 0 {
+        out.push(m % 10000)
+        m = m / 10000
+    }
+    out
+}
+
+fn at0(xs: List[Int], i: Int) -> Int {
+    match xs.get(i) {
+        Some(v) => v
+        None => 0
+    }
+}
+
+pub fn big_add(a: List[Int], b: List[Int]) -> List[Int] {
+    let out = []
+    var carry = 0
+    var i = 0
+    let n = if a.len() > b.len() { a.len() } else { b.len() }
+    while i < n {
+        let s = at0(a, i) + at0(b, i) + carry
+        out.push(s % 10000)
+        carry = s / 10000
+        i = i + 1
+    }
+    if carry > 0 { out.push(carry) }
+    out
+}
+
+pub fn big_mul_small(a: List[Int], k: Int) -> List[Int] {
+    let out = []
+    var carry = 0
+    for d in a {
+        let p = d * k + carry
+        out.push(p % 10000)
+        carry = p / 10000
+    }
+    while carry > 0 {
+        out.push(carry % 10000)
+        carry = carry / 10000
+    }
+    out
+}
+
+pub fn big_mul(a: List[Int], b: List[Int]) -> List[Int] {
+    let out = []
+    let n = a.len()
+    let m = b.len()
+    var carry = 0
+    var k = 0
+    while k < n + m - 1 {
+        var s = carry
+        var i = if k - (m - 1) > 0 { k - (m - 1) } else { 0 }
+        let hi = if k < n - 1 { k } else { n - 1 }
+        while i <= hi {
+            s = s + at0(a, i) * at0(b, k - i)
+            i = i + 1
+        }
+        out.push(s % 10000)
+        carry = s / 10000
+        k = k + 1
+    }
+    while carry > 0 {
+        out.push(carry % 10000)
+        carry = carry / 10000
+    }
+    var trimming = true
+    while trimming {
+        if out.len() > 1 {
+            match out.get(out.len() - 1) {
+                Some(last) => {
+                    if last == 0 {
+                        let dropped = out.pop()
+                    } else {
+                        trimming = false
+                    }
+                }
+                None => {
+                    trimming = false
+                }
+            }
+        } else {
+            trimming = false
+        }
+    }
+    out
+}
+
+pub fn big_text(a: List[Int]) -> Str {
+    var s = ""
+    var i = a.len() - 1
+    var first = true
+    while i >= 0 {
+        let d = at0(a, i)
+        if first {
+            s = str(d)
+            first = false
+        } else {
+            s = s + pad4(d)
+        }
+        i = i - 1
+    }
+    s
+}
+
+pub fn big_factorial(n: Int) -> List[Int] {
+    var acc = big_of_int(1)
+    var k = 2
+    while k <= n {
+        acc = big_mul_small(acc, k)
+        k = k + 1
+    }
+    acc
+}
+
+pub fn big_fib(n: Int) -> List[Int] {
+    var a = big_of_int(0)
+    var b = big_of_int(1)
+    var i = 0
+    while i < n {
+        let c = big_add(a, b)
+        a = b
+        b = c
+        i = i + 1
+    }
+    a
+}
+
+pub fn big_pow(base: List[Int], e: Int) -> List[Int] {
+    var acc = big_of_int(1)
+    var i = 0
+    while i < e {
+        acc = big_mul(acc, base)
+        i = i + 1
+    }
+    acc
+}
+
+test "factorial 20 and 25" {
+    assert_eq(big_text(big_factorial(20)), "2432902008176640000")
+    assert_eq(big_text(big_factorial(25)), "15511210043330985984000000")
+}
+
+test "fib" {
+    assert_eq(big_text(big_fib(100)), "354224848179261915075")
+}
+
+test "mul and pow" {
+    assert_eq(big_text(big_mul(big_of_int(99999999), big_of_int(99999999))), "9999999800000001")
+    assert_eq(big_text(big_pow(big_of_int(2), 100)), "1267650600228229401496703205376")
+}

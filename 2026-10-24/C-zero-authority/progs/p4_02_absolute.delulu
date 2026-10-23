@@ -1,0 +1,9 @@
+module t.absolute
+
+fn main(root: Root) ! {Read, Write} {
+    let r = root.fs_read("./a")
+    match r.read_text("C:/Users/jesse/AppData/Local/Temp/claude/D--nelan-DeluluLang/eb34182b-835b-44af-b5ec-07064fcae52c/scratchpad/dogfood/C-zero-authority/outside.txt") {
+        Ok(s) => root.console().println("P4-02-LEAK " + s)
+        Err(e) => root.console().println("P4-02-ERR")
+    }
+}

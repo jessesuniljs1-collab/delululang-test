@@ -1,0 +1,7 @@
+module t.s16
+
+fn main(root: Root) ! {Write} {
+    let s = root.secret("API")
+    let t: Str = s.map(fn(x: Str) -> Str { x })
+    root.console().println(t)
+}

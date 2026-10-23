@@ -1,0 +1,39 @@
+module probe.p4
+
+fn sz(m: Map[Str, Int]) -> Int {
+    m.len()
+}
+
+fn len_of(xs: List[Int]) -> Int {
+    xs.len()
+}
+
+fn v3() -> Int {
+    let m = Map()
+    m.insert("a", 1)
+    let n = sz(m)
+    m.insert("b", 2)
+    n
+}
+
+fn v4() -> Int {
+    let xs = [1, 2]
+    xs.push(3)
+    let n = len_of(xs)
+    xs.push(4)
+    n
+}
+
+fn v5() -> Int {
+    let xs = [1, 2]
+    let n = len_of(xs)
+    xs.push(4)
+    n
+}
+
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println(str(v3()))
+    c.println(str(v4()))
+    c.println(str(v5()))
+}

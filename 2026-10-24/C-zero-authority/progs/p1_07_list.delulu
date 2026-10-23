@@ -1,0 +1,12 @@
+module t.list
+
+fn fire(cs: List[Cap[Console]]) -> Unit {
+    for c in cs {
+        c.println("P1-07-LIST-LEAK")
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let cs = [root.console()]
+    fire(cs)
+}

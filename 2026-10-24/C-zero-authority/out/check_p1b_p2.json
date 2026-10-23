@@ -1,0 +1,1707 @@
+{
+  "command": "check",
+  "delulu_version": "1.0.0",
+  "diagnostics": [
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "`Printer.say` performs effect(s) not in its declared row: Write",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 172,
+            "col": 6,
+            "line": 12
+          },
+          "file": "progs/p1_11_actor.delulu",
+          "label": "declare these effects in the member's row",
+          "start": {
+            "byte": 118,
+            "col": 29,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "`Loud.new` performs effect(s) not in its declared row: Write",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 142,
+            "col": 6,
+            "line": 9
+          },
+          "file": "progs/p1b_01_actor_new.delulu",
+          "label": "declare these effects in the member's row",
+          "start": {
+            "byte": 73,
+            "col": 26,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "`Helper.shout` performs effect(s) not in its declared row: Write",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 213,
+            "col": 6,
+            "line": 14
+          },
+          "file": "progs/p1b_02_actor_fn.delulu",
+          "label": "declare these effects in the member's row",
+          "start": {
+            "byte": 178,
+            "col": 30,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "`Holder.go` performs effect(s) not in its declared row: Write",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 193,
+            "col": 6,
+            "line": 12
+          },
+          "file": "progs/p1b_03_actor_state_cap.delulu",
+          "label": "declare these effects in the member's row",
+          "start": {
+            "byte": 130,
+            "col": 13,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "`Loud.new` performs effect(s) not in its declared row: Write",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 147,
+            "col": 6,
+            "line": 9
+          },
+          "file": "progs/p1b_04_spawn_in_pure.delulu",
+          "label": "declare these effects in the member's row",
+          "start": {
+            "byte": 74,
+            "col": 26,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `make` performs effect `Async` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_04_spawn_in_pure.delulu",
+              "insert": "! {Async} ",
+              "range": {
+                "end_byte": 184,
+                "start_byte": 184
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 158,
+            "col": 8,
+            "line": 12
+          },
+          "file": "progs/p1b_04_spawn_in_pure.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 154,
+            "col": 4,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effects `Write, Async` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 251,
+            "col": 37,
+            "line": 16
+          },
+          "file": "progs/p1b_04_spawn_in_pure.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 235,
+            "col": 21,
+            "line": 16
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0208",
+      "explanation_id": "E-DL0208",
+      "message": "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 107,
+            "col": 6,
+            "line": 8
+          },
+          "file": "progs/p1b_05_const.delulu",
+          "label": "not an item",
+          "start": {
+            "byte": 102,
+            "col": 1,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `side` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_05_const.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 54,
+                "start_byte": 54
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 27,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1b_05_const.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 23,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `N`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 190,
+            "col": 33,
+            "line": 11
+          },
+          "file": "progs/p1b_05_const.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 189,
+            "col": 32,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0202",
+      "explanation_id": "E-DL0202",
+      "message": "expected an expression, found `{`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 68,
+            "col": 14,
+            "line": 4
+          },
+          "file": "progs/p1b_06_block_expr.delulu",
+          "label": "expected an expression",
+          "start": {
+            "byte": 67,
+            "col": 13,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0208",
+      "explanation_id": "E-DL0208",
+      "message": "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 169,
+            "col": 6,
+            "line": 9
+          },
+          "file": "progs/p1b_06_block_expr.delulu",
+          "label": "not an item",
+          "start": {
+            "byte": 168,
+            "col": 5,
+            "line": 9
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `out`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 113,
+            "col": 12,
+            "line": 6
+          },
+          "file": "progs/p1b_06_block_expr.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 110,
+            "col": 9,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 121,
+            "col": 20,
+            "line": 6
+          },
+          "file": "progs/p1b_06_block_expr.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 114,
+            "col": 13,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_caller` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_07_rowvar_twice.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 125,
+                "start_byte": 125
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 97,
+            "col": 15,
+            "line": 8
+          },
+          "file": "progs/p1b_07_rowvar_twice.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 86,
+            "col": 4,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 221,
+            "col": 30,
+            "line": 12
+          },
+          "file": "progs/p1b_07_rowvar_twice.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 212,
+            "col": 21,
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "let binding type mismatch: expected `List[fn() -> Unit]`, found `List[fn() -> Unit !{Write}]`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 149,
+            "col": 92,
+            "line": 4
+          },
+          "file": "progs/p1b_08_list_of_closures.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 91,
+            "col": 34,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 218,
+            "col": 30,
+            "line": 10
+          },
+          "file": "progs/p1b_08_list_of_closures.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 209,
+            "col": 21,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `first` performs effect `Read` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_09_question_mark.delulu",
+              "insert": "! {Read} ",
+              "range": {
+                "end_byte": 64,
+                "start_byte": 64
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 9,
+            "line": 3
+          },
+          "file": "progs/p1b_09_question_mark.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 19,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `main` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_09_question_mark.delulu",
+              "insert": ", Write",
+              "range": {
+                "end_byte": 141,
+                "start_byte": 141
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 121,
+            "col": 8,
+            "line": 8
+          },
+          "file": "progs/p1b_09_question_mark.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 117,
+            "col": 4,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Read` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 142,
+            "col": 29,
+            "line": 8
+          },
+          "file": "progs/p1b_09_question_mark.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 134,
+            "col": 21,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `fire` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_10_record_caps_list.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 83,
+                "start_byte": 83
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 66,
+            "col": 8,
+            "line": 7
+          },
+          "file": "progs/p1b_10_record_caps_list.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 62,
+            "col": 4,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 183,
+            "col": 30,
+            "line": 13
+          },
+          "file": "progs/p1b_10_record_caps_list.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 174,
+            "col": 21,
+            "line": 13
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0603",
+      "explanation_id": "E-DL0603",
+      "message": "Secret.map requires a pure function",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 168,
+            "col": 6,
+            "line": 7
+          },
+          "file": "progs/p1b_11_secret_map_print.delulu",
+          "label": "this function is not pure",
+          "start": {
+            "byte": 87,
+            "col": 11,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `wrap` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_11_secret_map_print.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 75,
+                "start_byte": 75
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 8,
+            "line": 3
+          },
+          "file": "progs/p1b_11_secret_map_print.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 20,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 202,
+            "col": 30,
+            "line": 10
+          },
+          "file": "progs/p1b_11_secret_map_print.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 193,
+            "col": 21,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `test_root_console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 118,
+            "col": 32,
+            "line": 8
+          },
+          "file": "progs/p1b_12_test_block.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 101,
+            "col": 15,
+            "line": 8
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `sum_and_log` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p1b_13_fold_pure_outer.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 75,
+                "start_byte": 75
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 33,
+            "col": 15,
+            "line": 3
+          },
+          "file": "progs/p1b_13_fold_pure_outer.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 22,
+            "col": 4,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Cap`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 80,
+            "col": 30,
+            "line": 4
+          },
+          "file": "progs/p2_01_cap_literal.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 77,
+            "col": 27,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 88,
+            "col": 38,
+            "line": 4
+          },
+          "file": "progs/p2_01_cap_literal.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 81,
+            "col": 31,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "cannot index a value of type `'t0`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 80,
+            "col": 30,
+            "line": 4
+          },
+          "file": "progs/p2_01_cap_literal.delulu",
+          "label": "not indexable",
+          "start": {
+            "byte": 77,
+            "col": 27,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0404",
+      "explanation_id": "E-DL0404",
+      "message": "value of type `'t2` is not callable",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 89,
+            "col": 39,
+            "line": 4
+          },
+          "file": "progs/p2_01_cap_literal.delulu",
+          "label": "not a function",
+          "start": {
+            "byte": 77,
+            "col": 27,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Root`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 74,
+            "col": 23,
+            "line": 4
+          },
+          "file": "progs/p2_02_root_ctor.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 70,
+            "col": 19,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `root`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 55,
+            "col": 9,
+            "line": 4
+          },
+          "file": "progs/p2_03_helper_no_root.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 51,
+            "col": 5,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 63,
+            "col": 17,
+            "line": 4
+          },
+          "file": "progs/p2_03_helper_no_root.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 56,
+            "col": 10,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t1` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 73,
+            "col": 27,
+            "line": 4
+          },
+          "file": "progs/p2_03_helper_no_root.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 66,
+            "col": 20,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `helper` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 44,
+            "col": 22,
+            "line": 3
+          },
+          "file": "progs/p2_03_helper_no_root.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 35,
+            "col": 13,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0208",
+      "explanation_id": "E-DL0208",
+      "message": "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 24,
+            "col": 6,
+            "line": 3
+          },
+          "file": "progs/p2_04_toplevel_root.delulu",
+          "label": "not an item",
+          "start": {
+            "byte": 19,
+            "col": 1,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `C`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 96,
+            "col": 6,
+            "line": 6
+          },
+          "file": "progs/p2_04_toplevel_root.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 95,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 104,
+            "col": 14,
+            "line": 6
+          },
+          "file": "progs/p2_04_toplevel_root.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 97,
+            "col": 7,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 88,
+            "col": 30,
+            "line": 5
+          },
+          "file": "progs/p2_04_toplevel_root.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 79,
+            "col": 21,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0601",
+      "explanation_id": "E-DL0601",
+      "message": "a capability cannot be constructed or forged: `Cap[Console]` is not `Str` (capabilities are derived from `Root`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 83,
+            "col": 35,
+            "line": 4
+          },
+          "file": "progs/p2_05_str_to_cap.delulu",
+          "label": "a capability value has no constructor",
+          "start": {
+            "byte": 75,
+            "col": 27,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0601",
+      "explanation_id": "E-DL0601",
+      "message": "a capability cannot be constructed or forged: `Cap[Console]` is not `Int` (capabilities are derived from `Root`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 76,
+            "col": 28,
+            "line": 4
+          },
+          "file": "progs/p2_06_int_to_cap.delulu",
+          "label": "a capability value has no constructor",
+          "start": {
+            "byte": 75,
+            "col": 27,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `Str` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 70,
+            "col": 21,
+            "line": 4
+          },
+          "file": "progs/p2_07_method_on_str.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 63,
+            "col": 14,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 47,
+            "col": 30,
+            "line": 3
+          },
+          "file": "progs/p2_07_method_on_str.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 38,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0601",
+      "explanation_id": "E-DL0601",
+      "message": "a capability cannot be constructed or forged: `Cap[Console]` is not `Fake` (capabilities are derived from `Root`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 192,
+            "col": 24,
+            "line": 10
+          },
+          "file": "progs/p2_08_record_forge.delulu",
+          "label": "a capability value has no constructor",
+          "start": {
+            "byte": 191,
+            "col": 23,
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Root`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 58,
+            "col": 9,
+            "line": 4
+          },
+          "file": "progs/p2_10_static_method.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 54,
+            "col": 5,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 66,
+            "col": 17,
+            "line": 4
+          },
+          "file": "progs/p2_10_static_method.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 59,
+            "col": 10,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t1` has no method `println`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 80,
+            "col": 31,
+            "line": 4
+          },
+          "file": "progs/p2_10_static_method.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 73,
+            "col": 24,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 47,
+            "col": 30,
+            "line": 3
+          },
+          "file": "progs/p2_10_static_method.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 38,
+            "col": 21,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0208",
+      "explanation_id": "E-DL0208",
+      "message": "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 23,
+            "col": 6,
+            "line": 3
+          },
+          "file": "progs/p2_11_top_list.delulu",
+          "label": "not an item",
+          "start": {
+            "byte": 18,
+            "col": 1,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `CS`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 105,
+            "col": 7,
+            "line": 6
+          },
+          "file": "progs/p2_11_top_list.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 103,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "type `'t0` has no method `len`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 109,
+            "col": 11,
+            "line": 6
+          },
+          "file": "progs/p2_11_top_list.delulu",
+          "label": "unknown method",
+          "start": {
+            "byte": 106,
+            "col": 8,
+            "line": 6
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 96,
+            "col": 30,
+            "line": 5
+          },
+          "file": "progs/p2_11_top_list.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 87,
+            "col": 21,
+            "line": 5
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0201",
+      "explanation_id": "E-DL0201",
+      "message": "expected `=`, found end of statement",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 72,
+            "col": 24,
+            "line": 4
+          },
+          "file": "progs/p2_12_var_uninit.delulu",
+          "label": "expected `=` here",
+          "start": {
+            "byte": 72,
+            "col": 24,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0601",
+      "explanation_id": "E-DL0601",
+      "message": "a capability cannot be constructed or forged: `Cap[Console]` is not `Int` (capabilities are derived from `Root`)",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 72,
+            "col": 24,
+            "line": 4
+          },
+          "file": "progs/p2_12_var_uninit.delulu",
+          "label": "a capability value has no constructor",
+          "start": {
+            "byte": 72,
+            "col": 24,
+            "line": 4
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0501",
+      "explanation_id": "E-DL0501",
+      "message": "function `pure_use` performs effect `Write` not declared in its row",
+      "repairs": [
+        {
+          "authority_widening": true,
+          "confidence": "exact",
+          "edits": [
+            {
+              "file": "progs/p2_13_root_from_record.delulu",
+              "insert": "! {Write} ",
+              "range": {
+                "end_byte": 79,
+                "start_byte": 79
+              }
+            }
+          ],
+          "id": "add_effect_to_row",
+          "reason": null,
+          "requires_human": false
+        }
+      ],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 59,
+            "col": 12,
+            "line": 7
+          },
+          "file": "progs/p2_13_root_from_record.delulu",
+          "label": "declared row is here",
+          "start": {
+            "byte": 51,
+            "col": 4,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0502",
+      "explanation_id": "E-DL0502",
+      "message": "function `main` declares effect `Write` it never performs",
+      "repairs": [
+        {
+          "authority_widening": false,
+          "confidence": "safe",
+          "edits": [],
+          "id": "remove_effect_from_row",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
+        }
+      ],
+      "severity": "warning",
+      "spans": [
+        {
+          "end": {
+            "byte": 163,
+            "col": 30,
+            "line": 11
+          },
+          "file": "progs/p2_13_root_from_record.delulu",
+          "label": "declared here",
+          "start": {
+            "byte": 154,
+            "col": 21,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Cap`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 128,
+            "col": 21,
+            "line": 7
+          },
+          "file": "progs/p2_14_ident_as_sum.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 125,
+            "col": 18,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown name `Console`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 136,
+            "col": 29,
+            "line": 7
+          },
+          "file": "progs/p2_14_ident_as_sum.delulu",
+          "label": "not found in this scope",
+          "start": {
+            "byte": 129,
+            "col": 22,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0405",
+      "explanation_id": "E-DL0405",
+      "message": "cannot index a value of type `'t1`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 128,
+            "col": 21,
+            "line": 7
+          },
+          "file": "progs/p2_14_ident_as_sum.delulu",
+          "label": "not indexable",
+          "start": {
+            "byte": 125,
+            "col": 18,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0404",
+      "explanation_id": "E-DL0404",
+      "message": "value of type `'t3` is not callable",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 137,
+            "col": 30,
+            "line": 7
+          },
+          "file": "progs/p2_14_ident_as_sum.delulu",
+          "label": "not a function",
+          "start": {
+            "byte": 125,
+            "col": 18,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 50,
+    "warnings": 12
+  }
+}
