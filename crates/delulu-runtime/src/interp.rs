@@ -248,10 +248,16 @@ type R<T> = Result<T, Escape>;
 pub struct Home {
     funcs: HashMap<String, FnDecl>,
     globals: Env,
-    /// Each record type's field names in the order the type declares them — the order its values hold them in, whatever
-    /// order a literal writes them (RECORD-ORDER-1: `==` pairs fields by position, and `str` prints them in it).
-    records: HashMap<String, Vec<String>>,
+    /// Each record type's fields, by name, at their place in the order the type declares them — the order its values
+    /// hold them in, whatever order a literal writes them (RECORD-ORDER-1: `==` pairs fields by position, and `str`
+    /// prints them in it). A name maps to its place so that putting a literal in order and finding a field in a wide
+    /// record cost no scan of the declaration (RW 2.10): a 1,600-field literal written out of order took 39 ms to build.
+    records: HashMap<String, HashMap<String, usize>>,
 }
+
+/// A record at most this wide has its field found by a scan; a wider one asks its type's places first (RW 2.10). A
+/// short scan beats two hash lookups, and most records are short.
+const SCAN_WIDTH: usize = 16;
 
 pub struct Interp {
     /// This interpreter's module, or — while a closure from another module runs — that closure's (see
@@ -352,7 +358,11 @@ impl Interp {
                 }
                 Item::Type(td) => {
                     if let TypeDeclKind::Record(fields) = &td.kind {
-                        records.insert(td.name.name.clone(), fields.iter().map(|f| f.name.name.clone()).collect());
+                        let mut at = HashMap::new();
+                        for (i, f) in fields.iter().enumerate() {
+                            at.entry(f.name.name.clone()).or_insert(i);
+                        }
+                        records.insert(td.name.name.clone(), at);
                     }
                 }
                 Item::Const(c) => consts.push((c.name.name.clone(), c.value.clone())),
@@ -926,12 +936,11 @@ impl Interp {
             }
             LValue::Field(base, field) => {
                 let recv = self.eval_lvalue(base, env)?;
-                if let Value::Record { fields, .. } = recv {
-                    for (n, slot) in fields.borrow_mut().iter_mut() {
-                        if *n == field.name {
-                            *slot = value;
-                            return Ok(());
-                        }
+                if let Value::Record { name, fields } = recv {
+                    let mut fields = fields.borrow_mut();
+                    if let Some(i) = self.field_at(&name, &fields, &field.name) {
+                        fields[i].1 = value;
+                        return Ok(());
                     }
                 }
                 Err(Escape::Fault(Fault::at("DL0907", "field assignment on non-record", span)))
@@ -997,8 +1006,8 @@ impl Interp {
                     fs.push((fname.name.clone(), self.eval_expr(fexpr, env)?));
                 }
                 // Computed in the order written; held in the order declared (RECORD-ORDER-1).
-                if let Some(order) = self.home.borrow().records.get(&*name) {
-                    fs.sort_by_key(|(f, _)| order.iter().position(|o| o == f));
+                if let Some(at) = self.home.borrow().records.get(&*name) {
+                    fs.sort_by_cached_key(|(f, _)| at.get(f).copied());
                 }
                 self.charge_alloc((fields.len() as u64).saturating_mul(16).saturating_add(16))?;
                 let v = Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) };
@@ -2215,14 +2224,26 @@ impl Interp {
     }
 
     fn field(&self, recv: Value, field: &str, span: delulu_diag::Span) -> R<Value> {
-        if let Value::Record { fields, .. } = &recv {
-            for (n, v) in fields.borrow().iter() {
-                if n == field {
-                    return Ok(v.clone());
-                }
+        if let Value::Record { name, fields } = &recv {
+            let fields = fields.borrow();
+            if let Some(i) = self.field_at(name, &fields, field) {
+                return Ok(fields[i].1.clone());
             }
         }
         Err(Escape::Fault(Fault::at("DL0907", format!("no field `{field}`"), span)))
+    }
+
+    /// Where `field` sits in a record of type `name` (RW 2.10). A wide record asks its type's places and checks the
+    /// name it finds there; a short one, or one whose type this module does not declare (a value built by another
+    /// module), is scanned. The check is what makes a guess safe: a place is used only when its name is `field`.
+    fn field_at(&self, name: &str, fields: &[(String, Value)], field: &str) -> Option<usize> {
+        if fields.len() > SCAN_WIDTH {
+            let guess = self.home.borrow().records.get(name).and_then(|at| at.get(field).copied());
+            if let Some(i) = guess.filter(|&i| fields.get(i).is_some_and(|(n, _)| n == field)) {
+                return Some(i);
+            }
+        }
+        fields.iter().position(|(n, _)| n == field)
     }
 
     fn index(&self, recv: Value, idx: Value, span: delulu_diag::Span) -> R<Value> {
